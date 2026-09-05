@@ -38,8 +38,10 @@ from snakes_and_ladders.search.alpha_expansion import energy, iterated_condition
 from snakes_and_ladders.search.potts_mcmc import (
     PottsChain,
     PottsMove,
+    TemperedChains,
     anneal_potts,
     energies,
+    parallel_tempering,
     sample_potts,
     tempered,
 )
@@ -50,6 +52,7 @@ from snakes_and_ladders.search.statistics import (
 from snakes_and_ladders.sim.canonical import (
     frustrated_triangular_lattice,
     minimum_frustrated_edges,
+    planted_spin_glass,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
@@ -346,3 +349,153 @@ def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not(
     assert annealed_hits >= 18
     assert annealed_hits > constant_hits
     assert descent_hits < annealed_hits
+
+
+# --- parallel tempering -----------------------------------------------------
+
+LADDER = (4.0, 2.0, 1.0)
+
+
+def _replica_p_values(
+    run: TemperedChains, graph: PottsGraph, field: np.ndarray
+) -> list[float]:
+    """Each replica's chi-square against its own tempered target, from the unscaled model."""
+    p_values = []
+    for replica, temperature in enumerate(run.temperatures):
+        index, probability = _tempered_exact_distribution(graph, field, temperature)
+        observed = np.zeros(len(probability))
+        for row in run.states[:, replica]:
+            observed[index[tuple(row)]] += 1
+        p_values.append(chi_square_p_value(observed, probability * run.states.shape[0]))
+    return p_values
+
+
+def test_every_replica_is_drawn_from_its_own_tempered_distribution() -> None:
+    # The oracle the plan named: the joint target is a product of tempered
+    # marginals, so with exchanges *on* each replica must still pass the
+    # chi-square against exp(-E / T_r) enumerated from the unscaled model. A
+    # wrong exchange ratio contaminates the cold replica with hot
+    # configurations and this is what says so. Realized p-values over two
+    # seeds: 0.024 to 0.70 at the 0.001 significance; exchange acceptance
+    # 0.78 and 0.57 for the two pairs, so the exchanges are actually
+    # happening and the test has power.
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+
+    run = parallel_tempering(
+        graph, WITH_FIELD, LADDER, SEED, SWEEPS, burn_in=SWEEPS // 10, thin=5
+    )
+
+    assert run.states.shape == (SWEEPS, len(LADDER), graph.n_nodes)
+    assert bool((run.swap_acceptance > 0.3).all()), run.swap_acceptance
+    assert min(_replica_p_values(run, graph, WITH_FIELD)) > SIGNIFICANCE
+
+
+def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The negative case, paired with the positive one above so the two are
+    # distinguishable. An exchange that ignores (beta_i - beta_j)(E_i - E_j)
+    # still runs and still mixes -- every exchange is accepted -- and every
+    # replica's marginal is the wrong distribution: realized p = 0.0 at all
+    # three temperatures.
+    def always_exchange(*_: float) -> float:
+        return 0.0
+
+    monkeypatch.setattr(potts_mcmc, "_swap_log_ratio", always_exchange)
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+
+    run = parallel_tempering(
+        graph, WITH_FIELD, LADDER, SEED, SWEEPS, burn_in=SWEEPS // 10, thin=5
+    )
+
+    assert bool((run.swap_acceptance == 1.0).all())
+    assert max(_replica_p_values(run, graph, WITH_FIELD)) < SIGNIFICANCE
+
+
+def test_replicas_draw_from_separate_streams_and_one_seed_reproduces_them() -> None:
+    # Two replicas at the *same* temperature with no field would be identical
+    # chains if they shared a stream, and the whole point would be lost while
+    # every diagnostic looked healthy. Spawned children differ; the parent
+    # seed still reproduces the run bitwise.
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+
+    first = parallel_tempering(graph, NO_FIELD, (1.0, 1.0), 3, 200)
+    second = parallel_tempering(graph, NO_FIELD, (1.0, 1.0), 3, 200)
+
+    assert not np.array_equal(first.states[:, 0], first.states[:, 1])
+    assert np.array_equal(first.states, second.states)
+
+
+def test_the_best_configuration_is_the_lowest_energy_any_replica_visited() -> None:
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+
+    run = parallel_tempering(graph, WITH_FIELD, LADDER, SEED, 300)
+
+    visited = energies(graph, WITH_FIELD, run.states.reshape(-1, graph.n_nodes))
+    assert run.best_energy == pytest.approx(
+        energies(graph, WITH_FIELD, run.best[None])[0]
+    )
+    assert run.best_energy <= visited.min() + 1e-12
+
+
+def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+
+    with pytest.raises(ValueError, match="at least two temperatures"):
+        parallel_tempering(graph, NO_FIELD, (1.0,), SEED, 10)
+    with pytest.raises(ValueError, match="must be positive"):
+        parallel_tempering(graph, NO_FIELD, (1.0, 0.0), SEED, 10)
+
+
+def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
+    # The comparison the ticket asked for, on the instance where restarts can
+    # lose: the planted Viana-Bray spin glass, 60 sites at mean degree 4 and
+    # frustration 0.2, whose planted energy upper-bounds the ground state and
+    # whose ground state enumeration cannot reach. Budget: 400 heat-bath
+    # sweeps per method -- annealing spends them on one chain, tempering on
+    # four replicas of 100, and single-site descent on 100 restarts of at
+    # most 4 sweeps (it converges in 2 to 4). Realized over 12 instances,
+    # against the best energy any method found: annealing and tempering
+    # 12/12, restarts 5/12 with a mean gap of 0.75; at frustration 0.35 it
+    # is 9/12, 9/12 against 5/12, and at 100 sites and degree 6, 7/12 and
+    # 8/12 against 2/12. The plan predicted tempering would be hard to
+    # justify at these sizes; it is not, and the prediction is retracted.
+    #
+    # Asserted at the margin the measurement supports, not the measurement:
+    # restarts below both, and the two tempered methods at or below the
+    # planted energy on every instance (restarts miss it on 1 of 12).
+    budget, n_instances = 400, 12
+    ladder = (2.0, 1.2, 0.7, 0.4)
+    best: dict[str, list[float]] = {"restarts": [], "anneal": [], "tempering": []}
+    planted = []
+    for seed in range(n_instances):
+        instance = planted_spin_glass(60, 4.0, 0.2, np.random.default_rng(1000 + seed))
+        graph, field = instance.graph, np.zeros(2)
+        planted.append(instance.planted_energy)
+        best["restarts"].append(
+            min(
+                iterated_conditional_modes(
+                    graph, field, 2, 5000 * seed + r, max_sweeps=4
+                )[1]
+                for r in range(budget // 4)
+            )
+        )
+        best["anneal"].append(
+            anneal_potts(graph, field, Exponential(2.0, 0.05, budget), seed).energy
+        )
+        best["tempering"].append(
+            parallel_tempering(
+                graph, field, ladder, seed, budget // len(ladder)
+            ).best_energy
+        )
+
+    known = np.min(np.array(list(best.values())), axis=0)
+    hits = {
+        name: int((np.array(values) <= known + 1e-9).sum())
+        for name, values in best.items()
+    }
+
+    for name in ("anneal", "tempering"):
+        assert bool((np.array(best[name]) <= np.array(planted) + 1e-9).all()), name
+    assert hits["restarts"] < hits["anneal"], hits
+    assert hits["restarts"] < hits["tempering"], hits
+    assert hits["anneal"] >= 10, hits
+    assert hits["tempering"] >= 10, hits

@@ -283,6 +283,169 @@ def anneal_potts(
     )
 
 
+@dataclass(frozen=True)
+class TemperedChains:
+    """What a parallel-tempering run produced.
+
+    Parameters
+    ----------
+    states : np.ndarray
+        Recorded configurations, shape ``(n_sweeps, n_replicas, n_nodes)``;
+        replica ``r`` sits at ``temperatures[r]`` throughout, because a swap
+        exchanges *configurations* between temperatures rather than moving a
+        chain along the ladder.
+    temperatures : tuple[float, ...]
+        The ladder, as given.
+    swap_acceptance : np.ndarray
+        Fraction of proposed exchanges accepted per adjacent pair, shape
+        ``(n_replicas - 1,)``. Near zero means the ladder has a gap no
+        configuration crosses and the replicas are independent chains; near
+        one means two temperatures are close enough that one is redundant.
+    best : np.ndarray
+        The lowest-energy configuration seen at any temperature.
+    best_energy : float
+        Its energy, in :func:`energies`' convention.
+    n_sweeps : int
+        Sweeps run per replica after burn-in --- the budget per replica, so
+        the whole run cost ``n_replicas`` times this.
+    """
+
+    states: np.ndarray
+    temperatures: tuple[float, ...]
+    swap_acceptance: np.ndarray
+    best: np.ndarray
+    best_energy: float
+    n_sweeps: int
+
+
+def _swap_log_ratio(
+    beta_low: float, beta_high: float, energy_low: float, energy_high: float
+) -> float:
+    """Log acceptance of exchanging the configurations at two temperatures.
+
+    The joint target is the product of the tempered marginals, so the ratio
+    is ``(beta_i - beta_j)(E_i - E_j)``: an exchange that hands the colder
+    replica the lower energy is always accepted. A version that omits this
+    term still runs, still mixes, and converges to the wrong distribution ---
+    `tests/regression/search/test_potts_mcmc.py` replaces this function with
+    that version and asserts the chi-square catches it.
+    """
+    return (beta_low - beta_high) * (energy_low - energy_high)
+
+
+def parallel_tempering(
+    graph: PottsGraph,
+    field: np.ndarray,
+    temperatures: tuple[float, ...],
+    seed: int,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+) -> TemperedChains:
+    """Replicas at fixed temperatures, exchanging configurations by Metropolis.
+
+    Each replica runs one heat-bath sweep per step at its own temperature,
+    then every adjacent pair proposes to exchange configurations and accepts
+    on :func:`_swap_log_ratio`. The hot replicas cross barriers the cold one
+    cannot, and an exchange carries what they find down the ladder (Swendsen &
+    Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
+
+    **The replicas must not share a stream and must be reproducible from one
+    seed.** One generator is seeded and spawns a child per replica; the parent
+    then draws only the exchange uniforms. Sharing one stream would correlate
+    the replicas, which is the whole point lost while every diagnostic looks
+    healthy.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The instance. Couplings of either sign; single-site moves only, for
+        the reason :func:`anneal_potts` gives.
+    field : np.ndarray
+        External field, shape ``(n_states,)``.
+    temperatures : tuple[float, ...]
+        The ladder, hottest to coldest or in any order; at least two, all
+        positive. The stationary distribution does not depend on the order,
+        only which pairs are adjacent for exchange.
+    seed : int
+        Seed for the parent ``np.random.default_rng``.
+    n_sweeps, burn_in, thin : int
+        As :func:`sample_potts`, applied per replica.
+
+    Returns
+    -------
+    TemperedChains
+
+    Raises
+    ------
+    ValueError
+        If fewer than two temperatures are given --- a ladder of one has
+        nothing to exchange and is :func:`sample_potts` --- or any is not
+        positive.
+    """
+    if len(temperatures) < 2:
+        msg = (
+            f"parallel tempering needs at least two temperatures, got "
+            f"{len(temperatures)}: a ladder of one has nothing to exchange"
+        )
+        raise ValueError(msg)
+    for temperature in temperatures:
+        if not temperature > 0.0:
+            msg = f"every temperature must be positive, got {temperature}"
+            raise ValueError(msg)
+
+    field = np.asarray(field, dtype=float)
+    n_replicas = len(temperatures)
+    betas = [1.0 / temperature for temperature in temperatures]
+    parent = np.random.default_rng(seed)
+    children = parent.spawn(n_replicas)
+    n_states = int(field.shape[0])
+    states = np.stack(
+        [child.integers(0, n_states, size=graph.n_nodes) for child in children]
+    )
+    neighbours = _adjacency(graph)
+
+    recorded = np.empty((n_sweeps, n_replicas, graph.n_nodes), dtype=np.int64)
+    proposed = np.zeros(n_replicas - 1)
+    accepted = np.zeros(n_replicas - 1)
+    current = energies(graph, field, states)
+    best_index = int(np.argmin(current))
+    best, best_energy = states[best_index].copy(), float(current[best_index])
+
+    for step in range(-burn_in * thin, n_sweeps * thin):
+        for replica in range(n_replicas):
+            _single_site_sweep(
+                states[replica],
+                field,
+                neighbours,
+                children[replica],
+                beta=betas[replica],
+            )
+        current = energies(graph, field, states)
+        for pair in range(n_replicas - 1):
+            log_ratio = _swap_log_ratio(
+                betas[pair], betas[pair + 1], current[pair], current[pair + 1]
+            )
+            proposed[pair] += 1
+            if log_ratio >= 0.0 or parent.random() < np.exp(log_ratio):
+                accepted[pair] += 1
+                states[[pair, pair + 1]] = states[[pair + 1, pair]]
+                current[[pair, pair + 1]] = current[[pair + 1, pair]]
+        lowest = int(np.argmin(current))
+        if current[lowest] < best_energy:
+            best, best_energy = states[lowest].copy(), float(current[lowest])
+        if step >= 0 and (step + 1) % thin == 0:
+            recorded[step // thin] = states
+    return TemperedChains(
+        states=recorded,
+        temperatures=tuple(temperatures),
+        swap_acceptance=accepted / proposed,
+        best=best,
+        best_energy=best_energy,
+        n_sweeps=n_sweeps,
+    )
+
+
 def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
     """Energy of each configuration, ``E = -log W``.
 
