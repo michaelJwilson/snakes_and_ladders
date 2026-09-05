@@ -32,16 +32,24 @@ import math
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.potts import log_weights
+from snakes_and_ladders.opt.schedule import Constant, Exponential
 from snakes_and_ladders.search import potts_mcmc
+from snakes_and_ladders.search.alpha_expansion import energy, iterated_conditional_modes
 from snakes_and_ladders.search.potts_mcmc import (
     PottsChain,
     PottsMove,
+    anneal_potts,
     energies,
     sample_potts,
+    tempered,
 )
 from snakes_and_ladders.search.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
+)
+from snakes_and_ladders.sim.canonical import (
+    frustrated_triangular_lattice,
+    minimum_frustrated_edges,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
@@ -210,3 +218,131 @@ def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() ->
     chain = sample_potts(graph, np.zeros(3), PottsMove.WOLFF, 7, 2_000, burn_in=200)
 
     assert 1.0 < chain.mean_cluster_size < graph.n_nodes
+
+
+# --- temperature ------------------------------------------------------------
+
+TEMPERATURES = [2.0, 0.5]
+
+
+def _tempered_exact_distribution(
+    graph: PottsGraph, field: np.ndarray, temperature: float
+) -> tuple[dict[tuple[int, ...], int], np.ndarray]:
+    """``exp(-E / T)`` from the *unscaled* model: the oracle a tempered chain is held to.
+
+    Computed from `log_weights` of the model as declared, divided by the
+    temperature, so it shares nothing with `tempered` -- a chain that ran the
+    scaled model wrongly would be caught here and not by a test that scaled
+    the oracle the same way.
+    """
+    n_states = int(field.shape[0])
+    configurations = np.array(
+        list(itertools.product(range(n_states), repeat=graph.n_nodes)),
+        dtype=np.int64,
+    )
+    log_probability = log_weights(graph, field, configurations) / temperature
+    probability = np.exp(log_probability - log_probability.max())
+    probability /= probability.sum()
+    index = {tuple(row): position for position, row in enumerate(configurations)}
+    return index, probability
+
+
+@pytest.mark.parametrize("temperature", TEMPERATURES)
+def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
+    # The consistency check the model itself provides: the coupling absorbs
+    # beta, so the energy of the scaled model is the energy over T, and the
+    # deviation is 0.0 rather than a tolerance -- a division on each term.
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+    configurations = np.array(
+        list(itertools.product(range(2), repeat=graph.n_nodes)), dtype=np.int64
+    )
+    scaled_graph, scaled_field = tempered(graph, WITH_FIELD, temperature)
+
+    scaled = energies(scaled_graph, scaled_field, configurations)
+    expected = energies(graph, WITH_FIELD, configurations) / temperature
+
+    assert np.abs(scaled - expected).max() == 0.0
+
+
+@pytest.mark.parametrize("move", list(PottsMove))
+@pytest.mark.parametrize("temperature", TEMPERATURES)
+def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
+    move: PottsMove, temperature: float
+) -> None:
+    # Hot and cold, in a field, for every move set: the bond probabilities
+    # and the field accept step are tempered by the same division as the heat
+    # bath, and this is what says so. Realized p-values over two seeds range
+    # 0.016 to 0.89 against the 0.001 significance the untempered tests use.
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+    index, probability = _tempered_exact_distribution(graph, WITH_FIELD, temperature)
+
+    chain = sample_potts(
+        graph,
+        WITH_FIELD,
+        move,
+        SEED,
+        SWEEPS,
+        burn_in=SWEEPS // 10,
+        thin=THINNING[move],
+        temperature=temperature,
+    )
+    observed = np.zeros(len(probability))
+    for row in chain.states:
+        observed[index[tuple(row)]] += 1
+
+    assert chi_square_p_value(observed, probability * SWEEPS) > SIGNIFICANCE
+
+
+def test_a_non_positive_temperature_is_refused() -> None:
+    # At zero the heat bath is an argmin and the chain is a descent that
+    # samples nothing; a negative temperature inverts the model.
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+
+    with pytest.raises(ValueError, match="temperature must be positive"):
+        sample_potts(graph, NO_FIELD, PottsMove.SINGLE_SITE, SEED, 10, temperature=0.0)
+    with pytest.raises(ValueError, match="temperature must be positive"):
+        tempered(graph, NO_FIELD, -1.0)
+
+
+def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not() -> (
+    None
+):
+    # The optimizer built from the sampler, against the one frustrated
+    # instance with a ground-state energy known at every size: the periodic
+    # triangular antiferromagnet, where at least one edge in three is
+    # unsatisfied (`sim.canonical.minimum_frustrated_edges`). At 9x9 over 20
+    # seeds and 200 sweeps: annealing 20/20, single-site descent (ICM) 2/20,
+    # and the same 200 sweeps at a *constant* temperature of 1 -- the control
+    # that separates the schedule from the wandering -- 7/20.
+    #
+    # What this does not say: that annealing beats descent at equal budget.
+    # ICM converges in 2.6 sweeps here, so 200 sweeps buy 78 restarts, and
+    # the best of 78 also reaches the ground state 20/20. The instance is too
+    # easy for restarts to lose on; the comparison at equal evaluations on
+    # instances where they might is #267's second pull request.
+    graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
+    field = np.zeros(2)
+    ground = float(minimum_frustrated_edges(graph))  # |J| = 1
+    schedule = Exponential(2.0, 0.05, 200)
+
+    annealed = [anneal_potts(graph, field, schedule, seed) for seed in range(20)]
+    constant = [
+        anneal_potts(graph, field, Constant(1.0, 200), seed) for seed in range(20)
+    ]
+    descended = [
+        iterated_conditional_modes(graph, field, 2, seed)[1] for seed in range(20)
+    ]
+
+    for result in annealed:
+        # The reported energy is the energy of the reported labelling, in the
+        # convention the exact solvers use, and never below the closed form.
+        assert result.energy == pytest.approx(energy(graph, field, result.labelling))
+        assert result.energy >= ground - 1e-12
+        assert result.n_sweeps == 200
+    annealed_hits = sum(abs(result.energy - ground) < 1e-12 for result in annealed)
+    constant_hits = sum(abs(result.energy - ground) < 1e-12 for result in constant)
+    descent_hits = sum(abs(value - ground) < 1e-12 for value in descended)
+
+    assert annealed_hits >= 18
+    assert annealed_hits > constant_hits
+    assert descent_hits < annealed_hits

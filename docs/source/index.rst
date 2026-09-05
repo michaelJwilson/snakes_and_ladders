@@ -96,6 +96,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.constrain
    :members:
 
+.. automodule:: snakes_and_ladders.opt.schedule
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.fit
    :members:
 

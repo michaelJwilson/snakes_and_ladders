@@ -20,7 +20,19 @@ because only the first of those catches its absence.
 
 These are samplers, not optimizers. They are validated by the distribution
 they converge to, and nothing here claims to find a ground state; that belongs
-to the classical baseline suite, which has an oracle for it.
+to the classical baseline suite, which has an oracle for it. The one
+exception is :func:`anneal_potts`, which is an optimizer built *from* the
+sampler: the same sweep on a schedule of falling temperatures (issue #267).
+
+**Temperature is model scaling, and the model says so exactly.** The Potts
+coupling absorbs ``beta``: ``exp(-E / T)`` with ``E = -h[s] - J [s = s']`` is
+the Boltzmann weight of the model with ``(J / T, h / T)`` at temperature 1.
+So a tempered chain runs the untempered sweeps on the scaled model, and there
+is no second code path to get wrong --- what :func:`tempered` does is checked
+against the energies, and the chain it produces against ``exp(-E / T)``
+enumerated from the *unscaled* model, which is the oracle the samplers already
+have. Tempering a likelihood is a different object (`snakes_and_ladders.opt.schedule`
+says why); here the objective is an energy and the temperature is physical.
 
 See ``docs/tex/main.tex``, "Potts Models in an External Field" (Newman &
 Barkema chs. 4 and 6 for both algorithms and for Sokal's windowing; Mezard &
@@ -35,6 +47,7 @@ from enum import StrEnum
 import numpy as np
 
 from snakes_and_ladders.likelihood.potts import log_weights
+from snakes_and_ladders.opt.schedule import Schedule
 from snakes_and_ladders.sim.graph import PottsGraph
 
 
@@ -71,6 +84,33 @@ class PottsChain:
     mean_cluster_size: float
 
 
+def tempered(
+    graph: PottsGraph, field: np.ndarray, temperature: float
+) -> tuple[PottsGraph, np.ndarray]:
+    """The model whose Boltzmann weight at temperature 1 is this one's at ``temperature``.
+
+    ``(J, h) / T``. At ``T = 1`` the division is the identity bitwise, which
+    is what lets every untempered chain be the tempered one at the default
+    rather than a separate path.
+
+    Raises
+    ------
+    ValueError
+        If ``temperature`` is not positive: at zero the sweep is a descent
+        and the chain samples nothing.
+    """
+    if not temperature > 0.0:
+        msg = f"temperature must be positive, got {temperature}"
+        raise ValueError(msg)
+    scaled = PottsGraph(
+        n_nodes=graph.n_nodes,
+        edges=graph.edges,
+        coupling=tuple(coupling / temperature for coupling in graph.coupling),
+        shape=graph.shape,
+    )
+    return scaled, np.asarray(field, dtype=float) / temperature
+
+
 def sample_potts(
     graph: PottsGraph,
     field: np.ndarray,
@@ -79,6 +119,8 @@ def sample_potts(
     n_sweeps: int,
     burn_in: int = 0,
     thin: int = 1,
+    *,
+    temperature: float = 1.0,
 ) -> PottsChain:
     """Run one chain and return the configuration after every sweep.
 
@@ -107,6 +149,11 @@ def sample_potts(
         sampler: the chi-square statistic assumes independent draws and the
         correlation inflates it. Thinning by several autocorrelation times is
         what makes the test measure the sampler rather than the correlation.
+    temperature : float
+        The chain targets ``exp(-E / temperature)``; 1 is the model as
+        declared. Implemented as :func:`tempered` model scaling, so the
+        cluster moves' bond probabilities and the field accept step are
+        tempered by the same division as the heat bath.
 
     Returns
     -------
@@ -130,6 +177,7 @@ def sample_potts(
         )
         raise ValueError(msg)
 
+    graph, field = tempered(graph, field, temperature)
     rng = np.random.default_rng(seed)
     n_states = int(field.shape[0])
     state = rng.integers(0, n_states, size=graph.n_nodes)
@@ -151,6 +199,88 @@ def sample_potts(
         cluster_total / cluster_count if cluster_count else float(graph.n_nodes)
     )
     return PottsChain(states=recorded, mean_cluster_size=mean_cluster)
+
+
+@dataclass(frozen=True)
+class AnnealedPotts:
+    """What one annealing run found, and what it cost.
+
+    Parameters
+    ----------
+    labelling : np.ndarray
+        The lowest-energy configuration visited, shape ``(n_nodes,)``. The
+        *best* rather than the last: the final sweeps run cold but not at
+        zero, so the chain can leave the best state it found.
+    energy : float
+        Its energy, in :func:`energies`' convention.
+    final : np.ndarray
+        Where the chain ended, kept so a caller can see whether the best was
+        the end or a state passed through.
+    n_sweeps : int
+        Heat-bath sweeps run, one per schedule step --- the budget, in the
+        unit `search/CLAUDE.md` says budgets are counted in.
+    """
+
+    labelling: np.ndarray
+    energy: float
+    final: np.ndarray
+    n_sweeps: int
+
+
+def anneal_potts(
+    graph: PottsGraph,
+    field: np.ndarray,
+    schedule: Schedule,
+    seed: int,
+) -> AnnealedPotts:
+    """Simulated annealing by heat-bath sweeps on a temperature schedule.
+
+    One :func:`_single_site_sweep` per schedule step at that step's
+    temperature, tracking the lowest energy seen (Kirkpatrick, Gelatt &
+    Vecchi, 1983). It is :func:`iterated_conditional_modes` with a finite
+    temperature: at ``T -> 0`` the heat bath is the argmin over each site's
+    conditional, which is exactly ICM's update, so the two are the same
+    search separated by the schedule alone and a difference between them is a
+    statement about the schedule.
+
+    Single-site moves only. The cluster moves are built for sampling near a
+    ferromagnetic transition and refuse a negative coupling, and the instances
+    worth annealing are frustrated.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The instance. Couplings of either sign.
+    field : np.ndarray
+        External field, shape ``(n_states,)``.
+    schedule : Schedule
+        Temperature per sweep. Its length is the budget.
+    seed : int
+        Seed for ``np.random.default_rng``; the start is drawn from it.
+
+    Returns
+    -------
+    AnnealedPotts
+    """
+    rng = np.random.default_rng(seed)
+    field = np.asarray(field, dtype=float)
+    state = rng.integers(0, int(field.shape[0]), size=graph.n_nodes)
+    neighbours = _adjacency(graph)
+
+    best_state = state.copy()
+    best_energy = float(energies(graph, field, state[None])[0])
+    for step in range(schedule.n_steps):
+        beta = 1.0 / schedule(step)
+        _single_site_sweep(state, field, neighbours, rng, beta=beta)
+        energy = float(energies(graph, field, state[None])[0])
+        if energy < best_energy:
+            best_state, best_energy = state.copy(), energy
+    return AnnealedPotts(
+        labelling=best_state,
+        energy=best_energy,
+        final=state,
+        n_sweeps=schedule.n_steps,
+    )
 
 
 def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
@@ -177,6 +307,7 @@ def _single_site_sweep(
     field: np.ndarray,
     neighbours: list[list[tuple[int, float]]],
     rng: np.random.Generator,
+    beta: float = 1.0,
 ) -> None:
     """One heat-bath sweep: every site redrawn from its exact conditional.
 
@@ -184,12 +315,17 @@ def _single_site_sweep(
     update `snakes_and_ladders.sim.potts._simulate_gibbs` uses --- restated here for a
     single chain rather than shared, because that one is vectorized across
     many independent chains and this one must step a single chain in time.
+
+    ``beta`` tempers the conditional in place, for :func:`anneal_potts`, whose
+    temperature changes every sweep and would otherwise rebuild the adjacency
+    each time. At 1.0 the multiplication is the identity bitwise.
     """
     draws = np.asarray(rng.random(state.shape[0]))
     for node in range(state.shape[0]):
         local = field.copy()
         for neighbour, coupling in neighbours[node]:
             local[state[neighbour]] += coupling
+        local *= beta
         local -= local.max()
         cumulative = np.cumsum(np.exp(local))
         # One uniform and a search, rather than `rng.choice` per site: this

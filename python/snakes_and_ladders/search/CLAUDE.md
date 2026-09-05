@@ -98,8 +98,9 @@ no application module.
 - **A sampler is validated by the distribution it converges to, never by
   inspection.** At an enumerable size the exact distribution is available, so
   a move set is tested by goodness-of-fit against it at a declared
-  significance and chain length. A chain that visibly moves is what a sampler
-  with a broken accept step also does.
+  significance and chain length. A chain that visibly moves is what a broken
+  accept step also does; a tempered chain is held to `exp(-E / T)` enumerated
+  from the *unscaled* model, which shares nothing with the scaling under test.
 
 - **A goodness-of-fit test must be thinned, and the thinning is part of the
   test.** Successive sweeps are not independent draws, so run on every sweep
