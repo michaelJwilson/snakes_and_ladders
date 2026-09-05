@@ -105,6 +105,45 @@ class _HmmObjective:
         """
         raise NotImplementedError  # pragma: no cover
 
+    def _free_transitions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained coordinates of the initial and transition blocks."""
+        return torch.cat(
+            [
+                free_from_log_simplex(named["log_initial"]),
+                free_from_log_simplex(named["log_transition"]).reshape(-1),
+            ]
+        )
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``.
+
+        The inverse of the constraint map, keyed exactly as :meth:`constrain`
+        returns. It is what lets a fit produced by *any* optimizer be given an
+        interval: the observed information is a property of the objective at a
+        point, and this is how a point stated in the model's own parameters
+        becomes one the Hessian can be taken at (issue #268).
+
+        Every instance shares the transition half and differs only in the
+        emission block, which is the same division :meth:`constrain` makes.
+
+        Parameters
+        ----------
+        named : Mapping[str, torch.Tensor]
+            Constrained parameters, under :meth:`constrain`'s own keys.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns ``named``.
+        """
+        return torch.cat(
+            [self._free_transitions_from(named), self._free_emissions_from(named)]
+        )
+
+    def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The emission block's unconstrained coordinates."""
+        raise NotImplementedError  # pragma: no cover
+
     @property
     def _initial_slice(self) -> slice:
         return slice(0, self._n_states - 1)
@@ -184,6 +223,9 @@ class HmmObjective(_HmmObjective):
                 theta[self._emission_slice].reshape(self._n_states, self._n_symbols - 1)
             )
         )
+
+    def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return free_from_log_simplex(named["log_emission"]).reshape(-1)
 
     def initial(self) -> torch.Tensor:
         """A start that is uninformative but **not** symmetric.
@@ -314,6 +356,11 @@ class GaussianHmmObjective(_HmmObjective):
             theta[self._mean_slice()],
             torch.exp(theta[self._log_scale_slice()]),
             self._variance_floor,
+        )
+
+    def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return torch.cat(
+            [named["mean"].reshape(-1), torch.log(named["scale"]).reshape(-1)]
         )
 
     def initial(self) -> torch.Tensor:
@@ -450,6 +497,9 @@ class PoissonHmmObjective(_CountHmmObjective):
         """The Poisson family ``theta``'s emission block encodes."""
         return PoissonEmission(torch.exp(theta[self._emission_slice]))
 
+    def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return torch.log(named["mean"]).reshape(-1)
+
     def initial(self) -> torch.Tensor:
         """Uniform transitions; rates at quantiles of the pooled counts."""
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
@@ -509,6 +559,10 @@ class BinomialHmmObjective(_CountHmmObjective):
         return BinomialEmission(
             self._trials, torch.sigmoid(theta[self._emission_slice])
         )
+
+    def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        rate = named["probability"].reshape(-1)
+        return torch.log(rate) - torch.log1p(-rate)
 
     def initial(self) -> torch.Tensor:
         """Uniform transitions; success rates from quantiles of the counts."""
@@ -581,6 +635,14 @@ class BetaBinomialHmmObjective(_CountHmmObjective):
             self._trials,
             torch.exp(theta[self._log_alpha_slice()]),
             torch.exp(theta[self._log_beta_slice()]),
+        )
+
+    def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return torch.cat(
+            [
+                torch.log(named["alpha"]).reshape(-1),
+                torch.log(named["beta"]).reshape(-1),
+            ]
         )
 
     def initial(self) -> torch.Tensor:
@@ -688,6 +750,14 @@ class NegativeBinomialHmmObjective(_HmmObjective):
         return NegativeBinomialEmission(
             torch.exp(theta[self._log_dispersion_slice()]),
             torch.exp(theta[self._log_mean_slice()]),
+        )
+
+    def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return torch.cat(
+            [
+                torch.log(named["dispersion"]).reshape(-1),
+                torch.log(named["mean"]).reshape(-1),
+            ]
         )
 
     def initial(self) -> torch.Tensor:

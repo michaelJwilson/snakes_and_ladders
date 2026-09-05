@@ -181,6 +181,32 @@ class GaussianMixtureObjective:
             self.components(theta),
         )
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``.
+
+        The inverse of the constraint map, keyed exactly as :meth:`constrain`
+        returns, so a fit produced by expectation-maximization — which works
+        in the mixture's own parameters and never builds a ``theta`` — can be
+        given an interval at the point it reached (issue #268).
+
+        Parameters
+        ----------
+        named : Mapping[str, torch.Tensor]
+            Constrained parameters, under :meth:`constrain`'s own keys.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns ``named``.
+        """
+        return torch.cat(
+            [
+                free_from_log_simplex(named["log_weight"].to(self._dtype)),
+                named["mean"].reshape(-1).to(self._dtype),
+                torch.log(named["scale"].reshape(-1).to(self._dtype)),
+            ]
+        )
+
     def theta_from_truth(
         self, weights: np.ndarray, mean: np.ndarray, scale: np.ndarray
     ) -> torch.Tensor:

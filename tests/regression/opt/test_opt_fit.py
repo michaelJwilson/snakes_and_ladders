@@ -270,6 +270,11 @@ class _Quadratic:
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return {"value": theta[0]}
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        # The second coordinate is not recoverable, because nothing depends
+        # on it -- which is the property this fixture exists to exhibit.
+        return torch.stack([named["value"], torch.zeros((), dtype=torch.float64)])
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         return (theta[0] - 2.0) ** 2
 

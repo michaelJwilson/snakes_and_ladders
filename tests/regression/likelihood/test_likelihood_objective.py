@@ -13,6 +13,8 @@ singular and every interval undefined.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 import pytest
 import torch
@@ -143,6 +145,9 @@ class _Unmerged:
 
     def constrain(self, theta: torch.Tensor) -> dict[str, torch.Tensor]:
         return {"branch_lengths": torch.exp(theta)}
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return torch.log(named["branch_lengths"])
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         return -pruning_torch.log_likelihood(
