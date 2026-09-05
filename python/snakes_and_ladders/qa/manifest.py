@@ -159,6 +159,13 @@ FIGURES: tuple[FigureSpec, ...] = (
         "snakes_and_ladders.qa.rl_reward_surface",
         ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
     ),
+    # Trains eight policies, so it is the most expensive entry here; the
+    # budget it trains at is chosen in the module for that reason.
+    FigureSpec(
+        "rl_tree_policy",
+        "snakes_and_ladders.qa.rl_tree_policy",
+        ("--params", f"{FIXTURES}/simulation_params_hard.yaml"),
+    ),
     FigureSpec(
         "topology_accuracy",
         "snakes_and_ladders.qa.topology_accuracy",
