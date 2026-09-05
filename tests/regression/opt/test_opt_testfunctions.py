@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.opt.fit import fit
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.testfunctions import (
     HIMMELBLAU_MINIMA,
     Himmelblau,
@@ -153,3 +154,22 @@ def test_the_value_at_the_stated_minimizer_is_zero(objective: object) -> None:
 
     for point in points:
         assert float(objective(point)) == pytest.approx(0.0, abs=1e-10)  # type: ignore[operator]
+
+
+@pytest.mark.parametrize(
+    "objective",
+    [Rosenbrock(dimension=3), Rastrigin(dimension=4), Himmelblau()],
+    ids=["Rosenbrock", "Rastrigin", "Himmelblau"],
+)
+def test_the_test_functions_invert_their_own_constraint_map(
+    objective: Objective,
+) -> None:
+    # These carry no parameter transformation, so the inverse is a repacking
+    # rather than arithmetic -- and Himmelblau's is the one that can go wrong,
+    # because it splits `theta` into two named scalars and an inverse that
+    # stacked them in the other order would still typecheck.
+    theta = torch.linspace(-1.5, 2.5, objective.initial().shape[0], dtype=torch.float64)
+
+    recovered = objective.theta_from(objective.constrain(theta))
+
+    assert torch.equal(recovered, theta)

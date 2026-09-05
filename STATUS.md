@@ -508,6 +508,48 @@ change would need. So **no default moves**; k-means++ lands as a strategy a
 caller may choose, at a cost of one objective evaluation (271 us of seeding
 against 260 us per evaluation at 4000 points).
 
+**An interval at a fit, whatever produced the fit.** The observed information
+is a property of an objective *at a point*, not of the route that reached it,
+but until now only a gradient fit could ask for one — expectation-maximization
+works in the model's own parameters and never builds an unconstrained vector,
+so the half of the fits with an independent oracle reported a point estimate
+and nothing else
+([#268](https://github.com/michaelJwilson/snakes_and_ladders/issues/268)).
+Every objective now inverts its own constraint map, exactly: the round trip
+`constrain(theta_from(named))` returns its input to between 0 and 4.4e-16
+across all eight likelihoods, and bitwise for the three closed-form test
+functions and the Gaussian-prior wrapper. `fit(include_intervals=True)` and
+`fit_from(include_intervals=True)` attach the interval to the fit — the latter
+to the best start only, one Hessian rather than one per start — and refuse it
+at an unconverged point rather than report a curvature that is not an
+information; off, they compute nothing and return `None`, so a fit inside a
+search loop costs what it did.
+
+**The check that costs nothing.** The gradient fit and Baum-Welch share the
+model and nothing else, and converge to the same optimum — log-likelihoods
+within 3.6e-9 relative. So their intervals must agree, and they do to **0.31%**,
+the width of the flat ridge EM approaches slowly. A broken round trip fails
+that loudly. The EM-derived intervals then cover truth at **243/264 = 0.920**
+over 12 replicates, with 1 of 12 reaching the boundary and contributing none.
+
+**The refusals survive, which is the part that mattered.** An interval from a
+Hessian is a statement about a maximum, and a Gaussian component at its
+variance floor is not one: the likelihood is unbounded there, the information
+is not positive definite, and the new entry point refuses exactly as the old
+one does — checked against the healthy point beside it, since a guard that
+refused everything would pass a refusal-only test.
+
+**And the comparison `hmc.py` promised is now complete, in both regimes.** A
+version already existed — a raw Hessian in unconstrained coordinates against
+grid quadrature. The missing halves are the delta-method interval on the
+parameters a person names, against a chain, where the approximation is exact
+and where it is not. On the analytic Gaussian the Laplace interval equals
+`sqrt(diag(covariance))` to 1e-8 and the chain's spread matches it to **0.04%
+and 0.47%** at 4000 draws, so agreement is asserted. On the Potts posterior the
+sampled spread is **1.057, 1.031 and 1.036** times the Laplace one: slightly
+optimistic, the expected direction for a mildly non-Gaussian posterior, and
+reported rather than asserted away.
+
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one

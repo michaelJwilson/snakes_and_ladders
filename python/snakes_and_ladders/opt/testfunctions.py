@@ -78,6 +78,9 @@ class Rosenbrock:
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return {"x": theta}
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return named["x"]
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         head, tail = theta[:-1], theta[1:]
         return (self.b * (tail - head**2) ** 2 + (self.a - head) ** 2).sum()
@@ -123,6 +126,9 @@ class Rastrigin:
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return {"x": theta}
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return named["x"]
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         ripple = theta**2 - self.amplitude * torch.cos(2.0 * math.pi * theta)
         return self.amplitude * theta.shape[0] + ripple.sum()
@@ -167,6 +173,9 @@ class Himmelblau:
 
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return {"x": theta[0], "y": theta[1]}
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return torch.stack([named["x"], named["y"]])
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         first, second = theta[0], theta[1]

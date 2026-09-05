@@ -373,6 +373,32 @@ class PottsLatticeObjective:
         unnormalized = coupling * self._agreement_total + (self._counts * field).sum()
         return -(unnormalized - self._n_samples * log_z)
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``.
+
+        The inverse of the constraint map, keyed exactly as :meth:`constrain`
+        returns. It is what lets a fit produced by *any* optimizer be given an
+        interval: the observed information is a property of the objective at a
+        point, and this is how a point stated in the model's own parameters
+        becomes one the Hessian can be taken at (issue #268).
+
+        Parameters
+        ----------
+        named : Mapping[str, torch.Tensor]
+            Constrained parameters, under :meth:`constrain`'s own keys.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns ``named``.
+        """
+        return torch.cat(
+            [
+                named["coupling"].reshape(1).to(self._dtype),
+                free_from_log_simplex(named["field"].to(self._dtype)),
+            ]
+        )
+
     def theta_from_truth(self, coupling: float, field: np.ndarray) -> torch.Tensor:
         """Place a known truth in the unconstrained coordinates.
 
@@ -440,6 +466,32 @@ class PottsObjective:
             + (self._counts * field).sum()
         )
         return -(unnormalized - self._chains.shape[0] * log_z)
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``.
+
+        The inverse of the constraint map, keyed exactly as :meth:`constrain`
+        returns. It is what lets a fit produced by *any* optimizer be given an
+        interval: the observed information is a property of the objective at a
+        point, and this is how a point stated in the model's own parameters
+        becomes one the Hessian can be taken at (issue #268).
+
+        Parameters
+        ----------
+        named : Mapping[str, torch.Tensor]
+            Constrained parameters, under :meth:`constrain`'s own keys.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns ``named``.
+        """
+        return torch.cat(
+            [
+                named["coupling"].reshape(1).to(self._dtype),
+                free_from_log_simplex(named["field"].to(self._dtype)),
+            ]
+        )
 
     def theta_from_truth(self, coupling: float, field: np.ndarray) -> torch.Tensor:
         """Place a known truth in the unconstrained coordinates.

@@ -74,6 +74,9 @@ class WithGaussianPrior:
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return self.objective.constrain(theta)
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return self.objective.theta_from(named)
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         penalty = (theta * theta).sum() / (2.0 * self.scale**2)
         return self.objective(theta) + penalty
