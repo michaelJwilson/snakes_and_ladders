@@ -124,6 +124,8 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: phylo.learn.hmm
+
+.. automodule:: phylo.learn.relaxed
    :members:
 
 .. automodule:: phylo.learn.rollout

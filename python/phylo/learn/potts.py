@@ -161,6 +161,26 @@ class PottsLandscape:
         """Sites in the chain."""
         return self._chain_length
 
+    @property
+    def coupling(self) -> float:
+        """The true ``J``.
+
+        Exposed because :mod:`phylo.learn.relaxed` evaluates the same score on
+        the simplex and must read the parameters rather than re-declare them:
+        a relaxation built on a second copy of ``J`` and ``h`` would drift
+        from the landscape it claims to extend.
+        """
+        return self._coupling
+
+    @property
+    def field(self) -> np.ndarray:
+        """The true ``h``, as a copy.
+
+        A copy rather than the array, so a caller cannot mutate the
+        landscape's parameters after an agent has been trained against them.
+        """
+        return self._field.copy()
+
     def energy(self, state: Configuration) -> float:
         """``E(s)``: the unnormalized log-density of one configuration.
 

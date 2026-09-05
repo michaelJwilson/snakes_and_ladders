@@ -101,8 +101,13 @@ A parenthesized number is an issue already filed.
 
 ## Stage 3 — Research Extensions
 
-- Differentiable topology search over the tropical Grassmannian
-- Gumbel-softmax relaxation of Potts and HMM discrete states
+- Differentiable topology search over the tropical Grassmannian — blocked on
+  an oracle, not on effort: unlike the Gumbel-softmax half (#211), no tree
+  instance at an interesting size has a known optimum to referee the claim
+- Whether the deterministic multilinear relaxation extends past a chain, to
+  the Potts lattice and to graphs with cycles — #211 established the identity
+  holds for any objective with one factor per site per term, and measured the
+  method only on chains
 - Neural surrogate for the likelihood and energy, with exact re-scoring of the
   top-`K` candidates
 - Learned compound moves (#147)

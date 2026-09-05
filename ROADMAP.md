@@ -252,6 +252,18 @@ discrete structural search and minimizing expensive exact evaluations.
   discrete states) to enable end-to-end, gradient-based optimization of the
   discrete structure alongside continuous parameters, bypassing discrete RL
   moves entirely.
+  - *The two halves differ in what can referee them, and that decides the
+    order.* Potts configurations and HMM state paths are enumerable, so the
+    exact optimum, the exact expected score and the exact gradient are all
+    computable and "does the relaxation find what discrete search finds" is
+    falsifiable. Tree topologies at any interesting size are not. The
+    Gumbel-softmax half is therefore built first and the tropical Grassmannian
+    waits on an oracle rather than on effort.
+  - *Validation:* the relaxation must reduce to the discrete objective exactly
+    at the corners of the simplex; the gradient estimator's bias and variance
+    are measured against the exact gradient rather than assumed small; and any
+    claim to beat a classical baseline needs the budget-matched paired test
+    §2.4 requires.
 - **Neural Surrogate Modeling:** train lightweight graph neural networks (GNNs)
   or transformers to directly approximate the Felsenstein likelihood, Potts
   energy, or HMM likelihood. The RL agent queries the surrogate 10,000× faster

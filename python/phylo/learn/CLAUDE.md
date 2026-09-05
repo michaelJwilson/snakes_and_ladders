@@ -93,6 +93,25 @@ takes an application type. The caller unpacks a model into index and
 log-probability arrays, because the no-application-imports rule admits no
 exception for convenience.
 
+## Relaxations
+
+A relaxation of a discrete objective must reduce to it exactly at the corners
+of the simplex, checked over every configuration of an enumerable instance
+rather than spot-checked. One that disagrees at a one-hot is a different
+model, and nothing measured against it transfers.
+
+Under a factorized distribution the expected discrete score equals the relaxed
+score at the marginals, for any objective carrying at most one factor per site
+per term. That multilinearity is the boundary, not the shape of the graph: a
+term reusing one site breaks it, which is what a doubled bond does. It follows
+that the maximum sits at a vertex, so a relaxation adds no optimum the
+discrete problem lacks, and what a relaxed search loses it loses to the ascent.
+
+A gradient estimator's bias is measured against the exact gradient, never
+assumed small, because enumeration supplies that gradient at these sizes.
+Averaging more samples cuts variance and leaves bias untouched, so the two are
+reported apart.
+
 ## What is not here yet
 
 PPO and a learned state-value critic; `docs/tex`'s reinforcement-learning
