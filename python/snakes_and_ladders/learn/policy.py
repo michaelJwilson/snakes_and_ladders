@@ -22,8 +22,27 @@ exists to prevent, one module over.
 
 from __future__ import annotations
 
+from typing import Protocol
+
 import numpy as np
 import torch
+
+
+class Policy(Protocol):
+    """What :func:`snakes_and_ladders.learn.rollout.rollout` needs of a policy.
+
+    Narrower than :class:`LinearPolicy` on purpose. Rolling out an episode
+    requires only the ability to choose among scored actions;
+    :func:`snakes_and_ladders.learn.reinforce.reinforce` needs the weights and the
+    autograd graph besides, and keeps the concrete type. Separating the two
+    is what lets a non-differentiable wrapper such as
+    :class:`EpsilonGreedyPolicy` be rolled out without being trainable, which
+    is exactly what it is.
+    """
+
+    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
+        """Choose an action index from the scored actions."""
+        ...
 
 
 class LinearPolicy:
@@ -123,3 +142,80 @@ class LinearPolicy:
         """
         with torch.no_grad():
             return int(torch.argmax(self.log_probabilities(features)))
+
+
+class EpsilonGreedyPolicy:
+    """Takes the wrapped policy's best action, except a fraction of the time.
+
+    With probability ``epsilon`` it draws uniformly from the available
+    actions, and otherwise takes the wrapped policy's greedy action. The
+    uniform draw is what makes it able to accept a *worsening* move, which is
+    the property issue #194 exists for: on a rugged landscape every episode
+    otherwise ends at the first state no action improves, so an agent chooses
+    which local optimum to enter and can never leave one.
+
+    It is not trainable and deliberately exposes no weights. Exploration here
+    is a fixed, declared property of the search rather than something learned,
+    so that a measured escape rate is attributable to ``epsilon`` and not to a
+    training run that happened alongside it. :class:`LinearPolicy` remains the
+    thing REINFORCE fits.
+
+    Parameters
+    ----------
+    policy : LinearPolicy
+        Supplies the greedy action.
+
+        **An untrained policy does not give hill climbing.** Weights start at
+        zero, so every action scores alike and :meth:`LinearPolicy.greedy`
+        returns the first one; wrapping it explores around "always take
+        action 0", which resembles a searcher without being one. It produces
+        plausible numbers rather than an error, which is what makes it worth
+        stating here --- the measurement in issue #194 was first run this way
+        and reported an escape rate of 0.000 where the baseline it had to
+        reproduce was 0.480. Wrap a trained policy, or set the weights to a
+        vector whose argmax is the action you mean.
+        ``tests/regression/search/test_search_escape.py`` pins both halves.
+    epsilon : float
+        Probability of the uniform draw, in ``[0, 1]``. At ``0`` this is the
+        wrapped policy's greedy action every step, which is *not* the same as
+        hill climbing once the episode is allowed to continue past a local
+        optimum: there the greedy action is the least-bad move, so a
+        zero-epsilon agent still walks, deterministically.
+
+    Raises
+    ------
+    ValueError
+        If ``epsilon`` is outside ``[0, 1]``.
+    """
+
+    def __init__(self, policy: LinearPolicy, epsilon: float) -> None:
+        if not 0.0 <= epsilon <= 1.0:
+            msg = f"epsilon must lie in [0, 1], got {epsilon}"
+            raise ValueError(msg)
+        self._policy = policy
+        self._epsilon = epsilon
+
+    @property
+    def epsilon(self) -> float:
+        """The exploration probability this policy was built with."""
+        return self._epsilon
+
+    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
+        """Choose an action index: uniform with probability ``epsilon``.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Action features, shape ``(n_actions, n_features)``.
+        rng : np.random.Generator
+            The only source of randomness, as for :meth:`LinearPolicy.sample`.
+
+        Returns
+        -------
+        int
+            Index into the available actions.
+        """
+        n_actions = int(features.shape[0])
+        if self._epsilon > 0.0 and rng.random() < self._epsilon:
+            return int(rng.integers(n_actions))
+        return self._policy.greedy(features)
