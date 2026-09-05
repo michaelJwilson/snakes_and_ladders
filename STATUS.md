@@ -237,6 +237,18 @@ not as an interval in the wrong place, which is the opposite of what the
 Gaussian case showed and is why both were measured rather than one assumed
 from the other.
 
+**A Gaussian mixture: the emission seam with the Markov chain removed.**
+`snakes_and_ladders.sim.mixture` draws component labels and observations
+jointly, retaining the label so a clustering has something to be checked
+against; `snakes_and_ladders.opt.mixture` fits
+([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)). Its
+component M step **is** `GaussianEmission.reestimate`, called with
+responsibilities where an HMM passes state posteriors, and a test asserts the
+two produce identical numbers on the same responsibilities rather than merely
+similar ones — the evidence that the seam extracted from an HMM was not shaped
+by one. The unbounded likelihood transfers unchanged with it: a component
+collapsed onto a single observation is refused, not clamped.
+
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
 **Felsenstein pruning: three CPU backends, one oracle.** Vectorized NumPy is
@@ -519,6 +531,36 @@ GTR model's three normalizations are gauges rather than conventions, each
 removing an exactly flat direction that would otherwise leave every parameter
 without an interval. The roadmap's sub-second gradient update at `n = 100` is
 now measured — 203 ms at 1000 sites — rather than assumed.
+
+**k-means++ lands, and buys nothing the fit can use.** The first initializer
+that reads its objective's data
+([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)), and
+the case [#251](https://github.com/michaelJwilson/snakes_and_ladders/issues/251)
+built the `Initializer` protocol for. **The protocol needed no change.** A
+data-dependent strategy turns out to be model-*specific* rather than
+protocol-incompatible: it takes an `Objective` like every other initializer and
+refuses the ones whose parameter vector it cannot interpret, which is why it
+lives beside the mixture rather than with the model-free strategies.
+
+Measured against its published guarantee — Arthur & Vassilvitskii (2007) bound
+the expected seeding cost at `8 (ln k + 2)` times optimal, and in one dimension
+the optimal clustering is computable exactly by dynamic programming over
+contiguous runs, so the bound has something to be checked against. On three
+components six standard deviations apart, over 200 replicates: mean cost ratio
+**2.91** against a bound of **24.79**, worst draw 14.41. Uniform seeding
+realizes **11.03** mean and a worst draw of **58.08**, outside the k-means++
+guarantee.
+
+**And none of that reaches the likelihood, which is the finding.** EM reaches
+the same optimum from either seeding on that mixture — 200/200 from k-means++,
+195/200 from uniform — and from the objective's own quantile start too. Harder
+fixtures do not reverse it, they make both fail: at five components 1.5
+standard deviations apart neither seeding reached the best optimum found in 200
+draws, and at five with unequal weights uniform reached it 9 times in 150
+against k-means++'s 3 — noise, in the direction opposite to the one a default
+change would need. So **no default moves**; k-means++ lands as a strategy a
+caller may choose, at a cost of one objective evaluation (271 us of seeding
+against 260 us per evaluation at 4000 points).
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
