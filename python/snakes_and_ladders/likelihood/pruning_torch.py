@@ -9,7 +9,7 @@ ordered by ``branch_order(tau)`` -- is the tensor ``torch.autograd``
 differentiates through. ``Node.branch_length`` is never read by
 ``log_likelihood``.
 
-JC transition probabilities default to the closed form of eq. (jc) in
+JC transition probabilities default to the closed form ``eq:jc`` of
 ``docs/tex/textbook.tex``, built from ``torch.exp`` so the branch length stays
 in the graph. Passing ``rate_matrix`` switches to the general
 ``torch.linalg.matrix_exp(Q * t)`` path -- the same path a fitted, non-JC
@@ -86,7 +86,7 @@ def branch_lengths_from_tree(
 
 
 def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
-    """Closed-form JC P(t) (``docs/tex/textbook.tex``), differentiable in ``t``."""
+    """Closed-form JC P(t), ``eq:jc`` of ``docs/tex/textbook.tex``, differentiable in ``t``."""
     decay = torch.exp(-k * t / (k - 1))
     off_diagonal = (1.0 - decay) / k
     diagonal = 1.0 / k + (k - 1) / k * decay
@@ -196,7 +196,7 @@ def log_likelihood(
             t = branch_lengths[index[child.name]]
             child_partial = _post_order(child)
             transition = _transition_probabilities(t, k, rate_matrix)
-            # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq. (pruning).
+            # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
             partial = partial * (child_partial @ transition.T)
 
         if rescale:
@@ -211,5 +211,5 @@ def log_likelihood(
         return partial
 
     root_partial = _post_order(tau)
-    site_likelihood = root_partial @ pi_t  # eq. (root)
+    site_likelihood = root_partial @ pi_t  # eq:root
     return torch.sum(torch.log(site_likelihood) + log_scale)

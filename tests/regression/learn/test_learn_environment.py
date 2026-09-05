@@ -73,7 +73,8 @@ def test_the_reference_environment_satisfies_the_protocol() -> None:
 
 
 def test_total_reward_is_the_improvement_between_first_and_last_state() -> None:
-    # eq. (16): the return of an episode is exactly the total improvement it
+    # eq:return of docs/tex/textbook.tex: the return of an episode is exactly the
+    # total improvement it
     # achieved, independent of the path. This is what licenses gamma = 1, so
     # it is checked against the objective rather than assumed from the algebra.
     environment = _landscape()

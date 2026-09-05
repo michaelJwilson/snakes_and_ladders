@@ -1,11 +1,10 @@
 """Closed-form k-state Jukes-Cantor model.
 
-Implements the closed-form transition matrix of the model in
-``docs/tex/textbook.tex`` (Sec. "Problem Statement: Phylogenetic
-Inference"): the transition-probability matrix P(t) and its
+Implements ``eq:jc`` of ``docs/tex/textbook.tex``: the transition-probability
+matrix P(t) and its
 generating rate matrix Q for k equally exchangeable states with a uniform
 stationary distribution, under the branch-length normalization
-``-sum_i pi_i q_ii = 1``. This is the oracle
+``-sum_i pi_i q_ii = 1`` (``eq:normalization``). This is the oracle
 ``simulate.py`` is validated against, per ``sim/CLAUDE.md`` -- it is derived
 independently of any pruning/likelihood code and must stay that way.
 """

@@ -2,8 +2,7 @@
 //! (the NumPy oracle) to Rust, exposed to Python via PyO3 as
 //! `snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`.
 //!
-//! Implements eq. (pruning) of `docs/tex/textbook.tex` (Sec. "Problem
-//! Statement: Phylogenetic Inference", "The algorithm: pruning") exactly: message passing `partial[s, i] = sum_j P_ij(t) *
+//! Implements `eq:pruning` and `eq:root` of `docs/tex/textbook.tex` exactly: message passing `partial[s, i] = sum_j P_ij(t) *
 //! child_partial[s, j]` over `(site, state)` arrays, post-order over the
 //! topology, with the same per-node rescaling behavior as the NumPy oracle
 //! (log of the scale factor accumulated separately; a site whose partial
@@ -32,9 +31,8 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-/// Closed-form k-state Jukes-Cantor transition probabilities P(t), the model
-/// of `docs/tex/textbook.tex` Sec. "Problem Statement: Phylogenetic
-/// Inference", ported from `snakes_and_ladders.sim.jc.jc_transition_probabilities`.
+/// Closed-form k-state Jukes-Cantor transition probabilities P(t), `eq:jc`
+/// of `docs/tex/textbook.tex`, ported from `snakes_and_ladders.sim.jc.jc_transition_probabilities`.
 ///
 /// Returns a row-major `k * k` matrix flattened into a `Vec<f64>`; entry
 /// `i * k + j` is Pr(state j at the branch's end | state i at its start).
@@ -72,8 +70,8 @@ fn jc_transition_probabilities(t: f64, k: usize) -> Vec<f64> {
 /// - `k`: number of states.
 /// - `pi`: root state distribution, length `k`.
 /// - `rescale`: whether to rescale partial likelihoods per node, log of the
-///   scale factor accumulated separately (docs/tex/textbook.tex, "The
-///   algorithm: pruning"). Disabling underflows for realistic (site, taxa) sizes.
+///   scale factor accumulated separately (`docs/tex/textbook.tex`,
+///   `eq:pruning`). Disabling underflows for realistic (site, taxa) sizes.
 ///
 /// # Errors
 /// Returns `Err` with a message if array lengths are inconsistent, `k < 2`,
@@ -160,7 +158,7 @@ pub fn pruning_log_likelihood_impl(
                 }
                 let transition = jc_transition_probabilities(t, k);
                 let child_partial = &partials[child_idx];
-                // message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq. (pruning).
+                // message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
                 for s in 0..n_sites {
                     let child_row = &child_partial[s * k..s * k + k];
                     for i in 0..k {
@@ -252,7 +250,7 @@ mod tests {
         }
     }
 
-    /// Two-leaf, one-site tree, hand-computed against eq. (pruning)/(root):
+    /// Two-leaf, one-site tree, hand-computed against `eq:pruning` and `eq:root`:
     /// root -> {A (t=0.1, state 0), B (t=0.2, state 1)}, k=2, pi uniform.
     /// L_root(i) = P(t_A)[i, 0] * P(t_B)[i, 1]; site likelihood = sum_i
     /// pi[i] * L_root(i).

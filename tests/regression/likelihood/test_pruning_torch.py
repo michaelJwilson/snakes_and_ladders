@@ -38,7 +38,7 @@ from snakes_and_ladders.sim.tree import Node
 
 # Relative, not absolute -- see issue #111 and the note in
 # test_pruning_rust.py. CROSS_DEVICE_RTOL_FLOAT64 is the float64
-# implementation-agreement bound stated in docs/tex/.
+# implementation-agreement bound stated in docs/tex/textbook.tex (sec:tolerance).
 _RTOL_ORACLE = CROSS_DEVICE_RTOL_FLOAT64
 
 _FD_EPS = 1e-6

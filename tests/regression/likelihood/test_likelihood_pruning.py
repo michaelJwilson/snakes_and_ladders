@@ -8,7 +8,7 @@ Four independent checks per issue #62, no two sharing an implementation:
   opinion from the same recursion.
 - Rescaled and unrescaled paths agreeing on small problems where both run
   (``test_rescaled_and_unrescaled_agree_on_small_problems``), the check
-  ``docs/tex/textbook.tex`` calls for after eq. (pruning).
+  ``docs/tex/textbook.tex`` calls for after ``eq:pruning``.
 - The pulley principle (``test_pulley_principle_is_invariant_to_root_position``):
   JC is reversible (pinned by
   ``tests/regression/test_jc_simulate.py``'s detailed-balance test), so
