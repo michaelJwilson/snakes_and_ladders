@@ -21,16 +21,20 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.opt.fit import (
+from snakes_and_ladders.opt.fit import (
     constrained_standard_errors,
     covers,
     fit,
     observed_information,
     parameter_covariance,
 )
-from phylo.opt.hmm import HmmObjective, align_states, baum_welch
-from phylo.opt.potts import PottsObjective, load_potts_params, simulate_chains
-from phylo.sim.hmm import load_hmm_params, simulate_sequences
+from snakes_and_ladders.opt.hmm import HmmObjective, align_states, baum_welch
+from snakes_and_ladders.opt.potts import (
+    PottsObjective,
+    load_potts_params,
+    simulate_chains,
+)
+from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 

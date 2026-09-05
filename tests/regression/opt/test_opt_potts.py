@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.opt.constrain import log_simplex
-from phylo.opt.potts import (
+from snakes_and_ladders.opt.constrain import log_simplex
+from snakes_and_ladders.opt.potts import (
     PottsObjective,
     load_potts_params,
     log_partition,

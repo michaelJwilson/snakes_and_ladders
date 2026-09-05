@@ -1,6 +1,6 @@
 """The footprint table publishes a model; this is what pins it to measurement.
 
-`phylo.qa.likelihood_footprint` computes what the arrays occupy from their
+`snakes_and_ladders.qa.likelihood_footprint` computes what the arrays occupy from their
 shapes, because `docs/CLAUDE.md` admits only a number that survives a rebuild on
 another machine and a ``tracemalloc`` peak does not — an earlier draft published
 one and the continuous-integration runner regenerated a different table. That
@@ -20,8 +20,8 @@ import tracemalloc
 
 import numpy as np
 import pytest
-from phylo.likelihood import pruning
-from phylo.qa.likelihood_footprint import (
+from snakes_and_ladders.likelihood import pruning
+from snakes_and_ladders.qa.likelihood_footprint import (
     DECLARED_MAXIMUM,
     MEASURED_SIZES,
     MEMORY_BUDGET_BYTES,
@@ -31,9 +31,9 @@ from phylo.qa.likelihood_footprint import (
     simulation_bytes,
     warm_up,
 )
-from phylo.search.rl import with_uniform_branch_lengths
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
+from snakes_and_ladders.search.rl import with_uniform_branch_lengths
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 #: The band the model is held to. Wide enough for the transients it does not
 #: model, narrow enough that a missing array term fails: at 4 states the
@@ -49,7 +49,7 @@ FIXED_SITES = 2_000
 def _warmed() -> None:
     """Absorb the cold-call inflation before any assertion reads a peak.
 
-    `phylo.qa.likelihood_footprint.warm_up` states why; calling it from here
+    `snakes_and_ladders.qa.likelihood_footprint.warm_up` states why; calling it from here
     rather than restating the reason keeps one home for the fact.
     """
     warm_up()

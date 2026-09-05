@@ -85,7 +85,7 @@ authoritative — where it and any other document disagree, it wins.
 
 - **Deliverable:** the technical document (`docs/tex/`, contents specified in
   §1.3) is the record a validated claim is written into. Every figure and
-  table in it is rendered by `phylo.qa` from the code it reports on, carries a
+  table in it is rendered by `snakes_and_ladders.qa` from the code it reports on, carries a
   caption naming the seed, the sizes and the model that produced it, and is
   committed so a changed plot is visible in review rather than after a build.
   `CHANGELOG.md` is assembled by `towncrier` from per-pull-request fragments;

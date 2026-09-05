@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.likelihood.parsimony import fitch_score
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood.parsimony import fitch_score
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 
 def _tree() -> Node:

@@ -4,7 +4,7 @@
 measured against, so it cannot itself rest on belief propagation. It is pinned
 twice, in opposite directions: against exhaustive enumeration at sizes where
 that is affordable, and by reduction --- a strip of width 1 is a chain, and
-must reproduce `phylo.opt.potts.log_partition`, a transfer matrix written
+must reproduce `snakes_and_ladders.opt.potts.log_partition`, a transfer matrix written
 before this module existed and sharing no code with it.
 """
 
@@ -13,14 +13,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from phylo.likelihood.potts import (
+from snakes_and_ladders.likelihood.potts import (
     ExactPotts,
     enumerate_potts,
     log_weights,
     strip_log_partition,
 )
-from phylo.opt.potts import log_partition
-from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.opt.potts import log_partition
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 # `likelihood/CLAUDE.md`'s float64 bound. Both sides here are float64, so this
 # is the applicable one; nothing in this module runs on a device.
@@ -54,7 +54,7 @@ def test_the_transfer_matrix_reproduces_exhaustive_enumeration(
 def test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix(
     length: int,
 ) -> None:
-    # A second exact reference, not a second sampler: `phylo.opt.potts`
+    # A second exact reference, not a second sampler: `snakes_and_ladders.opt.potts`
     # transfers a single site at a time in torch, this transfers a column of
     # `M` sites in numpy, and at `M = 1` they must agree to machine precision.
     coupling = 0.6

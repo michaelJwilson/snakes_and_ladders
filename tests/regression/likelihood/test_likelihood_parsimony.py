@@ -19,11 +19,14 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.likelihood.parsimony import brute_force_parsimony_score, fitch_score
-from phylo.search.infer import score_topology
-from phylo.search.topology import enumerate_topologies, leaf_bipartitions
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
+from snakes_and_ladders.likelihood.parsimony import (
+    brute_force_parsimony_score,
+    fitch_score,
+)
+from snakes_and_ladders.search.infer import score_topology
+from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 LEAVES = ("A", "B", "C", "D")
 

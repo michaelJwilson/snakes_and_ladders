@@ -15,8 +15,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from phylo.learn.potts import PottsLandscape
-from phylo.learn.relaxed import (
+from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.relaxed import (
     RelaxationMode,
     RelaxedPotts,
     estimate_gradient,
@@ -24,7 +25,6 @@ from phylo.learn.relaxed import (
     gumbel_softmax,
     optimize,
 )
-from pytest_benchmark.fixture import BenchmarkFixture
 
 
 def _objective(chain_length: int) -> RelaxedPotts:

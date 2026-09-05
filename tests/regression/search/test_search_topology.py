@@ -1,4 +1,4 @@
-"""Regression tests for ``phylo.search.topology``'s NNI and SPR generators.
+"""Regression tests for ``snakes_and_ladders.search.topology``'s NNI and SPR generators.
 
 Per root ``CLAUDE.md`` ("Pin to Independent Sources") and the module
 ``CLAUDE.md``'s local rules, every property here is checked exhaustively at
@@ -33,14 +33,18 @@ from functools import cache
 from itertools import combinations
 
 import pytest
-from phylo.search.topology import (
+from snakes_and_ladders.search.topology import (
     Topology,
     leaf_bipartitions,
     nni_neighbours,
     spr_neighbours,
 )
-from phylo.sim.newick import count_topologies, to_newick, validate_unrooted_newick
-from phylo.sim.tree import Node
+from snakes_and_ladders.sim.newick import (
+    count_topologies,
+    to_newick,
+    validate_unrooted_newick,
+)
+from snakes_and_ladders.sim.tree import Node
 
 # Sizes at which exhaustive enumeration is the oracle. The per-pull-request
 # budget holds 5 and 6; 7 costs about 8 s across the two neighbourhood tests
@@ -88,7 +92,7 @@ def _enumerate_unrooted(n_taxa: int) -> Iterator[Topology]:
     trifurcating-root convention, one-to-one with attaching that leaf via
     every possible edge of the corresponding unrooted tree. This is why
     ``count_topologies(n_taxa - 1)`` is the right oracle count (module
-    docstring of ``phylo.sim.newick``).
+    docstring of ``snakes_and_ladders.sim.newick``).
     """
     taxa = tuple(f"t{i}" for i in range(n_taxa))
     rooted_taxa, outgroup = taxa[:-1], taxa[-1]

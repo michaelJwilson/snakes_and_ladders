@@ -2,13 +2,13 @@
 
 `docs/CLAUDE.md` states the invariant and records it failing twice: issue #135
 repaired fourteen missing entries, eight of them long-standing, and #154
-repaired eighteen more including the whole of `phylo.qa`. It states the reason
+repaired eighteen more including the whole of `snakes_and_ladders.qa`. It states the reason
 too --- `sphinx-build -W` fails on a *broken* entry and never on an absent one,
 so the documentation build cannot notice a module nobody listed.
 
-It had drifted again by five when this test was written: `phylo.sim.graph`,
-`phylo.sim.potts`, `phylo.sim.hmm`, `phylo.scripts` and
-`phylo.scripts.run_phylo`. Three repairs of the same invariant is enough; this
+It had drifted again by five when this test was written: `snakes_and_ladders.sim.graph`,
+`snakes_and_ladders.sim.potts`, `snakes_and_ladders.sim.hmm`, `snakes_and_ladders.scripts` and
+`snakes_and_ladders.scripts.run_snakes_and_ladders`. Three repairs of the same invariant is enough; this
 closes the loop so the fourth is a failing test rather than an archaeology
 exercise.
 """
@@ -31,7 +31,7 @@ def _listed() -> set[str]:
 
 def _present() -> set[str]:
     modules = set()
-    for path in sorted((PACKAGE / "phylo").rglob("*.py")):
+    for path in sorted((PACKAGE / "snakes_and_ladders").rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
         relative = path.relative_to(PACKAGE)

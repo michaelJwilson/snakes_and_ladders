@@ -14,7 +14,7 @@ A parenthesized number is an issue already filed.
 - Define one fixture API across trees, lattices and chains (#132)
 - Convert the sixteen signatures that still take a seed where the rule says a
   generator (#240)
-- Move `PottsParams`/`load_potts_params` out of `phylo.opt.potts`, so
+- Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of keeping
   its own copy of the exact open-chain recursion (#186)
 - Additional evolutionary models (#107)

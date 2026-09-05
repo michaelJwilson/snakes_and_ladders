@@ -1,6 +1,6 @@
-//! Felsenstein pruning, ported from `python/phylo/likelihood/pruning.py`
+//! Felsenstein pruning, ported from `python/snakes_and_ladders/likelihood/pruning.py`
 //! (the NumPy oracle) to Rust, exposed to Python via PyO3 as
-//! `phylo.oxiphylo.pruning_log_likelihood`.
+//! `snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`.
 //!
 //! Implements eq. (pruning) and eq. (root) of `docs/tex/main.tex` (Sec.
 //! "Pruning") exactly: message passing `partial[s, i] = sum_j P_ij(t) *
@@ -11,8 +11,8 @@
 //! `ln(0) = -inf` propagates instead of being masked by a spurious
 //! `log_scale` contribution -- see `pruning.py`'s docstring).
 //!
-//! The Python wrapper (`phylo.likelihood.pruning_rust`) flattens a
-//! `phylo.sim.tree.Node` topology into the arrays this module expects,
+//! The Python wrapper (`snakes_and_ladders.likelihood.pruning_rust`) flattens a
+//! `snakes_and_ladders.sim.tree.Node` topology into the arrays this module expects,
 //! mirroring `pruning_torch.py`'s convention of keeping branch lengths as a
 //! flat array in a defined order rather than read off `Node.branch_length`
 //! inside the accelerated call, even though Rust has no autograd graph to
@@ -34,7 +34,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 /// Closed-form k-state Jukes-Cantor transition probabilities P(t), eq. (jc)
-/// of `docs/tex/main.tex`, ported from `phylo.sim.jc.jc_transition_probabilities`.
+/// of `docs/tex/main.tex`, ported from `snakes_and_ladders.sim.jc.jc_transition_probabilities`.
 ///
 /// Returns a row-major `k * k` matrix flattened into a `Vec<f64>`; entry
 /// `i * k + j` is Pr(state j at the branch's end | state i at its start).
@@ -78,7 +78,7 @@ pub struct LeafObservations<'a> {
 
 /// Total log-likelihood of an alignment under the k-state Jukes-Cantor model,
 /// computed by Felsenstein pruning -- the Rust port of
-/// `phylo.likelihood.pruning.log_likelihood`. Plain Rust (no PyO3 types) so
+/// `snakes_and_ladders.likelihood.pruning.log_likelihood`. Plain Rust (no PyO3 types) so
 /// `cargo test` can call it directly; see the module docs for why.
 ///
 /// # Parameters
@@ -102,7 +102,7 @@ pub struct LeafObservations<'a> {
 /// `pi` does not have length `k`, a branch length is negative, a leaf state
 /// is outside `[0, k)`, or no leaf provides `n_sites`.
 ///
-/// `pub` (not just `pub(crate)`) so `benches/oxiphylo_bench.rs` can call it
+/// `pub` (not just `pub(crate)`) so `benches/oxi_snakes_and_ladders_bench.rs` can call it
 /// directly, staying PyO3-free for the same link-time reason unit tests do
 /// (see the module docs).
 pub fn pruning_log_likelihood_impl(

@@ -25,15 +25,15 @@ import sys
 
 import numpy as np
 import pytest
-from phylo.search import maxflow_rust
-from phylo.search.maxflow import (
+from snakes_and_ladders.search import maxflow_rust
+from snakes_and_ladders.search.maxflow import (
     FlowNetwork,
     energy,
     ising_ground_state,
     max_flow,
     site_field,
 )
-from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 # The Python blocking flow recurses to the depth of the level graph. The Rust
 # port uses an explicit stack and needs no such raise, which is one of the two
@@ -76,7 +76,7 @@ def test_the_cut_finds_the_enumerated_minimum_with_a_per_node_field(
 def test_the_uniform_field_energy_is_the_negated_model_log_weight() -> None:
     # The per-node generalization must reduce to the model the rest of the
     # repository fits, or this is solving a different problem accurately.
-    from phylo.likelihood.potts import log_weights
+    from snakes_and_ladders.likelihood.potts import log_weights
 
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
     configurations = np.array(

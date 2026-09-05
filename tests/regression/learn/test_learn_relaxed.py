@@ -17,8 +17,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from phylo.learn.potts import Configuration, PottsLandscape, optimum
-from phylo.learn.relaxed import (
+from snakes_and_ladders.learn.potts import Configuration, PottsLandscape, optimum
+from snakes_and_ladders.learn.relaxed import (
     MINIMUM_TEMPERATURE,
     RelaxationMode,
     RelaxedHmmPath,
@@ -33,9 +33,12 @@ from phylo.learn.relaxed import (
     one_hot,
     optimize,
 )
-from phylo.learn.rollout import greedy_rollout
-from phylo.likelihood.hmm_paths import enumerate_hidden_paths, path_log_probability
-from phylo.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
+from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.likelihood.hmm_paths import (
+    enumerate_hidden_paths,
+    path_log_probability,
+)
+from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
@@ -95,7 +98,7 @@ def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
 
 def test_the_hmm_relaxation_is_exact_at_every_corner() -> None:
     # The same check across a module boundary, which makes it stronger than
-    # the one above: `phylo.learn` may not import `phylo.likelihood`, so
+    # the one above: `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
     # `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely
     # independent implementations of `log P(path, observations)`.
     objective, params, observations = _hmm(length=5)

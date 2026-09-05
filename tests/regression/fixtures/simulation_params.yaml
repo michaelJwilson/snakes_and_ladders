@@ -1,6 +1,6 @@
 # Ground truth for the k=4 Jukes-Cantor regression test
 # (tests/regression/test_jc_simulate.py). Every field is required -- see
-# python/phylo/sim/params.py and python/phylo/sim/CLAUDE.md.
+# python/snakes_and_ladders/sim/params.py and python/snakes_and_ladders/sim/CLAUDE.md.
 #
 # n_sites=200000 keeps the Monte Carlo standard error of an empirical
 # transition frequency (sqrt(p(1-p)/n_sites), <= ~0.001 for p in [0, 1]) an

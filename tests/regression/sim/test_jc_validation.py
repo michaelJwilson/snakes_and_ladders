@@ -10,10 +10,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from phylo.sim.jc import jc_rate_matrix, jc_transition_probabilities
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
+from snakes_and_ladders.sim.jc import jc_rate_matrix, jc_transition_probabilities
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 
 @pytest.mark.edge_case

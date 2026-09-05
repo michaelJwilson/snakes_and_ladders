@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.numerics import sample_rows as oracle
-from phylo.numerics_rust import sample_rows as accelerated
+from snakes_and_ladders.numerics import sample_rows as oracle
+from snakes_and_ladders.numerics_rust import sample_rows as accelerated
 
 SEED = 20260904
 
@@ -49,7 +49,7 @@ def test_the_rust_sampler_is_bit_identical_to_the_oracle(
 @pytest.mark.edge_case
 @pytest.mark.oracle
 def test_both_agree_on_a_row_that_does_not_quite_sum_to_one() -> None:
-    # The case `phylo.numerics`' docstring calls out as ordinary float64
+    # The case `snakes_and_ladders.numerics`' docstring calls out as ordinary float64
     # behaviour: the row leaves a sliver of the unit interval above its own
     # total, and a draw landing there crosses no column. Both implementations
     # must clamp it to the last category rather than report an index past the
@@ -101,7 +101,7 @@ def test_the_generator_is_consumed_identically_by_both() -> None:
 @pytest.mark.oracle
 def test_a_non_contiguous_input_gives_the_same_answer() -> None:
     # Borrowing rather than copying makes stride a real concern where it was
-    # not before. `phylo.numerics_rust` normalizes with `ascontiguousarray`
+    # not before. `snakes_and_ladders.numerics_rust` normalizes with `ascontiguousarray`
     # -- free when the array already is contiguous -- so a sliced view must
     # still agree with the oracle rather than reading every other element of
     # something else.

@@ -1,7 +1,7 @@
 """The phylogenetic environment: its rewards, its caching, and its boundaries.
 
-Two things are worth asserting here that neither `phylo.learn` nor
-`phylo.search.infer` can assert for itself. That the environment's reward is
+Two things are worth asserting here that neither `snakes_and_ladders.learn` nor
+`snakes_and_ladders.search.infer` can assert for itself. That the environment's reward is
 a difference of the log-likelihood it names -- both reward models, each
 against the scorer it claims to call -- and that the cheap model is cheap for
 the stated reason rather than by accident: it memoizes on a key that
@@ -15,25 +15,25 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.learn.environment import Environment
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.rollout import greedy_rollout, rollout
-from phylo.likelihood.pruning import log_likelihood
-from phylo.search.infer import Model, MoveSet, score_topology
-from phylo.search.rl import (
+from snakes_and_ladders.learn.environment import Environment
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
+from snakes_and_ladders.search.rl import (
     RewardModel,
     TopologyEnvironment,
     with_uniform_branch_lengths,
 )
-from phylo.search.topology import (
+from snakes_and_ladders.search.topology import (
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
     nni_neighbours,
 )
-from phylo.sim.params import SimulationParams, load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node, preorder
+from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -206,7 +206,7 @@ def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
 @pytest.mark.mathematical
 def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
     # The environment exists to be driven by a policy, not only by the
-    # baseline; this is the path `phylo.learn.rollout.rollout` takes through
+    # baseline; this is the path `snakes_and_ladders.learn.rollout.rollout` takes through
     # it. At a large positive weight the policy is effectively greedy, so the
     # two agree -- the same zero-temperature limit checked on the Potts
     # landscape, now on trees.

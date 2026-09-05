@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.numerics import sample_rows
+from snakes_and_ladders.numerics import sample_rows
 
 
 @pytest.mark.critical

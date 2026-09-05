@@ -14,11 +14,14 @@ import math
 
 import numpy as np
 import pytest
-from phylo.likelihood.hmm_paths import enumerate_hidden_paths, path_log_probability
-from phylo.search.alpha_expansion import energy, iterated_conditional_modes
-from phylo.search.max_cut import enumerate_max_cut
-from phylo.search.potts_mcmc import PottsMove, sample_potts
-from phylo.sim.canonical import (
+from snakes_and_ladders.likelihood.hmm_paths import (
+    enumerate_hidden_paths,
+    path_log_probability,
+)
+from snakes_and_ladders.search.alpha_expansion import energy, iterated_conditional_modes
+from snakes_and_ladders.search.max_cut import enumerate_max_cut
+from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
+from snakes_and_ladders.sim.canonical import (
     AMBIGUOUS_OBSERVATIONS,
     WANNIER_RESIDUAL_ENTROPY,
     ambiguous_hmm,
@@ -26,7 +29,7 @@ from phylo.sim.canonical import (
     minimum_frustrated_edges,
     planted_spin_glass,
 )
-from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 ZERO_FIELD = np.zeros(2)
 
@@ -73,7 +76,7 @@ def test_the_ground_state_energy_is_known_without_enumerating(
     shape: tuple[int, int],
 ) -> None:
     # What the closed form buys: the ground-state *energy* at any size, in the
-    # convention `phylo.search.alpha_expansion.energy` uses. Every other
+    # convention `snakes_and_ladders.search.alpha_expansion.energy` uses. Every other
     # discrete claim in this repository stops where enumeration does.
     graph = frustrated_triangular_lattice(shape, coupling=-1.5)
     field = np.zeros((graph.n_nodes, 2))
@@ -265,7 +268,7 @@ def test_the_planted_state_stops_being_the_ground_state_as_frustration_rises(
 def test_the_planted_energy_matches_the_energy_of_the_planted_state() -> None:
     # The construction records its own answer, so a drift between the recorded
     # energy and the model's would make every comparison against it wrong.
-    # Checked against `phylo.search.alpha_expansion.energy`, which shares no
+    # Checked against `snakes_and_ladders.search.alpha_expansion.energy`, which shares no
     # code with the construction.
     instance = planted_spin_glass(12, 4.0, 0.25, np.random.default_rng(3))
 

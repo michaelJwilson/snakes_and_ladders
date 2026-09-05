@@ -56,7 +56,7 @@ The fundamental challenge in high-dimensional probabilistic inference is the com
 Classical inference frameworks heavily rely on fixed, hand-designed heuristics---such as Nearest-Neighbor Interchange (NNI) for trees, or Swendsen-Wang cluster updates for lattices---applied greedily or via simulated annealing. This paper introduces an alternative paradigm: framing the discrete search as a Reinforcement Learning (RL) problem where a neural policy proposes structural updates, while continuous parameters are simultaneously fitted via reverse-mode automatic differentiation. 
 
 \subsection{Scope and Limitations}
-This document serves as the foundational mathematical and architectural specification of the \texttt{phylo} repository. It validates the exactness of our differentiable likelihood and energy engines against brute-force marginalization and establishes our continuous optimization tolerances. \textbf{Note:} Empirical benchmarking of the fully trained RL policies against state-of-the-art classical tools (e.g., IQ-TREE 2, RAxML-NG) is slated for upcoming milestones and is marked via placeholders in Section \ref{sec:results}.
+This document serves as the foundational mathematical and architectural specification of the \texttt{snakes\_and\_ladders} repository. It validates the exactness of our differentiable likelihood and energy engines against brute-force marginalization and establishes our continuous optimization tolerances. \textbf{Note:} Empirical benchmarking of the fully trained RL policies against state-of-the-art classical tools (e.g., IQ-TREE 2, RAxML-NG) is slated for upcoming milestones and is marked via placeholders in Section \ref{sec:results}.
 
 \section{Methods}
 \label{sec:methods}
@@ -146,7 +146,7 @@ In accordance with the project roadmap, the following metrics will be populated 
 \begin{figure}[htbp]
   \centering
   \framebox[\linewidth]{\rule{0pt}{150pt} \textbf{PLACEHOLDER: Competitiveness against Classical Software}}
-  \caption{Wall-clock convergence of the \texttt{phylo} framework against IQ-TREE 2 and RAxML-NG on empirical benchmark datasets.}
+  \caption{Wall-clock convergence of the \texttt{snakes\_and\_ladders} framework against IQ-TREE 2 and RAxML-NG on empirical benchmark datasets.}
   \label{fig:benchmark-iqtree}
 \end{figure}
 

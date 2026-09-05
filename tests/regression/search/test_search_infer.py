@@ -1,9 +1,9 @@
 """Regression tests for topology search.
 
 The claim this module carries is issue #63's, tested for the first time: the
-same model-agnostic ``phylo.opt.fit`` scores every candidate topology, with
+same model-agnostic ``snakes_and_ladders.opt.fit`` scores every candidate topology, with
 the discrete move sitting outside it as an operation that builds a new
-objective. Nothing in ``phylo.opt`` changed to make that work, and the
+objective. Nothing in ``snakes_and_ladders.opt`` changed to make that work, and the
 import-graph test in ``test_opt_objective.py`` still holds.
 
 Exhaustive validation of *search quality* -- whether hill climbing finds the
@@ -15,13 +15,23 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.likelihood.objective import BranchLengthObjective
-from phylo.opt.fit import fit
-from phylo.search.infer import Inference, Model, MoveSet, infer, score_topology
-from phylo.search.topology import leaf_bipartitions, random_topology
-from phylo.sim.newick import count_topologies, to_newick, validate_unrooted_newick
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import preorder
+from snakes_and_ladders.likelihood.objective import BranchLengthObjective
+from snakes_and_ladders.opt.fit import fit
+from snakes_and_ladders.search.infer import (
+    Inference,
+    Model,
+    MoveSet,
+    infer,
+    score_topology,
+)
+from snakes_and_ladders.search.topology import leaf_bipartitions, random_topology
+from snakes_and_ladders.sim.newick import (
+    count_topologies,
+    to_newick,
+    validate_unrooted_newick,
+)
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import SMALL_SITES, load_fixture
 

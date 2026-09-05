@@ -1,8 +1,8 @@
 """The hidden Markov state path as an `Environment`, against enumeration.
 
-The value of a third instance is that it is not a lattice. `phylo.opt`'s
+The value of a third instance is that it is not a lattice. `snakes_and_ladders.opt`'s
 model-agnosticism is measured rather than asserted --- four instances run
-against `Objective` unchanged --- and `phylo.learn.Environment` has until now
+against `Objective` unchanged --- and `snakes_and_ladders.learn.Environment` has until now
 had one. So what is checked here is not only that this landscape is correct
 but that the *estimator, the policy and the rollout code needed no change to
 carry it*, which is the claim `learn/CLAUDE.md` makes for the interface.
@@ -14,14 +14,14 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.learn.exact import (
+from snakes_and_ladders.learn.exact import (
     exact_expected_return,
     exact_policy_gradient,
     finite_difference_gradient,
 )
-from phylo.learn.hmm import StatePathLandscape, enumerate_paths, optimum
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.rollout import greedy_rollout
+from snakes_and_ladders.learn.hmm import StatePathLandscape, enumerate_paths, optimum
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.rollout import greedy_rollout
 
 # Deliberately asymmetric: a near-uniform transition or emission makes the
 # hidden states nearly exchangeable, and a search on an almost-flat landscape
@@ -111,7 +111,7 @@ def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
 @pytest.mark.oracle
 def test_the_enumerated_gradient_matches_central_differences() -> None:
     # The oracle that makes this an *instance* rather than a second class
-    # with the same method names: `phylo.learn.exact` carries it unchanged
+    # with the same method names: `snakes_and_ladders.learn.exact` carries it unchanged
     # from the Potts landscape, and the agreement it reaches here is the
     # same claim at 1.5e-11 that one reports.
     landscape = _landscape()

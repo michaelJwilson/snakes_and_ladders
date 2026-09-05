@@ -1,4 +1,4 @@
-# Developing phylo
+# Developing snakes_and_ladders
 
 Repository structure, CI enforcement, and contribution rules. For setup, see [INSTALL.md](INSTALL.md); for the project's trajectory and for the development loop these rules sit inside — ticket, plan, pull request, validation, record — see [ROADMAP.md](ROADMAP.md) §0. **`CLAUDE.md` is the authoritative source for conventions; in any conflict, `CLAUDE.md` prevails.**
 
@@ -13,14 +13,14 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 | --- | --- |
 | `benches/`, `tests/` | Criterion benchmarks (Rust), pytest suite, and integration tests. |
 | `docs/source/` | Sphinx API documentation. |
-| `python/phylo/` | Python package: re-exports, typed extension stubs, stub CLI. |
-| `python/phylo/sim/` | Data generation and ground-truth retention. |
-| `python/phylo/likelihood/` | Felsenstein pruning; CPU dispatch landed (NumPy, PyTorch, Rust), CUDA and Metal dispatch not yet implemented. Also the phylogenetic `Objective` (`objective.py`), which adapts the recursion to `opt/`'s fitting interface — it is here because `opt/` may import no application module. |
-| `python/phylo/opt/` | Model-agnostic continuous parameter fitting via autodiff (PyTorch): the `Objective` interface, shared constraint maps, and the Potts and HMM reference instances. Imports nothing from `sim/`, `likelihood/` or `search/`, asserted by test. |
-| `python/phylo/learn/` | Model-agnostic reinforcement learning: the `Environment` interface, the policy, REINFORCE, an exact trajectory-enumeration oracle, and a Potts-landscape reference instance. Imports nothing from `sim/`, `likelihood/` or `search/`, asserted by test. |
-| `python/phylo/search/` | Move sets, temperature schedules, and the hill-climbing search (`infer.py`) that joins them to `opt/`. The phylogenetic RL environment (`rl.py`) lives here too, for the reason the phylogenetic `Objective` lives in `likelihood/`: `learn/` may import no application module. |
-| `python/phylo/qa/` | QA figures/tables for the technical document; renders, doesn't recompute. |
-| `src/lib.rs` | Rust extension (`oxiphylo`), exposed through PyO3. |
+| `python/snakes_and_ladders/` | Python package: re-exports, typed extension stubs, stub CLI. |
+| `python/snakes_and_ladders/sim/` | Data generation and ground-truth retention. |
+| `python/snakes_and_ladders/likelihood/` | Felsenstein pruning; CPU dispatch landed (NumPy, PyTorch, Rust), CUDA and Metal dispatch not yet implemented. Also the phylogenetic `Objective` (`objective.py`), which adapts the recursion to `opt/`'s fitting interface — it is here because `opt/` may import no application module. |
+| `python/snakes_and_ladders/opt/` | Model-agnostic continuous parameter fitting via autodiff (PyTorch): the `Objective` interface, shared constraint maps, and the Potts and HMM reference instances. Imports nothing from `sim/`, `likelihood/` or `search/`, asserted by test. |
+| `python/snakes_and_ladders/learn/` | Model-agnostic reinforcement learning: the `Environment` interface, the policy, REINFORCE, an exact trajectory-enumeration oracle, and a Potts-landscape reference instance. Imports nothing from `sim/`, `likelihood/` or `search/`, asserted by test. |
+| `python/snakes_and_ladders/search/` | Move sets, temperature schedules, and the hill-climbing search (`infer.py`) that joins them to `opt/`. The phylogenetic RL environment (`rl.py`) lives here too, for the reason the phylogenetic `Objective` lives in `likelihood/`: `learn/` may import no application module. |
+| `python/snakes_and_ladders/qa/` | QA figures/tables for the technical document; renders, doesn't recompute. |
+| `src/lib.rs` | Rust extension (`oxi_snakes_and_ladders`), exposed through PyO3. |
 | `docs/tex/` | LaTeX source for the technical document. |
 | `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/draft.pdf` (committed). |
 
@@ -39,11 +39,11 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
 | `tests/regression/` (top level) | Regression tests belonging to no submodule — `test_numerics.py`, `test_claude_md_pointers.py`, `test_pairwise_distance.py` (scaffolding). |
 | `tests/benchmarks/` | `pytest-benchmark` timings. Asserts shape only; correctness is pinned by the regression counterpart. `profile_hotpaths.py` is the one exception — a `cProfile` self-time diagnostic, not a timing, and not `pytest`-collected. |
 | `tests/regression/fixtures/` | Declarative test data (e.g. `simulation_params.yaml`). Data, not Python. |
-| `tests/` (top level) | Whole-package and binding smoke tests, which belong to no single kind or submodule — `test_run_phylo.py`, `test_oxiphylo_bindings.py`. |
+| `tests/` (top level) | Whole-package and binding smoke tests, which belong to no single kind or submodule — `test_run_snakes_and_ladders.py`, `test_oxiphylo_bindings.py`. |
 
 * **Every benchmark pairs with a regression module.** `benchmarks/test_<name>_bench.py` accompanies `regression/test_<name>.py`. A benchmark without a counterpart asserts nothing about correctness, which `CLAUDE.md`'s "No Coverage Theatre" rule forbids. `profile_hotpaths.py` is not a benchmark in this sense — it ranks self time for a Rust-port audit, asserts nothing, and pairs with no regression module — so the rule does not apply to it.
 * **Split by submodule only when a kind outgrows one flat directory** — `tests/regression/likelihood/`, not a top-level `tests/likelihood/`. Kind stays the outer axis; a subject-first split would fight the two directories already there. `tests/regression/` reached 39 flat modules and was split under issue #154; `tests/benchmarks/` is 16 and stays flat.
-* **A pull request runs the tests its change can affect, not all of them.** `infra/select_tests.py` turns the changed files into the test paths to run and the modules to measure coverage over; `python-tests` calls it (issue #161). Three rules make it safe. A module's dependents are derived from the import graph and run too, because `phylo.search` imports `phylo.likelihood` and a change to the latter can break the former. A change it cannot attribute to one module — a lockfile, a shared fixture, `src/`, the workflow itself — selects everything. And a diff that changed no code selects nothing, because the suite would then run identical tests over identical source to the last run on `main`.
+* **A pull request runs the tests its change can affect, not all of them.** `infra/select_tests.py` turns the changed files into the test paths to run and the modules to measure coverage over; `python-tests` calls it (issue #161). Three rules make it safe. A module's dependents are derived from the import graph and run too, because `snakes_and_ladders.search` imports `snakes_and_ladders.likelihood` and a change to the latter can break the former. A change it cannot attribute to one module — a lockfile, a shared fixture, `src/`, the workflow itself — selects everything. And a diff that changed no code selects nothing, because the suite would then run identical tests over identical source to the last run on `main`.
 
   Benchmarks are selected the same way, by the regression module each pairs with: a `learn` change times `test_learn_reinforce_bench.py` and not the other twelve.
 
@@ -58,7 +58,7 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
   | `opt/` | 174.0 s | **163.7 s** | learn, likelihood, opt, qa, search |
   | lockfile, shared fixture, `src/` | 174.0 s | 174.0 s | everything |
 
-  The saving is uneven by design, and the reason is the import graph rather than the machinery. Attributed by `--durations=0` over one run: `qa` is 33.6% of the suite's time, benchmarks 29.6%, `search` 20.9%, and the rest under 6% each. `phylo.qa` imports four of the other five modules, so most changes reach the most expensive component; a change to `opt`, which everything depends on, saves almost nothing. `phylo.learn` is imported by nothing, so a change there saves 90%.
+  The saving is uneven by design, and the reason is the import graph rather than the machinery. Attributed by `--durations=0` over one run: `qa` is 33.6% of the suite's time, benchmarks 29.6%, `search` 20.9%, and the rest under 6% each. `snakes_and_ladders.qa` imports four of the other five modules, so most changes reach the most expensive component; a change to `opt`, which everything depends on, saves almost nothing. `snakes_and_ladders.learn` is imported by nothing, so a change there saves 90%.
 
 * **Coverage is measured against what was selected.** Where the whole suite runs, that is the package, as before. Where a subset runs, the claim narrows to *every module this pull request touched is at least 90% covered by that module's own tests* — stricter in one direction, since a module stops counting coverage it gets only incidentally from another module's tests, and weaker in another, since an untouched module is not re-checked. Measured on `main`: sim 100%, likelihood 100%, learn 100%, opt 99%, qa 99%, search 98%, so the gate holds without a new test. The package-wide gate still runs on every push to `main` and in `infra/release.sh`, which is what stops an unselected module rotting.
 * **Fixtures follow their blast radius.** Used by one module: keep it in that module, or in a local `conftest.py`. Shared across modules: a top-level underscore-prefixed module such as `tests/_example_hotpath.py`, which is imported rather than collected.
@@ -72,7 +72,7 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
 `maturin` builds the Rust extension natively during `pip install .`.
 
 * **Requirement:** A Rust toolchain is required for consumers.
-* **Known Gap:** The typed stub `python/phylo/oxiphylo.pyi` is hand-written. Run `python -m mypy.stubtest phylo.oxiphylo` periodically to prevent drift.
+* **Known Gap:** The typed stub `python/snakes_and_ladders/oxi_snakes_and_ladders.pyi` is hand-written. Run `python -m mypy.stubtest snakes_and_ladders.oxi_snakes_and_ladders` periodically to prevent drift.
 
 ### Continuous Integration
 
@@ -90,7 +90,7 @@ Nine required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs 
 | `notebooks` | Re-execute every notebook under `docs/nb/` (`infra/check_notebooks.py`) and fail on a re-executed output that differs from the committed one. Text is compared; a figure is checked only for still being produced. Regenerate with `--write` on the same script |
 | `audit` | `pip-audit`, `cargo audit` (skips on cache hit if lockfiles are unchanged) |
 
-`lint`, `python-tests`, `docs`, and `notebooks` restore a `~/.cache/uv` cache keyed on `uv.lock`'s hash before installing `uv`. `rust-lint`, `rust-tests`, `build`, and those same four jobs restore a shared `~/.cargo/registry`, `~/.cargo/git`, and `target/` cache keyed on `Cargo.lock`'s hash, so `oxiphylo` (built via `maturin`/`pyo3` on every `uv sync` or `pip install .`) compiles from scratch only when a lockfile changes or no job has populated the cache yet. `audit`'s per-week marker cache (above) is unrelated and unaffected.
+`lint`, `python-tests`, `docs`, and `notebooks` restore a `~/.cache/uv` cache keyed on `uv.lock`'s hash before installing `uv`. `rust-lint`, `rust-tests`, `build`, and those same four jobs restore a shared `~/.cargo/registry`, `~/.cargo/git`, and `target/` cache keyed on `Cargo.lock`'s hash, so `oxi_snakes_and_ladders` (built via `maturin`/`pyo3` on every `uv sync` or `pip install .`) compiles from scratch only when a lockfile changes or no job has populated the cache yet. `audit`'s per-week marker cache (above) is unrelated and unaffected.
 
 ### CI & Performance Budget
 
@@ -113,7 +113,7 @@ Nine required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs 
 * **Two axes select tests, and they answer different questions.** `infra/select_tests.py` chooses **by module path** — what a diff could have broken. The *kind* markers choose **by what a test is checked against** — `oracle`, `simulated_truth`, `mathematical`, `edge_case`, `structural`, registered in `pyproject.toml` and required of every test outside `tests/benchmarks/` by `tests/regression/test_test_kinds.py`. They sit beside each other rather than one replacing the other: path selection carries the dependency reasoning issue #161 built, and the kinds are how you ask for a class of check independently of where the change landed. `--strict-markers` is on, so a misspelled marker fails collection instead of silently selecting nothing.
 * **`critical` is the early gate, and it is a second axis rather than a kind.** It marks the tests whose failure invalidates everything after them — the import graph, the documentation index, the `CLAUDE.md` pointers, `select_tests` itself, the compiled extension, and the categorical sampler. **76 tests in 3.0 s**, measured uncontended on one development machine, against a `-m "not release"` suite of several minutes. CI runs `pytest -m critical` unconditionally before selection, so a broken invariant reports in seconds; run it locally the same way. A test is critical *and* a kind, never instead of one.
 * **Benchmarks are conditional**, and are 29.6% of the suite's wall clock (40.2 s of the 136.0 s attributed to tests). They measure code a documentation or QA change cannot have altered, and since issue #161 they are selected per module rather than all together. The job itself always runs and always reports — it is a required check, and skipping the job rather than the step would leave it pending and block the merge. Coverage is unaffected, because every line a benchmark reaches is also reached by the regression module it pairs with.
-* **The document decides which figures a pull request rebuilds.** `phylo.qa.manifest` states which QA outputs exist and what renders each one; `infra/build_technical_doc.sh` regenerates only those `docs/tex/main.tex` cites. The figures it does not cite are regenerated and compared at the release gate instead (`infra/release.sh` runs `phylo.qa.build --all --check`), so the check moves rather than disappearing. The saving is the job: rendering all thirteen figures costs 281.6 s against a 1.5 s LaTeX build, and the document currently cites two of them, so a full build is 5.9 s. Citing a figure the manifest cannot render fails the build rather than skipping it — a figure in the document that no build regenerates is exactly the drift the committed figures exist to prevent. `infra/measure_build.sh` reproduces these numbers on fixed hardware.
+* **The document decides which figures a pull request rebuilds.** `snakes_and_ladders.qa.manifest` states which QA outputs exist and what renders each one; `infra/build_technical_doc.sh` regenerates only those `docs/tex/main.tex` cites. The figures it does not cite are regenerated and compared at the release gate instead (`infra/release.sh` runs `snakes_and_ladders.qa.build --all --check`), so the check moves rather than disappearing. The saving is the job: rendering all thirteen figures costs 281.6 s against a 1.5 s LaTeX build, and the document currently cites two of them, so a full build is 5.9 s. Citing a figure the manifest cannot render fails the build rather than skipping it — a figure in the document that no build regenerates is exactly the drift the committed figures exist to prevent. `infra/measure_build.sh` reproduces these numbers on fixed hardware.
 * **Tolerances on a quantity that scales with problem size are relative.** The log-likelihood is a sum over sites, so an absolute bound fixed at one site count does not transfer to another: the backends agree to ~8e-13 relative at every size, but that same agreement is 7.4e-07 absolute at 200,000 sites. Absolute bounds are correct for quantities that do not scale — a transition probability, a row sum, a Monte Carlo frequency — and are kept there.
 * **Concurrency:** Superseded CI runs on the same branch are automatically cancelled.
 
@@ -166,7 +166,7 @@ consistency, duplicated machinery, suggested follow-up tickets) and gates on
    at least one check failed.
 2. **Bump the version.** Edit `[package].version` in `Cargo.toml` — the
    single version source (CLAUDE.md) — then run `cargo build` so
-   `Cargo.lock`'s `oxiphylo` entry picks up the new version, and commit both.
+   `Cargo.lock`'s `oxi_snakes_and_ladders` entry picks up the new version, and commit both.
    `maturin` reads the Python package version from the same field
    (`dynamic = ["version"]` in `pyproject.toml`), so nothing else needs
    editing.

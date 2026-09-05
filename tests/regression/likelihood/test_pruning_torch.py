@@ -1,4 +1,4 @@
-"""Regression tests for ``phylo.likelihood.pruning_torch``.
+"""Regression tests for ``snakes_and_ladders.likelihood.pruning_torch``.
 
 Four independent checks per issue #70, none sharing an implementation with
 the thing it judges:
@@ -30,12 +30,12 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.likelihood import pruning, pruning_torch
-from phylo.likelihood.brute_force import brute_force_log_likelihood
-from phylo.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from phylo.sim.jc import jc_rate_matrix
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
+from snakes_and_ladders.likelihood import pruning, pruning_torch
+from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
+from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from snakes_and_ladders.sim.jc import jc_rate_matrix
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 # Relative, not absolute -- see issue #111 and the note in
 # test_pruning_rust.py. CROSS_DEVICE_RTOL_FLOAT64 is the float64

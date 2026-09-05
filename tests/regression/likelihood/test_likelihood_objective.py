@@ -1,7 +1,7 @@
 """Regression tests for the phylogenetic instance of ``Objective``.
 
 Two things are pinned here that nothing else in the suite can pin. The
-optimizer is the same model-agnostic ``phylo.opt.fit`` the Potts chain and
+optimizer is the same model-agnostic ``snakes_and_ladders.opt.fit`` the Potts chain and
 the HMM use, so this file is where issue #63's claim -- that the interface
 was not secretly shaped by one model -- is either confirmed or refuted.
 
@@ -17,22 +17,22 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.likelihood import pruning_torch
-from phylo.likelihood.objective import (
+from snakes_and_ladders.likelihood import pruning_torch
+from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from phylo.opt.fit import (
+from snakes_and_ladders.opt.fit import (
     constrained_standard_errors,
     covers,
     fit,
     observed_information,
     parameter_covariance,
 )
-from phylo.sim.gtr import gtr_rate_matrix
-from phylo.sim.jc import jc_rate_matrix
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node, preorder
+from snakes_and_ladders.sim.gtr import gtr_rate_matrix
+from snakes_and_ladders.sim.jc import jc_rate_matrix
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, SMALL_SITES, load_fixture
 from tests._objective_checks import assert_gradient_matches_finite_differences
@@ -155,7 +155,7 @@ class _Unmerged:
 @pytest.mark.edge_case
 def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
     # The consequence of the confounding: a flat direction makes the
-    # observed information singular, and `phylo.opt.fit` refuses to invert
+    # observed information singular, and `snakes_and_ladders.opt.fit` refuses to invert
     # it. This is what the merged parameterization exists to avoid, and the
     # reason it is not merely a tidier way to count parameters.
     params = load_fixture(EIGHT_TAXA)

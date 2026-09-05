@@ -1,11 +1,11 @@
-"""Regression tests for :mod:`phylo.sim.potts`.
+"""Regression tests for :mod:`snakes_and_ladders.sim.potts`.
 
 Two independent oracles, for the two regimes the module supports. On the
 loopy 3x3 lattice, exhaustive enumeration over every ``k ** n_nodes``
 configuration gives the exact partition function and the exact single-site
 and pairwise marginals -- a computation that shares no code with the Gibbs
 sampler under test. On the open chain, the exact sampler is checked by
-reduction: it must reproduce ``phylo.opt.potts.log_partition``'s
+reduction: it must reproduce ``snakes_and_ladders.opt.potts.log_partition``'s
 transfer-matrix ``log Z`` to machine precision, since both claim to describe
 the same distribution by different routes.
 """
@@ -19,9 +19,9 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.opt.potts import log_partition
-from phylo.sim.graph import BoundaryCondition, lattice_graph
-from phylo.sim.potts import load_potts_lattice_params, simulate_potts
+from snakes_and_ladders.opt.potts import log_partition
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import load_potts_lattice_params, simulate_potts
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -141,7 +141,7 @@ def test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size() -> No
 @pytest.mark.oracle
 def test_the_open_chain_path_reproduces_the_transfer_matrix_log_z() -> None:
     # A reduction to an exact result, not sampler-vs-sampler agreement: the
-    # same distribution described by phylo.opt.potts's transfer matrix and
+    # same distribution described by snakes_and_ladders.opt.potts's transfer matrix and
     # by the backward-message sampler this module generalizes it from.
     coupling, length, n_states = 0.75, 10, 3
     field = np.array([0.4, -0.1, -0.3])

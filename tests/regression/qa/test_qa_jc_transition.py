@@ -1,4 +1,4 @@
-"""Regression test for phylo.qa.jc_transition.
+"""Regression test for snakes_and_ladders.qa.jc_transition.
 
 The figure's claim is that the simulator's substitution frequencies match the
 closed-form Jukes-Cantor transition probabilities. This pins that claim
@@ -12,9 +12,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from phylo.qa.jc_transition import build_figure, empirical_transitions, main
-from phylo.sim.jc import jc_transition_probabilities
-from phylo.sim.params import load_simulation_params
+from snakes_and_ladders.qa.jc_transition import (
+    build_figure,
+    empirical_transitions,
+    main,
+)
+from snakes_and_ladders.sim.jc import jc_transition_probabilities
+from snakes_and_ladders.sim.params import load_simulation_params
 
 from tests._fixtures import FIXTURES_DIR, FOUR_TAXA, load_fixture
 
@@ -105,7 +109,7 @@ def test_main_writes_a_figure_and_its_caption(tmp_path: Path) -> None:
 def test_a_branch_without_a_length_is_refused() -> None:
     from dataclasses import replace
 
-    from phylo.sim.tree import Node
+    from snakes_and_ladders.sim.tree import Node
 
     params = load_simulation_params(FIXTURES_DIR / FOUR_TAXA)
     broken = replace(

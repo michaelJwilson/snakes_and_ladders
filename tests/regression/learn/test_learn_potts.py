@@ -16,14 +16,14 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.potts import (
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.potts import (
     PottsLandscape,
     enumerate_configurations,
     optimum,
 )
-from phylo.learn.rollout import greedy_rollout
-from phylo.opt.potts import load_potts_params
+from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.opt.potts import load_potts_params
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -101,7 +101,7 @@ def test_a_terminal_state_is_one_no_flip_improves() -> None:
 
 @pytest.mark.mathematical
 def test_shifting_the_field_leaves_every_reward_unchanged() -> None:
-    # h and h + c are the same model, and `phylo.opt.potts` has to fix that
+    # h and h + c are the same model, and `snakes_and_ladders.opt.potts` has to fix that
     # gauge because a fitted field would otherwise have no value. Here it
     # costs nothing: a shift moves every configuration's energy by L * c, so
     # every *difference* is untouched. Recorded because the fixture is
@@ -186,7 +186,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
 
 @pytest.mark.structural
 def test_the_fixture_yaml_builds_the_same_landscape() -> None:
-    # One model, two roles: the yaml that supplies `phylo.opt`'s reference
+    # One model, two roles: the yaml that supplies `snakes_and_ladders.opt`'s reference
     # objective read as a search problem instead of a fitting problem.
     params = load_potts_params(FIXTURE)
     landscape = PottsLandscape.from_params(params)

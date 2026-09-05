@@ -1,6 +1,6 @@
 """The shared QA entry point's own contract.
 
-The thirteen figure and table scripts exercise :mod:`phylo.qa.runner`
+The thirteen figure and table scripts exercise :mod:`snakes_and_ladders.qa.runner`
 end-to-end, so what is pinned here is what routing them through one function
 is supposed to guarantee and what no individual figure's test would catch.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pytest
 from matplotlib.figure import Figure
-from phylo.qa.runner import (
+from snakes_and_ladders.qa.runner import (
     Option,
     ParamsArgument,
     figure_main,

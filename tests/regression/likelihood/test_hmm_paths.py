@@ -1,7 +1,7 @@
 """The path enumeration, against the forward recursion and against algebra.
 
 The enumeration is the oracle two decoders are separated by, so it cannot be
-validated by a decoder. It is pinned instead against `phylo.opt.hmm`'s forward
+validated by a decoder. It is pinned instead against `snakes_and_ladders.opt.hmm`'s forward
 algorithm --- which shares no code with it --- and against quantities that can
 be worked out by hand.
 """
@@ -13,14 +13,14 @@ import itertools
 import numpy as np
 import pytest
 import torch
-from phylo.likelihood.hmm_paths import (
+from snakes_and_ladders.likelihood.hmm_paths import (
     MAX_ENUMERABLE_PATHS,
     enumerate_hidden_paths,
     path_log_probability,
 )
-from phylo.opt.hmm import forward_log_likelihood
-from phylo.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
-from phylo.sim.hmm import HmmParams
+from snakes_and_ladders.opt.hmm import forward_log_likelihood
+from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
+from snakes_and_ladders.sim.hmm import HmmParams
 
 
 def _params(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
@@ -188,7 +188,7 @@ def test_the_ambiguous_fixture_is_within_the_cap() -> None:
 def test_a_sequence_too_long_to_enumerate_is_refused() -> None:
     params = _params(4, 2, 12, 16)
 
-    # The wording is `phylo.enumeration`'s, shared with every other
+    # The wording is `snakes_and_ladders.enumeration`'s, shared with every other
     # enumerator since issue #230; what is asserted here is that this caller
     # reaches it, and that the message names the size that was too large.
     with pytest.raises(

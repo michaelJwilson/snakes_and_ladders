@@ -8,7 +8,7 @@ gets trapped on it, that the trap is a genuine local optimum rather than a
 truncated episode, and that the generating topology is nonetheless the
 best-scoring one -- without which a search failing would say nothing.
 
-The surface is the fixed-branch-length one `phylo.search.rl` scores
+The surface is the fixed-branch-length one `snakes_and_ladders.search.rl` scores
 (`RewardModel.KNOWN`), because that is the surface an agent optimizes and the
 one issue #178 trains against. All 945 unrooted topologies on 7 leaves are
 enumerated, so "the best topology" is an enumerated fact.
@@ -20,13 +20,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from phylo.learn.rollout import greedy_rollout
-from phylo.search.infer import MoveSet
-from phylo.search.rl import RewardModel, TopologyEnvironment
-from phylo.search.topology import Topology, enumerate_topologies
-from phylo.sim.params import SimulationParams, load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import edges
+from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.search.infer import MoveSet
+from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.topology import Topology, enumerate_topologies
+from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import edges
 
 FIXTURE = Path("tests/regression/fixtures/simulation_params_hard.yaml")
 

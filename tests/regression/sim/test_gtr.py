@@ -14,15 +14,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.sim.gtr import (
+from snakes_and_ladders.sim.gtr import (
     exchangeabilities_from_free,
     exchangeability_matrix,
     gtr_rate_matrix,
     n_exchangeabilities,
     reversible_transition_probabilities,
 )
-from phylo.sim.jc import jc_rate_matrix, jc_transition_probabilities
-from phylo.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.jc import jc_rate_matrix, jc_transition_probabilities
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import SMALL_SITES, load_fixture
 

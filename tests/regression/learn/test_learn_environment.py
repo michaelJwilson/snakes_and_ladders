@@ -4,7 +4,7 @@ What is asserted here is what no instance can assert for itself -- that the
 return telescopes to the improvement it claims to be, that a rollout obeys
 its budget and reports truncation, and that a score shared by every action is
 unidentifiable. The last is the same failure ``log_simplex`` exists to
-prevent in ``phylo.opt``, one module over, and it is the reason no
+prevent in ``snakes_and_ladders.opt``, one module over, and it is the reason no
 environment here supplies a bias feature.
 """
 
@@ -14,17 +14,21 @@ import ast
 from pathlib import Path
 
 import numpy as np
-import phylo.learn
 import pytest
+import snakes_and_ladders.learn
 import torch
 from numpy.testing import assert_allclose
-from phylo.learn.environment import Environment, Episode
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.potts import PottsLandscape
-from phylo.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.learn.environment import Environment, Episode
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 
 # Same rule, same wording, same reason as `tests/regression/test_opt_objective.py`.
-FORBIDDEN_PREFIXES = ("phylo.sim", "phylo.likelihood", "phylo.search")
+FORBIDDEN_PREFIXES = (
+    "snakes_and_ladders.sim",
+    "snakes_and_ladders.likelihood",
+    "snakes_and_ladders.search",
+)
 
 FIELD = np.array([0.4, -0.1, -0.3])
 
@@ -50,7 +54,7 @@ def test_learn_imports_nothing_from_the_application_modules() -> None:
     # The structural claim this package exists to make. An agent that has
     # seen a tree is an agent shaped by trees, and neither ruff nor mypy
     # would notice a single convenience import.
-    package = Path(phylo.learn.__file__).parent
+    package = Path(snakes_and_ladders.learn.__file__).parent
     offenders: dict[str, set[str]] = {}
     for source in sorted(package.glob("*.py")):
         bad = {
@@ -194,7 +198,7 @@ def test_a_score_shared_by_every_action_is_unidentifiable() -> None:
     # same amount, and the softmax is invariant to that. So a feature that
     # does not vary across a state's actions carries no information and its
     # weight has no value -- which is why there is no bias term. Exactly the
-    # softmax gauge of `phylo.opt.constrain`, restated for a policy.
+    # softmax gauge of `snakes_and_ladders.opt.constrain`, restated for a policy.
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.7, -1.3], dtype=torch.float64))
     features = torch.tensor([[1.0, 0.0], [0.0, 2.0], [-1.0, 1.0]], dtype=torch.float64)

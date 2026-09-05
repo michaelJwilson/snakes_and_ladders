@@ -19,9 +19,12 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.likelihood.belief_propagation import ConvergenceError, belief_propagation
-from phylo.likelihood.potts import enumerate_potts
-from phylo.sim.graph import PottsGraph, erdos_renyi_graph
+from snakes_and_ladders.likelihood.belief_propagation import (
+    ConvergenceError,
+    belief_propagation,
+)
+from snakes_and_ladders.likelihood.potts import enumerate_potts
+from snakes_and_ladders.sim.graph import PottsGraph, erdos_renyi_graph
 
 # `likelihood/CLAUDE.md`'s float64 bound, which is what BP must meet wherever
 # it is exact.

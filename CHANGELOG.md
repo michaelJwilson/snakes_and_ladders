@@ -14,7 +14,7 @@ convention and is retained as history.
 
 ### Changed
 
-- The thirteen QA scripts share one command line (`phylo.qa.runner`). Each
+- The thirteen QA scripts share one command line (`snakes_and_ladders.qa.runner`). Each
   declared its own `ArgumentParser`, `--output-dir`, load, write and
   `try/finally` around `plt.close`, so a fix to one reached only that one; a
   script now declares its output stem, the parameters files it takes, and the
@@ -79,13 +79,13 @@ convention and is retained as history.
   figures nothing included. A full build is now 5.9 s, and `docs/draft.pdf` and
   all thirteen committed figures are byte-identical to before.
 
-  `phylo.qa.manifest` is the single statement of which figures exist and what
-  renders each one. `phylo.qa.build` reads it and renders a selection: what the
+  `snakes_and_ladders.qa.manifest` is the single statement of which figures exist and what
+  renders each one. `snakes_and_ladders.qa.build` reads it and renders a selection: what the
   document cites (per pull request), the whole manifest (`--all`, which
   `infra/release.sh` now runs with `--check`), or named stems (`--only`).
   Citing a figure the manifest cannot render is refused rather than skipped.
 
-  `phylo.qa.build` pins `SOURCE_DATE_EPOCH` for the figures it renders.
+  `snakes_and_ladders.qa.build` pins `SOURCE_DATE_EPOCH` for the figures it renders.
   matplotlib embeds it, so without it two rebuilds of an unchanged figure
   differ and a comparison reports every figure stale — which a caller had to
   know to prevent. `infra/build_technical_doc.sh` reads the value back from
@@ -164,7 +164,7 @@ convention and is retained as history.
 
 ### Added
 
-- A model-agnostic optimization interface (`phylo.opt`): an unconstrained
+- A model-agnostic optimization interface (`snakes_and_ladders.opt`): an unconstrained
   parameter vector, a differentiable scalar objective, and a map back to named
   constrained parameters, with the shared constraint maps that keep every
   parameter feasible by construction. Two reference instances ship with it — a
@@ -172,9 +172,9 @@ convention and is retained as history.
   against an exact independent oracle (transfer matrix and brute-force path
   enumeration respectively) and a central-difference derivative check. The
   interface carries no application knowledge, and a test asserts it imports
-  nothing from `phylo.sim`, `phylo.likelihood` or `phylo.search`.
+  nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`.
 
-  Gradient-based fitting for any `Objective` (`phylo.opt.fit`): L-BFGS with a
+  Gradient-based fitting for any `Objective` (`snakes_and_ladders.opt.fit`): L-BFGS with a
   strong-Wolfe line search, convergence judged on the gradient relative to the
   objective's own magnitude, and confidence intervals from the observed Fisher
   information pushed through the constraint map by the delta method. Validated
@@ -184,7 +184,7 @@ convention and is retained as history.
   algorithm sharing no optimizer, parameterization or constraint map with it.
   Two QA figures report the recovery and how fast the intervals converge on
   their nominal coverage. (#63)
-- Branch-length fitting for a fixed topology (`phylo.likelihood.objective`),
+- Branch-length fitting for a fixed topology (`snakes_and_ladders.likelihood.objective`),
   behind the same model-agnostic interface as the Potts and HMM instances — the
   optimizer needed no phylogenetic special-casing, which is the evidence issue
   \#63's abstraction was not shaped by one model. Branch lengths are recovered
@@ -195,11 +195,11 @@ convention and is retained as history.
   The two branches below a rooted binary tree's root are fitted as one
   parameter and reported as their sum, because only the sum is estimable: under
   a reversible model the likelihood is unchanged by moving length between them.
-  `phylo.opt.fit.parameter_covariance` now rejects an ill-conditioned observed
+  `snakes_and_ladders.opt.fit.parameter_covariance` now rejects an ill-conditioned observed
   information rather than inverting it, since a numerically singular matrix
   inverts successfully and yields a meaningless interval.
 
-  The general time-reversible model (`phylo.sim.gtr`), so `Q` and `π` have free
+  The general time-reversible model (`snakes_and_ladders.sim.gtr`), so `Q` and `π` have free
   parameters to fit at all — Jukes–Cantor has none. Exchangeabilities and the
   stationary distribution are fitted alongside the branch lengths and recovered
   within their intervals, and `simulate_alignment` takes an optional
@@ -209,7 +209,7 @@ convention and is retained as history.
   validated. Its three normalizations are gauges rather than conventions: each
   removes an exactly flat direction that would otherwise leave every parameter
   without a confidence interval. (#104)
-- Device dispatch for the likelihood engine (`phylo.likelihood.device`):
+- Device dispatch for the likelihood engine (`snakes_and_ladders.likelihood.device`):
   availability-based selection preferring CUDA, then Metal/MPS, then CPU, and
   the cross-device agreement tolerance `CLAUDE.md` had long promised was stated
   somewhere. `pruning_torch` takes dtype and device from the branch-length
@@ -220,21 +220,21 @@ convention and is retained as history.
   since Metal cannot do `float64`. Both are derived from measured agreement
   rather than chosen, and the `float32` figure is exercised on CPU, so runners
   without an accelerator still check it. (#106)
-- Topology search (`phylo.search.infer`): a user-facing `infer(alignment, k,
+- Topology search (`snakes_and_ladders.search.infer`): a user-facing `infer(alignment, k,
   ...)` that hill-climbs over NNI or SPR neighbourhoods, fitting the continuous
   parameters of every candidate, and reduces to a plain continuous fit when a
   topology is supplied. This is the first user of the seam issue #63 recorded
   and left unbuilt — a discrete move builds a new `Objective` rather than
-  stepping inside a fit — and `phylo.opt` needed no change to serve it, which
+  stepping inside a fit — and `snakes_and_ladders.opt` needed no change to serve it, which
   is the evidence that abstraction was not shaped by one model.
 
   Budgets are counted in candidate fits rather than seconds, so a run is
   reproducible from its seed; a topology is scored at most once per search,
-  keyed on `leaf_bipartitions`; and `phylo.search.topology.random_topology`
+  keyed on `leaf_bipartitions`; and `snakes_and_ladders.search.topology.random_topology`
   draws a seeded starting tree that reaches every topology on its leaf set.
 
   Exhaustive enumeration of unrooted topologies
-  (`phylo.search.topology.enumerate_topologies`), which gives search quality
+  (`snakes_and_ladders.search.topology.enumerate_topologies`), which gives search quality
   its first independent oracle: below 8 taxa every topology can be scored, so
   "did hill climbing find the best tree" has an answer rather than an opinion.
   Measured on a 6-taxon fixture, both NNI and SPR reach the enumerated maximum
@@ -248,15 +248,15 @@ convention and is retained as history.
   length, which is what rejecting a topology looks like from inside the
   continuous fit. `BranchLengthObjective.fitted_tree` is new, the inverse of
   `theta_from_truth`, so a fitted tree can be drawn or serialized as a tree. (#117)
-- Reinforcement learning (`phylo.learn`): the `Environment` interface, a
+- Reinforcement learning (`snakes_and_ladders.learn`): the `Environment` interface, a
   softmax-over-scored-actions policy, REINFORCE with a baseline, and an exact
-  trajectory-enumeration oracle. Model-agnostic on the terms `phylo.opt` is —
-  it imports nothing from `phylo.sim`, `phylo.likelihood` or `phylo.search`,
+  trajectory-enumeration oracle. Model-agnostic on the terms `snakes_and_ladders.opt` is —
+  it imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`,
   asserted by an import-graph test — so the phylogenetic environment will live
-  in `phylo.search` rather than here.
+  in `snakes_and_ladders.search` rather than here.
 
   The reference environment is single-flip local search over the same 1-D Potts
-  chain `phylo.opt` fits, appearing once as an objective and once as a search
+  chain `snakes_and_ladders.opt` fits, appearing once as an objective and once as a search
   problem. Its reward decomposes exactly into the two features the policy
   scores, which puts hill climbing *inside* the policy class as the weight
   vector proportional to `(J, 1)`, so a comparison against it is a statement
@@ -278,11 +278,11 @@ convention and is retained as history.
   decision budget, reaching the enumerated optimum from 86.6% of the 81 starts
   against greedy's 80.2%, in 8 of 8 training seeds.
 
-  The phylogenetic RL environment (`phylo.search.rl`): tree search as the MDP
+  The phylogenetic RL environment (`snakes_and_ladders.search.rl`): tree search as the MDP
   the technical document specifies — a state is a topology, an action is an NNI
   or SPR neighbour, the reward is the improvement in log-likelihood. It lives in
-  `phylo.search` rather than `phylo.learn` for the reason the phylogenetic
-  `Objective` lives in `phylo.likelihood`: the model-agnostic module may import
+  `snakes_and_ladders.search` rather than `snakes_and_ladders.learn` for the reason the phylogenetic
+  `Objective` lives in `snakes_and_ladders.likelihood`: the model-agnostic module may import
   no application code.
 
   Two reward models, and the comparison between them is the deliverable.
@@ -291,7 +291,7 @@ convention and is retained as history.
   affordable — measured at 352 us against 113.7 ms per candidate.
 
   The substitution is validated rather than assumed
-  (`phylo.qa.rl_reward_surface`). "The known parameters" cannot transfer across
+  (`snakes_and_ladders.qa.rl_reward_surface`). "The known parameters" cannot transfer across
   topologies at all — a branch length belongs to an edge, and a different
   topology has different edges — so the cheap reward is a different surface, not
   an approximation of the fitted one. On the 6-taxon fixture the two score the
@@ -309,7 +309,7 @@ convention and is retained as history.
   of one part in 1e9, so it is not a measurement and cannot appear in a
   committed document that CI rebuilds.
 
-  `phylo.qa.figure` gains `pearson_correlation`, which is continuous in the
+  `snakes_and_ladders.qa.figure` gains `pearson_correlation`, which is continuous in the
   scores, written here rather than pulling in `scipy`.
 
   Not claimed: that a learned policy beats hill climbing on trees. The 6-taxon
@@ -320,7 +320,7 @@ convention and is retained as history.
 
 - Cut the `0.1.0` release: `towncrier build --version 0.1.0` merged the fragments above into this file, `ROADMAP.md` records Milestone 5's NNI/SPR generators as landed, and `STATUS.md` (deleted from the repository but still described elsewhere as a live ledger) is dropped from `CLAUDE.md`, `DEV.md`, and the PR template — GitHub issues and labels (`infra/TICKETING.md`) are the project board now. `ROADMAP.md`'s remaining milestones (1, 2, 4, 6) gain the same landed/not-started status notes that 3 and 5 already carried; the fixtures directory, previously spelled out in eleven test modules under two names, moves to a single `tests/_fixtures.py`; and `DEV.md` states the measured cost of the release-gated suite so `pytest -m "not release"` is the obvious default while developing. (#101)
 - CI skips the benchmark suite unless the change touches code a benchmark
-  measures — `src/`, `python/phylo/{sim,likelihood,opt,search}/`,
+  measures — `src/`, `python/snakes_and_ladders/{sim,likelihood,opt,search}/`,
   `tests/benchmarks/`, or a lockfile. Benchmarks are half the suite's wall clock
   (36 s of 71 s), and a documentation or QA change cannot alter what they
   measure. The job still runs and reports, since it is a required check, and
@@ -348,13 +348,13 @@ convention and is retained as history.
   Fixed a preamble setting that suppressed the space at *every* source line
   break in the document, so text wrapped mid-sentence set as "substitutionmodel".
 
-  `phylo.qa.figure` gains `write_qa_table`, which emits a LaTeX `tabular`
+  `snakes_and_ladders.qa.figure` gains `write_qa_table`, which emits a LaTeX `tabular`
   fragment instead of a matplotlib image, and `latex_integer`, which separates
   large numbers as `200\_000`. Caption safety is now enforced at the point of
   writing rather than asserted per test, so a caption that would break the
   LaTeX build fails in the script that wrote it. `render_problem_sizes_figure`
   is replaced by `render_problem_sizes_table`, and `state_label` moves from
-  `phylo.qa.sim_example` to `phylo.qa.figure`. (#118)
+  `snakes_and_ladders.qa.sim_example` to `snakes_and_ladders.qa.figure`. (#118)
 - The technical document's prose is tightened globally: the quality-assurance
   section drops from 968 to 654 words and the body as a whole from 5986 to
   5581, with no claim, number or reference removed. The cut is mostly one
@@ -377,7 +377,7 @@ convention and is retained as history.
   rest are contrastive — "not merely wide", "exact rather than merely
   convenient", "obviously correct, not fast".
 
-  Two magnitude claims are replaced by their measurements. `phylo.search.rl`
+  Two magnitude claims are replaced by their measurements. `snakes_and_ladders.search.rl`
   called the fitted reward "roughly two orders of magnitude" more expensive
   than the known one; it is 113.7 ms against 352 us, a factor of 323. The
   search benchmark said a search spends "essentially all" of its time in
@@ -387,7 +387,7 @@ convention and is retained as history.
   against the writing style, correcting three defects along the way.
 
   Root `CLAUDE.md` named the project `snakes_and_ladders`; the package is
-  `phylo`. Its "Check known math properties/Invariants" rule was a label with no
+  `snakes_and_ladders`. Its "Check known math properties/Invariants" rule was a label with no
   body, so the invariants it names — transition rows summing to 1, detailed
   balance, gradients against finite differences, a monotone likelihood — are
   restored. Its reference table announced a count of 25 that nothing checks, and
@@ -395,7 +395,7 @@ convention and is retained as history.
 
   `DEV.md`'s `technical-doc` row said the job fails on undefined references or
   citations; it also fails on a multiply-defined label. `qa/CLAUDE.md` said it
-  validates `search/` "later", where `phylo.qa` has validated `search/` and
+  validates `search/` "later", where `snakes_and_ladders.qa` has validated `search/` and
   `learn/` since issues #117 and #131.
 
   No rule was added, dropped or re-scoped: the section headings and rule labels
@@ -408,7 +408,7 @@ convention and is retained as history.
   "reference"; `ROADMAP.md`'s objective and numerics requirements were
   ungrammatical; `README.md` linked to `infra/TICKETING.md`, deleted in
   `aae9e74`. `INSTALL.md` carried two claims that had gone stale: that one
-  `phylo.qa` script renders the technical document's figures, where eleven now
+  `snakes_and_ladders.qa` script renders the technical document's figures, where eleven now
   do, and that CI's LaTeX job fails on undefined references or citations, where
   it also fails on a multiply-defined label and on a committed `docs/draft.pdf`
   that differs from the rebuild.
@@ -424,16 +424,16 @@ convention and is retained as history.
   a discussion with threats to validity and outstanding work, and conclusions.
 
   Two figures answer requirements `ROADMAP.md` states and nothing had measured.
-  `phylo.qa.backend_agreement` puts all three pruning backends against
+  `snakes_and_ladders.qa.backend_agreement` puts all three pruning backends against
   brute-force marginalization, which shares no code with the recursion it
   checks: worst relative deviation 4.0e-14 across four site counts spanning a
-  factor of 30. `phylo.qa.topology_accuracy` measures the normalized
+  factor of 30. `snakes_and_ladders.qa.topology_accuracy` measures the normalized
   Robinson-Foulds distance from the inferred topology to the generating one
   against the site count, and finds the margin: the 0.05 accuracy requirement
   is met from 125 sites upward, with 8 of 8 replicates recovering the topology
   exactly at 2000 sites against 5 of 8 at 60.
 
-  `phylo.search.topology` gains `robinson_foulds` and
+  `snakes_and_ladders.search.topology` gains `robinson_foulds` and
   `normalized_robinson_foulds`. The normalizer counts internal splits only:
   every tree over the same leaves induces all the trivial ones, so including
   them would shrink every distance by a taxon-count-dependent factor and
@@ -443,8 +443,8 @@ convention and is retained as history.
   learning curve of a trained phylogenetic agent, are stated as outstanding
   rather than drawn: neither measurement exists, and a figure with invented
   data in a committed document is worse than a stated gap. (#144)
-- `phylo.numerics` holds the vectorized categorical sampler that
-  `phylo.sim.simulate`, `phylo.opt.potts` and `phylo.opt.hmm` each carried a
+- `snakes_and_ladders.numerics` holds the vectorized categorical sampler that
+  `snakes_and_ladders.sim.simulate`, `snakes_and_ladders.opt.potts` and `snakes_and_ladders.opt.hmm` each carried a
   private copy of. The copies had drifted: two omitted the clamp on the last
   cumulative column that the third had, so a probability row summing to
   `1 - 4e-16` after rounding could return a category one past the end of the
@@ -465,16 +465,16 @@ convention and is retained as history.
 
 ### Added
 
-- `k`-state Jukes–Cantor sequence simulator in `phylo.sim`: generates an
+- `k`-state Jukes–Cantor sequence simulator in `snakes_and_ladders.sim`: generates an
   alignment and the ancestral tree in Newick from a typed
   `simulation_params.yaml`, and retains the parameters that generated them.
   Simulated substitution frequencies are validated against the closed-form JC
   transition probabilities within a yaml-declared Monte Carlo tolerance across
   several site and taxa sizes. Promotes `numpy` and `pyyaml` to core
   dependencies. (#55)
-- Added `phylo.sim.newick`: topology counting (`count_topologies`), Newick string validation (`validate_newick`), and state-labelled Newick serialization (`to_newick`), now the package's single source of Newick functionality. (#60)
-- Added `phylo.qa`, quality-assurance figure scripts for the technical document, starting with `phylo.qa.sim_tree` (renders the assumed simulation tree with branch lengths). `infra/build_technical_doc.sh` regenerates these figures and builds `docs/draft.pdf`. (#61)
-- Vectorized NumPy Felsenstein pruning in `phylo.likelihood`, computing
+- Added `snakes_and_ladders.sim.newick`: topology counting (`count_topologies`), Newick string validation (`validate_newick`), and state-labelled Newick serialization (`to_newick`), now the package's single source of Newick functionality. (#60)
+- Added `snakes_and_ladders.qa`, quality-assurance figure scripts for the technical document, starting with `snakes_and_ladders.qa.sim_tree` (renders the assumed simulation tree with branch lengths). `infra/build_technical_doc.sh` regenerates these figures and builds `docs/draft.pdf`. (#61)
+- Vectorized NumPy Felsenstein pruning in `snakes_and_ladders.likelihood`, computing
   `ln L(alignment | tau, Q, t, pi)` under the k-state Jukes-Cantor model with
   per-node rescaling accumulated in log space. Ships with an independent
   brute-force marginalizer used only as the test oracle at `n <= 6` taxa.
@@ -483,12 +483,12 @@ convention and is retained as history.
   invariance), and scoring the generating topology above random wrong
   topologies on simulated data. This is the reference every future backend
   (Rust, PyTorch, CUDA, Metal) is pinned against. (#62)
-- Added `phylo.qa.sim_example` and `phylo.qa.sim_problem_sizes`: a worked
+- Added `snakes_and_ladders.qa.sim_example` and `snakes_and_ladders.qa.sim_problem_sizes`: a worked
   4-taxon simulation example (Newick topology and aligned sequences) and a
   cross-fixture table of problem-size parameters (taxa, sites, seed,
   tolerance), read directly from the `simulation_params.yaml` fixtures. Wired
   into `infra/build_technical_doc.sh` and `docs/tex/main.tex`. (#67)
-- Differentiable PyTorch Felsenstein pruning (`phylo.likelihood.pruning_torch`),
+- Differentiable PyTorch Felsenstein pruning (`snakes_and_ladders.likelihood.pruning_torch`),
   taking branch lengths as a `torch.float64` CPU tensor separate from the
   topology so `torch.autograd` differentiates through them. Validated against
   the NumPy oracle and brute-force marginalization to `atol=1e-9`, against
@@ -497,22 +497,22 @@ convention and is retained as history.
   `rate_matrix` path (`torch.matrix_exp`) is exercised by a benchmark fitting a
   Jukes-Cantor rate matrix Q, alongside a forward-pass benchmark against the
   NumPy reference. (#70)
-- Rust CPU Felsenstein pruning backend (`oxiphylo.pruning_log_likelihood`,
-  exposed via `phylo.likelihood.pruning_rust`), implementing the same
+- Rust CPU Felsenstein pruning backend (`oxi_snakes_and_ladders.pruning_log_likelihood`,
+  exposed via `snakes_and_ladders.likelihood.pruning_rust`), implementing the same
   recursion as the NumPy oracle in `src/pruning.rs` and exposed through PyO3.
   Validated against the NumPy oracle and independent brute-force
   marginalization at `n <= 6` taxa, and against the NumPy oracle at realistic
   (taxa, site) sizes to `abs_tol=1e-9`. Ships a `criterion` benchmark
-  (`benches/oxiphylo_bench.rs`) and a paired `tests/regression/test_pruning_rust.py`
+  (`benches/oxi_snakes_and_ladders_bench.rs`) and a paired `tests/regression/test_pruning_rust.py`
   / `tests/benchmarks/test_pruning_rust_bench.py` module, reporting Rust vs.
   NumPy timings at 4- and 8-taxon, 200,000-site fixtures. (#77)
 - NNI and SPR neighbourhood generators over unrooted binary topologies
-  (`phylo.search.topology`), behind one `Topology -> Iterator[Topology]`
+  (`snakes_and_ladders.search.topology`), behind one `Topology -> Iterator[Topology]`
   interface. Validated exhaustively against `2 * (n - 3)` (NNI) and
   `2 * (n - 3) * (2 * n - 7)` (SPR) at `n = 5..8` -- every one of the
   `count_topologies(n - 1)` distinct topologies, cross-checked for neighbour
   validity, symmetry, and NNI-in-SPR containment (`n = 8` gated to
-  `pytest -m release`, ~2.5 minutes). `phylo.sim.newick` gains
+  `pytest -m release`, ~2.5 minutes). `snakes_and_ladders.sim.newick` gains
   `validate_unrooted_newick` for the trifurcating-root convention this reuses.
   The random-walk connectivity test is deferred to issue #73's canonical
   Newick key. (#79)
@@ -537,7 +537,7 @@ convention and is retained as history.
 - `docs/tex/main.tex` now states its intended reader (a developer with
   baseline scientific/performance-computing background but no phylogenetics
   expertise) and the formatting contract that follows from it: streamlined
-  main text, standard non-phylo-specific background (e.g. NNI, SPR) moved to
+  main text, standard non-snakes_and_ladders-specific background (e.g. NNI, SPR) moved to
   a new appendix and cited from the point of use. `CLAUDE.md` records the
   same contract for anyone editing the document. (#85)
 - PR template's Benchmark section gained a second table for scientific/tolerance regression tests, so contributors report the realized value alongside the reference and tolerance it was checked against. (#88)
@@ -567,7 +567,7 @@ It is older than the dated sections above, not newer.
 ### Added
 
 - Changelog Automation: Adopted [towncrier](https://towncrier.readthedocs.io) to manage `CHANGELOG.md` via fragments in `changelog.d/`, restoring the no-merge-conflict, CI-enforced workflow of the bespoke system removed below — as a maintained dependency instead of custom infra code.
-- Project Scaffolding: Initialized uv-based Python 3.12 environment and Rust backend via maturin/PyO3 (phylo.oxiphylo).
+- Project Scaffolding: Initialized uv-based Python 3.12 environment and Rust backend via maturin/PyO3 (snakes_and_ladders.oxi_snakes_and_ladders).
 - Module Architecture: Established core package skeleton (sim, likelihood, opt, search, infra) enforcing a strict separation between infrastructure and domain-specific application logic.
 - Documentation Suite: Deployed Sphinx API docs, a LaTeX technical document for scientific foundations, and strategic planning documents (ROADMAP.md, STATUS.md, DEV.md).
 - CI/CD Pipeline: Implemented GitHub Actions for Python/Rust linting, testing, documentation building, and dependency auditing using strictly locked environments (uv.lock, Cargo.lock).

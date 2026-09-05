@@ -1,4 +1,4 @@
-"""Regression test for phylo.qa.opt_coverage.
+"""Regression test for snakes_and_ladders.qa.opt_coverage.
 
 The figure's claim is that the intervals converge on their nominal rate as
 the sample grows. Refitting at every size is what the technical-document
@@ -13,9 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from phylo.opt.potts import load_potts_params
-from phylo.qa import opt_coverage
-from phylo.qa.opt_coverage import (
+from snakes_and_ladders.opt.potts import load_potts_params
+from snakes_and_ladders.qa import opt_coverage
+from snakes_and_ladders.qa.opt_coverage import (
     HMM_SIZES,
     NOMINAL,
     POTTS_SIZES,
@@ -23,7 +23,7 @@ from phylo.qa.opt_coverage import (
     hmm_coverage,
     potts_coverage,
 )
-from phylo.sim.hmm import load_hmm_params
+from snakes_and_ladders.sim.hmm import load_hmm_params
 
 from tests._fixtures import FIXTURES_DIR
 

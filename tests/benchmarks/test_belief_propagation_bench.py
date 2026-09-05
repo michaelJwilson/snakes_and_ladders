@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.likelihood.belief_propagation import belief_propagation
-from phylo.likelihood.potts import enumerate_potts, strip_log_partition
-from phylo.sim.graph import BoundaryCondition, lattice_graph
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
+from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_partition
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
 FIELD = np.array([0.3, -0.7, 0.15])
 

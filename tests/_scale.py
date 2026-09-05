@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any, TypeVar
 
 import pytest
-from phylo.fixtures import Scale
+from snakes_and_ladders.fixtures import Scale
 
 T = TypeVar("T")
 

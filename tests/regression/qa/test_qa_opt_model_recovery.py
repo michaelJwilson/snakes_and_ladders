@@ -1,4 +1,4 @@
-"""Regression test for phylo.qa.opt_model_recovery.
+"""Regression test for snakes_and_ladders.qa.opt_model_recovery.
 
 Pins the numbers the script computes before matplotlib sees them
 (qa/CLAUDE.md), and in particular that the caption's coverage counts are the
@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.qa.opt_model_recovery import (
+from snakes_and_ladders.qa.opt_model_recovery import (
     SITES,
     TRUE_EXCHANGEABILITIES,
     TRUE_PI,
@@ -21,7 +21,7 @@ from phylo.qa.opt_model_recovery import (
     main,
     truth_vector,
 )
-from phylo.sim.gtr import gtr_rate_matrix
+from snakes_and_ladders.sim.gtr import gtr_rate_matrix
 
 from tests._fixtures import EIGHT_TAXA, fixture_path, load_fixture
 
