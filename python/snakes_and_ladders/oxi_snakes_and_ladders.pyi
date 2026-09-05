@@ -40,3 +40,12 @@ def ising_ground_state(
     edges: list[int],
     coupling: list[float],
 ) -> list[int]: ...
+def single_site_sweeps(
+    state: np.ndarray,
+    field: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    draws: np.ndarray,
+    n_sweeps: int,
+) -> None: ...
