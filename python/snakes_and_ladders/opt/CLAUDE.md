@@ -47,6 +47,11 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
   minimum. A result resting on a single fit of such a surface says so, or
   reports a multi-start rate instead.
 
+- **Where a likelihood is unbounded, refuse rather than clamp.** Some models
+  have no maximum, and a fit returning normally at one was stopped by a floor
+  or by its start rather than converged. State the bound and raise when it
+  binds — issue #122's fault, reached from the other side.
+
 - **A test function is not a likelihood, so it has no observed information.**
   The Hessian at its minimum is a curvature rather than an information matrix,
   and an interval built from it carries no meaning. Issue #122 covers the
