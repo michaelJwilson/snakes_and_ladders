@@ -13,6 +13,15 @@ boundary in a fixed, defined order, rather than letting Rust read
 consistency across backends even though Rust has no gradient to keep out of
 the topology.
 
+**The alignment crosses as one array, borrowed rather than copied.** The
+leaf observations go over as a single C-contiguous ``(n_leaves, n_sites)``
+``int64`` block with a per-node row index, so ``rust-numpy`` hands the kernel
+the buffer itself. The nested-list form this replaced boxed one Python
+integer per observed state, and that cost grows with ``n x L`` while the
+kernel's advantage does not -- which is why the caller-visible speedup
+decayed to parity at the declared scale (issue #232). It is the same fix
+issue #202 applied to the categorical sampler, for the same reason.
+
 Nodes cross the boundary in post-order (children before parents, root
 last): ``phylo.sim.tree`` has no ``postorder`` helper, so this module builds
 one locally rather than adding one there for a single caller. Validated to
@@ -94,7 +103,8 @@ def log_likelihood(
     ------
     ValueError
         If ``pi`` does not have shape ``(k,)``, ``alignment`` is missing a
-        leaf of ``tau``, or a non-root node has no ``branch_length``.
+        leaf of ``tau``, the alignment is ragged, or a non-root node has no
+        ``branch_length``.
     """
     if pi.shape != (k,):
         msg = f"pi has shape {pi.shape}, expected ({k},)"
@@ -110,27 +120,47 @@ def log_likelihood(
     index = {id(node): position for position, node in enumerate(order)}
     n_nodes = len(order)
 
-    branch_length: list[float] = []
+    n_sites = int(alignment[leaves[0].name].shape[0])
+    # One row per leaf, filled by C-level assignment. The nested-list form
+    # this replaced built a Python integer per observed state, which at
+    # `n = 200, L = 11 000` is 2.2 million objects on the way in -- a cost
+    # growing with `n * L` while the kernel's advantage does not, and the
+    # whole of the gap issue #232 measured.
+    leaf_states = np.empty((len(leaves), n_sites), dtype=np.int64)
+    leaf_row = np.full(n_nodes, -1, dtype=np.int64)
+
+    branch_length = np.zeros(n_nodes, dtype=np.float64)
     children: list[list[int]] = []
-    leaf_states: list[list[int]] = []
+    row = 0
     for position, node in enumerate(order):
         is_root = position == n_nodes - 1
-        if is_root:
-            branch_length.append(0.0)
-        else:
+        if not is_root:
             if node.branch_length is None:
                 msg = f"non-root node {node.name!r} has no branch_length"
                 raise ValueError(msg)
-            branch_length.append(float(node.branch_length))
+            branch_length[position] = float(node.branch_length)
 
         children.append([index[id(child)] for child in node.children])
 
         if node.is_leaf:
-            leaf_states.append(alignment[node.name].tolist())
-        else:
-            leaf_states.append([])
+            states = alignment[node.name]
+            if states.shape != (n_sites,):
+                msg = (
+                    f"leaf {node.name!r} has shape {states.shape}, "
+                    f"expected ({n_sites},) -- the alignment is ragged"
+                )
+                raise ValueError(msg)
+            leaf_states[row] = states
+            leaf_row[position] = row
+            row += 1
 
     result = oxiphylo.pruning_log_likelihood(
-        branch_length, children, leaf_states, k, pi.tolist(), rescale
+        branch_length,
+        children,
+        leaf_states,
+        leaf_row.tolist(),
+        k,
+        np.ascontiguousarray(pi, dtype=np.float64),
+        rescale,
     )
     return float(result)

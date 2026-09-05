@@ -197,6 +197,9 @@ whether or not it has members yet.
 .. automodule:: phylo.qa.sim_problem_sizes
    :members:
 
+.. automodule:: phylo.qa.likelihood_footprint
+   :members:
+
 .. automodule:: phylo.qa.jc_transition
    :members:
 
