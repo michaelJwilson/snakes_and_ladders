@@ -191,7 +191,7 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum() -> None:
 
     result = fit(objective)
     estimate = objective.constrain(result.theta)
-    _, _, family, log_likelihood = baum_welch_family(
+    em = baum_welch_family(
         observations,
         torch.log(torch.as_tensor(INITIAL)),
         torch.log(torch.as_tensor(TRANSITION)),
@@ -202,8 +202,9 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum() -> None:
         ),
     )
 
-    assert_allclose(-float(result.value), log_likelihood, rtol=1e-9)
-    parameters = family.named_parameters()
+    assert_allclose(-float(result.value), em.log_likelihood, rtol=1e-9)
+    assert not em.emission_at_boundary
+    parameters = em.emissions.named_parameters()
     assert_allclose(estimate["mean"].numpy(), parameters["mean"].numpy(), atol=1e-5)
     assert_allclose(estimate["scale"].numpy(), parameters["scale"].numpy(), atol=1e-5)
 

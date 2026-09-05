@@ -180,6 +180,63 @@ since excluding them unannounced would select for the well-behaved samples.
 Reported as a finding: a fixture using only well-separated means would have
 been testing the fixture.
 
+**Count emissions: the dispersion axis, bracketed.** Four count families join
+the seam — binomial below equidispersion, Poisson exactly at it, negative
+binomial and beta-binomial above
+([#229](https://github.com/michaelJwilson/snakes_and_ladders/issues/229),
+[#260](https://github.com/michaelJwilson/snakes_and_ladders/issues/260)). The
+bracketing is the point: an interface exercised only by overdispersed families
+has never been asked whether it assumes overdispersion somewhere. Each referees
+the neighbour it is a limit of, so the oracles come from outside this
+repository rather than from a second call into it: `BetaBinomial(n, 1, 1)` is
+the discrete uniform and `Binomial(1, p)` is Bernoulli, both to 1e-14 or
+better; the negative binomial approaches Poisson as `r -> inf` and the
+beta-binomial approaches the binomial as `a + b -> inf`, both at the `O(1/x)`
+rate the truncation predicts, with `r` times the deviation measured at 18.75,
+18.88, 18.94, 18.97 and 18.98 across `r` from 500 to 8000 — converging rather
+than drifting, which is what makes the extrapolated tolerance legitimate.
+
+**Two of the four have an M step that is an optimization**, which is what
+tests whether the seam is real: `reestimate` now returns what its M step did,
+not only what it produced. **Both solves bracket rather than step**, and that
+was a measurement, not a preference. Newton on the negative binomial's
+weighted score converges for moderate `r` and, on a near-Poisson sample,
+overshoots in `log r` and underflows to zero — arriving as a domain error
+rather than a bad answer; safeguarded bisection reaches `|score| / weight` of
+1e-14 to 1e-16 in 45 evaluations and agrees with a 40001-point grid search to
+zero relative difference. Minka's fixed point for the beta-binomial is
+monotone but linearly convergent: at a true concentration of 120 it was still
+moving in the third decimal after 500 iterations and returned that as though
+it were an estimate. Alternating bisection in `(p, a + b)` settles in 3 to 9
+iterations at a residual of exactly zero. An M step that does not settle is
+refused, per `likelihood/CLAUDE.md`.
+
+**The flat-likelihood hazard is the mirror of the Gaussian's, and it is
+measured.** Where a Gaussian likelihood is *unbounded* as a variance falls, a
+count likelihood goes *flat* as the dispersion rises toward its Poisson or
+binomial limit. The bound is derived on the same construction for both count
+families — the dispersion at which the overdispersion the model is for falls
+below the sampling noise on measuring it, `mu sqrt(W/2)` for the negative
+binomial and `(n-1) sqrt(W/2)` for the beta-binomial. Coverage of the 95%
+intervals over 16 replicates of 480 counts, against the true dispersion:
+
+| true `r` | intervals covering | rate | replicates with no interval at all |
+| --- | --- | --- | --- |
+| 0.5 | 44/48 | 0.917 | 4/16 |
+| 1.0 | 60/64 | 0.938 | 0/16 |
+| 2.0 | 58/64 | 0.906 | 0/16 |
+| 5.0 | 59/64 | 0.922 | 0/16 |
+| 20.0 | 58/64 | 0.906 | 0/16 |
+| 100.0 | 32/36 | 0.889 | 7/16 |
+
+**The finding is not the coverage column.** Coverage sits near nominal at every
+dispersion; what degrades is *whether an interval exists*, and it degrades at
+**both** ends — a heavy tail at `r = 0.5`, a flat likelihood at `r = 100`.
+A non-identified count model announces itself as a singular information matrix,
+not as an interval in the wrong place, which is the opposite of what the
+Gaussian case showed and is why both were measured rather than one assumed
+from the other.
+
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
 **Felsenstein pruning: three CPU backends, one oracle.** Vectorized NumPy is

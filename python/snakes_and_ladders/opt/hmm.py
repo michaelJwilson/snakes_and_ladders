@@ -26,16 +26,23 @@ state-alignment helper a recovery test needs.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from itertools import permutations
 
 import numpy as np
 import torch
 
 from snakes_and_ladders.emissions import (
+    BetaBinomialEmission,
+    BinomialEmission,
     CategoricalEmission,
     EmissionFamily,
     GaussianEmission,
+    NegativeBinomialEmission,
+    PoissonEmission,
+    identifiable_dispersion_bound,
     pooled_variance_floor,
 )
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
@@ -44,6 +51,17 @@ from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
 # enough to leave the stationary point, small enough not to preselect an
 # answer: at 1.0 a state favours its symbol by a factor of e.
 _SYMMETRY_BREAK = 1.0
+
+# Smallest mean a count state may start at. A quantile of the pooled counts
+# is zero whenever a state's share of the data is mostly zeros, and log(0) is
+# not a starting point; half a count is below any observable value and so
+# commits to nothing.
+_MINIMUM_COUNT_MEAN = 0.5
+
+# How far a starting success rate is held from 0 and 1, where a logit is
+# infinite. A quantile of the pooled counts hits either end whenever a state's
+# share of the data is all failures or all successes.
+_RATE_MARGIN = 1e-6
 
 
 class _HmmObjective:
@@ -372,6 +390,379 @@ class GaussianHmmObjective(_HmmObjective):
         )
 
 
+class _CountHmmObjective(_HmmObjective):
+    """Shared scaffolding for the count instances: a start on the data.
+
+    Every count family here places its per-state location at evenly spaced
+    quantiles of the pooled observations, for the reasons
+    :class:`GaussianHmmObjective` gives --- a shared location is the
+    stationary point ``opt/CLAUDE.md`` names, and a location far from every
+    observation makes a state invisible to the E step.
+    """
+
+    def __init__(
+        self,
+        observations: np.ndarray,
+        n_states: int,
+        dtype: torch.dtype = torch.float64,
+    ) -> None:
+        super().__init__(observations, n_states, torch.float64, dtype)
+
+    def _location_quantiles(self) -> torch.Tensor:
+        """Evenly spaced quantiles of the pooled observations, one per state."""
+        values = self._observations.reshape(-1).to(self._dtype)
+        quantiles = (torch.arange(self._n_states, dtype=self._dtype) + 0.5) / (
+            self._n_states
+        )
+        return torch.quantile(values, quantiles)
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        """Log transitions, and the emission family's own named parameters."""
+        return {
+            **self._transition_parameters(theta),
+            **self.emissions(theta).named_parameters(),
+        }
+
+
+class PoissonHmmObjective(_CountHmmObjective):
+    """Negative log-likelihood of count sequences from a Poisson-emission HMM.
+
+    One parameter per state and no dispersion to argue about, which is what
+    makes it the control: whatever a richer count family's fit does that this
+    one does not is attributable to the dispersion parameter and not to the
+    recursion they share.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observed counts, shape ``(n_sequences, sequence_length)``.
+    n_states : int
+        Hidden states.
+    dtype : torch.dtype
+        Precision of the computation; ``float64`` by default.
+    """
+
+    @property
+    def _n_emission_parameters(self) -> int:
+        return self._n_states
+
+    def emissions(self, theta: torch.Tensor) -> PoissonEmission:
+        """The Poisson family ``theta``'s emission block encodes."""
+        return PoissonEmission(torch.exp(theta[self._emission_slice]))
+
+    def initial(self) -> torch.Tensor:
+        """Uniform transitions; rates at quantiles of the pooled counts."""
+        theta = torch.zeros(self.n_parameters, dtype=self._dtype)
+        theta[self._emission_slice] = torch.log(
+            self._location_quantiles().clamp_min(_MINIMUM_COUNT_MEAN)
+        )
+        return theta
+
+    def theta_from_truth(
+        self, initial: np.ndarray, transition: np.ndarray, mean: np.ndarray
+    ) -> torch.Tensor:
+        """Place a known ``(pi, A, lambda)`` in the unconstrained coordinates."""
+        return torch.cat(
+            [
+                _free_transitions(initial, transition, self._dtype),
+                torch.log(torch.as_tensor(mean, dtype=self._dtype)).reshape(-1),
+            ]
+        )
+
+
+class BinomialHmmObjective(_CountHmmObjective):
+    """Negative log-likelihood of bounded counts from a binomial-emission HMM.
+
+    The under-dispersed instance. The trial count is declared rather than
+    fitted, so ``theta`` carries one free value per state and the constraint
+    map is a logit --- positivity is not enough here, since a probability has
+    two boundaries rather than one.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observed counts, shape ``(n_sequences, sequence_length)``.
+    n_states : int
+        Hidden states.
+    trials : np.ndarray
+        Declared trial count per state, shape ``(n_states,)``.
+    dtype : torch.dtype
+        Precision of the computation; ``float64`` by default.
+    """
+
+    def __init__(
+        self,
+        observations: np.ndarray,
+        n_states: int,
+        trials: np.ndarray,
+        dtype: torch.dtype = torch.float64,
+    ) -> None:
+        super().__init__(observations, n_states, dtype)
+        self._trials = torch.as_tensor(trials, dtype=torch.float64).reshape(-1)
+
+    @property
+    def _n_emission_parameters(self) -> int:
+        return self._n_states
+
+    def emissions(self, theta: torch.Tensor) -> BinomialEmission:
+        """The binomial family ``theta``'s emission block encodes."""
+        return BinomialEmission(
+            self._trials, torch.sigmoid(theta[self._emission_slice])
+        )
+
+    def initial(self) -> torch.Tensor:
+        """Uniform transitions; success rates from quantiles of the counts."""
+        theta = torch.zeros(self.n_parameters, dtype=self._dtype)
+        rate = (self._location_quantiles() / self._trials).clamp(
+            _RATE_MARGIN, 1.0 - _RATE_MARGIN
+        )
+        theta[self._emission_slice] = torch.log(rate) - torch.log1p(-rate)
+        return theta
+
+    def theta_from_truth(
+        self, initial: np.ndarray, transition: np.ndarray, probability: np.ndarray
+    ) -> torch.Tensor:
+        """Place a known ``(pi, A, p)`` in the unconstrained coordinates."""
+        rate = torch.as_tensor(probability, dtype=self._dtype).reshape(-1)
+        return torch.cat(
+            [
+                _free_transitions(initial, transition, self._dtype),
+                torch.log(rate) - torch.log1p(-rate),
+            ]
+        )
+
+
+class BetaBinomialHmmObjective(_CountHmmObjective):
+    """Negative log-likelihood of bounded counts from a beta-binomial HMM.
+
+    The over-dispersed counterpart of :class:`BinomialHmmObjective` on the
+    same support, and the second instance whose EM counterpart's M step is a
+    solve rather than a formula. The gradient fit is not --- autograd
+    differentiates through ``lgamma`` --- which is exactly what makes the pair
+    worth running: the two share the model and nothing else.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observed counts, shape ``(n_sequences, sequence_length)``.
+    n_states : int
+        Hidden states.
+    trials : np.ndarray
+        Declared trial count per state, shape ``(n_states,)``.
+    dtype : torch.dtype
+        Precision of the computation; ``float64`` by default.
+    """
+
+    def __init__(
+        self,
+        observations: np.ndarray,
+        n_states: int,
+        trials: np.ndarray,
+        dtype: torch.dtype = torch.float64,
+    ) -> None:
+        super().__init__(observations, n_states, dtype)
+        self._trials = torch.as_tensor(trials, dtype=torch.float64).reshape(-1)
+
+    @property
+    def _n_emission_parameters(self) -> int:
+        return 2 * self._n_states
+
+    def _log_alpha_slice(self) -> slice:
+        start = self._emission_slice.start
+        return slice(start, start + self._n_states)
+
+    def _log_beta_slice(self) -> slice:
+        start = self._log_alpha_slice().stop
+        return slice(start, start + self._n_states)
+
+    def emissions(self, theta: torch.Tensor) -> BetaBinomialEmission:
+        """The beta-binomial family ``theta``'s emission block encodes."""
+        return BetaBinomialEmission(
+            self._trials,
+            torch.exp(theta[self._log_alpha_slice()]),
+            torch.exp(theta[self._log_beta_slice()]),
+        )
+
+    def initial(self) -> torch.Tensor:
+        """Uniform transitions; ``(a, b)`` from the quantile rates at unit concentration.
+
+        The concentration starts at 1 --- the most overdispersed the family
+        gets before the Beta becomes improper --- because ``a + b -> inf`` is
+        the direction the likelihood goes flat in, and a start there would put
+        the first E step inside the region this model's hazard lives in.
+        """
+        theta = torch.zeros(self.n_parameters, dtype=self._dtype)
+        rate = (self._location_quantiles() / self._trials).clamp(
+            _RATE_MARGIN, 1.0 - _RATE_MARGIN
+        )
+        theta[self._log_alpha_slice()] = torch.log(rate)
+        theta[self._log_beta_slice()] = torch.log1p(-rate)
+        return theta
+
+    def theta_from_truth(
+        self,
+        initial: np.ndarray,
+        transition: np.ndarray,
+        alpha: np.ndarray,
+        beta: np.ndarray,
+    ) -> torch.Tensor:
+        """Place a known ``(pi, A, a, b)`` in the unconstrained coordinates."""
+        return torch.cat(
+            [
+                _free_transitions(initial, transition, self._dtype),
+                torch.log(torch.as_tensor(alpha, dtype=self._dtype)).reshape(-1),
+                torch.log(torch.as_tensor(beta, dtype=self._dtype)).reshape(-1),
+            ]
+        )
+
+
+def _free_transitions(
+    initial: np.ndarray, transition: np.ndarray, dtype: torch.dtype
+) -> torch.Tensor:
+    """The unconstrained coordinates of a known initial distribution and transition."""
+    return torch.cat(
+        [
+            free_from_log_simplex(torch.log(torch.as_tensor(initial, dtype=dtype))),
+            free_from_log_simplex(
+                torch.log(torch.as_tensor(transition, dtype=dtype))
+            ).reshape(-1),
+        ]
+    )
+
+
+class NegativeBinomialHmmObjective(_HmmObjective):
+    """Negative log-likelihood of count sequences from a negative binomial HMM.
+
+    The third emission family through the same recursion, and the one that
+    says whether the seam is real: its EM counterpart's M step is a solve
+    rather than a formula. The *gradient* fit here is not --- autograd
+    differentiates through ``lgamma`` like anything else --- which is what
+    makes the pair worth having, since the two disagree only if one of them is
+    wrong.
+
+    **The evidence is a probability again.** Counts are discrete, so
+    ``log P(observations) <= 0`` holds here and does not for
+    :class:`GaussianHmmObjective`. The contrast is pinned rather than
+    remarked on: it is the assertion that had to be dropped for one family and
+    is available for this one.
+
+    **The identifiability hazard is flatness.** Both parameters reach the
+    optimizer through a log map, so neither can leave its feasible set, but no
+    map fixes a likelihood that is flat in ``r`` past the point the data can
+    resolve it. :func:`snakes_and_ladders.emissions.identifiable_dispersion_bound`
+    says where that is, and the EM oracle reports reaching it.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Observed counts, shape ``(n_sequences, sequence_length)``.
+    n_states : int
+        Hidden states.
+    dtype : torch.dtype
+        Precision of the computation; ``float64`` by default, since a
+        finite-difference derivative check is meaningless in ``float32``.
+    """
+
+    def __init__(
+        self,
+        observations: np.ndarray,
+        n_states: int,
+        dtype: torch.dtype = torch.float64,
+    ) -> None:
+        super().__init__(observations, n_states, torch.float64, dtype)
+
+    @property
+    def _n_emission_parameters(self) -> int:
+        return 2 * self._n_states
+
+    def _log_dispersion_slice(self) -> slice:
+        start = self._emission_slice.start
+        return slice(start, start + self._n_states)
+
+    def _log_mean_slice(self) -> slice:
+        start = self._log_dispersion_slice().stop
+        return slice(start, start + self._n_states)
+
+    def emissions(self, theta: torch.Tensor) -> NegativeBinomialEmission:
+        """The negative binomial family ``theta``'s emission block encodes."""
+        return NegativeBinomialEmission(
+            torch.exp(theta[self._log_dispersion_slice()]),
+            torch.exp(theta[self._log_mean_slice()]),
+        )
+
+    def initial(self) -> torch.Tensor:
+        """A start that is uninformative but **not** symmetric.
+
+        Uniform transitions, and per-state means at evenly spaced quantiles of
+        the pooled counts, for the reasons the Gaussian instance gives. The
+        dispersions start at the pooled method-of-moments value, or at the
+        identifiable bound where the pooled counts are not overdispersed:
+        starting *above* what the data can resolve would put the first E step
+        in the flat region this model's hazard lives in.
+        """
+        theta = torch.zeros(self.n_parameters, dtype=self._dtype)
+        values = self._observations.reshape(-1).to(self._dtype)
+        quantiles = (torch.arange(self._n_states, dtype=self._dtype) + 0.5) / (
+            self._n_states
+        )
+        means = torch.quantile(values, quantiles).clamp_min(_MINIMUM_COUNT_MEAN)
+        theta[self._log_mean_slice()] = torch.log(means)
+
+        pooled_mean = float(values.mean())
+        pooled_variance = float(values.var(unbiased=True))
+        bound = identifiable_dispersion_bound(pooled_mean, float(values.numel()))
+        moments = (
+            pooled_mean**2 / (pooled_variance - pooled_mean)
+            if pooled_variance > pooled_mean
+            else bound
+        )
+        theta[self._log_dispersion_slice()] = math.log(min(moments, bound))
+        return theta
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        """Split ``theta`` into log transitions and the per-state ``(r, mu)``."""
+        return {
+            **self._transition_parameters(theta),
+            **self.emissions(theta).named_parameters(),
+        }
+
+    def theta_from_truth(
+        self,
+        initial: np.ndarray,
+        transition: np.ndarray,
+        dispersion: np.ndarray,
+        mean: np.ndarray,
+    ) -> torch.Tensor:
+        """Place a known truth in the unconstrained coordinates.
+
+        Parameters
+        ----------
+        initial : np.ndarray
+            True initial distribution, shape ``(n_states,)``.
+        transition : np.ndarray
+            True transition matrix, shape ``(n_states, n_states)``.
+        dispersion, mean : np.ndarray
+            True per-state ``r`` and ``mu``, shape ``(n_states,)``.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns this truth.
+        """
+        return torch.cat(
+            [
+                free_from_log_simplex(
+                    torch.log(torch.as_tensor(initial, dtype=self._dtype))
+                ),
+                free_from_log_simplex(
+                    torch.log(torch.as_tensor(transition, dtype=self._dtype))
+                ).reshape(-1),
+                torch.log(torch.as_tensor(dispersion, dtype=self._dtype)).reshape(-1),
+                torch.log(torch.as_tensor(mean, dtype=self._dtype)).reshape(-1),
+            ]
+        )
+
+
 def forward_log_likelihood(
     observations: torch.Tensor,
     log_initial: torch.Tensor,
@@ -525,6 +916,37 @@ def align_by_key(fitted: torch.Tensor, reference: torch.Tensor) -> tuple[int, ..
     return best
 
 
+@dataclass(frozen=True)
+class EmFit:
+    """What one Baum-Welch run produced, and what it had to report.
+
+    A tuple sufficed while every M step was a formula. It stopped sufficing
+    when one became a solve (issue #229): a fit whose dispersion sat at the
+    edge of what the data identifies is not an error and must not be raised,
+    but a caller that cannot see it will build a Wald interval around a bound
+    and call it an estimate.
+
+    Parameters
+    ----------
+    log_initial, log_transition : torch.Tensor
+        Fitted transition parameters, as log-probabilities.
+    emissions : EmissionFamily
+        The fitted emission family.
+    log_likelihood : float
+        The final log-likelihood. A density, and so possibly positive, where
+        the family is continuous.
+    emission_at_boundary : bool
+        Whether any M step returned a parameter at the edge of the range this
+        data identifies it over.
+    """
+
+    log_initial: torch.Tensor
+    log_transition: torch.Tensor
+    emissions: EmissionFamily
+    log_likelihood: float
+    emission_at_boundary: bool = False
+
+
 def baum_welch(
     observations: np.ndarray,
     log_initial: torch.Tensor,
@@ -561,7 +983,7 @@ def baum_welch(
         Fitted log initial, log transition and log emission, and the final
         log-likelihood.
     """
-    fitted_initial, fitted_transition, family, log_likelihood = baum_welch_family(
+    result = baum_welch_family(
         observations,
         log_initial,
         log_transition,
@@ -569,10 +991,16 @@ def baum_welch(
         max_iterations=max_iterations,
         tolerance=tolerance,
     )
+    family = result.emissions
     if not isinstance(family, CategoricalEmission):  # pragma: no cover
         msg = f"expected a categorical M step, got {type(family).__name__}"
         raise TypeError(msg)
-    return fitted_initial, fitted_transition, family.log_matrix, log_likelihood
+    return (
+        result.log_initial,
+        result.log_transition,
+        family.log_matrix,
+        result.log_likelihood,
+    )
 
 
 def baum_welch_family(
@@ -582,7 +1010,7 @@ def baum_welch_family(
     emissions: EmissionFamily,
     max_iterations: int = 500,
     tolerance: float = 1e-12,
-) -> tuple[torch.Tensor, torch.Tensor, EmissionFamily, float]:
+) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
 
     The E step is the model: forward and backward messages in log space,
@@ -610,9 +1038,9 @@ def baum_welch_family(
 
     Returns
     -------
-    tuple[torch.Tensor, torch.Tensor, EmissionFamily, float]
-        Fitted log initial, log transition, emission family, and the final
-        log-likelihood.
+    EmFit
+        The fitted parameters, the final log-likelihood, and whether any M
+        step reported a parameter at the edge of what the data identifies.
 
     Raises
     ------
@@ -628,6 +1056,7 @@ def baum_welch_family(
 
     previous = -float("inf")
     log_likelihood = previous
+    at_boundary = False
     for _ in range(max_iterations):
         # --- E step: forward and backward messages in log space ----------
         emit = emissions.log_density(data)
@@ -667,10 +1096,27 @@ def baum_welch_family(
         log_transition = transition_counts - torch.logsumexp(
             transition_counts, dim=1, keepdim=True
         )
-        emissions = emissions.reestimate(data, torch.exp(gamma))
+        step = emissions.reestimate(data, torch.exp(gamma))
+        if not step.converged:
+            msg = (
+                f"the emission M step did not settle after {step.iterations} "
+                f"iterations, at a relative change of {step.residual:.3e}: a "
+                f"parameter read off iterations that never converged is not an "
+                f"estimate, and a monotone outer likelihood would not have "
+                f"shown it"
+            )
+            raise ValueError(msg)
+        emissions = step.emissions
+        at_boundary = at_boundary or step.at_boundary
 
         if abs(log_likelihood - previous) <= tolerance * abs(log_likelihood):
             break
         previous = log_likelihood
 
-    return log_initial, log_transition, emissions, log_likelihood
+    return EmFit(
+        log_initial=log_initial,
+        log_transition=log_transition,
+        emissions=emissions,
+        log_likelihood=log_likelihood,
+        emission_at_boundary=at_boundary,
+    )
