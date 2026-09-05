@@ -63,7 +63,10 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
   likelihood as a density is a posterior under an improper flat prior, which
   for most models is not normalizable, and no diagnostic inside a sampler can
   notice. `hmc.WithGaussianPrior` makes the prior an explicit declaration by
-  the caller rather than an assumption by the sampler.
+  the caller rather than an assumption by the sampler. The same fault one
+  step over: tempering a likelihood is a power posterior, not a temperature
+  in the physical sense, and a schedule serves both without saying which —
+  the consumer says.
 
 - **No application imports.** Nothing here may import from `snakes_and_ladders.sim`,
   `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`. This is asserted by

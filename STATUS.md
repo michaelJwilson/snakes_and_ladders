@@ -509,6 +509,38 @@ a complete bipartite graph, whose maximum cut is exactly `|E|`, the ratio
 comes out slightly **above 1** — impossible for an exact solve, and the
 measurable evidence of what the certificate does and does not cover.
 
+**Temperature is one object, and it lives where all three consumers can reach
+it.** `snakes_and_ladders.opt.schedule` carries the schedules — constant, linear,
+geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
+and checked against it to 1e-12 (1e-10 for the cosine, whose torch form is a
+recursion) — with both endpoints reached *exactly* at the declared steps, and
+a step past the end refused rather than clamped
+([#267](https://github.com/michaelJwilson/snakes_and_ladders/issues/267)). The
+Potts sampler takes a temperature as model scaling, which the model makes an
+exact statement: the tempered energies equal the energies over `T` with a
+deviation of **0.0**, and every move set's chain at `T = 2` and `T = 0.5` in a
+field passes the chi-square against `exp(-E/T)` enumerated from the unscaled
+model (p-values 0.016 to 0.89 at the 0.001 significance). The Hamiltonian
+sampler takes it as the momentum's variance — the tempered dynamics are the
+untempered ones in rescaled time, so the integrator is untouched — and on the
+analytic Gaussian a chain at `T` is the chain at 1 with its deviations scaled
+by `sqrt(T)` **draw for draw to 1e-10**. At `T = 1` every operation is the
+identity bitwise, and the 31 existing HMC and 13 Potts tests pass untouched.
+
+**Annealing is the sampler on a schedule, and the first instance is a wash.**
+`anneal_potts` and `hmc.anneal` run one sweep or one proposal per schedule
+step and return the best state seen. On the 9×9 periodic triangular
+antiferromagnet, whose ground-state energy is a closed form, geometric
+annealing from `T = 2` to `0.05` over 200 sweeps reaches it **20/20** against
+single-site descent's **2/20** and a constant `T = 1` control's **7/20** — the
+schedule, not the wandering. But descent converges in 2.6 sweeps, so the same
+200 sweeps buy 78 restarts, and the best of 78 also reaches it 20/20. On
+Rastrigin, annealed Hamiltonian proposals reach the global basin 7/20 at 11,000
+gradients against a single fit's 1/20 at a few dozen; at equal gradients
+restarts would win by the same arithmetic. Neither is a default; the
+comparison at equal evaluations on instances where restarts might lose, and
+parallel tempering with its swap oracle, are the ticket's second pull request.
+
 **Not built:** Viterbi decoding, and iterated conditional modes over HMM state
 paths (`snakes_and_ladders.search.alpha_expansion` carries a lattice ICM as its baseline,
 which is a different object). Single-flip local search over the Potts chain exists as an RL

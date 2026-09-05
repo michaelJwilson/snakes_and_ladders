@@ -1,1 +1,1 @@
-"""Move sets, agents, and temperature schedules. See CLAUDE.md in this directory."""
+"""Move sets, samplers, exact solvers, and the agents that choose among moves. See CLAUDE.md in this directory."""

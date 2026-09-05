@@ -27,9 +27,21 @@ choice between them is a measurement at equal *evaluations* and never at
 equal steps --- `search/CLAUDE.md`'s budget rule, and the reason
 :meth:`Integrator.force_evaluations` exists.
 
+**Temperature is the momentum's variance.** The tempered target
+``exp(-U / T)`` is the marginal of ``exp(-(U + K) / T)``, whose momentum is
+``N(0, T)``; and Hamilton's equations for ``(U + K) / T`` are the untempered
+ones in rescaled time, so the *same* integrator with the *same* step serves
+every temperature and only the momentum draw and the acceptance ratio change
+(issue #267). That is what makes :func:`anneal` the sampler on a schedule
+rather than a second sampler: at ``T = 1`` every operation is the identity
+bitwise, and every chain drawn before the temperature existed is unchanged.
+A quasi-Newton fit has no acceptance ratio to temper, which is why ``fit``
+takes no schedule and annealing a continuous objective enters here.
+
 See Neal (2011), "MCMC using Hamiltonian dynamics"; Yoshida (1990) for the
 fourth-order composition and Suzuki (1991) for why its middle coefficient
-must be negative; Nocedal & Wright for the symplectic structure.
+must be negative; Nocedal & Wright for the symplectic structure; Kirkpatrick,
+Gelatt & Vecchi (1983) for annealing.
 """
 
 from __future__ import annotations
@@ -42,6 +54,7 @@ from dataclasses import dataclass
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.schedule import Schedule
 
 DEFAULT_STEPS = 20
 
@@ -292,8 +305,9 @@ def sample(
     theta0: torch.Tensor | None = None,
     burn_in: int = 0,
     integrator: Integrator = leapfrog,
+    temperature: float = 1.0,
 ) -> HmcChain:
-    """Draw ``n_samples`` from the density ``exp(-objective)``.
+    """Draw ``n_samples`` from the density ``exp(-objective / temperature)``.
 
     Parameters
     ----------
@@ -321,6 +335,10 @@ def sample(
         a comparison at equal evaluations rather than at equal steps ---
         :meth:`Integrator.force_evaluations` is what makes that comparison
         possible.
+    temperature : float
+        The chain targets ``exp(-objective / temperature)``; 1 is the
+        objective as declared. Whether that is a tempered *energy* or a power
+        posterior is the caller's to say (`snakes_and_ladders.opt.schedule`).
 
     Returns
     -------
@@ -330,11 +348,137 @@ def sample(
     Raises
     ------
     ValueError
-        If ``step_size`` is not positive or ``n_steps`` is below 1. A
-        zero-length trajectory proposes the current point every time, which
-        accepts at rate 1 and samples nothing --- a chain that looks healthy
-        by every diagnostic and has not moved.
+        If ``step_size`` or ``temperature`` is not positive, or ``n_steps``
+        is below 1. A zero-length trajectory proposes the current point every
+        time, which accepts at rate 1 and samples nothing --- a chain that
+        looks healthy by every diagnostic and has not moved.
     """
+    _check_trajectory(step_size, n_steps)
+    if not temperature > 0.0:
+        msg = f"temperature must be positive, got {temperature}"
+        raise ValueError(msg)
+
+    generator = torch.Generator().manual_seed(seed)
+    position = _start(objective, theta0)
+
+    draws = torch.empty((n_samples, position.shape[0]), dtype=torch.float64)
+    errors = torch.empty(n_samples + burn_in, dtype=torch.float64)
+    accepted = 0
+
+    for index in range(n_samples + burn_in):
+        position, error, was_accepted = _transition(
+            objective, position, temperature, generator, step_size, n_steps, integrator
+        )
+        errors[index] = error
+        if index >= burn_in:
+            accepted += was_accepted
+            draws[index - burn_in] = position
+
+    return HmcChain(
+        theta=draws,
+        acceptance_rate=accepted / n_samples if n_samples else 0.0,
+        energy_error=errors[burn_in:],
+    )
+
+
+@dataclass(frozen=True)
+class Annealed:
+    """What one annealing run found, and what it cost.
+
+    Parameters
+    ----------
+    theta : torch.Tensor
+        The lowest-valued point visited, in unconstrained coordinates. The
+        *best* rather than the last: the final proposals run cold but not at
+        zero, so the chain can leave the best point it found.
+    value : float
+        The objective there.
+    final : torch.Tensor
+        Where the chain ended.
+    acceptance_rate : float
+        Over the whole schedule. Near zero at the cold end is the symptom of
+        a step too large for the final temperature.
+    force_evaluations : int
+        Gradients spent, so the run is comparable to any other optimizer at
+        equal evaluations.
+    """
+
+    theta: torch.Tensor
+    value: float
+    final: torch.Tensor
+    acceptance_rate: float
+    force_evaluations: int
+
+
+def anneal(
+    objective: Objective,
+    schedule: Schedule,
+    seed: int,
+    *,
+    step_size: float,
+    n_steps: int = DEFAULT_STEPS,
+    theta0: torch.Tensor | None = None,
+    integrator: Integrator = leapfrog,
+) -> Annealed:
+    """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
+
+    One proposal per schedule step at that step's temperature, tracking the
+    lowest objective seen. The transition at each step is exactly the one
+    :func:`sample` runs at a constant temperature, so a constant schedule
+    reproduces a chain draw for draw at the same seed; what annealing adds is
+    that the temperature falls, and what it buys is measured against the
+    alternatives at equal force evaluations and never assumed.
+
+    Parameters
+    ----------
+    objective : Objective
+        What to minimize. Read as an energy, so ``T`` is physical; a negative
+        log-likelihood here is a power posterior and the caller should know
+        which they meant.
+    schedule : Schedule
+        Temperature per proposal. Its length is the budget in proposals;
+        ``force_evaluations`` on the result is the budget in gradients.
+    seed : int
+        Seed for ``torch.Generator``.
+    step_size, n_steps, theta0, integrator
+        As :func:`sample`. The step needs no rescaling with temperature ---
+        see the module note --- but a step that is stable at the hot end can
+        still reject at the cold end, which the acceptance rate reports.
+
+    Returns
+    -------
+    Annealed
+    """
+    _check_trajectory(step_size, n_steps)
+    generator = torch.Generator().manual_seed(seed)
+    position = _start(objective, theta0)
+
+    best, best_value = position.clone(), float(objective(position))
+    accepted = 0
+    for step in range(schedule.n_steps):
+        position, _, was_accepted = _transition(
+            objective,
+            position,
+            schedule(step),
+            generator,
+            step_size,
+            n_steps,
+            integrator,
+        )
+        accepted += was_accepted
+        value = float(objective(position))
+        if value < best_value:
+            best, best_value = position.clone(), value
+    return Annealed(
+        theta=best,
+        value=best_value,
+        final=position,
+        acceptance_rate=accepted / schedule.n_steps,
+        force_evaluations=schedule.n_steps * integrator.force_evaluations(n_steps),
+    )
+
+
+def _check_trajectory(step_size: float, n_steps: int) -> None:
     if step_size <= 0.0:
         msg = f"step_size must be positive, got {step_size}"
         raise ValueError(msg)
@@ -346,43 +490,55 @@ def sample(
         )
         raise ValueError(msg)
 
-    generator = torch.Generator().manual_seed(seed)
-    position = (
+
+def _start(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
+    return (
         objective.initial().detach().clone()
         if theta0 is None
         else theta0.detach().clone()
     ).to(torch.float64)
 
-    draws = torch.empty((n_samples, position.shape[0]), dtype=torch.float64)
-    errors = torch.empty(n_samples + burn_in, dtype=torch.float64)
-    accepted = 0
 
-    for index in range(n_samples + burn_in):
-        momentum = torch.randn(position.shape, generator=generator, dtype=torch.float64)
-        current = hamiltonian(objective, position, momentum)
+def _transition(
+    objective: Objective,
+    position: torch.Tensor,
+    temperature: float,
+    generator: torch.Generator,
+    step_size: float,
+    n_steps: int,
+    integrator: Integrator,
+) -> tuple[torch.Tensor, float, int]:
+    """One Metropolis step with a Hamiltonian proposal at ``temperature``.
 
-        proposal, proposed_momentum = integrator(
-            objective, position, momentum, step_size, n_steps
-        )
-        # Negating the momentum makes the proposal symmetric, which is what
-        # leaves the acceptance ratio as the energy difference alone. It has
-        # no effect on the next iteration, where the momentum is redrawn.
-        proposed = hamiltonian(objective, proposal, -proposed_momentum)
+    Momentum is drawn with variance ``temperature`` and the acceptance ratio
+    divides the energy difference by it; the integrator itself is untempered.
+    At ``temperature = 1.0`` both are the identity bitwise, so this *is* the
+    untempered transition and not an approximation of it.
 
-        errors[index] = abs(proposed - current)
-        uniform = float(torch.rand(1, generator=generator))
-        if uniform < float(torch.exp(torch.tensor(current - proposed))):
-            position = proposal
-            if index >= burn_in:
-                accepted += 1
-        if index >= burn_in:
-            draws[index - burn_in] = position
+    Returns
+    -------
+    tuple[torch.Tensor, float, int]
+        The new position, the absolute energy error of the proposal, and 1
+        if it was accepted.
+    """
+    momentum = torch.randn(
+        position.shape, generator=generator, dtype=torch.float64
+    ) * math.sqrt(temperature)
+    current = hamiltonian(objective, position, momentum)
 
-    return HmcChain(
-        theta=draws,
-        acceptance_rate=accepted / n_samples if n_samples else 0.0,
-        energy_error=errors[burn_in:],
+    proposal, proposed_momentum = integrator(
+        objective, position, momentum, step_size, n_steps
     )
+    # Negating the momentum makes the proposal symmetric, which is what
+    # leaves the acceptance ratio as the energy difference alone. It has
+    # no effect on the next iteration, where the momentum is redrawn.
+    proposed = hamiltonian(objective, proposal, -proposed_momentum)
+
+    error = abs(proposed - current)
+    uniform = float(torch.rand(1, generator=generator))
+    if uniform < float(torch.exp(torch.tensor((current - proposed) / temperature))):
+        return proposal, error, 1
+    return position, error, 0
 
 
 def _gradient(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
