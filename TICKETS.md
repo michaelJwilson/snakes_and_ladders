@@ -122,9 +122,7 @@ A parenthesized number is an issue already filed.
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
 - Make the public-facing reference to the work consistent (#134)
-- Derive the belief-propagation and forward-backward sections of `docs/tex/`, so
-  all three problem classes are documented to the same standard
 - Re-include the eleven committed QA figures the technical document no longer
   cites, so CI rebuilds nothing the document does not rest on
-- Restore the pruning derivation and the parameter-recovery evidence the
-  document dropped, against `ROADMAP.md` §1.3's required contents
+- The textbook carries every equation and algorithm the code cites, and a
+  guard resolves each citation (#274)

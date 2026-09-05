@@ -1,4 +1,4 @@
-"""The phylogenetic environment: tree search as the MDP ``docs/tex`` states.
+"""The phylogenetic environment: tree search as the MDP ``sec:policy-gradient`` of ``docs/tex/textbook.tex`` states.
 
 This is the application instance of :class:`snakes_and_ladders.learn.environment.Environment`,
 and it lives here rather than in ``snakes_and_ladders.learn`` for the reason the
@@ -238,7 +238,7 @@ class TopologyEnvironment:
         exactly as on the Potts landscape, and what the agent can learn is
         precisely *how much* it should accept a move that loses
         log-likelihood in order to reach a better local maximum. That is the
-        question `docs/tex` raises about credit assignment, isolated to one
+        question ``sec:policy-gradient`` of ``docs/tex/textbook.tex`` raises about credit assignment, isolated to one
         parameter.
 
         Richer features -- split support, subtree sizes, alignment summaries

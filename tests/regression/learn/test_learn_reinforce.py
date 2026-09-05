@@ -122,7 +122,8 @@ def test_the_score_function_has_zero_expectation() -> None:
 
 
 def test_the_baseline_reduces_the_estimator_variance() -> None:
-    # `docs/tex` gives variance, not bias, as the reason for a baseline, so
+    # sec:policy-gradient of docs/tex/textbook.tex gives variance, not bias, as
+    # the reason for a baseline, so
     # the variance is what is measured. The reduction here is modest --
     # realized ratio 0.90 -- because at this horizon the returns are all of
     # similar size; the baseline earns its place on problems whose return
@@ -268,7 +269,7 @@ def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
     # Guards the guard: a check that cannot fail reads as evidence while
     # supplying none. The bias planted here is myopia -- weighting each step
     # by its own reward instead of by everything that followed it, which
-    # discards precisely the credit assignment `docs/tex` says tree search
+    # discards precisely the credit assignment sec:policy-gradient says tree search
     # makes sharp. Realized: 7.1e-01 relative, against 9.9e-03 for the
     # correct estimator on the same episodes.
     #

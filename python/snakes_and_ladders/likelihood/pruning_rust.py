@@ -3,7 +3,7 @@ pinned against ``snakes_and_ladders.likelihood.pruning``, the NumPy oracle
 (``likelihood/CLAUDE.md``, "The NumPy reference is the oracle and it
 stays").
 
-Implements the same recursion as the oracle -- eq. (pruning)/(root) of
+Implements the same recursion as the oracle -- ``eq:pruning`` and ``eq:root`` of
 ``docs/tex/textbook.tex`` -- in Rust (``src/pruning.rs``), exposed via PyO3.
 There is no autodiff graph to protect here (unlike ``pruning_torch.py``),
 but this wrapper still flattens ``tau`` into plain arrays crossing the FFI

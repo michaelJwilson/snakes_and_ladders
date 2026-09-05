@@ -228,7 +228,7 @@ class PottsLandscape:
     def is_terminal(self, state: Configuration) -> bool:
         """Whether ``state`` is a local maximum under single flips.
 
-        ``docs/tex`` defines the episode as ending "on a step budget or when
+        ``sec:policy-gradient`` of ``docs/tex/textbook.tex`` defines the episode as ending "on a step budget or when
         no move improves the score", which is a property of the state rather
         than of the policy. So an agent can route *around* a barrier by
         accepting a negative reward and climbing elsewhere, but cannot step

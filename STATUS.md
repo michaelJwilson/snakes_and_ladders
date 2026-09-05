@@ -585,22 +585,34 @@ specification, cut down in `14d32d6` from the academic-letter structure of
 [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), and it is the shape
 the document is in rather than the shape §1.3 asks for.
 
-Thirteen QA scripts run in the build, each committing a figure with a caption
+Thirteen QA scripts render the figures, each committing a figure with a caption
 naming the seed, the sizes and the model that produced it, and `docs/CLAUDE.md`
 states the rules that keep a CI-regenerated artifact true
-([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The document
-currently includes two of them — the worked simulation example and the backend
-agreement — so eleven committed figures are rebuilt by CI but cited nowhere.
+([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The two
+documents cite seven of them — the textbook the simulated tree and the
+Jukes–Cantor curves, the paper the worked simulation, the backend agreement,
+parameter recovery, interval coverage and the topology search — and the
+per-pull-request build regenerates only those; the remaining six are checked at
+the release gate
+([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)).
 
 Measured against §1.3's required contents: the model formulations are present
-for all three classes, at the level of a statement rather than a derivation.
-Absent are the derivations of pruning, belief propagation and forward-backward;
-the branch-and-bound bounds and their proofs, no such bound being implemented;
-and the parameter-recovery and convergence evidence, which exists as committed
-QA figures but is no longer included. Three framed placeholders stand in for
-the RL learning curve, the comparison against classical software, and hardware
-scaling — none of which is measured, and each labelled as a placeholder rather
-than drawn with invented data.
+for all three classes, and since
+[#274](https://github.com/michaelJwilson/snakes_and_ladders/issues/274) every
+equation and algorithm the code cites is stated in the textbook under a label —
+the Jukes–Cantor closed form and its normalization, site independence, pruning
+and the root marginalization, forward simulation, the forward recursion, the
+belief-propagation message and the Bethe free energy, the episode return and the
+REINFORCE estimator, and the cross-device tolerance — and
+`tests/regression/test_document_labels.py` fails on a citation no document
+resolves. The old document had labelled none of them, so nine citations had
+never resolved and two named equation numbers from a numbering that no longer
+existed. What remains at the level of a statement rather than a derivation is
+the pruning and forward–backward recursions; absent entirely are the
+branch-and-bound bounds and their proofs, no such bound being implemented.
+Three framed placeholders stand in for the RL learning curve, the comparison
+against classical software, and hardware scaling — none of which is measured,
+and each labelled as a placeholder rather than drawn with invented data.
 
 ## What Is Not Claimed
 

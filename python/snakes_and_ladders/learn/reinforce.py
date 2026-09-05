@@ -1,6 +1,6 @@
-"""REINFORCE with a baseline: the score-function estimator ``docs/tex`` states.
+"""REINFORCE with a baseline: the score-function estimator ``docs/tex/textbook.tex`` states.
 
-The estimator is eq. (17) of the technical document, undiscounted::
+The estimator is ``eq:reinforce`` of ``docs/tex/textbook.tex``, undiscounted::
 
     grad J = E[ sum_t grad log pi(a_t | s_t) * (G_t - b(s_t)) ]
 
@@ -19,7 +19,7 @@ and keeps the unbiasedness claim exact -- which matters here because
 :mod:`snakes_and_ladders.learn.exact` checks it against an enumerated gradient rather than
 taking it on trust.
 
-**What the baseline is for.** ``docs/tex`` is explicit that variance, not
+**What the baseline is for.** ``sec:policy-gradient`` is explicit that variance, not
 bias, is the reason: ``G_t`` is a sum of objective differences whose scale
 depends on the problem, so an uncentred gradient varies in magnitude by
 orders of magnitude between instances. The measured variance reduction is

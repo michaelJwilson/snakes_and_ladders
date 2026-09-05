@@ -1,6 +1,6 @@
 """The policy: a softmax over scored actions, and the gauge that entails.
 
-``docs/tex`` states the form directly --- ``pi(a | s)`` proportional to
+``sec:policy-gradient`` of ``docs/tex/textbook.tex`` states the form directly --- ``pi(a | s)`` proportional to
 ``exp f(s, a)`` over the *available* actions, because a move neighbourhood's
 size varies with the problem and a fixed action index would not survive it.
 

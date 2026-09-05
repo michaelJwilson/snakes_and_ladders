@@ -36,7 +36,7 @@ from tests._fixtures import FOUR_TAXA, load_fixture
 # (issue #111): the backends agree to ~8e-13 relative at every size, but that
 # same agreement reads as 7.4e-07 absolute at 200,000 sites and would fail an
 # absolute 1e-9. CROSS_DEVICE_RTOL_FLOAT64 is the float64 implementation-
-# agreement bound stated in docs/tex/ ("The cross-device tolerance"); it is
+# agreement bound stated in docs/tex/textbook.tex (sec:tolerance); it is
 # never relaxed to accommodate a discrepancy.
 _RTOL_ORACLE = CROSS_DEVICE_RTOL_FLOAT64
 
