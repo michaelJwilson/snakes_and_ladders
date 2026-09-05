@@ -2,8 +2,8 @@
 //! (the NumPy oracle) to Rust, exposed to Python via PyO3 as
 //! `snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`.
 //!
-//! Implements eq. (pruning) and eq. (root) of `docs/tex/main.tex` (Sec.
-//! "Pruning") exactly: message passing `partial[s, i] = sum_j P_ij(t) *
+//! Implements eq. (pruning) of `docs/tex/textbook.tex` (Sec. "Problem
+//! Statement: Phylogenetic Inference", "The algorithm: pruning") exactly: message passing `partial[s, i] = sum_j P_ij(t) *
 //! child_partial[s, j]` over `(site, state)` arrays, post-order over the
 //! topology, with the same per-node rescaling behavior as the NumPy oracle
 //! (log of the scale factor accumulated separately; a site whose partial
@@ -32,8 +32,9 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-/// Closed-form k-state Jukes-Cantor transition probabilities P(t), eq. (jc)
-/// of `docs/tex/main.tex`, ported from `snakes_and_ladders.sim.jc.jc_transition_probabilities`.
+/// Closed-form k-state Jukes-Cantor transition probabilities P(t), the model
+/// of `docs/tex/textbook.tex` Sec. "Problem Statement: Phylogenetic
+/// Inference", ported from `snakes_and_ladders.sim.jc.jc_transition_probabilities`.
 ///
 /// Returns a row-major `k * k` matrix flattened into a `Vec<f64>`; entry
 /// `i * k + j` is Pr(state j at the branch's end | state i at its start).
@@ -71,8 +72,8 @@ fn jc_transition_probabilities(t: f64, k: usize) -> Vec<f64> {
 /// - `k`: number of states.
 /// - `pi`: root state distribution, length `k`.
 /// - `rescale`: whether to rescale partial likelihoods per node, log of the
-///   scale factor accumulated separately (docs/tex/main.tex, Sec.
-///   "Pruning"). Disabling underflows for realistic (site, taxa) sizes.
+///   scale factor accumulated separately (docs/tex/textbook.tex, "The
+///   algorithm: pruning"). Disabling underflows for realistic (site, taxa) sizes.
 ///
 /// # Errors
 /// Returns `Err` with a message if array lengths are inconsistent, `k < 2`,

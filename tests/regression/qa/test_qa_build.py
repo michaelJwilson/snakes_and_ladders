@@ -1,8 +1,8 @@
 """What the citation-driven figure selection must guarantee.
 
-The build regenerates only the figures ``docs/tex/main.tex`` cites, and the
-release gate regenerates the rest (issue #154). That trade is only sound if
-three things hold, and each is asserted here: the document can never cite a
+The build regenerates only the figures the documents under ``docs/tex/`` cite,
+and the release gate regenerates the rest (issue #154). That trade is only
+sound if three things hold, and each is asserted here: a document can never cite a
 figure the build skips, no committed figure falls outside the release gate's
 reach, and a rotted figure is still caught -- by the per-PR path when the
 document cites it, and by the release path when it does not.

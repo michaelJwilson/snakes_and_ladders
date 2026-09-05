@@ -119,9 +119,9 @@ uv sync --locked --extra test
 infra/build_technical_doc.sh
 ```
 
-Open `docs/draft.pdf`. CI runs the same script on every PR, and fails on an
-undefined or multiply-defined reference, an undefined citation, or a committed
-`docs/draft.pdf` that differs from the rebuild.
+Open `docs/paper.pdf` and `docs/textbook.pdf`. CI runs the same script on
+every PR, and fails on an undefined or multiply-defined reference, an undefined
+citation, or a committed PDF that differs from the rebuild.
 
 ## Benchmarking locally
 
