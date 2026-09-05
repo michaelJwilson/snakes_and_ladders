@@ -68,6 +68,19 @@ Every `CLAUDE.md`, this one included, is the exception, on rule 6: it carries th
 *   **Measurement:** Benchmark candidates against the NumPy reference before committing to a port. Report both numbers in the PR.
 *   **The Oracle:** Every accelerated kernel keeps its pure Python/NumPy implementation as an oracle. Regression tests must pin the accelerated output against it within an explicit tolerance.
 
+### Runtime Optimization Opportunities
+Checked in this order when a hot path is proposed; `DEV.md` carries the procedure, `STATUS.md` the numbers.
+*   **Profile first.** `cProfile` self time ranks the loop to port; a term that is a small fraction of the runtime pays for no port in any language (Gorelick & Ozsvald ch. 2).
+*   **L1/L2/L3 cache.** Keep a recursion's live set — partials, messages, the current sweep — inside cache; release intermediates and report peak memory beside time (Bryant & O'Hallaron ch. 6).
+*   **Memory layout.** Contiguous, row-major arrays walked in stride order; neighbour lists as offsets into one array, not lists of lists (Bryant & O'Hallaron ch. 6; Gorelick & Ozsvald ch. 6).
+*   **Vectorization and SIMD.** Inner loops contiguous, unaliased, without early exit or data-dependent reduction, so NumPy and the Rust compiler vectorize; confirm by benchmark, never by asserting a width (Bryant & O'Hallaron ch. 5).
+*   **Branch misprediction.** A data-dependent branch in an inner loop is free or a stall; the branchless form (mask, select, table) wins only where a measurement shows the branch does not predict (Bryant & O'Hallaron ch. 5).
+*   **Inlining and call overhead.** No Python-level call per site or per node; hoist it or vectorize it. In Rust, `#[inline]` the small hot helpers (Gorelick & Ozsvald ch. 4; Bryant & O'Hallaron ch. 5).
+*   **Allocation.** Preallocate and reuse buffers across sweeps; NumPy `out=` and in-place operators over temporaries (Gorelick & Ozsvald ch. 6).
+*   **Double buffering.** Reading and writing one array in a sweep is a *different Markov chain* from reading the previous buffer; the docstring says which and the oracle pins it before either is timed.
+*   **The FFI boundary.** Cross it once per call with contiguous arrays; time a kernel alone *and* through its binding, since the marshalling has been the dominant term here (Gorelick & Ozsvald ch. 7; Antão).
+*   **Compiled backends.** Rust for CPU-bound hot paths, decided; `numba`'s `njit` is a candidate only against a measurement on an existing hot path, as its own decision, because every backend is one more implementation held to the NumPy oracle (Gorelick & Ozsvald ch. 7).
+
 ## Testing & Quality Assurance
 *   **Simulate Component-Wise:** Build fixtures by simulating from a known generative model under an explicitly seeded generator. Test components individually and in combination.
 *   **Pin to Independent Sources:** Validate expected values against analytic results, brute-force computations, or secondary implementations with stated tolerances.
@@ -82,8 +95,9 @@ Every `CLAUDE.md`, this one included, is the exception, on rule 6: it carries th
 `docs/tex/` is treated as code. Cite these texts where they carry the material, and state any deviation from their standard algorithms explicitly. The core references are a routing table, grouped by what they inform:
 
 **Infrastructure (Build, Structure, and Speed)**
-*   **Software Craft:** Martin (*Clean Code*); Blandy et al. (*Programming Rust*)
+*   **Software Craft:** Martin (*Clean Code*); Blandy et al. (*Programming Rust*); Ramalho (*Fluent Python*)
 *   **Systems & Hardware:** Bryant & O'Hallaron (*Computer Systems*); Hwu et al. (*Programming Massively Parallel Processors*)
+*   **Python Performance:** Gorelick & Ozsvald (*High Performance Python*); Antão (*Fast Python*)
 
 **Optimization (Discrete and Continuous)**
 *   **Algorithms & Math:** Cormen et al. (*Introduction to Algorithms*); Rosen (*Discrete Mathematics and Its Applications*)

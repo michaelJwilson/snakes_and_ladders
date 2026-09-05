@@ -105,6 +105,18 @@ Nine required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs 
 * **Tolerances on a quantity that scales with problem size are relative.** The log-likelihood is a sum over sites, so an absolute bound fixed at one site count does not transfer to another: the backends agree to ~8e-13 relative at every size, but that same agreement is 7.4e-07 absolute at 200,000 sites. Absolute bounds are correct for quantities that do not scale — a transition probability, a row sum, a Monte Carlo frequency — and are kept there.
 * **Concurrency:** Superseded CI runs on the same branch are automatically cancelled.
 
+### Profiling a Hot Path
+
+`CLAUDE.md`'s **Runtime Optimization Opportunities** lists what to look for; this is the order to look, on fixed hardware per **No CI Profiling** above.
+
+1. `python tests/benchmarks/profile_hotpaths.py` — a `cProfile` self-time ranking for `sim`, `search` and `learn` at a CI-sized fixture and one larger size. Not collected by `pytest`; run by hand and read. A candidate not near the top does not proceed.
+2. `pytest tests/benchmarks/test_<name>_bench.py` — the NumPy or PyTorch baseline at the size the port would run at. The 10x rule is stated against realistic sizes, not the smallest that fits CI.
+3. Time the port **alone** (`cargo bench`, Criterion, in `benches/`) **and through its binding** (`tests/benchmarks/`); the difference is the FFI boundary, and the pull request reports both.
+4. For anything recursive, report peak memory beside time. No helper exists yet (`STATUS.md` records the memory requirement as not measured; #232 closes it), so take `tracemalloc` peaks by hand and say so.
+5. Pin the port against the NumPy oracle within its tolerance before reporting the speedup.
+
+`cProfile` cannot see inside a NumPy call or a Rust kernel; `pytest-benchmark` reports wall clock and nothing about cache, branches or vector width; Criterion times a kernel with its inputs already in Rust. Each ranks or times, none explains — the explanation is a change and its measured effect.
+
 ### Core Development Standards
 
 * **Reproducibility:** Pin the environment. Use `--locked` for CI installs, pin runner images (`ubuntu-24.04`), and seed every generator through `np.random.default_rng(seed)`.
