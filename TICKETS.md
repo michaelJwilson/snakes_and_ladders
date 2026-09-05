@@ -85,6 +85,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   installed (#126)
 - A classical baseline suite the three applications are scored against under
   one budget
+- Uncertainty for a discrete search result, where a Hessian is not defined:
+  a margin, a Boltzmann weight over the enumerated neighbourhood, or bootstrap
+  support, pinned against enumeration where it fits (#270)
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 

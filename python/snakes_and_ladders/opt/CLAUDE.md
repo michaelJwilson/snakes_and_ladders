@@ -52,11 +52,11 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
   or by its start rather than converged. State the bound and raise when it
   binds — issue #122's fault, reached from the other side.
 
-- **A test function is not a likelihood, so it has no observed information.**
-  The Hessian at its minimum is a curvature rather than an information matrix,
-  and an interval built from it carries no meaning. Issue #122 covers the
-  general form: an interval is refused where the quantity it would summarize
-  does not exist.
+- **An interval is a statement about a maximum, and about nothing else.** Not
+  the route: an EM fit, a gradient fit and the best of many starts get the same
+  interval through one door, so every objective inverts its constraint map. Not
+  a point that is no maximum: an unconverged fit, a parameter at a bound and a
+  test function's curvature are refused — issue #122's general form.
 
 - **An acceptance rate is not a diagnostic on its own.** An integrator step
   too large biases a posterior's *spread* downward while leaving its mean

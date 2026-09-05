@@ -17,7 +17,7 @@ against the objective's own magnitude.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
 
@@ -55,6 +55,12 @@ class FitResult:
         Whether the relative gradient norm fell below the tolerance. A fit
         that ran out of iterations is returned rather than raised, so a
         caller can inspect it; every test here asserts this is ``True``.
+    standard_errors : Mapping[str, torch.Tensor] | None
+        Delta-method standard errors at ``theta`` under :meth:`constrain`'s
+        keys, when the fit was asked for them (``include_intervals``);
+        ``None`` otherwise. ``None`` means *not requested*, never *refused*: a
+        point where the information is singular raises instead, so a caller
+        cannot mistake a missing interval for one that could not exist.
     """
 
     theta: torch.Tensor
@@ -62,6 +68,7 @@ class FitResult:
     gradient_norm: float
     iterations: int
     converged: bool
+    standard_errors: Mapping[str, torch.Tensor] | None = None
 
 
 def fit(
@@ -69,6 +76,8 @@ def fit(
     theta0: torch.Tensor | None = None,
     max_iterations: int = 500,
     gradient_tolerance: float = 1e-8,
+    *,
+    include_intervals: bool = False,
 ) -> FitResult:
     """Minimize ``objective`` by L-BFGS with a strong-Wolfe line search.
 
@@ -88,11 +97,23 @@ def fit(
         Maximum optimizer steps.
     gradient_tolerance : float
         Convergence threshold on ``max|grad| / max(1, |value|)``.
+    include_intervals : bool
+        Also compute :func:`constrained_standard_errors` at the fit. Off by
+        default because a Hessian costs more than the fit inside a multi-start
+        or a search loop, where the interval is never read (issue #268).
 
     Returns
     -------
     FitResult
         The fitted parameters and the state of the convergence test.
+
+    Raises
+    ------
+    ValueError
+        If an interval was asked for and the fit did not converge. The
+        observed information is a statement about a maximum, and a point the
+        optimizer left early is not one; without the flag the unconverged fit
+        is returned for inspection as before.
     """
     theta = (
         (objective.initial() if theta0 is None else theta0)
@@ -130,12 +151,27 @@ def fit(
             converged = True
             break
 
-    return FitResult(
+    result = FitResult(
         theta=theta.detach(),
         value=float(objective(theta.detach())),
         gradient_norm=_relative_gradient_norm(objective, theta),
         iterations=iterations,
         converged=converged,
+    )
+    return _with_intervals(objective, result) if include_intervals else result
+
+
+def _with_intervals(objective: Objective, result: FitResult) -> FitResult:
+    """``result`` carrying its interval, or a refusal where it has none."""
+    if not result.converged:
+        msg = (
+            "an interval was asked for at a point that is not an optimum: the "
+            f"fit did not converge in {result.iterations} iterations (relative "
+            f"gradient norm {result.gradient_norm:.2e})"
+        )
+        raise ValueError(msg)
+    return replace(
+        result, standard_errors=constrained_standard_errors(objective, result.theta)
     )
 
 
@@ -269,6 +305,47 @@ def constrained_standard_errors(
     return errors
 
 
+def standard_errors_at(
+    objective: Objective, named: Mapping[str, torch.Tensor]
+) -> Mapping[str, torch.Tensor]:
+    """Delta-method standard errors at a fit stated in the model's parameters.
+
+    The door every optimizer can use. :func:`constrained_standard_errors`
+    takes a ``theta``, which only a gradient fit has; this takes the
+    parameters themselves, which every fit has, and carries them back through
+    :meth:`Objective.theta_from` (issue #268).
+
+    **The refusals are the point, and they are unchanged.** An interval from
+    a Hessian is a statement about a *maximum*, and three things here are not
+    one: a variance at its floor, where the likelihood is unbounded and there
+    is no maximum to expand around; a dispersion at its identifiable bound,
+    where the likelihood is flat and the curvature is numerically
+    indistinguishable from zero; and any point that is simply not an optimum.
+    :func:`parameter_covariance` refuses all three, and this changes nothing
+    about that --- widening the entry point without widening the guard would
+    leave it firing in one code path out of four.
+
+    Parameters
+    ----------
+    objective : Objective
+        The objective the fit belongs to.
+    named : Mapping[str, torch.Tensor]
+        The fitted parameters, under :meth:`Objective.constrain`'s keys.
+
+    Returns
+    -------
+    Mapping[str, torch.Tensor]
+        One tensor per constrained parameter, shaped like that parameter.
+
+    Raises
+    ------
+    ValueError
+        If the observed information at that point is singular, indefinite or
+        worse conditioned than :func:`parameter_covariance` admits.
+    """
+    return constrained_standard_errors(objective, objective.theta_from(named))
+
+
 def covers(
     estimate: torch.Tensor, standard_error: torch.Tensor, truth: torch.Tensor
 ) -> torch.Tensor:
@@ -322,6 +399,8 @@ def fit_from(
     initializer: Initializer,
     max_iterations: int = 500,
     gradient_tolerance: float = 1e-8,
+    *,
+    include_intervals: bool = False,
 ) -> MultiStartResult:
     """Fit from every start an initializer offers, and report all of them.
 
@@ -339,6 +418,11 @@ def fit_from(
         Passed to each fit.
     gradient_tolerance : float
         Passed to each fit.
+    include_intervals : bool
+        Attach standard errors to ``best`` only --- one Hessian rather than
+        one per start, and the only fit whose interval a caller reads. The
+        interval is conditional on the mode ``best`` sits in, and ``spread``
+        beside it is what says how much that conditioning matters.
 
     Returns
     -------
@@ -361,4 +445,5 @@ def fit_from(
     ]
     ordered = tuple(sorted(results, key=lambda result: result.value))
     spread = float(ordered[-1].value - ordered[0].value)
-    return MultiStartResult(best=ordered[0], all_fits=ordered, spread=spread)
+    best = _with_intervals(objective, ordered[0]) if include_intervals else ordered[0]
+    return MultiStartResult(best=best, all_fits=ordered, spread=spread)
