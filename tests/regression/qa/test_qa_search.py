@@ -66,6 +66,7 @@ def _params() -> SimulationParams:
 # --- the trajectory figure ----------------------------------------------
 
 
+@pytest.mark.structural
 def test_trajectory_caption_reports_the_landscape_it_was_given() -> None:
     params = _params()
     trajectories = {
@@ -83,6 +84,7 @@ def test_trajectory_caption_reports_the_landscape_it_was_given() -> None:
     assert str(params.seed) in caption
 
 
+@pytest.mark.structural
 def test_trajectory_caption_is_latex_safe() -> None:
     params = _params()
     _, caption = search_trajectory.build_figure(
@@ -96,6 +98,7 @@ def test_trajectory_caption_is_latex_safe() -> None:
     assert not set(caption.replace("\\_", "")) & set("_%\\&#")
 
 
+@pytest.mark.structural
 def test_trajectory_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     # At 5 taxa, so the sweep is 15 fits rather than 105 and the whole
     # pipeline -- searches, enumeration, caption, render -- is still
@@ -114,6 +117,7 @@ def test_trajectory_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     assert "All 15 unrooted topologies" in written.caption
 
 
+@pytest.mark.oracle
 @pytest.mark.release
 def test_the_landscape_is_every_topology_sorted_ascending() -> None:
     # The oracle the figure rests on: 6 taxa is 105 unrooted topologies, and
@@ -129,6 +133,7 @@ def test_the_landscape_is_every_topology_sorted_ascending() -> None:
 # --- the topology comparison --------------------------------------------
 
 
+@pytest.mark.structural
 def test_comparison_caption_reports_both_scores_and_the_split() -> None:
     params = _params()
     found = Node(
@@ -163,6 +168,7 @@ def test_comparison_caption_reports_both_scores_and_the_split() -> None:
     assert not set(caption.replace("\\_", "")) & set("_%\\&#")
 
 
+@pytest.mark.structural
 def test_comparison_caption_says_so_when_the_truth_was_not_found() -> None:
     # The flag has to be able to read both ways, or it is decoration.
     params = _params()
@@ -183,6 +189,7 @@ def test_comparison_caption_says_so_when_the_truth_was_not_found() -> None:
     assert "is not the generating topology" in caption
 
 
+@pytest.mark.structural
 def test_comparison_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = search_topologies.main(
         [
@@ -198,6 +205,7 @@ def test_comparison_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     assert "log units" in written.caption
 
 
+@pytest.mark.simulated_truth
 @pytest.mark.release
 def test_the_search_finds_the_generating_tree_and_rejects_a_worse_one() -> None:
     found, found_score, other, other_score, difference, recovered = (

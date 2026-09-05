@@ -11,6 +11,7 @@ import pytest
 from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(4,), (5,), (3, 3), (3, 4), (2, 2, 2), (2, 3, 4)])
 def test_open_lattice_node_and_edge_counts_match_the_closed_form(
     shape: tuple[int, ...],
@@ -29,6 +30,7 @@ def test_open_lattice_node_and_edge_counts_match_the_closed_form(
     assert set(graph.coupling) == {0.5}
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(4,), (5,), (3, 3), (3, 4), (3, 3, 3)])
 def test_periodic_lattice_node_and_edge_counts_match_the_closed_form(
     shape: tuple[int, ...],
@@ -45,12 +47,14 @@ def test_periodic_lattice_node_and_edge_counts_match_the_closed_form(
     assert len(graph.edges) == len(shape) * n_nodes
 
 
+@pytest.mark.edge_case
 def test_a_periodic_dimension_of_extent_two_doubles_the_bond() -> None:
     graph = lattice_graph((2,), boundary=BoundaryCondition.PERIODIC, coupling=1.0)
     assert graph.n_nodes == 2
     assert graph.edges == ((0, 1), (1, 0))
 
 
+@pytest.mark.oracle
 def test_every_node_appears_in_the_expected_number_of_edges() -> None:
     # Interior nodes of an open 3x3 grid have degree 4; corners have degree 2.
     graph = lattice_graph((3, 3), boundary=BoundaryCondition.OPEN, coupling=1.0)
@@ -62,6 +66,7 @@ def test_every_node_appears_in_the_expected_number_of_edges() -> None:
     assert degree[0] == 2, "a corner of a 3x3 grid has 2 neighbours"
 
 
+@pytest.mark.structural
 def test_a_1d_open_chain_is_recognized_and_a_ring_is_not() -> None:
     assert lattice_graph(
         (5,), boundary=BoundaryCondition.OPEN, coupling=0.5
@@ -74,6 +79,7 @@ def test_a_1d_open_chain_is_recognized_and_a_ring_is_not() -> None:
     ).is_open_chain()
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("shape", "message"),
     [
@@ -88,6 +94,7 @@ def test_an_invalid_lattice_specification_is_refused(
         lattice_graph(shape, boundary=BoundaryCondition.OPEN, coupling=1.0)
 
 
+@pytest.mark.edge_case
 def test_a_graph_whose_coupling_does_not_match_its_edges_is_refused() -> None:
     # Every consumer indexes the coupling array by edge position, so a
     # mismatch is a silently wrong energy rather than an IndexError.
@@ -95,6 +102,7 @@ def test_a_graph_whose_coupling_does_not_match_its_edges_is_refused() -> None:
         PottsGraph(n_nodes=3, edges=((0, 1), (1, 2)), coupling=(0.5,))
 
 
+@pytest.mark.edge_case
 def test_a_graph_whose_edge_names_a_missing_node_is_refused() -> None:
     with pytest.raises(ValueError, match=r"outside \[0, 2\)"):
         PottsGraph(n_nodes=2, edges=((0, 2),), coupling=(0.5,))

@@ -10,6 +10,7 @@ import pytest
 from phylo.scripts.run_phylo import main
 
 
+@pytest.mark.structural
 def test_main_runs_without_error(capsys: pytest.CaptureFixture[str]) -> None:
     main()
     captured = capsys.readouterr()

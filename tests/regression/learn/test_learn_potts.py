@@ -38,6 +38,7 @@ def _landscape(chain_length: int = 4) -> PottsLandscape:
 # --- the model ------------------------------------------------------------
 
 
+@pytest.mark.oracle
 def test_energy_matches_its_definition_term_by_term() -> None:
     # E(s) = J * (agreeing adjacent pairs) + sum of the field at each site,
     # written out here independently of the implementation's loop.
@@ -47,6 +48,7 @@ def test_energy_matches_its_definition_term_by_term() -> None:
     assert_allclose(landscape.energy(state), expected, atol=1e-12)
 
 
+@pytest.mark.oracle
 def test_the_local_reward_equals_a_full_energy_difference() -> None:
     # The step function updates two bonds and one site rather than
     # re-evaluating E. Every state, every action: at this size the claim can
@@ -59,6 +61,7 @@ def test_the_local_reward_equals_a_full_energy_difference() -> None:
             assert_allclose(reward, landscape.energy(successor) - base, atol=1e-12)
 
 
+@pytest.mark.mathematical
 def test_the_features_span_the_reward_exactly() -> None:
     # delta_energy = J * agreement_delta + field_delta, which is why the
     # greedy searcher is inside the policy class. If this ever stopped
@@ -72,6 +75,7 @@ def test_the_features_span_the_reward_exactly() -> None:
         assert_allclose(scores.numpy(), rewards, atol=1e-12)
 
 
+@pytest.mark.oracle
 def test_the_neighbourhood_has_one_flip_per_site_and_alternative_state() -> None:
     landscape = _landscape(chain_length=5)
     state = (0, 1, 2, 0, 1)
@@ -81,6 +85,7 @@ def test_the_neighbourhood_has_one_flip_per_site_and_alternative_state() -> None
     assert all(value != state[site] for site, value in actions)
 
 
+@pytest.mark.structural
 def test_a_terminal_state_is_one_no_flip_improves() -> None:
     landscape = _landscape()
     for state in enumerate_configurations(3, 4):
@@ -94,6 +99,7 @@ def test_a_terminal_state_is_one_no_flip_improves() -> None:
 # --- the gauge ------------------------------------------------------------
 
 
+@pytest.mark.mathematical
 def test_shifting_the_field_leaves_every_reward_unchanged() -> None:
     # h and h + c are the same model, and `phylo.opt.potts` has to fix that
     # gauge because a fitted field would otherwise have no value. Here it
@@ -113,12 +119,14 @@ def test_shifting_the_field_leaves_every_reward_unchanged() -> None:
 # --- the oracle -----------------------------------------------------------
 
 
+@pytest.mark.oracle
 def test_enumeration_produces_every_configuration_exactly_once() -> None:
     produced = list(enumerate_configurations(3, 4))
     assert len(produced) == 3**4
     assert len(set(produced)) == len(produced)
 
 
+@pytest.mark.oracle
 def test_the_optimum_is_the_best_of_every_configuration() -> None:
     landscape = _landscape()
     state, energy = optimum(landscape)
@@ -132,6 +140,7 @@ def test_the_optimum_is_the_best_of_every_configuration() -> None:
     assert landscape.is_terminal(state)
 
 
+@pytest.mark.structural
 def test_the_landscape_is_hard_enough_to_be_worth_searching() -> None:
     # Measured: greedy hill climbing stalls below the global optimum from 16
     # of the 81 starting configurations. A landscape greedy always solved
@@ -153,6 +162,7 @@ def test_the_landscape_is_hard_enough_to_be_worth_searching() -> None:
 # --- the greedy searcher is a member of the policy class ------------------
 
 
+@pytest.mark.oracle
 def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
     # Not a convenience: it is what makes "the agent beat hill climbing" a
     # statement about learning rather than about two unrelated algorithms.
@@ -174,6 +184,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
 # --- construction from the shared fixture ---------------------------------
 
 
+@pytest.mark.structural
 def test_the_fixture_yaml_builds_the_same_landscape() -> None:
     # One model, two roles: the yaml that supplies `phylo.opt`'s reference
     # objective read as a search problem instead of a fitting problem.
@@ -186,6 +197,7 @@ def test_the_fixture_yaml_builds_the_same_landscape() -> None:
     )
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("coupling", "field", "chain_length", "message"),
     [
@@ -201,6 +213,7 @@ def test_an_unusable_landscape_is_rejected(
         PottsLandscape(coupling, field, chain_length)
 
 
+@pytest.mark.structural
 def test_reset_draws_a_configuration_of_the_right_shape() -> None:
     landscape = _landscape(chain_length=6)
     state = landscape.reset(np.random.default_rng(0))
@@ -209,6 +222,7 @@ def test_reset_draws_a_configuration_of_the_right_shape() -> None:
     assert state == landscape.reset(np.random.default_rng(0))
 
 
+@pytest.mark.structural
 def test_features_have_one_row_per_action() -> None:
     landscape = _landscape()
     state = (0, 1, 2, 0)

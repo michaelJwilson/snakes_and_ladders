@@ -52,6 +52,7 @@ def _landscape() -> StatePathLandscape:
     return StatePathLandscape(INITIAL, TRANSITION, EMISSION, OBSERVATIONS)
 
 
+@pytest.mark.oracle
 def test_the_local_reward_matches_re_evaluating_the_joint_probability() -> None:
     # The failure this class is most exposed to: an O(1) update that
     # disagrees with a full evaluation would be invisible to any test that
@@ -67,6 +68,7 @@ def test_the_local_reward_matches_re_evaluating_the_joint_probability() -> None:
             )
 
 
+@pytest.mark.mathematical
 def test_the_features_span_the_reward_so_greedy_is_in_the_policy_class() -> None:
     # `learn/CLAUDE.md` requires it. Here the reward is the plain sum of the
     # two features, so the greedy weights carry no parameter at all.
@@ -81,10 +83,12 @@ def test_the_features_span_the_reward_so_greedy_is_in_the_policy_class() -> None
     assert_allclose(scored, rewards, atol=1e-12)
 
 
+@pytest.mark.oracle
 def test_enumeration_counts_every_path() -> None:
     assert len(list(enumerate_paths(3, len(OBSERVATIONS)))) == 3 ** len(OBSERVATIONS)
 
 
+@pytest.mark.oracle
 def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
     # 729 paths, so "did the search find the best one" has an answer. Greedy
     # is not guaranteed to reach it and the realized rate is what is
@@ -103,6 +107,8 @@ def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
     assert np.mean([value == pytest.approx(best) for value in reached]) > 0.5
 
 
+@pytest.mark.mathematical
+@pytest.mark.oracle
 def test_the_enumerated_gradient_matches_central_differences() -> None:
     # The oracle that makes this an *instance* rather than a second class
     # with the same method names: `phylo.learn.exact` carries it unchanged
@@ -124,6 +130,7 @@ def test_the_enumerated_gradient_matches_central_differences() -> None:
     )
 
 
+@pytest.mark.mathematical
 def test_the_expected_return_is_finite_and_improves_with_greedy_weights() -> None:
     # Not "the return went up": both quantities are *enumerated*, so this is
     # an exact comparison of two closed forms rather than a training curve.
@@ -144,6 +151,7 @@ def test_the_expected_return_is_finite_and_improves_with_greedy_weights() -> Non
     assert under_greedy > under_uniform
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("initial", "transition", "emission", "observations", "message"),
     [

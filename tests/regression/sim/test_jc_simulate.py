@@ -31,22 +31,27 @@ SITE_AND_TAXA_FIXTURES = (
 )
 
 
+@pytest.mark.mathematical
 def test_jc_transition_probabilities_rows_sum_to_one() -> None:
     p = jc_transition_probabilities(0.3, k=4)
     assert_allclose(p.sum(axis=1), np.ones(4), rtol=1e-12)
 
 
+@pytest.mark.edge_case
+@pytest.mark.oracle
 def test_jc_transition_probabilities_at_zero_is_identity() -> None:
     p = jc_transition_probabilities(0.0, k=4)
     assert_allclose(p, np.eye(4), atol=1e-12)
 
 
+@pytest.mark.mathematical
 def test_jc_transition_probabilities_at_infinity_is_stationary() -> None:
     # k*t/(k-1) = 40 drives exp(...) to ~4e-18, well past float64 precision.
     p = jc_transition_probabilities(30.0, k=4)
     assert_allclose(p, np.full((4, 4), 0.25), atol=1e-12)
 
 
+@pytest.mark.mathematical
 def test_jc_rate_matrix_is_normalised() -> None:
     k = 4
     q = jc_rate_matrix(k)
@@ -58,6 +63,7 @@ def test_jc_rate_matrix_is_normalised() -> None:
     assert np.isclose(-np.sum(pi * np.diagonal(q)), 1.0)
 
 
+@pytest.mark.mathematical
 def test_jc_detailed_balance_under_uniform_stationary_distribution() -> None:
     k = 4
     pi = np.full(k, 1.0 / k)
@@ -68,6 +74,8 @@ def test_jc_detailed_balance_under_uniform_stationary_distribution() -> None:
     assert_allclose(lhs, rhs, atol=1e-12)
 
 
+@pytest.mark.oracle
+@pytest.mark.simulated_truth
 @pytest.mark.parametrize("fixture_name", SITE_AND_TAXA_FIXTURES)
 def test_simulated_substitution_frequencies_match_analytic_jc(
     fixture_name: str,
@@ -102,6 +110,7 @@ def test_simulated_substitution_frequencies_match_analytic_jc(
         )
 
 
+@pytest.mark.structural
 def test_simulation_is_reproducible_given_seed() -> None:
     params = load_simulation_params(FIXTURE)
     first = simulate_alignment(
@@ -115,6 +124,7 @@ def test_simulation_is_reproducible_given_seed() -> None:
         assert_allclose(states, second.node_states[name])
 
 
+@pytest.mark.structural
 def test_alignment_holds_exactly_the_leaf_states() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
@@ -126,6 +136,7 @@ def test_alignment_holds_exactly_the_leaf_states() -> None:
         assert_allclose(states, dataset.node_states[name])
 
 
+@pytest.mark.structural
 def test_newick_carries_every_leaf_and_terminates() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(

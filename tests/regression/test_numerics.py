@@ -14,6 +14,8 @@ from numpy.testing import assert_allclose
 from phylo.numerics import sample_rows
 
 
+@pytest.mark.critical
+@pytest.mark.edge_case
 def test_a_degenerate_row_always_yields_its_certain_category() -> None:
     # The one case with an answer that owes nothing to the sampling scheme.
     distributions = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])
@@ -22,6 +24,8 @@ def test_a_degenerate_row_always_yields_its_certain_category() -> None:
     assert drawn.tolist() == [1, 0, 1, 0, 1]
 
 
+@pytest.mark.critical
+@pytest.mark.mathematical
 def test_the_empirical_frequencies_match_the_distribution() -> None:
     # Against the probabilities themselves, at a sample size where the
     # Monte Carlo error is an order of magnitude below the tolerance:
@@ -35,6 +39,8 @@ def test_the_empirical_frequencies_match_the_distribution() -> None:
     assert_allclose(frequencies, distributions[0], atol=5e-3)
 
 
+@pytest.mark.critical
+@pytest.mark.edge_case
 def test_a_row_summing_below_one_cannot_yield_an_index_past_the_end() -> None:
     # The guard, and the reason this module exists. A normalized row can sum
     # to 1 - 4e-16 after rounding, leaving a sliver of the unit interval above
@@ -58,6 +64,8 @@ def test_a_row_summing_below_one_cannot_yield_an_index_past_the_end() -> None:
     assert int(drawn.max()) < distributions.shape[1]
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_every_row_is_selectable() -> None:
     distributions = np.eye(4)
     rows = np.arange(4)
@@ -65,6 +73,8 @@ def test_every_row_is_selectable() -> None:
     assert drawn.tolist() == [0, 1, 2, 3]
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_one_draw_is_consumed_per_entry() -> None:
     # The stream cost must not depend on the outcome, or two callers seeded
     # alike would diverge on data rather than on their seeds.
@@ -78,6 +88,8 @@ def test_one_draw_is_consumed_per_entry() -> None:
     assert_allclose(remaining, second.random(3))
 
 
+@pytest.mark.critical
+@pytest.mark.edge_case
 def test_a_one_dimensional_distribution_is_rejected() -> None:
     with pytest.raises(ValueError, match="expected distributions of shape"):
         sample_rows(np.random.default_rng(0), np.array([0.5, 0.5]), np.zeros(2, int))

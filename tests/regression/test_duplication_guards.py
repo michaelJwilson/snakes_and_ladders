@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "python" / "phylo"
 
@@ -38,6 +40,8 @@ def _offenders(pattern: re.Pattern[str], owner: str) -> list[str]:
     ]
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_logsumexp_has_one_implementation() -> None:
     # Four copies in two spellings, in `sim.potts`, `opt.potts`,
     # `likelihood.potts` and `likelihood.belief_propagation`. They agreed, so
@@ -46,6 +50,8 @@ def test_logsumexp_has_one_implementation() -> None:
     assert _offenders(PRIVATE_LOGSUMEXP, LOGSUMEXP_OWNER) == []
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_no_module_walks_edges_and_couplings_by_hand() -> None:
     # Twelve sites across eight modules zipped the two tuples together. The
     # pairing is an invariant of `PottsGraph`, so it belongs to the class:
@@ -54,6 +60,8 @@ def test_no_module_walks_edges_and_couplings_by_hand() -> None:
     assert _offenders(OPEN_CODED_EDGES, EDGE_ITERATION_OWNER) == []
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_the_enumeration_cap_is_defined_once() -> None:
     # Four thresholds in three units before this: 200_000 configurations,
     # 200_000 paths, 20 nodes, and a docstring-only `n <= 6` that nothing
@@ -62,6 +70,8 @@ def test_the_enumeration_cap_is_defined_once() -> None:
     assert _offenders(CAP_LITERAL, ENUMERATION_OWNER) == []
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard

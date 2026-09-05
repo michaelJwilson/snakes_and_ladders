@@ -80,6 +80,7 @@ def _mirrored(topology: Topology) -> Topology:
     )
 
 
+@pytest.mark.structural
 def test_the_environment_satisfies_the_protocol() -> None:
     environment, _, _ = _environment()
     assert isinstance(environment, Environment)
@@ -88,6 +89,7 @@ def test_the_environment_satisfies_the_protocol() -> None:
 # --- uniform branch lengths ----------------------------------------------
 
 
+@pytest.mark.structural
 def test_uniform_branch_lengths_relabel_every_edge_but_the_root() -> None:
     params = _params()
     labelled = with_uniform_branch_lengths(params.tau, 0.25)
@@ -98,6 +100,7 @@ def test_uniform_branch_lengths_relabel_every_edge_but_the_root() -> None:
     assert leaf_bipartitions(labelled) == leaf_bipartitions(params.tau)
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("branch_length", [0.0, -0.1])
 def test_a_non_positive_branch_length_is_rejected(branch_length: float) -> None:
     # A zero-length branch identifies two nodes, and a likelihood evaluated
@@ -109,6 +112,7 @@ def test_a_non_positive_branch_length_is_rejected(branch_length: float) -> None:
 # --- the rewards are the log-likelihoods they claim to be ----------------
 
 
+@pytest.mark.oracle
 def test_the_known_score_is_the_likelihood_at_a_fixed_branch_length() -> None:
     # Against a direct call to the pruning recursion, built independently
     # here: the environment is a wrapper, and this is the claim that it wraps
@@ -124,6 +128,7 @@ def test_the_known_score_is_the_likelihood_at_a_fixed_branch_length() -> None:
         assert_allclose(environment.score(topology), expected, rtol=1e-12)
 
 
+@pytest.mark.oracle
 def test_the_fitted_score_is_the_maximized_likelihood() -> None:
     environment, params, alignment = _environment(RewardModel.FITTED)
     topology = next(iter(enumerate_topologies(sorted(alignment))))
@@ -134,6 +139,7 @@ def test_the_fitted_score_is_the_maximized_likelihood() -> None:
     )
 
 
+@pytest.mark.mathematical
 def test_the_fitted_score_is_never_below_the_known_one() -> None:
     # The known surface fixes the branch lengths the fitted one optimizes, so
     # it can only do worse. This is the sense in which the cheap reward is a
@@ -150,6 +156,7 @@ def test_the_fitted_score_is_never_below_the_known_one() -> None:
         assert fitted.score(topology) >= known.score(topology) - 1e-9
 
 
+@pytest.mark.mathematical
 def test_a_reward_is_the_improvement_it_reports() -> None:
     environment, _, alignment = _environment()
     state = next(iter(enumerate_topologies(sorted(alignment))))
@@ -161,6 +168,7 @@ def test_a_reward_is_the_improvement_it_reports() -> None:
         )
 
 
+@pytest.mark.mathematical
 def test_an_episode_return_telescopes_to_its_total_improvement() -> None:
     environment, _, alignment = _environment()
     start = next(iter(enumerate_topologies(sorted(alignment))))
@@ -175,6 +183,7 @@ def test_an_episode_return_telescopes_to_its_total_improvement() -> None:
 # --- what the policy sees --------------------------------------------------
 
 
+@pytest.mark.structural
 def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
     # One feature, so the policy is a Boltzmann distribution over moves whose
     # single weight is an inverse temperature. This is the claim that makes
@@ -194,6 +203,7 @@ def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
     )
 
 
+@pytest.mark.mathematical
 def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
     # The environment exists to be driven by a policy, not only by the
     # baseline; this is the path `phylo.learn.rollout.rollout` takes through
@@ -218,6 +228,7 @@ def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
 # --- caching --------------------------------------------------------------
 
 
+@pytest.mark.structural
 def test_a_topology_is_scored_once_however_it_is_spelled() -> None:
     # `leaf_bipartitions` is rooting- and child-order-independent, so a tree
     # reached by two different move sequences costs one evaluation. Without
@@ -233,6 +244,7 @@ def test_a_topology_is_scored_once_however_it_is_spelled() -> None:
     assert environment.evaluations == 1
 
 
+@pytest.mark.structural
 def test_the_neighbourhood_excludes_the_state_and_repeats() -> None:
     environment, _, alignment = _environment()
     state = next(iter(enumerate_topologies(sorted(alignment))))
@@ -249,6 +261,7 @@ def test_the_neighbourhood_excludes_the_state_and_repeats() -> None:
 # --- terminal states and the baseline ------------------------------------
 
 
+@pytest.mark.structural
 def test_a_terminal_state_is_one_no_move_improves() -> None:
     environment, _, alignment = _environment()
     for topology in enumerate_topologies(sorted(alignment)):
@@ -259,6 +272,7 @@ def test_a_terminal_state_is_one_no_move_improves() -> None:
         assert environment.is_terminal(topology) is not improvable
 
 
+@pytest.mark.oracle
 def test_greedy_search_reaches_the_enumerated_optimum() -> None:
     # The exhaustive oracle, on the surface the agent actually sees. Measured:
     # hill climbing reaches it from all 15 starts here and recovers the
@@ -274,6 +288,7 @@ def test_greedy_search_reaches_the_enumerated_optimum() -> None:
         assert episode.terminated
 
 
+@pytest.mark.simulated_truth
 def test_the_known_optimum_is_the_generating_topology_here() -> None:
     environment, params, alignment = _environment()
     scored = {
@@ -287,6 +302,7 @@ def test_the_known_optimum_is_the_generating_topology_here() -> None:
 # --- boundaries -----------------------------------------------------------
 
 
+@pytest.mark.structural
 def test_reset_is_reproducible_from_its_seed() -> None:
     environment, _, _ = _environment()
     first = environment.reset(np.random.default_rng(3))
@@ -294,6 +310,7 @@ def test_reset_is_reproducible_from_its_seed() -> None:
     assert leaf_bipartitions(first) == leaf_bipartitions(second)
 
 
+@pytest.mark.edge_case
 def test_the_known_reward_refuses_a_model_it_cannot_score() -> None:
     # The closed-form scorer is the Jukes-Cantor pruning path, which is where
     # the cheapness comes from. Refusing is better than silently scoring a
@@ -310,6 +327,7 @@ def test_the_known_reward_refuses_a_model_it_cannot_score() -> None:
         )
 
 
+@pytest.mark.edge_case
 def test_too_few_taxa_is_rejected() -> None:
     params = _params()
     alignment = _alignment(params)
@@ -318,6 +336,7 @@ def test_too_few_taxa_is_rejected() -> None:
         TopologyEnvironment(trimmed, params.k, params.pi, _BRANCH_LENGTH)
 
 
+@pytest.mark.oracle
 def test_the_spr_neighbourhood_is_larger_than_the_nni_one() -> None:
     # The environment is parameterized by move set, and the two must actually
     # differ or that parameter is decoration.

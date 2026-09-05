@@ -105,6 +105,7 @@ def _all_unrooted(n_taxa: int) -> tuple[Topology, ...]:
     return tuple(_enumerate_unrooted(n_taxa))
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     "n_taxa", [*EXHAUSTIVE_PARAMS, pytest.param(8, marks=pytest.mark.stress)]
 )
@@ -144,6 +145,7 @@ def _assert_valid_neighbourhood(
     assert len(keys) == expected_count, "neighbours must be pairwise distinct"
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_nni_neighbour_count_and_validity(n_taxa: int) -> None:
     expected = 2 * (n_taxa - 3)
@@ -151,6 +153,7 @@ def test_nni_neighbour_count_and_validity(n_taxa: int) -> None:
         _assert_valid_neighbourhood(topology, list(nni_neighbours(topology)), expected)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_spr_neighbour_count_and_validity(n_taxa: int) -> None:
     expected = 2 * (n_taxa - 3) * (2 * n_taxa - 7)
@@ -158,6 +161,7 @@ def test_spr_neighbour_count_and_validity(n_taxa: int) -> None:
         _assert_valid_neighbourhood(topology, list(spr_neighbours(topology)), expected)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_nni_neighbours_are_symmetric(n_taxa: int) -> None:
     neighbour_keys = {
@@ -171,6 +175,7 @@ def test_nni_neighbours_are_symmetric(n_taxa: int) -> None:
             )
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_nni_neighbours_are_spr_neighbours(n_taxa: int) -> None:
     for topology in _all_unrooted(n_taxa):
@@ -179,6 +184,7 @@ def test_nni_neighbours_are_spr_neighbours(n_taxa: int) -> None:
         assert nni_keys <= spr_keys, "every NNI neighbour must also be an SPR neighbour"
 
 
+@pytest.mark.oracle
 @pytest.mark.release
 @pytest.mark.parametrize("n_taxa", [8])
 def test_nni_and_spr_exhaustive_at_n8(n_taxa: int) -> None:

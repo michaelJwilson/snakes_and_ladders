@@ -166,6 +166,19 @@ jobs:
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
       - run: uv sync --locked --extra test
+      # The early gate (issue #237). `critical` marks the tests whose failure
+      # invalidates what runs after them -- the import graph, the documentation
+      # index, the CLAUDE.md pointers, `select_tests` itself, the compiled
+      # extension, and the categorical sampler everything else draws from. It
+      # is 76 tests in 3.0 s against a full suite of several minutes, so a
+      # broken invariant reports in seconds rather than after the selection
+      # below has run everything downstream of it.
+      #
+      # It runs unconditionally, not through `select_tests`: these are exactly
+      # the checks that must not depend on which module the diff touched, since
+      # a change `select_tests` mis-attributes is one of the things they catch.
+      - name: Critical gate
+        run: uv run pytest -m critical -q
       # Benchmarks are half the suite's wall clock (36 s of 71 s) and measure
       # code that a docs or QA change cannot have altered, so they are skipped
       # unless something they measure moved. The job still runs and still

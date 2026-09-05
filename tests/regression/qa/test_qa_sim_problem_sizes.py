@@ -41,6 +41,7 @@ def _argv(output_dir: Path) -> list[str]:
     return [*argv, "--output-dir", str(output_dir)]
 
 
+@pytest.mark.structural
 def test_main_writes_a_table_and_caption_naming_every_fixture(
     tmp_path: Path,
 ) -> None:
@@ -52,6 +53,7 @@ def test_main_writes_a_table_and_caption_naming_every_fixture(
     assert str(len(FIXTURE_NAMES)) in qa_table.caption
 
 
+@pytest.mark.structural
 def test_the_table_is_a_latex_tabular_not_an_image(tmp_path: Path) -> None:
     # The point of the change: main.tex \input's a typeset table instead of
     # \includegraphics-ing a matplotlib rendering of one.
@@ -65,6 +67,7 @@ def test_the_table_is_a_latex_tabular_not_an_image(tmp_path: Path) -> None:
     assert body.count(r"\\") == 1 + len(FIXTURE_NAMES)
 
 
+@pytest.mark.structural
 def test_site_counts_are_separated_and_seeds_are_not(tmp_path: Path) -> None:
     # Sites are a magnitude and read better separated; a seed is an
     # identifier, and separating 20260902 would disguise a date as a
@@ -77,6 +80,7 @@ def test_site_counts_are_separated_and_seeds_are_not(tmp_path: Path) -> None:
     assert r"20\_260\_902" not in body
 
 
+@pytest.mark.structural
 def test_underscores_in_fixture_names_are_escaped(tmp_path: Path) -> None:
     # An unescaped underscore in a filename is a LaTeX error, and these
     # filenames all contain them.
@@ -88,6 +92,7 @@ def test_underscores_in_fixture_names_are_escaped(tmp_path: Path) -> None:
         assert "_" not in stripped, line
 
 
+@pytest.mark.oracle
 def test_problem_sizes_values_match_each_fixture_independently() -> None:
     for path in FIXTURE_PATHS:
         params = load_simulation_params(path)
@@ -118,6 +123,7 @@ def test_problem_sizes_values_match_each_fixture_independently() -> None:
             )
 
 
+@pytest.mark.structural
 def test_main_reads_sys_argv_when_no_argv_is_given(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

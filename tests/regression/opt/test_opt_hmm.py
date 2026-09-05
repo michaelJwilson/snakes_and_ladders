@@ -72,6 +72,7 @@ def _log_truth(params: object) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor
     )
 
 
+@pytest.mark.oracle
 def test_forward_matches_brute_force_path_enumeration() -> None:
     params = load_hmm_params(FIXTURE)
     observations = torch.as_tensor(
@@ -90,6 +91,7 @@ def test_forward_matches_brute_force_path_enumeration() -> None:
     assert_allclose(float(actual), expected, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
 def test_the_likelihood_is_invariant_to_relabelling_the_hidden_states() -> None:
     # The identifiability caveat, asserted rather than only documented: a
     # recovery test that compared parameters without aligning the
@@ -114,6 +116,7 @@ def test_the_likelihood_is_invariant_to_relabelling_the_hidden_states() -> None:
         assert_allclose(permuted, reference, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("at_truth", [True, False])
 def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
     params = load_hmm_params(FIXTURE)
@@ -134,6 +137,7 @@ def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
     )
 
 
+@pytest.mark.oracle
 def test_theta_round_trips_through_the_constraint_map() -> None:
     params = load_hmm_params(FIXTURE)
     objective = HmmObjective(
@@ -153,6 +157,7 @@ def test_theta_round_trips_through_the_constraint_map() -> None:
     )
 
 
+@pytest.mark.structural
 def test_theta_has_one_entry_per_free_probability() -> None:
     # 2 free initial + 3 rows x 2 free transition + 3 rows x 3 free emission.
     objective = HmmObjective(np.zeros((2, 5), dtype=np.int64), n_states=3, n_symbols=4)
@@ -160,6 +165,7 @@ def test_theta_has_one_entry_per_free_probability() -> None:
     assert objective.initial().shape == (17,)
 
 
+@pytest.mark.structural
 def test_the_initial_point_is_uninformative_but_not_symmetric() -> None:
     # Initial and transition start uniform; the emission rows are tilted
     # apart. See the stationary-point test below for why the tilt has to be
@@ -181,6 +187,7 @@ def test_the_initial_point_is_uninformative_but_not_symmetric() -> None:
     assert emission[1].argmax() != emission[2].argmax()
 
 
+@pytest.mark.mathematical
 def test_the_uniform_point_is_a_stationary_point_of_the_likelihood() -> None:
     # This is why `initial` breaks the symmetry, and it is a property of the
     # model rather than a quirk of the optimizer: with every hidden state
@@ -206,6 +213,7 @@ def test_the_uniform_point_is_a_stationary_point_of_the_likelihood() -> None:
     assert float(gradient[n_free_initial + n_free_transition :].abs().max()) > 1.0
 
 
+@pytest.mark.mathematical
 def test_baum_welch_increases_the_likelihood_monotonically() -> None:
     # An exact property of EM, not an empirical one: each iteration
     # maximizes a lower bound that is tight at the current parameters, so
@@ -231,6 +239,7 @@ def test_baum_welch_increases_the_likelihood_monotonically() -> None:
         previous = value
 
 
+@pytest.mark.oracle
 def test_align_states_recovers_a_known_permutation() -> None:
     params = load_hmm_params(FIXTURE)
     emission = torch.as_tensor(params.emission)
@@ -243,6 +252,7 @@ def test_align_states_recovers_a_known_permutation() -> None:
     )
 
 
+@pytest.mark.structural
 def test_baum_welch_stops_once_the_likelihood_stops_moving() -> None:
     # The convergence test is relative to the log-likelihood's magnitude, as
     # everywhere else. A loose tolerance must stop the iteration early, which

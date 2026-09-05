@@ -70,6 +70,7 @@ def _fitted(n_samples: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarr
     return truth.numpy(), fitted.numpy(), spread.numpy()
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("length", [2, 4, 6])
 def test_the_graph_normalizer_reduces_to_the_transfer_matrix(length: int) -> None:
     # A chain is a 1-D lattice, and its `log Z` has a closed form by transfer
@@ -89,6 +90,7 @@ def test_the_graph_normalizer_reduces_to_the_transfer_matrix(length: int) -> Non
         assert enumerated == pytest.approx(transfer, abs=1e-12)
 
 
+@pytest.mark.oracle
 def test_the_enumerated_statistics_count_every_configuration() -> None:
     edges, n_nodes = _graph()
     agreements, counts = graph_statistics(N_STATES, edges, n_nodes)
@@ -101,6 +103,7 @@ def test_the_enumerated_statistics_count_every_configuration() -> None:
     assert int((agreements == len(edges)).sum()) == N_STATES
 
 
+@pytest.mark.mathematical
 def test_the_gradient_matches_central_differences() -> None:
     edges, _ = _graph()
     graph = lattice_graph(SHAPE, boundary=BoundaryCondition.OPEN, coupling=COUPLING)
@@ -123,6 +126,7 @@ def test_the_gradient_matches_central_differences() -> None:
     assert_allclose(analytic.detach().numpy(), numerical.numpy(), rtol=1e-6, atol=1e-6)
 
 
+@pytest.mark.oracle
 def test_the_fitted_optimum_beats_a_brute_force_scan() -> None:
     # Checks the optimizer against the objective rather than against itself:
     # a coarse grid over the coupling, with the field at its fitted value,
@@ -141,6 +145,7 @@ def test_the_fitted_optimum_beats_a_brute_force_scan() -> None:
             assert float(objective(probe)) >= best - 1e-9
 
 
+@pytest.mark.simulated_truth
 def test_the_couplings_and_fields_are_recovered_within_their_intervals() -> None:
     # One dataset, so this is a draw and not a rate; the rate is the next test.
     truth, fitted, spread = _fitted(400, SEED)
@@ -152,6 +157,7 @@ def test_the_couplings_and_fields_are_recovered_within_their_intervals() -> None
     assert fitted[0] == pytest.approx(COUPLING, abs=4 * spread[0])
 
 
+@pytest.mark.simulated_truth
 @pytest.mark.release
 def test_interval_coverage_approaches_the_nominal_rate() -> None:
     # The claim `STATUS.md`'s ledger row rests on. Release-gated because it
