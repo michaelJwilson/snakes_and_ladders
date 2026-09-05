@@ -39,9 +39,9 @@ documents that describe it.
 
 Nine required checks gate a merge, and three of them do work no reviewer can
 do by inspection: the technical-document job rebuilds only the QA figures
-`docs/tex/main.tex` cites, comparing the rest at the release gate instead
+the documents under `docs/tex/` cite, comparing the rest at the release gate instead
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
-request whose rebuilt `docs/draft.pdf` differs from the committed one
+request whose rebuilt `docs/paper.pdf` or `docs/textbook.pdf` differs from the committed one
 ([#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72)); the notebooks job
 re-executes every notebook under `docs/nb/` and fails one whose printed
 output has moved; and the coverage floor cannot be lowered to pass a change. Cost is managed rather than absorbed:

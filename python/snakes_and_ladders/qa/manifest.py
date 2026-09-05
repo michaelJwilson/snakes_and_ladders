@@ -6,7 +6,7 @@ the document: when the document stopped citing eleven of the figures, the
 build kept regenerating all thirteen and no check noticed.
 
 Two consumers read this. Per pull request, ``snakes_and_ladders.qa.build`` regenerates only
-what ``docs/tex/main.tex`` cites, so the cost tracks the document rather than
+what the documents under ``docs/tex/`` cite, so the cost tracks them rather than
 drifting from it. At release, ``infra/release.sh`` regenerates every entry, so
 a figure the document has stopped citing still cannot rot unnoticed -- the
 check moves rather than disappearing.
@@ -33,7 +33,8 @@ class FigureSpec:
     Parameters
     ----------
     stem : str
-        Output basename, without extension. ``docs/tex/main.tex`` refers to
+        Output basename, without extension. A document under ``docs/tex/``
+        refers to
         the figure by this name, and the script writes ``<stem>.pdf`` (or
         ``.tex``) and ``<stem>_caption.txt``.
     module : str
@@ -172,30 +173,48 @@ _FIGURE_REFERENCE = re.compile(r"figures/([A-Za-z0-9_]+)")
 _CAPTION_SUFFIX = "_caption"
 
 
-def cited_stems(main_tex: Path) -> set[str]:
-    """Find the figure stems ``main_tex`` refers to.
+def cited_stems(*sources: Path) -> set[str]:
+    """Find the figure stems the given LaTeX sources refer to, as one set.
 
     A caption reference (``figures/<stem>_caption.txt``) counts as a
     reference to ``<stem>``: the caption is an output of the same script, and
     a document quoting a caption needs the figure regenerated with it.
 
+    **Several sources rather than one, and the union rather than each.** The
+    repository builds a paper and a textbook (issue #249). A per-pull-request
+    selection derived from one of them stops regenerating every figure the
+    other cites, and nothing notices --- issue #154's defect in mirror image,
+    where the build regenerated figures the document had stopped citing.
+    Taking the union makes leaving a document out a selection that is *wrong*
+    rather than one that is quietly smaller.
+
     Parameters
     ----------
-    main_tex : Path
-        The LaTeX source to scan.
+    *sources : Path
+        The LaTeX sources to scan. At least one.
 
     Returns
     -------
     set[str]
-        Every stem referred to, whether or not this manifest knows it.
+        Every stem referred to by any of them, whether or not this manifest
+        knows it.
+
+    Raises
+    ------
+    ValueError
+        If no source is given. An empty union selects nothing, which would
+        pass every check while regenerating no figure at all.
     """
-    text = main_tex.read_text()
+    if not sources:
+        msg = "cited_stems needs at least one document; an empty set cites nothing"
+        raise ValueError(msg)
     stems = set()
-    for match in _FIGURE_REFERENCE.finditer(text):
-        stem = match.group(1)
-        if stem.endswith(_CAPTION_SUFFIX):
-            stem = stem[: -len(_CAPTION_SUFFIX)]
-        stems.add(stem)
+    for source in sources:
+        for match in _FIGURE_REFERENCE.finditer(source.read_text()):
+            stem = match.group(1)
+            if stem.endswith(_CAPTION_SUFFIX):
+                stem = stem[: -len(_CAPTION_SUFFIX)]
+            stems.add(stem)
     return stems
 
 

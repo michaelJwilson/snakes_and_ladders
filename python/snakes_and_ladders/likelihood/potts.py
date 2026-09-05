@@ -14,7 +14,7 @@ configuration ``s`` carries unnormalized log weight
 
     sum_i h[s_i] + sum_(i,j) in edges J_ij [s_i == s_j]
 
-so ``J > 0`` favours agreement. See ``docs/tex/main.tex``, "Potts Models in an
+so ``J > 0`` favours agreement. See ``docs/tex/textbook.tex``, "Potts Models in an
 External Field" (Mezard & Montanari, ch. 2).
 """
 

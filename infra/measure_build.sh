@@ -58,10 +58,12 @@ time_it "cited figures" uv run python -m snakes_and_ladders.qa.build \
 
 echo
 echo "=== LaTeX ==="
-time_it "latexmk" bash -c '
-  cd docs/tex
-  latexmk -pdf -interaction=nonstopmode -halt-on-error \
-    -outdir=.. -jobname=draft main.tex'
+for document in paper textbook; do
+  time_it "latexmk ($document)" bash -c "
+    cd docs/tex
+    latexmk -pdf -interaction=nonstopmode -halt-on-error \
+      -outdir=.. -jobname=$document $document.tex"
+done
 
 if [ "$figures_only" -eq 0 ]; then
   echo

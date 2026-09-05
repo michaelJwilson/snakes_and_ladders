@@ -73,7 +73,7 @@ def test_caption_carries_its_generating_parameters() -> None:
 
 
 def test_caption_is_plain_text_not_latex() -> None:
-    # main.tex pulls the caption in verbatim, so an unescaped special
+    # The document pulls the caption in verbatim, so an unescaped special
     # character breaks the document build (qa/CLAUDE.md).
     fig, caption = build_figure(load_fixture(FOUR_TAXA))
     try:

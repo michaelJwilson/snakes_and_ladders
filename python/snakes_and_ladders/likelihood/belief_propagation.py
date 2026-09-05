@@ -19,7 +19,8 @@ that is -- `docs/CLAUDE.md`'s rule that an unstable number is not a
 measurement, applied where the instability is in the algorithm rather than in
 the machine.
 
-See ``docs/tex/main.tex``, "Belief Propagation and the Bethe Approximation"
+See ``docs/tex/textbook.tex``, "Problem Statement: Potts Models in an
+External Field"
 (Yedidia, Freeman & Weiss for the free energy; Mezard & Montanari ch. 14;
 Koller & Friedman ch. 11).
 """

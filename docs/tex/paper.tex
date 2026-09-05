@@ -1,0 +1,217 @@
+\documentclass[11pt,a4paper]{article}
+\input{preamble}
+\input{notation}
+
+\title{Mixed Discrete-Continuous Optimization for Graph-Structured Models: \\
+Applications in Phylogenetics, Potts Models, and Hidden Markov Models}
+\author{M.\ J.\ Wilson}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Inference over graph-structured models---phylogenetic trees, lattice-based
+Potts models, and hidden Markov models---is a coupled discrete-continuous
+optimization problem. The structural search space is combinatorial, while
+scoring each candidate structure requires continuously optimizing its
+parameters. We present a framework that strictly decouples differentiable
+continuous optimization from discrete structural search, so that one optimizer
+serves all three model classes and a structural move constructs a new objective
+rather than taking a step inside an existing one. By framing structural search
+as a Markov decision process, we enable reinforcement-learning agents to learn
+topological proposal policies against exact, approximate, or neural-surrogate
+objectives. We validate the engine against exact oracles---brute-force
+marginalization, path enumeration, and exhaustive topology enumeration---and
+report realized interval coverage rather than asserting it. We then outline
+the extensions required for curriculum learning, differentiable topology
+search, and canonical directed-acyclic-graph representations. Formulations,
+algorithms, and the properties each is validated against are given in the
+companion textbook; this paper reports results.
+\end{abstract}
+
+\tableofcontents
+
+\section{Introduction}
+\label{sec:intro}
+
+The fundamental difficulty in high-dimensional probabilistic inference is the
+combinatorial size of the structural search space. In phylogenetics, the number
+of unrooted binary topologies over $n$ taxa is $(2n-5)!!$ \citep{rosen2019}. In
+statistical physics, the ground state of an $N$-dimensional Potts model
+requires traversing an exponentially large configuration space
+\citep{mezard2009}. Decoding a hidden Markov model poses the same coupled
+problem on a chain \citep{mackay2003}.
+
+Classical frameworks rely on fixed, hand-designed heuristics---nearest-neighbour
+interchange for trees, Swendsen--Wang cluster updates for lattices---applied
+greedily or under simulated annealing. This paper takes an alternative: the
+discrete search is a reinforcement-learning problem in which a neural policy
+proposes structural updates, while continuous parameters are fitted by
+reverse-mode automatic differentiation.
+
+\subsection{Scope}
+This paper reports what has been built and measured. The formulations it
+rests on---the substitution model, the Potts energy, the hidden Markov
+recursions, the discrete move sets, and the mathematical properties each
+algorithm is refereed by---are stated in the companion textbook rather than
+repeated here. \textbf{Empirical benchmarking of trained policies against
+state-of-the-art classical tools} (IQ-TREE~2, RAxML-NG) is slated for a later
+milestone and appears as marked placeholders in Section~\ref{sec:results}.
+
+\section{Methods}
+\label{sec:methods}
+
+The methodology rests on one division: continuous parameters are optimized by
+gradients on a fixed structure, while discrete structural moves are proposed by
+an external agent and construct an entirely new differentiable objective. A
+move changes what the parameter vector means and how long it is, so it cannot
+be a step inside a fit over a fixed-length vector.
+
+\subsection{Continuous optimization}
+An objective is a differentiable scalar $\objective(\params)$ over an
+unconstrained vector $\params \in \mathbb{R}^d$, with an injective map
+$\constrained$ to the constrained parameters the model is stated in. The same
+quasi-Newton optimizer \citep{nocedal2006} therefore minimizes negative
+log-likelihoods of phylogenetic alignments, free energies of Potts models, and
+sequence log-likelihoods of hidden Markov models without knowing which it has.
+Standard errors come from the observed information at the optimum, pushed
+through $\constrained$ by the delta method.
+
+\subsection{Differentiable likelihoods and energies}
+Partial likelihoods are evaluated by a post-order recursion, with branch
+lengths $\branch$ and the rate matrix $\Q$ kept inside the automatic
+differentiation graph, so gradients are exact rather than numerical
+\citep{goodfellow2016, prince2023}. Rescaling against underflow is part of that
+graph.
+
+\subsection{Structural search as a Markov decision process}
+\label{sec:rl}
+Discrete graph traversal is formulated as a Markov decision process
+\citep{suttonbarto2018}: the \textbf{state} is the current topology, its
+optimized continuous parameters, and observation summaries; an \textbf{action}
+is a structural perturbation from a classical neighbourhood; the
+\textbf{reward} is the improvement in the objective.
+
+\subsubsection{Planned architectural extensions}
+\begin{itemize}
+    \item \textbf{Neural surrogate modelling.} Rather than running exact
+      inference on every proposal, a graph neural network or transformer
+      approximates $\objective$; the agent filters proposals with the surrogate
+      and evaluates exactly only the top candidates.
+    \item \textbf{Curriculum learning.} The policy is trained on small state
+      spaces before transferring to progressively larger graphs, to avoid
+      policy collapse.
+    \item \textbf{Differentiable topology search.} Continuous relaxations embed
+      the discrete structure in a manifold, enabling end-to-end topological
+      updates by natural gradients \citep{amari2016}.
+\end{itemize}
+
+\section{Results}
+\label{sec:results}
+
+Every figure below is rendered from the code it reports on and carries a
+generated caption naming the seed, sizes, and model that produced it.
+
+\subsection{Simulation against its analytic truth}
+\label{sec:res-simulation}
+
+\qacaptionread{figures/sim_example_caption.txt}{\simExampleCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/sim_example}
+  \caption{\simExampleCaption}
+  \label{fig:sim-example}
+\end{figure}
+
+\subsection{Exact inference across backends}
+\label{sec:res-likelihood}
+
+\qacaptionread{figures/backend_agreement_caption.txt}{\backendAgreementCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/backend_agreement}
+  \caption{\backendAgreementCaption}
+  \label{fig:backend-agreement}
+\end{figure}
+
+\subsection{Parameter recovery and interval coverage}
+\label{sec:res-recovery}
+
+Recovery is the acceptance test for a fit, and a Wald interval from the
+observed information is an \emph{asymptotic} claim. The two figures below are
+the evidence for it rather than an assertion of it: the first shows each fitted
+parameter against the value that generated the data, the second shows the
+realized coverage against the amount of data each fit sees.
+
+\qacaptionread{figures/opt_recovery_caption.txt}{\optRecoveryCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/opt_recovery}
+  \caption{\optRecoveryCaption}
+  \label{fig:opt-recovery}
+\end{figure}
+
+\qacaptionread{figures/opt_coverage_caption.txt}{\optCoverageCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/opt_coverage}
+  \caption{\optCoverageCaption}
+  \label{fig:opt-coverage}
+\end{figure}
+
+\subsection{Discrete search against exhaustive enumeration}
+\label{sec:res-search}
+
+Below the size at which every topology can be enumerated, enumeration is the
+only independent statement available about whether a search found the best tree
+or merely a good one.
+
+\qacaptionread{figures/search_topologies_caption.txt}{\searchTopologiesCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/search_topologies}
+  \caption{\searchTopologiesCaption}
+  \label{fig:search-topologies}
+\end{figure}
+
+\subsection{Empirical benchmarking [PLACEHOLDERS]}
+
+The following are populated on completion of the benchmarking milestone.
+
+\begin{figure}[htbp]
+  \centering
+  \framebox[\linewidth]{\rule{0pt}{150pt} \textbf{PLACEHOLDER: RL policy convergence against hill climbing}}
+  \caption{Learning curves of the reinforcement-learning proposal policy across $n \in \{10, 50, 100\}$, measured in improvement per objective-evaluation budget.}
+  \label{fig:rl-convergence}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \framebox[\linewidth]{\rule{0pt}{150pt} \textbf{PLACEHOLDER: Competitiveness against classical software}}
+  \caption{Wall-clock convergence against IQ-TREE~2 and RAxML-NG on empirical benchmark datasets.}
+  \label{fig:benchmark-iqtree}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \framebox[\linewidth]{\rule{0pt}{150pt} \textbf{PLACEHOLDER: Hardware scaling}}
+  \caption{Throughput in nodes evaluated per second across CPU, Apple Silicon, and CUDA backends.}
+  \label{fig:hardware-scaling}
+\end{figure}
+
+\section{Conclusions}
+\label{sec:conclusions}
+
+Decoupling structural exploration from continuous fitting yields a
+model-agnostic optimization engine that serves phylogenetics, Potts models, and
+hidden Markov models without encoding any of them. Formulating graph search as
+a Markov decision process gives a foundation for learned topological proposals
+and neural surrogate modelling. Future work populates the benchmarking
+placeholders and demonstrates competitiveness at scale.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

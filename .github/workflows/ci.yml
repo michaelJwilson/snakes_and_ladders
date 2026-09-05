@@ -337,26 +337,31 @@ jobs:
             texlive-fonts-recommended \
             texlive-science \
             poppler-utils
-      # Regenerates the QA figures/captions docs/tex/main.tex includes, then
-      # builds docs/draft.pdf -- the same entry point a local build uses (see
-      # infra/CLAUDE.md), so CI and a contributor's machine take one path.
-      - name: Build the technical document (QA figures + PDF)
+      # Regenerates the QA figures/captions the documents cite, then builds
+      # docs/paper.pdf and docs/textbook.pdf -- the same entry point a local
+      # build uses (see infra/CLAUDE.md), so CI and a contributor's machine
+      # take one path.
+      - name: Build the documents (QA figures + PDFs)
         run: infra/build_technical_doc.sh
       # latexmk exits 0 on unresolved references and citations, so the log is
       # checked explicitly -- the LaTeX counterpart of the docs job's -W.
+      # Both logs, since a reference broken by the split would otherwise be
+      # caught in whichever document happened to be checked (issue #249).
       - name: Fail on undefined or duplicated references and citations
         run: |
           # "multiply defined" matters as much as "undefined": two equations
           # sharing a label make every \eqref to it point at whichever came
           # last, silently. A duplicate went unnoticed until it was found by
           # hand, which is what added it to this pattern.
-          if grep -nE 'There were undefined references|Citation .* undefined|Reference .* undefined|multiply defined' docs/draft.log; then
-            echo "::error::LaTeX reported undefined or multiply-defined references or citations"
-            exit 1
-          fi
-      # docs/draft.pdf is committed (see DEV.md's "Technical Document"
+          for document in paper textbook; do
+            if grep -nE 'There were undefined references|Citation .* undefined|Reference .* undefined|multiply defined' "docs/$document.log"; then
+              echo "::error::LaTeX reported undefined or multiply-defined references or citations in $document"
+              exit 1
+            fi
+          done
+      # Both PDFs are committed (see DEV.md's "Technical Documents"
       # section); catch a PR that edited docs/tex/ or a QA figure without
-      # regenerating and committing the rebuilt PDF. SOURCE_DATE_EPOCH (set
+      # regenerating and committing the rebuilt PDFs. SOURCE_DATE_EPOCH (set
       # in infra/build_technical_doc.sh) makes a rebuild byte-identical to
       # itself on one machine, but pdftex's font-subsetting order can still
       # differ across otherwise-identical TeX Live installs (e.g. this
@@ -364,18 +369,21 @@ jobs:
       # visually-equivalent PDF. Rasterizing both to PNG and comparing those
       # bytes checks the document's actual rendered content instead of the
       # PDF container's internal encoding.
-      - name: Check the committed PDF is up to date
+      - name: Check the committed PDFs are up to date
         run: |
-          git show HEAD:docs/draft.pdf > /tmp/committed-draft.pdf
-          mkdir -p /tmp/committed-pages /tmp/built-pages
-          pdftoppm -png -r 150 /tmp/committed-draft.pdf /tmp/committed-pages/page
-          pdftoppm -png -r 150 docs/draft.pdf /tmp/built-pages/page
-          committed_hash="$(cat /tmp/committed-pages/page*.png | sha256sum | cut -d' ' -f1)"
-          built_hash="$(cat /tmp/built-pages/page*.png | sha256sum | cut -d' ' -f1)"
-          if [ "$committed_hash" != "$built_hash" ]; then
-            echo "::error::docs/draft.pdf is stale -- run infra/build_technical_doc.sh and commit the result"
-            exit 1
-          fi
+          for document in paper textbook; do
+            rm -rf /tmp/committed-pages /tmp/built-pages
+            mkdir -p /tmp/committed-pages /tmp/built-pages
+            git show "HEAD:docs/$document.pdf" > /tmp/committed.pdf
+            pdftoppm -png -r 150 /tmp/committed.pdf /tmp/committed-pages/page
+            pdftoppm -png -r 150 "docs/$document.pdf" /tmp/built-pages/page
+            committed_hash="$(cat /tmp/committed-pages/page*.png | sha256sum | cut -d' ' -f1)"
+            built_hash="$(cat /tmp/built-pages/page*.png | sha256sum | cut -d' ' -f1)"
+            if [ "$committed_hash" != "$built_hash" ]; then
+              echo "::error::docs/$document.pdf is stale -- run infra/build_technical_doc.sh and commit the result"
+              exit 1
+            fi
+          done
 
   audit:
     name: Dependency audit (pip-audit, cargo audit)

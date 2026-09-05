@@ -38,14 +38,22 @@ docs/tex/*.toc
 # out. infra/build_technical_doc.sh regenerates them, and CI rebuilds and
 # compares the rendered document, so a stale figure still fails.
 
-# infra/build_technical_doc.sh's LaTeX build output. docs/draft.pdf itself
-# is committed (see DEV.md's "Technical Document" section).
-docs/draft.aux
-docs/draft.bbl
-docs/draft.blg
-docs/draft.fdb_latexmk
-docs/draft.fls
-docs/draft.log
-docs/draft.out
-docs/draft.toc
+# infra/build_technical_doc.sh's LaTeX build output. The PDFs themselves
+# are committed (see DEV.md); everything latexmk leaves beside them is not.
+docs/paper.aux
+docs/paper.bbl
+docs/paper.blg
+docs/paper.fdb_latexmk
+docs/paper.fls
+docs/paper.log
+docs/paper.out
+docs/paper.toc
+docs/textbook.aux
+docs/textbook.bbl
+docs/textbook.blg
+docs/textbook.fdb_latexmk
+docs/textbook.fls
+docs/textbook.log
+docs/textbook.out
+docs/textbook.toc
 

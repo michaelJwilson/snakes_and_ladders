@@ -1,7 +1,7 @@
 # docs/
 
-The technical document (`tex/`), the API documentation (`source/`), and the
-worked notebooks (`nb/`). All three are generated artifacts whose output is
+The paper and the textbook (`tex/`), the API documentation (`source/`), and
+the worked notebooks (`nb/`). All are generated artifacts whose output is
 committed, CI regenerates each of them and compares against what is committed,
 and that is what these rules are about: an artifact held to that contract has
 to come out the same on another machine, which constrains what it may say.
@@ -14,18 +14,19 @@ produces them or in `STATUS.md`.
 
 ## What lives here
 
-`tex/` is the document, its bibliography, and the figures, tables and captions
-`snakes_and_ladders.qa` generates; a table ships as a fragment the document includes rather
-than as an image, so it matches the surrounding type. `source/` is Sphinx,
+`tex/` is two documents, their shared bibliography, notation and preamble, and
+the figures, tables and captions `snakes_and_ladders.qa` generates; a table
+ships as a fragment a document includes rather than as an image, so it matches
+the surrounding type. `source/` is Sphinx,
 built from the docstrings. `nb/` is one notebook per problem class, each
 running the application from a seeded fixture to a learned policy against
 oracles the regression suite already establishes.
 
-The build script regenerates the figures the document cites and then runs
-`latexmk`; nothing else invokes `latexmk`. The rebuild is partial by design —
-what the document does not cite is regenerated and compared at the release
-gate instead, so every committed figure is still checked against the code
-that produced it.
+The build script regenerates the figures the documents cite — the *union*, so
+a figure only one of them cites is still rebuilt — and then runs `latexmk` per
+document; nothing else invokes `latexmk`. The rebuild is partial by design:
+what neither cites is regenerated and compared at the release gate instead, so
+every committed figure is still checked against the code that produced it.
 
 ## The reader
 
@@ -75,6 +76,16 @@ in. It is not restated here.
   artifacts rather than by each caller: a comparison run without them reports
   everything stale, which is indistinguishable from the rot the comparison
   exists to detect.
+
+- **A document that states an algorithm names no code.** A formulation, a
+  recursion or an invariant is true whatever implements it, and a module path
+  inside one makes the text stale the next time a file moves. The paper cites
+  the textbook for every formulation and the textbook cites nothing here; a
+  test asserts it, since the rule is easy to keep and easy to forget.
+
+- **One definition per symbol, shared by every document.** Notation lives in
+  one file both inputs, so a symbol cannot mean two things in two places. A
+  document needing a new symbol adds it there rather than defining its own.
 
 - **A notebook is under the same contract as the document**, and the
   comparison is over what a cell *printed*. A rendered image embeds metadata

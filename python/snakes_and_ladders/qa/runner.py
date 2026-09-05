@@ -154,7 +154,8 @@ def figure_main(
     Parameters
     ----------
     stem : str
-        Output basename, without extension. ``docs/tex/main.tex`` refers to
+        Output basename, without extension. A document under ``docs/tex/``
+        refers to
         the figure by this name, so it is the script's contract with the
         document and is not derived from the module name.
     description : str | None

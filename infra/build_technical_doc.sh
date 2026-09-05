@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds the technical document: regenerates the QA figures and captions the
-# document cites, then builds them into docs/draft.pdf. Build tooling, not
+# Builds the project's documents: regenerates the QA figures and captions they
+# cite, then builds docs/paper.pdf and docs/textbook.pdf. Build tooling, not
 # science -- it orchestrates snakes_and_ladders.qa and latexmk, and knows nothing about
 # topologies, models, or which fixture renders which figure (see this
 # directory's CLAUDE.md, and snakes_and_ladders.qa.manifest for the figures themselves).
@@ -9,7 +9,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# docs/draft.pdf is committed, so identical inputs must produce identical
+# Both PDFs are committed, so identical inputs must produce identical
 # bytes. Both matplotlib (the QA figures below) and pdftex (the LaTeX build)
 # honor SOURCE_DATE_EPOCH, embedding it as their PDF /CreationDate instead of
 # the current wall-clock time; a fixed constant keeps every rebuild
@@ -27,20 +27,27 @@ export SOURCE_DATE_EPOCH
 # below fails on a PR that touched nothing.
 export FORCE_SOURCE_DATE=1
 
-# Which figures exist and what renders each one is `snakes_and_ladders.qa.manifest`, not a
-# list here: this script had thirteen invocations that nothing connected to the
-# document, so when the document stopped citing eleven of them the build kept
-# regenerating all thirteen (issue #154). Regenerating only what `main.tex`
-# cites makes the cost track the document. The rest are checked at the release
-# gate, which runs `--all --check`.
+# Which figures exist and what renders each one is
+# `snakes_and_ladders.qa.manifest`, not a list here: this script had thirteen
+# invocations that nothing connected to the document, so when the document
+# stopped citing eleven of them the build kept regenerating all thirteen
+# (issue #154). Regenerating only what the documents cite makes the cost track
+# them. The rest are checked at the release gate, which runs `--all --check`.
+#
+# Every document is passed, and that is load-bearing rather than tidy: the
+# selection is the *union* of what they cite, so leaving one out would stop
+# regenerating its figures and fail nothing (issue #249).
 uv run python -m snakes_and_ladders.qa.build \
-  --main-tex docs/tex/main.tex \
+  --document docs/tex/paper.tex \
+  --document docs/tex/textbook.tex \
   --output-dir docs/tex/figures
 
-(
-  cd docs/tex
-  latexmk -pdf -interaction=nonstopmode -halt-on-error \
-    -outdir=.. -jobname=draft main.tex
-)
+for document in paper textbook; do
+  (
+    cd docs/tex
+    latexmk -pdf -interaction=nonstopmode -halt-on-error \
+      -outdir=.. -jobname="$document" "$document.tex"
+  )
+done
 
-echo "Built docs/draft.pdf"
+echo "Built docs/paper.pdf and docs/textbook.pdf"

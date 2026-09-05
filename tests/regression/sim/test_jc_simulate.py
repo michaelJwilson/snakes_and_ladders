@@ -2,7 +2,7 @@
 
 Per ``python/snakes_and_ladders/sim/CLAUDE.md``, simulated substitution frequencies are
 validated against the closed-form Jukes-Cantor transition probabilities
-(docs/tex/main.tex, eq. jc) -- never against the likelihood/pruning code,
+(docs/tex/textbook.tex, "Problem Statement: Phylogenetic Inference") -- never against the likelihood/pruning code,
 which does not exist yet -- within a stated Monte Carlo tolerance. Math
 invariants (rows summing to 1, detailed balance) are pinned independently
 of any simulation.

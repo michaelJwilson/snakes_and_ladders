@@ -166,7 +166,7 @@ def execute(path: Path) -> Any:
     ).execute()
     for cell in notebook.cells:
         # nbclient records four wall-clock timestamps per cell. They are the
-        # notebooks' version of the `\today` that made `docs/draft.pdf` fail
+        # notebooks' version of the `\today` that made the committed PDFs fail
         # its own staleness check (`docs/CLAUDE.md`): nothing reads them, they
         # differ on every run, and left in they would make each regeneration
         # a diff of times with the real change buried inside it.

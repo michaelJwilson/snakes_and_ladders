@@ -53,7 +53,7 @@ def test_main_writes_a_table_and_caption_naming_every_fixture(
 
 
 def test_the_table_is_a_latex_tabular_not_an_image(tmp_path: Path) -> None:
-    # The point of the change: main.tex \input's a typeset table instead of
+    # The point of the change: the document \input's a typeset table instead of
     # \includegraphics-ing a matplotlib rendering of one.
     body = main(_argv(tmp_path)).table_path.read_text()
 

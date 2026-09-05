@@ -38,7 +38,7 @@ def test_a_documentation_only_change_selects_nothing() -> None:
     # The case this exists for: the suite would run the same code over the
     # same tests as the last run on main, so coverage cannot have moved.
     chosen = select(
-        ["docs/tex/main.tex", "README.md", "changelog.d/161.changed.md", "DEV.md"]
+        ["docs/tex/paper.tex", "README.md", "changelog.d/161.changed.md", "DEV.md"]
     )
 
     assert chosen["paths"] == []

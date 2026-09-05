@@ -1,7 +1,7 @@
 """Pre-order sequence simulation under the k-state Jukes-Cantor model.
 
-Implements alg. (simulate) of ``docs/tex/main.tex`` (Sec. "Simulation"):
-draw the root state from pi, then walk the tree in pre-order, drawing each
+Implements forward simulation under the model of ``docs/tex/textbook.tex``
+(Sec. "Problem Statement: Phylogenetic Inference"): draw the root state from pi, then walk the tree in pre-order, drawing each
 node's state from the transition-probability row of its parent's state. All
 sites are drawn independently and in parallel via vectorized NumPy
 sampling, rather than one Python-level loop per site.
