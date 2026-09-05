@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import yaml
 
+from phylo.fixtures import load_declared
 from phylo.numerics import logsumexp, sample_rows
 from phylo.sim.graph import BoundaryCondition, PottsGraph
 
@@ -126,12 +126,7 @@ def load_potts_lattice_params(path: Path) -> PottsLatticeParams:
         If a required field is missing, ``field`` has the wrong shape, or a
         size is too small to identify the model.
     """
-    raw = yaml.safe_load(path.read_text())
-
-    missing = _REQUIRED_FIELDS - raw.keys()
-    if missing:
-        msg = f"{path}: missing required field(s) {sorted(missing)}"
-        raise ValueError(msg)
+    raw = load_declared(path, _REQUIRED_FIELDS)
 
     shape = tuple(int(extent) for extent in raw["shape"])
     n_states = int(raw["n_states"])

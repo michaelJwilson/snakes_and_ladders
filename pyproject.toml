@@ -189,7 +189,9 @@ showcontent = true
 testpaths = ["tests"]
 markers = [
     "release: long-running scientific validity test, run on release rather than per PR (DEV.md CI & Performance Budget)",
+    "stress: same claim at a size the 5-minute CI budget cannot hold; run with `-m stress` inside the 10-minute developer budget (DEV.md CI & Performance Budget)",
 ]
+addopts = "--strict-markers"
 
 [tool.coverage.run]
 source = ["phylo"]

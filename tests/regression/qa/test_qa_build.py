@@ -18,6 +18,8 @@ from phylo.qa import build, manifest
 from phylo.qa.build import UncitedFigureError, compare, selected
 from phylo.qa.manifest import FIGURES, cited_stems
 
+from tests._scale import stress_only
+
 MAIN_TEX = build.DEFAULT_MAIN_TEX
 COMMITTED_FIGURES = build.DEFAULT_OUTPUT_DIR
 
@@ -124,6 +126,10 @@ def test_matching_figures_are_reported_as_clean(tmp_path: Path) -> None:
     assert compare(rebuilt, committed) == []
 
 
+@stress_only(
+    "renders every figure in the manifest, which is the release "
+    "gate's job; the cited-figure paths are checked at CI tier above"
+)
 def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None:
     # Both directions of the trade, on a real rendering. `sim_problem_sizes`
     # is committed and *not* cited by the document, so it is exactly the case
