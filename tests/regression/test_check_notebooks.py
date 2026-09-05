@@ -24,7 +24,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
-from check_notebooks import differences, image_count, text_outputs
+from check_notebooks import (
+    differences,
+    image_count,
+    structure_problems,
+    text_outputs,
+)
 
 
 def _cell(*outputs: dict[str, Any]) -> dict[str, Any]:
@@ -156,3 +161,69 @@ def test_the_comparison_imports_without_the_jupyter_stack() -> None:
     finally:
         sys.meta_path.pop(0)
         sys.modules.update(hidden)
+
+
+# --- the Further work section -----------------------------------------------
+
+
+def _markdown(text: str) -> dict[str, Any]:
+    return {"cell_type": "markdown", "source": text}
+
+
+WELL_FORMED = _markdown(
+    "## Further work\n\n- **Viterbi (#175).** Not built.\n"
+    "- **Lattice fits (`TICKETS.md` §1.3).** Not shown.\n"
+)
+
+
+def test_a_well_formed_further_work_section_passes() -> None:
+    assert structure_problems("n.ipynb", [_cell(_stream("1\n")), WELL_FORMED]) == []
+
+
+def test_a_notebook_whose_last_cell_is_not_further_work_is_reported() -> None:
+    # The two ways to lack the section: end on code, or end on markdown that
+    # is not it. Root `CLAUDE.md` makes the section mandatory, and nothing
+    # checked that before this.
+    ends_on_code = [WELL_FORMED, _cell(_stream("1\n"))]
+    other_heading = [_cell(_stream("1\n")), _markdown("## Summary\n\nDone.")]
+
+    for cells in (ends_on_code, other_heading):
+        (problem,) = structure_problems("n.ipynb", cells)
+        assert "not a markdown cell headed '## Further work'" in problem
+
+
+def test_a_further_work_bullet_without_a_ticket_is_reported() -> None:
+    # The drift this catches: a line that describes a gap nothing tracks, or
+    # -- the case found in all three notebooks -- a sentence about the
+    # repository that has stopped being true and names nothing that would
+    # ever close it.
+    cells = [
+        _markdown(
+            "## Further work\n\n- **Viterbi (#175).** Not built.\n"
+            "- **Re-execution in CI.** No job re-runs it.\n"
+        )
+    ]
+
+    (problem,) = structure_problems("n.ipynb", cells)
+    assert "names no issue" in problem
+    assert "Re-execution in CI" in problem
+
+
+def test_the_heading_is_matched_case_insensitively_on_the_second_word() -> None:
+    # Root `CLAUDE.md` writes "Further Work" and the notebooks "Further work".
+    assert (
+        structure_problems("n.ipynb", [_markdown("## Further Work\n\n- x (#1)")]) == []
+    )
+
+
+def test_every_committed_notebook_passes_the_structural_check() -> None:
+    # On the real notebooks, read as JSON so the Jupyter stack is not needed.
+    import json
+
+    notebooks = sorted(
+        (Path(__file__).resolve().parents[2] / "docs" / "nb").glob("*.ipynb")
+    )
+    assert notebooks
+    for path in notebooks:
+        cells = json.loads(path.read_text())["cells"]
+        assert structure_problems(path.name, cells) == []
