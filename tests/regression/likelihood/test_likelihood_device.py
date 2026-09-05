@@ -9,6 +9,7 @@ checks are marked and skip when the hardware is absent.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
@@ -118,7 +119,7 @@ def test_float32_agrees_with_float64_inside_the_stated_tolerance(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)
@@ -156,7 +157,7 @@ def test_float32_would_fail_an_absolute_bound_that_float64_passes() -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)
@@ -196,7 +197,7 @@ def test_float64_default_is_unchanged_by_the_dtype_parameter() -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=200,
     )
     alignment = dict(dataset.alignment)
@@ -223,7 +224,11 @@ def test_float64_default_is_unchanged_by_the_dtype_parameter() -> None:
 def test_cuda_agrees_with_cpu() -> None:  # pragma: no cover
     params = load_fixture(SMALL_SITES)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=500
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=500,
     )
     alignment = dict(dataset.alignment)
 
@@ -252,7 +257,11 @@ def test_cuda_agrees_with_cpu() -> None:  # pragma: no cover
 def test_mps_agrees_with_cpu() -> None:  # pragma: no cover
     params = load_fixture(SMALL_SITES)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=500
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=500,
     )
     alignment = dict(dataset.alignment)
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from itertools import combinations
 
+import numpy as np
 import pytest
 from snakes_and_ladders.sim.newick import (
     count_topologies,
@@ -89,7 +90,11 @@ def test_count_topologies_rejects_non_positive_n_taxa() -> None:
 def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
     params = load_simulation_params(BINARY_FIXTURE)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=10
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=10,
     )
 
     assert validate_newick(dataset.newick)
@@ -99,7 +104,11 @@ def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
 def test_validate_newick_rejects_a_trifurcating_root() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=10
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=10,
     )
 
     assert not validate_newick(dataset.newick)
@@ -109,7 +118,11 @@ def test_validate_newick_rejects_a_trifurcating_root() -> None:
 def test_to_newick_with_node_states_round_trips_ancestor_labels() -> None:
     params = load_simulation_params(BINARY_FIXTURE)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=10
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=10,
     )
 
     labelled = to_newick(dataset.tau, dataset.node_states, site=0)
@@ -154,7 +167,11 @@ def test_validate_newick_accepts_branch_lengths_and_internal_labels() -> None:
 def test_validate_unrooted_newick_accepts_a_trifurcating_root() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=10
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=10,
     )
 
     assert validate_unrooted_newick(dataset.newick)

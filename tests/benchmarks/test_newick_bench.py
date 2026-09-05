@@ -8,6 +8,7 @@ paths through ``to_newick``).
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.sim.newick import to_newick
@@ -30,7 +31,11 @@ def test_to_newick_with_states_benchmark(
 ) -> None:
     params = load_simulation_params(FIXTURES_DIR / fixture_name)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=10
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=10,
     )
 
     labelled = benchmark(to_newick, dataset.tau, dataset.node_states, 0)

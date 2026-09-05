@@ -181,15 +181,22 @@ def test_the_default_simulator_path_is_unchanged() -> None:
     # model is the last thing worth changing silently. Omitting rate_matrix
     # must still be Jukes-Cantor, bit for bit.
     params = load_fixture(SMALL_SITES)
-    common = {
-        "tau": params.tau,
-        "k": params.k,
-        "pi": params.pi,
-        "seed": params.seed,
-        "n_sites": 2000,
-    }
-    baseline = simulate_alignment(**common)  # type: ignore[arg-type]
-    explicit = simulate_alignment(**common, rate_matrix=None)  # type: ignore[arg-type]
+
+    # A generator is stateful, so the two calls each need their own, seeded
+    # alike. Under the old `seed: int` signature each call rebuilt the stream
+    # internally and this comparison held by accident of that re-seeding
+    # (issue #240).
+    def common() -> dict[str, object]:
+        return {
+            "tau": params.tau,
+            "k": params.k,
+            "pi": params.pi,
+            "rng": np.random.default_rng(params.seed),
+            "n_sites": 2000,
+        }
+
+    baseline = simulate_alignment(**common())  # type: ignore[arg-type]
+    explicit = simulate_alignment(**common(), rate_matrix=None)  # type: ignore[arg-type]
     for name, states in baseline.alignment.items():
         assert np.array_equal(states, explicit.alignment[name])
 
@@ -204,15 +211,22 @@ def test_simulating_under_a_jc_equivalent_gtr_matches_the_jc_path() -> None:
     params = load_fixture(SMALL_SITES)
     uniform = np.full(params.k, 1.0 / params.k)
     equivalent = gtr_rate_matrix(np.ones(n_exchangeabilities(params.k)), uniform)
-    common = {
-        "tau": params.tau,
-        "k": params.k,
-        "pi": uniform,
-        "seed": params.seed,
-        "n_sites": 20000,
-    }
-    baseline = simulate_alignment(**common)  # type: ignore[arg-type]
-    through_gtr = simulate_alignment(**common, rate_matrix=equivalent)  # type: ignore[arg-type]
+
+    # A generator is stateful, so the two calls each need their own, seeded
+    # alike. Under the old `seed: int` signature each call rebuilt the stream
+    # internally and this comparison held by accident of that re-seeding
+    # (issue #240).
+    def common() -> dict[str, object]:
+        return {
+            "tau": params.tau,
+            "k": params.k,
+            "pi": uniform,
+            "rng": np.random.default_rng(params.seed),
+            "n_sites": 20000,
+        }
+
+    baseline = simulate_alignment(**common())  # type: ignore[arg-type]
+    through_gtr = simulate_alignment(**common(), rate_matrix=equivalent)  # type: ignore[arg-type]
 
     for name, states in baseline.alignment.items():
         differing = int(np.count_nonzero(states != through_gtr.alignment[name]))
@@ -230,7 +244,7 @@ def test_simulated_frequencies_match_the_generating_stationary_distribution() ->
         tau=params.tau,
         k=params.k,
         pi=TRUE_PI,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=200000,
         rate_matrix=rate,
     )

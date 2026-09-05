@@ -43,7 +43,11 @@ _SITES = 2000
 def _alignment() -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(SMALL_SITES)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=_SITES
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=_SITES,
     )
     return dict(dataset.alignment), params.k
 
@@ -153,7 +157,7 @@ def test_every_accepted_move_strictly_improves(moves: MoveSet) -> None:
     # non-improving move would still terminate and still look plausible.
     alignment, k = _alignment()
 
-    result = infer(alignment, k, seed=1, moves=moves)
+    result = infer(alignment, k, rng=np.random.default_rng(1), moves=moves)
 
     assert list(result.trace) == sorted(result.trace)
     assert len(set(result.trace)) == len(result.trace)
@@ -164,7 +168,7 @@ def test_every_accepted_move_strictly_improves(moves: MoveSet) -> None:
 def test_the_search_converges_and_ends_on_its_best_score(moves: MoveSet) -> None:
     alignment, k = _alignment()
 
-    result = infer(alignment, k, seed=1, moves=moves)
+    result = infer(alignment, k, rng=np.random.default_rng(1), moves=moves)
 
     assert result.converged
     assert result.log_likelihood == result.trace[-1]
@@ -179,7 +183,7 @@ def test_no_topology_is_scored_twice() -> None:
     # proposes the same tree.
     alignment, k = _alignment()
 
-    result = infer(alignment, k, seed=1, moves=MoveSet.SPR)
+    result = infer(alignment, k, rng=np.random.default_rng(1), moves=MoveSet.SPR)
 
     assert result.converged
     assert result.evaluations <= count_topologies(len(alignment) - 1) == 3
@@ -189,7 +193,7 @@ def test_no_topology_is_scored_twice() -> None:
 def test_the_budget_is_respected_and_reported_unconverged() -> None:
     alignment, k = _alignment()
 
-    result = infer(alignment, k, seed=1, max_evaluations=1)
+    result = infer(alignment, k, rng=np.random.default_rng(1), max_evaluations=1)
 
     assert result.evaluations <= 1
     assert not result.converged
@@ -199,8 +203,8 @@ def test_the_budget_is_respected_and_reported_unconverged() -> None:
 def test_a_search_is_reproducible_from_its_seed() -> None:
     alignment, k = _alignment()
 
-    first = infer(alignment, k, seed=5)
-    second = infer(alignment, k, seed=5)
+    first = infer(alignment, k, rng=np.random.default_rng(5))
+    second = infer(alignment, k, rng=np.random.default_rng(5))
 
     assert leaf_bipartitions(first.topology) == leaf_bipartitions(second.topology)
     assert_allclose(first.log_likelihood, second.log_likelihood, rtol=1e-12)
@@ -222,7 +226,7 @@ def test_different_seeds_can_start_from_different_topologies() -> None:
 def test_the_general_model_is_searchable_too() -> None:
     alignment, k = _alignment()
 
-    result = infer(alignment, k, seed=1, model=Model.GTR)
+    result = infer(alignment, k, rng=np.random.default_rng(1), model=Model.GTR)
 
     assert isinstance(result, Inference)
     assert set(result.parameters) == {"branch_lengths", "exchangeabilities", "pi"}

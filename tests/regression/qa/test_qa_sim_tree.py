@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 from snakes_and_ladders.qa.figure import state_label
 from snakes_and_ladders.qa.sim_tree import (
@@ -114,7 +115,7 @@ def test_every_leaf_gets_its_own_sequence_aligned_to_its_row() -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=SITES_SHOWN,
     )
     _, ax = plt.subplots()

@@ -40,7 +40,13 @@ def test_simulate_alignment_rejects_mismatched_pi_shape() -> None:
         name="root", branch_length=None, children=(Node(name="A", branch_length=0.1),)
     )
     with pytest.raises(ValueError, match="pi has shape"):
-        simulate_alignment(tau=tau, k=4, pi=np.full(3, 1.0 / 3), seed=0, n_sites=10)
+        simulate_alignment(
+            tau=tau,
+            k=4,
+            pi=np.full(3, 1.0 / 3),
+            rng=np.random.default_rng(0),
+            n_sites=10,
+        )
 
 
 @pytest.mark.edge_case
@@ -49,7 +55,9 @@ def test_simulate_alignment_rejects_non_root_node_without_branch_length() -> Non
         name="root", branch_length=None, children=(Node(name="A", branch_length=None),)
     )
     with pytest.raises(ValueError, match="has no branch_length"):
-        simulate_alignment(tau=tau, k=4, pi=np.full(4, 0.25), seed=0, n_sites=10)
+        simulate_alignment(
+            tau=tau, k=4, pi=np.full(4, 0.25), rng=np.random.default_rng(0), n_sites=10
+        )
 
 
 @pytest.mark.edge_case

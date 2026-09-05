@@ -55,7 +55,9 @@ def _fitted(n_samples: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarr
     """Fit one simulated dataset; return truth, estimate and standard error."""
     edges, _ = _graph()
     graph = lattice_graph(SHAPE, boundary=BoundaryCondition.OPEN, coupling=COUPLING)
-    dataset = simulate_potts(graph, FIELD, seed=seed, n_samples=n_samples, burn_in=200)
+    dataset = simulate_potts(
+        graph, FIELD, rng=np.random.default_rng(seed), n_samples=n_samples, burn_in=200
+    )
     objective = PottsLatticeObjective(dataset.configurations, N_STATES, edges)
     result = fit(objective)
     assert result.converged
@@ -107,7 +109,9 @@ def test_the_enumerated_statistics_count_every_configuration() -> None:
 def test_the_gradient_matches_central_differences() -> None:
     edges, _ = _graph()
     graph = lattice_graph(SHAPE, boundary=BoundaryCondition.OPEN, coupling=COUPLING)
-    dataset = simulate_potts(graph, FIELD, seed=SEED, n_samples=200, burn_in=200)
+    dataset = simulate_potts(
+        graph, FIELD, rng=np.random.default_rng(SEED), n_samples=200, burn_in=200
+    )
     objective = PottsLatticeObjective(dataset.configurations, N_STATES, edges)
 
     theta = objective.theta_from_truth(COUPLING, FIELD).requires_grad_(True)
@@ -133,7 +137,9 @@ def test_the_fitted_optimum_beats_a_brute_force_scan() -> None:
     # must not find a lower negative log-likelihood than the fit did.
     edges, _ = _graph()
     graph = lattice_graph(SHAPE, boundary=BoundaryCondition.OPEN, coupling=COUPLING)
-    dataset = simulate_potts(graph, FIELD, seed=SEED, n_samples=200, burn_in=200)
+    dataset = simulate_potts(
+        graph, FIELD, rng=np.random.default_rng(SEED), n_samples=200, burn_in=200
+    )
     objective = PottsLatticeObjective(dataset.configurations, N_STATES, edges)
     result = fit(objective)
 
