@@ -375,6 +375,28 @@ and the posterior standard deviation was 12% low, because divergent
 trajectories are rejected preferentially in the tails. Acceptance rate does
 not detect it; `max |dH|` tracks it monotonically.
 
+**Where a fit starts is now the caller's to choose, and multi-start is
+measured rather than assumed.** `Objective.initial()` was already the seam;
+what went through it was one fixed constant per objective.
+`snakes_and_ladders.opt.initialize` adds the objective's own start, a
+deterministic perturbation, and random restarts from a passed-in generator, and
+`fit_from` reports every fit and their spread rather than only the best --
+returning one answer for a surface with four basins is the failure the
+abstraction is about.
+
+The measurement says multi-start is a tool for a particular shape of surface
+and not a general improvement. On Himmelblau, four equal minima, a single fixed
+start reaches exactly **one** basin however often it is run and four random
+restarts reach all **four**. On Rastrigin, roughly `10**n` local minima each
+satisfying the first-order condition, sixteen restarts reach the global minimum
+**2 times in 30** against **0 in 30** from one start -- sixteen times the cost
+for a success rate still near zero, and widening the draw does not help
+(the same 2 in 30 at scale 4.0 as at 2.0), because the obstacle is the density
+of the minima and not the reach of the proposal.
+
+No default changes on that evidence. Every number below was produced from the
+objective's own start and still is.
+
 **Fitting and intervals.** L-BFGS with a strong-Wolfe line search, convergence
 judged on the gradient relative to the objective's own magnitude, and
 confidence intervals from the observed Fisher information pushed through the
