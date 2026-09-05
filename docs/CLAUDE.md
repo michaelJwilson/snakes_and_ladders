@@ -86,11 +86,13 @@ in. It is not restated here.
   writes what the checker then rejects, and one that leaves per-cell
   timestamps in buries the change in a diff of clock values.
 
-- **A notebook's Further Work section is load-bearing.** Each names, with its
-  issue number, what the notebook could not demonstrate because the feature is
-  not built. A notebook that quietly omitted the unbuilt half would read as a
-  complete tour of an incomplete repository, and no re-execution check would
-  catch it.
+- **A notebook's Further Work section is load-bearing, so its shape is
+  checked.** Each names, with its issue number, what the notebook could not
+  demonstrate. A notebook that quietly omitted the unbuilt half would read as
+  a complete tour of an incomplete repository, and re-execution cannot catch
+  it — a markdown cell has no output — so the checker fails a notebook whose
+  last cell is not that section, or whose line names no ticket. All three
+  carried a false sentence for months before it did.
 
 ## Boundaries
 

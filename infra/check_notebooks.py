@@ -16,6 +16,16 @@ across matplotlib builds, and comparing them would reproduce the
 weaker payoff, since the printed numbers are what the notebooks assert with.
 What is checked for a figure is that the cell still produced one.
 
+**The Further Work section is checked for shape, not only for presence.**
+Root `CLAUDE.md` makes it load-bearing: the last cell of every notebook names,
+with an issue number, what the notebook could not demonstrate. Every one of
+the three carried a sentence that had been false since this tool landed
+("no job re-runs it"), and nothing noticed, because re-execution compares
+outputs and a markdown cell has none (issue #278). So the last cell must be
+markdown headed ``## Further work``, and every bullet under it must name an
+issue (``#N``) or a ``TICKETS.md`` section. Whether the issue is still open is
+a question for the release gate, not this tool.
+
 Exits 0 when every notebook agrees, 1 on the first that does not, printing a
 unified diff of the cell's output.
 
@@ -36,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -89,6 +100,53 @@ def image_count(cell: dict[str, Any]) -> int:
     return sum(
         1 for output in cell.get("outputs", []) if "image/png" in output.get("data", {})
     )
+
+
+#: The heading the last cell must carry; case-insensitive on the second word
+#: because root `CLAUDE.md` writes "Further Work" and the notebooks "Further
+#: work", and either is the section.
+FURTHER_WORK = re.compile(r"^## Further work\s*$", re.IGNORECASE | re.MULTILINE)
+
+#: What a Further Work bullet must name: an issue, or a `TICKETS.md` section.
+NAMES_A_TICKET = re.compile(r"#\d+|TICKETS\.md")
+
+
+def structure_problems(name: str, cells: Sequence[dict[str, Any]]) -> list[str]:
+    """Report where a notebook's Further Work section is missing or unanchored.
+
+    Parameters
+    ----------
+    name : str
+        The notebook's name, for the messages.
+    cells : Sequence[dict[str, Any]]
+        Its cells.
+
+    Returns
+    -------
+    list[str]
+        Human-readable problems; empty when the last cell is a markdown cell
+        headed ``## Further work`` whose every bullet names an issue.
+    """
+    if not cells:
+        return [f"{name}: has no cells"]
+    last = cells[-1]
+    source = last.get("source", "")
+    text = "".join(source) if isinstance(source, list) else str(source)
+    heading = FURTHER_WORK.search(text)
+    if last.get("cell_type") != "markdown" or heading is None:
+        return [
+            f"{name}: the last cell is not a markdown cell headed '## Further work'"
+        ]
+
+    problems = []
+    for bullet in re.split(r"^- ", text[heading.end() :], flags=re.MULTILINE)[1:]:
+        if not NAMES_A_TICKET.search(bullet):
+            first_line = bullet.strip().splitlines()[0] if bullet.strip() else ""
+            problems.append(
+                f"{name}: Further work bullet names no issue or TICKETS.md section: "
+                f"{first_line!r}"
+            )
+    return problems
 
 
 def differences(
@@ -204,6 +262,7 @@ def compare(path: Path) -> list[str]:
     from nbclient.exceptions import CellExecutionError
 
     committed = nbformat.read(path, as_version=4)
+    problems = structure_problems(path.name, committed.cells)
     try:
         executed = execute(path)
     except CellExecutionError as failure:
@@ -211,9 +270,9 @@ def compare(path: Path) -> list[str]:
         # reporting that as a crash of this tool rather than as a failure of
         # that notebook would bury it. `phylo.sim.hmm` landing in #182 broke
         # `hmm.ipynb`'s import outright, which is exactly this case.
-        return [f"{path.name} did not execute:\n{failure}"]
+        return [*problems, f"{path.name} did not execute:\n{failure}"]
 
-    return differences(path.name, committed.cells, executed.cells)
+    return [*problems, *differences(path.name, committed.cells, executed.cells)]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -246,10 +305,18 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if arguments.write:
+        import nbformat
+
+        failed = False
         for path in paths:
             rewrite(path)
             print(f"wrote {path}")
-        return 0
+            for problem in structure_problems(
+                path.name, nbformat.read(path, as_version=4).cells
+            ):
+                failed = True
+                print(problem, file=sys.stderr)
+        return 1 if failed else 0
 
     failed = False
     for path in paths:

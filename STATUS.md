@@ -37,13 +37,16 @@ tolerance table, and the deferred-work section
 from `.github/labels.yml` by a workflow, so the taxonomy cannot drift from the
 documents that describe it.
 
-Eight required checks gate a merge, and two of them do work no reviewer can
+Nine required checks gate a merge, and three of them do work no reviewer can
 do by inspection: the technical-document job rebuilds only the QA figures
 `docs/tex/main.tex` cites, comparing the rest at the release gate instead
 ([#157](https://github.com/michaelJwilson/phylo/pull/157)), and fails a pull
 request whose rebuilt `docs/draft.pdf` differs from the committed one
-([#72](https://github.com/michaelJwilson/phylo/pull/72)); the coverage floor
-cannot be lowered to pass a change. Cost is managed rather than absorbed:
+([#72](https://github.com/michaelJwilson/phylo/pull/72)); the notebooks job
+re-executes every notebook under `docs/nb/`, fails one whose Further work
+section is missing or names no ticket
+([#278](https://github.com/michaelJwilson/phylo/issues/278)), and fails one whose printed
+output has moved; and the coverage floor cannot be lowered to pass a change. Cost is managed rather than absorbed:
 benchmarks run only when the diff touches code they measure, and the
 release-gated suite is excluded per pull request — measured at 138 s over 540
 tests against 989 s for the full suite
