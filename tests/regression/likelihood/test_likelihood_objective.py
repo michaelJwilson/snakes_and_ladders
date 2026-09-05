@@ -539,3 +539,26 @@ def test_fitted_tree_halves_the_merged_root_pair() -> None:
     assert first + second == pytest.approx(
         sum(float(length) for length in original if length is not None)
     )
+
+
+@pytest.mark.parametrize("which", ["branch_lengths", "substitution_model"])
+def test_the_phylogenetic_objectives_invert_their_own_constraint_map(
+    which: str,
+) -> None:
+    # The seam #268 declares on every objective, checked on the two that live
+    # here rather than in `opt/`: the branch-length map is a log, the
+    # substitution model's a log-simplex and a positive map with a gauge
+    # fixed, and an inverse that dropped the gauge or mis-ordered the
+    # exchangeabilities would round-trip nothing. Held to the same 1e-14 the
+    # eight `opt` objectives are.
+    case: tuple[BranchLengthObjective | SubstitutionModelObjective, torch.Tensor]
+    if which == "branch_lengths":
+        branch = _objective(SMALL_SITES)
+        case = branch, branch.theta_from_truth(load_fixture(SMALL_SITES).tau)
+    else:
+        case = _gtr_objective(sites=200)
+    objective, theta = case
+
+    recovered = objective.theta_from(objective.constrain(theta))
+
+    assert_allclose(recovered.numpy(), theta.numpy(), atol=1e-14)
