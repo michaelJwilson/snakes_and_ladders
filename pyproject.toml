@@ -23,6 +23,7 @@ readme = "README.md"
 # GitHub stars and torch 90k+, both well above the 1,000-star review bar.
 # Add further entries only as real code depends on them.
 dependencies = [
+    "jupyter>=1.1.1",
     "matplotlib>=3.9.0",
     "numpy>=1.26.0",
     "pyyaml>=6.0.3",

@@ -67,6 +67,16 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
 
 ## Infrastructure & Tooling
 
+*   **Documentation Sync:** Any change affecting behavior, CI, dev setup, or math models must update, in the same PR, whichever of these it makes untrue: e.g. `README.md`, `CLAUDE.md` (including a module's), `DEV.m\
+d`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md`, `TICKETS.md`, `docs/tex/`, `docs/nb/`. If the change is user-visible, add a fragment under `changelog.d/` (see `changelog.d/README.md`) rather than editing `CHANGELOG.md\
+` directly — `towncrier` merges fragments into `CHANGELOG.md` at release time, and CI's `towncrier check` enforces one exists.  Similarly, keep this	convention and doc. up to date also.
+*   **Single Version Source:** The package version lives exclusively in `Cargo.toml`'s `[package].version`.
+*   **Package Surface:** `python/snakes_and_ladders/__init__.py` re-exports nothing beyond the package's own top-level utilities (currently `double`); import submodule contents explicitly (`from snakes_and_ladders.\
+likelihood import ...`), not through the top-level namespace.
+*   **Code Standards:** Use type hints on all Python functions. Do not introduce silent behavior changes (e.g., default parameters). Keep dependencies minimal and justify additions.
+*   **Dev Standards:** The number of PRs should be minimized to limit the amount of review work and test runs, particularly given tickets are typically scoped to a work item.
+
+
 ### Build System
 
 `maturin` builds the Rust extension natively during `pip install .`.
