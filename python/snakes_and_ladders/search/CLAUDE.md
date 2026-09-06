@@ -11,19 +11,14 @@ produces them or in `STATUS.md`, and the module docstrings say which.
 
 ## What lives here
 
-Topology neighbourhoods and the searches that walk them; an exact two-state
-ground-state solver by minimum cut and its extension to any label count by
-expansion moves; the same model read from its NP-hard side as Max-Cut, with a
-relaxation and a certificate; Monte Carlo move sets for the Potts lattice and
-the statistics that judge them; the outer inference loop; and this
-application's instance of `snakes_and_ladders.learn`'s environment protocol.
+Topology neighbourhoods and the searches that walk them for the supported problems.
 
-Two seams run through it and neither may be reversed. A discrete move changes
-the structure being fitted, so the loop builds a new objective rather than
-stepping inside a fit — which is why this module may import `snakes_and_ladders.likelihood`
-and `snakes_and_ladders.opt` while neither may import it. And the environment lives here
-rather than beside the estimator that consumes it, because `learn/` may import
-no application module.
+Two seams run through: a discrete move changes the structure being fitted, so the
+loop builds a new objective rather than stepping inside a fit currently.  This will
+change in the future for computational efficiency.
+
+The environments currently live here rather than beside the estimator that consumes it,
+because `learn/` may import no application module. but an envs/ module will be created.
 
 ## Local rules
 
