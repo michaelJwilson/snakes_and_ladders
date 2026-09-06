@@ -436,7 +436,7 @@ default sampler path moved:
 | layout | adjacency as a list of lists in every kernel | `PottsGraph.compressed_adjacency()`, one contiguous CSR | equal to the list adjacency in order, 4 graphs | exact |
 | compiled backends | descent sweep 6 µs/site in Python | `numba` kernel, default for `iterated_conditional_modes` | labelling and energy **bitwise**, 6 seeds | **7x** at 32x32, 3 labels |
 | FFI boundary | annealing and tempering on the Python sweep | `backend=Backend.RUST` runs the extension's sweep on the same uniforms | per-replica chi-square, both backends | tempering **5.8x** at 100 nodes, **7.8x** at 32x32; annealing 2.3x (the per-sweep energy now dominates) |
-| inlining / vectorization | one `P(t)` call per child per node | every branch's matrix in one call | `torch.equal` per branch, JC and GTR; log-likelihood bitwise | hill climb **3.99 s to 2.32 s**; one 20-taxa evaluation unchanged at 12 ms |
+| inlining / vectorization | one `P(t)` call per child per node | every branch's matrix in one call | `torch.equal` per branch for JC; GTR to 2.9e-13 (torch's batched `matrix_exp` is a different kernel); JC log-likelihood bitwise | hill climb **3.99 s to 2.32 s**; one 20-taxa evaluation unchanged at 12 ms |
 | inlining / vectorization | `_deltas` per action, 126,000 calls per 50 updates | `features` as one NumPy pass | `array_equal` to `_deltas`, 200 states, deviation 0.0 | REINFORCE **1.51 s to 1.00 s** |
 | profile first (algorithmic) | tree built and split-set unioned per SPR candidate | dedup on leaf bitmasks from the adjacency; tree built only for a new key | same neighbours in the same order as the definition, n = 5, 7, 9; key equals `leaf_bipartitions` on all 105 six-leaf topologies | **1.41 s to 0.59 s** at 30 taxa |
 | cache, branches, allocation, double buffering | no measurement separating them from the above | none | — | recorded as not measured |
@@ -446,7 +446,7 @@ the Python one **draw for draw** on the enumerable instance — identical
 p-values and exchange acceptances — which is the case `potts_mcmc_rust.py`
 says cannot be relied on, and it is not: one draw across a threshold moved by
 an ulp would part them, so the backend stays opt-in. And the batched
-transition matrices leave the log-likelihood bitwise unchanged while the
+transition matrices leave the JC log-likelihood bitwise unchanged while the
 gradient moves by 1.5e-11 absolute, autograd summing the same terms in a
 different order; the finite-difference check that pins the gradient is
 unaffected.
