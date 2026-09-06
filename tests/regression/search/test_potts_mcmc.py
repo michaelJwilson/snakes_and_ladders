@@ -529,7 +529,11 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
         best["restarts"].append(
             min(
                 iterated_conditional_modes(
-                    graph, field, 2, np.random.default_rng(5000 * seed + r), max_sweeps=4
+                    graph,
+                    field,
+                    2,
+                    np.random.default_rng(5000 * seed + r),
+                    max_sweeps=4,
                 )[1]
                 for r in range(budget // 4)
             )
