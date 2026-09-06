@@ -28,11 +28,9 @@ document; nothing else invokes `latexmk`. The rebuild is partial by design:
 what neither cites is regenerated and compared at the release gate instead, so
 every committed figure is still checked against the code that produced it.
 
-## The reader
+## Expected reader
 
-Root `CLAUDE.md`'s **Expected Reader** states the formatting contract — what
-belongs in the body, what belongs in the appendix, and the register to write
-in. It is not restated here.
+A well-educated developer with scientific and performance-computing background, but not an application expert, e.g. phylogenetics. Keep tech. doc. streamlined — hyperlinks and citations over inline derivation — and push required application background (e.g. NNI, other standard algorithms) into a dedicated appendix, cited from the point of use rather than re-derived there. Treat the main text as a high-level overview of the current best-known approach (simulation, models, results) in terms of the roadmap, not an exhaustive record; link out to supporting docs, with plots, and results for dedicated studies that informed the technical doc. Adopt the style of an academic paper, supported by a textbook on domain-specific material likely new to the developer — two documents rather than one file with appendices (issue #249), so the paper can report results without carrying the formulations that support them, and the textbook can state an algorithm without naming any code that implements it.
 
 ## Local rules
 
