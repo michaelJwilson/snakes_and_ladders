@@ -35,6 +35,7 @@ from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.schedule import Constant, Exponential
 from snakes_and_ladders.search import potts_mcmc
 from snakes_and_ladders.search.alpha_expansion import energy, iterated_conditional_modes
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import (
     PottsChain,
     PottsMove,
@@ -403,7 +404,10 @@ def _replica_p_values(
 
 
 @pytest.mark.structural
-def test_every_replica_is_drawn_from_its_own_tempered_distribution() -> None:
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
+def test_every_replica_is_drawn_from_its_own_tempered_distribution(
+    backend: Backend,
+) -> None:
     # The oracle the plan named: the joint target is a product of tempered
     # marginals, so with exchanges *on* each replica must still pass the
     # chi-square against exp(-E / T_r) enumerated from the unscaled model. A
@@ -422,6 +426,7 @@ def test_every_replica_is_drawn_from_its_own_tempered_distribution() -> None:
         SWEEPS,
         burn_in=SWEEPS // 10,
         thin=5,
+        backend=backend,
     )
 
     assert run.states.shape == (SWEEPS, len(LADDER), graph.n_nodes)
@@ -564,3 +569,20 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
     assert hits["restarts"] < hits["tempering"], hits
     assert hits["anneal"] >= 10, hits
     assert hits["tempering"] >= 10, hits
+
+
+@pytest.mark.edge_case
+def test_the_sweep_has_no_numba_backend() -> None:
+    # The descent has one and the sampler does not, deliberately: a sampler's
+    # pin is distributional, and root CLAUDE.md admits one compiled path per
+    # measurement. Refused by name rather than falling back silently.
+    graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+
+    with pytest.raises(ValueError, match="no numba backend"):
+        anneal_potts(
+            graph,
+            NO_FIELD,
+            Constant(1.0, 5),
+            np.random.default_rng(0),
+            backend=Backend.NUMBA,
+        )
