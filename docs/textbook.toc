@@ -1,0 +1,32 @@
+\contentsline {section}{\numberline {1}Notation}{2}{section.1}%
+\contentsline {section}{\numberline {2}The Shape All Three Problems Share}{2}{section.2}%
+\contentsline {subsection}{\numberline {2.1}The Continuous Optimization Abstraction}{2}{subsection.2.1}%
+\contentsline {paragraph}{Why the map and not a projection.}{2}{section*.2}%
+\contentsline {paragraph}{Why the map must be injective.}{3}{section*.3}%
+\contentsline {paragraph}{What follows for inference.}{3}{section*.4}%
+\contentsline {section}{\numberline {3}Problem Statement: Phylogenetic Inference}{3}{section.3}%
+\contentsline {subsection}{\numberline {3.1}The model}{3}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}The algorithm: pruning}{3}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}The algorithm: discrete search}{4}{subsection.3.3}%
+\contentsline {section}{\numberline {4}Problem Statement: Potts Models in an External Field}{4}{section.4}%
+\contentsline {subsection}{\numberline {4.1}The model}{4}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Why an odd cycle is the whole story}{4}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}The algorithms}{5}{subsection.4.3}%
+\contentsline {section}{\numberline {5}Problem Statement: Hidden Markov Models}{5}{section.5}%
+\contentsline {subsection}{\numberline {5.1}The model}{5}{subsection.5.1}%
+\contentsline {paragraph}{The emission family is the only part that knows what an observation is.}{5}{section*.5}%
+\contentsline {paragraph}{A density is not a probability.}{5}{section*.6}%
+\contentsline {subsection}{\numberline {5.2}The algorithm: forward--backward}{5}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}The algorithm: expectation-maximization}{5}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}Two decodings, and they are different answers}{6}{subsection.5.4}%
+\contentsline {section}{\numberline {6}The Properties That Referee Each Method}{6}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Exact answers, where an oracle exists}{6}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Structural invariants, where no oracle reaches}{6}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Recovery, which is the acceptance test for a fit}{6}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Where the likelihood has no maximum, or no curvature}{7}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Published constants, and asymptotic results}{7}{subsection.6.5}%
+\contentsline {section}{\numberline {7}Relevance to the Roadmap}{7}{section.7}%
+\contentsline {section}{\numberline {A}Reference Taxonomy}{9}{appendix.A}%
+\contentsline {paragraph}{Infrastructure (build, structure, and speed).}{9}{section*.8}%
+\contentsline {paragraph}{Optimization (discrete and continuous).}{9}{section*.9}%
+\contentsline {paragraph}{Application (the science).}{9}{section*.10}%
