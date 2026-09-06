@@ -32,11 +32,15 @@ from collections.abc import Iterator
 from functools import cache
 from itertools import combinations
 
+import numpy as np
 import pytest
+from snakes_and_ladders.search import topology as topology_module
 from snakes_and_ladders.search.topology import (
     Topology,
+    enumerate_topologies,
     leaf_bipartitions,
     nni_neighbours,
+    random_topology,
     spr_neighbours,
 )
 from snakes_and_ladders.sim.newick import (
@@ -216,3 +220,70 @@ def test_nni_and_spr_exhaustive_at_n8(n_taxa: int) -> None:
         _assert_valid_neighbourhood(topology, spr_neighbour_list, spr_expected)
         spr_keys = {leaf_bipartitions(n) for n in spr_neighbour_list}
         assert nni_map[leaf_bipartitions(topology)] <= spr_keys
+
+
+# --- the deduplication key, and the neighbourhood it deduplicates ---------------
+
+
+@pytest.mark.oracle
+def test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology() -> None:
+    # `_split_key` is what `spr_neighbours` deduplicates on since #264; this
+    # asserts it names the same set of splits `leaf_bipartitions` does, on
+    # every one of the 105 six-leaf topologies, with the anchor convention
+    # (the smallest leaf's side is the complement) applied identically.
+    names = [f"t{i}" for i in range(6)]
+    checked = 0
+    for candidate in enumerate_topologies(names):
+        adjacency, root_id = topology_module._to_adjacency(candidate)
+        bit_of = topology_module._leaf_bits(adjacency)
+        expected = frozenset(
+            sum(1 << bit_of[name] for name in side)
+            for side in leaf_bipartitions(candidate)
+        )
+
+        assert topology_module._split_key(adjacency, root_id, bit_of) == expected
+        checked += 1
+    assert checked == 105
+
+
+def _spr_by_definition(start: Topology) -> list[frozenset[frozenset[str]]]:
+    """Every prune-and-regraft, deduplicated on `leaf_bipartitions`, in order.
+
+    The definition `spr_neighbours` implemented before #264, kept here as the
+    oracle for what it implements now: the same candidates in the same order
+    with the same first-seen rule, keyed the slow way.
+    """
+    adjacency, _ = topology_module._to_adjacency(start)
+    seen = {leaf_bipartitions(start)}
+    keys = []
+    for u in list(adjacency):
+        if not isinstance(u, int):
+            continue
+        for v in list(adjacency[u]):
+            remainder, pruned = topology_module._prune(adjacency, u, v)
+            for x, y in topology_module._edges(remainder):
+                grafted, new_id = topology_module._regraft(remainder, pruned, v, x, y)
+                key = leaf_bipartitions(
+                    topology_module._from_adjacency(grafted, new_id)
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                keys.append(key)
+    return keys
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("n_taxa", [5, 7, 9])
+def test_spr_neighbours_are_the_definition_in_the_definition_order(n_taxa: int) -> None:
+    # Order matters as well as membership: a hill climb takes the first of
+    # equally good neighbours, so a faster generator that permuted them would
+    # change which tree a search lands on while every count test passed.
+    start = random_topology(
+        [f"x{i}" for i in range(n_taxa)], np.random.default_rng(n_taxa)
+    )
+
+    generated = [leaf_bipartitions(neighbour) for neighbour in spr_neighbours(start)]
+
+    assert generated == _spr_by_definition(start)
+    assert len(generated) == 2 * (n_taxa - 3) * (2 * n_taxa - 7)

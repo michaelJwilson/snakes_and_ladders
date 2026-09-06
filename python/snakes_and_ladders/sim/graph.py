@@ -100,6 +100,45 @@ class PottsGraph:
         """
         yield from zip(self.edges, self.coupling, strict=True)
 
+    def compressed_adjacency(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The adjacency in compressed-row form: offsets, neighbours, couplings.
+
+        Neighbour ``j`` of node ``i`` sits at ``neighbours[offsets[i]:offsets[i + 1]]``
+        with the coupling on that edge at the same position of ``couplings``,
+        in the graph's edge order from each end -- the same order the
+        list-of-lists adjacency the samplers' oracles walk has, so a kernel
+        reading this consumes its draws in the oracle's order.
+
+        One contiguous array instead of a list of Python lists is the layout
+        rule root ``CLAUDE.md`` states: a neighbour walk is then a stride
+        rather than a pointer chase, and it is what a compiled kernel can take
+        without marshalling per node.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray, np.ndarray]
+            ``offsets`` (``int64``, length ``n_nodes + 1``), ``neighbours``
+            (``int64``) and ``couplings`` (``float64``), the last two of length
+            ``2 * n_edges``.
+        """
+        degree = np.zeros(self.n_nodes, dtype=np.int64)
+        for first, second in self.edges:
+            degree[first] += 1
+            degree[second] += 1
+        offsets = np.zeros(self.n_nodes + 1, dtype=np.int64)
+        np.cumsum(degree, out=offsets[1:])
+        neighbours = np.empty(int(offsets[-1]), dtype=np.int64)
+        couplings = np.empty(int(offsets[-1]), dtype=np.float64)
+        cursor = offsets[:-1].copy()
+        for (first, second), coupling in self.weighted_edges():
+            neighbours[cursor[first]] = second
+            couplings[cursor[first]] = coupling
+            cursor[first] += 1
+            neighbours[cursor[second]] = first
+            couplings[cursor[second]] = coupling
+            cursor[second] += 1
+        return offsets, neighbours, couplings
+
     def is_open_chain(self) -> bool:
         """Whether this graph is a 1-D lattice with an open boundary.
 

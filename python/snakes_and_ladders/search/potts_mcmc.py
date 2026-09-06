@@ -41,6 +41,7 @@ Montanari ch. 2).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -48,6 +49,7 @@ import numpy as np
 
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import PottsGraph
 
 
@@ -232,6 +234,8 @@ def anneal_potts(
     field: np.ndarray,
     schedule: Schedule,
     rng: np.random.Generator,
+    *,
+    backend: Backend = Backend.PYTHON,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -259,6 +263,14 @@ def anneal_potts(
         Source of every draw, the start included. Passed in rather than
         seeded here, for the reason :func:`sample_potts` gives.
 
+    backend : Backend
+        :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` runs the oracle
+        sweep; :data:`~snakes_and_ladders.search.backend.Backend.RUST` runs the
+        extension's, on the same uniforms in the same order. Opt-in rather
+        than default for the reason :mod:`snakes_and_ladders.search.potts_mcmc_rust`
+        gives: the two agree distributionally, not draw for draw, so the
+        default path keeps every committed chain unchanged.
+
     Returns
     -------
     AnnealedPotts
@@ -269,9 +281,9 @@ def anneal_potts(
 
     best_state = state.copy()
     best_energy = float(energies(graph, field, state[None])[0])
+    sweep = _sweep_at(graph, field, neighbours, backend)
     for step in range(schedule.n_steps):
-        beta = 1.0 / schedule(step)
-        _single_site_sweep(state, field, neighbours, rng, beta=beta)
+        sweep(state, rng, 1.0 / schedule(step))
         energy = float(energies(graph, field, state[None])[0])
         if energy < best_energy:
             best_state, best_energy = state.copy(), energy
@@ -341,6 +353,8 @@ def parallel_tempering(
     n_sweeps: int,
     burn_in: int = 0,
     thin: int = 1,
+    *,
+    backend: Backend = Backend.PYTHON,
 ) -> TemperedChains:
     """Replicas at fixed temperatures, exchanging configurations by Metropolis.
 
@@ -372,6 +386,9 @@ def parallel_tempering(
         only the exchange uniforms, so one seeded generator reproduces the run.
     n_sweeps, burn_in, thin : int
         As :func:`sample_potts`, applied per replica.
+    backend : Backend
+        As :func:`anneal_potts`: the oracle sweep by default, the Rust sweep
+        on request, each replica on its own child generator either way.
 
     Returns
     -------
@@ -412,15 +429,10 @@ def parallel_tempering(
     best_index = int(np.argmin(current))
     best, best_energy = states[best_index].copy(), float(current[best_index])
 
+    sweep = _sweep_at(graph, field, neighbours, backend)
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(n_replicas):
-            _single_site_sweep(
-                states[replica],
-                field,
-                neighbours,
-                children[replica],
-                beta=betas[replica],
-            )
+            sweep(states[replica], children[replica], betas[replica])
         current = energies(graph, field, states)
         for pair in range(n_replicas - 1):
             log_ratio = _swap_log_ratio(
@@ -463,6 +475,54 @@ def _adjacency(graph: PottsGraph) -> list[list[tuple[int, float]]]:
         neighbours[first].append((second, coupling))
         neighbours[second].append((first, coupling))
     return neighbours
+
+
+def _sweep_at(
+    graph: PottsGraph,
+    field: np.ndarray,
+    neighbours: list[list[tuple[int, float]]],
+    backend: Backend,
+) -> Callable[[np.ndarray, np.random.Generator, float], None]:
+    """One tempered heat-bath sweep, on the backend the caller named.
+
+    Both closures consume exactly ``n_nodes`` uniforms per sweep from the
+    generator they are handed, so switching backend changes which arithmetic
+    evaluates the conditional and nothing about the stream. Tempering reaches
+    the Rust kernel as the model scaling :func:`tempered` states -- the field
+    and couplings multiplied by ``beta`` -- which is the identity the Python
+    sweep applies to its local field.
+    """
+    if backend is Backend.PYTHON:
+
+        def python_sweep(
+            state: np.ndarray, rng: np.random.Generator, beta: float
+        ) -> None:
+            _single_site_sweep(state, field, neighbours, rng, beta=beta)
+
+        return python_sweep
+    if backend is Backend.RUST:
+        from snakes_and_ladders import oxi_snakes_and_ladders
+
+        offsets, neighbour_index, couplings = graph.compressed_adjacency()
+        contiguous_field = np.ascontiguousarray(field, dtype=np.float64)
+
+        def rust_sweep(
+            state: np.ndarray, rng: np.random.Generator, beta: float
+        ) -> None:
+            draws = np.ascontiguousarray(rng.random(state.shape[0]), dtype=np.float64)
+            oxi_snakes_and_ladders.single_site_sweeps(
+                state,
+                np.ascontiguousarray(beta * contiguous_field),
+                offsets,
+                neighbour_index,
+                np.ascontiguousarray(beta * couplings),
+                draws,
+                1,
+            )
+
+        return rust_sweep
+    msg = f"the heat-bath sweep has no {backend} backend"
+    raise ValueError(msg)
 
 
 def _single_site_sweep(

@@ -269,6 +269,53 @@ def _collect_splits(
     return union
 
 
+def _split_key(
+    adjacency: dict[NodeId, list[NodeId]], root_id: NodeId, bit_of: dict[str, int]
+) -> frozenset[int]:
+    """The bipartition set of an adjacency, as leaf bitmasks, without building a tree.
+
+    :func:`leaf_bipartitions` is the statement of what a topology *is*; this
+    is the same set computed the way a deduplicating generator needs it.
+    ``spr_neighbours`` used to build a ``Node`` tree for every one of the
+    ``O(n^2)`` regraft candidates and then take unions of ``frozenset`` leaf
+    names up every path, which the #264 profile put at 28 of 29 seconds for
+    twenty neighbourhoods at 30 taxa. A leaf set is an ``int`` here, a union
+    is ``|``, and the tree is built only for a candidate that turns out new.
+
+    Each split is canonicalized to the side *not* containing the smallest
+    leaf name -- bit 0 -- so a split and its complement collapse to one entry,
+    exactly as :func:`leaf_bipartitions` does; a test asserts the two agree on
+    every topology of an enumerable leaf set.
+    """
+    full = (1 << len(bit_of)) - 1
+    splits: set[int] = set()
+
+    def visit(node_id: NodeId, parent_id: NodeId | None) -> int:
+        if isinstance(node_id, str):
+            return 1 << bit_of[node_id]
+        mask = 0
+        for child_id in adjacency[node_id]:
+            if child_id == parent_id:
+                continue
+            side = visit(child_id, node_id)
+            splits.add(side if not side & 1 else full ^ side)
+            mask |= side
+        return mask
+
+    visit(root_id, None)
+    return frozenset(splits)
+
+
+def _leaf_bits(adjacency: dict[NodeId, list[NodeId]]) -> dict[str, int]:
+    """Leaf name to bit index, the smallest name at bit 0 (the anchor)."""
+    return {
+        name: bit
+        for bit, name in enumerate(
+            sorted(node_id for node_id in adjacency if isinstance(node_id, str))
+        )
+    }
+
+
 def _to_adjacency(topology: Topology) -> tuple[dict[NodeId, list[NodeId]], int]:
     """Build an undirected adjacency map: leaves keyed by name, internal
     nodes keyed by a fresh ``int`` id starting at 0 for the root.
@@ -390,8 +437,9 @@ def spr_neighbours(topology: Topology) -> Iterator[Topology]:
         the same leaf set, differing from ``topology``. Matches the
         closed-form count ``2 * (n - 3) * (2 * n - 7)``.
     """
-    adjacency, _root_id = _to_adjacency(topology)
-    seen: set[frozenset[frozenset[str]]] = {leaf_bipartitions(topology)}
+    adjacency, root_id = _to_adjacency(topology)
+    bit_of = _leaf_bits(adjacency)
+    seen: set[frozenset[int]] = {_split_key(adjacency, root_id, bit_of)}
 
     for u in list(adjacency):
         if not isinstance(u, int):
@@ -400,12 +448,11 @@ def spr_neighbours(topology: Topology) -> Iterator[Topology]:
             remainder, pruned = _prune(adjacency, u, v)
             for x, y in _edges(remainder):
                 candidate_adjacency, new_id = _regraft(remainder, pruned, v, x, y)
-                candidate = _from_adjacency(candidate_adjacency, new_id)
-                key = leaf_bipartitions(candidate)
+                key = _split_key(candidate_adjacency, new_id, bit_of)
                 if key in seen:
                     continue
                 seen.add(key)
-                yield candidate
+                yield _from_adjacency(candidate_adjacency, new_id)
 
 
 def _prune(

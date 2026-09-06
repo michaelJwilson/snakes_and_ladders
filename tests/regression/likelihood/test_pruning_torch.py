@@ -238,3 +238,35 @@ def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
         finite_diff_grad[i] = (_numpy_ll(plus) - _numpy_ll(minus)) / (2 * _FD_EPS)
 
     assert_allclose(autograd_grad, finite_diff_grad, rtol=_RTOL_GRADIENT)
+
+
+@pytest.mark.oracle
+def test_the_batched_transition_matrices_are_the_scalar_ones_bitwise() -> None:
+    # #264 computes every branch's P(t) in one call. The closed form is
+    # elementwise, so each matrix of the batch must equal the scalar call's
+    # exactly -- `torch.equal`, not a tolerance -- for JC and for a general
+    # rate matrix through `matrix_exp`.
+    lengths = torch.tensor([0.01, 0.1, 0.35, 1.2, 3.0], dtype=torch.float64)
+    rate = torch.tensor(
+        [
+            [-1.1, 0.5, 0.3, 0.3],
+            [0.2, -0.9, 0.4, 0.3],
+            [0.3, 0.4, -1.0, 0.3],
+            [0.3, 0.3, 0.2, -0.8],
+        ],
+        dtype=torch.float64,
+    )
+
+    batched_jc = pruning_torch._transition_probabilities(lengths, 4, None)
+    batched_gtr = pruning_torch._transition_probabilities(lengths, 4, rate)
+
+    assert batched_jc.shape == batched_gtr.shape == (5, 4, 4)
+    for position, length in enumerate(lengths):
+        assert torch.equal(
+            batched_jc[position],
+            pruning_torch._transition_probabilities(length, 4, None),
+        )
+        assert torch.equal(
+            batched_gtr[position],
+            pruning_torch._transition_probabilities(length, 4, rate),
+        )
