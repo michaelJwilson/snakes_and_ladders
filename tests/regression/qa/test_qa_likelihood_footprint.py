@@ -73,6 +73,7 @@ def _balanced(n_taxa: int) -> Node:
     return Node(name="root", branch_length=None, children=tuple(level))
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     "size", MEASURED_SIZES, ids=lambda s: f"{s[0]}taxa_{s[1]}sites"
 )
@@ -90,6 +91,7 @@ def test_the_published_simulation_figure_matches_the_allocator(
     assert measured / simulation_bytes(*size) == pytest.approx(1.0, rel=TOLERANCE)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     "size", MEASURED_SIZES, ids=lambda s: f"{s[0]}taxa_{s[1]}sites"
 )
@@ -106,6 +108,7 @@ def test_the_published_evaluation_figure_matches_the_allocator(
     assert measured / evaluation_bytes(*size) == pytest.approx(1.0, rel=TOLERANCE)
 
 
+@pytest.mark.mathematical
 def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
     """The table reports the worst case, and this is what says so.
 
@@ -119,7 +122,7 @@ def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
         tau = with_uniform_branch_lengths(topology, 0.1)
         alignment = dict(
             simulate_alignment(
-                tau=tau, k=4, pi=pi, seed=1, n_sites=FIXED_SITES
+                tau=tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=FIXED_SITES
             ).alignment
         )
         tracemalloc.start()
@@ -132,6 +135,7 @@ def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
     assert balanced_peak < caterpillar_peak
 
 
+@pytest.mark.structural
 def test_the_declared_maximum_sits_inside_the_memory_requirement() -> None:
     """The bound `ROADMAP.md` §1.2 states, at the corner it states it for.
 
@@ -145,6 +149,7 @@ def test_the_declared_maximum_sits_inside_the_memory_requirement() -> None:
     assert total < MEMORY_BUDGET_BYTES / 10
 
 
+@pytest.mark.edge_case
 def test_the_check_would_fail_on_a_model_missing_a_term() -> None:
     """The tolerance rejects the error it exists to reject.
 

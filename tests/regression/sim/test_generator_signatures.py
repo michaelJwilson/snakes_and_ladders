@@ -158,7 +158,7 @@ def test_no_public_signature_takes_a_seed() -> None:
     parameters keep their `seed` *field*, which is how a run is declared
     reproducible; only the boundary at which it becomes a generator moved.
     """
-    torch_stream = {"sample", "goemans_williamson"}
+    torch_stream = {"sample", "anneal", "optimize", "goemans_williamson"}
     offenders = [
         entry
         for path in sorted(PACKAGE.rglob("*.py"))

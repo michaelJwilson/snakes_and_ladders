@@ -62,7 +62,7 @@ def environment(params: SimulationParams) -> TopologyEnvironment:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return TopologyEnvironment(
@@ -84,7 +84,7 @@ def taxa(params: SimulationParams) -> list[str]:
             tau=params.tau,
             k=params.k,
             pi=params.pi,
-            seed=params.seed,
+            rng=np.random.default_rng(params.seed),
             n_sites=params.n_sites,
         ).alignment
     )
@@ -126,6 +126,7 @@ def _best_seen(environment: TopologyEnvironment, states: tuple[Topology, ...]) -
     return max(environment.score(state) for state in states)
 
 
+@pytest.mark.edge_case
 def test_wrapping_an_untrained_policy_is_not_hill_climbing(
     environment: TopologyEnvironment, traps: list[Topology]
 ) -> None:
@@ -147,6 +148,7 @@ def test_wrapping_an_untrained_policy_is_not_hill_climbing(
     assert any(climbing.greedy(row) != 0 for row in features)
 
 
+@pytest.mark.structural
 def test_epsilon_zero_reproduces_hill_climbing_exactly(
     environment: TopologyEnvironment, traps: list[Topology]
 ) -> None:
@@ -163,6 +165,7 @@ def test_epsilon_zero_reproduces_hill_climbing_exactly(
         assert under_policy.states == under_greedy.states
 
 
+@pytest.mark.mathematical
 def test_an_episode_can_leave_a_local_optimum(
     environment: TopologyEnvironment, traps: list[Topology], maximum: float
 ) -> None:
@@ -200,6 +203,7 @@ def test_an_episode_can_leave_a_local_optimum(
     assert rates[_HIGH_EPSILON] > rates[_LOW_EPSILON], "exploration must pay"
 
 
+@pytest.mark.mathematical
 def test_stopping_at_a_local_optimum_never_escapes(
     environment: TopologyEnvironment, traps: list[Topology], maximum: float
 ) -> None:
@@ -214,6 +218,7 @@ def test_stopping_at_a_local_optimum_never_escapes(
         assert abs(environment.score(trap) - maximum) >= 1e-9
 
 
+@pytest.mark.mathematical
 def test_random_restart_hill_climbing_solves_this_fixture(
     environment: TopologyEnvironment, params: SimulationParams, maximum: float
 ) -> None:

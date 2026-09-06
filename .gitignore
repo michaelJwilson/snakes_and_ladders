@@ -57,3 +57,13 @@ docs/textbook.log
 docs/textbook.out
 docs/textbook.toc
 
+
+# LaTeX build products; only the PDFs are committed
+docs/*.aux
+docs/*.bbl
+docs/*.blg
+docs/*.fdb_latexmk
+docs/*.fls
+docs/*.log
+docs/*.out
+docs/*.toc

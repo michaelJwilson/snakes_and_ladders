@@ -58,6 +58,7 @@ def _collected(selector: str) -> int:
     raise AssertionError(msg)
 
 
+@pytest.mark.edge_case
 def test_the_stress_tier_is_reachable_and_not_empty() -> None:
     # A tier nothing selects is a tier that rots. This is the check that would
     # have caught `stress` being registered but never applied, or applied but
@@ -65,6 +66,7 @@ def test_the_stress_tier_is_reachable_and_not_empty() -> None:
     assert _collected("stress") > 0
 
 
+@pytest.mark.mathematical
 def test_the_ci_tier_excludes_the_stress_tier() -> None:
     # The two selections must partition, or the CI tier silently carries the
     # sizes the budget exists to keep out of it.
@@ -75,6 +77,7 @@ def test_the_ci_tier_excludes_the_stress_tier() -> None:
     assert ci + stress == both
 
 
+@pytest.mark.mathematical
 def test_at_scale_produces_one_case_per_tier() -> None:
     # `at_scale` is what keeps one assertion running at two sizes. If it ever
     # marked both cases or neither, tests would move tiers with no diff to
@@ -88,6 +91,7 @@ def test_at_scale_produces_one_case_per_tier() -> None:
     assert [mark.name for mark in parameters[1].marks] == ["stress"]
 
 
+@pytest.mark.edge_case
 def test_an_unregistered_marker_is_an_error_not_a_silent_deselection() -> None:
     # `--strict-markers` is in `addopts`, so a typo fails at collection. Pinned
     # because the alternative is a test that selects nothing and reports as
@@ -98,6 +102,7 @@ def test_an_unregistered_marker_is_an_error_not_a_silent_deselection() -> None:
     assert "stress:" in config
 
 
+@pytest.mark.mathematical
 @at_scale("size", ci=1, stress=2)
 def test_at_scale_runs_its_body_at_both_sizes(size: int) -> None:
     # The decorator exercised end to end: this test is collected twice, and
@@ -105,6 +110,7 @@ def test_at_scale_runs_its_body_at_both_sizes(size: int) -> None:
     assert size in (1, 2)
 
 
+@pytest.mark.simulated_truth
 def test_the_budget_script_states_both_budgets() -> None:
     # The numbers `DEV.md` documents and the numbers the script measures
     # against have to be the same two, or the report is against a budget
@@ -118,6 +124,7 @@ def test_the_budget_script_states_both_budgets() -> None:
     assert "**10 minutes**" in dev
 
 
+@pytest.mark.structural
 def test_pytest_is_importable_here() -> None:
     # `pytest` is imported for the marker types above; this keeps the import
     # used rather than removed by a linter, and costs nothing.

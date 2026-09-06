@@ -165,6 +165,7 @@ def test_the_value_at_the_stated_minimizer_is_zero(objective: object) -> None:
         assert float(objective(point)) == pytest.approx(0.0, abs=1e-10)  # type: ignore[operator]
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize(
     "objective",
     [Rosenbrock(dimension=3), Rastrigin(dimension=4), Himmelblau()],

@@ -192,10 +192,12 @@ WELL_FORMED = _markdown(
 )
 
 
+@pytest.mark.structural
 def test_a_well_formed_further_work_section_passes() -> None:
     assert structure_problems("n.ipynb", [_cell(_stream("1\n")), WELL_FORMED]) == []
 
 
+@pytest.mark.edge_case
 def test_a_notebook_whose_last_cell_is_not_further_work_is_reported() -> None:
     # The two ways to lack the section: end on code, or end on markdown that
     # is not it. Root `CLAUDE.md` makes the section mandatory, and nothing
@@ -208,6 +210,7 @@ def test_a_notebook_whose_last_cell_is_not_further_work_is_reported() -> None:
         assert "not a markdown cell headed '## Further work'" in problem
 
 
+@pytest.mark.edge_case
 def test_a_further_work_bullet_without_a_ticket_is_reported() -> None:
     # The drift this catches: a line that describes a gap nothing tracks, or
     # -- the case found in all three notebooks -- a sentence about the
@@ -225,6 +228,7 @@ def test_a_further_work_bullet_without_a_ticket_is_reported() -> None:
     assert "Re-execution in CI" in problem
 
 
+@pytest.mark.structural
 def test_the_heading_is_matched_case_insensitively_on_the_second_word() -> None:
     # Root `CLAUDE.md` writes "Further Work" and the notebooks "Further work".
     assert (
@@ -232,6 +236,7 @@ def test_the_heading_is_matched_case_insensitively_on_the_second_word() -> None:
     )
 
 
+@pytest.mark.structural
 def test_every_committed_notebook_passes_the_structural_check() -> None:
     # On the real notebooks, read as JSON so the Jupyter stack is not needed.
     import json

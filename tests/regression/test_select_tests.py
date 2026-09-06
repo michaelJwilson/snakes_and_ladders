@@ -70,7 +70,9 @@ def test_a_leaf_module_selects_only_itself() -> None:
     leaves = [module for module in MODULES if dependents({module}) == {module}]
     assert leaves, "no submodule is a leaf; the selection can save nothing"
     for leaf in leaves:
-        assert _modules_of(select([f"python/snakes_and_ladders/{leaf}/__init__.py"])) == {leaf}
+        assert _modules_of(
+            select([f"python/snakes_and_ladders/{leaf}/__init__.py"])
+        ) == {leaf}
 
 
 @pytest.mark.critical
@@ -212,6 +214,7 @@ def test_the_benchmarked_modules_are_a_subset_of_the_modules() -> None:
     assert set(BENCHMARKED) < set(MODULES)
 
 
+@pytest.mark.structural
 def test_every_always_run_path_names_a_file_that_exists() -> None:
     # The failure this catches has no other symptom worth trusting: an entry
     # renamed on one side only leaves `ALWAYS` naming a path that is gone, and
@@ -224,6 +227,7 @@ def test_every_always_run_path_names_a_file_that_exists() -> None:
     assert missing == []
 
 
+@pytest.mark.structural
 def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
     # `EVERYTHING` decides when the saving is abandoned and the whole suite
     # runs. An entry that matches nothing is a trigger that never fires, so

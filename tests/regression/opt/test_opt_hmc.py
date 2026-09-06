@@ -258,6 +258,7 @@ def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
     assert float(wrapped(point)) == pytest.approx(expected, rel=EXACT)
 
 
+@pytest.mark.mathematical
 def test_the_prior_leaves_the_coordinates_it_is_stated_in_alone() -> None:
     # The prior is isotropic *in unconstrained coordinates*, so the wrapper
     # adds a term and changes no coordinate. An inverse of its own would mean
@@ -305,6 +306,7 @@ def _hand_written_leapfrog(
     return position, velocity
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize(
     ("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (7, 0.13), (1, 0.3)]
 )
@@ -325,6 +327,7 @@ def test_the_composition_reproduces_the_hand_written_leapfrog_exactly(
     assert torch.equal(composed[1], written[1])
 
 
+@pytest.mark.mathematical
 def test_the_yoshida_middle_sub_step_runs_backwards_in_time() -> None:
     # Not a sign error, and not avoidable: no composition of a second-order
     # symmetric method reaches fourth order with positive coefficients. Pinned
@@ -335,6 +338,7 @@ def test_the_yoshida_middle_sub_step_runs_backwards_in_time() -> None:
     assert math.fsum(YOSHIDA_WEIGHTS) == pytest.approx(1.0, abs=1e-15)
 
 
+@pytest.mark.edge_case
 def test_a_composition_that_integrates_the_wrong_interval_is_refused() -> None:
     # The one arithmetic slip a reversibility check does not catch: weights
     # that are a palindrome but do not sum to 1 integrate perfectly reversibly
@@ -346,6 +350,7 @@ def test_a_composition_that_integrates_the_wrong_interval_is_refused() -> None:
         Integrator(name="asymmetric", weights=(0.2, 0.3, 0.5), order=2)
 
 
+@pytest.mark.oracle
 def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
     # The companion of the second-order test above, and it needs that one to
     # be trustworthy: a slope estimator reporting 4 for both integrators is
@@ -386,11 +391,15 @@ class _Counted:
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return self.inner.constrain(theta)
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return self.inner.theta_from(named)
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         self.calls += 1
         return self.inner(theta)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("integrator", [leapfrog, yoshida])
 @pytest.mark.parametrize("n_steps", [1, 3, 20])
 def test_force_evaluations_counts_what_a_trajectory_actually_costs(
@@ -413,6 +422,7 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
     assert counted.calls == integrator.force_evaluations(n_steps)
 
 
+@pytest.mark.simulated_truth
 def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
     # **The measurement the ticket is for, and it is negative.** A fourth-order
     # method pays where the step is limited by *accuracy*; here it is limited
@@ -449,6 +459,7 @@ def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> N
     assert cheapest["yoshida"] >= 60
 
 
+@pytest.mark.mathematical
 def test_the_default_integrator_is_the_one_every_committed_result_used() -> None:
     # A default changed here silently redraws every chain in the repository.
     chain = sample(GAUSSIAN, seed=3, n_samples=40, step_size=0.2, n_steps=6)
@@ -464,6 +475,7 @@ def test_the_default_integrator_is_the_one_every_committed_result_used() -> None
 # --- temperature ------------------------------------------------------------
 
 
+@pytest.mark.mathematical
 def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None:
     # Where the approximation is exact. For a Gaussian target the dynamics
     # are linear, so a chain at temperature T *is* the chain at 1 with its
@@ -500,11 +512,13 @@ def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None
         )
 
 
+@pytest.mark.edge_case
 def test_a_non_positive_temperature_is_refused() -> None:
     with pytest.raises(ValueError, match="temperature must be positive"):
         sample(GAUSSIAN, seed=1, n_samples=10, step_size=0.1, temperature=0.0)
 
 
+@pytest.mark.structural
 def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     # The refactor's guarantee, stated as the plan asked: annealing on a
     # constant schedule at temperature 1 reproduces the untempered chain at
@@ -517,6 +531,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     assert annealed.force_evaluations == 200 * leapfrog.force_evaluations(10)
 
 
+@pytest.mark.edge_case
 def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
     # The final proposals run cold but not at zero, so the chain can leave
     # the best point it found; what is returned is the best, and its value is

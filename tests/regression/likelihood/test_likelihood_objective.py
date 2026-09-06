@@ -582,6 +582,7 @@ def test_fitted_tree_halves_the_merged_root_pair() -> None:
     )
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("which", ["branch_lengths", "substitution_model"])
 def test_the_phylogenetic_objectives_invert_their_own_constraint_map(
     which: str,

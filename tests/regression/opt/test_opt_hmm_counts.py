@@ -122,6 +122,7 @@ def _params(
 FAMILIES = ("poisson", "binomial", "negative_binomial", "beta_binomial")
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("name", FAMILIES)
 def test_the_forward_recursion_matches_enumeration_over_every_path(name: str) -> None:
     truth = _truth(name)
@@ -140,6 +141,7 @@ def test_the_forward_recursion_matches_enumeration_over_every_path(name: str) ->
     assert_allclose(recursed, enumerated.log_likelihood, rtol=1e-11)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("name", FAMILIES)
 def test_the_evidence_of_a_count_model_is_a_probability(name: str) -> None:
     # The bound the Gaussian case had to give up, restored and asserted where
@@ -153,6 +155,7 @@ def test_the_evidence_of_a_count_model_is_a_probability(name: str) -> None:
     assert enumerate_hidden_paths(params, observations).log_likelihood <= 0.0
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("name", FAMILIES)
 def test_the_gradient_matches_central_differences(name: str) -> None:
     observations = simulate_sequences(_params(_truth(name), seed=103)).observations
@@ -165,6 +168,7 @@ def test_the_gradient_matches_central_differences(name: str) -> None:
     assert realized <= 1e-6
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("name", FAMILIES)
 def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum(name: str) -> None:
     # Two fitting algorithms sharing only the model. For the negative binomial
@@ -192,6 +196,7 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum(name: str) -> No
         assert_allclose(estimate[parameter].numpy(), value.numpy(), rtol=1e-3)
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("name", FAMILIES)
 def test_a_known_truth_round_trips_through_the_unconstrained_coordinates(
     name: str,
@@ -214,6 +219,7 @@ def test_a_known_truth_round_trips_through_the_unconstrained_coordinates(
         assert_allclose(estimate[parameter].numpy(), value.numpy(), rtol=1e-13)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("name", FAMILIES)
 def test_the_start_places_each_state_on_the_data_and_breaks_the_symmetry(
     name: str,
@@ -229,6 +235,7 @@ def test_the_start_places_each_state_on_the_data_and_breaks_the_symmetry(
     assert means.max() <= observations.max()
 
 
+@pytest.mark.structural
 def test_a_symmetric_start_collapses_the_states_and_the_asymmetric_one_does_not() -> (
     None
 ):
@@ -258,6 +265,7 @@ def test_a_symmetric_start_collapses_the_states_and_the_asymmetric_one_does_not(
     assert_allclose(asymmetric.mean.numpy(), truth.mean.numpy(), rtol=0.1)
 
 
+@pytest.mark.edge_case
 def test_an_m_step_that_did_not_settle_is_refused_rather_than_returned() -> None:
     # `likelihood/CLAUDE.md`: a number read off iterations that never settled
     # is not an estimate, and a caller cannot tell it from one that is. The
@@ -322,6 +330,7 @@ def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, 
     return covered, total, boundary
 
 
+@pytest.mark.mathematical
 def test_an_interval_stops_existing_at_both_ends_of_the_dispersion_range() -> None:
     # The cheap two-point form of the release sweep below, and the finding it
     # carries: what degrades with the dispersion is not the coverage of the
@@ -339,6 +348,7 @@ def test_an_interval_stops_existing_at_both_ends_of_the_dispersion_range() -> No
     assert middle[0] / middle[1] >= 0.85
 
 
+@pytest.mark.simulated_truth
 @pytest.mark.release
 def test_coverage_against_the_true_dispersion() -> None:
     # The full sweep behind the table in `STATUS.md`. Marked release: 16

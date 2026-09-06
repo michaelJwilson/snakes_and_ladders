@@ -64,7 +64,7 @@ def taxa(params: SimulationParams) -> list[str]:
             tau=params.tau,
             k=params.k,
             pi=params.pi,
-            seed=params.seed,
+            rng=np.random.default_rng(params.seed),
             n_sites=params.n_sites,
         ).alignment
     )
@@ -76,7 +76,7 @@ def environment(params: SimulationParams) -> TopologyEnvironment:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return TopologyEnvironment(
@@ -113,6 +113,7 @@ def _rate(
     )
 
 
+@pytest.mark.mathematical
 def test_every_episode_ends_where_no_move_improves(
     environment: TopologyEnvironment, starts: list[Topology]
 ) -> None:
@@ -142,6 +143,7 @@ def test_every_episode_ends_where_no_move_improves(
     assert all(environment.is_terminal(state) for state in learned_ends)
 
 
+@pytest.mark.mathematical
 def test_an_untrained_policy_is_far_worse_than_greedy(
     environment: TopologyEnvironment, starts: list[Topology], maximum: float
 ) -> None:
@@ -164,6 +166,7 @@ def test_an_untrained_policy_is_far_worse_than_greedy(
     assert abs(rate - _UNTRAINED) < 0.02
 
 
+@pytest.mark.mathematical
 def test_a_trained_policy_is_no_worse_than_hill_climbing(
     environment: TopologyEnvironment, starts: list[Topology], maximum: float
 ) -> None:

@@ -67,6 +67,7 @@ def informal_citations(text: str) -> list[str]:
     return INFORMAL.findall(text)
 
 
+@pytest.mark.structural
 def test_every_label_the_code_cites_is_defined_in_a_document() -> None:
     defined = defined_labels()
     assert defined, "no labels found under docs/tex/"
@@ -80,6 +81,7 @@ def test_every_label_the_code_cites_is_defined_in_a_document() -> None:
     assert dangling == {}, f"labels cited in code that no document defines: {dangling}"
 
 
+@pytest.mark.mathematical
 def test_no_citation_uses_an_unresolvable_form() -> None:
     # A name in parentheses or a quoted title cannot be resolved by the
     # build, so it can go stale without anything noticing -- which is what
@@ -93,6 +95,7 @@ def test_no_citation_uses_an_unresolvable_form() -> None:
     assert offenders == {}, f"citations by name or title rather than label: {offenders}"
 
 
+@pytest.mark.structural
 def test_the_code_actually_cites_the_document() -> None:
     # The two tests above pass on a tree with no citations at all. This one
     # pins that the binding ROADMAP §1.3 describes is in force: the pruning
@@ -104,6 +107,7 @@ def test_the_code_actually_cites_the_document() -> None:
     assert {"eq:pruning", "eq:root", "eq:jc", "eq:reinforce", "eq:return"} <= cited
 
 
+@pytest.mark.edge_case
 def test_the_guard_catches_a_dangling_label_and_an_informal_form(
     tmp_path: Path,
 ) -> None:
@@ -121,6 +125,7 @@ def test_the_guard_catches_a_dangling_label_and_an_informal_form(
     assert informal_citations("Implements ``eq:jc`` of ``sec:phylo``") == []
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("document", DOCUMENTS, ids=lambda path: path.name)
 def test_no_label_is_defined_twice(document: Path) -> None:
     # `latexmk` exits zero on a multiply-defined label (`docs/CLAUDE.md`), so

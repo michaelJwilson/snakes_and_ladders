@@ -41,11 +41,13 @@ def _gaussian() -> GaussianEmission:
     return GaussianEmission(MEAN, SCALE, FLOOR)
 
 
+@pytest.mark.structural
 def test_both_families_satisfy_the_emission_protocol() -> None:
     assert isinstance(CategoricalEmission(MATRIX), EmissionFamily)
     assert isinstance(_gaussian(), EmissionFamily)
 
 
+@pytest.mark.mathematical
 def test_a_categorical_family_scores_a_symbol_as_its_matrix_entry() -> None:
     observations = torch.tensor([[0, 3, 1], [2, 2, 0]])
 
@@ -55,6 +57,7 @@ def test_a_categorical_family_scores_a_symbol_as_its_matrix_entry() -> None:
     assert_allclose(scored, expected, rtol=1e-15)
 
 
+@pytest.mark.oracle
 def test_the_gaussian_density_matches_the_closed_form() -> None:
     # Against the expression written out, not against another call into the
     # same code: `1 / (sigma sqrt(2 pi)) exp(-(y - mu)^2 / 2 sigma^2)`.
@@ -77,6 +80,7 @@ def test_the_gaussian_density_matches_the_closed_form() -> None:
     assert_allclose(scored, expected, rtol=1e-13)
 
 
+@pytest.mark.mathematical
 def test_a_categorical_score_is_a_probability_and_a_gaussian_one_is_a_density() -> None:
     # The place the discrete assumption was load-bearing. A categorical score
     # is bounded above by zero; a Gaussian one is not, and a test asserting
@@ -93,6 +97,7 @@ def test_a_categorical_score_is_a_probability_and_a_gaussian_one_is_a_density() 
     assert float(narrow.log_density(torch.tensor([0.0]))[0, 0]) > 0.0
 
 
+@pytest.mark.mathematical
 def test_the_categorical_m_step_is_the_normalized_expected_counts() -> None:
     rng = np.random.default_rng(11)
     observations = torch.as_tensor(rng.integers(0, 4, size=(5, 7)))
@@ -114,6 +119,7 @@ def test_the_categorical_m_step_is_the_normalized_expected_counts() -> None:
     assert (step.at_boundary, step.iterations, step.residual) == (False, 0, 0.0)
 
 
+@pytest.mark.mathematical
 def test_the_gaussian_m_step_is_the_posterior_weighted_mean_and_variance() -> None:
     # Checked against the closed form directly rather than only by a
     # monotonically increasing likelihood, which is a strictly stronger
@@ -133,6 +139,7 @@ def test_the_gaussian_m_step_is_the_posterior_weighted_mean_and_variance() -> No
     assert_allclose(fitted.scale.numpy(), np.sqrt(variance), rtol=1e-13)
 
 
+@pytest.mark.edge_case
 def test_a_state_collapsed_onto_one_observation_is_refused_not_clamped() -> None:
     # Clamping and returning normally is the failure this exists to prevent:
     # the caller would receive a point estimate at a degenerate optimum, and
@@ -148,6 +155,7 @@ def test_a_state_collapsed_onto_one_observation_is_refused_not_clamped() -> None
         _gaussian().reestimate(observations, posterior)
 
 
+@pytest.mark.edge_case
 def test_the_gaussian_likelihood_grows_without_bound_as_a_state_collapses() -> None:
     # The pathology exhibited rather than described. With a mean sitting on an
     # observation, the log-density at that observation is -log(sigma) plus a
@@ -171,6 +179,7 @@ def test_the_gaussian_likelihood_grows_without_bound_as_a_state_collapses() -> N
     assert_allclose(steps, np.full(steps.shape, math.log(10.0)), rtol=1e-12)
 
 
+@pytest.mark.mathematical
 def test_the_variance_floor_is_derived_from_the_data_and_scales_with_it() -> None:
     # `s**2 / n**2`: the spacing a state occupying a neighbourhood of the data
     # cannot fall below. Both scalings are asserted, since a floor that
@@ -186,6 +195,7 @@ def test_the_variance_floor_is_derived_from_the_data_and_scales_with_it() -> Non
     assert pooled_variance_floor(doubled) < floor / 3.0
 
 
+@pytest.mark.edge_case
 def test_a_floor_cannot_be_derived_without_a_scale_to_derive_it_from() -> None:
     with pytest.raises(ValueError, match="at least 2 observations"):
         pooled_variance_floor(np.array([1.0]))
@@ -193,6 +203,7 @@ def test_a_floor_cannot_be_derived_without_a_scale_to_derive_it_from() -> None:
         pooled_variance_floor(np.full(10, 2.5))
 
 
+@pytest.mark.edge_case
 def test_each_family_refuses_an_observation_outside_its_support() -> None:
     categorical = CategoricalEmission(MATRIX)
     categorical.validate(np.array([0, 3]))
@@ -205,6 +216,7 @@ def test_each_family_refuses_an_observation_outside_its_support() -> None:
         gaussian.validate(np.array([0.0, np.inf]))
 
 
+@pytest.mark.mathematical
 def test_each_family_says_what_distinguishes_its_states() -> None:
     # Aligning a Gaussian fit by anything but the mean would let two states
     # with different means look identical; aligning a categorical one by a
@@ -213,6 +225,7 @@ def test_each_family_says_what_distinguishes_its_states() -> None:
     assert_allclose(_gaussian().alignment_key().numpy(), MEAN.reshape(-1, 1))
 
 
+@pytest.mark.structural
 def test_a_categorical_draw_reproduces_the_declared_row_frequencies() -> None:
     # Monte Carlo standard error at 40000 draws from one row is at most
     # sqrt(0.25 / 40000) = 0.0025, so 0.01 is four of those.
@@ -225,6 +238,7 @@ def test_a_categorical_draw_reproduces_the_declared_row_frequencies() -> None:
     assert_allclose(frequencies, MATRIX[0], atol=0.01)
 
 
+@pytest.mark.structural
 def test_a_gaussian_draw_reproduces_the_declared_moments() -> None:
     # Standard error of the mean at 40000 draws is 1.25 / 200 = 0.00625 for
     # the wider state; 0.03 is under five of those, and the same bound covers
@@ -240,6 +254,7 @@ def test_a_gaussian_draw_reproduces_the_declared_moments() -> None:
         assert_allclose(block.std(ddof=1), SCALE[state], atol=0.03)
 
 
+@pytest.mark.edge_case
 def test_a_gaussian_family_refuses_parameters_it_cannot_be() -> None:
     with pytest.raises(ValueError, match="same shape"):
         GaussianEmission(np.array([0.0, 1.0]), np.array([1.0]), FLOOR)
@@ -274,10 +289,12 @@ def _negative_binomial() -> NegativeBinomialEmission:
     return NegativeBinomialEmission(NB_DISPERSION, NB_MEAN)
 
 
+@pytest.mark.structural
 def test_the_count_family_satisfies_the_emission_protocol() -> None:
     assert isinstance(_negative_binomial(), EmissionFamily)
 
 
+@pytest.mark.structural
 def test_a_dispersion_of_one_is_the_geometric_distribution_exactly() -> None:
     # An equality, not a tolerance: at r = 1 the two lgamma terms cancel
     # identically and what is left is log(p) + y log(1 - p). A tolerance here
@@ -293,6 +310,7 @@ def test_a_dispersion_of_one_is_the_geometric_distribution_exactly() -> None:
         assert float((scored - geometric).abs().max()) == 0.0
 
 
+@pytest.mark.mathematical
 def test_the_poisson_limit_is_approached_at_the_rate_the_expansion_predicts() -> None:
     # The tolerance is *derived* from the truncation rather than chosen. The
     # deviation from the Poisson log-pmf is O(1 / r), so what is asserted is
@@ -326,6 +344,7 @@ def test_the_poisson_limit_is_approached_at_the_rate_the_expansion_predicts() ->
     assert_allclose(halvings, np.full(len(halvings), 2.0), rtol=0.02)
 
 
+@pytest.mark.mathematical
 def test_the_drawn_moments_match_the_mean_variance_relation() -> None:
     # `Var = mu + mu**2 / r` is what makes this a count model rather than a
     # Poisson with a free parameter, so it is checked against the relation
@@ -349,6 +368,7 @@ def test_the_drawn_moments_match_the_mean_variance_relation() -> None:
         )
 
 
+@pytest.mark.mathematical
 def test_the_count_m_step_returns_a_stationary_point_of_the_weighted_likelihood() -> (
     None
 ):
@@ -372,6 +392,7 @@ def test_the_count_m_step_returns_a_stationary_point_of_the_weighted_likelihood(
     assert step.iterations > 0
 
 
+@pytest.mark.oracle
 def test_the_count_m_step_agrees_with_a_brute_force_grid_search() -> None:
     # The second, independent check the ticket asks for: a grid search shares
     # no root-finding with the solve, so agreement is evidence rather than the
@@ -401,6 +422,7 @@ def test_the_count_m_step_agrees_with_a_brute_force_grid_search() -> None:
     assert weighted_log_likelihood(dispersion) >= weighted_log_likelihood(best)
 
 
+@pytest.mark.edge_case
 def test_data_that_is_not_overdispersed_reaches_the_bound_and_says_so() -> None:
     # The flat-likelihood hazard, exhibited. Poisson counts carry no
     # overdispersion, so the maximum in `r` is at infinity; the solve returns
@@ -425,6 +447,7 @@ def test_data_that_is_not_overdispersed_reaches_the_bound_and_says_so() -> None:
         )
 
 
+@pytest.mark.edge_case
 def test_overdispersed_data_recovers_its_dispersion_and_does_not_flag() -> None:
     # The paired half of the check above: a guard that flagged everything
     # would pass that test and mean nothing.
@@ -440,6 +463,7 @@ def test_overdispersed_data_recovers_its_dispersion_and_does_not_flag() -> None:
     assert_allclose(float(step.emissions.mean[0]), 10.0, rtol=0.05)
 
 
+@pytest.mark.edge_case
 def test_the_dispersion_bound_is_derived_from_the_counts_and_the_sample() -> None:
     # `mu sqrt(W / 2)`: where the overdispersion `mu**2 / r` falls below the
     # sampling noise on a variance. Both scalings are asserted, since a bound
@@ -457,6 +481,7 @@ def test_the_dispersion_bound_is_derived_from_the_counts_and_the_sample() -> Non
         identifiable_dispersion_bound(0.0, 4000.0)
 
 
+@pytest.mark.mathematical
 def test_a_count_family_distinguishes_its_states_by_two_moments() -> None:
     # Mean *and* variance, unlike the Gaussian family's mean alone. The
     # dispersion is the parameter this family exists for, so two states
@@ -474,6 +499,7 @@ def test_a_count_family_distinguishes_its_states_by_two_moments() -> None:
     assert float((tied_means[0] - tied_means[1]).abs().sum()) > 0.0
 
 
+@pytest.mark.edge_case
 def test_a_count_family_refuses_what_is_not_a_count() -> None:
     family = _negative_binomial()
     family.validate(np.array([0, 3, 17]))
@@ -487,6 +513,7 @@ def test_a_count_family_refuses_what_is_not_a_count() -> None:
         NegativeBinomialEmission([1.0, 2.0], [1.0])
 
 
+@pytest.mark.mathematical
 def test_the_textbook_parameterization_is_accepted_at_the_boundary() -> None:
     # `(r, p)` is the form a fixture or a reference states, `(r, mu)` the form
     # the M step profiles cleanly in. Converting at the edge keeps one
@@ -508,6 +535,7 @@ TRIALS = np.array([12, 12])
 POISSON_MEAN = np.array([4.0, 9.0])
 
 
+@pytest.mark.structural
 def test_the_four_count_families_bracket_equidispersion() -> None:
     # One assertion, and it is the reason the other three families exist.
     binomial = BinomialEmission(TRIALS, [0.3, 0.6])
@@ -524,6 +552,7 @@ def test_the_four_count_families_bracket_equidispersion() -> None:
     assert bool((beta_binomial.variance > beta_binomial.mean).all())
 
 
+@pytest.mark.mathematical
 def test_a_binomial_over_one_trial_is_bernoulli() -> None:
     # An equality up to the arithmetic: at n = 1 the three lgamma terms are
     # lgamma(2), lgamma(y + 1) and lgamma(2 - y), which cancel to zero for
@@ -539,6 +568,7 @@ def test_a_binomial_over_one_trial_is_bernoulli() -> None:
     assert float((scored - bernoulli).abs().max()) <= 1e-15
 
 
+@pytest.mark.mathematical
 def test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform() -> None:
     # `BetaBinomial(n, 1, 1)` puts equal mass on every one of the n + 1
     # outcomes. Known from outside this repository, and exact.
@@ -552,6 +582,7 @@ def test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform() -> None:
     assert_allclose(float(torch.exp(scored).sum()), 1.0, rtol=1e-14)
 
 
+@pytest.mark.mathematical
 def test_the_beta_binomial_approaches_the_binomial_as_it_concentrates() -> None:
     # The second approached limit, and the tolerance is derived the same way
     # the Poisson one is: the deviation is O(1 / (a + b)), so what is asserted
@@ -585,6 +616,7 @@ def test_the_beta_binomial_approaches_the_binomial_as_it_concentrates() -> None:
     assert_allclose(halvings, np.full(len(halvings), 2.0), rtol=0.02)
 
 
+@pytest.mark.structural
 def test_each_count_family_reproduces_its_own_mean_variance_relation() -> None:
     # Every one of these has a closed form for both moments, so the simulated
     # draws are checked against the relation and not against another call.
@@ -611,6 +643,7 @@ def test_each_count_family_reproduces_its_own_mean_variance_relation() -> None:
             assert_allclose(drawn.var(ddof=1), variance, atol=NB_VARIANCE_TOLERANCE)
 
 
+@pytest.mark.oracle
 def test_the_closed_form_count_m_steps_are_the_weighted_mean() -> None:
     rng = np.random.default_rng(37)
     counts = torch.as_tensor(rng.integers(0, 13, size=(3, 60)).astype(float))
@@ -631,6 +664,7 @@ def test_the_closed_form_count_m_steps_are_the_weighted_mean() -> None:
         assert (step.converged, step.at_boundary, step.iterations) == (True, False, 0)
 
 
+@pytest.mark.mathematical
 def test_the_beta_binomial_m_step_settles_and_is_a_stationary_point() -> None:
     # Validated as an optimization. Minka's fixed point was tried first and
     # rejected on measurement: monotone but linearly convergent, it was still
@@ -667,6 +701,7 @@ def test_the_beta_binomial_m_step_settles_and_is_a_stationary_point() -> None:
         assert weighted(float(fitted.alpha[0]), float(fitted.beta[0]) * scale) <= best
 
 
+@pytest.mark.mathematical
 def test_data_with_no_overdispersion_drives_the_concentration_to_its_bound() -> None:
     # The beta-binomial's flat-likelihood hazard is the negative binomial's,
     # one family over: as `a + b` grows the family becomes a binomial, so
@@ -701,6 +736,7 @@ def test_data_with_no_overdispersion_drives_the_concentration_to_its_bound() -> 
     assert min(fractions) >= 0.30
 
 
+@pytest.mark.edge_case
 def test_the_concentration_bound_is_derived_from_the_trials_and_the_sample() -> None:
     assert_allclose(identifiable_concentration_bound(12.0, 4000.0), 11.0 * 2000.0**0.5)
     assert_allclose(
@@ -713,6 +749,7 @@ def test_the_concentration_bound_is_derived_from_the_trials_and_the_sample() -> 
         identifiable_concentration_bound(1.0, 4000.0)
 
 
+@pytest.mark.edge_case
 def test_the_bounded_families_refuse_a_count_above_their_trials() -> None:
     for family in (
         BinomialEmission(TRIALS, [0.3, 0.6]),

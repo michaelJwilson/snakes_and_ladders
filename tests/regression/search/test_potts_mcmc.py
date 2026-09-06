@@ -266,6 +266,7 @@ def _tempered_exact_distribution(
     return index, probability
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     # The consistency check the model itself provides: the coupling absorbs
@@ -283,6 +284,7 @@ def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     assert np.abs(scaled - expected).max() == 0.0
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("move", list(PottsMove))
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
@@ -299,7 +301,7 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
         graph,
         WITH_FIELD,
         move,
-        SEED,
+        np.random.default_rng(SEED),
         SWEEPS,
         burn_in=SWEEPS // 10,
         thin=THINNING[move],
@@ -312,17 +314,26 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     assert chi_square_p_value(observed, probability * SWEEPS) > SIGNIFICANCE
 
 
+@pytest.mark.edge_case
 def test_a_non_positive_temperature_is_refused() -> None:
     # At zero the heat bath is an argmin and the chain is a descent that
     # samples nothing; a negative temperature inverts the model.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     with pytest.raises(ValueError, match="temperature must be positive"):
-        sample_potts(graph, NO_FIELD, PottsMove.SINGLE_SITE, SEED, 10, temperature=0.0)
+        sample_potts(
+            graph,
+            NO_FIELD,
+            PottsMove.SINGLE_SITE,
+            np.random.default_rng(SEED),
+            10,
+            temperature=0.0,
+        )
     with pytest.raises(ValueError, match="temperature must be positive"):
         tempered(graph, NO_FIELD, -1.0)
 
 
+@pytest.mark.oracle
 def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not() -> (
     None
 ):
@@ -344,12 +355,17 @@ def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not(
     ground = float(minimum_frustrated_edges(graph))  # |J| = 1
     schedule = Exponential(2.0, 0.05, 200)
 
-    annealed = [anneal_potts(graph, field, schedule, seed) for seed in range(20)]
+    annealed = [
+        anneal_potts(graph, field, schedule, np.random.default_rng(seed))
+        for seed in range(20)
+    ]
     constant = [
-        anneal_potts(graph, field, Constant(1.0, 200), seed) for seed in range(20)
+        anneal_potts(graph, field, Constant(1.0, 200), np.random.default_rng(seed))
+        for seed in range(20)
     ]
     descended = [
-        iterated_conditional_modes(graph, field, 2, seed)[1] for seed in range(20)
+        iterated_conditional_modes(graph, field, 2, np.random.default_rng(seed))[1]
+        for seed in range(20)
     ]
 
     for result in annealed:
@@ -386,6 +402,7 @@ def _replica_p_values(
     return p_values
 
 
+@pytest.mark.structural
 def test_every_replica_is_drawn_from_its_own_tempered_distribution() -> None:
     # The oracle the plan named: the joint target is a product of tempered
     # marginals, so with exchanges *on* each replica must still pass the
@@ -398,7 +415,13 @@ def test_every_replica_is_drawn_from_its_own_tempered_distribution() -> None:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     run = parallel_tempering(
-        graph, WITH_FIELD, LADDER, SEED, SWEEPS, burn_in=SWEEPS // 10, thin=5
+        graph,
+        WITH_FIELD,
+        LADDER,
+        np.random.default_rng(SEED),
+        SWEEPS,
+        burn_in=SWEEPS // 10,
+        thin=5,
     )
 
     assert run.states.shape == (SWEEPS, len(LADDER), graph.n_nodes)
@@ -406,6 +429,7 @@ def test_every_replica_is_drawn_from_its_own_tempered_distribution() -> None:
     assert min(_replica_p_values(run, graph, WITH_FIELD)) > SIGNIFICANCE
 
 
+@pytest.mark.edge_case
 def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -> None:
     # The negative case, paired with the positive one above so the two are
     # distinguishable. An exchange that ignores (beta_i - beta_j)(E_i - E_j)
@@ -419,13 +443,20 @@ def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     run = parallel_tempering(
-        graph, WITH_FIELD, LADDER, SEED, SWEEPS, burn_in=SWEEPS // 10, thin=5
+        graph,
+        WITH_FIELD,
+        LADDER,
+        np.random.default_rng(SEED),
+        SWEEPS,
+        burn_in=SWEEPS // 10,
+        thin=5,
     )
 
     assert bool((run.swap_acceptance == 1.0).all())
     assert max(_replica_p_values(run, graph, WITH_FIELD)) < SIGNIFICANCE
 
 
+@pytest.mark.structural
 def test_replicas_draw_from_separate_streams_and_one_seed_reproduces_them() -> None:
     # Two replicas at the *same* temperature with no field would be identical
     # chains if they shared a stream, and the whole point would be lost while
@@ -433,17 +464,24 @@ def test_replicas_draw_from_separate_streams_and_one_seed_reproduces_them() -> N
     # seed still reproduces the run bitwise.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
-    first = parallel_tempering(graph, NO_FIELD, (1.0, 1.0), 3, 200)
-    second = parallel_tempering(graph, NO_FIELD, (1.0, 1.0), 3, 200)
+    first = parallel_tempering(
+        graph, NO_FIELD, (1.0, 1.0), np.random.default_rng(3), 200
+    )
+    second = parallel_tempering(
+        graph, NO_FIELD, (1.0, 1.0), np.random.default_rng(3), 200
+    )
 
     assert not np.array_equal(first.states[:, 0], first.states[:, 1])
     assert np.array_equal(first.states, second.states)
 
 
+@pytest.mark.mathematical
 def test_the_best_configuration_is_the_lowest_energy_any_replica_visited() -> None:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
-    run = parallel_tempering(graph, WITH_FIELD, LADDER, SEED, 300)
+    run = parallel_tempering(
+        graph, WITH_FIELD, LADDER, np.random.default_rng(SEED), 300
+    )
 
     visited = energies(graph, WITH_FIELD, run.states.reshape(-1, graph.n_nodes))
     assert run.best_energy == pytest.approx(
@@ -452,15 +490,17 @@ def test_the_best_configuration_is_the_lowest_energy_any_replica_visited() -> No
     assert run.best_energy <= visited.min() + 1e-12
 
 
+@pytest.mark.edge_case
 def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     with pytest.raises(ValueError, match="at least two temperatures"):
-        parallel_tempering(graph, NO_FIELD, (1.0,), SEED, 10)
+        parallel_tempering(graph, NO_FIELD, (1.0,), np.random.default_rng(SEED), 10)
     with pytest.raises(ValueError, match="must be positive"):
-        parallel_tempering(graph, NO_FIELD, (1.0, 0.0), SEED, 10)
+        parallel_tempering(graph, NO_FIELD, (1.0, 0.0), np.random.default_rng(SEED), 10)
 
 
+@pytest.mark.simulated_truth
 def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
     # The comparison the ticket asked for, on the instance where restarts can
     # lose: the planted Viana-Bray spin glass, 60 sites at mean degree 4 and
@@ -489,17 +529,22 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
         best["restarts"].append(
             min(
                 iterated_conditional_modes(
-                    graph, field, 2, 5000 * seed + r, max_sweeps=4
+                    graph, field, 2, np.random.default_rng(5000 * seed + r), max_sweeps=4
                 )[1]
                 for r in range(budget // 4)
             )
         )
         best["anneal"].append(
-            anneal_potts(graph, field, Exponential(2.0, 0.05, budget), seed).energy
+            anneal_potts(
+                graph,
+                field,
+                Exponential(2.0, 0.05, budget),
+                np.random.default_rng(seed),
+            ).energy
         )
         best["tempering"].append(
             parallel_tempering(
-                graph, field, ladder, seed, budget // len(ladder)
+                graph, field, ladder, np.random.default_rng(seed), budget // len(ladder)
             ).best_energy
         )
 

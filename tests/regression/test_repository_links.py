@@ -97,7 +97,7 @@ def test_the_guard_fails_on_a_link_to_the_old_name() -> None:
     file is itself scanned, so a literal one here would fail the check above --
     which is the guard working, but on its own test.
     """
-    former = "snakes_and_ladders"
+    former = "phylo"
     assert _wrong_links(f"see https://github.com/{OWNER}/{former}/pull/49") == [former]
     assert _wrong_links(f"https://github.com/{OWNER}/{REPOSITORY}/pull/49") == []
     # A different owner is a different project, not this one under an old name.

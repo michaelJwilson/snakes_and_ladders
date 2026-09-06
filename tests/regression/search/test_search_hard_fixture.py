@@ -62,7 +62,7 @@ def alignment(params: SimulationParams) -> dict[str, np.ndarray]:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return dict(dataset.alignment)
@@ -102,6 +102,7 @@ def _endpoints(environment: TopologyEnvironment, seed: int) -> list[Topology]:
     ]
 
 
+@pytest.mark.oracle
 def test_the_generating_topology_is_the_enumerated_maximum(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:
@@ -112,6 +113,7 @@ def test_the_generating_topology_is_the_enumerated_maximum(
     assert environment.score(params.tau) == _enumerated_maximum(environment, alignment)
 
 
+@pytest.mark.oracle
 def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     alignment: dict[str, np.ndarray],
 ) -> None:
@@ -120,6 +122,7 @@ def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     assert len(list(enumerate_topologies(sorted(alignment)))) == 945
 
 
+@pytest.mark.mathematical
 def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:
@@ -144,6 +147,7 @@ def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
     assert abs(float(np.median(shortfalls)) - _NNI_MEDIAN_GAP) < 10.0
 
 
+@pytest.mark.mathematical
 def test_every_nni_failure_stops_at_a_genuine_local_optimum(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:
@@ -159,6 +163,7 @@ def test_every_nni_failure_stops_at_a_genuine_local_optimum(
     assert all(environment.is_terminal(state) for state in failures)
 
 
+@pytest.mark.simulated_truth
 def test_spr_reaches_the_optimum_where_nni_does_not(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:

@@ -64,14 +64,11 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
   rejected preferentially in the tails. The energy error tracks that and the
   acceptance rate does not, so a sampler here reports both.
 
-- **A negative log-likelihood is not a log posterior.** Reading a bare
-  likelihood as a density is a posterior under an improper flat prior, which
-  for most models is not normalizable, and no diagnostic inside a sampler can
-  notice. `hmc.WithGaussianPrior` makes the prior an explicit declaration by
-  the caller rather than an assumption by the sampler. The same fault one
-  step over: tempering a likelihood is a power posterior, not a temperature
-  in the physical sense, and a schedule serves both without saying which —
-  the consumer says.
+- **A negative log-likelihood is not a log posterior.** Read as a density it
+  is a posterior under an improper flat prior, often not normalizable, and no
+  sampler diagnostic can notice; `hmc.WithGaussianPrior` makes the prior the
+  caller's declaration. Tempering it is a power posterior, not a physical
+  temperature; the consumer says which it means.
 
 - **No application imports.** Nothing here may import from `snakes_and_ladders.sim`,
   `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`. This is asserted by

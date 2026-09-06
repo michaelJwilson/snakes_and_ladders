@@ -231,7 +231,7 @@ def anneal_potts(
     graph: PottsGraph,
     field: np.ndarray,
     schedule: Schedule,
-    seed: int,
+    rng: np.random.Generator,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -255,14 +255,14 @@ def anneal_potts(
         External field, shape ``(n_states,)``.
     schedule : Schedule
         Temperature per sweep. Its length is the budget.
-    seed : int
-        Seed for ``np.random.default_rng``; the start is drawn from it.
+    rng : np.random.Generator
+        Passed in rather than seeded here (`sim/CLAUDE.md`, issue #240); the
+        start is drawn from it.
 
     Returns
     -------
     AnnealedPotts
     """
-    rng = np.random.default_rng(seed)
     field = np.asarray(field, dtype=float)
     state = rng.integers(0, int(field.shape[0]), size=graph.n_nodes)
     neighbours = _adjacency(graph)
@@ -337,7 +337,7 @@ def parallel_tempering(
     graph: PottsGraph,
     field: np.ndarray,
     temperatures: tuple[float, ...],
-    seed: int,
+    rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
     thin: int = 1,
@@ -351,8 +351,8 @@ def parallel_tempering(
     Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
 
     **The replicas must not share a stream and must be reproducible from one
-    seed.** One generator is seeded and spawns a child per replica; the parent
-    then draws only the exchange uniforms. Sharing one stream would correlate
+    generator.** The generator passed in spawns a child per replica and then
+    draws only the exchange uniforms. Sharing one stream would correlate
     the replicas, which is the whole point lost while every diagnostic looks
     healthy.
 
@@ -367,8 +367,8 @@ def parallel_tempering(
         The ladder, hottest to coldest or in any order; at least two, all
         positive. The stationary distribution does not depend on the order,
         only which pairs are adjacent for exchange.
-    seed : int
-        Seed for the parent ``np.random.default_rng``.
+    rng : np.random.Generator
+        The parent generator; its children drive the replicas.
     n_sweeps, burn_in, thin : int
         As :func:`sample_potts`, applied per replica.
 
@@ -397,7 +397,7 @@ def parallel_tempering(
     field = np.asarray(field, dtype=float)
     n_replicas = len(temperatures)
     betas = [1.0 / temperature for temperature in temperatures]
-    parent = np.random.default_rng(seed)
+    parent = rng
     children = parent.spawn(n_replicas)
     n_states = int(field.shape[0])
     states = np.stack(

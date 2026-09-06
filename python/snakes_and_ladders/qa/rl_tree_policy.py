@@ -35,7 +35,12 @@ from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 from snakes_and_ladders.qa.figure import QAFigure, latex_integer
 from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
-from snakes_and_ladders.qa.style import INK_MUTED, ONE_COLUMN_WIDE, letter_style, series_style
+from snakes_and_ladders.qa.style import (
+    INK_MUTED,
+    ONE_COLUMN_WIDE,
+    letter_style,
+    series_style,
+)
 from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
@@ -89,7 +94,7 @@ def _environment(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)

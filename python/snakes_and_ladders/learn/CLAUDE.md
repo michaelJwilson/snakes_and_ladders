@@ -89,9 +89,9 @@ demonstrated rather than asserted.
   greedy run is not a budget-matched baseline: greedy stops after a few
   decisions and leaves the rest of the budget unspent. Restarting it until
   the budget is gone is the honest comparison, and on the issue #177 fixture
-  it reaches the enumerated maximum from every start at 60 decisions, where
-  the best epsilon measured reaches 0.908 (issue #194). A result stated
-  against single-run greedy alone overstates itself.
+  it reaches the enumerated maximum from every start where the best epsilon
+  measured does not (issue #194; the numbers are in `STATUS.md`). A result
+  stated against single-run greedy alone overstates itself.
 
 ## Framework
 
@@ -110,24 +110,10 @@ exception for convenience.
 
 ## Relaxations
 
-A relaxation of a discrete objective must reduce to it exactly at the corners
-of the simplex, checked over every configuration of an enumerable instance
-rather than spot-checked. One that disagrees at a one-hot is a different
-model, and nothing measured against it transfers.
-
-Under a factorized distribution the expected discrete score equals the relaxed
-score at the marginals, for any objective carrying at most one factor per site
-per term. That multilinearity is the boundary, not the shape of the graph: a
-term reusing one site breaks it, which is what a doubled bond does. It follows
-that the maximum sits at a vertex, so a relaxation adds no optimum the
-discrete problem lacks, and what a relaxed search loses it loses to the ascent.
-
-A gradient estimator's bias is measured against the exact gradient, never
-assumed small, because enumeration supplies that gradient at these sizes.
-Averaging more samples cuts variance and leaves bias untouched, so the two are
-reported apart.
-
-## What is not here yet
-
-PPO and a learned state-value critic; `docs/tex`'s reinforcement-learning
-section states the theory they are built against.
+A relaxation must reduce to the discrete objective exactly at every corner of
+the simplex, checked over every configuration of an enumerable instance. Under
+a factorized distribution the expected discrete score equals the relaxed score
+at the marginals whenever no term reuses a site — multilinearity, not graph
+shape, is the boundary — so the maximum sits at a vertex and a relaxation adds
+no optimum the discrete problem lacks. A gradient estimator's bias is measured
+against the exact gradient enumeration supplies, never assumed small.
