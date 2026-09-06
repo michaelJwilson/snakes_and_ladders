@@ -418,6 +418,39 @@ worst where the correlations it neglects are longest-ranged, and it recovers
 on both sides. Messages that do not settle raise rather than returning a
 number.
 
+**The tree was audited against the runtime-optimization opportunities, and
+five of the ten lines had a measurement behind them**
+([#287](https://github.com/michaelJwilson/snakes_and_ladders/issues/287)). Profiling
+first (`tests/benchmarks/profile_hotpaths.py` plus a Potts-side probe) ranked
+the Python-level loops by self time, and the top of the ranking was not where a
+reader would guess: the SPR neighbourhood at 30 taxa spent 28 of 29 seconds
+building a `Node` tree and unioning `frozenset`s per candidate *to
+deduplicate*; a 6-taxon hill climb charged 8,730 scalar transition-matrix
+calls to 970 likelihood evaluations; a fifth of a REINFORCE run was Python
+arithmetic per action. Each change is pinned to the code it replaces, and no
+default sampler path moved:
+
+| rule | finding | change | pin | realized |
+| --- | --- | --- | --- | --- |
+| profile first | five loops above 20% of their run's self time | the five below | — | — |
+| layout | adjacency as a list of lists in every kernel | `PottsGraph.compressed_adjacency()`, one contiguous CSR | equal to the list adjacency in order, 4 graphs | exact |
+| compiled backends | descent sweep 6 µs/site in Python | `numba` kernel, default for `iterated_conditional_modes` | labelling and energy **bitwise**, 6 seeds | **7x** at 32x32, 3 labels |
+| FFI boundary | annealing and tempering on the Python sweep | `backend=Backend.RUST` runs the extension's sweep on the same uniforms | per-replica chi-square, both backends | tempering **5.8x** at 100 nodes, **7.8x** at 32x32; annealing 2.3x (the per-sweep energy now dominates) |
+| inlining / vectorization | one `P(t)` call per child per node | every branch's matrix in one call | `torch.equal` per branch for JC; GTR to 2.9e-13 (torch's batched `matrix_exp` is a different kernel); JC log-likelihood bitwise | hill climb **3.99 s to 2.32 s**; one 20-taxa evaluation unchanged at 12 ms |
+| inlining / vectorization | `_deltas` per action, 126,000 calls per 50 updates | `features` as one NumPy pass | `array_equal` to `_deltas`, 200 states, deviation 0.0 | REINFORCE **1.51 s to 1.00 s** |
+| profile first (algorithmic) | tree built and split-set unioned per SPR candidate | dedup on leaf bitmasks from the adjacency; tree built only for a new key | same neighbours in the same order as the definition, n = 5, 7, 9; key equals `leaf_bipartitions` on all 105 six-leaf topologies | **1.41 s to 0.59 s** at 30 taxa |
+| cache, branches, allocation, double buffering | no measurement separating them from the above | none | — | recorded as not measured |
+
+Two things the table does not say. The Rust-backed tempering chain agreed with
+the Python one **draw for draw** on the enumerable instance — identical
+p-values and exchange acceptances — which is the case `potts_mcmc_rust.py`
+says cannot be relied on, and it is not: one draw across a threshold moved by
+an ulp would part them, so the backend stays opt-in. And the batched
+transition matrices leave the JC log-likelihood bitwise unchanged while the
+gradient moves by 1.5e-11 absolute, autograd summing the same terms in a
+different order; the finite-difference check that pins the gradient is
+unaffected.
+
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 **The interface is model-agnostic, and that is measured rather than asserted.**

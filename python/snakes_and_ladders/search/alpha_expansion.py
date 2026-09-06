@@ -31,6 +31,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
 from snakes_and_ladders.sim.graph import PottsGraph
 
@@ -253,6 +254,7 @@ def iterated_conditional_modes(
     rng: np.random.Generator,
     *,
     max_sweeps: int = 200,
+    backend: Backend = Backend.NUMBA,
 ) -> tuple[np.ndarray, float]:
     """Single-site descent: the baseline alpha expansion has to beat.
 
@@ -268,6 +270,16 @@ def iterated_conditional_modes(
     distinction matters because this is meant to be a *fair* baseline, and a
     baseline made slow by its implementation is not one.
 
+    ``backend`` chooses the sweep's implementation and nothing else. The
+    :data:`~snakes_and_ladders.search.backend.Backend.NUMBA` kernel in
+    :mod:`snakes_and_ladders.search.kernels` walks the compressed-row adjacency and
+    returns the labelling the Python loop returns **bitwise** -- same update,
+    same index order, same first-minimum tie rule -- which is what lets it be
+    the default: the audit behind it (#264) measured the Python sweep at
+    the top of the descent's self time, and the labelling a caller sees does
+    not move. :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` is the oracle
+    that pins it.
+
     Returns
     -------
     tuple[np.ndarray, float]
@@ -275,6 +287,23 @@ def iterated_conditional_modes(
     """
     values = _site_field(graph, field_values)
     labelling = rng.integers(0, n_states, size=graph.n_nodes)
+
+    if backend is Backend.NUMBA:
+        from snakes_and_ladders.search.kernels import icm_sweeps
+
+        offsets, neighbour_index, couplings = graph.compressed_adjacency()
+        icm_sweeps(
+            labelling,
+            np.ascontiguousarray(values, dtype=np.float64),
+            offsets,
+            neighbour_index,
+            couplings,
+            max_sweeps,
+        )
+        return labelling, energy(graph, values, labelling)
+    if backend is not Backend.PYTHON:
+        msg = f"iterated conditional modes has no {backend} backend"
+        raise ValueError(msg)
 
     neighbours: list[list[tuple[int, float]]] = [[] for _ in range(graph.n_nodes)]
     for (first, second), coupling in graph.weighted_edges():
