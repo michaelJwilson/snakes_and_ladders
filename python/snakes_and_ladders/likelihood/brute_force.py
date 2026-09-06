@@ -3,8 +3,8 @@
 Exponential in the number of internal nodes, and deliberately so: per
 ``likelihood/CLAUDE.md``, "correctness comes from brute force, not from
 another backend... two backends agreeing proves nothing if both are wrong."
-Sums eq. (site-independence) directly, over every joint assignment of
-internal-node states, without eq. (pruning)'s conditional-independence
+Sums ``eq:site-independence`` of ``docs/tex/textbook.tex`` directly, over every
+joint assignment of internal-node states, without ``eq:pruning``'s conditional-independence
 factorization. Shares no traversal or accumulation code with
 ``snakes_and_ladders.likelihood.pruning`` -- only the already-independently-validated
 substitution model, ``jc_transition_probabilities``.

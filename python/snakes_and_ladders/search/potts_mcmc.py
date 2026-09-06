@@ -22,8 +22,7 @@ These are samplers, not optimizers. They are validated by the distribution
 they converge to, and nothing here claims to find a ground state; that belongs
 to the classical baseline suite, which has an oracle for it.
 
-See ``docs/tex/textbook.tex``, "Problem Statement: Potts Models in an
-External Field" (Newman &
+See ``docs/tex/textbook.tex``, ``sec:potts`` (Newman &
 Barkema chs. 4 and 6 for both algorithms and for Sokal's windowing; Mezard &
 Montanari ch. 2).
 """
