@@ -90,6 +90,11 @@ FIGURES: tuple[FigureSpec, ...] = (
         ("--params", f"{FIXTURES}/simulation_params.yaml"),
     ),
     FigureSpec(
+        "likelihood_footprint",
+        "phylo.qa.likelihood_footprint",
+        (),
+    ),
+    FigureSpec(
         "sim_problem_sizes",
         "phylo.qa.sim_problem_sizes",
         (

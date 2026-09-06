@@ -29,6 +29,7 @@
 //! path that touches `PyResult`/`PyErr` fails to link outside of a real
 //! Python process.
 
+use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -50,6 +51,31 @@ fn jc_transition_probabilities(t: f64, k: usize) -> Vec<f64> {
     p
 }
 
+/// An alignment as it crosses the FFI boundary: one row per leaf, plus the
+/// index saying which row each node reads.
+///
+/// The three fields travel together and are meaningless apart, so they are
+/// one argument rather than three. `states` is row-major `n_rows * n_sites`
+/// with entries in `[0, k)`; a flat slice rather than a `Vec<Vec<i64>>` so
+/// the caller's NumPy buffer can be borrowed instead of copied element by
+/// element -- at `n = 200, L = 11 000` the nested form boxes 2.2 million
+/// Python integers on the way in, which is the whole of the gap issue #232
+/// measured. `n_sites` is passed rather than inferred, so a leaf whose row
+/// is genuinely empty is a length mismatch rather than an unnoticed
+/// zero-site alignment. `row` has one entry per node -- the row of `states`
+/// holding that node's observations, or `-1` for an internal node -- and the
+/// indirection is what lets `states` carry one row per *leaf* rather than
+/// one per node, which at 200 taxa is half the array.
+#[derive(Clone, Copy)]
+pub struct LeafObservations<'a> {
+    /// Row-major `n_rows * n_sites` observed states, one row per leaf.
+    pub states: &'a [i64],
+    /// Row width of `states`.
+    pub n_sites: usize,
+    /// Per node, its row of `states`, or `-1` if the node is internal.
+    pub row: &'a [i64],
+}
+
 /// Total log-likelihood of an alignment under the k-state Jukes-Cantor model,
 /// computed by Felsenstein pruning -- the Rust port of
 /// `phylo.likelihood.pruning.log_likelihood`. Plain Rust (no PyO3 types) so
@@ -64,10 +90,7 @@ fn jc_transition_probabilities(t: f64, k: usize) -> Vec<f64> {
 ///   wrapper) must supply nodes in post-order, children before parents, so
 ///   a single forward pass over `0..n_nodes` suffices with no recursion.
 ///   The tree's root is `n_nodes - 1`.
-/// - `leaf_states`: length `n_nodes`; for a leaf, the observed state per
-///   site (length `n_sites`, entries in `[0, k)`); for an internal node, an
-///   empty vector (unused). `n_sites` is inferred from the first non-empty
-///   entry.
+/// - `observations`: the alignment, as [`LeafObservations`].
 /// - `k`: number of states.
 /// - `pi`: root state distribution, length `k`.
 /// - `rescale`: whether to rescale partial likelihoods per node, log of the
@@ -85,11 +108,16 @@ fn jc_transition_probabilities(t: f64, k: usize) -> Vec<f64> {
 pub fn pruning_log_likelihood_impl(
     branch_length: &[f64],
     children: &[Vec<usize>],
-    leaf_states: &[Vec<i64>],
+    observations: LeafObservations<'_>,
     k: usize,
     pi: &[f64],
     rescale: bool,
 ) -> Result<f64, String> {
+    let LeafObservations {
+        states: leaf_states,
+        n_sites,
+        row: leaf_row,
+    } = observations;
     let n_nodes = children.len();
     if branch_length.len() != n_nodes {
         return Err(format!(
@@ -97,9 +125,18 @@ pub fn pruning_log_likelihood_impl(
             branch_length.len()
         ));
     }
-    if leaf_states.len() != n_nodes {
+    if leaf_row.len() != n_nodes {
         return Err(format!(
-            "leaf_states has length {}, expected {n_nodes} (one per node)",
+            "leaf_row has length {}, expected {n_nodes} (one per node)",
+            leaf_row.len()
+        ));
+    }
+    if n_sites == 0 {
+        return Err("n_sites is 0, expected at least one site".to_string());
+    }
+    if !leaf_states.len().is_multiple_of(n_sites) {
+        return Err(format!(
+            "leaf_states has length {}, not a multiple of n_sites {n_sites}",
             leaf_states.len()
         ));
     }
@@ -113,11 +150,7 @@ pub fn pruning_log_likelihood_impl(
         return Err("tree has no nodes".to_string());
     }
 
-    let n_sites = leaf_states
-        .iter()
-        .find(|states| !states.is_empty())
-        .map(|states| states.len())
-        .ok_or_else(|| "no leaf provided any observed states".to_string())?;
+    let n_rows = leaf_states.len() / n_sites;
 
     let mut partials: Vec<Vec<f64>> = Vec::with_capacity(n_nodes);
     let mut log_scale = vec![0.0f64; n_sites];
@@ -125,13 +158,14 @@ pub fn pruning_log_likelihood_impl(
     for idx in 0..n_nodes {
         let is_leaf = children[idx].is_empty();
         let partial = if is_leaf {
-            let states = &leaf_states[idx];
-            if states.len() != n_sites {
+            let row = leaf_row[idx];
+            if row < 0 || row as usize >= n_rows {
                 return Err(format!(
-                    "leaf at node {idx} has {} observed states, expected {n_sites}",
-                    states.len()
+                    "leaf at node {idx} has leaf_row {row}, expected [0, {n_rows})"
                 ));
             }
+            let start = row as usize * n_sites;
+            let states = &leaf_states[start..start + n_sites];
             let mut partial = vec![0.0f64; n_sites * k];
             for (s, &state) in states.iter().enumerate() {
                 if state < 0 || state as usize >= k {
@@ -173,6 +207,15 @@ pub fn pruning_log_likelihood_impl(
                 }
             }
 
+            // A child's partial is read exactly once, by this parent, and the
+            // post-order guarantees no later node reads it. Releasing it here
+            // holds one partial per *open* node rather than one per node: at
+            // `n = 200, L = 11 000, k = 4` that is the difference between 140
+            // MB live and a few MB.
+            for &child_idx in &children[idx] {
+                partials[child_idx] = Vec::new();
+            }
+
             if rescale {
                 for s in 0..n_sites {
                     let row = &mut partial[s * k..s * k + k];
@@ -208,20 +251,42 @@ pub fn pruning_log_likelihood_impl(
     Ok(total_log_likelihood)
 }
 
-/// PyO3 boundary for [`pruning_log_likelihood_impl`]: same arguments and
-/// return value, `Err` mapped to a Python `ValueError`. See the free
-/// function's docs for the algorithm and argument shapes.
+/// PyO3 boundary for [`pruning_log_likelihood_impl`], `Err` mapped to a
+/// Python `ValueError`. See the free function's docs for the algorithm and
+/// argument shapes.
+///
+/// **Arrays are borrowed, not copied.** The previous binding took
+/// `Vec<Vec<i64>>`, so PyO3 built a Python integer per observed state on the
+/// way in. That cost grows with `n * L` while the kernel's advantage does
+/// not, which is why the caller-visible speedup decayed from 1.8x at
+/// `n = 10, L = 1 000` to 1.0x at `n = 200, L = 11 000` (issue #232).
+/// `rust-numpy` hands over the buffer itself.
 #[pyfunction]
-#[pyo3(signature = (branch_length, children, leaf_states, k, pi, rescale))]
+#[pyo3(signature = (branch_length, children, leaf_states, leaf_row, k, pi, rescale))]
 pub fn pruning_log_likelihood(
-    branch_length: Vec<f64>,
+    branch_length: PyReadonlyArray1<'_, f64>,
     children: Vec<Vec<usize>>,
-    leaf_states: Vec<Vec<i64>>,
+    leaf_states: PyReadonlyArray2<'_, i64>,
+    leaf_row: Vec<i64>,
     k: usize,
-    pi: Vec<f64>,
+    pi: PyReadonlyArray1<'_, f64>,
     rescale: bool,
 ) -> PyResult<f64> {
-    pruning_log_likelihood_impl(&branch_length, &children, &leaf_states, k, &pi, rescale)
+    // `as_slice` succeeds only for a C-contiguous array, so a borrow with the
+    // wrong stride is impossible rather than merely unlikely -- the same
+    // contract `sampling::sample_rows` states, and the wrapper normalizes with
+    // `ascontiguousarray` before calling, which is free when the array already
+    // is one.
+    let n_sites = leaf_states.shape()[1];
+    let leaf_states = leaf_states.as_slice()?;
+    let branch_length = branch_length.as_slice()?;
+    let pi = pi.as_slice()?;
+    let observations = LeafObservations {
+        states: leaf_states,
+        n_sites,
+        row: &leaf_row,
+    };
+    pruning_log_likelihood_impl(branch_length, &children, observations, k, pi, rescale)
         .map_err(PyValueError::new_err)
 }
 
@@ -263,10 +328,16 @@ mod tests {
         // node 0 = leaf A, node 1 = leaf B, node 2 = root.
         let branch_length = vec![t_a, t_b, 0.0];
         let children = vec![vec![], vec![], vec![0usize, 1usize]];
-        let leaf_states = vec![vec![0i64], vec![1i64], vec![]];
+        let leaf_states = vec![0i64, 1i64];
+        let leaf_row = vec![0i64, 1, -1];
         let pi = vec![0.5, 0.5];
 
-        let ll = pruning_log_likelihood_impl(&branch_length, &children, &leaf_states, k, &pi, true)
+        let observations = LeafObservations {
+            states: &leaf_states,
+            n_sites: 1,
+            row: &leaf_row,
+        };
+        let ll = pruning_log_likelihood_impl(&branch_length, &children, observations, k, &pi, true)
             .unwrap();
 
         let p_a = jc_transition_probabilities(t_a, k);
@@ -288,11 +359,16 @@ mod tests {
     fn test_rejects_pi_with_wrong_length() {
         let branch_length = vec![0.1, 0.0];
         let children = vec![vec![], vec![0usize]];
-        let leaf_states = vec![vec![0i64], vec![]];
+        let leaf_states = vec![0i64];
+        let observations = LeafObservations {
+            states: &leaf_states,
+            n_sites: 1,
+            row: &[0i64, -1],
+        };
         let err = pruning_log_likelihood_impl(
             &branch_length,
             &children,
-            &leaf_states,
+            observations,
             4,
             &[0.5, 0.5],
             true,
@@ -305,11 +381,16 @@ mod tests {
     fn test_rejects_negative_branch_length() {
         let branch_length = vec![-0.1, 0.2, 0.0];
         let children = vec![vec![], vec![], vec![0usize, 1usize]];
-        let leaf_states = vec![vec![0i64], vec![1i64], vec![]];
+        let leaf_states = vec![0i64, 1i64];
+        let observations = LeafObservations {
+            states: &leaf_states,
+            n_sites: 1,
+            row: &[0i64, 1, -1],
+        };
         let err = pruning_log_likelihood_impl(
             &branch_length,
             &children,
-            &leaf_states,
+            observations,
             2,
             &[0.5, 0.5],
             true,
