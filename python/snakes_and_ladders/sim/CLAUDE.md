@@ -1,8 +1,5 @@
 # sim/
 
-Generation: data drawn from a declared model under a declared generator, with
-the truth that produced it retained beside it. Nothing here performs inference.
-
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file too — and every docstring, comment and commit message
 in this module. It is referenced here, never restated. What follows is local,
@@ -11,23 +8,18 @@ produces them or in `STATUS.md`, and the module docstrings say which.
 
 ## What lives here
 
-Substitution models on a tree; a general undirected graph carrying a per-edge
-coupling, the lattices and random graphs built as constructed cases of it, and
-the samplers that draw spin configurations on them; hidden state paths and
-their emissions; the factor graph the three of those are shapes of, with its
-adapters, and the coupled spatio-sequential model that joins them, with its
-simulator; the package's single source of Newick; and `canonical.py`, the
-problem instances whose answer is known from outside this repository.
+Generation: data drawn from a declared model under a declared generator, with
+the truth that produced it retained for validation. Nothing here performs (autodiff)
+inference.
 
 ## Local rules
 
 - **A generator, never a seed.** Randomness enters as a generator object
   passed in. Seeding inside a call makes every draw of an ensemble identical,
-  which looks like a passing test over many draws and is one draw. That
-  mistake has been made here, so the signature is what prevents it.
+  which looks like a passing test over many draws and is one draw.
 
-- **Validate against the analytic result, never against our own likelihood.**
-  Where a model has a closed form the technical document states it, and the
+- **Validate against analytic results**
+  Where a model has closed form properties the technical document states it, and the
   simulator is checked against that. A validation test states its tolerance
   and runs across a range of sizes, because the tolerance is a Monte Carlo
   bound and a single size does not exercise it.
