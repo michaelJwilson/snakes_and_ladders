@@ -1,7 +1,7 @@
 # likelihood/
 
 Evaluators: what a model says about data, on a tree, a graph or a chain. This
-is the hottest path in the project, since every proposed move costs at least
+is one of the hottest path in the project, since every proposed move costs at least
 one evaluation and search proposes many.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
@@ -11,23 +11,15 @@ and is principle: the numbers behind each rule live with the code that
 produces them, and the module docstrings say which.
 
 ## What lives here
-
-The pruning recursion and its backends, an exact and an approximate evaluator
-for the Potts MRF, Fitch parsimony as a second criterion over the same
-topology, path enumeration for the HMM, and the adapter that presents any of
-them to `snakes_and_ladders.opt`'s fitting interface. That adapter lives here and not in
-`opt/`, because `opt/` may import no application module — the dependency runs
-application to infrastructure, never back.
+Likelihood evaluations for the supported problems, particularly with autodiff/pytorch.
 
 ## Local rules
 
 - **The reference implementation is the oracle and it stays.** Every
-  accelerated backend is pinned against it. Deleting the slow path to "clean
-  up" removes the only thing that says the fast path is right.
+  new/accelerated backend is pinned against it. Never delete the slow path that
+  removes this simplified reference.
 
-- **Correctness comes from brute force, not from another backend.** Direct
-  marginalization over the hidden states is the test. Two backends agreeing
-  proves nothing if both are wrong.
+- **Correctness comes from brute force and validation against truth, not from another backend.**
 
 - **Cross-device agreement is a relative tolerance keyed on the lowest
   precision in the comparison.** It is relative because a log-likelihood is a
