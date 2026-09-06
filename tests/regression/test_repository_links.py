@@ -33,8 +33,8 @@ REPOSITORY = "snakes_and_ladders"
 _LINK = re.compile(rf"github\.com/{OWNER}/([A-Za-z0-9_.-]+)")
 
 #: Where a link can be written. Binary artifacts and generated output are
-#: excluded: `docs/draft.pdf` is a build product, and a link inside it comes
-#: from `docs/tex/`, which is covered.
+#: excluded: `docs/paper.pdf` and `docs/textbook.pdf` are build products, and
+#: a link inside them comes from `docs/tex/`, which is covered.
 SUFFIXES = (".md", ".toml", ".tex", ".py", ".rst", ".yml", ".yaml", ".sh", ".bib")
 
 
