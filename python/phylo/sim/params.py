@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import yaml
 
+from phylo.fixtures import load_declared
 from phylo.sim.tree import Node
 
 _REQUIRED_FIELDS = frozenset({"seed", "n_sites", "tolerance", "k", "pi", "tau"})
@@ -72,12 +72,7 @@ def load_simulation_params(path: Path) -> SimulationParams:
         If a required field is missing, or ``pi`` does not have shape (k,)
         and sum to 1.
     """
-    raw = yaml.safe_load(path.read_text())
-
-    missing = _REQUIRED_FIELDS - raw.keys()
-    if missing:
-        msg = f"{path}: missing required field(s) {sorted(missing)}"
-        raise ValueError(msg)
+    raw = load_declared(path, _REQUIRED_FIELDS)
 
     k = int(raw["k"])
     pi = np.asarray(raw["pi"], dtype=np.float64)

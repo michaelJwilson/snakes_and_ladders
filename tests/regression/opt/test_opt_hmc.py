@@ -32,6 +32,8 @@ from phylo.opt.hmc import (
 )
 from phylo.opt.potts import PottsObjective, PottsParams, simulate_chains
 
+from tests._scale import stress_only
+
 EXACT = 1e-13
 
 
@@ -136,6 +138,10 @@ def test_the_chain_recovers_an_analytic_gaussian() -> None:
     )
 
 
+@stress_only(
+    "the second moment needs pooled 2000-draw chains; a shorter run "
+    "estimates the spread badly and would assert less than it claims"
+)
 def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
     # The Potts chain's `theta` is two-dimensional at two states, so the
     # posterior can be integrated on a grid and there is a reference that is
@@ -170,6 +176,10 @@ def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
     )
 
 
+@stress_only(
+    "the bias is in the spread, which needs the same chain lengths "
+    "as the test above before it is measurable at all"
+)
 def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
     # The failure this module's `energy_error` exists for, and the reason
     # acceptance rate is not enough on its own. Measured against quadrature:
