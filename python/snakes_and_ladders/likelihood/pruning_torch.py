@@ -86,8 +86,14 @@ def branch_lengths_from_tree(
 
 
 def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
-    """Closed-form JC P(t), ``eq:jc`` of ``docs/tex/textbook.tex``, differentiable in ``t``."""
-    decay = torch.exp(-k * t / (k - 1))
+    """Closed-form JC P(t), ``eq:jc`` of ``docs/tex/textbook.tex``, differentiable in ``t``.
+
+    ``t`` may be a scalar or a vector of branch lengths; the result carries
+    one ``(k, k)`` matrix per entry of ``t`` in its leading dimensions. The
+    arithmetic is elementwise, so a matrix taken from the batched result is
+    the matrix the scalar call returns, bitwise -- a test pins it.
+    """
+    decay = torch.exp(-k * t / (k - 1))[..., None, None]
     off_diagonal = (1.0 - decay) / k
     diagonal = 1.0 / k + (k - 1) / k * decay
     eye = torch.eye(k, dtype=t.dtype, device=t.device)
@@ -97,9 +103,18 @@ def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
 def _transition_probabilities(
     t: torch.Tensor, k: int, rate_matrix: torch.Tensor | None
 ) -> torch.Tensor:
+    """``P(t)`` for every branch length in ``t``, shape ``(*t.shape, k, k)``.
+
+    One call per likelihood evaluation rather than one per branch: the
+    hill-climb profile behind #264 charged 8,730 scalar calls per 970
+    evaluations to this function, a Python-level call per child per node that
+    root ``CLAUDE.md``'s inlining rule names. Batched, the closed form is one
+    ``exp`` over the branch vector and the matrix exponential one batched
+    ``matrix_exp``.
+    """
     if rate_matrix is None:
         return _jc_transition_probabilities(t, k)
-    result: torch.Tensor = torch.linalg.matrix_exp(rate_matrix * t)
+    result: torch.Tensor = torch.linalg.matrix_exp(rate_matrix * t[..., None, None])
     return result
 
 
@@ -180,6 +195,8 @@ def log_likelihood(
 
     n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
     log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
+    # Every branch's transition matrix at once, indexed by branch_order.
+    transitions = _transition_probabilities(branch_lengths, k, rate_matrix)
 
     def _post_order(node: Node) -> torch.Tensor:
         nonlocal log_scale
@@ -193,9 +210,8 @@ def log_likelihood(
 
         partial = torch.ones((n_sites, k), dtype=dtype, device=device)
         for child in node.children:
-            t = branch_lengths[index[child.name]]
             child_partial = _post_order(child)
-            transition = _transition_probabilities(t, k, rate_matrix)
+            transition = transitions[index[child.name]]
             # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
             partial = partial * (child_partial @ transition.T)
 
