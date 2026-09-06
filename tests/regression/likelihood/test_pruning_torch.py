@@ -241,11 +241,14 @@ def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
 
 
 @pytest.mark.oracle
-def test_the_batched_transition_matrices_are_the_scalar_ones_bitwise() -> None:
-    # #264 computes every branch's P(t) in one call. The closed form is
-    # elementwise, so each matrix of the batch must equal the scalar call's
-    # exactly -- `torch.equal`, not a tolerance -- for JC and for a general
-    # rate matrix through `matrix_exp`.
+def test_the_batched_transition_matrices_are_the_scalar_ones() -> None:
+    # #264 computes every branch's P(t) in one call. The JC closed form is
+    # elementwise, so each matrix of the batch equals the scalar call's
+    # bitwise -- `torch.equal`, not a tolerance. `matrix_exp` is not: torch
+    # picks its Pade degree per input norm and its batched kernel is a
+    # different code path, so the GTR matrices agree to 2.9e-13 absolute
+    # (measured, stable across runs) and are held to 1e-12 rather than to
+    # equality that would assert something false.
     lengths = torch.tensor([0.01, 0.1, 0.35, 1.2, 3.0], dtype=torch.float64)
     rate = torch.tensor(
         [
@@ -266,7 +269,5 @@ def test_the_batched_transition_matrices_are_the_scalar_ones_bitwise() -> None:
             batched_jc[position],
             pruning_torch._transition_probabilities(length, 4, None),
         )
-        assert torch.equal(
-            batched_gtr[position],
-            pruning_torch._transition_probabilities(length, 4, rate),
-        )
+        scalar_gtr = pruning_torch._transition_probabilities(length, 4, rate)
+        assert float((batched_gtr[position] - scalar_gtr).abs().max()) < 1e-12
