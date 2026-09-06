@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import yaml
 
+from phylo.fixtures import load_declared
 from phylo.numerics_rust import sample_rows
 
 _REQUIRED_FIELDS = frozenset(
@@ -97,12 +97,7 @@ def load_hmm_params(path: Path) -> HmmParams:
         parameters, or a distribution has the wrong shape or does not sum
         to 1.
     """
-    raw = yaml.safe_load(path.read_text())
-
-    missing = _REQUIRED_FIELDS - raw.keys()
-    if missing:
-        msg = f"{path}: missing required field(s) {sorted(missing)}"
-        raise ValueError(msg)
+    raw = load_declared(path, _REQUIRED_FIELDS)
 
     n_states = int(raw["n_states"])
     n_symbols = int(raw["n_symbols"])

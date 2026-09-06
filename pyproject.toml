@@ -202,6 +202,7 @@ markers = [
     "edge_case: checked at a boundary, or that an unusable input is refused",
     "structural: checked against an invariant this repository chose -- the import graph, a protocol, a documented contract, or a guard's own trigger",
     "critical: gates early; fast, and its failure invalidates what runs after it",
+    "stress: same claim at a size the 5-minute CI budget cannot hold; run with `-m stress` inside the 10-minute developer budget (DEV.md CI & Performance Budget)",
 ]
 
 [tool.coverage.run]

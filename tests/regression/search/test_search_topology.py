@@ -42,7 +42,17 @@ from phylo.search.topology import (
 from phylo.sim.newick import count_topologies, to_newick, validate_unrooted_newick
 from phylo.sim.tree import Node
 
-EXHAUSTIVE_SIZES = (5, 6, 7)
+# Sizes at which exhaustive enumeration is the oracle. The per-pull-request
+# budget holds 5 and 6; 7 costs about 8 s across the two neighbourhood tests
+# below and is the size that shows the count formula holding as the
+# neighbourhood grows, so it runs under `stress` (`DEV.md`, CI & Performance
+# Budget). The claim asserted is identical at every size.
+EXHAUSTIVE_SIZES = (5, 6)
+STRESS_SIZES = (7,)
+EXHAUSTIVE_PARAMS = [
+    *(pytest.param(size) for size in EXHAUSTIVE_SIZES),
+    *(pytest.param(size, marks=pytest.mark.stress) for size in STRESS_SIZES),
+]
 
 
 def _enumerate_rooted(taxa: tuple[str, ...]) -> Iterator[Node]:
@@ -96,7 +106,9 @@ def _all_unrooted(n_taxa: int) -> tuple[Topology, ...]:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_taxa", [*EXHAUSTIVE_SIZES, 8])
+@pytest.mark.parametrize(
+    "n_taxa", [*EXHAUSTIVE_PARAMS, pytest.param(8, marks=pytest.mark.stress)]
+)
 def test_enumeration_matches_count_topologies(n_taxa: int) -> None:
     topologies = _all_unrooted(n_taxa)
     assert len(topologies) == count_topologies(n_taxa - 1)
@@ -134,7 +146,7 @@ def _assert_valid_neighbourhood(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_taxa", EXHAUSTIVE_SIZES)
+@pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_nni_neighbour_count_and_validity(n_taxa: int) -> None:
     expected = 2 * (n_taxa - 3)
     for topology in _all_unrooted(n_taxa):
@@ -142,7 +154,7 @@ def test_nni_neighbour_count_and_validity(n_taxa: int) -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("n_taxa", EXHAUSTIVE_SIZES)
+@pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_spr_neighbour_count_and_validity(n_taxa: int) -> None:
     expected = 2 * (n_taxa - 3) * (2 * n_taxa - 7)
     for topology in _all_unrooted(n_taxa):
@@ -150,7 +162,7 @@ def test_spr_neighbour_count_and_validity(n_taxa: int) -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.parametrize("n_taxa", EXHAUSTIVE_SIZES)
+@pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_nni_neighbours_are_symmetric(n_taxa: int) -> None:
     neighbour_keys = {
         leaf_bipartitions(t): {leaf_bipartitions(n) for n in nni_neighbours(t)}
@@ -164,7 +176,7 @@ def test_nni_neighbours_are_symmetric(n_taxa: int) -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.parametrize("n_taxa", EXHAUSTIVE_SIZES)
+@pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_nni_neighbours_are_spr_neighbours(n_taxa: int) -> None:
     for topology in _all_unrooted(n_taxa):
         nni_keys = {leaf_bipartitions(n) for n in nni_neighbours(topology)}

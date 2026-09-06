@@ -150,6 +150,39 @@ spanning a factor of 30
 ([#148](https://github.com/michaelJwilson/phylo/pull/148)). The pulley
 principle and rescaled/unrescaled agreement are checked besides.
 
+**The Rust backend returned nothing at the declared scale, and now returns
+2.5x.** Measured against the NumPy oracle end to end, it was **1.8x** at 10
+taxa by 1,000 sites and **1.00x** at 200 by 11,000 — the top of the range
+`ROADMAP.md` §1.2 declares. Two causes, and both were invisible in the
+benchmark cells that existed, which sat at 4 and 8 taxa. The binding took
+nested Python lists, so PyO3 built one integer object per observed state: 2.2
+million of them at the top of the range, a cost growing with `n x L` while the
+kernel's advantage does not. And the recursion held every node's partial
+likelihood for the whole computation, 140 MB where the oracle needs 21. The
+alignment now crosses as one borrowed array and a partial is released when its
+parent has consumed it, giving **1.7x** at 20 taxa by 11,000 sites and
+**2.5x** at 200, with peak memory down to 22.6 MB. The backend is still under
+the 3x bar a CPU port is now held to: the remaining cost is the kernel itself,
+which loops over states scalar-wise where the oracle reaches BLAS, and the
+site-parallel recursion is the data-parallel case the roadmap sends to the GPU
+rather than to a second CPU port.
+
+**The memory requirement is settled.** The simulator retains every node's
+states, `(2n - 1) x L x 8` bytes, and pruning retains one partial likelihood
+per open node, `(2n - 2) x L x k x 8` on a caterpillar — the deepest tree on
+its leaves, so the worst case, and the topology at which `O(n x L x k)` is
+tight rather than loose. At 100 taxa by 11,000 sites that is **87.2 MB**, and
+at the declared maximum of 1,000 by 11,000 it is **879 MB**: a factor of **20**
+inside the 16 GB requirement. A balanced tree of the same size costs strictly
+less, which is what makes the figure a bound.
+
+Both terms are published as arithmetic over the arrays' shapes rather than as a
+sampled peak, because a `tracemalloc` figure does not survive a change of
+machine — an earlier draft published one and CI regenerated a different table.
+The regression suite carries the measurement instead, pinning every published
+cell against the allocator's own count: realized agreement **2.5%** at the
+smallest cell and **0.3%** at the two larger ones, against a 5% band.
+
 **Device dispatch: declared, CPU-only.** Selection prefers CUDA, then
 Metal/MPS, then CPU, and the cross-device tolerance is stated where the
 roadmap promised it — relative, and keyed on the lowest precision in the
@@ -571,7 +604,7 @@ would need more replicates than the figure runs, and none is claimed here.
 | Precise state-sequence decoding | **Not started** — no Viterbi decoder (issue #175) |
 | Parity with exact oracles on small `n` | **Met** for tree search against exhaustive enumeration ([#128](https://github.com/michaelJwilson/phylo/pull/128)) |
 | Parity with IQ-TREE 2 / RAxML-NG on large `n` | **Not started**; the tools are not in the environment (issue #126) |
-| `O(n×L×k)` memory inside 16 GB / 24 GB | **Not measured**; deterministic and reportable, but no figure exists |
+| `O(n×L×k)` memory inside 16 GB / 24 GB | **Met**: 87.2 MB at 100 taxa by 11,000 sites on the worst-case (caterpillar) topology, 879 MB at the declared maximum — a factor of 20 inside 16 GB, with each figure pinned against the allocator to within 2.5% |
 | CUDA, Metal/MPS and CPU dispatch | **CPU only**; selection logic landed ([#112](https://github.com/michaelJwilson/phylo/pull/112)), accelerator paths not implemented |
 | Declared cross-device tolerance, not bitwise | **Met**: `1e-11` relative in `float64`, `1e-6` where either side is `float32` ([#112](https://github.com/michaelJwilson/phylo/pull/112)) |
 

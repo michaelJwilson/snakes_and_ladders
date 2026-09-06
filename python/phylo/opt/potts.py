@@ -42,8 +42,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import yaml
 
+from phylo.fixtures import load_declared
 from phylo.numerics import logsumexp
 from phylo.numerics_rust import sample_rows
 from phylo.opt.constrain import free_from_log_simplex, log_simplex
@@ -102,12 +102,7 @@ def load_potts_params(path: Path) -> PottsParams:
         If a required field is missing, ``field`` does not have shape
         ``(n_states,)``, or a size is too small to identify the parameters.
     """
-    raw = yaml.safe_load(path.read_text())
-
-    missing = _REQUIRED_FIELDS - raw.keys()
-    if missing:
-        msg = f"{path}: missing required field(s) {sorted(missing)}"
-        raise ValueError(msg)
+    raw = load_declared(path, _REQUIRED_FIELDS)
 
     n_states = int(raw["n_states"])
     chain_length = int(raw["chain_length"])

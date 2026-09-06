@@ -15,7 +15,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use oxiphylo::double;
-use oxiphylo::pruning::pruning_log_likelihood_impl;
+use oxiphylo::pruning::{pruning_log_likelihood_impl, LeafObservations};
 use oxiphylo::sampling::sample_rows_impl;
 
 fn bench_double(c: &mut Criterion) {
@@ -56,13 +56,14 @@ fn build_balanced_tree(
     n_sites: usize,
     k: usize,
     seed: u64,
-) -> (Vec<f64>, Vec<Vec<usize>>, Vec<Vec<i64>>) {
+) -> (Vec<f64>, Vec<Vec<usize>>, Vec<i64>, Vec<i64>) {
     assert!(n_leaves.is_power_of_two());
     let mut rng = SplitMix64::new(seed);
 
     let mut branch_length = Vec::new();
     let mut children: Vec<Vec<usize>> = Vec::new();
-    let mut leaf_states: Vec<Vec<i64>> = Vec::new();
+    let mut leaf_states: Vec<i64> = Vec::new();
+    let mut leaf_row: Vec<i64> = Vec::new();
 
     // level holds the flat-array index of each node at the current level,
     // starting with n_leaves leaves.
@@ -71,7 +72,8 @@ fn build_balanced_tree(
         let idx = branch_length.len();
         branch_length.push(0.05 + (rng.next_u64() % 1000) as f64 / 5000.0); // 0.05..0.25
         children.push(vec![]);
-        leaf_states.push((0..n_sites).map(|_| rng.next_state(k)).collect());
+        leaf_row.push((leaf_states.len() / n_sites) as i64);
+        leaf_states.extend((0..n_sites).map(|_| rng.next_state(k)));
         level.push(idx);
     }
 
@@ -86,13 +88,13 @@ fn build_balanced_tree(
             };
             branch_length.push(branch);
             children.push(pair.to_vec());
-            leaf_states.push(vec![]);
+            leaf_row.push(-1);
             next_level.push(idx);
         }
         level = next_level;
     }
 
-    (branch_length, children, leaf_states)
+    (branch_length, children, leaf_states, leaf_row)
 }
 
 fn bench_pruning_log_likelihood(c: &mut Criterion) {
@@ -104,14 +106,18 @@ fn bench_pruning_log_likelihood(c: &mut Criterion) {
         (4usize, 200_000usize, "4taxa_200000sites"),
         (8usize, 200_000usize, "8taxa_200000sites"),
     ] {
-        let (branch_length, children, leaf_states) =
+        let (branch_length, children, leaf_states, leaf_row) =
             build_balanced_tree(n_leaves, n_sites, k, 20260930);
         group.bench_function(label, |b| {
             b.iter(|| {
                 pruning_log_likelihood_impl(
                     std::hint::black_box(&branch_length),
                     std::hint::black_box(&children),
-                    std::hint::black_box(&leaf_states),
+                    std::hint::black_box(LeafObservations {
+                        states: &leaf_states,
+                        n_sites,
+                        row: &leaf_row,
+                    }),
                     k,
                     &pi,
                     true,

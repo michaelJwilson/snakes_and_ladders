@@ -18,6 +18,9 @@ whether or not it has members yet.
 .. automodule:: phylo.enumeration
    :members:
 
+.. automodule:: phylo.fixtures
+   :members:
+
 .. automodule:: phylo.numerics_rust
    :members:
 
@@ -190,6 +193,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: phylo.qa.sim_problem_sizes
+   :members:
+
+.. automodule:: phylo.qa.likelihood_footprint
    :members:
 
 .. automodule:: phylo.qa.jc_transition
