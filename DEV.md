@@ -200,6 +200,33 @@ Every entry point — a QA script, `snakes_and_ladders.qa.build`,
 3. **Lock:** Run `uv lock` or update `Cargo.lock` and commit in the same PR.
 4. **Justify:** Explain the inclusion in the PR description.
 
+### Experiments
+
+A measured comparison lives in `docs/experiments/` as one file per experiment,
+written from `TEMPLATE.md` (issue #314): YAML front matter with the commit,
+branch and pull request, the tickets it tests and files, the problem, fixture
+and size tier, the methods compared, the budget and its unit, the shared
+seeds, the hardware and a status; then fixed sections — feature under test,
+setup, results, figures, finding, conclusion and actions, what is not
+claimed. `infra/experiments.py` validates every file and generates the index
+`README.md`; `--check` fails on an invalid file or a stale index, and
+`tests/regression/test_experiments.py` runs it per pull request.
+
+* **A number stated against a baseline lives in an experiment file.** A pull
+  request that measures one method against another adds or updates the
+  experiment it belongs to, and `STATUS.md` cites the file rather than
+  restating its table. The matrix the ledger fills is problems × size tiers ×
+  method families, every cell run through `opt.budget.compare` at one budget
+  over shared seeds; the index shows each cell's status and finding.
+* **Status is a claim about the record.** `open` while the comparison runs,
+  `confirmed` once the finding is stated against its commit, `retracted` when
+  a later measurement contradicts it (the file stays, with the contradiction
+  in its finding), `superseded` when a later experiment replaces it.
+* **A run store, when one exists, generates the Results section.** Until the
+  Aim ledger of #75 lands, results are typed from the measurement with the
+  script that produced them named; after it, `qa/experiment.py` renders them
+  from the store and the Markdown stays the reviewed artefact.
+
 ### Release
 
 A release is cut from a Release-template issue (`.github/ISSUE_TEMPLATE/release.yml`):
