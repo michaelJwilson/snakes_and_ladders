@@ -76,7 +76,7 @@ def agreement(params: SimulationParams) -> dict[str, list[tuple[int, float]]]:
             tau=params.tau,
             k=params.k,
             pi=params.pi,
-            seed=params.seed,
+            rng=np.random.default_rng(params.seed),
             n_sites=n_sites,
         )
         alignment = dict(dataset.alignment)

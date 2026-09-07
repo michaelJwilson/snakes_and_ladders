@@ -95,7 +95,7 @@ def _goodness_of_fit(move: PottsMove, field: np.ndarray, seed: int = SEED) -> fl
         graph,
         field,
         move,
-        seed,
+        np.random.default_rng(seed),
         SWEEPS,
         burn_in=SWEEPS // 10,
         thin=THINNING[move],
@@ -154,7 +154,7 @@ def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
 
     with pytest.raises(ValueError, match="needs every coupling >= 0"):
-        sample_potts(graph, NO_FIELD, move, SEED, 10)
+        sample_potts(graph, NO_FIELD, move, np.random.default_rng(SEED), 10)
 
 
 @pytest.mark.edge_case
@@ -162,7 +162,9 @@ def test_single_site_still_runs_on_a_negative_coupling() -> None:
     # The refusal is a property of the cluster construction, not of the model.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
 
-    chain = sample_potts(graph, NO_FIELD, PottsMove.SINGLE_SITE, SEED, 10)
+    chain = sample_potts(
+        graph, NO_FIELD, PottsMove.SINGLE_SITE, np.random.default_rng(SEED), 10
+    )
 
     assert chain.states.shape == (10, graph.n_nodes)
 
@@ -186,7 +188,7 @@ def _autocorrelation_in_site_updates(move: PottsMove, extent: int) -> float:
     n_sweeps = 12_000 if move is PottsMove.WOLFF else 1_500
 
     chain: PottsChain = sample_potts(
-        graph, field, move, 7, n_sweeps, burn_in=n_sweeps // 5
+        graph, field, move, np.random.default_rng(7), n_sweeps, burn_in=n_sweeps // 5
     )
     tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
     return tau * chain.mean_cluster_size / graph.n_nodes
@@ -214,6 +216,13 @@ def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() ->
     # an expensive single-site sampler -- is visible.
     graph = lattice_graph((8, 8), BoundaryCondition.OPEN, TRANSITION)
 
-    chain = sample_potts(graph, np.zeros(3), PottsMove.WOLFF, 7, 2_000, burn_in=200)
+    chain = sample_potts(
+        graph,
+        np.zeros(3),
+        PottsMove.WOLFF,
+        np.random.default_rng(7),
+        2_000,
+        burn_in=200,
+    )
 
     assert 1.0 < chain.mean_cluster_size < graph.n_nodes

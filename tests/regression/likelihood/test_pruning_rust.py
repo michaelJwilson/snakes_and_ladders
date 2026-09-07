@@ -106,7 +106,9 @@ def test_rust_matches_numpy_oracle() -> None:
     tau = _small_tree_n4()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260920, n_sites=50)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260920), n_sites=50
+    )
 
     numpy_ll = pruning.log_likelihood(tau, k, pi, dataset.alignment)
     rust_ll = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment)
@@ -119,7 +121,9 @@ def test_rust_matches_brute_force() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260921, n_sites=15)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260921), n_sites=15
+    )
 
     rust_ll = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment)
     brute = brute_force_log_likelihood(tau, k, pi, dataset.alignment)
@@ -132,7 +136,9 @@ def test_rescaled_and_unrescaled_rust_paths_agree() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260922, n_sites=100)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260922), n_sites=100
+    )
 
     rescaled = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment, rescale=True)
     unrescaled = pruning_rust.log_likelihood(
@@ -210,7 +216,7 @@ def test_relative_tolerance_transfers_to_fixture_scale() -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)

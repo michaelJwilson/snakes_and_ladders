@@ -88,7 +88,7 @@ def test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice() -> 
     dataset = simulate_potts(
         graph,
         params.field,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_samples=params.n_samples,
         burn_in=params.burn_in,
     )
@@ -120,7 +120,9 @@ def test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size() -> No
         graph.n_nodes, graph.edges, graph.coupling, field
     )
 
-    dataset = simulate_potts(graph, field, seed=20260904, n_samples=1500, burn_in=200)
+    dataset = simulate_potts(
+        graph, field, rng=np.random.default_rng(20260904), n_samples=1500, burn_in=200
+    )
     configurations = dataset.configurations
 
     observed_single = np.zeros((graph.n_nodes, 2))
@@ -148,7 +150,7 @@ def test_the_open_chain_path_reproduces_the_transfer_matrix_log_z() -> None:
     graph = lattice_graph((length,), boundary=BoundaryCondition.OPEN, coupling=coupling)
     assert graph.is_open_chain()
 
-    dataset = simulate_potts(graph, field, seed=1, n_samples=4000)
+    dataset = simulate_potts(graph, field, rng=np.random.default_rng(1), n_samples=4000)
     observed = (
         np.bincount(dataset.configurations.ravel(), minlength=n_states)
         / dataset.configurations.size
@@ -191,7 +193,11 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
         params.shape, boundary=params.boundary, coupling=params.coupling
     )
     dataset = simulate_potts(
-        graph, params.field, seed=params.seed, n_samples=20, burn_in=5
+        graph,
+        params.field,
+        rng=np.random.default_rng(params.seed),
+        n_samples=20,
+        burn_in=5,
     )
     assert dataset.configurations.shape == (20, graph.n_nodes)
     assert set(np.unique(dataset.configurations)) <= set(range(params.n_states))
@@ -204,10 +210,18 @@ def test_simulation_is_reproducible_from_the_seed() -> None:
         params.shape, boundary=params.boundary, coupling=params.coupling
     )
     first = simulate_potts(
-        graph, params.field, seed=params.seed, n_samples=20, burn_in=5
+        graph,
+        params.field,
+        rng=np.random.default_rng(params.seed),
+        n_samples=20,
+        burn_in=5,
     )
     second = simulate_potts(
-        graph, params.field, seed=params.seed, n_samples=20, burn_in=5
+        graph,
+        params.field,
+        rng=np.random.default_rng(params.seed),
+        n_samples=20,
+        burn_in=5,
     )
     assert np.array_equal(first.configurations, second.configurations)
 

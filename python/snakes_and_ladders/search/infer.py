@@ -13,7 +13,7 @@ claim issue #63 made and could not itself test.
 **Budget is counted in candidate fits, not in seconds.** ``DEV.md`` forbids
 ranking performance on CI hardware, and a wall-clock budget would make a
 result depend on the machine that produced it, so a run would not be
-reproducible from its seed.
+reproducible from the generator it was given.
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ def infer(
     model: Model = Model.JC,
     moves: MoveSet = MoveSet.NNI,
     max_evaluations: int = 200,
-    seed: int = 0,
+    rng: np.random.Generator | None = None,
 ) -> Inference:
     """Fit an alignment, searching for the topology unless one is given.
 
@@ -140,7 +140,7 @@ def infer(
     k : int
         Number of states.
     topology : Topology | None
-        Starting topology; ``None`` draws one at random from ``seed``.
+        Starting topology; ``None`` draws one at random from ``rng``.
         Supplying one and leaving the budget at zero fits it without moving.
     model : Model
         Substitution model for the continuous fit.
@@ -149,8 +149,13 @@ def infer(
     max_evaluations : int
         Maximum candidate fits. The initial topology's own fit is not
         counted against it.
-    seed : int
-        Seed for the starting topology.
+    rng : np.random.Generator | None
+        Source of the starting topology, required when ``topology`` is
+        ``None`` and unused otherwise. Passed in rather than seeded here, so
+        a caller running an ensemble gets independent starts rather than the
+        same one repeatedly (`sim/CLAUDE.md`, issue #240). There is no
+        default: a generator made here would be either unseeded, and the run
+        irreproducible, or seeded from a constant nobody declared.
 
     Returns
     -------
@@ -167,11 +172,13 @@ def infer(
         msg = f"need at least 4 taxa to search, got {len(alignment)}"
         raise ValueError(msg)
 
-    current = (
-        random_topology(sorted(alignment), np.random.default_rng(seed))
-        if topology is None
-        else topology
-    )
+    if topology is not None:
+        current = topology
+    elif rng is None:
+        msg = "searching for a topology needs an rng to draw the start from"
+        raise ValueError(msg)
+    else:
+        current = random_topology(sorted(alignment), rng)
     best_value, best_parameters = _score(model, current, k, alignment)
     trace = [best_value]
     seen = {leaf_bipartitions(current)}

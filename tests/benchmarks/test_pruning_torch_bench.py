@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
@@ -41,7 +42,7 @@ def test_torch_log_likelihood_benchmark(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     branch_lengths = pruning_torch.branch_lengths_from_tree(params.tau)
@@ -68,7 +69,7 @@ def test_numpy_vs_torch_forward_pass(benchmark: BenchmarkFixture) -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     branch_lengths = pruning_torch.branch_lengths_from_tree(params.tau)
@@ -95,7 +96,7 @@ def test_fit_general_rate_matrix_benchmark(benchmark: BenchmarkFixture) -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     branch_lengths = pruning_torch.branch_lengths_from_tree(params.tau).requires_grad_(

@@ -102,6 +102,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.fit
    :members:
 
+.. automodule:: snakes_and_ladders.opt.initialize
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.testfunctions
    :members:
 
@@ -163,6 +166,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.potts_mcmc
+   :members:
+
+.. automodule:: snakes_and_ladders.search.potts_mcmc_rust
    :members:
 
 .. automodule:: snakes_and_ladders.search.statistics

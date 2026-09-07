@@ -129,7 +129,14 @@ def test_a_cluster_move_refuses_this_instance(move: PottsMove) -> None:
     graph = frustrated_triangular_lattice((3, 3))
 
     with pytest.raises(ValueError, match="needs every coupling >= 0"):
-        sample_potts(graph, ZERO_FIELD, move=move, n_sweeps=4, burn_in=0, seed=1)
+        sample_potts(
+            graph,
+            ZERO_FIELD,
+            move=move,
+            n_sweeps=4,
+            burn_in=0,
+            rng=np.random.default_rng(1),
+        )
 
 
 @pytest.mark.edge_case
@@ -140,7 +147,12 @@ def test_single_site_sampling_still_runs_on_the_frustrated_instance() -> None:
     graph = frustrated_triangular_lattice((3, 3))
 
     chain = sample_potts(
-        graph, ZERO_FIELD, move=PottsMove.SINGLE_SITE, n_sweeps=20, burn_in=5, seed=1
+        graph,
+        ZERO_FIELD,
+        move=PottsMove.SINGLE_SITE,
+        n_sweeps=20,
+        burn_in=5,
+        rng=np.random.default_rng(1),
     )
 
     assert chain.states.shape == (20, graph.n_nodes)
@@ -351,7 +363,9 @@ def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> 
     for frustration in (0.05, 0.30):
         instance = planted_spin_glass(100, 4.0, frustration, rng)
         best = min(
-            iterated_conditional_modes(instance.graph, field, 2, seed=seed)[1]
+            iterated_conditional_modes(
+                instance.graph, field, 2, rng=np.random.default_rng(seed)
+            )[1]
             for seed in range(20)
         )
         reachable.append(best - instance.planted_energy)

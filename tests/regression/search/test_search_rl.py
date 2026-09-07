@@ -50,7 +50,7 @@ def _alignment(params: SimulationParams) -> dict[str, np.ndarray]:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return dict(dataset.alignment)
