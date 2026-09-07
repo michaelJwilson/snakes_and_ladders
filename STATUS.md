@@ -249,6 +249,28 @@ similar ones — the evidence that the seam extracted from an HMM was not shaped
 by one. The unbounded likelihood transfers unchanged with it: a component
 collapsed onto a single observation is refused, not clamped.
 
+**The coupled spatio-sequential model has a simulator and an exact oracle**
+([#300](https://github.com/michaelJwilson/snakes_and_ladders/issues/300), #290
+part 2). `sim.spatio_sequential` declares the truth — a spatial graph with
+`J >= 0`, `M` classes, `K` states, `S` positions, `beta`, the circulant
+self-transition `t`, one initial distribution and one emission family per
+class — and draws labels by the single-site heat bath at `beta` with no field,
+chains by `Pi_m` and the circulant transition, and observations by the class's family
+at the node's class and the position's state, under one generator; labels may
+be planted for recovery studies. `likelihood.spatio_sequential` sums
+`eq:joint` over every assignment of the canonical instance (a 2x2 open
+lattice, `M = K = 2`, `S = 6`: 65,536 joint states) for the evidence, the
+label posterior, the per-class state posterior and the state posterior given
+a labelling that part 3's forward–backward is pinned to. The oracle is pinned
+two ways that share no code: its evidence equals the sum over labellings of
+the per-class forward recursion to a relative gap of 0.0 on three draws, and
+its written-out joint equals the factor graph's log-density on 50 random
+assignments to 1.4e-14. The simulator is held to what it composes by
+chi-square at 0.001 over 400 draws — labellings against the enumerated Potts
+prior, transitions against `t`, first states against `Pi_m`, and symbol
+counts per (class, state) against the families' tables — and the label
+posterior recovers planted labels on 42 of 48 nodes at `S = 6`.
+
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
 **Felsenstein pruning: three CPU backends, one oracle.** Vectorized NumPy is
