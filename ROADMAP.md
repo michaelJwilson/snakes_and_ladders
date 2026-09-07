@@ -56,7 +56,7 @@ authoritative — where it and any other document disagree, it wins.
   every tolerance-based test beside the tolerance it was checked against, the
   documents the change made untrue, and anything deferred with the tracking
   issue that carries it.
-- **Gate:** nine required checks — `ruff`, `mypy --strict`, `clippy`,
+- **Gate:** ten required checks — a title naming the base branch, `ruff`, `mypy --strict`, `clippy`,
   `cargo fmt`, the Rust suite, the Python suite under its coverage floor, the
   Sphinx build with warnings as errors, the technical-document build, the
   re-execution of every committed notebook, and the dependency audits. Documentation Sync is part of the diff, not a follow-up:

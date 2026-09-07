@@ -28,6 +28,26 @@ env:
   CARGO_AUDIT_VERSION: "0.22.2"
 
 jobs:
+  pr-title:
+    name: PR title names its base branch
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      # DEV.md: every pull request's title starts with the branch it targets
+      # in brackets, so a reviewer reads where the diff lands before the diff
+      # (issue #292). The base is GitHub's own field, never inferred.
+      - name: Check the title prefix
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          case "$TITLE" in
+            "[$BASE]"*) echo "ok: $TITLE" ;;
+            *) echo "::error::title must start with [$BASE]: $TITLE"; exit 1 ;;
+          esac
+
   lint:
     name: Lint & type-check (ruff, mypy)
     runs-on: ubuntu-24.04
