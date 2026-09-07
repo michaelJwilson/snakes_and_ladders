@@ -1,18 +1,18 @@
 # Fdb version 4
-["bibtex /home/user/wt-repoint2/docs/textbook"] 1788822039.61092 "/home/user/wt-repoint2/docs/textbook.aux" "/home/user/wt-repoint2/docs/textbook.bbl" "/home/user/wt-repoint2/docs/textbook" 1788822040.11489 0
-  "./references.bib" 1788821571.42504 6346 a70326cad35a36f06ebb84a7b7936c6f ""
-  "/home/user/wt-repoint2/docs/textbook.aux" 1788822040.03027 11154 5a576356ca859f02c1d513bef1442dd7 "pdflatex"
+["bibtex /home/user/wt-193/docs/textbook"] 1788822911.98168 "/home/user/wt-193/docs/textbook.aux" "/home/user/wt-193/docs/textbook.bbl" "/home/user/wt-193/docs/textbook" 1788822912.45458 0
+  "./references.bib" 1788822651.97831 6346 a70326cad35a36f06ebb84a7b7936c6f ""
+  "/home/user/wt-193/docs/textbook.aux" 1788822912.37032 11154 5a576356ca859f02c1d513bef1442dd7 "pdflatex"
   "/usr/share/texlive/texmf-dist/bibtex/bst/natbib/plainnat.bst" 1233624470 26816 ffe5423d2019860bad9f54bc402fac15 ""
   (generated)
-  "/home/user/wt-repoint2/docs/textbook.bbl"
-  "/home/user/wt-repoint2/docs/textbook.blg"
+  "/home/user/wt-193/docs/textbook.bbl"
+  "/home/user/wt-193/docs/textbook.blg"
   (rewritten before read)
-["pdflatex"] 1788822039.62864 "textbook.tex" "/home/user/wt-repoint2/docs/textbook.pdf" "textbook" 1788822040.11514 0
+["pdflatex"] 1788822911.99886 "textbook.tex" "/home/user/wt-193/docs/textbook.pdf" "textbook" 1788822912.45482 0
   "/etc/texmf/web2c/texmf.cnf" 1788609781.05059 475 c0e671620eb5563b2130f56340a5fde8 ""
-  "/home/user/wt-repoint2/docs/textbook.aux" 1788822040.03027 11154 5a576356ca859f02c1d513bef1442dd7 "pdflatex"
-  "/home/user/wt-repoint2/docs/textbook.bbl" 1788822039.62379 5999 5d497da647ed160594916c8ef0550093 "bibtex /home/user/wt-repoint2/docs/textbook"
-  "/home/user/wt-repoint2/docs/textbook.out" 1788822040.03427 6359 e89106f0a477732c94a71d18fd7a79b2 "pdflatex"
-  "/home/user/wt-repoint2/docs/textbook.toc" 1788822040.03427 3398 30ff7336a580ba1c7d92e3a3eefbb940 "pdflatex"
+  "/home/user/wt-193/docs/textbook.aux" 1788822912.37032 11154 5a576356ca859f02c1d513bef1442dd7 "pdflatex"
+  "/home/user/wt-193/docs/textbook.bbl" 1788822911.99032 5999 5d497da647ed160594916c8ef0550093 "bibtex /home/user/wt-193/docs/textbook"
+  "/home/user/wt-193/docs/textbook.out" 1788822912.37432 6359 e89106f0a477732c94a71d18fd7a79b2 "pdflatex"
+  "/home/user/wt-193/docs/textbook.toc" 1788822912.37432 3398 30ff7336a580ba1c7d92e3a3eefbb940 "pdflatex"
   "/root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk" 1788609820.38806 12644 36adb9dd3a291b652a55c18998eb6c39 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/tcrm1095.tfm" 1136768653 1536 02c06700a42be0f5a28664c7273f82e7 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmbsy6.tfm" 1246382020 1124 14ccf5552bc7f77ca02a8a402bea8bfb ""
@@ -135,17 +135,17 @@
   "/usr/share/texmf/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1788747054.56313 73770 cdb81e6988263283715a8870444b650f ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1788609798 6831072 97066924acff677d086b8d138968f8e6 ""
-  "figures/jc_transition.pdf" 1788821584.61824 17386 c5f64524b217ea1f65f339bb1b076d7e ""
-  "figures/jc_transition_caption.txt" 1788821584.62199 411 182e3ee0afeee472c2fd7a9537a52226 ""
-  "figures/sim_tree.pdf" 1788821579.79824 14489 d4d6e83614e757066cc6a6cb5fb6e552 ""
-  "figures/sim_tree_caption.txt" 1788821579.80446 304 06dfcd207eecdd4400721d2361b01138 ""
-  "notation.tex" 1788820260.42267 2156 f3199689e9bd3028c12b69edfe081251 ""
-  "preamble.tex" 1788821311.86623 400 db613774630f14491fe91e45b63873e7 ""
-  "textbook.tex" 1788821543.38224 28200 d9fc1bda0118e20032122e630aab852c ""
+  "figures/jc_transition.pdf" 1788822793.70232 17386 c5f64524b217ea1f65f339bb1b076d7e ""
+  "figures/jc_transition_caption.txt" 1788822793.70986 411 182e3ee0afeee472c2fd7a9537a52226 ""
+  "figures/sim_tree.pdf" 1788822789.11432 14489 d4d6e83614e757066cc6a6cb5fb6e552 ""
+  "figures/sim_tree_caption.txt" 1788822789.11804 304 06dfcd207eecdd4400721d2361b01138 ""
+  "notation.tex" 1788822651.97831 2156 f3199689e9bd3028c12b69edfe081251 ""
+  "preamble.tex" 1788822651.97831 400 db613774630f14491fe91e45b63873e7 ""
+  "textbook.tex" 1788822651.97831 28200 d9fc1bda0118e20032122e630aab852c ""
   (generated)
-  "/home/user/wt-repoint2/docs/textbook.aux"
-  "/home/user/wt-repoint2/docs/textbook.log"
-  "/home/user/wt-repoint2/docs/textbook.out"
-  "/home/user/wt-repoint2/docs/textbook.pdf"
-  "/home/user/wt-repoint2/docs/textbook.toc"
+  "/home/user/wt-193/docs/textbook.aux"
+  "/home/user/wt-193/docs/textbook.log"
+  "/home/user/wt-193/docs/textbook.out"
+  "/home/user/wt-193/docs/textbook.pdf"
+  "/home/user/wt-193/docs/textbook.toc"
   (rewritten before read)
