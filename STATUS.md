@@ -1050,10 +1050,11 @@ measurement and names the script that produced it.
 `docs/tex/` now spans all three problem classes rather than the phylogenetic
 application alone: the abstract, methods and appendices state the Potts
 Hamiltonian and the HMM decoding problem beside the substitution model, and the
-Reference Taxonomy appendix routes the literature by concern. It is an eight-page
-specification, cut down in `14d32d6` from the academic-letter structure of
-[#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), and it is the shape
-the document is in rather than the shape §1.3 asks for.
+Reference Taxonomy appendix routes the literature by concern. It was cut down
+in `14d32d6` from the academic-letter structure of
+[#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148) to an
+eight-page specification, and has since grown back toward the shape §1.3 asks
+for section by section, as recorded below.
 
 Thirteen QA scripts render the figures, each committing a figure with a caption
 naming the seed, the sizes and the model that produced it, and `docs/CLAUDE.md`
@@ -1083,6 +1084,31 @@ branch-and-bound bounds and their proofs, no such bound being implemented.
 Three framed placeholders stand in for the RL learning curve, the comparison
 against classical software, and hardware scaling — none of which is measured,
 and each labelled as a placeholder rather than drawn with invented data.
+
+**The textbook is now one document at one standard**
+([#298](https://github.com/michaelJwilson/snakes_and_ladders/issues/298)). Every
+problem section carries the same four parts — the model, the model as an
+instance of the factor graph of `sec:factor-graph`, the algorithm as the
+instance of `eq:sum-product` or of the optimization it is, and the property
+that pins it — and the notation table states the factor-graph symbols once
+with the identification each section's classical symbol makes. The discrete
+solvers that were one sentence each are sections with a labelled equation, a
+citation, a regime and a pin: ground states as cuts (`eq:cut-energy`,
+`eq:gw`), alpha expansion and its bound (`eq:alpha-expansion`), the heat bath
+and the cluster moves with the field accept step (`eq:heat-bath`,
+`eq:cluster-accept`), and temperature, annealing and tempering with the
+exchange ratio (`eq:exchange`). The hidden Markov section states the backward
+pass, the posterior and Viterbi as max-product (`eq:posterior`,
+`eq:viterbi`). The coupled spatio-sequential model of #290 has its own section
+(`sec:coupled`): the ticket's Forney-style figure, the spatial and chain
+priors, the block-coordinate estimator with the M-step identity and the
+external field (`eq:coupled-m-step`, `eq:external-field`,
+`eq:label-ground-state`), and both algorithms (`alg:wolff-field`,
+`alg:graph-burnin`), with a paragraph stating which part is built and which
+is planned. Four derivations the main text depends on — the Bethe fixed
+point, detailed balance for a cluster move in a field, the exchange ratio, the
+delta method — sit in an appendix cited from the point of use. The document
+is 21 pages; `texlive-pictures` joins the CI TeX install for the figure.
 
 ## What Is Not Claimed
 
