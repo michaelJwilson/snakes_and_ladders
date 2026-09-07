@@ -8,12 +8,17 @@ what each milestone claims; this is what pins it. Do not edit by hand --
 run `uv run python infra/checks_ledger.py --write`.
 
 
-## `tests/regression/` (9)
+## `tests/regression/` (14)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
 | `test_emissions.py::test_the_gaussian_density_matches_the_closed_form` | oracle | Against the expression written out, not against another call into the same code: `1 / (sigma sqrt(2 pi)) exp(-(y - mu)^2 / 2 sigma^2)`. |
+| `test_emissions.py::test_the_categorical_m_step_is_the_normalized_expected_counts` | oracle |  |
+| `test_emissions.py::test_the_gaussian_m_step_is_the_posterior_weighted_mean_and_variance` | oracle | Checked against the closed form directly rather than only by a monotonically increasing likelihood, which is a strictly stronger statement than the categorical M step gets from an EM run. |
+| `test_emissions.py::test_a_dispersion_of_one_is_the_geometric_distribution_exactly` | oracle | An equality, not a tolerance: at r = 1 the two lgamma terms cancel identically and what is left is log(p) + y log(1 - p). |
 | `test_emissions.py::test_the_count_m_step_agrees_with_a_brute_force_grid_search` | oracle | The second, independent check the ticket asks for: a grid search shares no root-finding with the solve, so agreement is evidence rather than the solve confirming itself. |
+| `test_emissions.py::test_overdispersed_data_recovers_its_dispersion_and_does_not_flag` | simulated_truth | The paired half of the check above: a guard that flagged everything would pass that test and mean nothing. |
+| `test_emissions.py::test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform` | oracle | `BetaBinomial(n, 1, 1)` puts equal mass on every one of the n + 1 outcomes. |
 | `test_emissions.py::test_the_closed_form_count_m_steps_are_the_weighted_mean` | oracle |  |
 | `test_numerics_rust.py::test_the_rust_sampler_is_bit_identical_to_the_oracle` | oracle |  |
 | `test_numerics_rust.py::test_both_agree_on_a_row_that_does_not_quite_sum_to_one` | oracle | The case `snakes_and_ladders.numerics`' docstring calls out as ordinary float64 behaviour: the row leaves a sliver of the unit interval above its own total, and a draw landing there crosses no column. |
@@ -22,7 +27,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_pairwise_distance.py::test_pairwise_distance_small_fixed_input` | oracle | Small, hand-checkable input. |
 | `test_scale_tiers.py::test_the_budget_script_states_both_budgets` | simulated_truth | The numbers `DEV.md` documents and the numbers the script measures against have to be the same two, or the report is against a budget nothing else knows about. |
 
-## `tests/regression/learn/` (29)
+## `tests/regression/learn/` (26)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -37,7 +42,6 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_potts.py::test_enumeration_produces_every_configuration_exactly_once` | oracle |  |
 | `test_learn_potts.py::test_the_optimum_is_the_best_of_every_configuration` | oracle |  |
 | `test_learn_potts.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle | Not a convenience: it is what makes "the agent beat hill climbing" a statement about learning rather than about two unrelated algorithms. |
-| `test_learn_potts.py::test_the_vectorized_features_are_the_scalar_deltas_exactly` | oracle | `features` computes every action's (agreement, field) change in one NumPy pass since #264; `_deltas` is the scalar statement it replaces and stays as the oracle. |
 | `test_learn_potts_lattice.py::test_a_chain_built_as_a_graph_is_the_chain` | oracle | The claim that justifies one class rather than two: if the two constructors disagreed anywhere, the generalization would have changed the reference instance every existing result rests on. |
 | `test_learn_potts_lattice.py::test_the_local_reward_matches_re_evaluating_the_energy_on_a_lattice` | oracle | A 3x3 open lattice has interior sites with four neighbours, which the chain never exercises: its delta only ever sums two terms. |
 | `test_learn_potts_lattice.py::test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary` | oracle | Periodic wrapping gives every site the same degree and makes a 2-extent dimension list the same pair twice, as a doubled bond. |
@@ -49,14 +53,12 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_reinforce.py::test_the_learned_policy_is_at_least_as_good_as_hill_climbing` | simulated_truth | Milestone 8's criterion, at a size where the answer is enumerable. |
 | `test_learn_relaxed.py::test_the_potts_relaxation_is_exact_at_every_corner` | oracle | The first thing that must be true. |
 | `test_learn_relaxed.py::test_the_hmm_relaxation_is_exact_at_every_corner` | oracle | The same check across a module boundary, which makes it stronger than the one above: `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely independent implementations of `log P(path, observations)`. |
+| `test_learn_relaxed.py::test_the_relaxed_optimum_of_the_hmm_is_the_viterbi_path` | oracle | The relaxed objective's discrete optimum must be the answer another module computes for the same question, or the relaxation is optimizing something else. |
 | `test_learn_relaxed.py::test_the_expected_discrete_score_equals_the_score_at_the_marginals` | oracle |  |
 | `test_learn_relaxed.py::test_the_exact_gradient_matches_a_finite_difference` | oracle | The reference every estimator is measured against needs its own check, or a bias measurement is only evidence that two wrong things differ. |
-| `test_learn_relaxed.py::test_the_deterministic_relaxation_beats_single_flip_hill_climbing` | simulated_truth | The comparison that decides whether this is worth having, on shared seeds with the exact optimum as the target. |
 | `test_learn_relaxed.py::test_the_hmm_path_is_recovered_from_every_restart` | simulated_truth | The HMM half validates correctness, not difficulty: Viterbi is exact in `O(T k**2)` and nothing here is hard. |
-| `test_learn_relaxed.py::test_the_anneal_schedule_is_geometric_and_hits_both_endpoints` | oracle | Geometric because the relaxation's behaviour is set by the ratio of logit gaps to `tau`, so equal multiplicative steps are equal steps in the thing that matters. |
-| `test_learn_relaxed.py::test_annealing_reaches_the_final_temperature_during_optimization` | simulated_truth | Both schedules are supported because the fixed-`tau` sweep is the measurement and annealing is the practice. |
 
-## `tests/regression/likelihood/` (37)
+## `tests/regression/likelihood/` (47)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -86,6 +88,14 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_likelihood_parsimony.py::test_parsimony_is_correct_and_fast_in_the_farris_zone` | simulated_truth | The control. |
 | `test_likelihood_pruning.py::test_pruning_matches_brute_force` | oracle |  |
 | `test_likelihood_pruning.py::test_generating_topology_outscores_random_wrong_topologies` | simulated_truth |  |
+| `test_message_passing.py::test_the_potts_log_density_is_log_weights_on_every_configuration` | oracle |  |
+| `test_message_passing.py::test_sum_product_on_the_potts_tree_is_the_enumeration` | oracle |  |
+| `test_message_passing.py::test_flooding_on_the_loopy_lattice_is_belief_propagation` | oracle | Both are the Bethe approximation. |
+| `test_message_passing.py::test_sum_product_on_the_chain_is_the_path_enumeration` | oracle |  |
+| `test_message_passing.py::test_max_product_on_the_chain_is_viterbi` | oracle |  |
+| `test_message_passing.py::test_sum_product_per_site_sums_to_pruning` | oracle |  |
+| `test_message_passing.py::test_the_coupled_log_density_is_the_joint_written_out` | oracle | eq:joint (textbook, sec:factor-graph): beta * sum_edges J delta(l_i, l_j) + sum_m [log pi_m(k_{0,m}) + sum_s log A_m(k_{s-1,m}, k_{s,m})] + sum_n sum_s log P(x_{sn} \| k_{s,l_n}, theta_{l_n}). |
+| `test_message_passing.py::test_message_passing_on_the_forney_form_gives_the_same_marginals` | oracle |  |
 | `test_potts_exact.py::test_the_transfer_matrix_reproduces_exhaustive_enumeration` | oracle |  |
 | `test_potts_exact.py::test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix` | oracle |  |
 | `test_potts_exact.py::test_log_weights_matches_the_hamiltonian_evaluated_by_hand` | oracle | Two sites, one bond. |
@@ -96,9 +106,11 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_pruning_torch.py::test_torch_matches_brute_force` | oracle |  |
 | `test_pruning_torch.py::test_matrix_exp_rate_matrix_path_matches_closed_form` | oracle |  |
 | `test_pruning_torch.py::test_gradient_matches_finite_differences_of_numpy_oracle` | oracle |  |
-| `test_pruning_torch.py::test_the_batched_transition_matrices_are_the_scalar_ones` | oracle | #264 computes every branch's P(t) in one call. |
+| `test_spatio_sequential.py::test_the_enumerated_evidence_equals_the_per_class_forward_route` | oracle |  |
+| `test_spatio_sequential.py::test_the_written_out_joint_is_the_factor_graph_log_density` | oracle |  |
+| `test_spatio_sequential.py::test_the_label_posterior_recovers_planted_labels_on_most_nodes` | simulated_truth | 42 of 48 when measured; asserted at three quarters. |
 
-## `tests/regression/opt/` (52)
+## `tests/regression/opt/` (44)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -110,31 +122,27 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_fit.py::test_the_observed_information_is_the_hessian_of_the_objective` | oracle | Pinned against a closed form: d2/dx2 (x - 2)^2 = 2, and zero elsewhere. |
 | `test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian` | oracle | Mean and covariance in closed form, so nothing here rests on a second sampler. |
 | `test_opt_hmc.py::test_the_chain_matches_grid_quadrature_on_a_real_objective` | oracle | The Potts chain's `theta` is two-dimensional at two states, so the posterior can be integrated on a grid and there is a reference that is not a sampler. |
-| `test_opt_hmc.py::test_the_energy_error_is_fourth_order_in_the_step_size` | oracle | The companion of the second-order test above, and it needs that one to be trustworthy: a slope estimator reporting 4 for both integrators is broken, and only the pair catches it. |
-| `test_opt_hmc.py::test_force_evaluations_counts_what_a_trajectory_actually_costs` | oracle |  |
-| `test_opt_hmc.py::test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida` | simulated_truth | **The measurement the ticket is for, and it is negative.** A fourth-order method pays where the step is limited by *accuracy*; here it is limited by *stability*, and the two are different constraints. |
+| `test_opt_hmc.py::test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw` | oracle | The refactor's guarantee, stated as the plan asked: annealing on a constant schedule at temperature 1 reproduces the untempered chain at the same seed *bitwise*. |
 | `test_opt_hmm.py::test_forward_matches_brute_force_path_enumeration` | oracle |  |
 | `test_opt_hmm.py::test_theta_round_trips_through_the_constraint_map` | oracle |  |
 | `test_opt_hmm.py::test_align_states_recovers_a_known_permutation` | oracle |  |
 | `test_opt_hmm_counts.py::test_the_forward_recursion_matches_enumeration_over_every_path` | oracle |  |
-| `test_opt_hmm_counts.py::test_the_gradient_matches_central_differences` | oracle |  |
-| `test_opt_hmm_counts.py::test_the_gradient_fit_and_baum_welch_reach_the_same_optimum` | oracle | Two fitting algorithms sharing only the model. |
+| `test_opt_hmm_counts.py::test_a_known_truth_round_trips_through_the_unconstrained_coordinates` | simulated_truth |  |
 | `test_opt_hmm_counts.py::test_coverage_against_the_true_dispersion` | simulated_truth | The full sweep behind the table in `STATUS.md`. |
 | `test_opt_hmm_gaussian.py::test_the_forward_recursion_matches_enumeration_over_every_path` | oracle |  |
-| `test_opt_hmm_gaussian.py::test_the_gradient_matches_central_differences` | oracle |  |
-| `test_opt_hmm_gaussian.py::test_the_gradient_fit_and_baum_welch_reach_the_same_optimum` | oracle | Two fitting algorithms sharing only the model: one is L-BFGS in unconstrained coordinates through a constraint map, the other is EM working directly in the parameters. |
 | `test_opt_hmm_gaussian.py::test_the_alignment_recovers_a_known_permutation_of_the_states` | simulated_truth | Label switching is unidentifiable, so a recovery comparison is stated up to a permutation and the aligner has to find it. |
+| `test_opt_hmm_gaussian.py::test_a_known_truth_round_trips_through_the_unconstrained_coordinates` | simulated_truth |  |
 | `test_opt_hmm_gaussian.py::test_coverage_reaches_nominal_only_where_the_states_are_separated` | simulated_truth | The identifiable regime, measured rather than assumed. |
 | `test_opt_hmm_gaussian.py::test_coverage_against_the_separation_of_the_emitting_states` | simulated_truth | The full sweep behind the table in `STATUS.md`. |
 | `test_opt_initialize.py::test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one` | simulated_truth | The case multi-start is for, measured against four analytic minima. |
 | `test_opt_initialize.py::test_restarts_barely_help_on_rastrigin_and_the_number_says_so` | simulated_truth | The negative result, kept because it is the more useful one. |
-| `test_opt_intervals.py::test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum` | oracle | **The check this ticket is really for, and it costs nothing.** The two algorithms share the model and nothing else -- no optimizer, no parameterization, no constraint map -- and converge to the same optimum. |
+| `test_opt_intervals.py::test_the_new_door_is_the_old_one` | oracle | `standard_errors_at` must be `constrained_standard_errors` reached another way, not a second implementation of it. |
 | `test_opt_intervals.py::test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it` | oracle | The comparison on the one target where it has an exact answer. |
-| `test_opt_intervals.py::test_the_delta_method_interval_and_the_sampled_posterior_agree` | oracle | The comparison `hmc.py`'s docstring promises, in the regime where the approximation is allowed to be one. |
 | `test_opt_intervals.py::test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate` | simulated_truth | An interval that exists and does not cover is worse than no interval, so the EM path is held to exactly the standard the gradient path is. |
-| `test_opt_mixture.py::test_the_gradient_matches_central_differences` | oracle |  |
+| `test_opt_mixture.py::test_the_fit_recovers_the_generating_mixture_up_to_the_label_permutation` | simulated_truth |  |
+| `test_opt_mixture.py::test_the_component_m_step_is_the_emission_family_s_own` | oracle | Asserted rather than assumed: the mixture's EM and a direct call into `GaussianEmission.reestimate` on the same responsibilities must produce the same numbers, because they *are* the same call. |
 | `test_opt_mixture.py::test_the_optimal_clustering_is_exact_where_it_can_be_checked_by_hand` | oracle | Two obvious clusters of three points each: the optimum splits them, and the cost is the within-run sum of squares, 2 * (1 + 0 + 1) / ... |
-| `test_opt_mixture.py::test_kmeans_plus_plus_stays_inside_its_published_guarantee` | oracle | Arthur & Vassilvitskii (2007), theorem 1.1: the *expected* seeding cost is within `8 (ln k + 2)` of optimal, so the mean over replicates is what is checked and a single draw would not be a test of it. |
+| `test_opt_mixture.py::test_a_known_truth_round_trips_through_the_unconstrained_coordinates` | simulated_truth |  |
 | `test_opt_potts.py::test_transfer_matrix_matches_brute_force_enumeration` | oracle |  |
 | `test_opt_potts.py::test_objective_matches_a_naive_per_chain_log_likelihood` | oracle | The objective reduces the data to two sufficient statistics up front. |
 | `test_opt_potts.py::test_theta_round_trips_through_the_constraint_map` | oracle |  |
@@ -144,11 +152,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_potts_lattice.py::test_the_fitted_optimum_beats_a_brute_force_scan` | oracle | Checks the optimizer against the objective rather than against itself: a coarse grid over the coupling, with the field at its fitted value, must not find a lower negative log-likelihood than the fit did. |
 | `test_opt_potts_lattice.py::test_the_couplings_and_fields_are_recovered_within_their_intervals` | simulated_truth | One dataset, so this is a draw and not a rate; the rate is the next test. |
 | `test_opt_potts_lattice.py::test_interval_coverage_approaches_the_nominal_rate` | simulated_truth | The claim `STATUS.md`'s ledger row rests on. |
-| `test_opt_schedule.py::test_the_exponential_schedule_has_a_constant_ratio` | oracle | The characterization independent of the formula: geometric means the ratio of successive temperatures never changes, and its value is the `gamma` torch's ExponentialLR would need to land at `end`. |
-| `test_opt_schedule.py::test_the_linear_schedule_has_a_constant_difference` | oracle |  |
-| `test_opt_schedule.py::test_linear_mirrors_torch_linear_lr` | oracle | `LinearLR` scales a base rate from `start_factor` to `end_factor` over `total_iters` steps; with the base rate as `start` and the factors chosen to land on `end`, it is this schedule. |
-| `test_opt_schedule.py::test_exponential_mirrors_torch_exponential_lr` | oracle |  |
-| `test_opt_schedule.py::test_cosine_mirrors_torch_cosine_annealing_lr` | oracle | torch computes the cosine schedule recursively, accumulating rounding over the run, so the agreement is to 1e-10 rather than 1e-12 -- and the two agree *exactly* at both ends, which the recursion does not guarantee and this schedule does. |
+| `test_opt_schedule.py::test_both_endpoints_are_reached_exactly_at_the_declared_steps` | oracle |  |
 | `test_opt_testfunctions.py::test_rosenbrock_reaches_its_analytic_minimizer` | oracle | The valley is curved and nearly flat along its floor, so a line search that terminates on the wrong condition lands short of `(1, ..., 1)` while still reporting a small gradient. |
 | `test_opt_testfunctions.py::test_rastrigin_reaches_its_analytic_minimizer_from_inside_the_central_cell` | oracle |  |
 | `test_opt_testfunctions.py::test_the_autodiff_gradient_matches_the_closed_form` | oracle | The closed forms are written out in `testfunctions`, not differentiated from the implementation: an error shared between a value and its derivative is exactly what differentiating the implementation hides. |
@@ -189,7 +193,6 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_alpha_expansion.py::test_the_multi_state_energy_agrees_with_the_two_state_one` | oracle | The generalization must reduce to what `maxflow` already validates, or the two modules are optimizing different objectives accurately. |
 | `test_alpha_expansion.py::test_expansion_beats_single_site_descent_past_enumeration` | simulated_truth | Where the move set earns its complexity. |
 | `test_alpha_expansion.py::test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term` | oracle | With no bonds the sites decouple and the optimum is `argmax` per node, so the answer is known without enumerating or cutting anything. |
-| `test_alpha_expansion.py::test_the_numba_descent_reproduces_the_python_one_bitwise` | oracle | The pin that lets the kernel be the default (#264): same update, same index order, same first-minimum tie rule, so the labelling and the energy are identical, not close. |
 | `test_max_cut.py::test_a_complete_bipartite_graph_has_every_edge_in_its_maximum_cut` | oracle |  |
 | `test_max_cut.py::test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice` | oracle |  |
 | `test_max_cut.py::test_max_cut_is_the_antiferromagnetic_ising_ground_state` | oracle | The identity the module rests on, checked rather than asserted in prose: with every coupling negative and no field, the minimum energy is the total weight less the maximum cut. |
@@ -202,9 +205,9 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_maxflow.py::test_the_rust_max_flow_reproduces_a_hand_computed_value` | oracle | Two disjoint paths carry 2 each; the cross edge carries a third unit a greedy first path would have blocked. |
 | `test_potts_mcmc.py::test_the_chain_is_drawn_from_the_exact_boltzmann_distribution` | oracle |  |
 | `test_potts_mcmc.py::test_the_chain_is_still_exact_in_an_external_field` | oracle | The case the ticket exists for. |
-| `test_potts_mcmc.py::test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution` | oracle |  |
+| `test_potts_mcmc.py::test_tempering_is_model_scaling_exactly` | oracle | The consistency check the model itself provides: the coupling absorbs beta, so the energy of the scaled model is the energy over T, and the deviation is 0.0 rather than a tolerance -- a division on each term. |
 | `test_potts_mcmc.py::test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not` | oracle |  |
-| `test_potts_mcmc.py::test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass` | simulated_truth | The comparison the ticket asked for, on the instance where restarts can lose: the planted Viana-Bray spin glass, 60 sites at mean degree 4 and frustration 0.2, whose planted energy upper-bounds the ground state and whose ground state enumeration cannot reach. |
+| `test_potts_mcmc.py::test_the_best_configuration_is_the_lowest_energy_any_replica_visited` | oracle |  |
 | `test_potts_mcmc_rust.py::test_the_rust_chain_is_drawn_from_the_exact_boltzmann_distribution` | oracle | The claim the port has to earn, against enumeration. |
 | `test_potts_mcmc_rust.py::test_the_rust_chain_is_still_exact_in_an_external_field` | oracle | A field is not optional here. |
 | `test_search_exhaustive.py::test_enumeration_produces_every_topology_exactly_once` | oracle | Checked against the closed form, not against a second enumeration. |
@@ -214,8 +217,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_exhaustive.py::test_the_maximum_likelihood_tree_is_the_generating_tree_here` | simulated_truth |  |
 | `test_search_exhaustive.py::test_search_recovers_the_generating_topology` | simulated_truth |  |
 | `test_search_hard_fixture.py::test_the_generating_topology_is_the_enumerated_maximum` | oracle |  |
-| `test_search_hard_fixture.py::test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves` | oracle |  |
-| `test_search_hard_fixture.py::test_spr_reaches_the_optimum_where_nni_does_not` | simulated_truth |  |
+| `test_search_hard_fixture.py::test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts` | simulated_truth |  |
+| `test_search_hard_fixture.py::test_spr_reaches_the_optimum_where_nni_does_not` | oracle |  |
 | `test_search_infer.py::test_random_topology_reaches_every_topology_and_only_those` | oracle | The generator must be able to start anywhere, or a search seeded from it is quietly restricted to part of the space. |
 | `test_search_infer.py::test_a_fixed_topology_with_no_budget_is_exactly_the_continuous_fit` | oracle | The API's two cases are one code path, not two: with the topology given and no budget, `infer` must agree with calling the objective and the optimizer directly. |
 | `test_search_infer.py::test_score_topology_agrees_with_a_zero_budget_search` | oracle |  |
@@ -226,14 +229,15 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_rl.py::test_the_spr_neighbourhood_is_larger_than_the_nni_one` | oracle | The environment is parameterized by move set, and the two must actually differ or that parameter is decoration. |
 | `test_search_statistics.py::test_the_chi_square_tail_matches_published_critical_values` | oracle |  |
 | `test_search_statistics.py::test_an_ar1_process_matches_its_closed_form` | oracle | For `x_t = rho x_{t-1} + noise`, `rho(t) = rho**t` exactly, so `tau = 0.5 + sum_{t>=1} rho**t = 0.5 + rho / (1 - rho)`. |
+| `test_search_support.py::test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_supports_agree` | oracle |  |
+| `test_search_support.py::test_the_generating_splits_have_full_bootstrap_support_at_many_sites` | simulated_truth |  |
+| `test_search_support.py::test_the_enumerated_support_is_calibrated_on_simulated_data` | simulated_truth | The test the ticket names: bin the returned trees by the support they report and the fraction that equal the generating topology must not fall as the support rises. |
 | `test_search_topology.py::test_enumeration_matches_count_topologies` | oracle |  |
 | `test_search_topology.py::test_nni_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_spr_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_nni_and_spr_exhaustive_at_n8` | oracle | The same properties as the per-PR sweep, at the next size up. |
-| `test_search_topology.py::test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology` | oracle | `_split_key` is what `spr_neighbours` deduplicates on since #264; this asserts it names the same set of splits `leaf_bipartitions` does, on every one of the 105 six-leaf topologies, with the anchor convention (the smallest leaf's side is the complement) applied identically. |
-| `test_search_topology.py::test_spr_neighbours_are_the_definition_in_the_definition_order` | oracle | Order matters as well as membership: a hill climb takes the first of equally good neighbours, so a faster generator that permuted them would change which tree a search lands on while every count test passed. |
 
-## `tests/regression/sim/` (34)
+## `tests/regression/sim/` (37)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -271,5 +275,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_potts_simulate.py::test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice` | oracle |  |
 | `test_potts_simulate.py::test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size` | oracle | An independent confirmation at a different (n_states, shape) than the fixture, per the issue's own two named sizes: 2-state 4x4 is 65,536 configurations. |
 | `test_potts_simulate.py::test_the_open_chain_path_reproduces_the_transfer_matrix_log_z` | oracle | A reduction to an exact result, not sampler-vs-sampler agreement: the same distribution described by snakes_and_ladders.opt.potts's transfer matrix and by the backward-message sampler this module generalizes it from. |
+| `test_spatio_sequential.py::test_the_labels_are_drawn_from_the_potts_prior` | simulated_truth |  |
+| `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
+| `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-229 checks.
+236 checks.
