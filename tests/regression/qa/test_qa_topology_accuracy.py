@@ -35,12 +35,14 @@ FIVE_TAXA = FIXTURES_DIR / "simulation_params_5taxa.yaml"
 # --- the distance ---------------------------------------------------------
 
 
+@pytest.mark.mathematical
 def test_a_topology_is_at_distance_zero_from_itself() -> None:
     for topology in enumerate_topologies(list("ABCDE")):
         assert robinson_foulds(topology, topology) == 0
         assert normalized_robinson_foulds(topology, topology) == 0.0
 
 
+@pytest.mark.oracle
 def test_the_distance_is_the_symmetric_difference_of_the_splits() -> None:
     # Against the definition, computed here independently of the
     # implementation: splits in one tree and not the other, both ways.
@@ -55,6 +57,7 @@ def test_the_distance_is_the_symmetric_difference_of_the_splits() -> None:
             assert robinson_foulds(first, second) == expected
 
 
+@pytest.mark.mathematical
 def test_the_normalizer_is_the_internal_split_count() -> None:
     # 2(n - 3) for two binary unrooted trees on n leaves. Trivial splits are
     # excluded deliberately: every tree over the same leaves induces all of
@@ -70,6 +73,7 @@ def test_the_normalizer_is_the_internal_split_count() -> None:
         assert raw == 2 * (len(names) - 3)
 
 
+@pytest.mark.edge_case
 def test_a_tree_with_no_internal_edge_scores_zero() -> None:
     # Below four taxa there is no internal split, so the normalizer is zero
     # and the ratio undefined. Reporting 0.0 is right -- three leaves admit
@@ -79,6 +83,7 @@ def test_a_tree_with_no_internal_edge_scores_zero() -> None:
     assert normalized_robinson_foulds(star, star) == 0.0
 
 
+@pytest.mark.edge_case
 def test_the_distance_refuses_trees_over_different_leaves() -> None:
     first = next(iter(enumerate_topologies(list("ABCDE"))))
     second = next(iter(enumerate_topologies(list("ABCDF"))))
@@ -89,6 +94,7 @@ def test_the_distance_refuses_trees_over_different_leaves() -> None:
 # --- the figure -----------------------------------------------------------
 
 
+@pytest.mark.structural
 def test_the_sweep_covers_sizes_on_both_sides_of_the_requirement() -> None:
     # A sweep that only covers sizes already known to work locates no margin,
     # which is the whole point of plotting against the site count.
@@ -97,6 +103,7 @@ def test_the_sweep_covers_sizes_on_both_sides_of_the_requirement() -> None:
     assert REQUIREMENT == 0.05
 
 
+@pytest.mark.structural
 def test_main_writes_a_figure_and_caption(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -127,6 +134,7 @@ def test_main_writes_a_figure_and_caption(
     assert str(min(SITE_COUNTS)) in written.caption
 
 
+@pytest.mark.simulated_truth
 @pytest.mark.release
 def test_more_sites_recover_the_topology_more_often() -> None:
     # The claim the figure makes. Asserted as a comparison between the ends of

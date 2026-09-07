@@ -74,6 +74,7 @@ def _recovery_rates(tau: Node, n_sites: int, replicates: int) -> tuple[int, int]
     return parsimony_correct, likelihood_correct
 
 
+@pytest.mark.oracle
 def test_fitch_matches_exhaustive_enumeration_over_internal_labellings() -> None:
     # The oracle assigns states to internal nodes directly and counts
     # disagreeing edges; Fitch intersects state sets in one post-order pass.
@@ -89,6 +90,7 @@ def test_fitch_matches_exhaustive_enumeration_over_internal_labellings() -> None
         )
 
 
+@pytest.mark.oracle
 def test_fitch_matches_a_score_worked_out_by_hand() -> None:
     # Three sites chosen so each exercises a different branch of the
     # recursion: an informative split, a constant site, and a site where every
@@ -106,6 +108,7 @@ def test_fitch_matches_a_score_worked_out_by_hand() -> None:
     assert fitch_score(tau, alignment, 4) == 1 + 0 + 3
 
 
+@pytest.mark.edge_case
 def test_a_constant_alignment_needs_no_changes() -> None:
     tau = _balanced(0.1, 0.1, 0.1, 0.1)
     alignment = {name: np.zeros(20, dtype=np.int64) for name in LEAVES}
@@ -113,6 +116,7 @@ def test_a_constant_alignment_needs_no_changes() -> None:
     assert fitch_score(tau, alignment, 4) == 0
 
 
+@pytest.mark.edge_case
 def test_a_missing_leaf_is_refused() -> None:
     # Silently scoring the subtree it can reach would return a smaller number
     # for the wrong reason, and smaller is better under this criterion.
@@ -123,6 +127,7 @@ def test_a_missing_leaf_is_refused() -> None:
         fitch_score(tau, alignment, 4)
 
 
+@pytest.mark.edge_case
 def test_sequences_of_different_lengths_are_refused() -> None:
     tau = _balanced(0.1, 0.1, 0.1, 0.1)
     alignment = {name: np.zeros(5, dtype=np.int64) for name in LEAVES}
@@ -132,6 +137,7 @@ def test_sequences_of_different_lengths_are_refused() -> None:
         fitch_score(tau, alignment, 4)
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("k", [1, 64])
 def test_a_state_count_a_bitmask_cannot_hold_is_refused(k: int) -> None:
     tau = _balanced(0.1, 0.1, 0.1, 0.1)
@@ -141,6 +147,7 @@ def test_a_state_count_a_bitmask_cannot_hold_is_refused(k: int) -> None:
         fitch_score(tau, alignment, k)
 
 
+@pytest.mark.simulated_truth
 def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
     # The theorem, as a prediction. Parsimony does not merely do badly here --
     # more data does not help, because the systematic pull toward grouping the
@@ -153,6 +160,7 @@ def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
     assert many_parsimony == 0
 
 
+@pytest.mark.simulated_truth
 def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
     # The other half of the same claim, and the reason the zone is the
     # canonical argument for the criterion this repository actually uses.
@@ -164,6 +172,7 @@ def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
     assert many_likelihood >= few_likelihood
 
 
+@pytest.mark.simulated_truth
 def test_parsimony_is_correct_and_fast_in_the_farris_zone() -> None:
     # The control. Without it, "parsimony got the Felsenstein zone wrong" is
     # indistinguishable from "this parsimony implementation is broken".
@@ -175,6 +184,8 @@ def test_parsimony_is_correct_and_fast_in_the_farris_zone() -> None:
     assert parsimony == 6
 
 
+@pytest.mark.edge_case
+@pytest.mark.mathematical
 def test_a_zero_length_internal_branch_leaves_the_three_topologies_tied() -> None:
     # An analytic corner: with no internal branch there is no split to detect,
     # so no topology should be preferred and a strict preference would be

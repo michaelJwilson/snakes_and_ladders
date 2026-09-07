@@ -187,11 +187,23 @@ showcontent = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Two axes, and they are independent (issue #237). A *kind* says what a test is
+# checked against; `critical` says whether it gates early. A test is critical
+# *and* an oracle test, never instead of one, so folding them into one flat set
+# would force a choice the scheme has no basis for. `release` is a third,
+# older axis and says when a test runs. `CLAUDE.md`'s Testing section states
+# the principle; this list is where the names live.
+addopts = "--strict-markers"
 markers = [
     "release: long-running scientific validity test, run on release rather than per PR (DEV.md CI & Performance Budget)",
+    "oracle: checked against an independent exact answer -- enumeration, brute force, a closed form, or a published value",
+    "simulated_truth: checked against the parameters that generated the data",
+    "mathematical: checked against a property the model must satisfy regardless of implementation",
+    "edge_case: checked at a boundary, or that an unusable input is refused",
+    "structural: checked against an invariant this repository chose -- the import graph, a protocol, a documented contract, or a guard's own trigger",
+    "critical: gates early; fast, and its failure invalidates what runs after it",
     "stress: same claim at a size the 5-minute CI budget cannot hold; run with `-m stress` inside the 10-minute developer budget (DEV.md CI & Performance Budget)",
 ]
-addopts = "--strict-markers"
 
 [tool.coverage.run]
 source = ["phylo"]

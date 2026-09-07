@@ -55,6 +55,7 @@ def _random_graph(n_nodes: int, density: float, seed: int) -> PottsGraph:
     return PottsGraph(n_nodes=n_nodes, edges=edges, coupling=(1.0,) * len(edges))
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(("first", "second"), [(3, 4), (5, 5), (8, 6)])
 def test_a_complete_bipartite_graph_has_every_edge_in_its_maximum_cut(
     first: int, second: int
@@ -68,6 +69,7 @@ def test_a_complete_bipartite_graph_has_every_edge_in_its_maximum_cut(
     assert result.value == pytest.approx(float(len(graph.edges)))
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(3, 3), (4, 3), (4, 4)])
 def test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice(
     shape: tuple[int, int],
@@ -83,6 +85,7 @@ def test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice(
     assert result.value == pytest.approx(optimum)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize(
     ("n_nodes", "density", "seed"), [(12, 0.4, 1), (16, 0.3, 2), (18, 0.25, 3)]
 )
@@ -102,6 +105,7 @@ def test_the_realized_ratio_beats_the_bound_on_a_graph_with_triangles(
     assert result.value <= optimum + 1e-9
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize(
     ("n_nodes", "density", "seed"), [(12, 0.4, 1), (16, 0.3, 2), (18, 0.25, 3)]
 )
@@ -118,6 +122,7 @@ def test_the_certificate_holds_where_the_optimum_is_unknown(
     assert result.ratio >= GOEMANS_WILLIAMSON_RATIO
 
 
+@pytest.mark.structural
 def test_the_relaxation_is_solved_approximately_and_says_so() -> None:
     # The honest limit of the certificate, asserted rather than left in prose.
     # An exactly solved relaxation upper bounds the true optimum, so the ratio
@@ -137,6 +142,7 @@ def test_the_relaxation_is_solved_approximately_and_says_so() -> None:
     assert result.ratio < 1.001
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("weight", [1.0, 2.5, 0.4])
 def test_max_cut_is_the_antiferromagnetic_ising_ground_state(weight: float) -> None:
     # The identity the module rests on, checked rather than asserted in prose:
@@ -171,6 +177,7 @@ def test_max_cut_is_the_antiferromagnetic_ising_ground_state(weight: float) -> N
     assert maximum_cut < weight * len(positive.edges)
 
 
+@pytest.mark.mathematical
 def test_the_cut_does_not_depend_on_the_sign_of_the_coupling() -> None:
     # A graph written with the antiferromagnetic sign the problem corresponds
     # to and one written with positive weights are the same instance.
@@ -187,6 +194,7 @@ def test_the_cut_does_not_depend_on_the_sign_of_the_coupling() -> None:
     assert cut_value(positive, assignment) == cut_value(negative, assignment)
 
 
+@pytest.mark.edge_case
 def test_enumeration_refuses_a_size_it_cannot_do() -> None:
     graph = lattice_graph((5, 5), BoundaryCondition.OPEN, 1.0)
 
@@ -196,6 +204,7 @@ def test_enumeration_refuses_a_size_it_cannot_do() -> None:
         enumerate_max_cut(graph)
 
 
+@pytest.mark.oracle
 def test_enumeration_fixes_one_side_without_losing_the_optimum() -> None:
     # Complementing an assignment gives the same cut, so half the search space
     # is redundant. Fixing the last node is exact rather than a heuristic --
@@ -211,6 +220,7 @@ def test_enumeration_fixes_one_side_without_losing_the_optimum() -> None:
     assert restricted == pytest.approx(unrestricted)
 
 
+@pytest.mark.edge_case
 def test_a_graph_with_no_edges_has_an_empty_cut() -> None:
     graph = PottsGraph(n_nodes=4, edges=(), coupling=())
 

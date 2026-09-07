@@ -59,6 +59,7 @@ def _ensemble(draws: int, seed: int) -> list[PottsGraph]:
     return graphs
 
 
+@pytest.mark.oracle
 def test_belief_propagation_is_exact_on_every_acyclic_draw() -> None:
     # The strong claim, and far broader than one hand-built tree supports: the
     # ensemble supplies isolated vertices, several components, and varying
@@ -83,6 +84,7 @@ def test_belief_propagation_is_exact_on_every_acyclic_draw() -> None:
         )
 
 
+@pytest.mark.structural
 def test_the_ensemble_reaches_structures_no_committed_fixture_does() -> None:
     # The reason to draw rather than to hand-build. Each of these is a real
     # code path -- the isolated vertex in particular sits on the boundary
@@ -106,6 +108,7 @@ def test_the_ensemble_reaches_structures_no_committed_fixture_does() -> None:
     assert saw_cycle
 
 
+@pytest.mark.structural
 def test_the_deviation_on_a_cyclic_draw_is_reported_not_asserted() -> None:
     # On a loop BP is approximate, so the deviation is a measurement -- the
     # same disposition #172 takes for the lattice.
@@ -135,6 +138,7 @@ def test_the_deviation_on_a_cyclic_draw_is_reported_not_asserted() -> None:
         assert deviation < 5e-2
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("n_nodes", [4, 8, 12])
 def test_the_expected_edge_count_matches_the_closed_form(n_nodes: int) -> None:
     # A property of the generator, checked against `p n (n - 1) / 2` rather
@@ -154,6 +158,7 @@ def test_the_expected_edge_count_matches_the_closed_form(n_nodes: int) -> None:
     assert abs(float(np.mean(counts)) - expected) < 3.0 * error
 
 
+@pytest.mark.edge_case
 def test_zero_and_one_give_the_empty_and_complete_graphs_exactly() -> None:
     # Equalities rather than tolerances: at these probabilities no randomness
     # is left, so anything but an exact answer is a bug in the comparison.
@@ -163,6 +168,7 @@ def test_zero_and_one_give_the_empty_and_complete_graphs_exactly() -> None:
     assert len(erdos_renyi_graph(6, 1.0, 1.0, rng).edges) == 6 * 5 // 2
 
 
+@pytest.mark.structural
 def test_a_drawn_graph_has_no_self_loops_and_no_repeated_pairs() -> None:
     # `PottsGraph` deliberately permits a repeated pair, because a periodic
     # lattice of extent 2 produces one legitimately. A random graph must not,
@@ -174,6 +180,7 @@ def test_a_drawn_graph_has_no_self_loops_and_no_repeated_pairs() -> None:
     assert len(set(graph.edges)) == len(graph.edges)
 
 
+@pytest.mark.structural
 def test_a_drawn_graph_is_not_mistaken_for_a_lattice() -> None:
     # `is_open_chain` gates the exact 1-D sampler. A random graph carrying a
     # `shape` would be sampled by a recursion that assumes a chain.
@@ -185,6 +192,7 @@ def test_a_drawn_graph_is_not_mistaken_for_a_lattice() -> None:
     assert not graph.is_open_chain()
 
 
+@pytest.mark.structural
 def test_independent_draws_come_from_one_generator() -> None:
     # The generator is passed in rather than seeded inside, so an ensemble is
     # independent. Seeding per call is the mistake that silently makes every
@@ -196,6 +204,7 @@ def test_independent_draws_come_from_one_generator() -> None:
     assert len(set(drawn)) > 1
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("probability", [-0.1, 1.1])
 def test_a_probability_outside_the_unit_interval_is_refused(
     probability: float,
@@ -204,6 +213,7 @@ def test_a_probability_outside_the_unit_interval_is_refused(
         erdos_renyi_graph(5, probability, 1.0, np.random.default_rng(0))
 
 
+@pytest.mark.edge_case
 def test_an_empty_graph_is_refused() -> None:
     with pytest.raises(ValueError, match="n_nodes must be at least 1"):
         erdos_renyi_graph(0, 0.5, 1.0, np.random.default_rng(0))

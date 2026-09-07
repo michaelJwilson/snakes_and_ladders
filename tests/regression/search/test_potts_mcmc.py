@@ -102,6 +102,7 @@ def _goodness_of_fit(move: PottsMove, field: np.ndarray, seed: int = SEED) -> fl
     return chi_square_p_value(observed, probability * SWEEPS)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("move", list(PottsMove))
 def test_the_chain_is_drawn_from_the_exact_boltzmann_distribution(
     move: PottsMove,
@@ -109,6 +110,7 @@ def test_the_chain_is_drawn_from_the_exact_boltzmann_distribution(
     assert _goodness_of_fit(move, NO_FIELD) > SIGNIFICANCE
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("move", list(PottsMove))
 def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
     # The case the ticket exists for. Wolff's cluster construction alone does
@@ -117,6 +119,7 @@ def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
     assert _goodness_of_fit(move, WITH_FIELD) > SIGNIFICANCE
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_dropping_the_field_accept_step_is_caught(
     move: PottsMove, monkeypatch: pytest.MonkeyPatch
@@ -137,6 +140,7 @@ def test_dropping_the_field_accept_step_is_caught(
     assert _goodness_of_fit(move, WITH_FIELD) < SIGNIFICANCE
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
     # `1 - exp(-J)` is above 1 for J < 0, so it is not a probability, and an
@@ -148,6 +152,7 @@ def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
         sample_potts(graph, NO_FIELD, move, SEED, 10)
 
 
+@pytest.mark.edge_case
 def test_single_site_still_runs_on_a_negative_coupling() -> None:
     # The refusal is a property of the cluster construction, not of the model.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
@@ -182,6 +187,7 @@ def _autocorrelation_in_site_updates(move: PottsMove, extent: int) -> float:
     return tau * chain.mean_cluster_size / graph.n_nodes
 
 
+@pytest.mark.mathematical
 def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
     # The reason for having them, as a number rather than an assertion. At
     # 12x12 the measured times are roughly 6.7, 4.2 and 2.3 site-updates for
@@ -196,6 +202,7 @@ def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
     assert wolff < single
 
 
+@pytest.mark.mathematical
 def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() -> None:
     # What makes the normalization above necessary, pinned so a change that
     # made every cluster a single site -- which would silently turn Wolff into

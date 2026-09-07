@@ -33,6 +33,7 @@ def _relative(realized: float, reference: float) -> float:
     return abs(realized - reference) / abs(reference)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(3, 3), (4, 2), (2, 4), (5, 2)])
 def test_the_transfer_matrix_reproduces_exhaustive_enumeration(
     shape: tuple[int, int],
@@ -48,6 +49,7 @@ def test_the_transfer_matrix_reproduces_exhaustive_enumeration(
     assert _relative(realized, exact.log_partition) < RELATIVE_TOLERANCE
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("length", [2, 3, 5, 8])
 def test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix(
     length: int,
@@ -68,6 +70,7 @@ def test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix(
     assert _relative(realized, reference) < RELATIVE_TOLERANCE
 
 
+@pytest.mark.edge_case
 def test_a_periodic_lattice_is_refused_rather_than_answered_as_open() -> None:
     # The forward recursion computes an open strip. Returning that number for
     # a periodic lattice would be wrong by a whole ring of bonds and silent.
@@ -75,11 +78,13 @@ def test_a_periodic_lattice_is_refused_rather_than_answered_as_open() -> None:
         strip_log_partition((3, 3), BoundaryCondition.PERIODIC, 0.6, FIELD)
 
 
+@pytest.mark.edge_case
 def test_a_three_dimensional_shape_is_refused() -> None:
     with pytest.raises(ValueError, match="takes a 2-D shape"):
         strip_log_partition((2, 2, 2), BoundaryCondition.OPEN, 0.6, FIELD)  # type: ignore[arg-type]
 
 
+@pytest.mark.edge_case
 def test_enumeration_refuses_a_size_it_cannot_do() -> None:
     # Refused rather than attempted: 3**20 configurations is an out-of-memory
     # kill inside a test, which reads as broken infrastructure rather than as
@@ -91,12 +96,14 @@ def test_enumeration_refuses_a_size_it_cannot_do() -> None:
         enumerate_potts(graph, FIELD)
 
 
+@pytest.mark.edge_case
 def test_a_configuration_of_the_wrong_width_is_refused() -> None:
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.6)
     with pytest.raises(ValueError, match="columns for a graph of 4 nodes"):
         log_weights(graph, FIELD, np.zeros((3, 5), dtype=np.int64))
 
 
+@pytest.mark.oracle
 def test_log_weights_matches_the_hamiltonian_evaluated_by_hand() -> None:
     # Two sites, one bond. Agreeing costs `h[a] + h[a] + J`; disagreeing costs
     # `h[a] + h[b]`. Written out rather than derived from the same loop the
@@ -122,6 +129,7 @@ def _enumerated() -> tuple[PottsGraph, ExactPotts]:
     return graph, enumerate_potts(graph, FIELD)
 
 
+@pytest.mark.mathematical
 def test_enumerated_marginals_are_distributions() -> None:
     _, exact = _enumerated()
 
@@ -129,6 +137,7 @@ def test_enumerated_marginals_are_distributions() -> None:
     np.testing.assert_allclose(exact.pairwise.sum(axis=(1, 2)), 1.0, atol=1e-12)
 
 
+@pytest.mark.mathematical
 def test_the_pairwise_marginal_reduces_to_the_single_site_one() -> None:
     # The consistency a joint distribution owes its own marginals. It holds
     # for enumeration by construction and *not* for belief propagation on a
@@ -144,6 +153,8 @@ def test_the_pairwise_marginal_reduces_to_the_single_site_one() -> None:
         )
 
 
+@pytest.mark.edge_case
+@pytest.mark.oracle
 def test_a_zero_coupling_lattice_factorizes_into_independent_sites() -> None:
     # With no bonds the model is `n_nodes` independent draws from softmax(h),
     # so `log Z` is `n_nodes` copies of one normalizer -- an analytic result,

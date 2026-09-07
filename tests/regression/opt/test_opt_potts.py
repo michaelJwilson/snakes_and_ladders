@@ -51,6 +51,7 @@ def _brute_force_log_partition(
     return peak + float(np.log(np.exp(np.asarray(weights) - peak).sum()))
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("length", [1, 2, 3, 5, 8])
 def test_transfer_matrix_matches_brute_force_enumeration(length: int) -> None:
     params = load_potts_params(FIXTURE)
@@ -63,6 +64,7 @@ def test_transfer_matrix_matches_brute_force_enumeration(length: int) -> None:
     assert_allclose(float(actual), expected, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("shift", [-1.5, 0.75])
 def test_log_partition_shifts_exactly_with_the_field_gauge(shift: float) -> None:
     # Every configuration occupies all `length` sites, so adding a constant
@@ -80,6 +82,7 @@ def test_log_partition_shifts_exactly_with_the_field_gauge(shift: float) -> None
     )
 
 
+@pytest.mark.oracle
 def test_objective_matches_a_naive_per_chain_log_likelihood() -> None:
     # The objective reduces the data to two sufficient statistics up front.
     # That shortcut is the kind of thing that is right until someone changes
@@ -105,6 +108,7 @@ def test_objective_matches_a_naive_per_chain_log_likelihood() -> None:
     assert_allclose(float(objective(theta)), -naive, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("at_truth", [True, False])
 def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
     params = load_potts_params(FIXTURE)
@@ -120,6 +124,7 @@ def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
     )
 
 
+@pytest.mark.oracle
 def test_theta_round_trips_through_the_constraint_map() -> None:
     params = load_potts_params(FIXTURE)
     objective = PottsObjective(simulate_chains(params), params.n_states)
@@ -130,6 +135,7 @@ def test_theta_round_trips_through_the_constraint_map() -> None:
     assert_allclose(constrained["field"].numpy(), params.field, rtol=1e-14)
 
 
+@pytest.mark.structural
 def test_the_initial_point_is_a_uniform_field_and_no_coupling() -> None:
     objective = PottsObjective(np.zeros((2, 4), dtype=np.int64), n_states=3)
     constrained = objective.constrain(objective.initial())
@@ -139,11 +145,13 @@ def test_the_initial_point_is_a_uniform_field_and_no_coupling() -> None:
     )
 
 
+@pytest.mark.structural
 def test_the_loader_canonicalizes_the_field_gauge() -> None:
     params = load_potts_params(FIXTURE)
     assert_allclose(float(np.exp(params.field).sum()), 1.0, rtol=1e-14)
 
 
+@pytest.mark.structural
 def test_simulated_chains_have_the_declared_shape_and_alphabet() -> None:
     params = load_potts_params(FIXTURE)
     chains = simulate_chains(params)
@@ -151,11 +159,13 @@ def test_simulated_chains_have_the_declared_shape_and_alphabet() -> None:
     assert set(np.unique(chains)) <= set(range(params.n_states))
 
 
+@pytest.mark.structural
 def test_simulation_is_reproducible_from_the_seed() -> None:
     params = load_potts_params(FIXTURE)
     assert np.array_equal(simulate_chains(params), simulate_chains(params))
 
 
+@pytest.mark.simulated_truth
 def test_coupling_raises_the_frequency_of_adjacent_agreement() -> None:
     # A generative check with an unambiguous direction: positive coupling
     # rewards agreeing neighbours, so simulated chains must agree more often
@@ -169,6 +179,7 @@ def test_coupling_raises_the_frequency_of_adjacent_agreement() -> None:
     assert observed > independent
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("field", "message"),
     [
@@ -188,6 +199,7 @@ def test_a_missing_field_is_refused(field: str, message: str, tmp_path: Path) ->
         load_potts_params(path)
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("replace", "with_", "message"),
     [
@@ -205,6 +217,7 @@ def test_an_unusable_size_is_refused(
         load_potts_params(path)
 
 
+@pytest.mark.structural
 def test_the_constraint_map_is_the_one_the_objective_uses() -> None:
     # Ties the instance to the shared vocabulary rather than to a private
     # copy of it: a divergence here is what would make `opt/CLAUDE.md`'s

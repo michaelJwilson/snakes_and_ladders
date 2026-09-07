@@ -98,6 +98,7 @@ def _small_tree_n6() -> Node:
     )
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     ("tree_factory", "seed", "n_sites"),
     [
@@ -119,6 +120,7 @@ def test_pruning_matches_brute_force(
     assert_allclose(pruned, brute, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
+@pytest.mark.mathematical
 def test_rescaled_and_unrescaled_agree_on_small_problems() -> None:
     tau = _small_tree_n6()
     k = 4
@@ -141,6 +143,7 @@ def _relabel_leaves(node: Node, mapping: dict[str, str]) -> Node:
     )
 
 
+@pytest.mark.mathematical
 def test_pulley_principle_is_invariant_to_root_position() -> None:
     tau = _small_tree_n6()
     k = 4
@@ -169,6 +172,7 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
         )
 
 
+@pytest.mark.simulated_truth
 def test_generating_topology_outscores_random_wrong_topologies() -> None:
     params = load_simulation_params(FIXTURES_DIR / "simulation_params_8taxa.yaml")
     dataset = simulate_alignment(

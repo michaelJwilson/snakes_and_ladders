@@ -47,6 +47,7 @@ def five_taxon() -> Surfaces:
 # --- the statistic --------------------------------------------------------
 
 
+@pytest.mark.mathematical
 def test_the_correlation_is_invariant_to_affine_rescaling() -> None:
     # The property that makes it the right statistic here: the two surfaces
     # are log-likelihoods in the same units, separated by a shift and a
@@ -56,6 +57,7 @@ def test_the_correlation_is_invariant_to_affine_rescaling() -> None:
     assert_allclose(pearson_correlation(values, -2.0 * values), -1.0, atol=1e-12)
 
 
+@pytest.mark.oracle
 def test_the_correlation_matches_its_closed_form_on_a_worked_case() -> None:
     # Centred: a = (-2, -1, 0, 1, 2), b = (-1, -2, 1, 0, 2). a.b = 2+2+0+0+4 = 8,
     # |a| = |b| = sqrt(10), so r = 8/10 = 0.8.
@@ -64,6 +66,7 @@ def test_the_correlation_matches_its_closed_form_on_a_worked_case() -> None:
     assert_allclose(pearson_correlation(first, second), 0.8, atol=1e-12)
 
 
+@pytest.mark.structural
 def test_the_correlation_is_continuous_where_a_rank_statistic_is_not() -> None:
     # The reason this statistic replaced Spearman's rho, pinned rather than
     # argued. Near-tied values are exactly what the fitted surface produces --
@@ -78,6 +81,7 @@ def test_the_correlation_is_continuous_where_a_rank_statistic_is_not() -> None:
     assert abs(pearson_correlation(first, jittered) - baseline) < 1e-9
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("first", "second", "message"),
     [
@@ -97,6 +101,7 @@ def test_the_correlation_rejects_a_sample_it_cannot_use(
 # --- the comparison -------------------------------------------------------
 
 
+@pytest.mark.simulated_truth
 def test_the_two_surfaces_agree_on_the_generating_topology(
     five_taxon: Surfaces,
 ) -> None:
@@ -108,6 +113,7 @@ def test_the_two_surfaces_agree_on_the_generating_topology(
     assert int(np.argmax(fitted)) == truth
 
 
+@pytest.mark.simulated_truth
 def test_the_two_surfaces_are_correlated_but_not_identical(
     five_taxon: Surfaces,
 ) -> None:
@@ -120,6 +126,7 @@ def test_the_two_surfaces_are_correlated_but_not_identical(
     assert 0.9 < correlation < 1.0
 
 
+@pytest.mark.simulated_truth
 def test_the_answer_survives_the_choice_of_fixed_branch_length(
     five_taxon: Surfaces,
 ) -> None:
@@ -133,12 +140,14 @@ def test_the_answer_survives_the_choice_of_fixed_branch_length(
     assert min(BRANCH_LENGTHS) < default < max(BRANCH_LENGTHS)
 
 
+@pytest.mark.structural
 def test_the_default_branch_length_is_the_generating_mean() -> None:
     params = load_simulation_params(FIVE_TAXA)
     lengths = [0.11, 0.26, 0.07, 0.19, 0.12, 0.08, 0.31]
     assert_allclose(mean_branch_length(params), float(np.mean(lengths)), atol=1e-12)
 
 
+@pytest.mark.structural
 def test_the_caption_reports_the_correlation_it_measured(five_taxon: Surfaces) -> None:
     # `qa/CLAUDE.md`: a caption states what actually ran. The correlation is
     # the figure's whole evidence, so a caption that omitted or rounded away
@@ -158,6 +167,7 @@ def test_the_caption_reports_the_correlation_it_measured(five_taxon: Surfaces) -
         figure.clear()
 
 
+@pytest.mark.structural
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     # At 5 taxa, so the whole pipeline -- both surfaces, the sweep, the
     # caption, the render -- is exercised per PR rather than only behind the
@@ -172,6 +182,7 @@ def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     assert "correlation" in written.caption
 
 
+@pytest.mark.simulated_truth
 @pytest.mark.release
 def test_the_comparison_holds_at_six_taxa() -> None:
     # The size the technical document reports. Release-gated because the

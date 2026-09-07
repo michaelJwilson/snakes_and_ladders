@@ -29,11 +29,13 @@ _ALIGNMENT = {
 _BRANCH_LENGTHS = branch_lengths_from_tree(_TAU)
 
 
+@pytest.mark.edge_case
 def test_rejects_mismatched_pi_shape() -> None:
     with pytest.raises(ValueError, match="pi has shape"):
         log_likelihood(_TAU, 4, np.full(3, 1.0 / 3), _ALIGNMENT, _BRANCH_LENGTHS)
 
 
+@pytest.mark.edge_case
 def test_rejects_mismatched_branch_lengths_shape() -> None:
     with pytest.raises(ValueError, match="branch_lengths has shape"):
         log_likelihood(
@@ -41,6 +43,7 @@ def test_rejects_mismatched_branch_lengths_shape() -> None:
         )
 
 
+@pytest.mark.edge_case
 def test_rejects_alignment_missing_a_leaf() -> None:
     with pytest.raises(ValueError, match="alignment is missing leaf"):
         log_likelihood(
@@ -48,6 +51,7 @@ def test_rejects_alignment_missing_a_leaf() -> None:
         )
 
 
+@pytest.mark.edge_case
 def test_branch_lengths_from_tree_rejects_missing_branch_length() -> None:
     tau = Node(
         name="root",

@@ -95,6 +95,7 @@ def five_taxon() -> tuple[
 # --- the enumeration itself ---------------------------------------------
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("n_taxa", [3, 4, 5, 6, 7])
 def test_enumeration_produces_every_topology_exactly_once(n_taxa: int) -> None:
     # Checked against the closed form, not against a second enumeration. A
@@ -107,6 +108,7 @@ def test_enumeration_produces_every_topology_exactly_once(n_taxa: int) -> None:
     assert len({leaf_bipartitions(topology) for topology in produced}) == len(produced)
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("n_taxa", [4, 6])
 def test_every_enumerated_topology_is_well_formed(n_taxa: int) -> None:
     names = [f"t{index}" for index in range(n_taxa)]
@@ -114,6 +116,7 @@ def test_every_enumerated_topology_is_well_formed(n_taxa: int) -> None:
         assert validate_unrooted_newick(to_newick(topology))
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("names", "message"),
     [(["A", "B"], "at least 3 leaves"), (["A", "A", "B"], "must be distinct")],
@@ -123,6 +126,7 @@ def test_enumeration_refuses_unusable_leaf_sets(names: list[str], message: str) 
         list(enumerate_topologies(names))
 
 
+@pytest.mark.structural
 @pytest.mark.release
 def test_enumeration_scales_to_the_size_cap() -> None:
     # DEV.md caps exhaustive topological tests at n <= 10; 8 taxa is 10395
@@ -137,6 +141,7 @@ def test_enumeration_scales_to_the_size_cap() -> None:
 # --- search quality, per PR at 5 taxa ------------------------------------
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
 def test_hill_climbing_reaches_the_enumerated_maximum(
     moves: MoveSet,
@@ -159,6 +164,7 @@ def test_hill_climbing_reaches_the_enumerated_maximum(
         )
 
 
+@pytest.mark.oracle
 def test_the_enumerated_maximum_is_reached_by_no_topology_twice_over(
     five_taxon: tuple[
         dict[str, np.ndarray], int, float, dict[frozenset[frozenset[str]], float]
@@ -176,6 +182,7 @@ def test_the_enumerated_maximum_is_reached_by_no_topology_twice_over(
 # --- the full study, release-gated ---------------------------------------
 
 
+@pytest.mark.oracle
 @pytest.mark.release
 @pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
 def test_hill_climbing_success_rate_at_six_taxa(
@@ -214,6 +221,7 @@ def test_hill_climbing_success_rate_at_six_taxa(
     )
 
 
+@pytest.mark.simulated_truth
 @pytest.mark.release
 def test_the_maximum_likelihood_tree_is_the_generating_tree_here(
     six_taxon: tuple[
@@ -234,6 +242,7 @@ def test_the_maximum_likelihood_tree_is_the_generating_tree_here(
     assert abs(scores[leaf_bipartitions(truth)] - best) <= _LIKELIHOOD_TOLERANCE
 
 
+@pytest.mark.simulated_truth
 @pytest.mark.release
 def test_search_recovers_the_generating_topology(
     six_taxon: tuple[

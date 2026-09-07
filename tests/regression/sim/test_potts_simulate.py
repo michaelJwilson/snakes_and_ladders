@@ -73,6 +73,7 @@ def _enumerate_lattice(
     return log_z, single_site, pair_marginals
 
 
+@pytest.mark.oracle
 def test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice() -> None:
     params = load_potts_lattice_params(FIXTURE)
     graph = lattice_graph(
@@ -108,6 +109,7 @@ def test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice() -> 
         assert_allclose(observed_pair, expected_pairs[edge], atol=params.tolerance)
 
 
+@pytest.mark.oracle
 def test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size() -> None:
     # An independent confirmation at a different (n_states, shape) than the
     # fixture, per the issue's own two named sizes: 2-state 4x4 is 65,536
@@ -136,6 +138,7 @@ def test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size() -> No
     assert_allclose(observed_pair, expected_pairs[edge], atol=0.06)
 
 
+@pytest.mark.oracle
 def test_the_open_chain_path_reproduces_the_transfer_matrix_log_z() -> None:
     # A reduction to an exact result, not sampler-vs-sampler agreement: the
     # same distribution described by phylo.opt.potts's transfer matrix and
@@ -178,6 +181,7 @@ def test_the_open_chain_path_reproduces_the_transfer_matrix_log_z() -> None:
     assert_allclose(observed, expected_single.mean(axis=0), atol=0.03)
 
 
+@pytest.mark.structural
 def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     # A shape/alphabet check needs no equilibration, so it runs at a tiny
     # burn-in and sample count rather than the fixture's full,
@@ -193,6 +197,7 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     assert set(np.unique(dataset.configurations)) <= set(range(params.n_states))
 
 
+@pytest.mark.structural
 def test_simulation_is_reproducible_from_the_seed() -> None:
     params = load_potts_lattice_params(FIXTURE)
     graph = lattice_graph(
@@ -207,6 +212,7 @@ def test_simulation_is_reproducible_from_the_seed() -> None:
     assert np.array_equal(first.configurations, second.configurations)
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("replace", "with_", "message"),
     [
@@ -226,6 +232,7 @@ def test_a_malformed_fixture_is_refused(
         load_potts_lattice_params(path)
 
 
+@pytest.mark.edge_case
 def test_a_missing_field_is_refused(tmp_path: Path) -> None:
     text = "\n".join(
         line

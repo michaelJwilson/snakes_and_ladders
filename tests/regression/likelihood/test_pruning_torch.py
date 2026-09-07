@@ -27,6 +27,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import numpy as np
+import pytest
 import torch
 from numpy.testing import assert_allclose
 from phylo.likelihood import pruning, pruning_torch
@@ -121,6 +122,7 @@ def _with_branch_lengths(node: Node, lengths: dict[str, float]) -> Node:
     )
 
 
+@pytest.mark.oracle
 def test_torch_matches_numpy_oracle() -> None:
     tau = _small_tree_n4()
     k = 4
@@ -136,6 +138,7 @@ def test_torch_matches_numpy_oracle() -> None:
     assert_allclose(float(torch_ll), numpy_ll, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.oracle
 def test_torch_matches_brute_force() -> None:
     tau = _small_tree_n6()
     k = 4
@@ -151,6 +154,7 @@ def test_torch_matches_brute_force() -> None:
     assert_allclose(float(torch_ll), brute, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
 def test_rescaled_and_unrescaled_torch_paths_agree() -> None:
     tau = _small_tree_n6()
     k = 4
@@ -168,6 +172,7 @@ def test_rescaled_and_unrescaled_torch_paths_agree() -> None:
     assert_allclose(float(rescaled), float(unrescaled), rtol=1e-10)
 
 
+@pytest.mark.oracle
 def test_matrix_exp_rate_matrix_path_matches_closed_form() -> None:
     tau = _small_tree_n4()
     k = 4
@@ -186,6 +191,8 @@ def test_matrix_exp_rate_matrix_path_matches_closed_form() -> None:
     assert_allclose(float(general), float(closed_form), rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
+@pytest.mark.oracle
 def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
     tau = _small_tree_n4()
     k = 4
