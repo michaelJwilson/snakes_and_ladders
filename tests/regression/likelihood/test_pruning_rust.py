@@ -1,4 +1,4 @@
-"""Regression tests for ``phylo.likelihood.pruning_rust`` (the Rust CPU backend).
+"""Regression tests for ``snakes_and_ladders.likelihood.pruning_rust`` (the Rust CPU backend).
 
 Checks per ``likelihood/CLAUDE.md``, mirroring ``test_pruning_torch.py``'s
 structure for the PyTorch backend:
@@ -23,11 +23,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.likelihood import pruning, pruning_rust
-from phylo.likelihood.brute_force import brute_force_log_likelihood
-from phylo.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
+from snakes_and_ladders.likelihood import pruning, pruning_rust
+from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
+from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 
@@ -101,11 +101,14 @@ def _small_tree_n6() -> Node:
     )
 
 
+@pytest.mark.oracle
 def test_rust_matches_numpy_oracle() -> None:
     tau = _small_tree_n4()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260920, n_sites=50)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260920), n_sites=50
+    )
 
     numpy_ll = pruning.log_likelihood(tau, k, pi, dataset.alignment)
     rust_ll = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment)
@@ -113,11 +116,14 @@ def test_rust_matches_numpy_oracle() -> None:
     assert_allclose(rust_ll, numpy_ll, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.oracle
 def test_rust_matches_brute_force() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260921, n_sites=15)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260921), n_sites=15
+    )
 
     rust_ll = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment)
     brute = brute_force_log_likelihood(tau, k, pi, dataset.alignment)
@@ -125,11 +131,14 @@ def test_rust_matches_brute_force() -> None:
     assert_allclose(rust_ll, brute, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
 def test_rescaled_and_unrescaled_rust_paths_agree() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260922, n_sites=100)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260922), n_sites=100
+    )
 
     rescaled = pruning_rust.log_likelihood(tau, k, pi, dataset.alignment, rescale=True)
     unrescaled = pruning_rust.log_likelihood(
@@ -139,6 +148,7 @@ def test_rescaled_and_unrescaled_rust_paths_agree() -> None:
     assert_allclose(rescaled, unrescaled, rtol=1e-10)
 
 
+@pytest.mark.edge_case
 def test_rust_rejects_mismatched_pi_shape() -> None:
     tau = Node(
         name="root",
@@ -156,6 +166,7 @@ def test_rust_rejects_mismatched_pi_shape() -> None:
         pruning_rust.log_likelihood(tau, 4, np.full(3, 1.0 / 3), alignment)
 
 
+@pytest.mark.edge_case
 def test_rust_rejects_alignment_missing_a_leaf() -> None:
     tau = Node(
         name="root",
@@ -170,6 +181,7 @@ def test_rust_rejects_alignment_missing_a_leaf() -> None:
         pruning_rust.log_likelihood(tau, 4, np.full(4, 0.25), alignment)
 
 
+@pytest.mark.edge_case
 def test_rust_rejects_non_root_node_without_branch_length() -> None:
     tau = Node(
         name="root",
@@ -187,6 +199,7 @@ def test_rust_rejects_non_root_node_without_branch_length() -> None:
         pruning_rust.log_likelihood(tau, 4, np.full(4, 0.25), alignment)
 
 
+@pytest.mark.structural
 @pytest.mark.release
 def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     """The tolerance holds at 200,000 sites, where an absolute one would not.
@@ -203,7 +216,7 @@ def test_relative_tolerance_transfers_to_fixture_scale() -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)

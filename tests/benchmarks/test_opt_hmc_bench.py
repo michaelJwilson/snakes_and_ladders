@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import pytest
 import torch
-from phylo.opt.hmc import sample
-from phylo.opt.testfunctions import Rosenbrock
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.opt.hmc import sample
+from snakes_and_ladders.opt.testfunctions import Rosenbrock
 
 
 @pytest.mark.parametrize("n_steps", [5, 20])

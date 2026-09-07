@@ -1,7 +1,7 @@
 """Re-execute the committed notebooks and compare what they print.
 
 `docs/nb/` ships notebooks with their outputs committed, and until now
-nothing re-ran them. That gap was not theoretical: `phylo.sim.hmm` landing in
+nothing re-ran them. That gap was not theoretical: `snakes_and_ladders.sim.hmm` landing in
 #182 broke `hmm.ipynb`'s import outright, and #187 switched three call sites
 to a Rust sampler that could have moved every simulated number. Both were
 caught by hand. A `docs/tex/` figure cannot rot that way because CI
@@ -209,7 +209,7 @@ def compare(path: Path) -> list[str]:
     except CellExecutionError as failure:
         # A notebook that no longer runs is the loudest way it can rot, and
         # reporting that as a crash of this tool rather than as a failure of
-        # that notebook would bury it. `phylo.sim.hmm` landing in #182 broke
+        # that notebook would bury it. `snakes_and_ladders.sim.hmm` landing in #182 broke
         # `hmm.ipynb`'s import outright, which is exactly this case.
         return [f"{path.name} did not execute:\n{failure}"]
 

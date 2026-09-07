@@ -1,231 +1,244 @@
-phylo
-=====
+snakes_and_ladders
+==================
 
-.. automodule:: phylo
+.. automodule:: snakes_and_ladders
    :members:
 
 Submodules
 ----------
 
-`python/phylo/__init__.py` re-exports nothing beyond `phylo`'s own top-level
+`python/snakes_and_ladders/__init__.py` re-exports nothing beyond `snakes_and_ladders`'s own top-level
 utilities; each submodule is autodocumented on its own rather than through the
 flat top-level namespace. Entries below cover every submodule that exists,
 whether or not it has members yet.
 
-.. automodule:: phylo.numerics
+.. automodule:: snakes_and_ladders.numerics
    :members:
 
-.. automodule:: phylo.enumeration
+.. automodule:: snakes_and_ladders.enumeration
    :members:
 
-.. automodule:: phylo.numerics_rust
+.. automodule:: snakes_and_ladders.fixtures
    :members:
 
-.. automodule:: phylo.sim
+.. automodule:: snakes_and_ladders.numerics_rust
    :members:
 
-.. automodule:: phylo.sim.tree
+.. automodule:: snakes_and_ladders.sim
    :members:
 
-.. automodule:: phylo.sim.jc
+.. automodule:: snakes_and_ladders.sim.tree
    :members:
 
-.. automodule:: phylo.sim.gtr
+.. automodule:: snakes_and_ladders.sim.jc
    :members:
 
-.. automodule:: phylo.sim.params
+.. automodule:: snakes_and_ladders.sim.gtr
    :members:
 
-.. automodule:: phylo.sim.simulate
+.. automodule:: snakes_and_ladders.sim.params
    :members:
 
-.. automodule:: phylo.sim.graph
+.. automodule:: snakes_and_ladders.sim.simulate
    :members:
 
-.. automodule:: phylo.sim.potts
+.. automodule:: snakes_and_ladders.sim.graph
    :members:
 
-.. automodule:: phylo.sim.hmm
+.. automodule:: snakes_and_ladders.sim.potts
    :members:
 
-.. automodule:: phylo.sim.canonical
+.. automodule:: snakes_and_ladders.sim.hmm
    :members:
 
-.. automodule:: phylo.sim.newick
+.. automodule:: snakes_and_ladders.sim.canonical
    :members:
 
-.. automodule:: phylo.likelihood
+.. automodule:: snakes_and_ladders.sim.newick
    :members:
 
-.. automodule:: phylo.likelihood.objective
+.. automodule:: snakes_and_ladders.likelihood
    :members:
 
-.. automodule:: phylo.likelihood.pruning
+.. automodule:: snakes_and_ladders.likelihood.objective
    :members:
 
-.. automodule:: phylo.likelihood.pruning_torch
+.. automodule:: snakes_and_ladders.likelihood.pruning
    :members:
 
-.. automodule:: phylo.likelihood.pruning_rust
+.. automodule:: snakes_and_ladders.likelihood.pruning_torch
    :members:
 
-.. automodule:: phylo.likelihood.brute_force
+.. automodule:: snakes_and_ladders.likelihood.pruning_rust
    :members:
 
-.. automodule:: phylo.likelihood.parsimony
+.. automodule:: snakes_and_ladders.likelihood.brute_force
    :members:
 
-.. automodule:: phylo.likelihood.device
+.. automodule:: snakes_and_ladders.likelihood.parsimony
    :members:
 
-.. automodule:: phylo.likelihood.potts
+.. automodule:: snakes_and_ladders.likelihood.device
    :members:
 
-.. automodule:: phylo.likelihood.belief_propagation
+.. automodule:: snakes_and_ladders.likelihood.potts
    :members:
 
-.. automodule:: phylo.likelihood.hmm_paths
+.. automodule:: snakes_and_ladders.likelihood.belief_propagation
    :members:
 
-.. automodule:: phylo.opt
+.. automodule:: snakes_and_ladders.likelihood.hmm_paths
    :members:
 
-.. automodule:: phylo.opt.objective
+.. automodule:: snakes_and_ladders.opt
    :members:
 
-.. automodule:: phylo.opt.constrain
+.. automodule:: snakes_and_ladders.opt.objective
    :members:
 
-.. automodule:: phylo.opt.fit
+.. automodule:: snakes_and_ladders.opt.constrain
    :members:
 
-.. automodule:: phylo.opt.testfunctions
+.. automodule:: snakes_and_ladders.opt.fit
    :members:
 
-.. automodule:: phylo.opt.hmc
+.. automodule:: snakes_and_ladders.opt.initialize
    :members:
 
-.. automodule:: phylo.opt.potts
+.. automodule:: snakes_and_ladders.opt.testfunctions
    :members:
 
-.. automodule:: phylo.opt.hmm
+.. automodule:: snakes_and_ladders.opt.hmc
    :members:
 
-.. automodule:: phylo.learn
+.. automodule:: snakes_and_ladders.opt.potts
    :members:
 
-.. automodule:: phylo.learn.environment
+.. automodule:: snakes_and_ladders.opt.hmm
    :members:
 
-.. automodule:: phylo.learn.policy
+.. automodule:: snakes_and_ladders.learn
    :members:
 
-.. automodule:: phylo.learn.potts
+.. automodule:: snakes_and_ladders.learn.environment
    :members:
 
-.. automodule:: phylo.learn.hmm
+.. automodule:: snakes_and_ladders.learn.policy
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.relaxed
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.potts
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.hmm
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.rollout
+   :members:
 
-.. automodule:: phylo.learn.relaxed
+.. automodule:: snakes_and_ladders.learn.reinforce
    :members:
 
-.. automodule:: phylo.learn.rollout
+.. automodule:: snakes_and_ladders.learn.exact
    :members:
 
-.. automodule:: phylo.learn.reinforce
+.. automodule:: snakes_and_ladders.search
    :members:
 
-.. automodule:: phylo.learn.exact
+.. automodule:: snakes_and_ladders.search.topology
    :members:
 
-.. automodule:: phylo.search
+.. automodule:: snakes_and_ladders.search.infer
    :members:
 
-.. automodule:: phylo.search.topology
+.. automodule:: snakes_and_ladders.search.rl
    :members:
 
-.. automodule:: phylo.search.infer
+.. automodule:: snakes_and_ladders.search.alpha_expansion
    :members:
 
-.. automodule:: phylo.search.rl
+.. automodule:: snakes_and_ladders.search.max_cut
    :members:
 
-.. automodule:: phylo.search.alpha_expansion
+.. automodule:: snakes_and_ladders.search.maxflow
    :members:
 
-.. automodule:: phylo.search.max_cut
+.. automodule:: snakes_and_ladders.search.maxflow_rust
    :members:
 
-.. automodule:: phylo.search.maxflow
+.. automodule:: snakes_and_ladders.search.potts_mcmc
    :members:
 
-.. automodule:: phylo.search.maxflow_rust
+.. automodule:: snakes_and_ladders.search.potts_mcmc_rust
    :members:
 
-.. automodule:: phylo.search.potts_mcmc
+.. automodule:: snakes_and_ladders.search.statistics
    :members:
 
-.. automodule:: phylo.search.statistics
+.. automodule:: snakes_and_ladders.qa
    :members:
 
-.. automodule:: phylo.qa
+.. automodule:: snakes_and_ladders.qa.figure
    :members:
 
-.. automodule:: phylo.qa.figure
+.. automodule:: snakes_and_ladders.qa.style
    :members:
 
-.. automodule:: phylo.qa.style
+.. automodule:: snakes_and_ladders.qa.runner
    :members:
 
-.. automodule:: phylo.qa.runner
+.. automodule:: snakes_and_ladders.qa.manifest
    :members:
 
-.. automodule:: phylo.qa.manifest
+.. automodule:: snakes_and_ladders.qa.build
    :members:
 
-.. automodule:: phylo.qa.build
+.. automodule:: snakes_and_ladders.qa.sim_tree
    :members:
 
-.. automodule:: phylo.qa.sim_tree
+.. automodule:: snakes_and_ladders.qa.sim_example
    :members:
 
-.. automodule:: phylo.qa.sim_example
+.. automodule:: snakes_and_ladders.qa.sim_problem_sizes
    :members:
 
-.. automodule:: phylo.qa.sim_problem_sizes
+.. automodule:: snakes_and_ladders.qa.likelihood_footprint
    :members:
 
-.. automodule:: phylo.qa.jc_transition
+.. automodule:: snakes_and_ladders.qa.jc_transition
    :members:
 
-.. automodule:: phylo.qa.backend_agreement
+.. automodule:: snakes_and_ladders.qa.backend_agreement
    :members:
 
-.. automodule:: phylo.qa.opt_recovery
+.. automodule:: snakes_and_ladders.qa.opt_recovery
    :members:
 
-.. automodule:: phylo.qa.opt_coverage
+.. automodule:: snakes_and_ladders.qa.opt_coverage
    :members:
 
-.. automodule:: phylo.qa.opt_branch_recovery
+.. automodule:: snakes_and_ladders.qa.opt_branch_recovery
    :members:
 
-.. automodule:: phylo.qa.opt_model_recovery
+.. automodule:: snakes_and_ladders.qa.opt_model_recovery
    :members:
 
-.. automodule:: phylo.qa.search_trajectory
+.. automodule:: snakes_and_ladders.qa.search_trajectory
    :members:
 
-.. automodule:: phylo.qa.search_topologies
+.. automodule:: snakes_and_ladders.qa.search_topologies
    :members:
 
-.. automodule:: phylo.qa.rl_reward_surface
+.. automodule:: snakes_and_ladders.qa.rl_reward_surface
    :members:
 
-.. automodule:: phylo.qa.topology_accuracy
+.. automodule:: snakes_and_ladders.qa.topology_accuracy
    :members:
 
-.. automodule:: phylo.scripts
+.. automodule:: snakes_and_ladders.scripts
    :members:
 
-.. automodule:: phylo.scripts.run_phylo
+.. automodule:: snakes_and_ladders.scripts.run_snakes_and_ladders
    :members:

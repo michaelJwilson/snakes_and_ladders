@@ -1,8 +1,8 @@
-"""Sphinx configuration for phylo's API docs."""
+"""Sphinx configuration for snakes_and_ladders's API docs."""
 
 from __future__ import annotations
 
-project = "phylo"
+project = "snakes_and_ladders"
 copyright = "2026, M. J. Wilson"
 author = "M. J. Wilson"
 

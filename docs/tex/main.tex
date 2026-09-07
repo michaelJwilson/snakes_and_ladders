@@ -56,7 +56,7 @@ The fundamental challenge in high-dimensional probabilistic inference is the com
 Classical inference frameworks heavily rely on fixed, hand-designed heuristics---such as Nearest-Neighbor Interchange (NNI) for trees, or Swendsen-Wang cluster updates for lattices---applied greedily or via simulated annealing. This paper introduces an alternative paradigm: framing the discrete search as a Reinforcement Learning (RL) problem where a neural policy proposes structural updates, while continuous parameters are simultaneously fitted via reverse-mode automatic differentiation. 
 
 \subsection{Scope and Limitations}
-This document serves as the foundational mathematical and architectural specification of the \texttt{phylo} repository. It validates the exactness of our differentiable likelihood and energy engines against brute-force marginalization and establishes our continuous optimization tolerances. \textbf{Note:} Empirical benchmarking of the fully trained RL policies against state-of-the-art classical tools (e.g., IQ-TREE 2, RAxML-NG) is slated for upcoming milestones and is marked via placeholders in Section \ref{sec:results}.
+This document serves as the foundational mathematical and architectural specification of the \texttt{snakes\_and\_ladders} repository. It validates the exactness of our differentiable likelihood and energy engines against brute-force marginalization and establishes our continuous optimization tolerances. \textbf{Note:} Empirical benchmarking of the fully trained RL policies against state-of-the-art classical tools (e.g., IQ-TREE 2, RAxML-NG) is slated for upcoming milestones and is marked via placeholders in Section \ref{sec:results}.
 
 \section{Methods}
 \label{sec:methods}
@@ -119,6 +119,19 @@ The following figures validate the mathematical exactness of the simulation and 
   \label{fig:backend-agreement}
 \end{figure}
 
+\subsection{Memory Footprint at the Declared Scale}
+\label{sec:res-footprint}
+
+The roadmap bounds the working set to $O(n \times L \times k)$ inside 16\,GB of unified memory. Table~\ref{tab:likelihood-footprint} settles it, splitting the cost the data carries from the cost the evaluator adds: the simulator retains every node's states, while pruning retains a partial likelihood only for nodes whose parent has not yet consumed it and so tracks the tree's depth. Both are reported on a caterpillar, the deepest tree on its leaves, which makes the bound tight rather than loose and the reported total a worst case rather than a typical one.
+
+\qacaptionread{figures/likelihood_footprint_caption.txt}{\likelihoodFootprintCaption}
+\begin{table}[htbp]
+  \centering
+  \input{figures/likelihood_footprint}
+  \caption{\likelihoodFootprintCaption}
+  \label{tab:likelihood-footprint}
+\end{table}
+
 \subsection{Empirical Benchmarking [PLACEHOLDERS]}
 
 In accordance with the project roadmap, the following metrics will be populated upon completion of Milestone 2.3.
@@ -133,7 +146,7 @@ In accordance with the project roadmap, the following metrics will be populated 
 \begin{figure}[htbp]
   \centering
   \framebox[\linewidth]{\rule{0pt}{150pt} \textbf{PLACEHOLDER: Competitiveness against Classical Software}}
-  \caption{Wall-clock convergence of the \texttt{phylo} framework against IQ-TREE 2 and RAxML-NG on empirical benchmark datasets.}
+  \caption{Wall-clock convergence of the \texttt{snakes\_and\_ladders} framework against IQ-TREE 2 and RAxML-NG on empirical benchmark datasets.}
   \label{fig:benchmark-iqtree}
 \end{figure}
 

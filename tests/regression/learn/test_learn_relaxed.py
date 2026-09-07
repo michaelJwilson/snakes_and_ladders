@@ -17,8 +17,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from phylo.learn.potts import Configuration, PottsLandscape, optimum
-from phylo.learn.relaxed import (
+from snakes_and_ladders.learn.potts import Configuration, PottsLandscape, optimum
+from snakes_and_ladders.learn.relaxed import (
     MINIMUM_TEMPERATURE,
     RelaxationMode,
     RelaxedHmmPath,
@@ -33,9 +33,12 @@ from phylo.learn.relaxed import (
     one_hot,
     optimize,
 )
-from phylo.learn.rollout import greedy_rollout
-from phylo.likelihood.hmm_paths import enumerate_hidden_paths, path_log_probability
-from phylo.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
+from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.likelihood.hmm_paths import (
+    enumerate_hidden_paths,
+    path_log_probability,
+)
+from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
@@ -81,6 +84,7 @@ def _mcnemar(first: np.ndarray, second: np.ndarray) -> tuple[int, int, float]:
 # --- 1. The relaxation is an extension ------------------------------------
 
 
+@pytest.mark.oracle
 def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
     # The first thing that must be true. A relaxation that disagrees with the
     # discrete score at a one-hot is a different model, and every measurement
@@ -93,9 +97,10 @@ def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
         assert relaxed == pytest.approx(landscape.energy(candidate), rel=1e-11)
 
 
+@pytest.mark.oracle
 def test_the_hmm_relaxation_is_exact_at_every_corner() -> None:
     # The same check across a module boundary, which makes it stronger than
-    # the one above: `phylo.learn` may not import `phylo.likelihood`, so
+    # the one above: `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
     # `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely
     # independent implementations of `log P(path, observations)`.
     objective, params, observations = _hmm(length=5)
@@ -109,6 +114,7 @@ def test_the_hmm_relaxation_is_exact_at_every_corner() -> None:
         assert objective.discrete(candidate) == pytest.approx(reference, rel=1e-11)
 
 
+@pytest.mark.oracle
 def test_the_relaxed_optimum_of_the_hmm_is_the_viterbi_path() -> None:
     # The relaxed objective's discrete optimum must be the answer another
     # module computes for the same question, or the relaxation is optimizing
@@ -125,6 +131,7 @@ def test_the_relaxed_optimum_of_the_hmm_is_the_viterbi_path() -> None:
 # --- 2. The identity, and where it actually breaks ------------------------
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_the_expected_discrete_score_equals_the_score_at_the_marginals(
     seed: int,
@@ -145,6 +152,7 @@ def test_the_expected_discrete_score_equals_the_score_at_the_marginals(
         assert enumerated == pytest.approx(closed_form, rel=1e-11)
 
 
+@pytest.mark.mathematical
 def test_a_term_over_three_distinct_sites_does_not_break_the_identity() -> None:
     # The boundary is easy to state wrongly, and "the terms must be pairwise"
     # is one of the wrong statements. Three distinct sites is still one factor
@@ -168,6 +176,7 @@ def test_a_term_over_three_distinct_sites_does_not_break_the_identity() -> None:
     )
 
 
+@pytest.mark.mathematical
 def test_a_term_using_one_site_twice_does_break_the_identity() -> None:
     # What actually breaks it: `E[X**2]` is `E[X]` for an indicator and not
     # `E[X]**2`. Not hypothetical -- `PottsGraph` permits a doubled bond,
@@ -194,6 +203,7 @@ def test_a_term_using_one_site_twice_does_break_the_identity() -> None:
     )
 
 
+@pytest.mark.structural
 def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> None:
     # A multilinear function on a product of simplices attains its maximum at
     # a vertex, so the relaxed optimum cannot exceed the discrete one. It
@@ -213,6 +223,7 @@ def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> No
         assert value <= best + 1e-12
 
 
+@pytest.mark.structural
 def test_the_two_objectives_satisfy_the_protocol() -> None:
     # The seam this module is built on. Everything -- estimators, exact
     # gradient, optimizer -- is written against `RelaxedObjective` and never
@@ -224,6 +235,7 @@ def test_the_two_objectives_satisfy_the_protocol() -> None:
 # --- 3. The estimators, against the exact gradient ------------------------
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("mode", list(RelaxationMode))
 def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     mode: RelaxationMode,
@@ -274,6 +286,7 @@ def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     assert min(biases) > 0.05
 
 
+@pytest.mark.structural
 def test_more_samples_cut_the_variance_and_leave_the_bias() -> None:
     # The distinction the two are reported separately for: averaging is a
     # variance reduction and not a bias reduction, so a method that fails
@@ -303,6 +316,7 @@ def test_more_samples_cut_the_variance_and_leave_the_bias() -> None:
     assert means[1] == pytest.approx(means[0], rel=0.35)
 
 
+@pytest.mark.oracle
 def test_the_exact_gradient_matches_a_finite_difference() -> None:
     # The reference every estimator is measured against needs its own check,
     # or a bias measurement is only evidence that two wrong things differ.
@@ -329,6 +343,7 @@ def test_the_exact_gradient_matches_a_finite_difference() -> None:
 # --- 4. Against the baseline, at matched restarts -------------------------
 
 
+@pytest.mark.structural
 def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     # The comparison that decides whether this is worth having, on shared
     # seeds with the exact optimum as the target. Measured over 40 restarts:
@@ -386,6 +401,7 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     assert p_value < 0.01
 
 
+@pytest.mark.structural
 def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
     # Reported as a tie because it is one. #193 established that precedent for
     # the tree policy, and a tie stated as a tie is worth more than a variant
@@ -420,6 +436,7 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
         assert p_value > 0.05
 
 
+@pytest.mark.simulated_truth
 def test_the_hmm_path_is_recovered_from_every_restart() -> None:
     # The HMM half validates correctness, not difficulty: Viterbi is exact in
     # `O(T k**2)` and nothing here is hard. Recovering it from 20 of 20
@@ -442,6 +459,7 @@ def test_the_hmm_path_is_recovered_from_every_restart() -> None:
 # --- 5. The pieces --------------------------------------------------------
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("mode", list(RelaxationMode))
 def test_a_gumbel_softmax_sample_is_row_stochastic(mode: RelaxationMode) -> None:
     generator = torch.Generator().manual_seed(2)
@@ -454,6 +472,7 @@ def test_a_gumbel_softmax_sample_is_row_stochastic(mode: RelaxationMode) -> None
     assert float(sample.min()) >= 0.0
 
 
+@pytest.mark.structural
 def test_straight_through_is_one_hot_forward_and_soft_backward() -> None:
     # The identity the mode is built on, checked on both halves: the value is
     # a corner, and the gradient is not the corner's (which would be zero
@@ -471,6 +490,7 @@ def test_straight_through_is_one_hot_forward_and_soft_backward() -> None:
     assert float(np.abs(logits.grad.numpy()).max()) > 0.0
 
 
+@pytest.mark.structural
 def test_the_gumbel_draws_are_independent_across_calls() -> None:
     # The generator is passed in rather than seeded inside, so a batch is
     # independent. Seeding per call silently makes every draw identical, and
@@ -486,6 +506,7 @@ def test_the_gumbel_draws_are_independent_across_calls() -> None:
     assert len(drawn) > 1
 
 
+@pytest.mark.edge_case
 def test_a_temperature_below_the_floor_is_refused() -> None:
     with pytest.raises(ValueError, match="temperature must be >="):
         gumbel_softmax(
@@ -495,6 +516,7 @@ def test_a_temperature_below_the_floor_is_refused() -> None:
         )
 
 
+@pytest.mark.structural
 def test_the_anneal_schedule_is_geometric_and_hits_both_endpoints() -> None:
     # Geometric because the relaxation's behaviour is set by the ratio of
     # logit gaps to `tau`, so equal multiplicative steps are equal steps in
@@ -507,6 +529,7 @@ def test_the_anneal_schedule_is_geometric_and_hits_both_endpoints() -> None:
     assert ratios == pytest.approx([ratios[0]] * len(ratios))
 
 
+@pytest.mark.structural
 def test_a_single_step_schedule_stays_at_the_start() -> None:
     assert anneal(0.5, 0.1, 1, 0) == pytest.approx(0.5)
 
@@ -519,6 +542,7 @@ def test_a_single_step_schedule_stays_at_the_start() -> None:
         (1.0, 0.1, 0, "steps must be at least 1"),
     ],
 )
+@pytest.mark.edge_case
 def test_an_invalid_schedule_is_refused(
     start: float, end: float, steps: int, message: str
 ) -> None:
@@ -526,6 +550,7 @@ def test_an_invalid_schedule_is_refused(
         anneal(start, end, steps, 0)
 
 
+@pytest.mark.structural
 def test_annealing_reaches_the_final_temperature_during_optimization() -> None:
     # Both schedules are supported because the fixed-`tau` sweep is the
     # measurement and annealing is the practice. This checks the annealed run

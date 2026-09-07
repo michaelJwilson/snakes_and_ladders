@@ -1,4 +1,4 @@
-"""Self-time profiling over ``phylo.sim``, ``phylo.search`` and ``phylo.learn``.
+"""Self-time profiling over ``snakes_and_ladders.sim``, ``snakes_and_ladders.search`` and ``snakes_and_ladders.learn``.
 
 Ranks each module's hot entry points by ``cProfile`` self time, at a
 CI-sized fixture and one larger, non-CI size (root `CLAUDE.md`'s
@@ -31,14 +31,14 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.potts import PottsLandscape
-from phylo.learn.reinforce import reinforce
-from phylo.search.infer import MoveSet, infer
-from phylo.search.topology import Topology, nni_neighbours, spr_neighbours
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
 from profile_harness import self_time_ranking
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.reinforce import reinforce
+from snakes_and_ladders.search.infer import MoveSet, infer
+from snakes_and_ladders.search.topology import Topology, nni_neighbours, spr_neighbours
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 
 def _caterpillar(n_taxa: int) -> Topology:
@@ -72,7 +72,9 @@ def profile_sim(n_sites: int) -> str:
     pi = np.full(4, 0.25)
 
     def _run() -> None:
-        simulate_alignment(tau, k=4, pi=pi, seed=1, n_sites=n_sites)
+        simulate_alignment(
+            tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
+        )
 
     return self_time_ranking(_run, repeats=5)
 
@@ -102,10 +104,18 @@ def profile_search_hill_climb(n_sites: int) -> str:
     """
     tau = _branched(6, seed=2)
     pi = np.full(4, 0.25)
-    dataset = simulate_alignment(tau, k=4, pi=pi, seed=3, n_sites=n_sites)
+    dataset = simulate_alignment(
+        tau, k=4, pi=pi, rng=np.random.default_rng(3), n_sites=n_sites
+    )
 
     def _run() -> None:
-        infer(dataset.alignment, k=4, seed=4, moves=MoveSet.NNI, max_evaluations=20)
+        infer(
+            dataset.alignment,
+            k=4,
+            rng=np.random.default_rng(4),
+            moves=MoveSet.NNI,
+            max_evaluations=20,
+        )
 
     return self_time_ranking(_run, repeats=1)
 

@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
-from phylo.likelihood.pruning import log_likelihood
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -35,7 +36,7 @@ def test_log_likelihood_benchmark(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
 

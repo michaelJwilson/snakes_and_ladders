@@ -3,7 +3,7 @@
 `select_tests.py` decides *what* CI runs; this decides *where a candidate
 Rust port should look first* -- both read code to answer a question no
 scientific model bears on, which is why both live in `infra/` rather than
-beside `phylo.sim`, `phylo.search` or `phylo.learn`. Imported the same way
+beside `snakes_and_ladders.sim`, `snakes_and_ladders.search` or `snakes_and_ladders.learn`. Imported the same way
 `select_tests.py` is: insert `infra/` onto ``sys.path`` and import it by its
 bare module name (see ``tests/benchmarks/profile_hotpaths.py``, the caller).
 

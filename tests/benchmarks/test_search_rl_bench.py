@@ -14,11 +14,11 @@ pruning pass -- and this is where the size of that difference is measured.
 from __future__ import annotations
 
 import numpy as np
-from phylo.search.rl import RewardModel, TopologyEnvironment
-from phylo.search.topology import random_topology
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.topology import random_topology
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -32,7 +32,7 @@ def _alignment() -> tuple[dict[str, np.ndarray], int, np.ndarray]:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return dict(dataset.alignment), params.k, params.pi

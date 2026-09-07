@@ -12,11 +12,15 @@ from __future__ import annotations
 
 import math
 
-from phylo.opt.fit import constrained_standard_errors, fit
-from phylo.opt.hmm import HmmObjective
-from phylo.opt.potts import PottsObjective, load_potts_params, simulate_chains
-from phylo.sim.hmm import load_hmm_params, simulate_sequences
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.opt.fit import constrained_standard_errors, fit
+from snakes_and_ladders.opt.hmm import HmmObjective
+from snakes_and_ladders.opt.potts import (
+    PottsObjective,
+    load_potts_params,
+    simulate_chains,
+)
+from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 

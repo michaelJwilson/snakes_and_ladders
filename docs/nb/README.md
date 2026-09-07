@@ -17,7 +17,7 @@ the state of the repository.
 
 ## Running them
 
-The notebooks import `phylo` and read fixtures from
+The notebooks import `snakes_and_ladders` and read fixtures from
 `tests/regression/fixtures/`, resolving the repository root from wherever they
 are opened. Install the package first (`INSTALL.md`), then open them with any
 Jupyter front end.
@@ -48,8 +48,8 @@ does not need it.
 
 ## Keeping them true
 
-A change to `phylo.sim`, `phylo.opt`, `phylo.likelihood`, `phylo.search` or
-`phylo.learn` that alters a number these notebooks print must re-run them in
+A change to `snakes_and_ladders.sim`, `snakes_and_ladders.opt`, `snakes_and_ladders.likelihood`, `snakes_and_ladders.search` or
+`snakes_and_ladders.learn` that alters a number these notebooks print must re-run them in
 the same pull request, exactly as it must regenerate a `docs/tex/` figure —
 and CI now enforces that rather than trusting it.
 

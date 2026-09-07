@@ -4,11 +4,13 @@ See tests/_example_hotpath.py for what this exercises and why it's scaffolding.
 """
 
 import numpy as np
+import pytest
 from numpy.testing import assert_allclose
 
 from tests._example_hotpath import pairwise_distance
 
 
+@pytest.mark.oracle
 def test_pairwise_distance_small_fixed_input() -> None:
     # Small, hand-checkable input.
     x = np.array(

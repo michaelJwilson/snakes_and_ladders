@@ -1,10 +1,10 @@
-"""Regression tests for ``phylo.likelihood.pruning``.
+"""Regression tests for ``snakes_and_ladders.likelihood.pruning``.
 
 Four independent checks per issue #62, no two sharing an implementation:
 
 - Brute-force agreement at ``n <= 6`` taxa, to machine precision
   (``test_pruning_matches_brute_force``) -- a genuinely different algorithm
-  (direct marginalization, ``phylo.likelihood.brute_force``), not a second
+  (direct marginalization, ``snakes_and_ladders.likelihood.brute_force``), not a second
   opinion from the same recursion.
 - Rescaled and unrescaled paths agreeing on small problems where both run
   (``test_rescaled_and_unrescaled_agree_on_small_problems``), the check
@@ -27,12 +27,12 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.likelihood.brute_force import brute_force_log_likelihood
-from phylo.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from phylo.likelihood.pruning import log_likelihood
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node, preorder
+from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
+from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -98,6 +98,7 @@ def _small_tree_n6() -> Node:
     )
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     ("tree_factory", "seed", "n_sites"),
     [
@@ -111,7 +112,9 @@ def test_pruning_matches_brute_force(
     tau = tree_factory()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=seed, n_sites=n_sites)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(seed), n_sites=n_sites
+    )
 
     pruned = log_likelihood(tau, k, pi, dataset.alignment)
     brute = brute_force_log_likelihood(tau, k, pi, dataset.alignment)
@@ -119,11 +122,14 @@ def test_pruning_matches_brute_force(
     assert_allclose(pruned, brute, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
+@pytest.mark.mathematical
 def test_rescaled_and_unrescaled_agree_on_small_problems() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260904, n_sites=100)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260904), n_sites=100
+    )
 
     rescaled = log_likelihood(tau, k, pi, dataset.alignment, rescale=True)
     unrescaled = log_likelihood(tau, k, pi, dataset.alignment, rescale=False)
@@ -141,11 +147,14 @@ def _relabel_leaves(node: Node, mapping: dict[str, str]) -> Node:
     )
 
 
+@pytest.mark.mathematical
 def test_pulley_principle_is_invariant_to_root_position() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260905, n_sites=200)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260905), n_sites=200
+    )
 
     left, right = tau.children
     assert left.branch_length is not None
@@ -169,13 +178,14 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
         )
 
 
+@pytest.mark.simulated_truth
 def test_generating_topology_outscores_random_wrong_topologies() -> None:
     params = load_simulation_params(FIXTURES_DIR / "simulation_params_8taxa.yaml")
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
 
