@@ -10,5 +10,6 @@
 \contentsline {subsection}{\numberline {3.2}Exact inference across backends}{3}{subsection.3.2}%
 \contentsline {subsection}{\numberline {3.3}Parameter recovery and interval coverage}{3}{subsection.3.3}%
 \contentsline {subsection}{\numberline {3.4}Discrete search against exhaustive enumeration}{4}{subsection.3.4}%
-\contentsline {subsection}{\numberline {3.5}Empirical benchmarking [PLACEHOLDERS]}{4}{subsection.3.5}%
+\contentsline {subsection}{\numberline {3.5}Memory footprint at the declared scale}{4}{subsection.3.5}%
+\contentsline {subsection}{\numberline {3.6}Empirical benchmarking [PLACEHOLDERS]}{4}{subsection.3.6}%
 \contentsline {section}{\numberline {4}Conclusions}{4}{section.4}%
