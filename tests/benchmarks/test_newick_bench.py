@@ -1,4 +1,4 @@
-"""Benchmark for ``phylo.sim.newick.to_newick``.
+"""Benchmark for ``snakes_and_ladders.sim.newick.to_newick``.
 
 See tests/regression/test_newick.py for correctness. Runs across the same
 site/taxa fixtures as the simulator benchmark, per sim/CLAUDE.md's local
@@ -8,11 +8,12 @@ paths through ``to_newick``).
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
-from phylo.sim.newick import to_newick
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.sim.newick import to_newick
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -30,7 +31,11 @@ def test_to_newick_with_states_benchmark(
 ) -> None:
     params = load_simulation_params(FIXTURES_DIR / fixture_name)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=10
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=10,
     )
 
     labelled = benchmark(to_newick, dataset.tau, dataset.node_states, 0)

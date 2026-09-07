@@ -1,6 +1,6 @@
 # Ground truth for the reward-surface comparison at a size the per-PR suite
 # can afford (tests/regression/test_qa_rl_reward_surface.py). Every field is
-# required -- see python/phylo/sim/params.py and python/phylo/sim/CLAUDE.md.
+# required -- see python/snakes_and_ladders/sim/params.py and python/snakes_and_ladders/sim/CLAUDE.md.
 #
 # 5 taxa because the fitted surface costs one optimization per topology: 15
 # unrooted topologies here against 105 at 6 taxa, which is the difference

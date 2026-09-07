@@ -1,4 +1,4 @@
-"""Benchmarks for `phylo.sim.potts.simulate_potts`.
+"""Benchmarks for `snakes_and_ladders.sim.potts.simulate_potts`.
 
 Correctness is pinned in `tests/regression/sim/test_potts_simulate.py`
 against exhaustive enumeration; these measure cost. Both sampling paths are
@@ -13,9 +13,9 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from phylo.sim.graph import BoundaryCondition, lattice_graph
-from phylo.sim.potts import simulate_potts
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import simulate_potts
 
 _FIELD = np.array([0.40, -0.10, -0.30])
 _SEED = 20260903
@@ -25,7 +25,12 @@ def test_the_exact_open_chain_sampler(benchmark: BenchmarkFixture) -> None:
     graph = lattice_graph((50,), boundary=BoundaryCondition.OPEN, coupling=0.6)
 
     result = benchmark(
-        simulate_potts, graph, _FIELD, seed=_SEED, n_samples=200, burn_in=0
+        simulate_potts,
+        graph,
+        _FIELD,
+        rng=np.random.default_rng(_SEED),
+        n_samples=200,
+        burn_in=0,
     )
 
     # Shape and finiteness only: this file measures, it does not validate.
@@ -39,7 +44,12 @@ def test_the_gibbs_sampler_on_a_two_dimensional_lattice(
     graph = lattice_graph((6, 6), boundary=BoundaryCondition.OPEN, coupling=0.5)
 
     result = benchmark(
-        simulate_potts, graph, _FIELD, seed=_SEED, n_samples=50, burn_in=50
+        simulate_potts,
+        graph,
+        _FIELD,
+        rng=np.random.default_rng(_SEED),
+        n_samples=50,
+        burn_in=50,
     )
 
     assert result.configurations.shape == (50, 36)

@@ -13,14 +13,14 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.likelihood.hmm_paths import enumerate_hidden_paths
-from phylo.sim.canonical import (
+from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
+from snakes_and_ladders.sim.canonical import (
     AMBIGUOUS_OBSERVATIONS,
     ambiguous_hmm,
     frustrated_triangular_lattice,
     planted_spin_glass,
 )
-from pytest_benchmark.fixture import BenchmarkFixture
 
 
 @pytest.mark.parametrize("extent", [8, 24, 64])

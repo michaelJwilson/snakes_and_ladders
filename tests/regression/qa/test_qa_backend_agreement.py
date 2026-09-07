@@ -12,9 +12,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.qa import backend_agreement
-from phylo.qa.backend_agreement import BACKENDS, SITE_COUNTS, agreement, build_figure
-from phylo.sim.params import load_simulation_params
+from snakes_and_ladders.qa import backend_agreement
+from snakes_and_ladders.qa.backend_agreement import (
+    BACKENDS,
+    SITE_COUNTS,
+    agreement,
+    build_figure,
+)
+from snakes_and_ladders.sim.params import load_simulation_params
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -31,6 +36,7 @@ def measured() -> dict[str, list[tuple[int, float]]]:
     return agreement(load_simulation_params(FIXTURE))
 
 
+@pytest.mark.oracle
 def test_every_backend_agrees_with_brute_force(
     measured: dict[str, list[tuple[int, float]]],
 ) -> None:
@@ -41,6 +47,7 @@ def test_every_backend_agrees_with_brute_force(
         assert worst < _AGREEMENT, f"{name} deviates by {worst:.2e}"
 
 
+@pytest.mark.mathematical
 def test_the_deviation_does_not_grow_with_the_sum() -> None:
     # The reason the figure reports a relative deviation. An absolute one
     # grows with the site count, since the log-likelihood is a sum; the
@@ -54,6 +61,7 @@ def test_the_deviation_does_not_grow_with_the_sum() -> None:
     assert SITE_COUNTS[-1] // SITE_COUNTS[0] >= 10
 
 
+@pytest.mark.structural
 def test_the_caption_reports_the_worst_deviation_it_measured(
     measured: dict[str, list[tuple[int, float]]],
 ) -> None:
@@ -68,6 +76,7 @@ def test_the_caption_reports_the_worst_deviation_it_measured(
         figure.clear()
 
 
+@pytest.mark.structural
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = backend_agreement.main(
         ["--params", str(FIXTURE), "--output-dir", str(tmp_path)]
@@ -77,6 +86,7 @@ def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     assert written.caption == written.caption_path.read_text()
 
 
+@pytest.mark.structural
 def test_float64_epsilon_is_below_the_measured_deviation(
     measured: dict[str, list[tuple[int, float]]],
 ) -> None:

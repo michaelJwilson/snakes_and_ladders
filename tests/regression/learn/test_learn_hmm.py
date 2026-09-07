@@ -1,8 +1,8 @@
 """The hidden Markov state path as an `Environment`, against enumeration.
 
-The value of a third instance is that it is not a lattice. `phylo.opt`'s
+The value of a third instance is that it is not a lattice. `snakes_and_ladders.opt`'s
 model-agnosticism is measured rather than asserted --- four instances run
-against `Objective` unchanged --- and `phylo.learn.Environment` has until now
+against `Objective` unchanged --- and `snakes_and_ladders.learn.Environment` has until now
 had one. So what is checked here is not only that this landscape is correct
 but that the *estimator, the policy and the rollout code needed no change to
 carry it*, which is the claim `learn/CLAUDE.md` makes for the interface.
@@ -14,14 +14,14 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.learn.exact import (
+from snakes_and_ladders.learn.exact import (
     exact_expected_return,
     exact_policy_gradient,
     finite_difference_gradient,
 )
-from phylo.learn.hmm import StatePathLandscape, enumerate_paths, optimum
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.rollout import greedy_rollout
+from snakes_and_ladders.learn.hmm import StatePathLandscape, enumerate_paths, optimum
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.rollout import greedy_rollout
 
 # Deliberately asymmetric: a near-uniform transition or emission makes the
 # hidden states nearly exchangeable, and a search on an almost-flat landscape
@@ -52,6 +52,7 @@ def _landscape() -> StatePathLandscape:
     return StatePathLandscape(INITIAL, TRANSITION, EMISSION, OBSERVATIONS)
 
 
+@pytest.mark.oracle
 def test_the_local_reward_matches_re_evaluating_the_joint_probability() -> None:
     # The failure this class is most exposed to: an O(1) update that
     # disagrees with a full evaluation would be invisible to any test that
@@ -67,6 +68,7 @@ def test_the_local_reward_matches_re_evaluating_the_joint_probability() -> None:
             )
 
 
+@pytest.mark.mathematical
 def test_the_features_span_the_reward_so_greedy_is_in_the_policy_class() -> None:
     # `learn/CLAUDE.md` requires it. Here the reward is the plain sum of the
     # two features, so the greedy weights carry no parameter at all.
@@ -81,10 +83,12 @@ def test_the_features_span_the_reward_so_greedy_is_in_the_policy_class() -> None
     assert_allclose(scored, rewards, atol=1e-12)
 
 
+@pytest.mark.oracle
 def test_enumeration_counts_every_path() -> None:
     assert len(list(enumerate_paths(3, len(OBSERVATIONS)))) == 3 ** len(OBSERVATIONS)
 
 
+@pytest.mark.oracle
 def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
     # 729 paths, so "did the search find the best one" has an answer. Greedy
     # is not guaranteed to reach it and the realized rate is what is
@@ -103,9 +107,11 @@ def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
     assert np.mean([value == pytest.approx(best) for value in reached]) > 0.5
 
 
+@pytest.mark.mathematical
+@pytest.mark.oracle
 def test_the_enumerated_gradient_matches_central_differences() -> None:
     # The oracle that makes this an *instance* rather than a second class
-    # with the same method names: `phylo.learn.exact` carries it unchanged
+    # with the same method names: `snakes_and_ladders.learn.exact` carries it unchanged
     # from the Potts landscape, and the agreement it reaches here is the
     # same claim at 1.5e-11 that one reports.
     landscape = _landscape()
@@ -124,6 +130,7 @@ def test_the_enumerated_gradient_matches_central_differences() -> None:
     )
 
 
+@pytest.mark.mathematical
 def test_the_expected_return_is_finite_and_improves_with_greedy_weights() -> None:
     # Not "the return went up": both quantities are *enumerated*, so this is
     # an exact comparison of two closed forms rather than a training curve.
@@ -144,6 +151,7 @@ def test_the_expected_return_is_finite_and_improves_with_greedy_weights() -> Non
     assert under_greedy > under_uniform
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("initial", "transition", "emission", "observations", "message"),
     [
