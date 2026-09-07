@@ -95,8 +95,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   invariance pinned
 - PPO and a learned state-value critic
 - Truth as a terminal penalty, never a training signal
-- Train a phylogenetic policy and report its learning curve against the
-  enumerated expected return (#178)
 
 ## Milestone 2.2 — Curriculum Learning
 
