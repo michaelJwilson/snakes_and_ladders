@@ -171,6 +171,8 @@ against the separation of the emitting means:
 | 4.0 | 93/96 | 0.969 | 0/24 |
 | 6.0 | 92/96 | 0.958 | 0/24 |
 
+Recorded as `docs/experiments/002-hmm-gaussian-interval-coverage.md`.
+
 Coverage reaches nominal from two standard deviations of separation upward and
 degrades below it, seen twice over: the intervals that exist under-cover, and
 most replicates produce **no interval at all** — the observed information is
@@ -771,7 +773,8 @@ normalized to sites touched:
 Single-site slows by 3.2x between extent 8 and 24 while both cluster
 algorithms slow by roughly 1.9x, so the gap is 2.1x at extent 24 and widening.
 That understates the asymptotic separation: these lattices are small and their
-boundary is open, both of which soften the transition.
+boundary is open, both of which soften the transition. Recorded as
+`docs/experiments/001-potts-cluster-autocorrelation.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
@@ -955,7 +958,8 @@ the reward decomposes exactly into the two features the policy scores, which
 puts hill climbing *inside* the policy class as the weight vector proportional
 to `(J, 1)`. The learned policy reaches the enumerated optimum from 86.6% of
 the 81 starts against greedy's 80.2%, in 8 of 8 training seeds — a statement
-about learning rather than about two unrelated algorithms.
+about learning rather than about two unrelated algorithms. Recorded as
+`docs/experiments/003-potts-chain-reinforce-vs-greedy.md`.
 
 **The phylogenetic environment exists, and the reward it can afford is
 measured** ([#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137)). A state
@@ -988,6 +992,23 @@ their own state spaces: 19,683 configurations for a 3-state 3x3 lattice, 729
 paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
+
+## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
+
+**The ledger has a record format before it has a run store**
+([#314](https://github.com/michaelJwilson/snakes_and_ladders/issues/314)). An
+experiment is a file under `docs/experiments/`, written from a template: the
+commit, the feature under test, the fixture and its size tier, the methods
+compared at one budget over shared seeds, the results, the finding, and the
+tickets it filed. `infra/experiments.py` validates every file against the
+template's fields, vocabularies and sections and generates the index that is
+the leaderboard, and a guard runs it per pull request. Three measured
+comparisons this file already stated are the first entries — the cluster
+updates' autocorrelation at the transition, the Gaussian-emission interval
+coverage against separation, and REINFORCE against greedy on the Potts chain —
+and this file now cites them. The Aim run store (#75) is part 2, behind the
+dependency's approval; until then the Results section is typed from the
+measurement and names the script that produced it.
 
 ## §1.2 Requirements Ledger
 
