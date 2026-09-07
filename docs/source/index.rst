@@ -18,6 +18,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.enumeration
    :members:
 
+.. automodule:: snakes_and_ladders.log
+   :members:
+
+.. automodule:: snakes_and_ladders.emissions
+   :members:
+
 .. automodule:: snakes_and_ladders.fixtures
    :members:
 
@@ -45,10 +51,19 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.graph
    :members:
 
+.. automodule:: snakes_and_ladders.sim.factor_graph
+   :members:
+
+.. automodule:: snakes_and_ladders.sim.spatio_sequential
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.potts
    :members:
 
 .. automodule:: snakes_and_ladders.sim.hmm
+   :members:
+
+.. automodule:: snakes_and_ladders.sim.mixture
    :members:
 
 .. automodule:: snakes_and_ladders.sim.canonical
@@ -87,6 +102,15 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.belief_propagation
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.message_passing
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.spatio_sequential
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.forward_backward
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.hmm_paths
    :members:
 
@@ -99,10 +123,16 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.constrain
    :members:
 
+.. automodule:: snakes_and_ladders.opt.schedule
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.fit
    :members:
 
 .. automodule:: snakes_and_ladders.opt.initialize
+   :members:
+
+.. automodule:: snakes_and_ladders.opt.budget
    :members:
 
 .. automodule:: snakes_and_ladders.opt.testfunctions
@@ -115,6 +145,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.opt.hmm
+   :members:
+
+.. automodule:: snakes_and_ladders.opt.mixture
    :members:
 
 .. automodule:: snakes_and_ladders.learn
@@ -150,6 +183,15 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.infer
    :members:
 
+.. automodule:: snakes_and_ladders.search.support
+   :members:
+
+.. automodule:: snakes_and_ladders.search.spatio_sequential
+   :members:
+
+.. automodule:: snakes_and_ladders.search.gibbs
+   :members:
+
 .. automodule:: snakes_and_ladders.search.rl
    :members:
 
@@ -178,6 +220,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.figure
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.layout
    :members:
 
 .. automodule:: snakes_and_ladders.qa.style

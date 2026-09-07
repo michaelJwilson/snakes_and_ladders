@@ -8,7 +8,7 @@ this one is written against no application at all: ``snakes_and_ladders.learn`` 
 nothing from ``snakes_and_ladders.sim``, ``snakes_and_ladders.likelihood`` or ``snakes_and_ladders.search``, asserted
 by a test rather than left to review.
 
-Four pieces are enough, and they are the ones ``docs/tex`` already names:
+Four pieces are enough, and they are the ones ``sec:policy-gradient`` of ``docs/tex/textbook.tex`` names:
 
 * a **state**, whose type the environment owns;
 * an **action set that varies with the state**, because a move neighbourhood's
@@ -125,7 +125,8 @@ class Episode[S, A]:
     terminated : bool
         Whether the episode ended because the environment said the state was
         terminal, rather than because the step budget ran out. A truncated
-        episode has not finished, and ``docs/tex`` notes why that matters:
+        episode has not finished, and ``sec:policy-gradient`` of ``docs/tex/textbook.tex``
+        notes why that matters:
         a truncation landing between a sacrifice and its payoff teaches the
         opposite of the truth.
     """
@@ -139,7 +140,7 @@ class Episode[S, A]:
     def total_reward(self) -> float:
         """The undiscounted return.
 
-        By the telescoping in ``docs/tex`` this is exactly the improvement in
+        By ``eq:return`` of ``docs/tex/textbook.tex`` this is exactly the improvement in
         the underlying objective between the first and last state, whatever
         path was taken between them.
         """

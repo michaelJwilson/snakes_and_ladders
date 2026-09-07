@@ -18,6 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
+from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
 from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.numerics_rust import sample_rows
 
@@ -44,8 +45,6 @@ class HmmParams:
     ----------
     n_states : int
         Hidden states, >= 2.
-    n_symbols : int
-        Emission alphabet size, >= 2.
     sequence_length : int
         Observations per sequence, >= 2. A length-1 sequence carries no
         transition and would leave the transition matrix unidentifiable.
@@ -56,9 +55,12 @@ class HmmParams:
     transition : np.ndarray
         True transition matrix, shape ``(n_states, n_states)``, rows summing
         to 1.
-    emission : np.ndarray
-        True emission matrix, shape ``(n_states, n_symbols)``, rows summing
-        to 1.
+    emissions : EmissionFamily
+        What each hidden state emits. A matrix of symbol probabilities is one
+        family among several (:mod:`snakes_and_ladders.emissions`); the field
+        is the family rather than the matrix so a fixture whose observations
+        are continuous is the same type as one whose observations are
+        symbols.
     seed : int
         Seed for ``np.random.default_rng``.
     tolerance : float
@@ -67,14 +69,51 @@ class HmmParams:
     """
 
     n_states: int
-    n_symbols: int
     sequence_length: int
     n_sequences: int
     initial: np.ndarray
     transition: np.ndarray
-    emission: np.ndarray
+    emissions: EmissionFamily
     seed: int
     tolerance: float
+
+    @property
+    def emission(self) -> np.ndarray:
+        """The emission matrix, for a fixture whose emissions are categorical.
+
+        Kept because the categorical matrix is what a reader of a discrete
+        fixture means by "the emission", and every test written against one
+        says so. A family that is not a matrix has no such reading and this
+        raises rather than inventing one.
+
+        Raises
+        ------
+        TypeError
+            If the emission family is not categorical.
+        """
+        return _categorical(self.emissions).matrix.numpy()
+
+    @property
+    def n_symbols(self) -> int:
+        """Emission alphabet size, for a categorical fixture.
+
+        Raises
+        ------
+        TypeError
+            If the emission family is not categorical.
+        """
+        return _categorical(self.emissions).n_symbols
+
+
+def _categorical(family: EmissionFamily) -> CategoricalEmission:
+    """The family as a categorical one, or a refusal naming what it is."""
+    if not isinstance(family, CategoricalEmission):
+        msg = (
+            f"emission family {type(family).__name__} has no emission matrix "
+            f"and no alphabet; read its named_parameters() instead"
+        )
+        raise TypeError(msg)
+    return family
 
 
 def load_hmm_params(path: Path) -> HmmParams:
@@ -120,12 +159,11 @@ def load_hmm_params(path: Path) -> HmmParams:
 
     return HmmParams(
         n_states=n_states,
-        n_symbols=n_symbols,
         sequence_length=sequence_length,
         n_sequences=int(raw["n_sequences"]),
         initial=initial,
         transition=transition,
-        emission=emission,
+        emissions=CategoricalEmission(emission),
         seed=int(raw["seed"]),
         tolerance=float(raw["tolerance"]),
     )
@@ -159,10 +197,12 @@ class SimulatedHmmDataset:
         Hidden states, shape ``(n_sequences, sequence_length)``, entries in
         ``[0, n_states)``.
     observations : np.ndarray
-        Emitted symbols, shape ``(n_sequences, sequence_length)``, entries
-        in ``[0, n_symbols)``.
-    initial, transition, emission : np.ndarray
-        The truth that generated ``states`` and ``observations``.
+        Emitted observations, shape ``(n_sequences, sequence_length)``. Symbol
+        indices for a categorical family, real values for a continuous one.
+    initial, transition : np.ndarray
+        The transition truth that generated ``states``.
+    emissions : EmissionFamily
+        The emission truth that generated ``observations``.
     seed : int
         Seed used.
     """
@@ -171,8 +211,19 @@ class SimulatedHmmDataset:
     observations: np.ndarray
     initial: np.ndarray
     transition: np.ndarray
-    emission: np.ndarray
+    emissions: EmissionFamily
     seed: int
+
+    @property
+    def emission(self) -> np.ndarray:
+        """The emission matrix, for a categorical dataset.
+
+        Raises
+        ------
+        TypeError
+            If the emission family is not categorical.
+        """
+        return _categorical(self.emissions).matrix.numpy()
 
 
 def simulate_sequences(params: HmmParams) -> SimulatedHmmDataset:
@@ -191,21 +242,19 @@ def simulate_sequences(params: HmmParams) -> SimulatedHmmDataset:
     """
     rng = np.random.default_rng(params.seed)
     states = np.empty((params.n_sequences, params.sequence_length), dtype=np.int64)
-    observations = np.empty(
-        (params.n_sequences, params.sequence_length), dtype=np.int64
-    )
+    columns: list[np.ndarray] = []
     states[:, 0] = rng.choice(
         params.n_states, size=params.n_sequences, p=params.initial
     )
-    observations[:, 0] = sample_rows(rng, params.emission, states[:, 0])
+    columns.append(params.emissions.sample(states[:, 0], rng))
     for t in range(1, params.sequence_length):
         states[:, t] = sample_rows(rng, params.transition, states[:, t - 1])
-        observations[:, t] = sample_rows(rng, params.emission, states[:, t])
+        columns.append(params.emissions.sample(states[:, t], rng))
     return SimulatedHmmDataset(
         states=states,
-        observations=observations,
+        observations=np.stack(columns, axis=1),
         initial=params.initial,
         transition=params.transition,
-        emission=params.emission,
+        emissions=params.emissions,
         seed=params.seed,
     )

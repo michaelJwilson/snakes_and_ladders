@@ -3,8 +3,8 @@ pinned against ``snakes_and_ladders.likelihood.pruning``, the NumPy oracle
 (``likelihood/CLAUDE.md``, "The NumPy reference is the oracle and it
 stays").
 
-Implements the same recursion as the oracle -- eq. (pruning)/(root) of
-``docs/tex/main.tex`` -- in Rust (``src/pruning.rs``), exposed via PyO3.
+Implements the same recursion as the oracle -- ``eq:pruning`` and ``eq:root`` of
+``docs/tex/textbook.tex`` -- in Rust (``src/pruning.rs``), exposed via PyO3.
 There is no autodiff graph to protect here (unlike ``pruning_torch.py``),
 but this wrapper still flattens ``tau`` into plain arrays crossing the FFI
 boundary in a fixed, defined order, rather than letting Rust read
@@ -26,7 +26,7 @@ Nodes cross the boundary in post-order (children before parents, root
 last): ``snakes_and_ladders.sim.tree`` has no ``postorder`` helper, so this module builds
 one locally rather than adding one there for a single caller. Validated to
 machine precision against the NumPy oracle
-(``tests/regression/test_pruning_rust.py``), per ``docs/tex/main.tex``'s
+(``tests/regression/test_pruning_rust.py``), per ``likelihood/CLAUDE.md``'s
 statement of the Rust-backend tolerance.
 """
 

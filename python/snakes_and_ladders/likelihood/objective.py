@@ -239,6 +239,27 @@ class BranchLengthObjective:
 
         return rebuild(self._tau)
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``.
+
+        The inverse of the constraint map, keyed exactly as :meth:`constrain`
+        returns (issue #268). Only the estimable branch lengths appear, as in
+        :meth:`constrain`: a confounded pair is reported as the combination
+        that is identified, and there is nothing to invert for the parts that
+        are not.
+
+        Parameters
+        ----------
+        named : Mapping[str, torch.Tensor]
+            Constrained parameters, under :meth:`constrain`'s own keys.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns ``named``.
+        """
+        return free_from_positive(named["branch_lengths"])
+
     def theta_from_truth(self, tau: Node) -> torch.Tensor:
         """Place a tree's own branch lengths in the unconstrained coordinates.
 
@@ -430,6 +451,32 @@ class SubstitutionModelObjective:
             self._alignment,
             self._branches.branch_lengths(branches),
             rate_matrix=self.rate_matrix(theta),
+        )
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``.
+
+        The inverse of the constraint map, keyed exactly as :meth:`constrain`
+        returns (issue #268). The last exchangeability is pinned at 1 by the
+        gauge and so is dropped rather than inverted — it is not a free
+        parameter and has no coordinate to return to.
+
+        Parameters
+        ----------
+        named : Mapping[str, torch.Tensor]
+            Constrained parameters, under :meth:`constrain`'s own keys.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns ``named``.
+        """
+        return torch.cat(
+            [
+                free_from_positive(named["branch_lengths"]),
+                free_from_positive(named["exchangeabilities"][:-1]),
+                free_from_log_simplex(torch.log(named["pi"])),
+            ]
         )
 
     def theta_from_truth(

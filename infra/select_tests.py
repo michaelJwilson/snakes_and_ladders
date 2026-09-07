@@ -29,9 +29,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# The submodules with their own test directory. `snakes_and_ladders.numerics` and the
-# scaffolding hot path are covered by the top-level regression modules, which
-# are cheap and always run.
+# The submodules with their own test directory. `snakes_and_ladders.numerics`,
+# `snakes_and_ladders.emissions` and the scaffolding hot path are covered by
+# the top-level regression modules, which are cheap and always run.
 MODULES = ("sim", "likelihood", "opt", "learn", "search", "qa")
 
 # The modules a benchmark measures. `qa` renders figures from what these
@@ -42,6 +42,7 @@ BENCHMARKED = ("sim", "likelihood", "opt", "learn", "search")
 # Always run: cheap, and they cover what belongs to no single module.
 ALWAYS = (
     "tests/regression/test_numerics.py",
+    "tests/regression/test_emissions.py",
     "tests/regression/test_pairwise_distance.py",
     "tests/regression/test_claude_md_pointers.py",
     "tests/test_run_snakes_and_ladders.py",
@@ -59,6 +60,7 @@ EVERYTHING = (
     "tests/regression/fixtures/",
     ".github/workflows/",
     "python/snakes_and_ladders/__init__.py",
+    "python/snakes_and_ladders/emissions.py",
     "python/snakes_and_ladders/numerics.py",
     "python/snakes_and_ladders/numerics_rust.py",
     "python/snakes_and_ladders/oxi_snakes_and_ladders.pyi",
