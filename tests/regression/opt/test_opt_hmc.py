@@ -19,17 +19,23 @@ does, which is why `HmcChain` carries it.
 from __future__ import annotations
 
 import itertools
+import math
 from collections.abc import Mapping
 
 import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.opt.hmc import (
+    YOSHIDA_WEIGHTS,
+    Integrator,
     WithGaussianPrior,
+    _gradient,
     hamiltonian,
     leapfrog,
     sample,
+    yoshida,
 )
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 
 from tests._scale import stress_only
@@ -83,8 +89,11 @@ QUADRATURE_SD = (0.05497, 0.04524)
 
 
 @pytest.mark.mathematical
+@pytest.mark.parametrize("integrator", [leapfrog, yoshida])
 @pytest.mark.parametrize(("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (100, 0.02)])
-def test_the_integrator_is_reversible(n_steps: int, step_size: float) -> None:
+def test_the_integrator_is_reversible(
+    n_steps: int, step_size: float, integrator: Integrator
+) -> None:
     # Run forward, negate the momentum, run forward again: the exact statement
     # that makes the Metropolis proposal symmetric. Without it the acceptance
     # ratio is not the energy difference alone and the chain targets the wrong
@@ -92,8 +101,10 @@ def test_the_integrator_is_reversible(n_steps: int, step_size: float) -> None:
     theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
     momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
 
-    forward, forward_momentum = leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
-    back, back_momentum = leapfrog(
+    forward, forward_momentum = integrator(
+        GAUSSIAN, theta, momentum, step_size, n_steps
+    )
+    back, back_momentum = integrator(
         GAUSSIAN, forward, -forward_momentum, step_size, n_steps
     )
 
@@ -270,3 +281,194 @@ def test_a_chain_is_reproducible_from_its_seed() -> None:
     second = sample(GAUSSIAN, seed=5, n_samples=50, step_size=0.2, n_steps=10)
 
     assert torch.equal(first.theta, second.theta)
+
+
+# --- the fourth-order composition (#266) ----------------------------------
+
+
+def _hand_written_leapfrog(
+    objective: Objective,
+    theta: torch.Tensor,
+    momentum: torch.Tensor,
+    step_size: float,
+    n_steps: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Kick-drift-kick, written out, as `leapfrog` was before it was composed.
+
+    Kept as the reference the composition is pinned against. A general driver
+    that reduces to this for the trivial composition is one implementation
+    instead of two; that it *does* reduce is what the test below establishes,
+    and without the reference there would be nothing to establish it against.
+    """
+    position = theta.detach().clone()
+    velocity = momentum.detach().clone()
+    velocity = velocity - 0.5 * step_size * _gradient(objective, position)
+    for step in range(n_steps):
+        position = position + step_size * velocity
+        if step < n_steps - 1:
+            velocity = velocity - step_size * _gradient(objective, position)
+    velocity = velocity - 0.5 * step_size * _gradient(objective, position)
+    return position, velocity
+
+
+@pytest.mark.parametrize(
+    ("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (7, 0.13), (1, 0.3)]
+)
+@pytest.mark.mathematical
+def test_the_composition_reproduces_the_hand_written_leapfrog_exactly(
+    n_steps: int, step_size: float
+) -> None:
+    # Bitwise, not to a tolerance. The composition driver replaced a
+    # hand-written loop, and "the chain is unchanged" is only a claim worth
+    # making if it is exact -- a tolerance here would hide a merged kick
+    # computed in the wrong order.
+    theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
+    momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
+
+    composed = leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
+    written = _hand_written_leapfrog(GAUSSIAN, theta, momentum, step_size, n_steps)
+
+    assert torch.equal(composed[0], written[0])
+    assert torch.equal(composed[1], written[1])
+
+
+@pytest.mark.mathematical
+def test_the_yoshida_middle_sub_step_runs_backwards_in_time() -> None:
+    # Not a sign error, and not avoidable: no composition of a second-order
+    # symmetric method reaches fourth order with positive coefficients. Pinned
+    # because the trajectory is then non-monotone in time, and the first
+    # person to plot one will otherwise read it as a bug.
+    assert YOSHIDA_WEIGHTS[1] < 0.0
+    assert YOSHIDA_WEIGHTS[0] == YOSHIDA_WEIGHTS[2] > 1.0
+    assert math.fsum(YOSHIDA_WEIGHTS) == pytest.approx(1.0, abs=1e-15)
+
+
+@pytest.mark.edge_case
+def test_a_composition_that_integrates_the_wrong_interval_is_refused() -> None:
+    # The one arithmetic slip a reversibility check does not catch: weights
+    # that are a palindrome but do not sum to 1 integrate perfectly reversibly
+    # over the wrong amount of time, so every symmetry test passes and the
+    # trajectory is wrong.
+    with pytest.raises(ValueError, match="wrong interval"):
+        Integrator(name="wrong", weights=(0.4, 0.4), order=2)
+    with pytest.raises(ValueError, match="palindrome"):
+        Integrator(name="asymmetric", weights=(0.2, 0.3, 0.5), order=2)
+
+
+@pytest.mark.mathematical
+def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
+    # The companion of the second-order test above, and it needs that one to
+    # be trustworthy: a slope estimator reporting 4 for both integrators is
+    # broken, and only the pair catches it.
+    #
+    # Realized ratios, coarse to fine: 16.310, 16.077, 16.019, 16.005, 16.001
+    # -- converging on 16 rather than drifting, which is what makes the claim
+    # an order rather than a coincidence at one step size. The coarsest is
+    # excluded from the assertion and reported here: at 1/10 the higher-order
+    # terms have not yet died away.
+    theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
+    momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
+    reference = hamiltonian(GAUSSIAN, theta, momentum)
+
+    errors = []
+    for n_steps in (20, 40, 80, 160, 320):
+        position, velocity = yoshida(GAUSSIAN, theta, momentum, 1.0 / n_steps, n_steps)
+        errors.append(abs(hamiltonian(GAUSSIAN, position, velocity) - reference))
+
+    for ratio in (before / after for before, after in itertools.pairwise(errors)):
+        assert ratio == pytest.approx(16.0, rel=0.01)
+    # And the finest step is still far above float64 round-off on a
+    # Hamiltonian of order 1, so the window is the power law's and not the
+    # arithmetic's.
+    assert errors[-1] > 1e-12
+
+
+class _Counted:
+    """An objective that records how often its gradient was taken."""
+
+    def __init__(self, inner: Objective) -> None:
+        self.inner = inner
+        self.calls = 0
+
+    def initial(self) -> torch.Tensor:
+        return self.inner.initial()
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        return self.inner.constrain(theta)
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        self.calls += 1
+        return self.inner(theta)
+
+
+@pytest.mark.structural
+@pytest.mark.parametrize("integrator", [leapfrog, yoshida])
+@pytest.mark.parametrize("n_steps", [1, 3, 20])
+def test_force_evaluations_counts_what_a_trajectory_actually_costs(
+    integrator: Integrator, n_steps: int
+) -> None:
+    # The number a comparison between integrators rests on. Counted rather
+    # than derived, because a comparison at equal *steps* says nothing and one
+    # at equal evaluations says everything -- and an off-by-one here would
+    # quietly favour whichever method the arithmetic was written for.
+    counted = _Counted(GAUSSIAN)
+
+    integrator(
+        counted,
+        torch.zeros(2, dtype=torch.float64),
+        torch.ones(2, dtype=torch.float64),
+        0.05,
+        n_steps,
+    )
+
+    assert counted.calls == integrator.force_evaluations(n_steps)
+
+
+@pytest.mark.mathematical
+def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
+    # **The measurement the ticket is for, and it is negative.** A fourth-order
+    # method pays where the step is limited by *accuracy*; here it is limited
+    # by *stability*, and the two are different constraints.
+    #
+    # Yoshida's largest sub-step is |w0| = 1.70 times the nominal step, so its
+    # stability limit in the step size is ~0.59 of leapfrog's -- measured at
+    # 0.0333 against 0.0500, a ratio of 1.50 against the 1.70 the coefficient
+    # predicts. Combined with three force evaluations per step, that is where
+    # the order advantage goes.
+    #
+    # Realized on this posterior: leapfrog reaches 0.855 acceptance at **21**
+    # gradients per trajectory; Yoshida needs **91** to reach 0.975, and at 61
+    # it accepts *nothing*. On the analytic Gaussian, 3 against 7.
+    target = _potts_posterior()
+    cheapest = {}
+    for integrator in (leapfrog, yoshida):
+        for n_steps in (4, 6, 8, 10, 14, 20, 30, 45, 70):
+            chain = sample(
+                target,
+                seed=11,
+                n_samples=200,
+                step_size=1.0 / n_steps,
+                n_steps=n_steps,
+                burn_in=80,
+                integrator=integrator,
+            )
+            if chain.acceptance_rate >= 0.7:
+                cheapest[integrator.name] = integrator.force_evaluations(n_steps)
+                break
+
+    assert cheapest["leapfrog"] < cheapest["yoshida"]
+    assert cheapest["leapfrog"] <= 21
+    assert cheapest["yoshida"] >= 60
+
+
+@pytest.mark.structural
+def test_the_default_integrator_is_the_one_every_committed_result_used() -> None:
+    # A default changed here silently redraws every chain in the repository.
+    chain = sample(GAUSSIAN, seed=3, n_samples=40, step_size=0.2, n_steps=6)
+    explicit = sample(
+        GAUSSIAN, seed=3, n_samples=40, step_size=0.2, n_steps=6, integrator=leapfrog
+    )
+
+    assert torch.equal(chain.theta, explicit.theta)
+    assert leapfrog.order == 2
+    assert leapfrog.weights == (1.0,)

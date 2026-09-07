@@ -373,6 +373,29 @@ and the posterior standard deviation was 12% low, because divergent
 trajectories are rejected preferentially in the tails. Acceptance rate does
 not detect it; `max |dH|` tracks it monotonically.
 
+**A fourth-order integrator lands, and loses.** Yoshida's (1990) triple jump
+joins leapfrog as a selectable symplectic integrator, both expressed as
+compositions of the same kick-drift-kick sub-step so there is one
+implementation rather than two
+([#266](https://github.com/michaelJwilson/snakes_and_ladders/issues/266)). The
+orders are measured rather than claimed, as the ratio by which halving the
+step divides the energy error: leapfrog realizes 3.999, 4.000, 4.000, 4.000,
+4.000 against a predicted 4, and Yoshida 16.310, 16.077, 16.019, 16.005,
+16.001 against a predicted 16 — converging rather than drifting, which is what
+makes it an order and not a coincidence at one step size.
+
+**It is slower anyway, and the mechanism is worth recording.** A higher-order
+method pays where the step is limited by *accuracy*; here it is limited by
+*stability*. Yoshida's middle sub-step runs backwards in time with
+`|w0| = 1.70` times the nominal step, so its stability limit in the step size
+is about 0.59 of leapfrog's — measured at 0.0333 against 0.0500, a ratio of
+1.50 against the 1.70 the coefficient predicts. With three force evaluations
+per step on top, the order advantage is spent twice over. At equal
+acceptance on the Potts posterior, leapfrog reaches 0.855 at **21** gradient
+evaluations per trajectory while Yoshida needs **91** to reach 0.975 and
+accepts *nothing* at 61; on the analytic Gaussian it is 3 against 7. The
+default does not move.
+
 **Where a fit starts is now the caller's to choose, and multi-start is
 measured rather than assumed.** `Objective.initial()` was already the seam;
 what went through it was one fixed constant per objective.

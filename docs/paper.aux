@@ -1,0 +1,61 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{rosen2019}
+\citation{mezard2009}
+\citation{mackay2003}
+\citation{nocedal2006}
+\citation{goodfellow2016,prince2023}
+\citation{suttonbarto2018}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{2}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{2}{Introduction}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Scope}{2}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Methods}{2}{section.2}\protected@file@percent }
+\newlabel{sec:methods}{{2}{2}{Methods}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Continuous optimization}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Differentiable likelihoods and energies}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Structural search as a Markov decision process}{2}{subsection.2.3}\protected@file@percent }
+\newlabel{sec:rl}{{2.3}{2}{Structural search as a Markov decision process}{subsection.2.3}{}}
+\citation{amari2016}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.1}Planned architectural extensions}{3}{subsubsection.2.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Results}{3}{section.3}\protected@file@percent }
+\newlabel{sec:results}{{3}{3}{Results}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Simulation against its analytic truth}{3}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:res-simulation}{{3.1}{3}{Simulation against its analytic truth}{subsection.3.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Worked example: 4-taxon alignment simulated under the Jukes-Cantor model (seed 20260902, 200\_000 sites total), showing the topology with branch lengths -- rho the root, Greek letters its internal ancestors -- and the first 10 of 200\_000 simulated sites.}}{3}{figure.1}\protected@file@percent }
+\newlabel{fig:sim-example}{{1}{3}{\simExampleCaption }{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Exact inference across backends}{3}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:res-likelihood}{{3.2}{3}{Exact inference across backends}{subsection.3.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Parameter recovery and interval coverage}{3}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:res-recovery}{{3.3}{3}{Parameter recovery and interval coverage}{subsection.3.3}{}}
+\bibstyle{plainnat}
+\bibdata{references}
+\bibcite{amari2016}{{1}{2016}{{Amari}}{{}}}
+\bibcite{goodfellow2016}{{2}{2016}{{Goodfellow et~al.}}{{Goodfellow, Bengio, and Courville}}}
+\bibcite{mackay2003}{{3}{2003}{{MacKay}}{{}}}
+\bibcite{mezard2009}{{4}{2009}{{M{\'e}zard and Montanari}}{{}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Every pruning backend against the oracle that owes it nothing. Brute-force marginalization sums over all ancestral assignments, so it shares no code with the recursion it checks, and its cost is what keeps the fixture small. Fixture: 4-state Jukes-Cantor on the 3-child-root tree, seed 20260902. The deviation is relative because the log-likelihood is a sum over sites: an absolute bound fixed at one site count does not transfer to another, which is why the x-axis spans a factor of 30. Worst deviation across every backend and size: 3.99e-14, against a float64 epsilon of 2.22e-16.}}{4}{figure.2}\protected@file@percent }
+\newlabel{fig:backend-agreement}{{2}{4}{\backendAgreementCaption }{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Discrete search against exhaustive enumeration}{4}{subsection.3.4}\protected@file@percent }
+\newlabel{sec:res-search}{{3.4}{4}{Discrete search against exhaustive enumeration}{subsection.3.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Empirical benchmarking [PLACEHOLDERS]}{4}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Conclusions}{4}{section.4}\protected@file@percent }
+\newlabel{sec:conclusions}{{4}{4}{Conclusions}{section.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Parameter recovery for the two reference instances of the optimization interface, fitted by the same model-agnostic optimizer. Bars are 95 percent Wald intervals from the observed information, propagated to the reported parameters by the delta method; the dotted line is y = x. (a) A 3-state Potts chain, 400 chains of length 12, seed 20260902: coupling and gauge-fixed field, 4 of 4 intervals covering (1.00). (b) A 3-state, 4-symbol hidden Markov model, 600 sequences of length 15, seed 20260903: initial, transition and emission probabilities after aligning the hidden-state permutation the likelihood is invariant to, 23 of 24 intervals covering (0.96). Coverage on a single dataset is a draw, not a rate: the nominal 0.95 is checked over independent replicates by the fitting regression suite, and against sample size in the companion coverage figure.}}{5}{figure.3}\protected@file@percent }
+\newlabel{fig:opt-recovery}{{3}{5}{\optRecoveryCaption }{figure.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Realized coverage of the 95 percent Wald intervals built from the observed information, against the amount of data each fit sees. Bars are binomial standard errors on the realized fraction. Both instances converge on the nominal rate and neither sits on it at the smallest sample, which is what an asymptotic approximation does and a wrong formula does not. They approach from opposite sides. The Potts chain over-covers and comes down: 158/160 = 0.988 at 100 chains, 96/100 = 0.960 at 1600. The hidden Markov model under-covers and comes up: 45/48 = 0.938 at 150 sequences, 91/96 = 0.948 at 2400. The under-coverage has two identifiable sources absent from the Potts chain -- some emission probabilities are fitted near zero, where a Wald interval on the log scale is a poor approximation, and aligning the hidden-state permutation to the truth is a post-selection step that costs a little coverage. Seeds are fixed, so every point is reproducible rather than redrawn. At the smallest hidden Markov size 6 of 18 fits reached the boundary of the parameter space -- an emission probability estimated at zero -- where the observed information is singular and there is no interval to report. Those fits are excluded from the counts above and stated here rather than dropped silently, since excluding them unannounced would select for the well-behaved samples.}}{6}{figure.4}\protected@file@percent }
+\newlabel{fig:opt-coverage}{{4}{6}{\optCoverageCaption }{figure.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces The topology hill climbing selected, beside the highest-scoring one it rejected, each with its own branch lengths fitted. Fixture: 4-state Jukes-Cantor over 1500 sites, seed 20260905. (a) scores -8775.5 and is the generating topology; (b) scores -8817.1, a difference of 41.6 log units. They differ by one split: C D are a group in one and not in the other. On this fixture the search recovers the generating tree, so a drawing of found against true would show the same tree twice; the runner-up is what the likelihood actually had to discriminate against. Note its shortest internal branch, fitted at 0.000: a wrong grouping is generally only supportable by collapsing the edge that would create it.}}{7}{figure.5}\protected@file@percent }
+\newlabel{fig:search-topologies}{{5}{7}{\searchTopologiesCaption }{figure.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Learning curves of the reinforcement-learning proposal policy across $n \in \{10, 50, 100\}$, measured in improvement per objective-evaluation budget.}}{7}{figure.6}\protected@file@percent }
+\newlabel{fig:rl-convergence}{{6}{7}{Learning curves of the reinforcement-learning proposal policy across $n \in \{10, 50, 100\}$, measured in improvement per objective-evaluation budget}{figure.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Wall-clock convergence against IQ-TREE~2 and RAxML-NG on empirical benchmark datasets.}}{8}{figure.7}\protected@file@percent }
+\newlabel{fig:benchmark-iqtree}{{7}{8}{Wall-clock convergence against IQ-TREE~2 and RAxML-NG on empirical benchmark datasets}{figure.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Throughput in nodes evaluated per second across CPU, Apple Silicon, and CUDA backends.}}{8}{figure.8}\protected@file@percent }
+\newlabel{fig:hardware-scaling}{{8}{8}{Throughput in nodes evaluated per second across CPU, Apple Silicon, and CUDA backends}{figure.8}{}}
+\bibcite{nocedal2006}{{5}{2006}{{Nocedal and Wright}}{{}}}
+\bibcite{prince2023}{{6}{2023}{{Prince}}{{}}}
+\bibcite{rosen2019}{{7}{2019}{{Rosen}}{{}}}
+\bibcite{suttonbarto2018}{{8}{2018}{{Sutton and Barto}}{{}}}
+\gdef \@abspage@last{9}
