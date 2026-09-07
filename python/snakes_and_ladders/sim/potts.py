@@ -2,7 +2,8 @@
 
 An N-D lattice (:func:`snakes_and_ladders.sim.graph.lattice_graph`) is a constructed case
 of :class:`~snakes_and_ladders.sim.graph.PottsGraph`, not a separate code path, per
-``docs/tex/main.tex``'s "Potts Models in an External Field" (Mezard &
+``docs/tex/textbook.tex``'s "Problem Statement: Potts Models in an External
+Field" (Mezard &
 Montanari, ch. 2; Koller & Friedman for the general framing). A graph
 recognized as a 1-D chain with an open boundary is sampled exactly, by the
 same backward-message recursion :func:`snakes_and_ladders.opt.potts.simulate_chains`

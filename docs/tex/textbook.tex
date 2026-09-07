@@ -1,0 +1,382 @@
+\documentclass[11pt,a4paper]{article}
+\input{preamble}
+\input{notation}
+
+\title{Graph-Structured Models, Their Algorithms, \\
+and the Properties That Referee Them}
+\author{M.\ J.\ Wilson}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+A self-contained account of the three problem classes this project supports,
+the algorithms that solve them, and---the part a methods section usually
+omits---the mathematical properties each algorithm is validated against, and
+why those properties are the right referees. Written for a reader with a
+scientific and performance-computing background but no background in
+phylogenetics or statistical physics. It describes \emph{algorithms}, not an
+implementation: no result here depends on how any of it is coded, and the
+companion paper carries the results themselves.
+\end{abstract}
+
+\tableofcontents
+
+\section{Notation}
+\label{sec:notation}
+
+One symbol, one meaning, across this document and the companion paper.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Symbol & Meaning \\
+\midrule
+$\tree$        & a tree topology \\
+$\graph$       & a general undirected graph \\
+$\states$      & the state alphabet, $|\states| = k$ \\
+$\rootnode$    & the root of a rooted tree \\
+$\neighbourhood(\cdot)$ & the neighbourhood a discrete move set reaches in one step \\
+$\Q$           & a rate matrix; $\Pmat(t) = \exp(\Q t)$ its transition matrix \\
+$\SubMat$      & a symmetric exchangeability matrix \\
+$\bpi$         & a stationary or initial distribution \\
+$\branch$      & branch lengths \\
+$\params$      & unconstrained parameters, $\params \in \mathbb{R}^d$ \\
+$\constrained$ & the constraint map, $\constrained(\params)$ the feasible parameters \\
+$\data$        & the observed data \\
+$\objective$   & the scalar being minimized \\
+$\energy$      & a Hamiltonian \\
+$\hidden$      & a hidden state path \\
+$\emission$    & an emission family \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two conventions are worth stating because they are load-bearing later.
+Optimization is always \emph{minimization}, so a likelihood-based objective is
+a negative log-likelihood. And $\objective$ is a function of $\params$, the
+unconstrained vector, not of the parameters a person names---the two are
+connected by $\constrained$ and Section~\ref{sec:abstraction} explains why the
+distinction is not cosmetic.
+
+\section{The Shape All Three Problems Share}
+\label{sec:shape}
+
+Each problem class below couples a \emph{combinatorial} search over a
+structure to a \emph{continuous} optimization of parameters given that
+structure. The two are not interleaved steps of one optimizer: a structural
+move changes what the parameter vector \emph{means} and how long it is, so it
+constructs a new objective rather than taking a step inside an existing one.
+Everything else in this document follows from that division.
+
+\subsection{The Continuous Optimization Abstraction}
+\label{sec:abstraction}
+
+Let the objective be a differentiable scalar $\objective(\params)$ over an
+unconstrained vector $\params \in \mathbb{R}^d$, with a map $\constrained$
+carrying $\params$ to the constrained parameters a model is stated in:
+positive branch lengths through a logarithm, a distribution over $k$ states
+through a softmax on $k-1$ free values, a positive scale through a logarithm.
+
+\paragraph{Why the map and not a projection.}
+An optimizer that must be \emph{stopped} from leaving the feasible set will
+eventually leave it, and a constrained parameter that reaches its boundary has
+no interval around it worth reporting. Constraining by construction removes
+both failures: every point in $\mathbb{R}^d$ is feasible, and the gradient
+$\nabla_{\params} \objective$ is defined everywhere.
+
+\paragraph{Why the map must be injective.}
+Where a reparameterization leaves $\objective$ unchanged, the direction along
+it is not estimable: the observed information is singular and an interval is
+undefined. A softmax on $k$ free values has exactly this flat direction---adding
+a constant to every value changes nothing---which is why $k-1$ are used.
+Removing the freedom is the constraint map's job, not the optimizer's.
+
+\paragraph{What follows for inference.}
+Standard errors come from the observed information at the optimum, pushed
+through $\constrained$ by the delta method: $\mathrm{Var}(\constrained(\params))
+\approx J \Sigma J^{\top}$ with $J$ the Jacobian of $\constrained$. This is an
+\emph{asymptotic} statement, exact only in the large-sample limit, which is why
+Section~\ref{sec:properties} makes realized interval coverage a measurement
+rather than an assumption.
+
+\section{Problem Statement: Phylogenetic Inference}
+\label{sec:phylo}
+
+\subsection{The model}
+Character evolution along a branch is a continuous-time Markov chain with rate
+matrix $\Q$; the transition probabilities over a branch of length $t$ are the
+matrix exponential $\Pmat(t) = \exp(\Q t)$ \citep{felsenstein2004}. A
+time-reversible model factors as $\Q = \SubMat \operatorname{diag}(\bpi)$ with
+$\SubMat$ symmetric, and then satisfies detailed balance,
+$\pi_i \Q_{ij} = \pi_j \Q_{ji}$.
+
+Given a topology $\tree$ over $n$ taxa, branch lengths $\branch$, and an
+alignment $\data$ of $L$ sites, the likelihood marginalizes every assignment of
+states to the $n-2$ internal nodes---$k^{\,n-2}$ of them per site.
+
+\qacaptionread{figures/sim_tree_caption.txt}{\simTreeCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/sim_tree}
+  \caption{\simTreeCaption}
+  \label{fig:sim-tree}
+\end{figure}
+
+\qacaptionread{figures/jc_transition_caption.txt}{\jcTransitionCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/jc_transition}
+  \caption{\jcTransitionCaption}
+  \label{fig:jc-transition}
+\end{figure}
+
+\subsection{The algorithm: pruning}
+Felsenstein's pruning evaluates that marginal in $O(n L k^2)$ rather than
+$O(L k^{n-2})$, by a post-order recursion carrying a partial likelihood
+$L_u(i)$---the probability of the data below node $u$ given that $u$ is in
+state $i$:
+\begin{equation}
+  L_u(i) = \prod_{v \in \mathrm{children}(u)}
+           \sum_{j \in \states} \Pmat_{ij}(t_v)\, L_v(j),
+  \label{eq:pruning}
+\end{equation}
+with $L_u(i) = \mathbb{1}[\,\text{$u$ observed in state $i$}\,]$ at a leaf, and
+the site likelihood $\sum_i \pi_i L_{\rootnode}(i)$ at the root
+\citep{felsenstein2004, durbin1998}. Products of many small numbers underflow,
+so each node's partials are rescaled and the logarithm of the scaling
+accumulated separately; the rescaling must remain differentiable, since
+$\branch$ and $\Q$ are what the continuous optimization fits.
+
+\subsection{The algorithm: discrete search}
+The number of unrooted binary topologies on $n$ taxa is $(2n-5)!!$
+\citep{rosen2019}, so exhaustive enumeration is an oracle at small $n$ and
+nothing more. Two neighbourhoods are standard. \emph{Nearest-neighbour
+interchange} (NNI) swaps the subtrees adjacent to one internal edge, giving
+$|\neighbourhood_{\mathrm{NNI}}(\tree)| = 2(n-3)$. \emph{Subtree prune and
+regraft} (SPR) detaches a subtree and reattaches it at another edge, giving
+$2(n-3)(2n-7)$ and containing NNI. Neither is complete in one step; both are
+complete in the transitive closure, which for NNI is the connectivity of the
+associated graph \citep{felsenstein2004} and is inherited by SPR because it
+dominates NNI.
+
+\section{Problem Statement: Potts Models in an External Field}
+\label{sec:potts}
+
+\subsection{The model}
+On a graph $\graph$, each node $i$ carries a spin $\sigma_i \in \{1, \dots, q\}$
+and the energy is
+\begin{equation}
+  \energy(\sigma) = -\sum_{\langle i,j \rangle} J_{ij}\,\delta(\sigma_i, \sigma_j)
+                    - \sum_i h_i(\sigma_i),
+  \label{eq:potts}
+\end{equation}
+with couplings $J_{ij}$ and an external field $h_i$ \citep{mezard2009}. The
+Boltzmann distribution is $p(\sigma) \propto \exp(-\energy(\sigma))$, and its
+normalizer sums over $q^{|V|}$ configurations.
+
+\subsection{Why an odd cycle is the whole story}
+A two-state antiferromagnet ($J < 0$) wants every edge to disagree, which is
+possible exactly when $\graph$ is $2$-colourable. So every bipartite
+lattice---a chain, a square lattice---has a trivial, unfrustrated ground state
+and says nothing about a hard problem. A geometry containing odd cycles is what
+makes the ground state non-trivial, and where a counting argument closes
+exactly it fixes that ground state at every size. This is the difference
+between a fixture that exercises an optimizer and one that does not.
+
+\subsection{The algorithms}
+Exact marginals come from enumeration at small sizes and from belief
+propagation on a tree, where it is exact; on a loopy graph it is an
+approximation whose accuracy is a property of the graph rather than of the
+implementation \citep{koller2009, frey1998}. Sampling is by single-site Gibbs
+updates or by cluster moves such as Swendsen--Wang, which flip correlated
+regions together and so decorrelate faster near a critical point
+\citep{newman1999}. Ground states of the two-state case reduce to a maximum
+cut, and to a minimum cut---hence a max-flow---when the couplings are
+submodular; more than two states is approximated by alpha expansion, whose
+guarantee is a factor of two.
+
+\section{Problem Statement: Hidden Markov Models}
+\label{sec:hmm}
+
+\subsection{The model}
+A hidden path $\hidden = (z_1, \dots, z_T)$ over $k$ states evolves by an
+initial distribution $\bpi$ and a transition matrix $\mathbf{A}$; each position
+emits an observation from an emission family $\emission$ indexed by its state.
+The evidence marginalizes $k^T$ paths.
+
+\paragraph{The emission family is the only part that knows what an observation
+is.} Everything else---the recursions, the expectation step, path
+enumeration---needs three things from it: draw an observation given a state,
+score one, and re-estimate itself from posterior weights. Separating it is what
+lets one set of recursions serve a finite alphabet, a real observation, and a
+count.
+
+\paragraph{A density is not a probability.} For a family over a countable
+alphabet the evidence is a probability, so $\log p(\data) \le 0$. For a family
+over the reals it is a \emph{density} and carries no such bound. A check
+written against the first is false under the second, so what may be asserted
+is keyed on the support the model declares.
+
+\subsection{The algorithm: forward--backward}
+The forward recursion is Equation~\ref{eq:pruning} on a chain:
+\begin{equation}
+  \alpha_t(i) = \Big[ \sum_j \alpha_{t-1}(j)\, \mathbf{A}_{ji} \Big]
+                \, \emission_i(y_t),
+  \qquad
+  p(\data) = \sum_i \alpha_T(i).
+  \label{eq:forward}
+\end{equation}
+Pruning on a caterpillar tree carrying one observed leaf per internal node
+\emph{is} this recursion \citep{durbin1998, koller2009}: the three problem
+classes are one marginalization over three structures, not three unrelated
+models sharing an optimizer.
+
+\subsection{The algorithm: expectation-maximization}
+Baum--Welch alternates a posterior over hidden states given the parameters with
+a re-estimate of the parameters given that posterior, and increases the
+likelihood at every iteration \citep{mackay2003}. The initial distribution and
+the transitions re-estimate in closed form for every family; the emission
+re-estimate is the family's own, and \emph{whether it is a formula} is the
+property that separates the families. A weighted mean is; a dispersion
+parameter whose score involves the digamma function is not, and its M step is
+itself an optimization---which is the case that says whether an interface
+built around closed forms was built correctly.
+
+\subsection{Two decodings, and they are different answers}
+Viterbi returns the single path of highest joint probability; posterior
+decoding returns, at each position independently, the state of highest marginal
+probability. Where they disagree, the posterior-decoded sequence can be a path
+the model assigns zero probability to, because nothing constrains consecutive
+choices to be compatible. They agree on almost every instance, which is exactly
+why an implementation that computes one and reports the other survives a test
+suite with no case where they diverge.
+
+\section{The Properties That Referee Each Method}
+\label{sec:properties}
+
+An algorithm is accepted here against a property that is true independently of
+this implementation. The properties are not interchangeable, and which one
+applies is a statement about the method rather than a matter of convenience.
+
+\subsection{Exact answers, where an oracle exists}
+Where a quantity can be computed a second way that shares no recursion with the
+first, equality is asserted to a stated tolerance. Direct marginalization over
+$k^{n-2}$ internal assignments referees pruning; a sum over $k^T$ paths
+referees the forward recursion; exhaustive enumeration over $q^{|V|}$
+configurations referees a Potts marginal; enumeration of $(2n-5)!!$ topologies
+referees a search. Every one is exponential, and that is what makes it an
+oracle rather than a second opinion. \textbf{Two implementations agreeing prove
+nothing if both are wrong}, so an accelerated method is pinned against the
+reference and never against another acceleration.
+
+\subsection{Structural invariants, where no oracle reaches}
+Past the sizes enumeration allows, what remains are properties the model must
+satisfy whatever the answer is:
+\begin{itemize}
+  \item rows of a transition matrix sum to one, and $\Pmat(0) = \mathbf{I}$;
+  \item a reversible model satisfies detailed balance, $\pi_i \Q_{ij} = \pi_j \Q_{ji}$;
+  \item the \emph{pulley principle}: on a reversible model the likelihood is
+        invariant to where the root is placed along a branch, so a rooted
+        computation and its re-rooting must agree exactly;
+  \item a gradient matches central differences, relative to the gradient's own
+        norm---entrywise fails wherever an entry is zero, and an absolute bound
+        does not transfer across data sizes;
+  \item an expectation-maximization iterate increases the likelihood
+        monotonically.
+\end{itemize}
+None of these establishes that a method is right. Each establishes that a
+specific way of being wrong did not happen, which is a weaker and more
+defensible claim.
+
+\subsection{Recovery, which is the acceptance test for a fit}
+A likelihood that increases proves the optimizer runs, not that the model is
+right. The acceptance test is to fit data simulated from known parameters and
+require the intervals to cover the truth at their nominal rate over
+independent replicates. Two qualifications are load-bearing. Where a model has
+an exact symmetry---permuting the hidden states of an HMM or the components of
+a mixture leaves the likelihood unchanged---recovery is stated \emph{up to that
+symmetry}, and the alignment is part of the test. And coverage is measured as a
+function of how identifiable the instance is, because a fixture chosen where
+everything is well separated is a test of the fixture.
+
+\subsection{Where the likelihood has no maximum, or no curvature}
+Two failures are properties of models rather than defects, and both must be
+handled before they are discovered.
+
+An \emph{unbounded} likelihood has no maximum to find: put a Gaussian
+component's mean on a single observation and let its variance go to zero and
+the density there diverges. A fit that converges there was stopped by its
+starting point or by a floor, and which one must be knowable---so the bound is
+explicit, derived from the data rather than chosen, and reaching it is a
+refusal rather than a clamp.
+
+A \emph{flat} likelihood has a maximum that runs to the boundary: an
+overdispersed count model approaches its Poisson limit as the dispersion grows,
+and past the point where the overdispersion is smaller than the sampling noise
+on measuring it, the data cannot tell one value from another. The two failures
+are mirror images, and they announce themselves differently---the first as a
+divergence, the second as a singular information matrix---which is why each is
+measured rather than inferred from the other.
+
+\subsection{Published constants, and asymptotic results}
+Some claims come from outside entirely: the $(2n-5)!!$ count, Goemans--Williamson's
+$0.87856$ for maximum cut, alpha expansion's factor of two, the
+$8(\ln k + 2)$ bound on $k$-means$++$ seeding. These referee an implementation
+at any size. \textbf{No asymptotic result is testable at the sizes an exact
+oracle allows}, however: a threshold or a limit holds as the problem grows and
+says nothing where enumeration can check it. Such a result is reported for
+orientation and the per-instance property is what is asserted.
+
+\section{Relevance to the Roadmap}
+\label{sec:roadmap}
+
+The three problem classes are not three applications. They are chosen so that
+each abstraction is tested against something that is not the model it was
+extracted from: a likelihood engine justified only by trees would be a
+phylogenetics library, and an optimizer justified only by an HMM would
+encode a chain.
+
+The order the milestones take follows the dependency between the properties
+above. Simulation and its ground truth come first, because every later claim is
+checked against data whose generating parameters are known. The exact
+evaluators come next, because they are the oracles the accelerated ones are
+pinned to. Continuous optimization follows, since recovery is the acceptance
+test and needs both. Discrete search and learned proposals come last, because
+their acceptance criterion---reaching the optimum enumeration identifies---only
+exists once enumeration does.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+
+\section{Reference Taxonomy}
+\label{app:taxonomy}
+
+Grouped as the repository groups them, so one routing table serves the code and
+the documents alike.
+
+\paragraph{Infrastructure (build, structure, and speed).}
+Software craft: \citet{martin2008}, \citet{blandy2021}. Systems and hardware,
+including memory hierarchies and parallel kernels: \citet{bryant2015},
+\citet{pmpp2022}.
+
+\paragraph{Optimization (discrete and continuous).}
+Algorithms and discrete mathematics: \citet{clrs2022}, \citet{rosen2019}.
+Numerical optimization: \citet{nocedal2006}. Probabilistic inference and
+message passing: \citet{mackay2003}, \citet{koller2009}, \citet{frey1998},
+\citet{ortega2022}. Statistical physics and Monte Carlo:
+\citet{mezard2009}, \citet{newman1999}. Information geometry:
+\citet{amari2016}. Learning and reinforcement learning:
+\citet{goodfellow2016}, \citet{prince2023}, \citet{suttonbarto2018},
+\citet{lapan2020}, \citet{raschka2024}.
+
+\paragraph{Application (the science).}
+Phylogenetics: \citet{felsenstein2004}, \citet{durbin1998},
+\citet{compeau2015}, \citet{pachter2005}. Information and coding:
+\citet{blahut2003}, with \citet{nielsen2010} as background only.
+
+\end{document}
