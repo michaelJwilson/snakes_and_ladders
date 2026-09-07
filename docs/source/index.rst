@@ -18,6 +18,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.enumeration
    :members:
 
+.. automodule:: snakes_and_ladders.emissions
+   :members:
+
 .. automodule:: snakes_and_ladders.fixtures
    :members:
 

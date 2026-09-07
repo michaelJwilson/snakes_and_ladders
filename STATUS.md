@@ -136,6 +136,50 @@ marginals, self-normalized importance sampling against the exact path
 posterior for one realized observation, and the transition matrix's own
 stationary distribution for long-run occupancy.
 
+**Emission families: what a state emits, separated from how it is fitted.**
+`snakes_and_ladders.emissions` holds the interface — draw, score, re-estimate —
+with the categorical matrix one implementation of it and a univariate Gaussian
+the second; the simulator, the forward recursion, Baum-Welch, path enumeration
+and the state aligner all go through it
+([#228](https://github.com/michaelJwilson/snakes_and_ladders/issues/228)). Every
+categorical test in the suite passes against the family without its assertions
+being rewritten, which is what says the refactor did not alter a model already
+validated.
+
+The Gaussian case is where the discrete assumption stops holding, and both
+consequences are pinned rather than discovered later. The evidence is a
+*density*, so `log P(observations) <= 0` fails on correct code and no test
+asserts it. And the likelihood has **no maximum**: a state's mean on one
+observation with its variance going to zero diverges, at exactly `log 10` nats
+per tenfold narrowing, which a test exhibits. The variance floor is derived
+from the data rather than chosen — `s**2 / n**2`, the nearest-neighbour
+spacing below which a state has collapsed onto a point — and reaching it is a
+**refusal**, since a clamped fit returns normally and reports an interval
+around a degenerate optimum ([#122](https://github.com/michaelJwilson/snakes_and_ladders/issues/122)).
+
+**The identifiable regime is measured, not assumed.** Two states one common
+standard deviation apart are nearly the same state, and the fit says so.
+Coverage of the 95% Wald intervals over 24 replicates of 240 observations,
+against the separation of the emitting means:
+
+| separation | intervals covering | rate | replicates with no interval at all |
+| --- | --- | --- | --- |
+| 0.5 | 18/28 | 0.643 | 17/24 |
+| 1.0 | 46/56 | 0.821 | 10/24 |
+| 2.0 | 82/88 | 0.932 | 2/24 |
+| 3.0 | 90/96 | 0.938 | 0/24 |
+| 4.0 | 93/96 | 0.969 | 0/24 |
+| 6.0 | 92/96 | 0.958 | 0/24 |
+
+Coverage reaches nominal from two standard deviations of separation upward and
+degrades below it, seen twice over: the intervals that exist under-cover, and
+most replicates produce **no interval at all** — the observed information is
+too ill-conditioned to invert, which is what an unidentifiable model looks
+like from inside a fit. Those replicates are counted rather than dropped,
+since excluding them unannounced would select for the well-behaved samples.
+Reported as a finding: a fixture using only well-separated means would have
+been testing the fixture.
+
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
 **Felsenstein pruning: three CPU backends, one oracle.** Vectorized NumPy is
