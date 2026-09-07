@@ -7,20 +7,21 @@ one gradient-descent step fitting a general rate matrix Q via
 ``pruning_torch.log_likelihood``'s ``rate_matrix`` (``torch.matrix_exp``)
 path -- the general-Q path issue #70 asks be exercised, even though JC's Q
 is fully determined by k. The fitting loop lives in this test only:
-``phylo.likelihood`` gains no parameter-fitting feature, out of scope for
-issue #70 (that is ``phylo.opt``'s follow-on job).
+``snakes_and_ladders.likelihood`` gains no parameter-fitting feature, out of scope for
+issue #70 (that is ``snakes_and_ladders.opt``'s follow-on job).
 """
 
 from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 import torch
-from phylo.likelihood import pruning, pruning_torch
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood import pruning, pruning_torch
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -41,7 +42,7 @@ def test_torch_log_likelihood_benchmark(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     branch_lengths = pruning_torch.branch_lengths_from_tree(params.tau)
@@ -68,7 +69,7 @@ def test_numpy_vs_torch_forward_pass(benchmark: BenchmarkFixture) -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     branch_lengths = pruning_torch.branch_lengths_from_tree(params.tau)
@@ -95,7 +96,7 @@ def test_fit_general_rate_matrix_benchmark(benchmark: BenchmarkFixture) -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     branch_lengths = pruning_torch.branch_lengths_from_tree(params.tau).requires_grad_(

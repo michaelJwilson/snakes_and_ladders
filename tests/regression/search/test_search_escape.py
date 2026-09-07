@@ -19,14 +19,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from phylo.learn.policy import EpsilonGreedyPolicy, LinearPolicy
-from phylo.learn.rollout import greedy_rollout, rollout
-from phylo.search.infer import MoveSet
-from phylo.search.rl import RewardModel, TopologyEnvironment
-from phylo.search.topology import Topology, enumerate_topologies
-from phylo.sim.params import SimulationParams, load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import edges
+from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, LinearPolicy
+from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.search.infer import MoveSet
+from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.topology import Topology, enumerate_topologies
+from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import edges
 
 FIXTURE = Path("tests/regression/fixtures/simulation_params_hard.yaml")
 
@@ -62,7 +62,7 @@ def environment(params: SimulationParams) -> TopologyEnvironment:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return TopologyEnvironment(
@@ -84,7 +84,7 @@ def taxa(params: SimulationParams) -> list[str]:
             tau=params.tau,
             k=params.k,
             pi=params.pi,
-            seed=params.seed,
+            rng=np.random.default_rng(params.seed),
             n_sites=params.n_sites,
         ).alignment
     )
@@ -126,6 +126,7 @@ def _best_seen(environment: TopologyEnvironment, states: tuple[Topology, ...]) -
     return max(environment.score(state) for state in states)
 
 
+@pytest.mark.structural
 def test_wrapping_an_untrained_policy_is_not_hill_climbing(
     environment: TopologyEnvironment, traps: list[Topology]
 ) -> None:
@@ -147,6 +148,7 @@ def test_wrapping_an_untrained_policy_is_not_hill_climbing(
     assert any(climbing.greedy(row) != 0 for row in features)
 
 
+@pytest.mark.oracle
 def test_epsilon_zero_reproduces_hill_climbing_exactly(
     environment: TopologyEnvironment, traps: list[Topology]
 ) -> None:
@@ -163,6 +165,7 @@ def test_epsilon_zero_reproduces_hill_climbing_exactly(
         assert under_policy.states == under_greedy.states
 
 
+@pytest.mark.structural
 def test_an_episode_can_leave_a_local_optimum(
     environment: TopologyEnvironment, traps: list[Topology], maximum: float
 ) -> None:
@@ -200,6 +203,7 @@ def test_an_episode_can_leave_a_local_optimum(
     assert rates[_HIGH_EPSILON] > rates[_LOW_EPSILON], "exploration must pay"
 
 
+@pytest.mark.structural
 def test_stopping_at_a_local_optimum_never_escapes(
     environment: TopologyEnvironment, traps: list[Topology], maximum: float
 ) -> None:
@@ -214,6 +218,7 @@ def test_stopping_at_a_local_optimum_never_escapes(
         assert abs(environment.score(trap) - maximum) >= 1e-9
 
 
+@pytest.mark.structural
 def test_random_restart_hill_climbing_solves_this_fixture(
     environment: TopologyEnvironment, params: SimulationParams, maximum: float
 ) -> None:

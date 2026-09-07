@@ -28,6 +28,26 @@ env:
   CARGO_AUDIT_VERSION: "0.22.2"
 
 jobs:
+  pr-title:
+    name: PR title names its base branch
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      # DEV.md: every pull request's title starts with the branch it targets
+      # in brackets, so a reviewer reads where the diff lands before the diff
+      # (issue #292). The base is GitHub's own field, never inferred.
+      - name: Check the title prefix
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          case "$TITLE" in
+            "[$BASE]"*) echo "ok: $TITLE" ;;
+            *) echo "::error::title must start with [$BASE]: $TITLE"; exit 1 ;;
+          esac
+
   lint:
     name: Lint & type-check (ruff, mypy)
     runs-on: ubuntu-24.04
@@ -48,7 +68,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxiphylo build
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
         uses: actions/cache@v4
         with:
           path: |
@@ -78,7 +98,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - name: Cache Cargo registry and the oxiphylo build
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
         uses: actions/cache@v4
         with:
           path: |
@@ -97,7 +117,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo registry and the oxiphylo build
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
         uses: actions/cache@v4
         with:
           path: |
@@ -120,7 +140,7 @@ jobs:
         with:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo registry and the oxiphylo build
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
         uses: actions/cache@v4
         with:
           path: |
@@ -133,8 +153,8 @@ jobs:
       # Deliberately plain pip, not the lockfile: this job checks the path a
       # fresh consumer takes when installing the package from source.
       - run: pip install .
-      - name: Smoke-test phylo.oxiphylo is importable
-        run: python -c "from phylo.oxiphylo import double; assert double(21) == 42"
+      - name: Smoke-test snakes_and_ladders.oxi_snakes_and_ladders is importable
+        run: python -c "from snakes_and_ladders.oxi_snakes_and_ladders import double; assert double(21) == 42"
 
   python-tests:
     name: Python tests (pytest)
@@ -154,7 +174,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxiphylo build
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
         uses: actions/cache@v4
         with:
           path: |
@@ -166,6 +186,19 @@ jobs:
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
       - run: uv sync --locked --extra test
+      # The early gate (issue #237). `critical` marks the tests whose failure
+      # invalidates what runs after them -- the import graph, the documentation
+      # index, the CLAUDE.md pointers, `select_tests` itself, the compiled
+      # extension, and the categorical sampler everything else draws from. It
+      # is 76 tests in 3.0 s against a full suite of several minutes, so a
+      # broken invariant reports in seconds rather than after the selection
+      # below has run everything downstream of it.
+      #
+      # It runs unconditionally, not through `select_tests`: these are exactly
+      # the checks that must not depend on which module the diff touched, since
+      # a change `select_tests` mis-attributes is one of the things they catch.
+      - name: Critical gate
+        run: uv run pytest -m critical -q
       # Benchmarks are half the suite's wall clock (36 s of 71 s) and measure
       # code that a docs or QA change cannot have altered, so they are skipped
       # unless something they measure moved. The job still runs and still
@@ -198,7 +231,7 @@ jobs:
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "::notice::not a pull request -- running the whole suite"
             echo "paths=tests" >> "$GITHUB_OUTPUT"
-            echo "cov=--cov=phylo" >> "$GITHUB_OUTPUT"
+            echo "cov=--cov=snakes_and_ladders" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           base="origin/${{ github.base_ref }}"
@@ -236,7 +269,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxiphylo build
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
         uses: actions/cache@v4
         with:
           path: |
@@ -264,7 +297,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxiphylo build
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
         uses: actions/cache@v4
         with:
           path: |
@@ -296,7 +329,7 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      - name: Cache Cargo registry and the oxiphylo build
+      - name: Cache Cargo registry and the oxi_snakes_and_ladders build
         uses: actions/cache@v4
         with:
           path: |

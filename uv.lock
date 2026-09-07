@@ -1833,61 +1833,6 @@ wheels = [
 ]
 
 [[package]]
-name = "phylo"
-source = { editable = "." }
-dependencies = [
-    { name = "matplotlib" },
-    { name = "numpy" },
-    { name = "pyyaml" },
-    { name = "torch" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pip-audit" },
-    { name = "pre-commit" },
-    { name = "ruff" },
-    { name = "towncrier" },
-    { name = "types-pyyaml" },
-]
-docs = [
-    { name = "sphinx" },
-]
-notebooks = [
-    { name = "ipykernel" },
-    { name = "nbclient" },
-    { name = "nbformat" },
-]
-test = [
-    { name = "pytest" },
-    { name = "pytest-benchmark" },
-    { name = "pytest-cov" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "ipykernel", marker = "extra == 'notebooks'", specifier = ">=6.29" },
-    { name = "matplotlib", specifier = ">=3.9.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
-    { name = "nbclient", marker = "extra == 'notebooks'", specifier = ">=0.10" },
-    { name = "nbformat", marker = "extra == 'notebooks'", specifier = ">=5.10" },
-    { name = "numpy", specifier = ">=1.26.0" },
-    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
-    { name = "pytest-benchmark", marker = "extra == 'test'", specifier = ">=4" },
-    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.9,<0.10" },
-    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7,<9" },
-    { name = "torch", specifier = ">=2.4.0" },
-    { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
-    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
-]
-provides-extras = ["dev", "docs", "notebooks", "test"]
-
-[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2515,6 +2460,61 @@ sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
 ]
+
+[[package]]
+name = "snakes-and-ladders"
+source = { editable = "." }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+    { name = "torch" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pip-audit" },
+    { name = "pre-commit" },
+    { name = "ruff" },
+    { name = "towncrier" },
+    { name = "types-pyyaml" },
+]
+docs = [
+    { name = "sphinx" },
+]
+notebooks = [
+    { name = "ipykernel" },
+    { name = "nbclient" },
+    { name = "nbformat" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-benchmark" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ipykernel", marker = "extra == 'notebooks'", specifier = ">=6.29" },
+    { name = "matplotlib", specifier = ">=3.9.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "nbclient", marker = "extra == 'notebooks'", specifier = ">=0.10" },
+    { name = "nbformat", marker = "extra == 'notebooks'", specifier = ">=5.10" },
+    { name = "numpy", specifier = ">=1.26.0" },
+    { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
+    { name = "pytest-benchmark", marker = "extra == 'test'", specifier = ">=4" },
+    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.9,<0.10" },
+    { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7,<9" },
+    { name = "torch", specifier = ">=2.4.0" },
+    { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
+]
+provides-extras = ["dev", "docs", "notebooks", "test"]
 
 [[package]]
 name = "snowballstemmer"

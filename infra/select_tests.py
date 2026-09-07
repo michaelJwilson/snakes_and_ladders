@@ -8,8 +8,8 @@ over.
 
 Two properties matter more than the saving.
 
-A module's tests are not enough on their own: `phylo.search` imports
-`phylo.likelihood`, so a change to the latter must run the former's tests too.
+A module's tests are not enough on their own: `snakes_and_ladders.search` imports
+`snakes_and_ladders.likelihood`, so a change to the latter must run the former's tests too.
 The dependents are derived from the source here rather than listed, because a
 list goes stale silently and an import does not.
 
@@ -29,7 +29,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# The submodules with their own test directory. `phylo.numerics` and the
+# The submodules with their own test directory. `snakes_and_ladders.numerics` and the
 # scaffolding hot path are covered by the top-level regression modules, which
 # are cheap and always run.
 MODULES = ("sim", "likelihood", "opt", "learn", "search", "qa")
@@ -44,8 +44,8 @@ ALWAYS = (
     "tests/regression/test_numerics.py",
     "tests/regression/test_pairwise_distance.py",
     "tests/regression/test_claude_md_pointers.py",
-    "tests/test_run_phylo.py",
-    "tests/test_oxiphylo_bindings.py",
+    "tests/test_run_snakes_and_ladders.py",
+    "tests/test_oxi_snakes_and_ladders_bindings.py",
 )
 
 # A change to any of these could alter any result, so the whole suite runs.
@@ -58,11 +58,11 @@ EVERYTHING = (
     "tests/_",
     "tests/regression/fixtures/",
     ".github/workflows/",
-    "python/phylo/__init__.py",
-    "python/phylo/numerics.py",
-    "python/phylo/numerics_rust.py",
-    "python/phylo/oxiphylo.pyi",
-    "python/phylo/scripts/",
+    "python/snakes_and_ladders/__init__.py",
+    "python/snakes_and_ladders/numerics.py",
+    "python/snakes_and_ladders/numerics_rust.py",
+    "python/snakes_and_ladders/oxi_snakes_and_ladders.pyi",
+    "python/snakes_and_ladders/scripts/",
 )
 
 # Nothing here can change what a test does, so no test needs to run.
@@ -80,7 +80,9 @@ def _module_imports() -> dict[str, set[str]]:
     """
     imports: dict[str, set[str]] = {module: set() for module in MODULES}
     for module in MODULES:
-        for path in (REPO_ROOT / "python" / "phylo" / module).rglob("*.py"):
+        for path in (REPO_ROOT / "python" / "snakes_and_ladders" / module).rglob(
+            "*.py"
+        ):
             for node in ast.walk(ast.parse(path.read_text())):
                 names: list[str] = []
                 if isinstance(node, ast.ImportFrom) and node.module:
@@ -91,7 +93,7 @@ def _module_imports() -> dict[str, set[str]]:
                     parts = name.split(".")
                     if (
                         len(parts) >= 2
-                        and parts[0] == "phylo"
+                        and parts[0] == "snakes_and_ladders"
                         and parts[1] in MODULES
                         and parts[1] != module
                     ):
@@ -177,7 +179,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     """
     changed = list(changed)
     if not changed:
-        return {"paths": ["tests"], "cov": ["phylo"]}
+        return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
 
     relevant = [
         path
@@ -189,25 +191,28 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
         return {"paths": [], "cov": []}
 
     if any(_touches(path, EVERYTHING) for path in relevant):
-        return {"paths": ["tests"], "cov": ["phylo"]}
+        return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
 
     touched: set[str] = set()
     for path in relevant:
         for module in MODULES:
             if path.startswith(
-                (f"python/phylo/{module}/", f"tests/regression/{module}/")
+                (f"python/snakes_and_ladders/{module}/", f"tests/regression/{module}/")
             ):
                 touched.add(module)
     if not touched:
         # Recognised as code, but not attributable to a module: run everything.
-        return {"paths": ["tests"], "cov": ["phylo"]}
+        return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
 
     selected = dependents(touched)
     paths = [f"tests/regression/{module}" for module in sorted(selected)]
     paths += list(ALWAYS)
-    if any(path.startswith("python/phylo/") for path in relevant):
+    if any(path.startswith("python/snakes_and_ladders/") for path in relevant):
         paths += _benchmarks_for(selected & set(BENCHMARKED))
-    return {"paths": paths, "cov": [f"phylo.{module}" for module in sorted(selected)]}
+    return {
+        "paths": paths,
+        "cov": [f"snakes_and_ladders.{module}" for module in sorted(selected)],
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

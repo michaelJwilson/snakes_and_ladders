@@ -23,22 +23,22 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.reinforce import reinforce
-from phylo.learn.rollout import greedy_rollout, rollout
-from phylo.qa.rl_tree_policy import (
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.reinforce import reinforce
+from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.qa.rl_tree_policy import (
     BATCH,
     HORIZON,
     ITERATIONS,
     ROLLOUTS_PER_START,
     STARTS,
 )
-from phylo.search.infer import MoveSet
-from phylo.search.rl import RewardModel, TopologyEnvironment
-from phylo.search.topology import Topology, enumerate_topologies
-from phylo.sim.params import SimulationParams, load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import edges
+from snakes_and_ladders.search.infer import MoveSet
+from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.topology import Topology, enumerate_topologies
+from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import edges
 
 FIXTURE = Path("tests/regression/fixtures/simulation_params_hard.yaml")
 
@@ -64,7 +64,7 @@ def taxa(params: SimulationParams) -> list[str]:
             tau=params.tau,
             k=params.k,
             pi=params.pi,
-            seed=params.seed,
+            rng=np.random.default_rng(params.seed),
             n_sites=params.n_sites,
         ).alignment
     )
@@ -76,7 +76,7 @@ def environment(params: SimulationParams) -> TopologyEnvironment:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return TopologyEnvironment(
@@ -113,6 +113,7 @@ def _rate(
     )
 
 
+@pytest.mark.structural
 def test_every_episode_ends_where_no_move_improves(
     environment: TopologyEnvironment, starts: list[Topology]
 ) -> None:
@@ -142,6 +143,7 @@ def test_every_episode_ends_where_no_move_improves(
     assert all(environment.is_terminal(state) for state in learned_ends)
 
 
+@pytest.mark.structural
 def test_an_untrained_policy_is_far_worse_than_greedy(
     environment: TopologyEnvironment, starts: list[Topology], maximum: float
 ) -> None:
@@ -164,6 +166,7 @@ def test_an_untrained_policy_is_far_worse_than_greedy(
     assert abs(rate - _UNTRAINED) < 0.02
 
 
+@pytest.mark.structural
 def test_a_trained_policy_is_no_worse_than_hill_climbing(
     environment: TopologyEnvironment, starts: list[Topology], maximum: float
 ) -> None:

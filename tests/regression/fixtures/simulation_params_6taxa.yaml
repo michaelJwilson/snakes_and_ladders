@@ -1,11 +1,11 @@
 # Ground truth for the exhaustive search study
 # (tests/regression/test_search_exhaustive.py). Every field is required --
-# see python/phylo/sim/params.py and python/phylo/sim/CLAUDE.md.
+# see python/snakes_and_ladders/sim/params.py and python/snakes_and_ladders/sim/CLAUDE.md.
 #
 # 6 taxa because that is where exhaustive enumeration is still cheap -- 105
 # unrooted topologies -- and hill climbing is no longer trivially correct.
 # The topology is in the trifurcating-root convention, so every branch is
-# separately estimable (see python/phylo/likelihood/CLAUDE.md).
+# separately estimable (see python/snakes_and_ladders/likelihood/CLAUDE.md).
 #
 # The branch lengths are deliberately uneven. A tree with equal branches has
 # near-degenerate alternatives, and a study run on one would measure the

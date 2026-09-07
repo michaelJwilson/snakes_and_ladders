@@ -1,4 +1,4 @@
-"""Shared derivative check for any ``phylo.opt.objective.Objective``.
+"""Shared derivative check for any ``snakes_and_ladders.opt.objective.Objective``.
 
 `DEV.md`'s Test Layout puts a fixture shared across modules in a top-level
 underscore-prefixed module, imported rather than collected. `opt/CLAUDE.md`
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import torch
 
 if TYPE_CHECKING:
-    from phylo.opt.objective import Objective
+    from snakes_and_ladders.opt.objective import Objective
 
 
 def central_difference_gradient(
