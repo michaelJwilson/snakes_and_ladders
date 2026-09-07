@@ -1,0 +1,64 @@
+# A tree fixture NNI hill climbing does not already solve (issue #177).
+#
+# The 6-taxon fixture cannot separate a learned policy from greedy, because
+# greedy reaches the enumerated optimum from every start. This one is chosen
+# so it does not: hill climbing reaches the best topology from roughly half
+# its starting points, leaving room for a policy to be better or worse.
+#
+# 7 taxa, so all 945 unrooted topologies still enumerate in under a second
+# and "the best topology" stays a checkable claim rather than an assertion.
+#
+# The hardness comes from the branch lengths, not the taxon count. The three
+# internal edges are ~0.02 and the pendant edges ~0.35 -- an order of
+# magnitude apart. Short internal edges make the topologies that differ only
+# by resolving them near-degenerate, so the likelihood surface over
+# topologies is rugged and a single-move neighbourhood gets trapped; long
+# pendant edges keep the leaves far enough apart that the surface still has a
+# clear global maximum, which is what keeps the fixture honest.
+#
+# Chosen by sweeping taxon count, internal and pendant branch scale, site
+# count and seed (72 candidates), and keeping those where the generating
+# topology IS the enumerated maximum and hill climbing still fails. Only 6
+# of the 72 satisfied both. This is the hardest of them.
+#
+# Measured on the committed values, over 50 seeded starts on the
+# fixed-branch-length reward surface (`RewardModel.KNOWN` at the tree's mean
+# branch length, which is what the RL environment scores) -- see
+# tests/regression/search/test_search_hard_fixture.py for the pinned values.
+#
+# tolerance is unused by the search study; it is required by the loader and
+# carries the Monte Carlo bound the simulator's own validation would use.
+seed: 20260907
+n_sites: 2000
+tolerance: 0.01
+k: 4
+pi: [0.25, 0.25, 0.25, 0.25]
+tau:
+  name: root
+  children:
+    - name: B
+      branch_length: 0.3769
+    - name: ancestor_AE
+      branch_length: 0.0182
+      children:
+        - name: A
+          branch_length: 0.3422
+        - name: E
+          branch_length: 0.3182
+    - name: ancestor_CDFG
+      branch_length: 0.0141
+      children:
+        - name: ancestor_CDG
+          branch_length: 0.0170
+          children:
+            - name: C
+              branch_length: 0.4250
+            - name: ancestor_DG
+              branch_length: 0.0262
+              children:
+                - name: D
+                  branch_length: 0.4200
+                - name: G
+                  branch_length: 0.4041
+        - name: F
+          branch_length: 0.3340
