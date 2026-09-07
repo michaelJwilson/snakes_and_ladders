@@ -30,7 +30,7 @@ parameters files it takes, and the builder that turns them into a figure or a
 
 `manifest.py` states which outputs exist and what renders each one — stem,
 module, and fixture arguments. `build.py` reads it and renders a selection:
-what `docs/tex/main.tex` cites, the whole manifest (`--all`, the release
+what the documents under `docs/tex/` cite, the whole manifest (`--all`, the release
 gate), or named stems (`--only`). It also pins the clock those figures are
 rendered against, because a committed figure that does not reproduce is
 indistinguishable from one that has rotted.
@@ -76,3 +76,9 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
 - **Regression-test the layout, not the rendering.** matplotlib output isn't
   numerically pinnable; the coordinates and text a script computes before
   handing them to matplotlib are, and that is what a test pins.
+- **Series and states are two palettes with two rules, and a layout is
+  shared.** A series is traced across a plot and takes the four validated
+  hues with their markers; a state is read off a legend and takes the
+  eight-colour state palette; neither grows a hue, both facet. A composition
+  more than one figure needs — a spatial grid, grouped tracks, a joint
+  distribution — lives in `layout.py`, never in a script.
