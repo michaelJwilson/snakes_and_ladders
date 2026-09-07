@@ -1,4 +1,4 @@
-\begin{thebibliography}{27}
+\begin{thebibliography}{28}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -147,5 +147,12 @@ Kenneth~H. Rosen.
 Richard~S. Sutton and Andrew~G. Barto.
 \newblock \emph{Reinforcement Learning: An Introduction}.
 \newblock MIT Press, Cambridge, Massachusetts, 2nd edition, 2018.
+
+\bibitem[Yedidia et~al.(2005)Yedidia, Freeman, and Weiss]{yedidia2005}
+Jonathan~S. Yedidia, William~T. Freeman, and Yair Weiss.
+\newblock Constructing free-energy approximations and generalized belief
+  propagation algorithms.
+\newblock \emph{IEEE Transactions on Information Theory}, 51\penalty0
+  (7):\penalty0 2282--2312, 2005.
 
 \end{thebibliography}
