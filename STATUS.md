@@ -43,7 +43,9 @@ the documents under `docs/tex/` cite, comparing the rest at the release gate ins
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
 request whose rebuilt `docs/paper.pdf` or `docs/textbook.pdf` differs from the committed one
 ([#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72)); the notebooks job
-re-executes every notebook under `docs/nb/` and fails one whose printed
+re-executes every notebook under `docs/nb/`, fails one whose Further work
+section is missing or names no ticket
+([#278](https://github.com/michaelJwilson/snakes_and_ladders/issues/278)), and fails one whose printed
 output has moved; and the coverage floor cannot be lowered to pass a change. Cost is managed rather than absorbed:
 benchmarks run only when the diff touches code they measure, and the
 release-gated suite is excluded per pull request — measured at 138 s over 540
