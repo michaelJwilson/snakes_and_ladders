@@ -21,6 +21,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.log
    :members:
 
+.. automodule:: snakes_and_ladders.bound
+   :members:
+
 .. automodule:: snakes_and_ladders.emissions
    :members:
 
@@ -114,6 +117,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.hmm_paths
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.surrogate
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.features
+   :members:
+
 .. automodule:: snakes_and_ladders.opt
    :members:
 
@@ -174,6 +183,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.exact
    :members:
 
+.. automodule:: snakes_and_ladders.learn.surrogate
+   :members:
+
 .. automodule:: snakes_and_ladders.search
    :members:
 
@@ -220,6 +232,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.statistics
+   :members:
+
+.. automodule:: snakes_and_ladders.search.surrogate
    :members:
 
 .. automodule:: snakes_and_ladders.qa

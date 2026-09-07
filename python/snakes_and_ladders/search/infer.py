@@ -41,6 +41,7 @@ from enum import StrEnum
 import numpy as np
 import torch
 
+from snakes_and_ladders.bound import Surrogate
 from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
@@ -254,6 +255,7 @@ def infer(
     rng: np.random.Generator | None = None,
     warm_start: bool = True,
     lazy_top: int | None = None,
+    surrogate: Surrogate | None = None,
 ) -> Inference:
     """Hill-climb over topologies, fitting continuous parameters per candidate.
 
@@ -290,6 +292,13 @@ def infer(
         accepted move is always a full fit. Which candidates get fitted
         changes, so this is opt-in, and its cost in missed optima is the
         measurement the regression suite reports.
+    surrogate : Surrogate | None
+        What ranks the neighbourhood when ``lazy_top`` is given: ``None``
+        ranks by the one-evaluation lazy score, a surrogate ranks by its own
+        value (issue #308), and a bound or a learned predictor from
+        ``likelihood.surrogate`` or ``search.surrogate`` fits here. Its
+        evaluations are not likelihood evaluations and are not counted as
+        such; the fits it saves or costs are what ``fits`` reports.
 
     Returns
     -------
@@ -300,13 +309,17 @@ def infer(
     ------
     ValueError
         If the alignment has fewer than 4 taxa, below which no unrooted
-        topology has a neighbour to move to, or ``lazy_top`` is not positive.
+        topology has a neighbour to move to, ``lazy_top`` is not positive,
+        or a surrogate is given without ``lazy_top`` to apply it to.
     """
     if len(alignment) < 4:
         msg = f"need at least 4 taxa to search, got {len(alignment)}"
         raise ValueError(msg)
     if lazy_top is not None and lazy_top < 1:
         msg = f"lazy_top must be at least 1 when given, got {lazy_top}"
+        raise ValueError(msg)
+    if surrogate is not None and lazy_top is None:
+        msg = "a surrogate ranks the candidates lazy_top selects; give both"
         raise ValueError(msg)
 
     if topology is not None:
@@ -346,6 +359,13 @@ def infer(
             fresh.append(neighbour)
         if lazy_top is None:
             to_fit = fresh
+        elif surrogate is not None:
+            ranked = sorted(
+                fresh,
+                key=lambda neighbour: float(surrogate(neighbour, alignment)),
+                reverse=True,
+            )
+            to_fit = ranked[:lazy_top]
         else:
             ranked = sorted(
                 fresh,
