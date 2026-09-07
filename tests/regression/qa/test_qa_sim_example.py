@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 from snakes_and_ladders.qa.figure import latex_integer, state_label
 from snakes_and_ladders.qa.sim_example import (
@@ -68,7 +69,7 @@ def test_sim_example_alignment_matches_independent_simulation() -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
 

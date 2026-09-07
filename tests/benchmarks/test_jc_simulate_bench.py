@@ -7,6 +7,7 @@ across a variety of site/taxa sizes, per sim/CLAUDE.md's local rule.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.sim.params import load_simulation_params
@@ -33,7 +34,7 @@ def test_simulate_alignment_benchmark(
         params.tau,
         params.k,
         params.pi,
-        params.seed,
+        np.random.default_rng(params.seed),
         params.n_sites,
     )
 

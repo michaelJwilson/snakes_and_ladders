@@ -85,7 +85,7 @@ def test_simulated_substitution_frequencies_match_analytic_jc(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
 
@@ -114,10 +114,18 @@ def test_simulated_substitution_frequencies_match_analytic_jc(
 def test_simulation_is_reproducible_given_seed() -> None:
     params = load_simulation_params(FIXTURE)
     first = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=1000
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=1000,
     )
     second = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=1000
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=1000,
     )
 
     for name, states in first.node_states.items():
@@ -128,7 +136,11 @@ def test_simulation_is_reproducible_given_seed() -> None:
 def test_alignment_holds_exactly_the_leaf_states() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=10
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=10,
     )
 
     assert set(dataset.alignment) == {"A", "B", "C", "D"}
@@ -140,7 +152,11 @@ def test_alignment_holds_exactly_the_leaf_states() -> None:
 def test_newick_carries_every_leaf_and_terminates() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=10
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=10,
     )
 
     assert dataset.newick.endswith(";")

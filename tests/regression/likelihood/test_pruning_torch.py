@@ -127,7 +127,9 @@ def test_torch_matches_numpy_oracle() -> None:
     tau = _small_tree_n4()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260910, n_sites=50)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260910), n_sites=50
+    )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
 
     numpy_ll = pruning.log_likelihood(tau, k, pi, dataset.alignment)
@@ -143,7 +145,9 @@ def test_torch_matches_brute_force() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260911, n_sites=15)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260911), n_sites=15
+    )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
 
     torch_ll = pruning_torch.log_likelihood(
@@ -159,7 +163,9 @@ def test_rescaled_and_unrescaled_torch_paths_agree() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260912, n_sites=100)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260912), n_sites=100
+    )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
 
     rescaled = pruning_torch.log_likelihood(
@@ -177,7 +183,9 @@ def test_matrix_exp_rate_matrix_path_matches_closed_form() -> None:
     tau = _small_tree_n4()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260913, n_sites=50)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260913), n_sites=50
+    )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
     rate_matrix = torch.as_tensor(jc_rate_matrix(k), dtype=torch.float64)
 
@@ -197,7 +205,9 @@ def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
     tau = _small_tree_n4()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260914, n_sites=30)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260914), n_sites=30
+    )
     order = pruning_torch.branch_order(tau)
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau).requires_grad_(True)
 

@@ -112,7 +112,9 @@ def test_pruning_matches_brute_force(
     tau = tree_factory()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=seed, n_sites=n_sites)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(seed), n_sites=n_sites
+    )
 
     pruned = log_likelihood(tau, k, pi, dataset.alignment)
     brute = brute_force_log_likelihood(tau, k, pi, dataset.alignment)
@@ -125,7 +127,9 @@ def test_rescaled_and_unrescaled_agree_on_small_problems() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260904, n_sites=100)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260904), n_sites=100
+    )
 
     rescaled = log_likelihood(tau, k, pi, dataset.alignment, rescale=True)
     unrescaled = log_likelihood(tau, k, pi, dataset.alignment, rescale=False)
@@ -148,7 +152,9 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260905, n_sites=200)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260905), n_sites=200
+    )
 
     left, right = tau.children
     assert left.branch_length is not None
@@ -179,7 +185,7 @@ def test_generating_topology_outscores_random_wrong_topologies() -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
 

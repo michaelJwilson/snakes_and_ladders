@@ -63,7 +63,9 @@ def _recovery_rates(tau: Node, n_sites: int, replicates: int) -> tuple[int, int]
     """How often each criterion picks the true topology out of all three."""
     parsimony_correct = likelihood_correct = 0
     for replicate in range(replicates):
-        dataset = simulate_alignment(tau, 4, UNIFORM, 1000 + replicate, n_sites)
+        dataset = simulate_alignment(
+            tau, 4, UNIFORM, np.random.default_rng(1000 + replicate), n_sites
+        )
         alignment = dataset.alignment
         topologies = list(enumerate_topologies(LEAVES))
 
@@ -211,7 +213,9 @@ def test_a_zero_length_internal_branch_leaves_the_three_topologies_tied() -> Non
 
     winners = set()
     for seed in range(15):
-        dataset = simulate_alignment(star, 4, UNIFORM, 5000 + seed, 400)
+        dataset = simulate_alignment(
+            star, 4, UNIFORM, np.random.default_rng(5000 + seed), 400
+        )
         scores = [
             fitch_score(topology, dataset.alignment, 4) for topology in topologies
         ]

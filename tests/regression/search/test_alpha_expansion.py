@@ -164,7 +164,9 @@ def test_expansion_beats_single_site_descent_past_enumeration() -> None:
 
         expansion = alpha_expansion(graph, field_values, 4).energy
         descent = min(
-            iterated_conditional_modes(graph, field_values, 4, seed)[1]
+            iterated_conditional_modes(
+                graph, field_values, 4, np.random.default_rng(seed)
+            )[1]
             for seed in range(8)
         )
 
@@ -180,7 +182,9 @@ def test_single_site_descent_settles_at_a_local_minimum() -> None:
     graph = lattice_graph((5, 5), BoundaryCondition.OPEN, 0.9)
     field_values = rng.normal(size=(graph.n_nodes, 3))
 
-    labelling, settled = iterated_conditional_modes(graph, field_values, 3, 1)
+    labelling, settled = iterated_conditional_modes(
+        graph, field_values, 3, np.random.default_rng(1)
+    )
 
     for node in range(graph.n_nodes):
         for label in range(3):

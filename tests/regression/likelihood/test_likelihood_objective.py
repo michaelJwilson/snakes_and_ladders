@@ -50,7 +50,11 @@ _FINITE_DIFFERENCE_STEP = 1e-6
 def _objective(fixture: str, sites: int = _SITES) -> BranchLengthObjective:
     params = load_fixture(fixture)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=sites
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=sites,
     )
     return BranchLengthObjective(
         params.tau, params.k, params.pi, dict(dataset.alignment)
@@ -68,7 +72,11 @@ def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
     # changes nothing. This is the fact the parameterization is built on.
     params = load_fixture(EIGHT_TAXA)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=_SITES
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=_SITES,
     )
     alignment = dict(dataset.alignment)
     order = pruning_torch.branch_order(params.tau)
@@ -100,7 +108,11 @@ def test_two_non_root_siblings_are_not_confounded() -> None:
     # that ignored branch lengths entirely.
     params = load_fixture(EIGHT_TAXA)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=_SITES
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=_SITES,
     )
     alignment = dict(dataset.alignment)
     order = pruning_torch.branch_order(params.tau)
@@ -160,7 +172,11 @@ def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
     # reason it is not merely a tidier way to count parameters.
     params = load_fixture(EIGHT_TAXA)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=_SITES
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=_SITES,
     )
     alignment = dict(dataset.alignment)
     naive = _Unmerged(params.tau, params.k, params.pi, alignment)
@@ -296,7 +312,7 @@ def test_branch_length_intervals_cover_at_the_nominal_rate() -> None:
             tau=params.tau,
             k=params.k,
             pi=params.pi,
-            seed=params.seed + 7919 * replicate,
+            rng=np.random.default_rng(params.seed + 7919 * replicate),
             n_sites=_SITES,
         )
         objective = BranchLengthObjective(
@@ -340,7 +356,7 @@ def _gtr_objective(
         tau=params.tau,
         k=params.k,
         pi=_TRUE_PI,
-        seed=params.seed + 7919 * seed_offset,
+        rng=np.random.default_rng(params.seed + 7919 * seed_offset),
         n_sites=sites,
         rate_matrix=rate,
     )
@@ -462,7 +478,7 @@ def test_fitting_jc_simulated_data_recovers_a_jc_like_model() -> None:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=_GTR_SITES,
     )
     objective = SubstitutionModelObjective(

@@ -50,7 +50,7 @@ def _alignment(path: Path = FIXTURE) -> tuple[dict[str, np.ndarray], int, Topolo
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return dict(dataset.alignment), params.k, params.tau
@@ -159,7 +159,13 @@ def test_hill_climbing_reaches_the_enumerated_maximum(
     alignment, k, best, _ = five_taxon
 
     for seed in range(2):
-        result = infer(alignment, k, seed=seed, moves=moves, max_evaluations=200)
+        result = infer(
+            alignment,
+            k,
+            rng=np.random.default_rng(seed),
+            moves=moves,
+            max_evaluations=200,
+        )
         assert result.converged
         assert result.log_likelihood <= best + _LIKELIHOOD_TOLERANCE
         assert result.log_likelihood >= best - _LIKELIHOOD_TOLERANCE, (
@@ -215,7 +221,13 @@ def test_hill_climbing_success_rate_at_six_taxa(
     successes = 0
     trials = 12
     for seed in range(trials):
-        result = infer(alignment, k, seed=seed, moves=moves, max_evaluations=500)
+        result = infer(
+            alignment,
+            k,
+            rng=np.random.default_rng(seed),
+            moves=moves,
+            max_evaluations=500,
+        )
         assert result.converged
         if abs(result.log_likelihood - best) <= _LIKELIHOOD_TOLERANCE:
             successes += 1
@@ -263,7 +275,11 @@ def test_search_recovers_the_generating_topology(
     recovered = sum(
         leaf_bipartitions(
             infer(
-                alignment, k, seed=seed, moves=MoveSet.SPR, max_evaluations=500
+                alignment,
+                k,
+                rng=np.random.default_rng(seed),
+                moves=MoveSet.SPR,
+                max_evaluations=500,
             ).topology
         )
         == truth_key
