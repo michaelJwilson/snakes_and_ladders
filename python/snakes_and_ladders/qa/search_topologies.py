@@ -62,12 +62,12 @@ def found_and_runner_up(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)
 
-    result = infer(alignment, params.k, seed=0, moves=MoveSet.NNI)
+    result = infer(alignment, params.k, rng=np.random.default_rng(0), moves=MoveSet.NNI)
     found_key = leaf_bipartitions(result.topology)
 
     ranked = sorted(

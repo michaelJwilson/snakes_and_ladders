@@ -41,6 +41,8 @@ def _imported_modules(source: Path) -> set[str]:
     return imported
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_opt_imports_nothing_from_the_application_modules() -> None:
     # `opt/CLAUDE.md` says nothing phylogenetic belongs here. That rule is
     # only worth stating if something checks it: a single `from snakes_and_ladders.sim
@@ -59,6 +61,8 @@ def test_opt_imports_nothing_from_the_application_modules() -> None:
     assert offenders == {}
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_the_check_would_catch_an_application_import(tmp_path: Path) -> None:
     # Guards the guard: a structural test that cannot fail is worse than no
     # test, because it reads as evidence.
@@ -73,6 +77,7 @@ def test_the_check_would_catch_an_application_import(tmp_path: Path) -> None:
     }
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("n", [2, 3, 5])
 def test_log_simplex_yields_a_normalized_distribution(n: int) -> None:
     free = torch.linspace(-1.5, 2.0, n - 1, dtype=torch.float64)
@@ -81,6 +86,7 @@ def test_log_simplex_yields_a_normalized_distribution(n: int) -> None:
     assert_allclose(float(torch.exp(log_probs).sum()), 1.0, rtol=1e-15)
 
 
+@pytest.mark.mathematical
 def test_log_simplex_normalizes_each_row_of_a_batch() -> None:
     # Transition and emission matrices are mapped a whole matrix at a time,
     # so the batched path is the one that is actually used.
@@ -92,6 +98,7 @@ def test_log_simplex_normalizes_each_row_of_a_batch() -> None:
     )
 
 
+@pytest.mark.mathematical
 def test_free_from_log_simplex_inverts_log_simplex() -> None:
     free = torch.tensor([0.3, -1.2, 0.75], dtype=torch.float64)
     assert_allclose(
@@ -99,6 +106,7 @@ def test_free_from_log_simplex_inverts_log_simplex() -> None:
     )
 
 
+@pytest.mark.mathematical
 def test_the_pinned_gauge_leaves_no_flat_direction() -> None:
     # A plain softmax over n logits is invariant to adding a constant to all
     # of them, which makes the observed information singular and an interval
@@ -114,6 +122,7 @@ def test_the_pinned_gauge_leaves_no_flat_direction() -> None:
     )
 
 
+@pytest.mark.structural
 def test_both_reference_instances_satisfy_the_protocol() -> None:
     chains = torch.zeros((2, 3), dtype=torch.long).numpy()
     assert isinstance(PottsObjective(chains, n_states=2), Objective)

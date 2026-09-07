@@ -41,6 +41,7 @@ def _params(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
     )
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     ("n_states", "n_symbols", "length", "seed"),
     [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3), (4, 3, 3, 4)],
@@ -66,6 +67,7 @@ def test_the_enumerated_evidence_matches_the_forward_recursion(
     assert enumerated.log_likelihood == pytest.approx(float(forward), rel=1e-12)
 
 
+@pytest.mark.mathematical
 def test_the_marginals_sum_to_one_and_are_a_valid_distribution() -> None:
     params = _params(3, 3, 5, 11)
     observations = np.array([0, 2, 1, 1, 2])
@@ -77,6 +79,7 @@ def test_the_marginals_sum_to_one_and_are_a_valid_distribution() -> None:
     assert float(result.posterior.min()) >= 0.0
 
 
+@pytest.mark.oracle
 def test_a_marginal_is_the_summed_joint_over_paths_through_that_state() -> None:
     # The definition, computed a second way: `P(state_t = s | y)` is the total
     # weight of paths passing through `s` at `t`, normalized. Written out here
@@ -99,6 +102,7 @@ def test_a_marginal_is_the_summed_joint_over_paths_through_that_state() -> None:
     )
 
 
+@pytest.mark.oracle
 def test_the_viterbi_path_is_the_maximum_of_the_enumerated_joints() -> None:
     params = _params(3, 3, 4, 13)
     observations = np.array([2, 0, 1, 2])
@@ -115,6 +119,7 @@ def test_the_viterbi_path_is_the_maximum_of_the_enumerated_joints() -> None:
     )
 
 
+@pytest.mark.mathematical
 def test_the_evidence_bounds_the_best_path_from_above() -> None:
     # `P(observations)` sums over every path and `P(viterbi, observations)` is
     # one term of that sum, so the second cannot exceed the first. A decoder
@@ -127,6 +132,7 @@ def test_the_evidence_bounds_the_best_path_from_above() -> None:
     assert result.viterbi_log_probability < result.log_likelihood
 
 
+@pytest.mark.edge_case
 def test_a_deterministic_chain_makes_both_decoders_agree() -> None:
     # The degenerate case, and the reason a disagreeing fixture had to be
     # built: when one path carries essentially all the mass the two decoders
@@ -150,6 +156,8 @@ def test_a_deterministic_chain_makes_both_decoders_agree() -> None:
     assert list(result.viterbi) == [0, 0, 0, 0, 0]
 
 
+@pytest.mark.edge_case
+@pytest.mark.oracle
 def test_a_single_observation_is_decoded_by_the_prior_and_the_emission() -> None:
     # Length 1 has no transition, so both decoders reduce to
     # `argmax_s pi[s] B[s, y]` and the answer is arithmetic rather than a
@@ -167,6 +175,7 @@ def test_a_single_observation_is_decoded_by_the_prior_and_the_emission() -> None
     )
 
 
+@pytest.mark.structural
 def test_the_ambiguous_fixture_is_within_the_cap() -> None:
     # The fixture the module exists for must be enumerable in the fast suite,
     # or the distinction it draws is untestable per pull request.
@@ -175,6 +184,7 @@ def test_the_ambiguous_fixture_is_within_the_cap() -> None:
     assert params.n_states ** len(AMBIGUOUS_OBSERVATIONS) < MAX_ENUMERABLE_PATHS
 
 
+@pytest.mark.edge_case
 def test_a_sequence_too_long_to_enumerate_is_refused() -> None:
     params = _params(4, 2, 12, 16)
 
@@ -187,6 +197,7 @@ def test_a_sequence_too_long_to_enumerate_is_refused() -> None:
         enumerate_hidden_paths(params, np.zeros(12, dtype=np.int64))
 
 
+@pytest.mark.edge_case
 def test_a_symbol_outside_the_alphabet_is_refused() -> None:
     params = _params(2, 2, 3, 17)
 
@@ -194,6 +205,7 @@ def test_a_symbol_outside_the_alphabet_is_refused() -> None:
         enumerate_hidden_paths(params, np.array([0, 5, 1]))
 
 
+@pytest.mark.edge_case
 def test_an_empty_observation_sequence_is_refused() -> None:
     params = _params(2, 2, 3, 18)
 

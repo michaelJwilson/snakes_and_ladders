@@ -18,6 +18,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.enumeration
    :members:
 
+.. automodule:: snakes_and_ladders.fixtures
+   :members:
+
 .. automodule:: snakes_and_ladders.numerics_rust
    :members:
 
@@ -99,6 +102,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.fit
    :members:
 
+.. automodule:: snakes_and_ladders.opt.initialize
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.testfunctions
    :members:
 
@@ -162,6 +168,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.potts_mcmc
    :members:
 
+.. automodule:: snakes_and_ladders.search.potts_mcmc_rust
+   :members:
+
 .. automodule:: snakes_and_ladders.search.statistics
    :members:
 
@@ -190,6 +199,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.sim_problem_sizes
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.likelihood_footprint
    :members:
 
 .. automodule:: snakes_and_ladders.qa.jc_transition

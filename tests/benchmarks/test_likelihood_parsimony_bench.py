@@ -35,7 +35,9 @@ def _tree() -> Node:
 def test_fitch_score_benchmark(benchmark: BenchmarkFixture, n_sites: int) -> None:
     # Linear in sites by construction: the recursion is vectorized over the
     # whole alignment, so the Python cost is per *node* rather than per site.
-    dataset = simulate_alignment(_tree(), 4, np.full(4, 0.25), 11, n_sites)
+    dataset = simulate_alignment(
+        _tree(), 4, np.full(4, 0.25), np.random.default_rng(11), n_sites
+    )
 
     score = benchmark(fitch_score, _tree(), dataset.alignment, 4)
 

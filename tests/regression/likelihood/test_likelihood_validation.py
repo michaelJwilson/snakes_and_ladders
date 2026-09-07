@@ -31,18 +31,21 @@ _ALIGNMENT = {
 }
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("func", [log_likelihood, brute_force_log_likelihood])
 def test_rejects_mismatched_pi_shape(func: _LikelihoodFunc) -> None:
     with pytest.raises(ValueError, match="pi has shape"):
         func(_TAU, 4, np.full(3, 1.0 / 3), _ALIGNMENT)
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("func", [log_likelihood, brute_force_log_likelihood])
 def test_rejects_alignment_missing_a_leaf(func: _LikelihoodFunc) -> None:
     with pytest.raises(ValueError, match="alignment is missing leaf"):
         func(_TAU, 4, np.full(4, 0.25), {"A": _ALIGNMENT["A"]})
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("func", [log_likelihood, brute_force_log_likelihood])
 def test_rejects_non_root_node_without_branch_length(func: _LikelihoodFunc) -> None:
     tau = Node(

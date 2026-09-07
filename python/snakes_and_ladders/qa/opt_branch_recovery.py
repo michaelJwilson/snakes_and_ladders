@@ -67,7 +67,11 @@ def recovery(
         interval covers, one entry per *estimable* parameter.
     """
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=SITES
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=SITES,
     )
     objective = BranchLengthObjective(
         params.tau, params.k, params.pi, dict(dataset.alignment)
@@ -103,7 +107,11 @@ def split_profile(
         The splits, and the log-likelihood change from the even split.
     """
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=SITES
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=SITES,
     )
     alignment = dict(dataset.alignment)
     order = pruning_torch.branch_order(params.tau)

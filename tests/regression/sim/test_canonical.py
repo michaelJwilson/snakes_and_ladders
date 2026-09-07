@@ -52,6 +52,7 @@ def _agreeing_edges(graph: PottsGraph) -> tuple[int, int]:
 # --- 1. The frustrated triangular antiferromagnet ------------------------
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(3, 3), (3, 4), (4, 4)])
 def test_the_periodic_ground_state_agrees_on_exactly_one_edge_in_three(
     shape: tuple[int, int],
@@ -69,6 +70,7 @@ def test_the_periodic_ground_state_agrees_on_exactly_one_edge_in_three(
     assert lowest * 3 == len(graph.edges)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(3, 3), (3, 4)])
 def test_the_ground_state_energy_is_known_without_enumerating(
     shape: tuple[int, int],
@@ -89,6 +91,7 @@ def test_the_ground_state_energy_is_known_without_enumerating(
     assert attained == pytest.approx(1.5 * graph.n_nodes)
 
 
+@pytest.mark.mathematical
 def test_a_square_lattice_is_unfrustrated_and_a_triangular_one_is_not() -> None:
     # The contrast that makes "frustration" mean something. A square lattice
     # is bipartite, so every edge can disagree and the ground-state energy is
@@ -101,6 +104,7 @@ def test_a_square_lattice_is_unfrustrated_and_a_triangular_one_is_not() -> None:
     assert _agreeing_edges(triangular)[0] == 16
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(3, 3), (3, 4)])
 def test_the_frustrated_optimum_is_the_maximum_cut(shape: tuple[int, int]) -> None:
     # The identity `max_cut.py` documents, checked on the instance it matters
@@ -114,6 +118,7 @@ def test_the_frustrated_optimum_is_the_maximum_cut(shape: tuple[int, int]) -> No
     assert maximum == pytest.approx(2.0 * graph.n_nodes)
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_a_cluster_move_refuses_this_instance(move: PottsMove) -> None:
     # The second job of this fixture, and the reason it is not merely a
@@ -124,9 +129,17 @@ def test_a_cluster_move_refuses_this_instance(move: PottsMove) -> None:
     graph = frustrated_triangular_lattice((3, 3))
 
     with pytest.raises(ValueError, match="needs every coupling >= 0"):
-        sample_potts(graph, ZERO_FIELD, move=move, n_sweeps=4, burn_in=0, seed=1)
+        sample_potts(
+            graph,
+            ZERO_FIELD,
+            move=move,
+            n_sweeps=4,
+            burn_in=0,
+            rng=np.random.default_rng(1),
+        )
 
 
+@pytest.mark.edge_case
 def test_single_site_sampling_still_runs_on_the_frustrated_instance() -> None:
     # The refusal above is specific to the cluster construction, not a blanket
     # ban on a negative coupling. Without this the test above would also pass
@@ -134,12 +147,18 @@ def test_single_site_sampling_still_runs_on_the_frustrated_instance() -> None:
     graph = frustrated_triangular_lattice((3, 3))
 
     chain = sample_potts(
-        graph, ZERO_FIELD, move=PottsMove.SINGLE_SITE, n_sweeps=20, burn_in=5, seed=1
+        graph,
+        ZERO_FIELD,
+        move=PottsMove.SINGLE_SITE,
+        n_sweeps=20,
+        burn_in=5,
+        rng=np.random.default_rng(1),
     )
 
     assert chain.states.shape == (20, graph.n_nodes)
 
 
+@pytest.mark.structural
 def test_the_residual_entropy_is_reported_and_not_asserted() -> None:
     # Wannier (1950) gives 0.3231 per site for the *infinite* lattice. The
     # finite-size values are not close to it and, measured here, are not even
@@ -169,6 +188,7 @@ def test_the_residual_entropy_is_reported_and_not_asserted() -> None:
     assert max(entropies) > WANNIER_RESIDUAL_ENTROPY
 
 
+@pytest.mark.structural
 def test_an_open_boundary_is_frustrated_but_has_no_closed_form() -> None:
     # The counting argument needs every triangle complete, which an open
     # boundary breaks. The instance is still frustrated -- 4 agreeing edges of
@@ -184,11 +204,13 @@ def test_an_open_boundary_is_frustrated_but_has_no_closed_form() -> None:
         minimum_frustrated_edges(graph)
 
 
+@pytest.mark.edge_case
 def test_a_ferromagnetic_coupling_on_this_graph_is_refused() -> None:
     with pytest.raises(ValueError, match="coupling must be negative"):
         frustrated_triangular_lattice((3, 3), coupling=1.0)
 
 
+@pytest.mark.edge_case
 def test_a_periodic_extent_below_three_is_refused() -> None:
     # At extent 2 the "+1" and "-1" neighbours coincide, so the wrap doubles a
     # bond -- which `PottsGraph` permits and which silently doubles that
@@ -200,6 +222,8 @@ def test_a_periodic_extent_below_three_is_refused() -> None:
 # --- 2. The planted Viana-Bray spin glass --------------------------------
 
 
+@pytest.mark.edge_case
+@pytest.mark.mathematical
 def test_zero_frustration_is_a_gauge_transform_of_the_ferromagnet() -> None:
     # Stated in the docstring as the reason not to use `frustration = 0` as a
     # hard case, and checked here rather than trusted: with the gauge
@@ -220,6 +244,7 @@ def test_zero_frustration_is_a_gauge_transform_of_the_ferromagnet() -> None:
     assert gauged == pytest.approx([1.0] * len(gauged))
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     ("frustration", "expected_hits"),
     [(0.0, 60), (0.1, 41), (0.2, 23), (0.3, 10), (0.5, 0)],
@@ -251,6 +276,7 @@ def test_the_planted_state_stops_being_the_ground_state_as_frustration_rises(
     assert hits == expected_hits
 
 
+@pytest.mark.oracle
 def test_the_planted_energy_matches_the_energy_of_the_planted_state() -> None:
     # The construction records its own answer, so a drift between the recorded
     # energy and the model's would make every comparison against it wrong.
@@ -263,6 +289,7 @@ def test_the_planted_energy_matches_the_energy_of_the_planted_state() -> None:
     )
 
 
+@pytest.mark.structural
 def test_the_couplings_carry_both_signs_at_positive_frustration() -> None:
     # Otherwise it is not a spin glass. `+/- J` means the magnitude is fixed
     # and only the sign varies, which is also checked.
@@ -273,6 +300,7 @@ def test_the_couplings_carry_both_signs_at_positive_frustration() -> None:
     assert {abs(weight) for weight in instance.graph.coupling} == {1.0}
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("n_nodes", "mean_degree", "frustration", "magnitude", "message"),
     [
@@ -299,6 +327,7 @@ def test_an_out_of_range_parameter_is_refused(
         )
 
 
+@pytest.mark.structural
 @pytest.mark.release
 def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> None:
     # The claim this fixture was proposed to support, and the measurement that
@@ -334,7 +363,9 @@ def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> 
     for frustration in (0.05, 0.30):
         instance = planted_spin_glass(100, 4.0, frustration, rng)
         best = min(
-            iterated_conditional_modes(instance.graph, field, 2, seed=seed)[1]
+            iterated_conditional_modes(
+                instance.graph, field, 2, rng=np.random.default_rng(seed)
+            )[1]
             for seed in range(20)
         )
         reachable.append(best - instance.planted_energy)
@@ -347,6 +378,7 @@ def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> 
 # --- 3. The ambiguous HMM ------------------------------------------------
 
 
+@pytest.mark.oracle
 def test_viterbi_and_posterior_decoding_disagree_on_this_fixture() -> None:
     # The whole reason the fixture exists. A decoder that computes the single
     # best path and reports it as the per-site maximum -- or the reverse --
@@ -362,6 +394,7 @@ def test_viterbi_and_posterior_decoding_disagree_on_this_fixture() -> None:
     assert int((result.viterbi != result.posterior_path).sum()) == 2
 
 
+@pytest.mark.oracle
 def test_the_viterbi_path_is_unique_by_a_stated_margin() -> None:
     # Without this the disagreement above could be an `argmax` tie-break, and
     # a correct decoder returning the other tied path would "fail". A
@@ -383,6 +416,7 @@ def test_the_viterbi_path_is_unique_by_a_stated_margin() -> None:
     assert ranked[0] - ranked[1] == pytest.approx(0.303296, abs=1e-6)
 
 
+@pytest.mark.oracle
 def test_the_posterior_marginals_are_decisive_at_every_site() -> None:
     # The mirror of the test above, for the other decoder. If some marginal
     # sat at 0.5 the posterior path would also be a tie-break, and the
@@ -397,6 +431,7 @@ def test_the_posterior_marginals_are_decisive_at_every_site() -> None:
     assert float(result.posterior.max(axis=1).min()) > 0.6
 
 
+@pytest.mark.oracle
 def test_the_posterior_path_is_a_poor_path_and_that_is_the_point() -> None:
     # Posterior decoding maximizes each site's marginal, which says nothing
     # about the sequence as a whole: the path it returns here is the 5th most
@@ -425,6 +460,7 @@ def test_the_posterior_path_is_a_poor_path_and_that_is_the_point() -> None:
     assert rank == 4
 
 
+@pytest.mark.structural
 def test_the_fixture_declares_the_length_its_observations_have() -> None:
     # A mismatch would leave every consumer slicing or padding, and the
     # simulated dataset would not be the sequence the decodings are pinned on.
