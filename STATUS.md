@@ -171,6 +171,8 @@ against the separation of the emitting means:
 | 4.0 | 93/96 | 0.969 | 0/24 |
 | 6.0 | 92/96 | 0.958 | 0/24 |
 
+Recorded as `docs/experiments/002-hmm-gaussian-interval-coverage.md`.
+
 Coverage reaches nominal from two standard deviations of separation upward and
 degrades below it, seen twice over: the intervals that exist under-cover, and
 most replicates produce **no interval at all** — the observed information is
@@ -248,6 +250,28 @@ two produce identical numbers on the same responsibilities rather than merely
 similar ones — the evidence that the seam extracted from an HMM was not shaped
 by one. The unbounded likelihood transfers unchanged with it: a component
 collapsed onto a single observation is refused, not clamped.
+
+**The coupled spatio-sequential model has a simulator and an exact oracle**
+([#300](https://github.com/michaelJwilson/snakes_and_ladders/issues/300), #290
+part 2). `sim.spatio_sequential` declares the truth — a spatial graph with
+`J >= 0`, `M` classes, `K` states, `S` positions, `beta`, the circulant
+self-transition `t`, one initial distribution and one emission family per
+class — and draws labels by the single-site heat bath at `beta` with no field,
+chains by `Pi_m` and the circulant transition, and observations by the class's family
+at the node's class and the position's state, under one generator; labels may
+be planted for recovery studies. `likelihood.spatio_sequential` sums
+`eq:joint` over every assignment of the canonical instance (a 2x2 open
+lattice, `M = K = 2`, `S = 6`: 65,536 joint states) for the evidence, the
+label posterior, the per-class state posterior and the state posterior given
+a labelling that part 3's forward–backward is pinned to. The oracle is pinned
+two ways that share no code: its evidence equals the sum over labellings of
+the per-class forward recursion to a relative gap of 0.0 on three draws, and
+its written-out joint equals the factor graph's log-density on 50 random
+assignments to 1.4e-14. The simulator is held to what it composes by
+chi-square at 0.001 over 400 draws — labellings against the enumerated Potts
+prior, transitions against `t`, first states against `Pi_m`, and symbol
+counts per (class, state) against the families' tables — and the label
+posterior recovers planted labels on 42 of 48 nodes at `S = 6`.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
@@ -771,7 +795,8 @@ normalized to sites touched:
 Single-site slows by 3.2x between extent 8 and 24 while both cluster
 algorithms slow by roughly 1.9x, so the gap is 2.1x at extent 24 and widening.
 That understates the asymptotic separation: these lattices are small and their
-boundary is open, both of which soften the transition.
+boundary is open, both of which soften the transition. Recorded as
+`docs/experiments/001-potts-cluster-autocorrelation.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
@@ -955,7 +980,8 @@ the reward decomposes exactly into the two features the policy scores, which
 puts hill climbing *inside* the policy class as the weight vector proportional
 to `(J, 1)`. The learned policy reaches the enumerated optimum from 86.6% of
 the 81 starts against greedy's 80.2%, in 8 of 8 training seeds — a statement
-about learning rather than about two unrelated algorithms.
+about learning rather than about two unrelated algorithms. Recorded as
+`docs/experiments/003-potts-chain-reinforce-vs-greedy.md`.
 
 **The phylogenetic environment exists, and the reward it can afford is
 measured** ([#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137)). A state
@@ -988,6 +1014,23 @@ their own state spaces: 19,683 configurations for a 3-state 3x3 lattice, 729
 paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
+
+## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
+
+**The ledger has a record format before it has a run store**
+([#314](https://github.com/michaelJwilson/snakes_and_ladders/issues/314)). An
+experiment is a file under `docs/experiments/`, written from a template: the
+commit, the feature under test, the fixture and its size tier, the methods
+compared at one budget over shared seeds, the results, the finding, and the
+tickets it filed. `infra/experiments.py` validates every file against the
+template's fields, vocabularies and sections and generates the index that is
+the leaderboard, and a guard runs it per pull request. Three measured
+comparisons this file already stated are the first entries — the cluster
+updates' autocorrelation at the transition, the Gaussian-emission interval
+coverage against separation, and REINFORCE against greedy on the Potts chain —
+and this file now cites them. The Aim run store (#75) is part 2, behind the
+dependency's approval; until then the Results section is typed from the
+measurement and names the script that produced it.
 
 ## Stage 3 — Research Extensions
 
