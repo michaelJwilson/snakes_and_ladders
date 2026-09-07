@@ -36,8 +36,8 @@ KINDS = (
     "structural",
 )
 
-#: The second axis. Not a kind: each says when a test runs, not what it checks
-#: -- `stress` (issue #232) is the same claim at a size the CI budget cannot hold.
+#: The second axis. Not a kind: it says when a test runs, not what it checks.
+#: `stress` (#232) is the same axis as `release`: a size, not a claim.
 SCHEDULING = ("critical", "release", "stress")
 
 #: Benchmarks measure rather than assert, so they carry no kind. Excluded here

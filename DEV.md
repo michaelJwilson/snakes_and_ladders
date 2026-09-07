@@ -67,16 +67,6 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
 
 ## Infrastructure & Tooling
 
-*   **Documentation Sync:** Any change affecting behavior, CI, dev setup, or math models must update, in the same PR, whichever of these it makes untrue: e.g. `README.md`, `CLAUDE.md` (including a module's), `DEV.m\
-d`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md`, `TICKETS.md`, `docs/tex/`, `docs/nb/`. If the change is user-visible, add a fragment under `changelog.d/` (see `changelog.d/README.md`) rather than editing `CHANGELOG.md\
-` directly — `towncrier` merges fragments into `CHANGELOG.md` at release time, and CI's `towncrier check` enforces one exists.  Similarly, keep this	convention and doc. up to date also.
-*   **Single Version Source:** The package version lives exclusively in `Cargo.toml`'s `[package].version`.
-*   **Package Surface:** `python/snakes_and_ladders/__init__.py` re-exports nothing beyond the package's own top-level utilities (currently `double`); import submodule contents explicitly (`from snakes_and_ladders.\
-likelihood import ...`), not through the top-level namespace.
-*   **Code Standards:** Use type hints on all Python functions. Do not introduce silent behavior changes (e.g., default parameters). Keep dependencies minimal and justify additions.
-*   **Dev Standards:** The number of PRs should be minimized to limit the amount of review work and test runs, particularly given tickets are typically scoped to a work item.
-
-
 ### Build System
 
 `maturin` builds the Rust extension natively during `pip install .`.
@@ -86,7 +76,7 @@ likelihood import ...`), not through the top-level namespace.
 
 ### Continuous Integration
 
-Nine required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs against `main`:
+Ten required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs against `main`:
 
 | Job | Execution |
 | --- | --- |
@@ -99,6 +89,7 @@ Nine required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs 
 | `technical-doc` | Regenerate the QA figures the documents cite (`infra/build_technical_doc.sh`), then LaTeX build. Fails on an undefined reference or citation, a multiply-defined label in either log, or a rebuilt PDF that differs from its committed copy |
 | `notebooks` | Re-execute every notebook under `docs/nb/` (`infra/check_notebooks.py`) and fail on a re-executed output that differs from the committed one. Text is compared; a figure is checked only for still being produced. Regenerate with `--write` on the same script |
 | `audit` | `pip-audit`, `cargo audit` (skips on cache hit if lockfiles are unchanged) |
+| `pr-title` | The title starts with `[<base branch>]`, the branch the pull request targets (issue #292). One shell line; runs only where the workflow does, so on a stacked pull request it is the reviewer's until #273 lands |
 
 `lint`, `python-tests`, `docs`, and `notebooks` restore a `~/.cache/uv` cache keyed on `uv.lock`'s hash before installing `uv`. `rust-lint`, `rust-tests`, `build`, and those same four jobs restore a shared `~/.cargo/registry`, `~/.cargo/git`, and `target/` cache keyed on `Cargo.lock`'s hash, so `oxi_snakes_and_ladders` (built via `maturin`/`pyo3` on every `uv sync` or `pip install .`) compiles from scratch only when a lockfile changes or no job has populated the cache yet. `audit`'s per-week marker cache (above) is unrelated and unaffected.
 
@@ -127,18 +118,6 @@ Nine required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs 
 * **Tolerances on a quantity that scales with problem size are relative.** The log-likelihood is a sum over sites, so an absolute bound fixed at one site count does not transfer to another: the backends agree to ~8e-13 relative at every size, but that same agreement is 7.4e-07 absolute at 200,000 sites. Absolute bounds are correct for quantities that do not scale — a transition probability, a row sum, a Monte Carlo frequency — and are kept there.
 * **Concurrency:** Superseded CI runs on the same branch are automatically cancelled.
 
-### Profiling a Hot Path
-
-`CLAUDE.md`'s **Runtime Optimization Opportunities** lists what to look for; this is the order to look, on fixed hardware per **No CI Profiling** above.
-
-1. `python tests/benchmarks/profile_hotpaths.py` — a `cProfile` self-time ranking for `sim`, `search` and `learn` at a CI-sized fixture and one larger size. Not collected by `pytest`; run by hand and read. A candidate not near the top does not proceed.
-2. `pytest tests/benchmarks/test_<name>_bench.py` — the NumPy or PyTorch baseline at the size the port would run at. The 10x rule is stated against realistic sizes, not the smallest that fits CI.
-3. Time the port **alone** (`cargo bench`, Criterion, in `benches/`) **and through its binding** (`tests/benchmarks/`); the difference is the FFI boundary, and the pull request reports both.
-4. For anything recursive, report peak memory beside time. No helper exists yet (`STATUS.md` records the memory requirement as not measured; #232 closes it), so take `tracemalloc` peaks by hand and say so.
-5. Pin the port against the NumPy oracle within its tolerance before reporting the speedup.
-
-`cProfile` cannot see inside a NumPy call or a Rust kernel; `pytest-benchmark` reports wall clock and nothing about cache, branches or vector width; Criterion times a kernel with its inputs already in Rust. Each ranks or times, none explains — the explanation is a change and its measured effect.
-
 ### The Continuous Optimization Contract
 
 Moved here from the technical document (issue #249): it is a statement about
@@ -165,6 +144,18 @@ textbook's; what follows is what the implementation guarantees.
   is singular or worse-conditioned than a stated bound — an interval around a
   parameter the data does not identify summarizes nothing.
 
+### Profiling a Hot Path
+
+`CLAUDE.md`'s **Runtime Optimization Opportunities** lists what to look for; this is the order to look, on fixed hardware per **No CI Profiling** above.
+
+1. `python tests/benchmarks/profile_hotpaths.py` — a `cProfile` self-time ranking for `sim`, `search` and `learn` at a CI-sized fixture and one larger size. Not collected by `pytest`; run by hand and read. A candidate not near the top does not proceed.
+2. `pytest tests/benchmarks/test_<name>_bench.py` — the NumPy or PyTorch baseline at the size the port would run at. The 10x rule is stated against realistic sizes, not the smallest that fits CI.
+3. Time the port **alone** (`cargo bench`, Criterion, in `benches/`) **and through its binding** (`tests/benchmarks/`); the difference is the FFI boundary, and the pull request reports both.
+4. For anything recursive, report peak memory beside time. No helper exists yet (`STATUS.md` records the memory requirement as not measured; #232 closes it), so take `tracemalloc` peaks by hand and say so.
+5. Pin the port against the NumPy oracle within its tolerance before reporting the speedup.
+
+`cProfile` cannot see inside a NumPy call or a Rust kernel; `pytest-benchmark` reports wall clock and nothing about cache, branches or vector width; Criterion times a kernel with its inputs already in Rust. Each ranks or times, none explains — the explanation is a change and its measured effect.
+
 ### Core Development Standards
 
 * **Reproducibility:** Pin the environment. Use `--locked` for CI installs, pin runner images (`ubuntu-24.04`), and seed every generator through `np.random.default_rng(seed)`.
@@ -175,7 +166,7 @@ textbook's; what follows is what the implementation guarantees.
 * **A plan is 2–5 steps**, or more where the work needs them and the plan says why, each stating how it will be validated — the analytic result, brute-force computation or enumeration it is checked against, not "tests pass". It ends with an `Open Questions` section carrying every question on the desired behaviour, so a reviewer finds them in one place; a plan with none says so under that heading rather than omitting it.
 * **PR Template:** Every PR starts from `.github/pull_request_template.md`. It carries the Definition-of-Done checklist, a benchmark-numbers table, a Documentation Sync line, and a Follow-up / Deferred Work section for anything left to a tracking issue. A second table in the Benchmark section takes the realized value of every scientific or tolerance test the PR touches — test, reference, tolerance, realized value — or the text "N/A" and no table. The template reminds; it is not a CI gate.
 * **Agentic Approach:** Disjoint tickets run as parallel git worktrees and parallel pull requests; coupled changes run as a single sequential chain, each stacked on the last. Stated the same way in `ROADMAP.md` §0.2.
-* **A stacked pull request names its base in its title, and targets it.** `[on #212]` for a link in a chain, `[on main]` for a root. The base branch is set to the *parent branch* rather than `main`, so the diff under review is the change itself and not everything beneath it — measured on the #190 chain, #225 was 64 changed files against `main` and 11 against its parent. GitHub retargets a child to `main` on its own when the parent merges, so the title prefix is the only part to update by hand.
+* **Every pull request names its base branch in its title, and targets it.** The title starts with the base branch in brackets — `[main]` for a root, `[claude/phylo-249-document-split]` for a link in a chain — and the base is set to that branch (issue #292). The base branch rather than the parent's PR number, because it is what the pull request's `base` field holds, so the `pr-title` job checks the two agree, and it survives the parent being renumbered or closed. A stacked pull request targets its *parent branch* rather than `main`, so the diff under review is the change itself and not everything beneath it — measured on the #190 chain, #225 was 64 changed files against `main` and 11 against its parent. GitHub retargets a child to `main` on its own when the parent merges, so the title prefix is the only part to update by hand, and the check fails until it is.
 * **A chain merges bottom-up, with a merge commit.** Squash and rebase-merge both rewrite the parent's commits into new SHAs, after which the child no longer contains them: its diff duplicates the parent's content and every pull request below it conflicts. A merge commit preserves the ancestry, so each child's diff narrows to its own change the moment its parent lands. Bring a chain up to date the same way — cascade `main` into the root, then each parent into its child — and never rebase or force-push a branch, which invalidates any checkout of it and leaves the stale heads issue #123 records. Where two subtrees share a root, take the longer one first: whichever goes second is reconciled per branch, so the shorter chain is the cheaper one to leave until last.
 
 ### Dependency Management

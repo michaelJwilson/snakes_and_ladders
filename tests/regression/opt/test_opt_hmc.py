@@ -310,6 +310,7 @@ def _hand_written_leapfrog(
 @pytest.mark.parametrize(
     ("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (7, 0.13), (1, 0.3)]
 )
+@pytest.mark.mathematical
 def test_the_composition_reproduces_the_hand_written_leapfrog_exactly(
     n_steps: int, step_size: float
 ) -> None:

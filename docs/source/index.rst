@@ -18,10 +18,10 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.enumeration
    :members:
 
-.. automodule:: snakes_and_ladders.fixtures
+.. automodule:: snakes_and_ladders.emissions
    :members:
 
-.. automodule:: snakes_and_ladders.emissions
+.. automodule:: snakes_and_ladders.fixtures
    :members:
 
 .. automodule:: snakes_and_ladders.numerics_rust
@@ -52,9 +52,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sim.hmm
-   :members:
-
-.. automodule:: snakes_and_ladders.sim.mixture
    :members:
 
 .. automodule:: snakes_and_ladders.sim.canonical
@@ -105,9 +102,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.constrain
    :members:
 
-.. automodule:: snakes_and_ladders.opt.schedule
-   :members:
-
 .. automodule:: snakes_and_ladders.opt.fit
    :members:
 
@@ -126,9 +120,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.hmm
    :members:
 
-.. automodule:: snakes_and_ladders.opt.mixture
-   :members:
-
 .. automodule:: snakes_and_ladders.learn
    :members:
 
@@ -142,8 +133,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.learn.hmm
-
-.. automodule:: snakes_and_ladders.learn.relaxed
    :members:
 
 .. automodule:: snakes_and_ladders.learn.rollout
@@ -165,12 +154,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.rl
-   :members:
-
-.. automodule:: snakes_and_ladders.search.backend
-   :members:
-
-.. automodule:: snakes_and_ladders.search.kernels
    :members:
 
 .. automodule:: snakes_and_ladders.search.alpha_expansion
@@ -249,9 +232,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.rl_reward_surface
-   :members:
-
-.. automodule:: snakes_and_ladders.qa.rl_tree_policy
    :members:
 
 .. automodule:: snakes_and_ladders.qa.topology_accuracy

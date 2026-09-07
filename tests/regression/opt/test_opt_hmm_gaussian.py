@@ -110,6 +110,7 @@ def _coverage(separation: float, replicates: int) -> tuple[int, int, int]:
 @pytest.mark.parametrize(
     ("n_states", "length", "seed"), [(2, 5, 1), (2, 7, 2), (3, 4, 3), (3, 6, 4)]
 )
+@pytest.mark.oracle
 def test_the_forward_recursion_matches_enumeration_over_every_path(
     n_states: int, length: int, seed: int
 ) -> None:

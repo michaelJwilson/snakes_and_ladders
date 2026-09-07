@@ -13,7 +13,7 @@ started**, on the terms §0.4 sets.
 
 | Roadmap item | Status | Evidence | Key PRs |
 | --- | --- | --- | --- |
-| §0 Development loop | Landed | Nine required checks; committed PDF byte-compared and every notebook re-executed on each PR | [#49](https://github.com/michaelJwilson/snakes_and_ladders/pull/49), [#57](https://github.com/michaelJwilson/snakes_and_ladders/pull/57), [#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72), [#92](https://github.com/michaelJwilson/snakes_and_ladders/pull/92), [#102](https://github.com/michaelJwilson/snakes_and_ladders/pull/102), [#151](https://github.com/michaelJwilson/snakes_and_ladders/pull/151) |
+| §0 Development loop | Landed | Ten required checks; committed PDF byte-compared and every notebook re-executed on each PR | [#49](https://github.com/michaelJwilson/snakes_and_ladders/pull/49), [#57](https://github.com/michaelJwilson/snakes_and_ladders/pull/57), [#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72), [#92](https://github.com/michaelJwilson/snakes_and_ladders/pull/92), [#102](https://github.com/michaelJwilson/snakes_and_ladders/pull/102), [#151](https://github.com/michaelJwilson/snakes_and_ladders/pull/151) |
 | 1.1 Simulation & ground truth | Trees, the HMM and Potts (1-D chain plus general N-D lattice/MRF) landed as first-class simulators | Simulated substitution frequencies against the closed-form JC probabilities; GTR reproduces JC to machine precision; HMM state and emission marginals against brute-force path enumeration; Potts single-site and pair marginals against exhaustive enumeration at 3-state 3x3 and 2-state 4x4 | [#58](https://github.com/michaelJwilson/snakes_and_ladders/pull/58), [#64](https://github.com/michaelJwilson/snakes_and_ladders/pull/64), [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#182](https://github.com/michaelJwilson/snakes_and_ladders/pull/182), [#190](https://github.com/michaelJwilson/snakes_and_ladders/pull/190) |
 | 1.2 Likelihood & energy engine | CPU landed (NumPy, PyTorch, Rust); belief propagation landed with two exact oracles; GPU dispatch not started | Worst relative deviation 4.0e-14 against brute-force marginalization across three backends and four site counts spanning a factor of 30 | [#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66), [#74](https://github.com/michaelJwilson/snakes_and_ladders/pull/74), [#81](https://github.com/michaelJwilson/snakes_and_ladders/pull/81), [#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148) |
 | 1.3 Continuous optimization | Landed for trees, the HMM, the 1-D Potts chain and the 2-D lattice; posterior sampling landed beside the curvature-based intervals | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates; the lattice fitted against an enumerated normalizer, coverage 157/160 at 100 samples and 153/160 at 400 and 1600 | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120) |
@@ -37,7 +37,7 @@ tolerance table, and the deferred-work section
 from `.github/labels.yml` by a workflow, so the taxonomy cannot drift from the
 documents that describe it.
 
-Nine required checks gate a merge, and three of them do work no reviewer can
+Ten required checks gate a merge, and three of them do work no reviewer can
 do by inspection: the technical-document job rebuilds only the QA figures
 the documents under `docs/tex/` cite, comparing the rest at the release gate instead
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
@@ -179,75 +179,6 @@ like from inside a fit. Those replicates are counted rather than dropped,
 since excluding them unannounced would select for the well-behaved samples.
 Reported as a finding: a fixture using only well-separated means would have
 been testing the fixture.
-
-**Count emissions: the dispersion axis, bracketed.** Four count families join
-the seam — binomial below equidispersion, Poisson exactly at it, negative
-binomial and beta-binomial above
-([#229](https://github.com/michaelJwilson/snakes_and_ladders/issues/229),
-[#260](https://github.com/michaelJwilson/snakes_and_ladders/issues/260)). The
-bracketing is the point: an interface exercised only by overdispersed families
-has never been asked whether it assumes overdispersion somewhere. Each referees
-the neighbour it is a limit of, so the oracles come from outside this
-repository rather than from a second call into it: `BetaBinomial(n, 1, 1)` is
-the discrete uniform and `Binomial(1, p)` is Bernoulli, both to 1e-14 or
-better; the negative binomial approaches Poisson as `r -> inf` and the
-beta-binomial approaches the binomial as `a + b -> inf`, both at the `O(1/x)`
-rate the truncation predicts, with `r` times the deviation measured at 18.75,
-18.88, 18.94, 18.97 and 18.98 across `r` from 500 to 8000 — converging rather
-than drifting, which is what makes the extrapolated tolerance legitimate.
-
-**Two of the four have an M step that is an optimization**, which is what
-tests whether the seam is real: `reestimate` now returns what its M step did,
-not only what it produced. **Both solves bracket rather than step**, and that
-was a measurement, not a preference. Newton on the negative binomial's
-weighted score converges for moderate `r` and, on a near-Poisson sample,
-overshoots in `log r` and underflows to zero — arriving as a domain error
-rather than a bad answer; safeguarded bisection reaches `|score| / weight` of
-1e-14 to 1e-16 in 45 evaluations and agrees with a 40001-point grid search to
-zero relative difference. Minka's fixed point for the beta-binomial is
-monotone but linearly convergent: at a true concentration of 120 it was still
-moving in the third decimal after 500 iterations and returned that as though
-it were an estimate. Alternating bisection in `(p, a + b)` settles in 3 to 9
-iterations at a residual of exactly zero. An M step that does not settle is
-refused, per `likelihood/CLAUDE.md`.
-
-**The flat-likelihood hazard is the mirror of the Gaussian's, and it is
-measured.** Where a Gaussian likelihood is *unbounded* as a variance falls, a
-count likelihood goes *flat* as the dispersion rises toward its Poisson or
-binomial limit. The bound is derived on the same construction for both count
-families — the dispersion at which the overdispersion the model is for falls
-below the sampling noise on measuring it, `mu sqrt(W/2)` for the negative
-binomial and `(n-1) sqrt(W/2)` for the beta-binomial. Coverage of the 95%
-intervals over 16 replicates of 480 counts, against the true dispersion:
-
-| true `r` | intervals covering | rate | replicates with no interval at all |
-| --- | --- | --- | --- |
-| 0.5 | 44/48 | 0.917 | 4/16 |
-| 1.0 | 60/64 | 0.938 | 0/16 |
-| 2.0 | 58/64 | 0.906 | 0/16 |
-| 5.0 | 59/64 | 0.922 | 0/16 |
-| 20.0 | 58/64 | 0.906 | 0/16 |
-| 100.0 | 32/36 | 0.889 | 7/16 |
-
-**The finding is not the coverage column.** Coverage sits near nominal at every
-dispersion; what degrades is *whether an interval exists*, and it degrades at
-**both** ends — a heavy tail at `r = 0.5`, a flat likelihood at `r = 100`.
-A non-identified count model announces itself as a singular information matrix,
-not as an interval in the wrong place, which is the opposite of what the
-Gaussian case showed and is why both were measured rather than one assumed
-from the other.
-
-**A Gaussian mixture: the emission seam with the Markov chain removed.**
-`snakes_and_ladders.sim.mixture` draws component labels and observations
-jointly, retaining the label so a clustering has something to be checked
-against; `snakes_and_ladders.opt.mixture` fits
-([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)). Its
-component M step **is** `GaussianEmission.reestimate`, called with
-responsibilities where an HMM passes state posteriors, and a test asserts the
-two produce identical numbers on the same responsibilities rather than merely
-similar ones — the evidence that the seam extracted from an HMM was not shaped
-by one. The unbounded likelihood transfers unchanged with it: a component
-collapsed onto a single observation is refused, not clamped.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
@@ -418,39 +349,6 @@ worst where the correlations it neglects are longest-ranged, and it recovers
 on both sides. Messages that do not settle raise rather than returning a
 number.
 
-**The tree was audited against the runtime-optimization opportunities, and
-five of the ten lines had a measurement behind them**
-([#287](https://github.com/michaelJwilson/snakes_and_ladders/issues/287)). Profiling
-first (`tests/benchmarks/profile_hotpaths.py` plus a Potts-side probe) ranked
-the Python-level loops by self time, and the top of the ranking was not where a
-reader would guess: the SPR neighbourhood at 30 taxa spent 28 of 29 seconds
-building a `Node` tree and unioning `frozenset`s per candidate *to
-deduplicate*; a 6-taxon hill climb charged 8,730 scalar transition-matrix
-calls to 970 likelihood evaluations; a fifth of a REINFORCE run was Python
-arithmetic per action. Each change is pinned to the code it replaces, and no
-default sampler path moved:
-
-| rule | finding | change | pin | realized |
-| --- | --- | --- | --- | --- |
-| profile first | five loops above 20% of their run's self time | the five below | — | — |
-| layout | adjacency as a list of lists in every kernel | `PottsGraph.compressed_adjacency()`, one contiguous CSR | equal to the list adjacency in order, 4 graphs | exact |
-| compiled backends | descent sweep 6 µs/site in Python | `numba` kernel, default for `iterated_conditional_modes` | labelling and energy **bitwise**, 6 seeds | **7x** at 32x32, 3 labels |
-| FFI boundary | annealing and tempering on the Python sweep | `backend=Backend.RUST` runs the extension's sweep on the same uniforms | per-replica chi-square, both backends | tempering **5.8x** at 100 nodes, **7.8x** at 32x32; annealing 2.3x (the per-sweep energy now dominates) |
-| inlining / vectorization | one `P(t)` call per child per node | every branch's matrix in one call | `torch.equal` per branch for JC; GTR to 2.9e-13 (torch's batched `matrix_exp` is a different kernel); JC log-likelihood bitwise | hill climb **3.99 s to 2.32 s**; one 20-taxa evaluation unchanged at 12 ms |
-| inlining / vectorization | `_deltas` per action, 126,000 calls per 50 updates | `features` as one NumPy pass | `array_equal` to `_deltas`, 200 states, deviation 0.0 | REINFORCE **1.51 s to 1.00 s** |
-| profile first (algorithmic) | tree built and split-set unioned per SPR candidate | dedup on leaf bitmasks from the adjacency; tree built only for a new key | same neighbours in the same order as the definition, n = 5, 7, 9; key equals `leaf_bipartitions` on all 105 six-leaf topologies | **1.41 s to 0.59 s** at 30 taxa |
-| cache, branches, allocation, double buffering | no measurement separating them from the above | none | — | recorded as not measured |
-
-Two things the table does not say. The Rust-backed tempering chain agreed with
-the Python one **draw for draw** on the enumerable instance — identical
-p-values and exchange acceptances — which is the case `potts_mcmc_rust.py`
-says cannot be relied on, and it is not: one draw across a threshold moved by
-an ulp would part them, so the backend stays opt-in. And the batched
-transition matrices leave the JC log-likelihood bitwise unchanged while the
-gradient moves by 1.5e-11 absolute, autograd summing the same terms in a
-different order; the finite-difference check that pins the gradient is
-unaffected.
-
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
@@ -521,27 +419,6 @@ and the posterior standard deviation was 12% low, because divergent
 trajectories are rejected preferentially in the tails. Acceptance rate does
 not detect it; `max |dH|` tracks it monotonically.
 
-**Where a fit starts is now the caller's to choose, and multi-start is
-measured rather than assumed.** `Objective.initial()` was already the seam;
-what went through it was one fixed constant per objective.
-`snakes_and_ladders.opt.initialize` adds the objective's own start, a
-deterministic perturbation, and random restarts from a passed-in generator, and
-`fit_from` reports every fit and their spread rather than only the best --
-returning one answer for a surface with four basins is the failure the
-abstraction is about.
-
-The measurement says multi-start is a tool for a particular shape of surface
-and not a general improvement. On Himmelblau, four equal minima, a single fixed
-start reaches exactly **one** basin however often it is run and four random
-restarts reach all **four**. On Rastrigin, roughly `10**n` local minima each
-satisfying the first-order condition, sixteen restarts reach the global minimum
-**2 times in 30** against **0 in 30** from one start -- sixteen times the cost
-for a success rate still near zero, and widening the draw does not help
-(the same 2 in 30 at scale 4.0 as at 2.0), because the obstacle is the density
-of the minima and not the reach of the proposal.
-
-No default changes on that evidence. Every number below was produced from the
-objective's own start and still is.
 **A fourth-order integrator lands, and loses.** Yoshida's (1990) triple jump
 joins leapfrog as a selectable symplectic integrator, both expressed as
 compositions of the same kick-drift-kick sub-step so there is one
@@ -565,6 +442,28 @@ evaluations per trajectory while Yoshida needs **91** to reach 0.975 and
 accepts *nothing* at 61; on the analytic Gaussian it is 3 against 7. The
 default does not move.
 
+**Where a fit starts is now the caller's to choose, and multi-start is
+measured rather than assumed.** `Objective.initial()` was already the seam;
+what went through it was one fixed constant per objective.
+`snakes_and_ladders.opt.initialize` adds the objective's own start, a
+deterministic perturbation, and random restarts from a passed-in generator, and
+`fit_from` reports every fit and their spread rather than only the best --
+returning one answer for a surface with four basins is the failure the
+abstraction is about.
+
+The measurement says multi-start is a tool for a particular shape of surface
+and not a general improvement. On Himmelblau, four equal minima, a single fixed
+start reaches exactly **one** basin however often it is run and four random
+restarts reach all **four**. On Rastrigin, roughly `10**n` local minima each
+satisfying the first-order condition, sixteen restarts reach the global minimum
+**2 times in 30** against **0 in 30** from one start -- sixteen times the cost
+for a success rate still near zero, and widening the draw does not help
+(the same 2 in 30 at scale 4.0 as at 2.0), because the obstacle is the density
+of the minima and not the reach of the proposal.
+
+No default changes on that evidence. Every number below was produced from the
+objective's own start and still is.
+
 **Fitting and intervals.** L-BFGS with a strong-Wolfe line search, convergence
 judged on the gradient relative to the objective's own magnitude, and
 confidence intervals from the observed Fisher information pushed through the
@@ -586,78 +485,6 @@ GTR model's three normalizations are gauges rather than conventions, each
 removing an exactly flat direction that would otherwise leave every parameter
 without an interval. The roadmap's sub-second gradient update at `n = 100` is
 now measured — 203 ms at 1000 sites — rather than assumed.
-
-**k-means++ lands, and buys nothing the fit can use.** The first initializer
-that reads its objective's data
-([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)), and
-the case [#251](https://github.com/michaelJwilson/snakes_and_ladders/issues/251)
-built the `Initializer` protocol for. **The protocol needed no change.** A
-data-dependent strategy turns out to be model-*specific* rather than
-protocol-incompatible: it takes an `Objective` like every other initializer and
-refuses the ones whose parameter vector it cannot interpret, which is why it
-lives beside the mixture rather than with the model-free strategies.
-
-Measured against its published guarantee — Arthur & Vassilvitskii (2007) bound
-the expected seeding cost at `8 (ln k + 2)` times optimal, and in one dimension
-the optimal clustering is computable exactly by dynamic programming over
-contiguous runs, so the bound has something to be checked against. On three
-components six standard deviations apart, over 200 replicates: mean cost ratio
-**2.91** against a bound of **24.79**, worst draw 14.41. Uniform seeding
-realizes **11.03** mean and a worst draw of **58.08**, outside the k-means++
-guarantee.
-
-**And none of that reaches the likelihood, which is the finding.** EM reaches
-the same optimum from either seeding on that mixture — 200/200 from k-means++,
-195/200 from uniform — and from the objective's own quantile start too. Harder
-fixtures do not reverse it, they make both fail: at five components 1.5
-standard deviations apart neither seeding reached the best optimum found in 200
-draws, and at five with unequal weights uniform reached it 9 times in 150
-against k-means++'s 3 — noise, in the direction opposite to the one a default
-change would need. So **no default moves**; k-means++ lands as a strategy a
-caller may choose, at a cost of one objective evaluation (271 us of seeding
-against 260 us per evaluation at 4000 points).
-
-**An interval at a fit, whatever produced the fit.** The observed information
-is a property of an objective *at a point*, not of the route that reached it,
-but until now only a gradient fit could ask for one — expectation-maximization
-works in the model's own parameters and never builds an unconstrained vector,
-so the half of the fits with an independent oracle reported a point estimate
-and nothing else
-([#268](https://github.com/michaelJwilson/snakes_and_ladders/issues/268)).
-Every objective now inverts its own constraint map, exactly: the round trip
-`constrain(theta_from(named))` returns its input to between 0 and 4.4e-16
-across all eight likelihoods, and bitwise for the three closed-form test
-functions and the Gaussian-prior wrapper. `fit(include_intervals=True)` and
-`fit_from(include_intervals=True)` attach the interval to the fit — the latter
-to the best start only, one Hessian rather than one per start — and refuse it
-at an unconverged point rather than report a curvature that is not an
-information; off, they compute nothing and return `None`, so a fit inside a
-search loop costs what it did.
-
-**The check that costs nothing.** The gradient fit and Baum-Welch share the
-model and nothing else, and converge to the same optimum — log-likelihoods
-within 3.6e-9 relative. So their intervals must agree, and they do to **0.31%**,
-the width of the flat ridge EM approaches slowly. A broken round trip fails
-that loudly. The EM-derived intervals then cover truth at **243/264 = 0.920**
-over 12 replicates, with 1 of 12 reaching the boundary and contributing none.
-
-**The refusals survive, which is the part that mattered.** An interval from a
-Hessian is a statement about a maximum, and a Gaussian component at its
-variance floor is not one: the likelihood is unbounded there, the information
-is not positive definite, and the new entry point refuses exactly as the old
-one does — checked against the healthy point beside it, since a guard that
-refused everything would pass a refusal-only test.
-
-**And the comparison `hmc.py` promised is now complete, in both regimes.** A
-version already existed — a raw Hessian in unconstrained coordinates against
-grid quadrature. The missing halves are the delta-method interval on the
-parameters a person names, against a chain, where the approximation is exact
-and where it is not. On the analytic Gaussian the Laplace interval equals
-`sqrt(diag(covariance))` to 1e-8 and the chain's spread matches it to **0.04%
-and 0.47%** at 4000 draws, so agreement is asserted. On the Potts posterior the
-sampled spread is **1.057, 1.031 and 1.036** times the Laplace one: slightly
-optimistic, the expected direction for a mildly non-Gaussian posterior, and
-reported rather than asserted away.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
@@ -820,63 +647,6 @@ against the exact enumerated Boltzmann distribution at 2x2, with a field and
 without, at the significance and thinning the Python sweep is held to -- and a
 chain drawn under no field is rejected against the with-field truth, which is
 what says the test has the power it claims.
-**Temperature is one object, and it lives where all three consumers can reach
-it.** `snakes_and_ladders.opt.schedule` carries the schedules — constant, linear,
-geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
-and checked against it to 1e-12 (1e-10 for the cosine, whose torch form is a
-recursion) — with both endpoints reached *exactly* at the declared steps, and
-a step past the end refused rather than clamped
-([#267](https://github.com/michaelJwilson/snakes_and_ladders/issues/267)). The
-Potts sampler takes a temperature as model scaling, which the model makes an
-exact statement: the tempered energies equal the energies over `T` with a
-deviation of **0.0**, and every move set's chain at `T = 2` and `T = 0.5` in a
-field passes the chi-square against `exp(-E/T)` enumerated from the unscaled
-model (p-values 0.016 to 0.89 at the 0.001 significance). The Hamiltonian
-sampler takes it as the momentum's variance — the tempered dynamics are the
-untempered ones in rescaled time, so the integrator is untouched — and on the
-analytic Gaussian a chain at `T` is the chain at 1 with its deviations scaled
-by `sqrt(T)` **draw for draw to 1e-10**. At `T = 1` every operation is the
-identity bitwise, and the 31 existing HMC and 13 Potts tests pass untouched.
-
-**Annealing is the sampler on a schedule, and the first instance is a wash.**
-`anneal_potts` and `hmc.anneal` run one sweep or one proposal per schedule
-step and return the best state seen. On the 9×9 periodic triangular
-antiferromagnet, whose ground-state energy is a closed form, geometric
-annealing from `T = 2` to `0.05` over 200 sweeps reaches it **20/20** against
-single-site descent's **2/20** and a constant `T = 1` control's **7/20** — the
-schedule, not the wandering. But descent converges in 2.6 sweeps, so the same
-200 sweeps buy 78 restarts, and the best of 78 also reaches it 20/20. On
-Rastrigin, measured at equal *objective evaluations* with a counting wrapper:
-at 14,400 evaluations annealed Hamiltonian proposals plus a polishing fit reach
-the global basin **6/20**, and 101 random-restart fits on the same budget
-**10/20**; at 2,900 evaluations it is 0/20 against 1/20. Restarts win on the
-continuous surface. Neither is a default.
-
-**Parallel tempering, and the instance where restarts lose.** Replicas at
-fixed temperatures exchange configurations on `(β_i − β_j)(E_i − E_j)`, each
-replica on its own spawned generator from one seed. The oracle is the one the
-samplers already have: with exchanges on, every replica passes the chi-square
-against `exp(-E/T_r)` enumerated from the unscaled model (p 0.024 to 0.70,
-exchange acceptance 0.78 and 0.57), and the paired negative case — an exchange
-that omits the energy term — is caught at p = 0.0 on every replica. Then the
-comparison the plan asked for, at **400 sweeps per method** on the planted
-Viana–Bray spin glass, against the best energy any method found over 12
-instances:
-
-| instance | restarts of descent (100 × ≤4 sweeps) | annealing (1 × 400) | tempering (4 × 100) |
-| --- | --- | --- | --- |
-| 60 sites, degree 4, frustration 0.2 | 5/12, mean gap 0.75 | **12/12** | **12/12** |
-| 60 sites, degree 4, frustration 0.35 | 5/12, gap 1.00 | 9/12, gap 0.50 | 9/12, gap 0.25 |
-| 100 sites, degree 6, frustration 0.3 | 2/12, gap 2.58 | 7/12, gap 1.08 | **8/12**, gap 0.50 |
-
-Every method beats the planted energy on every instance, as frustration
-predicts. **The plan's prediction that tempering would be hard to justify at
-these sizes is retracted**: on the one class of instance the roadmap needs —
-frustrated, past enumeration — the tempered methods beat restarts at equal
-budget and tempering carries the smallest gap. The triangular antiferromagnet
-was too easy to show it; the glass is not. The five-component mixture waits on
-the mixture branch (#263) landing, and the comparison on it belongs to the
-budgeted harness #281.
 
 **Not built:** Viterbi decoding, and iterated conditional modes over HMM state
 paths (`snakes_and_ladders.search.alpha_expansion` carries a lattice ICM as its baseline,
@@ -935,120 +705,6 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
 
-**The tree policy has now been trained, and the result is negative.** On the
-7-taxon fixture where NNI hill climbing reaches the enumerated maximum from
-only 24 of 50 starts, a trained policy reaches it on 0.485 of episodes against
-greedy's 0.480 at a matched per-episode budget — +0.005, standard deviation
-0.014 over 16 training seeds, 8 ahead, sign test p = 1.0. Two properties of
-the environment bound it, and both are measured rather than argued. An episode
-terminates when no move improves, and all 945 topologies contain 10 such
-states, so every run — 50 of 50 greedy, 800 of 800 learned — ends at one: the
-agent selects which local optimum to enter, and cannot leave one. And the
-policy ranks moves by a single feature, the improvement a move buys, which
-places hill climbing inside the policy class as a temperature. What would
-change the answer is named rather than hoped for: a richer feature set
-(`TICKETS.md` §2.1) and accepted-worsening steps (Stage 3, stochastic escape).
-
-**Escape is now built, and it moved the comparison's baseline rather than its
-result.** An episode can run past a local optimum, and an epsilon-greedy
-policy can take the worsening move that leaves one: escape from one of the 9
-non-global optima rises from 0.111 at `epsilon = 0` to 0.883 at `0.4`, and
-matched-budget success from a random start rises from 0.560 to 0.908 against
-the 0.480 a single greedy run reaches. But random-restart hill climbing
-reaches the enumerated maximum from **every** start at the same 60-decision
-budget: greedy stops after about four decisions, so 60 buys roughly fifteen
-restarts, and with the global basin covering about 48% of starting topologies
-`1 - 0.52**15` is indistinguishable from 1. The baseline Milestone 2.1 has to
-beat on this fixture is therefore 1.000, not the 0.480 the tree-policy
-comparison above was stated against, and nothing measured here beats it. The
-fixture separates a single greedy run from the optimum; it does not separate
-anything from restarts, and a fixture that does is what the next comparison
-needs.
-
-## Stage 3 — Research Extensions
-
-**Only the half with an oracle is built.** `ROADMAP.md`'s differentiable-search
-bullet names two relaxations. Potts configurations and HMM state paths are
-enumerable, so the exact optimum, the exact expected score and the exact
-gradient are all computable and "does the relaxation find what discrete search
-finds" is falsifiable. Tree topologies at any interesting size are not, so the
-tropical Grassmannian half is not started and `TICKETS.md` records that it is
-blocked on an oracle rather than on effort
-([#211](https://github.com/michaelJwilson/snakes_and_ladders/issues/211)).
-
-**The relaxation is an extension, checked at every corner.** Over every
-configuration of an enumerable instance the relaxed score equals the discrete
-one to `1e-11` relative, for both spaces. The HMM check crosses a module
-boundary — `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
-`RelaxedHmmPath.discrete` and `snakes_and_ladders.likelihood.hmm_paths.path_log_probability`
-are independent implementations — and the relaxed objective's enumerated
-optimum is the Viterbi path.
-
-**One identity carries the result, and its boundary is not what it looks
-like.** For a multilinear objective under a factorized `q`,
-`E_q[score] = score(q)` exactly: the relaxed form at the marginals *is* the
-expected discrete score. Two plausible statements of the limit are false and
-are refuted by tests — it is not that the model must be a chain, and it is not
-that terms must be pairwise. What breaks it is a term using one site twice,
-since `E[X**2] = E[X]` for an indicator; measured, 1.000 against 0.557. It
-follows that the relaxed maximum is attained at a vertex, so the relaxation
-introduces **no optimum the discrete problem lacks** — everything a relaxed
-search loses is lost to local optima of the ascent.
-
-**The estimator bias is measured, not assumed.** Against the exact gradient
-over 20000 draws, scaled by the largest exact component:
-
-| `tau` | soft bias (SEM) | soft sd | straight-through bias (SEM) | ST sd |
-| --- | --- | --- | --- | --- |
-| 2.00 | 0.5975 (0.0012) | 0.165 | 0.5620 (0.0027) | 0.382 |
-| 1.00 | 0.3373 (0.0034) | 0.487 | 0.3233 (0.0051) | 0.723 |
-| 0.50 | 0.1400 (0.0076) | 1.077 | 0.1418 (0.0090) | 1.272 |
-| 0.20 | 0.0475 (0.0157) | 2.220 | 0.0502 (0.0165) | 2.340 |
-| 0.10 | 0.0356 (0.0240) | 3.392 | 0.0380 (0.0246) | 3.472 |
-
-Bias falls by a factor of 17 while the standard deviation rises by a factor of
-21, so no temperature is good at both. Straight-through's bias matches the soft
-estimator's within error and its variance is higher at every temperature, so on
-this problem it buys nothing.
-
-**The sampling is what costs, not the relaxation.** Against single-flip hill
-climbing over 40 shared seeds, on an antiferromagnetic chain whose optimum
-needs coordinated flips:
-
-| Method | Reached the optimum | McNemar |
-| --- | --- | --- |
-| Greedy hill climbing | 5/40 | — |
-| Deterministic relaxation | 18/40 | `p = 0.00098` |
-| Soft Gumbel-softmax | 11/40 | `p = 0.18` |
-| Straight-through | 11/40 | `p = 0.18` |
-| Annealed soft, 0.5 to 0.05 | 11/40 | `p = 0.18` |
-
-The deterministic ascent — which the identity licenses, so it is not a
-shortcut — is significantly better than the baseline; adding Gumbel noise gives
-that up for a tie, and annealing does not recover it. It is also 15% cheaper
-per run: 43.6 ms against 50.1 ms for 100 gradient steps. Three of four variants
-tie, and that is reported as a tie, per the precedent
-[#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193) set.
-
-**The budgets are not the same unit and no claim is made that they are.**
-Greedy stops at a local maximum after 3.5 decisions on average at 14 discrete
-evaluations each; the relaxation takes gradient steps and evaluates no discrete
-configuration until the end. What is matched is the restart count and the
-seeds. The advantage is not bought with the larger budget: the relaxation
-already wins at 25 gradient steps (15/40, `p = 0.0064`).
-
-**The comparison fixture is not the repository's own.** `potts_params.yaml` has
-`J = 0.75 > 0`, so its optimum is `argmax(h)` repeated and every method finds
-it. That is the third time a fixture has been too easy to separate methods —
-after [#177](https://github.com/michaelJwilson/snakes_and_ladders/issues/177),
-[#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198) and #209's planted
-spin glass — and it is why the baseline is now run before any claim is made.
-
-**Not built:** the tropical Grassmannian relaxation; the relaxation on the
-Potts *lattice*, where the identity holds but nothing has been measured; and
-any joint optimization of structure alongside continuous parameters, which is
-what the roadmap bullet ultimately asks for.
-
 ## §1.2 Requirements Ledger
 
 | Requirement | Status |
@@ -1072,45 +728,31 @@ specification, cut down in `14d32d6` from the academic-letter structure of
 [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), and it is the shape
 the document is in rather than the shape §1.3 asks for.
 
-Thirteen QA scripts render the figures, each committing a figure with a caption
+Thirteen QA scripts run in the build, each committing a figure with a caption
 naming the seed, the sizes and the model that produced it, and `docs/CLAUDE.md`
 states the rules that keep a CI-regenerated artifact true
-([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The two
-documents cite seven of them — the textbook the simulated tree and the
-Jukes–Cantor curves, the paper the worked simulation, the backend agreement,
-parameter recovery, interval coverage and the topology search — and the
-per-pull-request build regenerates only those; the remaining six are checked at
-the release gate
-([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)).
+([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The document
+currently includes two of them — the worked simulation example and the backend
+agreement — so eleven committed figures are rebuilt by CI but cited nowhere.
 
 Measured against §1.3's required contents: the model formulations are present
-for all three classes, and since
-[#274](https://github.com/michaelJwilson/snakes_and_ladders/issues/274) every
-equation and algorithm the code cites is stated in the textbook under a label —
-the Jukes–Cantor closed form and its normalization, site independence, pruning
-and the root marginalization, forward simulation, the forward recursion, the
-belief-propagation message and the Bethe free energy, the episode return and the
-REINFORCE estimator, and the cross-device tolerance — and
-`tests/regression/test_document_labels.py` fails on a citation no document
-resolves. The old document had labelled none of them, so nine citations had
-never resolved and two named equation numbers from a numbering that no longer
-existed. What remains at the level of a statement rather than a derivation is
-the pruning and forward–backward recursions; absent entirely are the
-branch-and-bound bounds and their proofs, no such bound being implemented.
-Three framed placeholders stand in for the RL learning curve, the comparison
-against classical software, and hardware scaling — none of which is measured,
-and each labelled as a placeholder rather than drawn with invented data.
+for all three classes, at the level of a statement rather than a derivation.
+Absent are the derivations of pruning, belief propagation and forward-backward;
+the branch-and-bound bounds and their proofs, no such bound being implemented;
+and the parameter-recovery and convergence evidence, which exists as committed
+QA figures but is no longer included. Three framed placeholders stand in for
+the RL learning curve, the comparison against classical software, and hardware
+scaling — none of which is measured, and each labelled as a placeholder rather
+than drawn with invented data.
 
 ## What Is Not Claimed
 
-- That a learned policy beats hill climbing on trees. It has now been
-  measured on a fixture where hill climbing demonstrably fails, and it does
-  not: 0.485 of episodes reach the enumerated maximum against greedy's 0.480,
-  a difference of +0.005 with a standard deviation of 0.014 over 16 training
-  seeds, 8 of them ahead, at an exact two-sided sign test of p = 1.0. The
-  policy does train — an untrained one reaches the maximum on 0.018 — so this
-  is a tie rather than a failure to learn. The environment is what bounds it,
-  in two ways stated in §2.1 below.
+- That a learned policy beats hill climbing on trees. The 6-taxon fixture
+  cannot support the claim in either direction, because greedy already reaches
+  the enumerated optimum from every start. Separating a policy from greedy
+  needs a problem harder than exhaustive enumeration can referee, so the oracle
+  that validates the search cannot validate the agent replacing it
+  (issues #177 and #178).
 - Any comparison against established software. IQ-TREE 2 and RAxML-NG are not
   installed, and no statement anywhere in the repository compares against them.
 - Runtime scaling. Benchmarks are not ranked on CI hardware, so timings live in
