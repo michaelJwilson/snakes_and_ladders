@@ -44,8 +44,8 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
 - **`converged` is a statement about the gradient, never about the global
   minimum.** A run satisfying the first-order condition reports convergence
   wherever it stopped, and on a multimodal surface that is routinely a local
-  minimum. A result resting on a single fit of such a surface says so, or
-  reports a multi-start rate instead.
+  minimum. A result resting on one fit of such a surface says so, or reports
+  a multi-start rate — through `budget.compare`, never a loop of its own.
 
 - **Where a likelihood is unbounded, refuse rather than clamp.** Some models
   have no maximum, and a fit returning normally at one was stopped by a floor

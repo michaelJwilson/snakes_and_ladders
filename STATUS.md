@@ -528,7 +528,9 @@ satisfying the first-order condition, sixteen restarts reach the global minimum
 **2 times in 30** against **0 in 30** from one start -- sixteen times the cost
 for a success rate still near zero, and widening the draw does not help
 (the same 2 in 30 at scale 4.0 as at 2.0), because the obstacle is the density
-of the minima and not the reach of the proposal.
+of the minima and not the reach of the proposal. Held to eight fits by
+`opt.budget.compare` ([#281](https://github.com/michaelJwilson/snakes_and_ladders/issues/281))
+it is 0 of 10 either way.
 
 No default changes on that evidence. Every number below was produced from the
 objective's own start and still is.
@@ -782,9 +784,14 @@ predicts. **The plan's prediction that tempering would be hard to justify at
 these sizes is retracted**: on the one class of instance the roadmap needs —
 frustrated, past enumeration — the tempered methods beat restarts at equal
 budget and tempering carries the smallest gap. The triangular antiferromagnet
-was too easy to show it; the glass is not. The five-component mixture waits on
-the mixture branch (#263) landing, and the comparison on it belongs to the
-budgeted harness #281.
+was too easy to show it; the glass is not. The first row is now held equal
+by `opt.budget.compare`
+([#281](https://github.com/michaelJwilson/snakes_and_ladders/issues/281)):
+with the utility's own streams and the best any method found as the
+reference, tempering **12/12**, annealing 10/12 with a mean gap of 0.17, and
+restarts of descent 4/12 with a mean gap of 0.75, every method at or below
+the planted energy. The five-component mixture comparison waits on the
+mixture branch (#263) landing and belongs to the same utility.
 
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter
