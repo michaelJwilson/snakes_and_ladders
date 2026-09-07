@@ -538,6 +538,25 @@ a complete bipartite graph, whose maximum cut is exactly `|E|`, the ratio
 comes out slightly **above 1** — impossible for an exact solve, and the
 measurable evidence of what the certificate does and does not cover.
 
+**The single-site sweep has a Rust backend, beside the oracle.** Issue #232
+profiled it as the one place a Python-level loop dominates -- one interpreter
+iteration per site per sweep, five NumPy calls to move one spin. The port runs
+**77x** the Python sweep at 64 nodes and **108x** at 1,024, and unlike the
+pruning backend the ratio *rises* with size: there is no per-element
+marshalling to grow against it, since the adjacency crosses once in
+compressed-row form and the uniforms cross as one array.
+
+Nothing switches to it. `f64::exp` agrees with NumPy's to within a unit in the
+last place rather than exactly, and `searchsorted` is a threshold, so one draw
+across a boundary that moved by 1 ulp sends the two chains apart permanently.
+Replacing the oracle would move every autocorrelation figure above, every
+committed notebook output that reads a chain, and the goodness-of-fit fixtures'
+chain lengths. Agreement is therefore distributional: the Rust chain is scored
+against the exact enumerated Boltzmann distribution at 2x2, with a field and
+without, at the significance and thinning the Python sweep is held to -- and a
+chain drawn under no field is rejected against the with-field truth, which is
+what says the test has the power it claims.
+
 **Not built:** Viterbi decoding, and iterated conditional modes over HMM state
 paths (`snakes_and_ladders.search.alpha_expansion` carries a lattice ICM as its baseline,
 which is a different object). Single-flip local search over the Potts chain exists as an RL
