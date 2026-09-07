@@ -56,11 +56,11 @@ authoritative — where it and any other document disagree, it wins.
   every tolerance-based test beside the tolerance it was checked against, the
   documents the change made untrue, and anything deferred with the tracking
   issue that carries it.
-- **Gate:** nine required checks, enumerated in `DEV.md`, which is where a
+- **Gate:** ten required checks, enumerated in `DEV.md`, which is where a
   contributor works through them and therefore where they are stated in full.
-  They span lint and types in both languages, both test suites, the
-  documentation and technical-document builds, the notebook re-execution, and
-  the dependency audits. Documentation Sync is part of the diff, not a follow-up:
+  They span a title naming the base branch, lint and types in both languages,
+  both test suites, the documentation and technical-document builds, the
+  notebook re-execution, and the dependency audits. Documentation Sync is part of the diff, not a follow-up:
   a change that makes `README.md`, `DEV.md`, `INSTALL.md`, a `CLAUDE.md`,
   `STATUS.md`, `ROADMAP.md` or `docs/tex/` untrue corrects it in the same pull
   request, and adds a `changelog.d/` fragment if it is user-visible.
