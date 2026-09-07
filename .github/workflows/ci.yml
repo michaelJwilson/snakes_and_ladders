@@ -369,6 +369,7 @@ jobs:
             texlive-latex-recommended \
             texlive-fonts-recommended \
             texlive-science \
+            texlive-pictures \
             poppler-utils
       # Regenerates the QA figures/captions the documents cite, then builds
       # docs/paper.pdf and docs/textbook.pdf -- the same entry point a local
