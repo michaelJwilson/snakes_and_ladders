@@ -729,6 +729,49 @@ likelihoods under a flat prior over topologies and is named so, not called a
 posterior; a tempered ensemble over topologies, which would give a marginal
 one, does not exist.
 
+**What carries between neighbours, and what does not.** A branch is now
+identified by the leaf split it induces rather than by a node name, so a
+neighbour that shares all but a few branches with its parent starts its fit
+from the parent's lengths
+([#289](https://github.com/michaelJwilson/snakes_and_ladders/issues/289)). The
+warm fit reaches the cold optimum — worst relative gap 5.3e-12 in
+log-likelihood over the 90 SPR neighbours of an eight-taxon tree — and the
+search's answer does not move. What it saves is smaller than the ticket
+hoped, and in one measurement negative: over those 90 neighbours the warm
+fits spent 6,053 likelihood evaluations against 5,145 cold, a single
+neighbour fit costs the same 49 either way, and only a refit of the *same*
+topology from its own lengths drops to 14 — L-BFGS spends its evaluations on
+the branches the move changed, not on the ones it kept. The larger saving is
+lazy scoring: one cached likelihood evaluation at the warm lengths ranks a
+neighbourhood and only the top `K` candidates are fitted, the accepted move
+always in full. Subtree partials are cached keyed on the subtree's structure
+and lengths, and a cached partial equals a recomputed one bitwise, so the
+ranking evaluation is the same arithmetic in the same order. Over four
+random starts on the eight-taxon fixture at 2,000 sites, budget 400 candidates,
+counted in what the search reports:
+
+| move set | run | same optimum as cold | fits | likelihood evaluations |
+| --- | --- | --- | --- | --- |
+| NNI | cold | 4/4 | 68.8 | 5,061 |
+| NNI | warm | 4/4 | 68.8 | 3,660 |
+| NNI | warm, `lazy_top=3` | 4/4 | 26.5 | 1,354 |
+| NNI | warm, `lazy_top=1` | 4/4 | 9.5 | 493 |
+| SPR | cold | 4/4 | 336.8 | 24,423 |
+| SPR | warm | 4/4 | 339.5 | 22,677 |
+| SPR | warm, `lazy_top=3` | 4/4 | 13.8 | 1,032 |
+| SPR | warm, `lazy_top=1` | **2/4** | 5.2 | 579 |
+
+Warm starts alone are worth 28% on NNI and 7% on SPR. Lazy scoring at
+`K = 3` reaches the cold optimum on every start at 3.7x fewer evaluations on
+NNI and 24x fewer on SPR; at `K = 1` it holds on NNI and loses half the SPR
+starts, because the cheap surface ranks an SPR neighbourhood poorly — the
+fitted best sits at lazy rank one in 6 of 6 NNI neighbourhoods and 1 of 6 SPR
+neighbourhoods. So warm starts are the default, `lazy_top` is opt-in with
+`K` chosen per move set from this table, the budget stays in candidates
+scored, and `Inference` reports fits and likelihood evaluations beside it.
+RAxML's three-branch local optimization is not built; its gap to the full
+optimum is the measurement that would license it.
+
 **The accuracy requirement's first half is met.** Normalized Robinson-Foulds
 distance from the inferred to the generating topology is met at the 0.05 bound
 from 125 sites upward, with 8 of 8 replicates recovering the topology exactly at
