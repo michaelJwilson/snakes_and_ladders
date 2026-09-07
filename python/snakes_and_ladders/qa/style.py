@@ -19,6 +19,13 @@ legal only with secondary encoding -- which is why `MARKERS` and
 carries identity alone.
 
 A fifth series is not a new hue. Facet, or fold into an aggregate.
+
+Categorical *states* -- Potts states, hidden states, the coupled model's
+labels -- are a different object from series and take `STATE_PALETTE`, the
+full eight-colour Okabe--Ito set (issue #312): a state is read off a
+legend or a colourbar, never traced across a plot, so the adjacent-pair
+separation the series palette was validated for is not what it needs. A
+ninth state is a facet, as a fifth series is.
 """
 
 from __future__ import annotations
@@ -27,6 +34,9 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
 import matplotlib as mpl
+import matplotlib.colors as mcolors
+import numpy as np
+from matplotlib.typing import ColorType
 
 # Okabe-Ito, fixed order. See the module docstring for the validation result.
 PALETTE: tuple[str, ...] = ("#0072B2", "#009E73", "#D55E00", "#CC79A7")
@@ -35,6 +45,19 @@ PALETTE: tuple[str, ...] = ("#0072B2", "#009E73", "#D55E00", "#CC79A7")
 # printing and colour-vision deficiency without relying on hue.
 MARKERS: tuple[str, ...] = ("o", "s", "^", "D")
 LINESTYLES: tuple[str, ...] = ("-", "--", "-.", ":")
+
+# The full Okabe-Ito set, for categorical states rather than series. Order
+# is the published one, with black omitted because INK is the text colour.
+STATE_PALETTE: tuple[str, ...] = (
+    "#E69F00",
+    "#56B4E9",
+    "#009E73",
+    "#F0E442",
+    "#0072B2",
+    "#D55E00",
+    "#CC79A7",
+    "#999999",
+)
 
 # Ink, not series colour. Text never wears a series hue.
 INK = "#1a1a1a"
@@ -77,6 +100,75 @@ def series_style(index: int) -> dict[str, str]:
         "marker": MARKERS[index],
         "linestyle": LINESTYLES[index],
     }
+
+
+def blend_with_white(
+    color: ColorType, alpha: float
+) -> tuple[float, float, float, float]:
+    """``color`` mixed with white: ``alpha = 1`` is the colour, ``alpha = 0`` is white.
+
+    A fill lighter than its edge without transparency, so it prints the same
+    over any background and does not compound where fills overlap.
+    """
+    if not 0.0 <= alpha <= 1.0:
+        msg = f"alpha must be in [0, 1], got {alpha}"
+        raise ValueError(msg)
+    r, g, b, _ = mcolors.to_rgba(color)
+    return (1 - alpha * (1 - r), 1 - alpha * (1 - g), 1 - alpha * (1 - b), 1.0)
+
+
+def with_opacity(colors: Sequence[ColorType], opacities: Sequence[float]) -> np.ndarray:
+    """One RGBA row per colour, its alpha the matching opacity clipped to ``[0, 1]``.
+
+    For a scatter whose points carry a weight -- a posterior probability, a
+    support -- as opacity, with the colour carrying the state.
+    """
+    if len(colors) != len(opacities):
+        msg = f"{len(colors)} colours but {len(opacities)} opacities"
+        raise ValueError(msg)
+    rgba = np.zeros((len(colors), 4))
+    for row, (color, alpha) in enumerate(zip(colors, opacities, strict=True)):
+        rgba[row, :3] = mcolors.to_rgb(color)
+        rgba[row, 3] = float(np.clip(alpha, 0.0, 1.0))
+    return rgba
+
+
+def discrete_palette(
+    n_states: int, *, highlight: int | None = None, highlight_color: str = INK
+) -> dict[int, str]:
+    """State index to hex colour from `STATE_PALETTE`, with one state optionally drawn in ``highlight_color``.
+
+    Raises
+    ------
+    IndexError
+        If ``n_states`` exceeds the eight states the palette carries, or
+        ``highlight`` names a state outside them. A ninth state is a facet.
+    """
+    if not 1 <= n_states <= len(STATE_PALETTE):
+        msg = (
+            f"{n_states} states outside the {len(STATE_PALETTE)}-colour state palette; "
+            "facet rather than adding a hue"
+        )
+        raise IndexError(msg)
+    palette = dict(enumerate(STATE_PALETTE[:n_states]))
+    if highlight is not None:
+        if highlight not in palette:
+            msg = f"highlight {highlight} is not one of the {n_states} states"
+            raise IndexError(msg)
+        palette[highlight] = highlight_color
+    return palette
+
+
+@contextmanager
+def notebook_style() -> Iterator[None]:
+    """The letter style at screen resolution, for the notebooks under ``docs/nb/``.
+
+    The document's 200 dpi is what the committed PDFs are byte-compared at
+    and stays in :func:`letter_style`; a notebook renders inline and is not
+    compared, so it draws at 150.
+    """
+    with letter_style(), mpl.rc_context({"figure.dpi": 150}):
+        yield
 
 
 @contextmanager
