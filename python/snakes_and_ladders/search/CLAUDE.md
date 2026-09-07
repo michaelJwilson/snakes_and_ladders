@@ -50,8 +50,9 @@ no application module.
   orders of magnitude cheaper than scoring one.
 
 - **A structure is scored at most once per search**, keyed on a canonical form
-  that is independent of how it was spelled, because overlapping
-  neighbourhoods otherwise pay the dominant cost twice.
+  independent of how it was spelled, because overlapping neighbourhoods pay
+  the dominant cost twice otherwise. A returned structure states its support
+  and names which it is: neighbourhood, enumerated, or bootstrap (`support.py`).
 
 - **Truth is a terminal penalty, never a training signal.** An agent that can
   see the answer during training learns to look it up.

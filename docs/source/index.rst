@@ -165,6 +165,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.infer
    :members:
 
+.. automodule:: snakes_and_ladders.search.support
+   :members:
+
 .. automodule:: snakes_and_ladders.search.rl
    :members:
 
