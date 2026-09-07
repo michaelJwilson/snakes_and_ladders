@@ -1,4 +1,4 @@
-\begin{thebibliography}{28}
+\begin{thebibliography}{39}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -10,6 +10,12 @@ Shun-ichi Amari.
 \newblock \emph{Information Geometry and Its Applications}.
 \newblock Springer, Tokyo, 2016.
 
+\bibitem[Arthur and Vassilvitskii(2007)]{arthur2007}
+David Arthur and Sergei Vassilvitskii.
+\newblock k-means++: The advantages of careful seeding.
+\newblock In \emph{Proceedings of the Eighteenth Annual ACM-SIAM Symposium on
+  Discrete Algorithms}, pages 1027--1035, 2007.
+
 \bibitem[Blahut(2003)]{blahut2003}
 Richard~E. Blahut.
 \newblock \emph{Algebraic Codes for Data Transmission}.
@@ -19,6 +25,12 @@ Richard~E. Blahut.
 Jim Blandy, Jason Orendorff, and Leonora F.~S. Tindall.
 \newblock \emph{Programming Rust: Fast, Safe Systems Development}.
 \newblock O'Reilly Media, 2nd edition, 2021.
+
+\bibitem[Boykov et~al.(2001)Boykov, Veksler, and Zabih]{boykov2001}
+Yuri Boykov, Olga Veksler, and Ramin Zabih.
+\newblock Fast approximate energy minimization via graph cuts.
+\newblock \emph{IEEE Transactions on Pattern Analysis and Machine
+  Intelligence}, 23\penalty0 (11):\penalty0 1222--1239, 2001.
 
 \bibitem[Bryant and O'Hallaron(2015)]{bryant2015}
 Randal~E. Bryant and David~R. O'Hallaron.
@@ -41,6 +53,18 @@ Richard Durbin, Sean~R. Eddy, Anders Krogh, and Graeme Mitchison.
   and Nucleic Acids}.
 \newblock Cambridge University Press, Cambridge, 1998.
 
+\bibitem[Earl and Deem(2005)]{earl2005}
+David~J. Earl and Michael~W. Deem.
+\newblock Parallel tempering: Theory, applications, and new perspectives.
+\newblock \emph{Physical Chemistry Chemical Physics}, 7:\penalty0 3910--3916,
+  2005.
+
+\bibitem[Edwards and Sokal(1988)]{edwards1988}
+Robert~G. Edwards and Alan~D. Sokal.
+\newblock Generalization of the {F}ortuin--{K}asteleyn--{S}wendsen--{W}ang
+  representation and {M}onte {C}arlo algorithm.
+\newblock \emph{Physical Review D}, 38\penalty0 (6):\penalty0 2009--2012, 1988.
+
 \bibitem[Felsenstein(2004)]{felsenstein2004}
 Joseph Felsenstein.
 \newblock \emph{Inferring Phylogenies}.
@@ -58,17 +82,42 @@ Brendan~J. Frey.
   Communication}.
 \newblock MIT Press, Cambridge, Massachusetts, 1998.
 
+\bibitem[Geyer(1991)]{geyer1991}
+Charles~J. Geyer.
+\newblock Markov chain {M}onte {C}arlo maximum likelihood.
+\newblock In \emph{Computing Science and Statistics: Proceedings of the 23rd
+  Symposium on the Interface}, pages 156--163, 1991.
+
+\bibitem[Goemans and Williamson(1995)]{goemans1995}
+Michel~X. Goemans and David~P. Williamson.
+\newblock Improved approximation algorithms for maximum cut and satisfiability
+  problems using semidefinite programming.
+\newblock \emph{Journal of the ACM}, 42\penalty0 (6):\penalty0 1115--1145,
+  1995.
+
 \bibitem[Goodfellow et~al.(2016)Goodfellow, Bengio, and
   Courville]{goodfellow2016}
 Ian Goodfellow, Yoshua Bengio, and Aaron Courville.
 \newblock \emph{Deep Learning}.
 \newblock MIT Press, Cambridge, Massachusetts, 2016.
 
+\bibitem[Greig et~al.(1989)Greig, Porteous, and Seheult]{greig1989}
+D.~M. Greig, B.~T. Porteous, and A.~H. Seheult.
+\newblock Exact maximum a posteriori estimation for binary images.
+\newblock \emph{Journal of the Royal Statistical Society: Series B},
+  51\penalty0 (2):\penalty0 271--279, 1989.
+
 \bibitem[Hwu et~al.(2022)Hwu, Kirk, and El~Hajj]{pmpp2022}
 Wen-mei~W. Hwu, David~B. Kirk, and Izzat El~Hajj.
 \newblock \emph{Programming Massively Parallel Processors: A Hands-on
   Approach}.
 \newblock Morgan Kaufmann, 4th edition, 2022.
+
+\bibitem[Kirkpatrick et~al.(1983)Kirkpatrick, Gelatt, and
+  Vecchi]{kirkpatrick1983}
+S.~Kirkpatrick, C.~D. Gelatt, and M.~P. Vecchi.
+\newblock Optimization by simulated annealing.
+\newblock \emph{Science}, 220\penalty0 (4598):\penalty0 671--680, 1983.
 
 \bibitem[Koller and Friedman(2009)]{koller2009}
 Daphne Koller and Nir Friedman.
@@ -147,6 +196,24 @@ Kenneth~H. Rosen.
 Richard~S. Sutton and Andrew~G. Barto.
 \newblock \emph{Reinforcement Learning: An Introduction}.
 \newblock MIT Press, Cambridge, Massachusetts, 2nd edition, 2018.
+
+\bibitem[Swendsen and Wang(1986)]{swendsenwang1986}
+Robert~H. Swendsen and Jian-Sheng Wang.
+\newblock Replica {M}onte {C}arlo simulation of spin-glasses.
+\newblock \emph{Physical Review Letters}, 57\penalty0 (21):\penalty0
+  2607--2609, 1986.
+
+\bibitem[Swendsen and Wang(1987)]{swendsen1987}
+Robert~H. Swendsen and Jian-Sheng Wang.
+\newblock Nonuniversal critical dynamics in monte carlo simulations.
+\newblock \emph{Physical Review Letters}, 58\penalty0 (2):\penalty0 86--88,
+  1987.
+
+\bibitem[Wolff(1989)]{wolff1989}
+Ulli Wolff.
+\newblock Collective monte carlo updating for spin systems.
+\newblock \emph{Physical Review Letters}, 62\penalty0 (4):\penalty0 361--364,
+  1989.
 
 \bibitem[Yedidia et~al.(2005)Yedidia, Freeman, and Weiss]{yedidia2005}
 Jonathan~S. Yedidia, William~T. Freeman, and Yair Weiss.
