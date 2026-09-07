@@ -19,6 +19,7 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.emissions import GaussianEmission
+from snakes_and_ladders.opt.budget import Budget, Outcome, compare
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import align_by_key
 from snakes_and_ladders.opt.initialize import Initializer
@@ -307,15 +308,26 @@ def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
         ).log_likelihood
 
     best = -float(fit(objective).value)
-    reached = {}
-    for name, seeder in (("seeded", kmeans_plus_plus), ("uniform", uniform_seeds)):
-        rng = np.random.default_rng(11)
-        reached[name] = sum(
-            _from(seeder(observations, 3, rng)) >= best - 1e-6 for _ in range(20)
-        )
 
-    assert reached["seeded"] == 20
-    assert reached["uniform"] >= 18
+    def seeded(data: np.ndarray, _budget: Budget, rng: np.random.Generator) -> Outcome:
+        return Outcome(-_from(kmeans_plus_plus(data, 3, rng)), 1)
+
+    def uniform(data: np.ndarray, _budget: Budget, rng: np.random.Generator) -> Outcome:
+        return Outcome(-_from(uniform_seeds(data, 3, rng)), 1)
+
+    # Twenty replicates of one dataset, each its own instance so each draws
+    # its own stream; one EM fit per seeding is the budget (issue #281).
+    result = compare(
+        {"seeded": seeded, "uniform": uniform},
+        [observations] * 20,
+        Budget("fits", 1),
+        seeds=(11,),
+        known=[-best] * 20,
+    )
+    reached = result.hits(tolerance=1e-6)
+
+    assert reached["seeded"] == 20, reached
+    assert reached["uniform"] >= 18, reached
 
 
 @pytest.mark.structural
