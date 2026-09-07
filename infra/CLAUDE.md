@@ -18,6 +18,11 @@ and is principle: `DEV.md` holds the CI budget, the repository settings and
 the CI jobs, including the size caps that keep an exact oracle available, and
 is not restated here.
 
+A measurement against a baseline that is not in an experiment file with its
+commit and its budget is an anecdote; the Markdown under `docs/experiments/`
+is the ledger, a run store is its source, and the index is generated from
+the files, never edited.
+
 ## Tickets and the approval flow
 
 - **Priorities.** `high` runs immediately; `medium` runs at the next
