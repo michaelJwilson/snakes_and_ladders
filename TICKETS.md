@@ -38,6 +38,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   zero-field benchmark measures the fixture (#245)
 - Coloured iterated conditional modes on CUDA and Metal through torch,
   measured against the 10× rule before any Triton kernel (#227)
+- Expose forward-backward as an evaluator, not as Baum-Welch's internals (#173)
 - One energy/likelihood evaluator API across the three problem classes,
   asserted by an import-graph test (#238)
 - CUDA dispatch for the pruning recursion, pinned against the NumPy oracle
@@ -92,8 +93,13 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - A feature set for the tree environment, with the unidentifiable-constant
   invariance pinned
-- PPO and a learned state-value critic
+- A tree fixture hard enough to separate a policy from greedy (#177)
+- The factor-graph environment over #296, the #308 surrogate as a tree reward
+  model, and the budget-matched harness of #281 for the RL comparisons
+  (#313, what `dev` could not yet carry)
 - Truth as a terminal penalty, never a training signal
+- Train a phylogenetic policy and report its learning curve against the
+  enumerated expected return (#178)
 
 ## Milestone 2.2 — Curriculum Learning
 
@@ -113,20 +119,21 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
-- Create a ledger of benchmarked and validated runs with Aim (#75), revived
-  from the closed draft as the run store behind the experiment files (#314,
-  part 2; the `tracking` extra needs the dependency's yes)
+- Create a ledger of benchmarked and validated runs with Aim (#75)
 - Reproduce a run from a single manifest, and assert it
-- Budget-matched ablation leaderboard across shared seeds: the experiment
-  ledger and its generated index landed (#314); the cells that remain are the
-  stress and release tiers, on the fixed-hardware runner
+- Budget-matched ablation leaderboard across shared seeds
 - Paired significance test required before a variant is adopted as
   state-of-the-art
 
 ## Stage 3 — Research Extensions
 
-- Differentiable topology search over the tropical Grassmannian (#211)
-- Gumbel-softmax relaxation of Potts and HMM discrete states
+- Differentiable topology search over the tropical Grassmannian — blocked on
+  an oracle, not on effort: unlike the Gumbel-softmax half (#211), no tree
+  instance at an interesting size has a known optimum to referee the claim
+- Whether the deterministic multilinear relaxation extends past a chain, to
+  the Potts lattice and to graphs with cycles — #211 established the identity
+  holds for any objective with one factor per site per term, and measured the
+  method only on chains
 - Neural surrogate for the likelihood and energy, with exact re-scoring of the
   top-`K` candidates
 - Learned compound moves (#147)
@@ -153,8 +160,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
 - Make the public-facing reference to the work consistent (#250)
-- Derive the belief-propagation and forward-backward sections of `docs/tex/`, so
-  all three problem classes are documented to the same standard
 - Re-include the eleven committed QA figures the technical document no longer
   cites, so CI rebuilds nothing the document does not rest on
 - The textbook carries every equation and algorithm the code cites, and a

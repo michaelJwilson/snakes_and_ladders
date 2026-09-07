@@ -28,12 +28,12 @@ from __future__ import annotations
 import torch
 
 from snakes_and_ladders.learn.environment import Environment
-from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.policy import LinearPolicy, TrainablePolicy
 
 
 def exact_expected_return[S, A](
     environment: Environment[S, A],
-    policy: LinearPolicy,
+    policy: TrainablePolicy,
     start: S,
     horizon: int,
 ) -> torch.Tensor:
@@ -67,12 +67,12 @@ def exact_expected_return[S, A](
 
     def value(state: S, remaining: int) -> torch.Tensor:
         if remaining == 0 or environment.is_terminal(state):
-            return torch.zeros((), dtype=policy.weights.dtype)
+            return torch.zeros((), dtype=policy.dtype)
         available = environment.actions(state)
         probabilities = torch.exp(
             policy.log_probabilities(environment.features(state, available))
         )
-        total = torch.zeros((), dtype=policy.weights.dtype)
+        total = torch.zeros((), dtype=policy.dtype)
         for index, action in enumerate(available):
             successor, reward = environment.step(state, action)
             total = total + probabilities[index] * (
@@ -145,3 +145,68 @@ def finite_difference_gradient[S, A](
         gradient[index] = (upper - lower) / (2.0 * step)
     policy.set_weights(baseline)
     return gradient
+
+
+def exact_action_values[S, A](
+    environment: Environment[S, A],
+    policy: TrainablePolicy,
+    state: S,
+    horizon: int,
+) -> torch.Tensor:
+    """``Q^pi(s, a)`` for every available action: the reward plus ``V^pi`` of the successor with one decision fewer.
+
+    ``V^pi(s) = sum_a pi(a | s) Q^pi(s, a)`` by construction, and
+    :func:`exact_expected_return` computes the left-hand side by a different
+    recursion, so the two are an internal consistency check (Bellman's
+    equation) rather than the same code twice.
+
+    Returns
+    -------
+    torch.Tensor
+        Shape ``(len(environment.actions(state)),)``; empty at a terminal
+        state or at ``horizon == 0``.
+    """
+    if horizon < 1 or environment.is_terminal(state):
+        return torch.zeros((0,), dtype=policy.dtype)
+    values = []
+    for action in environment.actions(state):
+        successor, reward = environment.step(state, action)
+        values.append(
+            reward + exact_expected_return(environment, policy, successor, horizon - 1)
+        )
+    return torch.stack(values)
+
+
+def exact_optimal_value[S, A](
+    environment: Environment[S, A],
+    state: S,
+    horizon: int,
+    _memo: dict[tuple[S, int], float] | None = None,
+) -> float:
+    """``V*(s)`` over ``horizon`` decisions: finite-horizon value iteration by recursion.
+
+    The best return any policy can reach from ``state``, so ``V*(s) >= V^pi(s)``
+    for every policy, which is what makes it the oracle a learned critic and
+    a planner are held to. Memoized on ``(state, remaining)``; states must be
+    hashable, which every instance in this package's states are (tuples and
+    frozen dataclasses).
+    """
+    if horizon < 0:
+        msg = f"horizon must be >= 0, got {horizon}"
+        raise ValueError(msg)
+    memo: dict[tuple[S, int], float] = {} if _memo is None else _memo
+    key = (state, horizon)
+    if key in memo:
+        return memo[key]
+    if horizon == 0 or environment.is_terminal(state):
+        memo[key] = 0.0
+        return 0.0
+    best = -float("inf")
+    for action in environment.actions(state):
+        successor, reward = environment.step(state, action)
+        best = max(
+            best,
+            reward + exact_optimal_value(environment, successor, horizon - 1, memo),
+        )
+    memo[key] = best
+    return best
