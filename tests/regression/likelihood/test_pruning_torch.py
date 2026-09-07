@@ -1,4 +1,4 @@
-"""Regression tests for ``phylo.likelihood.pruning_torch``.
+"""Regression tests for ``snakes_and_ladders.likelihood.pruning_torch``.
 
 Four independent checks per issue #70, none sharing an implementation with
 the thing it judges:
@@ -27,14 +27,15 @@ from __future__ import annotations
 from dataclasses import replace
 
 import numpy as np
+import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.likelihood import pruning, pruning_torch
-from phylo.likelihood.brute_force import brute_force_log_likelihood
-from phylo.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from phylo.sim.jc import jc_rate_matrix
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
+from snakes_and_ladders.likelihood import pruning, pruning_torch
+from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
+from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from snakes_and_ladders.sim.jc import jc_rate_matrix
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 # Relative, not absolute -- see issue #111 and the note in
 # test_pruning_rust.py. CROSS_DEVICE_RTOL_FLOAT64 is the float64
@@ -121,11 +122,14 @@ def _with_branch_lengths(node: Node, lengths: dict[str, float]) -> Node:
     )
 
 
+@pytest.mark.oracle
 def test_torch_matches_numpy_oracle() -> None:
     tau = _small_tree_n4()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260910, n_sites=50)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260910), n_sites=50
+    )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
 
     numpy_ll = pruning.log_likelihood(tau, k, pi, dataset.alignment)
@@ -136,11 +140,14 @@ def test_torch_matches_numpy_oracle() -> None:
     assert_allclose(float(torch_ll), numpy_ll, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.oracle
 def test_torch_matches_brute_force() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260911, n_sites=15)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260911), n_sites=15
+    )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
 
     torch_ll = pruning_torch.log_likelihood(
@@ -151,11 +158,14 @@ def test_torch_matches_brute_force() -> None:
     assert_allclose(float(torch_ll), brute, rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
 def test_rescaled_and_unrescaled_torch_paths_agree() -> None:
     tau = _small_tree_n6()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260912, n_sites=100)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260912), n_sites=100
+    )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
 
     rescaled = pruning_torch.log_likelihood(
@@ -168,11 +178,14 @@ def test_rescaled_and_unrescaled_torch_paths_agree() -> None:
     assert_allclose(float(rescaled), float(unrescaled), rtol=1e-10)
 
 
+@pytest.mark.oracle
 def test_matrix_exp_rate_matrix_path_matches_closed_form() -> None:
     tau = _small_tree_n4()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260913, n_sites=50)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260913), n_sites=50
+    )
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau)
     rate_matrix = torch.as_tensor(jc_rate_matrix(k), dtype=torch.float64)
 
@@ -186,11 +199,15 @@ def test_matrix_exp_rate_matrix_path_matches_closed_form() -> None:
     assert_allclose(float(general), float(closed_form), rtol=_RTOL_ORACLE)
 
 
+@pytest.mark.mathematical
+@pytest.mark.oracle
 def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
     tau = _small_tree_n4()
     k = 4
     pi = np.full(k, 0.25)
-    dataset = simulate_alignment(tau=tau, k=k, pi=pi, seed=20260914, n_sites=30)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260914), n_sites=30
+    )
     order = pruning_torch.branch_order(tau)
     branch_lengths = pruning_torch.branch_lengths_from_tree(tau).requires_grad_(True)
 

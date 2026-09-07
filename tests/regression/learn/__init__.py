@@ -1,1 +1,1 @@
-"""Regression tests for `phylo.learn`."""
+"""Regression tests for `snakes_and_ladders.learn`."""

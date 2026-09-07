@@ -13,10 +13,10 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from phylo.search.infer import MoveSet, infer, score_topology
-from phylo.search.topology import nni_neighbours, random_topology
-from phylo.sim.simulate import simulate_alignment
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.search.infer import MoveSet, infer, score_topology
+from snakes_and_ladders.search.topology import nni_neighbours, random_topology
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import SMALL_SITES, load_fixture
 
@@ -26,7 +26,11 @@ _SITES = 2000
 def _alignment() -> tuple[dict[str, np.ndarray], int]:
     params = load_fixture(SMALL_SITES)
     dataset = simulate_alignment(
-        tau=params.tau, k=params.k, pi=params.pi, seed=params.seed, n_sites=_SITES
+        tau=params.tau,
+        k=params.k,
+        pi=params.pi,
+        rng=np.random.default_rng(params.seed),
+        n_sites=_SITES,
     )
     return dict(dataset.alignment), params.k
 
@@ -58,7 +62,9 @@ def test_hill_climb_benchmark(benchmark: BenchmarkFixture) -> None:
     """A whole search, so the per-fit number can be checked against a run."""
     alignment, k = _alignment()
 
-    result = benchmark(infer, alignment, k, seed=1, moves=MoveSet.NNI)
+    result = benchmark(
+        infer, alignment, k, rng=np.random.default_rng(1), moves=MoveSet.NNI
+    )
 
     assert result.converged
     assert math.isfinite(result.log_likelihood)

@@ -9,7 +9,7 @@ matches a full evaluation when a site has more than two neighbours, and that
 a chain built as a graph is the chain.
 
 The graph arrives as plain edge indices. `learn/CLAUDE.md` forbids importing
-`phylo.sim`, so a `PottsGraph` is unpacked by the caller; these tests do that
+`snakes_and_ladders.sim`, so a `PottsGraph` is unpacked by the caller; these tests do that
 inline, which is also the demonstration that the adaptation is a two-field
 read rather than a layer.
 """
@@ -20,11 +20,18 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.learn.exact import exact_policy_gradient, finite_difference_gradient
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.potts import PottsLandscape, enumerate_configurations, optimum
-from phylo.learn.rollout import greedy_rollout
-from phylo.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.learn.exact import (
+    exact_policy_gradient,
+    finite_difference_gradient,
+)
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.potts import (
+    PottsLandscape,
+    enumerate_configurations,
+    optimum,
+)
+from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
 FIELD = np.array([0.4, -0.1, -0.3])
 COUPLING = 0.75
@@ -37,6 +44,7 @@ def _lattice(shape: tuple[int, ...], boundary: BoundaryCondition) -> PottsLandsc
     return PottsLandscape.on_graph(COUPLING, FIELD, graph.edges, graph.n_nodes)
 
 
+@pytest.mark.oracle
 def test_a_chain_built_as_a_graph_is_the_chain() -> None:
     # The claim that justifies one class rather than two: if the two
     # constructors disagreed anywhere, the generalization would have changed
@@ -51,6 +59,7 @@ def test_a_chain_built_as_a_graph_is_the_chain() -> None:
         assert chain.is_terminal(state) == as_graph.is_terminal(state)
 
 
+@pytest.mark.oracle
 def test_the_local_reward_matches_re_evaluating_the_energy_on_a_lattice() -> None:
     # A 3x3 open lattice has interior sites with four neighbours, which the
     # chain never exercises: its delta only ever sums two terms. An O(degree)
@@ -66,6 +75,7 @@ def test_the_local_reward_matches_re_evaluating_the_energy_on_a_lattice() -> Non
             )
 
 
+@pytest.mark.oracle
 def test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary() -> None:
     # Periodic wrapping gives every site the same degree and makes a
     # 2-extent dimension list the same pair twice, as a doubled bond. Both
@@ -81,6 +91,7 @@ def test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary() -> Non
             )
 
 
+@pytest.mark.mathematical
 def test_the_features_span_the_reward_on_a_lattice() -> None:
     landscape = _lattice((3, 3), BoundaryCondition.OPEN)
     state = landscape.reset(np.random.default_rng(2))
@@ -92,6 +103,7 @@ def test_the_features_span_the_reward_on_a_lattice() -> None:
     assert_allclose(scored, rewards, atol=1e-12)
 
 
+@pytest.mark.oracle
 def test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice() -> None:
     # 3**9 = 19,683 configurations, the same size #170's simulator validates
     # against, so the best configuration is an enumerated fact.
@@ -106,9 +118,11 @@ def test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice() -> None:
     assert max(reached) == pytest.approx(best)
 
 
+@pytest.mark.mathematical
+@pytest.mark.oracle
 def test_the_enumerated_gradient_matches_central_differences_on_a_lattice() -> None:
     # The oracle that makes this an instance rather than a lookalike:
-    # `phylo.learn.exact` carries it unchanged from the chain. A 2x2 lattice
+    # `snakes_and_ladders.learn.exact` carries it unchanged from the chain. A 2x2 lattice
     # keeps |A| ** horizon affordable at 8 actions and horizon 2.
     landscape = _lattice((2, 2), BoundaryCondition.OPEN)
     policy = LinearPolicy(2)
@@ -127,6 +141,7 @@ def test_the_enumerated_gradient_matches_central_differences_on_a_lattice() -> N
     )
 
 
+@pytest.mark.edge_case
 def test_an_edge_naming_a_missing_node_is_refused() -> None:
     with pytest.raises(ValueError, match=r"outside \[0, 3\)"):
         PottsLandscape.on_graph(COUPLING, FIELD, [(0, 3)], 3)

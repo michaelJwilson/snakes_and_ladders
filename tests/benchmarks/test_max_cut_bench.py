@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.search.max_cut import enumerate_max_cut, goemans_williamson
-from phylo.sim.graph import PottsGraph
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.search.max_cut import enumerate_max_cut, goemans_williamson
+from snakes_and_ladders.sim.graph import PottsGraph
 
 
 def _random_graph(n_nodes: int, density: float, seed: int) -> PottsGraph:
