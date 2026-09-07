@@ -38,7 +38,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   zero-field benchmark measures the fixture (#245)
 - Coloured iterated conditional modes on CUDA and Metal through torch,
   measured against the 10× rule before any Triton kernel (#227)
-- Expose forward-backward as an evaluator, not as Baum-Welch's internals (#173)
 - One energy/likelihood evaluator API across the three problem classes,
   asserted by an import-graph test (#238)
 - CUDA dispatch for the pruning recursion, pinned against the NumPy oracle
@@ -114,9 +113,13 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
-- Create a ledger of benchmarked and validated runs with Aim (#75)
+- Create a ledger of benchmarked and validated runs with Aim (#75), revived
+  from the closed draft as the run store behind the experiment files (#314,
+  part 2; the `tracking` extra needs the dependency's yes)
 - Reproduce a run from a single manifest, and assert it
-- Budget-matched ablation leaderboard across shared seeds
+- Budget-matched ablation leaderboard across shared seeds: the experiment
+  ledger and its generated index landed (#314); the cells that remain are the
+  stress and release tiers, on the fixed-hardware runner
 - Paired significance test required before a variant is adopted as
   state-of-the-art
 

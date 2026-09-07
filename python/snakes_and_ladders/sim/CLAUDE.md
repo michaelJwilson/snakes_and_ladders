@@ -15,7 +15,8 @@ Substitution models on a tree; a general undirected graph carrying a per-edge
 coupling, the lattices and random graphs built as constructed cases of it, and
 the samplers that draw spin configurations on them; hidden state paths and
 their emissions; the factor graph the three of those are shapes of, with its
-adapters; the package's single source of Newick; and `canonical.py`, the
+adapters, and the coupled spatio-sequential model that joins them, with its
+simulator; the package's single source of Newick; and `canonical.py`, the
 problem instances whose answer is known from outside this repository.
 
 ## Local rules

@@ -171,6 +171,8 @@ against the separation of the emitting means:
 | 4.0 | 93/96 | 0.969 | 0/24 |
 | 6.0 | 92/96 | 0.958 | 0/24 |
 
+Recorded as `docs/experiments/002-hmm-gaussian-interval-coverage.md`.
+
 Coverage reaches nominal from two standard deviations of separation upward and
 degrades below it, seen twice over: the intervals that exist under-cover, and
 most replicates produce **no interval at all** — the observed information is
@@ -248,6 +250,28 @@ two produce identical numbers on the same responsibilities rather than merely
 similar ones — the evidence that the seam extracted from an HMM was not shaped
 by one. The unbounded likelihood transfers unchanged with it: a component
 collapsed onto a single observation is refused, not clamped.
+
+**The coupled spatio-sequential model has a simulator and an exact oracle**
+([#300](https://github.com/michaelJwilson/snakes_and_ladders/issues/300), #290
+part 2). `sim.spatio_sequential` declares the truth — a spatial graph with
+`J >= 0`, `M` classes, `K` states, `S` positions, `beta`, the circulant
+self-transition `t`, one initial distribution and one emission family per
+class — and draws labels by the single-site heat bath at `beta` with no field,
+chains by `Pi_m` and the circulant transition, and observations by the class's family
+at the node's class and the position's state, under one generator; labels may
+be planted for recovery studies. `likelihood.spatio_sequential` sums
+`eq:joint` over every assignment of the canonical instance (a 2x2 open
+lattice, `M = K = 2`, `S = 6`: 65,536 joint states) for the evidence, the
+label posterior, the per-class state posterior and the state posterior given
+a labelling that part 3's forward–backward is pinned to. The oracle is pinned
+two ways that share no code: its evidence equals the sum over labellings of
+the per-class forward recursion to a relative gap of 0.0 on three draws, and
+its written-out joint equals the factor graph's log-density on 50 random
+assignments to 1.4e-14. The simulator is held to what it composes by
+chi-square at 0.001 over 400 draws — labellings against the enumerated Potts
+prior, transitions against `t`, first states against `Pi_m`, and symbol
+counts per (class, state) against the families' tables — and the label
+posterior recovers planted labels on 42 of 48 nodes at `S = 6`.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
@@ -441,6 +465,14 @@ recursion on a 200-step, four-state chain (73 ms against 7 ms) and 57x
 factor and a dictionary per message against a recursion that knows its shape.
 The specialised evaluators therefore stay; the factor graph is the structure
 for the model none of them can express.
+
+**Forward–backward is an evaluator** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
+closing #173). `likelihood.forward_backward` returns the evidence, the
+position posteriors and the pairwise posteriors of one chain in the log
+domain, and a forward-filter backward-sample draw of the path; it is pinned
+against the path enumeration on four chains to 1e-12 and the E step of the
+coupled model built on it against the enumerated conditional posterior to
+1e-11. Baum–Welch keeps its own recursion for the gradient it needs.
 
 **The tree was audited against the runtime-optimization opportunities, and
 five of the ten lines had a measurement behind them**
@@ -729,6 +761,63 @@ likelihoods under a flat prior over topologies and is named so, not called a
 posterior; a tempered ensemble over topologies, which would give a marginal
 one, does not exist.
 
+**The coupled model is fitted, and the finding is about the start, not the
+move** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
+#290 parts 3 to 6). `search.spatio_sequential` runs block-coordinate ascent
+on `log p(x, l | theta)` with the chains marginalized: an E step per class,
+an M step through each family's `reestimate` with `Pi_m` and the shared `t`
+in closed form, and a label block that is the ground state of a Potts model
+in the external field the posterior defines — by alpha expansion, by
+single-site descent, or by an annealed Wolff move in the field whose best
+visited labelling is taken only when it improves the joint. The M-step
+identity holds through autograd on a Gaussian instance to 1e-10 relative;
+the joint is non-decreasing across every block for every solver; and with
+the parameters at the truth the label block reaches the enumerated MAP
+labelling from the planted labels on 5 of 6 draws of the canonical instance
+for every solver. Past enumeration, on a planted 10x10 lattice with weak
+emissions, the label problem alone is easy — 0.98 accuracy up to permutation
+with the parameters known — and every cold start freezes:
+
+| start, then ten blocks | alpha expansion | single-site descent | annealed Wolff |
+| --- | --- | --- | --- |
+| uniform labels, true parameters | 0.66 | 0.78 | 0.68 |
+| `Graph_BurnIn++` (thirty annealed steps), then alpha expansion | 0.97 | — | — |
+
+The cluster move does not escape what descent freezes into; the trap is the
+parameters, which a cold EM collapses before the labels can separate them.
+The annealed start — labels nearly free while the emissions are fitted to
+what the data alone supports, the prior tightening as the classes separate,
+seeded by `Emission_Mixture++` (k-means++ under the family's own negative
+log-density, exactly k-means++ under a squared distance) — is what recovers
+the labels. Both are recorded, and the escape claim is retracted for this
+instance.
+
+**One Gibbs sampler and one annealer serve every problem, over the factor
+graph** ([#309](https://github.com/michaelJwilson/snakes_and_ladders/issues/309)).
+`search.gibbs` runs a heat-bath sweep over any `FactorGraph` — a variable's
+conditional is the product of the factors touching it — tempered by a
+schedule for annealing, with an exact block move for a chain-shaped subset
+by forward filter and backward sample, and a Metropolis move over tree
+topologies on the fitted likelihood. Each instance is held to the
+distribution it targets by chi-square at 0.001: the 2x2 Potts lattice in a
+field against enumeration; the five-step chain against the enumerated path
+posterior, for the single-site sweep and for the block move, whose every
+draw is independent; the four-taxon tree at one site against sum-product's
+exact marginals; the coupled model's labels against the enumerated
+posterior. The sweep copies the Potts kernel's arithmetic — one uniform per
+variable, a search of the cumulative conditional — and agrees with it draw
+for draw on 2,000 of 2,000 sweeps; annealing reaches the triangular
+antiferromagnet's closed-form ground state on 6 of 6 seeds, as `anneal_potts`
+does at the same schedule. At temperature one the topology move's visits
+over the 15 five-taxon topologies match the flat-prior weight over fitted
+likelihoods, the quantity #270 enumerates, and annealed to 0.02 it reaches
+the enumerated best from 6 of 6 random starts with every topology fitted
+once. The price of generality is smaller than expected: twenty sweeps of an
+8x8 three-state lattice take 19.1 ms over factor tables against 15.0 ms for
+the Python Potts sweep and 5.9 ms for the Rust one, 1.3x and 3.2x, because
+the Python kernel already pays a NumPy call per site. The specialised kernels
+stay the default for the Potts lattice.
+
 **The accuracy requirement's first half is met.** Normalized Robinson-Foulds
 distance from the inferred to the generating topology is met at the 0.05 bound
 from 125 sites upward, with 8 of 8 replicates recovering the topology exactly at
@@ -771,7 +860,8 @@ normalized to sites touched:
 Single-site slows by 3.2x between extent 8 and 24 while both cluster
 algorithms slow by roughly 1.9x, so the gap is 2.1x at extent 24 and widening.
 That understates the asymptotic separation: these lattices are small and their
-boundary is open, both of which soften the transition.
+boundary is open, both of which soften the transition. Recorded as
+`docs/experiments/001-potts-cluster-autocorrelation.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
@@ -955,7 +1045,8 @@ the reward decomposes exactly into the two features the policy scores, which
 puts hill climbing *inside* the policy class as the weight vector proportional
 to `(J, 1)`. The learned policy reaches the enumerated optimum from 86.6% of
 the 81 starts against greedy's 80.2%, in 8 of 8 training seeds — a statement
-about learning rather than about two unrelated algorithms.
+about learning rather than about two unrelated algorithms. Recorded as
+`docs/experiments/003-potts-chain-reinforce-vs-greedy.md`.
 
 **The phylogenetic environment exists, and the reward it can afford is
 measured** ([#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137)). A state
@@ -1003,6 +1094,23 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
 
+## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
+
+**The ledger has a record format before it has a run store**
+([#314](https://github.com/michaelJwilson/snakes_and_ladders/issues/314)). An
+experiment is a file under `docs/experiments/`, written from a template: the
+commit, the feature under test, the fixture and its size tier, the methods
+compared at one budget over shared seeds, the results, the finding, and the
+tickets it filed. `infra/experiments.py` validates every file against the
+template's fields, vocabularies and sections and generates the index that is
+the leaderboard, and a guard runs it per pull request. Three measured
+comparisons this file already stated are the first entries — the cluster
+updates' autocorrelation at the transition, the Gaussian-emission interval
+coverage against separation, and REINFORCE against greedy on the Potts chain —
+and this file now cites them. The Aim run store (#75) is part 2, behind the
+dependency's approval; until then the Results section is typed from the
+measurement and names the script that produced it.
+
 ## §1.2 Requirements Ledger
 
 | Requirement | Status |
@@ -1021,10 +1129,11 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `docs/tex/` now spans all three problem classes rather than the phylogenetic
 application alone: the abstract, methods and appendices state the Potts
 Hamiltonian and the HMM decoding problem beside the substitution model, and the
-Reference Taxonomy appendix routes the literature by concern. It is an eight-page
-specification, cut down in `14d32d6` from the academic-letter structure of
-[#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), and it is the shape
-the document is in rather than the shape §1.3 asks for.
+Reference Taxonomy appendix routes the literature by concern. It was cut down
+in `14d32d6` from the academic-letter structure of
+[#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148) to an
+eight-page specification, and has since grown back toward the shape §1.3 asks
+for section by section, as recorded below.
 
 Thirteen QA scripts render the figures, each committing a figure with a caption
 naming the seed, the sizes and the model that produced it, and `docs/CLAUDE.md`
@@ -1054,6 +1163,31 @@ branch-and-bound bounds and their proofs, no such bound being implemented.
 Three framed placeholders stand in for the RL learning curve, the comparison
 against classical software, and hardware scaling — none of which is measured,
 and each labelled as a placeholder rather than drawn with invented data.
+
+**The textbook is now one document at one standard**
+([#298](https://github.com/michaelJwilson/snakes_and_ladders/issues/298)). Every
+problem section carries the same four parts — the model, the model as an
+instance of the factor graph of `sec:factor-graph`, the algorithm as the
+instance of `eq:sum-product` or of the optimization it is, and the property
+that pins it — and the notation table states the factor-graph symbols once
+with the identification each section's classical symbol makes. The discrete
+solvers that were one sentence each are sections with a labelled equation, a
+citation, a regime and a pin: ground states as cuts (`eq:cut-energy`,
+`eq:gw`), alpha expansion and its bound (`eq:alpha-expansion`), the heat bath
+and the cluster moves with the field accept step (`eq:heat-bath`,
+`eq:cluster-accept`), and temperature, annealing and tempering with the
+exchange ratio (`eq:exchange`). The hidden Markov section states the backward
+pass, the posterior and Viterbi as max-product (`eq:posterior`,
+`eq:viterbi`). The coupled spatio-sequential model of #290 has its own section
+(`sec:coupled`): the ticket's Forney-style figure, the spatial and chain
+priors, the block-coordinate estimator with the M-step identity and the
+external field (`eq:coupled-m-step`, `eq:external-field`,
+`eq:label-ground-state`), and both algorithms (`alg:wolff-field`,
+`alg:graph-burnin`), with a paragraph stating which part is built and which
+is planned. Four derivations the main text depends on — the Bethe fixed
+point, detailed balance for a cluster move in a field, the exchange ratio, the
+delta method — sit in an appendix cited from the point of use. The document
+is 21 pages; `texlive-pictures` joins the CI TeX install for the figure.
 
 ## What Is Not Claimed
 
