@@ -7,10 +7,20 @@ not a plan: the plan is posted to the thread and approved before any pull
 request opens (§0.2).
 
 Ordering within a milestone is by dependency, not priority; priority is a label.
-A parenthesized number is an issue already filed.
+A parenthesized number is an issue already filed; a bullet without one is work
+this file names and nobody has filed yet, which is the honest state and not an
+oversight to paper over. `tests/regression/test_planning_documents_agree.py`
+keeps the milestone headings here, in `ROADMAP.md` and in `STATUS.md` naming the
+same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
+- An HMM with Gaussian emissions, and the unbounded likelihood that comes
+  with it (#228)
+- An HMM with negative binomial emissions, the family whose M-step has no
+  closed form (#229)
+- Support the different lattice types (#231)
+- A turbo code problem, fixture and belief-propagation example (#233)
 - Define one fixture API across trees, lattices and chains (#132)
 - Convert the sixteen signatures that still take a seed where the rule says a
   generator (#240)
@@ -24,9 +34,13 @@ A parenthesized number is an issue already filed.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
+- Belief propagation converges in two sweeps at zero field, so every
+  zero-field benchmark measures the fixture (#245)
+- Coloured iterated conditional modes on CUDA and Metal through torch,
+  measured against the 10× rule before any Triton kernel (#227)
 - Expose forward-backward as an evaluator, not as Baum-Welch's internals (#173)
 - One energy/likelihood evaluator API across the three problem classes,
-  asserted by an import-graph test
+  asserted by an import-graph test (#238)
 - CUDA dispatch for the pruning recursion, pinned against the NumPy oracle
 - Metal/MPS dispatch, and the `float32` tolerance it forces
 - Evaluate a Triton or JAX kernel for the site-parallel recursion against the
@@ -37,15 +51,21 @@ A parenthesized number is an issue already filed.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
+- Define an initialization abstraction and the initializers each supported
+  optimization needs (#251)
 - Fit HMM transition and emission matrices to nominal interval coverage
 - Refuse an unidentifiable fit rather than returning a meaningless interval
   (#122)
 - Realize the tolerance helper rather than assume it is applied by hand (#91)
 - Profile a gradient fit in memory and time across the declared `n × L × k`
-  range
+  range (#232)
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
+- Iterated conditional modes as a first-class solver across every lattice
+  model (#226)
+- Port the single-site Gibbs sweep to Rust, beside the oracle rather than
+  replacing it (#246)
 - Viterbi decoding, pinned against brute-force path enumeration and against
   the fixture where it disagrees with posterior decoding (#175, #209)
 - Posterior decoding, reported as the per-site marginal maximum it is and
@@ -102,26 +122,34 @@ A parenthesized number is an issue already filed.
 
 ## Stage 3 — Research Extensions
 
-- Differentiable topology search over the tropical Grassmannian
+- Differentiable topology search over the tropical Grassmannian (#211)
 - Gumbel-softmax relaxation of Potts and HMM discrete states
 - Neural surrogate for the likelihood and energy, with exact re-scoring of the
   top-`K` candidates
 - Learned compound moves (#147)
 - Transformer policy over canonical encodings
 - Stochastic escape: Metropolis-Hastings worsening steps and ratchet-style
-  reweighting
+  reweighting (#194)
 
 ## Cross-Cutting Infrastructure
 
+- Impose a test grouping, so a class of check can be selected independently
+  of the module a diff touched (#237)
+- Assess the computational efficiency of the key algorithms for scaling
+  fixtures through simulation, optimization and learning (#232)
+- Scope rustworkx for efficiency and scaling (#242)
+- Vet `ROADMAP.md`, `STATUS.md` and `TICKETS.md` for incompleteness,
+  inconsistency and error (#244)
+- Separate the technical document into infrastructure, textbook and paper
+  (#249)
+- Release 0.4.0 (#236)
 - Fix the root-detection assertion blocking `infra/release.sh`'s full-suite
   check (#168)
 - Re-key the milestone references in code and `docs/tex/` to the roadmap's
   `N.M` numbering
-- Reconcile the dangling `STATUS.md` references (#34)
-- Give every rule exactly one home (#39)
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
-- Make the public-facing reference to the work consistent (#134)
+- Make the public-facing reference to the work consistent (#250)
 - Derive the belief-propagation and forward-backward sections of `docs/tex/`, so
   all three problem classes are documented to the same standard
 - Re-include the eleven committed QA figures the technical document no longer

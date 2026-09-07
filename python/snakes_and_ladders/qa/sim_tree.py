@@ -205,7 +205,7 @@ def build_figure(params: SimulationParams) -> tuple[Figure, str]:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=max(SITES_SHOWN, 1),
     )
     fig, ax = plt.subplots(figsize=(6.5, 4))

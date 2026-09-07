@@ -10,6 +10,7 @@ shown nucleotide-coded (A/C/G/T) for ``k == 4``.
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.transforms import Bbox
@@ -188,7 +189,7 @@ def build_figure(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     fig, ax = plt.subplots(figsize=(6, 4))

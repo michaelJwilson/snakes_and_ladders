@@ -32,6 +32,7 @@ CRITICAL_VALUES = [
 ]
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(("degrees_of_freedom", "statistic", "tail"), CRITICAL_VALUES)
 def test_the_chi_square_tail_matches_published_critical_values(
     degrees_of_freedom: int, statistic: float, tail: float
@@ -53,11 +54,13 @@ def test_the_chi_square_tail_matches_published_critical_values(
     assert realized == pytest.approx(tail, abs=5e-4)
 
 
+@pytest.mark.edge_case
 def test_mismatched_shapes_are_refused() -> None:
     with pytest.raises(ValueError, match="disagree"):
         chi_square_p_value(np.ones(3), np.ones(4))
 
 
+@pytest.mark.edge_case
 def test_a_zero_expected_count_is_refused() -> None:
     # The statistic is infinite for any observation against a category the
     # model cannot produce, so the caller has chosen the wrong categories.
@@ -65,6 +68,7 @@ def test_a_zero_expected_count_is_refused() -> None:
         chi_square_p_value(np.ones(2), np.array([1.0, 0.0]))
 
 
+@pytest.mark.mathematical
 def test_independent_draws_have_the_autocorrelation_time_of_independence() -> None:
     # 0.5 is the value for a series with no correlation, in the convention
     # `tau = 0.5 + sum_t rho(t)`.
@@ -75,6 +79,7 @@ def test_independent_draws_have_the_autocorrelation_time_of_independence() -> No
     assert realized == pytest.approx(0.5, abs=0.02)
 
 
+@pytest.mark.oracle
 def test_an_ar1_process_matches_its_closed_form() -> None:
     # For `x_t = rho x_{t-1} + noise`, `rho(t) = rho**t` exactly, so
     # `tau = 0.5 + sum_{t>=1} rho**t = 0.5 + rho / (1 - rho)`. An estimator
@@ -91,12 +96,14 @@ def test_an_ar1_process_matches_its_closed_form() -> None:
     assert realized == pytest.approx(0.5 + correlation / (1.0 - correlation), rel=0.02)
 
 
+@pytest.mark.edge_case
 def test_a_series_that_never_moved_reports_the_floor() -> None:
     # A constant chain has no correlation to measure, and is a sampler that
     # never moved rather than a fast one; the caller's own test sees it.
     assert integrated_autocorrelation_time(np.ones(1_000)) == 0.5
 
 
+@pytest.mark.edge_case
 def test_a_series_too_short_to_have_an_autocorrelation_is_refused() -> None:
     with pytest.raises(ValueError, match="at least two sweeps"):
         integrated_autocorrelation_time(np.array([1.0]))
