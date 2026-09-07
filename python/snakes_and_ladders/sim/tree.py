@@ -2,7 +2,7 @@
 
 Topology is an input to simulation (drawn from ``simulation_params.yaml``),
 never inferred. Newick serialization, parsing, and validation live in
-``snakes_and_ladders.sim.newick``, the package's single source of Newick functionality.
+``sal.sim.newick``, the package's single source of Newick functionality.
 """
 
 from __future__ import annotations

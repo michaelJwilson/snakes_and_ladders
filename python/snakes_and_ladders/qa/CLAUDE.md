@@ -16,7 +16,7 @@ One script per figure or table, each taking a declarative parameters file and
 producing a rendered figure plus a caption that states the seed, sizes, and
 model used to generate it. The format is that model's own — the
 phylogenetic figures take `simulation_params.yaml`, the optimization figures
-take the Potts and HMM fixtures `snakes_and_ladders.opt` defines — because the
+take the Potts and HMM fixtures `sal.opt` defines — because the
 ground-truth-retention rule is about the caption matching what actually ran,
 not about one file layout. `figure.py` holds the shared
 figure/caption-writing helper every script uses, so output is named and

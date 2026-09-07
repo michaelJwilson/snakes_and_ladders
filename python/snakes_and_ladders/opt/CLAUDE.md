@@ -29,7 +29,7 @@ independent oracle for its own objective. They exist so the interface is
 tested against something that is not a tree. The phylogenetic instance
 belongs with them, as another instance.
 
-Truth types and data generation live in `snakes_and_ladders.sim`; a reference instance
+Truth types and data generation live in `sal.sim`; a reference instance
 here imports the type and fits, but draws no data. Issue #186 tracks the last
 instance still holding its own generator.
 
@@ -70,8 +70,8 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
   caller's declaration. Tempering it is a power posterior, not a physical
   temperature; the consumer says which it means.
 
-- **No application imports.** Nothing here may import from `snakes_and_ladders.sim`,
-  `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`. This is asserted by
+- **No application imports.** Nothing here may import from `sal.sim`,
+  `sal.likelihood` or `sal.search`. This is asserted by
   `tests/regression/test_opt_objective.py`, not left to review: a single
   convenience import turns the abstraction back into a phylogenetics-specific
   optimizer, and neither `ruff` nor `mypy` would notice.

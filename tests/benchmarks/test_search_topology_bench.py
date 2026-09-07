@@ -1,4 +1,4 @@
-"""Benchmarks for ``snakes_and_ladders.search.topology``'s NNI and SPR generators.
+"""Benchmarks for ``sal.search.topology``'s NNI and SPR generators.
 
 See ``tests/regression/test_search_topology.py`` for correctness. Runs at
 ``n = 10``, the module ``CLAUDE.md``'s topological-test size cap, on a

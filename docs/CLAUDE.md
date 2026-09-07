@@ -15,7 +15,7 @@ produces them or in `STATUS.md`.
 ## What lives here
 
 `tex/` is two documents, their shared bibliography, notation and preamble, and
-the figures, tables and captions `snakes_and_ladders.qa` generates; a table
+the figures, tables and captions `sal.qa` generates; a table
 ships as a fragment a document includes rather than as an image, so it matches
 the surrounding type. `source/` is Sphinx,
 built from the docstrings. `nb/` is one notebook per problem class, each

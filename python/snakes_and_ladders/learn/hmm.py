@@ -1,15 +1,15 @@
 """Single-position search over a hidden Markov state path at known parameters.
 
 The third instance of :class:`~snakes_and_ladders.learn.environment.Environment`, beside
-the Potts landscape and (in ``snakes_and_ladders.search``) the tree. It exists for the same
-reason ``snakes_and_ladders.opt`` keeps a Potts chain and an HMM beside branch lengths: an
+the Potts landscape and (in ``sal.search``) the tree. It exists for the same
+reason ``sal.opt`` keeps a Potts chain and an HMM beside branch lengths: an
 interface justified by one model is shaped by that model, and the only way to
 show that :class:`Environment` is not shaped by lattices is to put something
 that is not a lattice behind it.
 
 **The parameters arrive as plain arrays.** ``learn/CLAUDE.md`` forbids
-importing ``snakes_and_ladders.sim``, so this module never sees an ``HmmParams``; a caller
-in ``snakes_and_ladders.search`` --- which may import both halves --- unpacks one. That is
+importing ``sal.sim``, so this module never sees an ``HmmParams``; a caller
+in ``sal.search`` --- which may import both halves --- unpacks one. That is
 the same reason :meth:`PottsLandscape.on_graph` takes an edge list rather
 than a ``PottsGraph``.
 

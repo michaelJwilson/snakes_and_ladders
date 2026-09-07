@@ -2,7 +2,7 @@
 
 The forward recursion is checked against brute-force enumeration over every
 hidden path -- the same independent-oracle pattern
-``snakes_and_ladders.likelihood.brute_force`` establishes for pruning, and for the same
+``sal.likelihood.brute_force`` establishes for pruning, and for the same
 reason: a recursion checked only against itself is checked against nothing.
 ``opt/CLAUDE.md``'s finite-difference derivative check is here too.
 """

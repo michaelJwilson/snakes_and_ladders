@@ -108,7 +108,7 @@ def hmm_coverage(
     A fit whose estimate reaches the boundary of the parameter space -- an
     emission probability at zero -- has no interval to check: the curvature
     in that direction vanishes, the observed information is singular, and
-    ``snakes_and_ladders.opt.fit`` refuses to invert it. Those replicates are counted
+    ``sal.opt.fit`` refuses to invert it. Those replicates are counted
     separately rather than dropped silently, because excluding them without
     saying so would quietly select for the well-behaved samples and report a
     coverage that no procedure achieves.
