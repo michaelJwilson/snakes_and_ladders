@@ -34,11 +34,13 @@ def _gaussian() -> GaussianEmission:
     return GaussianEmission(MEAN, SCALE, FLOOR)
 
 
+@pytest.mark.structural
 def test_both_families_satisfy_the_emission_protocol() -> None:
     assert isinstance(CategoricalEmission(MATRIX), EmissionFamily)
     assert isinstance(_gaussian(), EmissionFamily)
 
 
+@pytest.mark.structural
 def test_a_categorical_family_scores_a_symbol_as_its_matrix_entry() -> None:
     observations = torch.tensor([[0, 3, 1], [2, 2, 0]])
 
@@ -48,6 +50,7 @@ def test_a_categorical_family_scores_a_symbol_as_its_matrix_entry() -> None:
     assert_allclose(scored, expected, rtol=1e-15)
 
 
+@pytest.mark.oracle
 def test_the_gaussian_density_matches_the_closed_form() -> None:
     # Against the expression written out, not against another call into the
     # same code: `1 / (sigma sqrt(2 pi)) exp(-(y - mu)^2 / 2 sigma^2)`.
@@ -70,6 +73,7 @@ def test_the_gaussian_density_matches_the_closed_form() -> None:
     assert_allclose(scored, expected, rtol=1e-13)
 
 
+@pytest.mark.structural
 def test_a_categorical_score_is_a_probability_and_a_gaussian_one_is_a_density() -> None:
     # The place the discrete assumption was load-bearing. A categorical score
     # is bounded above by zero; a Gaussian one is not, and a test asserting
@@ -86,6 +90,7 @@ def test_a_categorical_score_is_a_probability_and_a_gaussian_one_is_a_density() 
     assert float(narrow.log_density(torch.tensor([0.0]))[0, 0]) > 0.0
 
 
+@pytest.mark.oracle
 def test_the_categorical_m_step_is_the_normalized_expected_counts() -> None:
     rng = np.random.default_rng(11)
     observations = torch.as_tensor(rng.integers(0, 4, size=(5, 7)))
@@ -102,6 +107,7 @@ def test_the_categorical_m_step_is_the_normalized_expected_counts() -> None:
     )
 
 
+@pytest.mark.oracle
 def test_the_gaussian_m_step_is_the_posterior_weighted_mean_and_variance() -> None:
     # Checked against the closed form directly rather than only by a
     # monotonically increasing likelihood, which is a strictly stronger
@@ -121,6 +127,7 @@ def test_the_gaussian_m_step_is_the_posterior_weighted_mean_and_variance() -> No
     assert_allclose(fitted.scale.numpy(), np.sqrt(variance), rtol=1e-13)
 
 
+@pytest.mark.edge_case
 def test_a_state_collapsed_onto_one_observation_is_refused_not_clamped() -> None:
     # Clamping and returning normally is the failure this exists to prevent:
     # the caller would receive a point estimate at a degenerate optimum, and
@@ -136,6 +143,7 @@ def test_a_state_collapsed_onto_one_observation_is_refused_not_clamped() -> None
         _gaussian().reestimate(observations, posterior)
 
 
+@pytest.mark.mathematical
 def test_the_gaussian_likelihood_grows_without_bound_as_a_state_collapses() -> None:
     # The pathology exhibited rather than described. With a mean sitting on an
     # observation, the log-density at that observation is -log(sigma) plus a
@@ -159,6 +167,7 @@ def test_the_gaussian_likelihood_grows_without_bound_as_a_state_collapses() -> N
     assert_allclose(steps, np.full(steps.shape, math.log(10.0)), rtol=1e-12)
 
 
+@pytest.mark.structural
 def test_the_variance_floor_is_derived_from_the_data_and_scales_with_it() -> None:
     # `s**2 / n**2`: the spacing a state occupying a neighbourhood of the data
     # cannot fall below. Both scalings are asserted, since a floor that
@@ -174,6 +183,7 @@ def test_the_variance_floor_is_derived_from_the_data_and_scales_with_it() -> Non
     assert pooled_variance_floor(doubled) < floor / 3.0
 
 
+@pytest.mark.structural
 def test_a_floor_cannot_be_derived_without_a_scale_to_derive_it_from() -> None:
     with pytest.raises(ValueError, match="at least 2 observations"):
         pooled_variance_floor(np.array([1.0]))
@@ -181,6 +191,7 @@ def test_a_floor_cannot_be_derived_without_a_scale_to_derive_it_from() -> None:
         pooled_variance_floor(np.full(10, 2.5))
 
 
+@pytest.mark.edge_case
 def test_each_family_refuses_an_observation_outside_its_support() -> None:
     categorical = CategoricalEmission(MATRIX)
     categorical.validate(np.array([0, 3]))
@@ -193,6 +204,7 @@ def test_each_family_refuses_an_observation_outside_its_support() -> None:
         gaussian.validate(np.array([0.0, np.inf]))
 
 
+@pytest.mark.structural
 def test_each_family_says_what_distinguishes_its_states() -> None:
     # Aligning a Gaussian fit by anything but the mean would let two states
     # with different means look identical; aligning a categorical one by a
@@ -201,6 +213,7 @@ def test_each_family_says_what_distinguishes_its_states() -> None:
     assert_allclose(_gaussian().alignment_key().numpy(), MEAN.reshape(-1, 1))
 
 
+@pytest.mark.mathematical
 def test_a_categorical_draw_reproduces_the_declared_row_frequencies() -> None:
     # Monte Carlo standard error at 40000 draws from one row is at most
     # sqrt(0.25 / 40000) = 0.0025, so 0.01 is four of those.
@@ -213,6 +226,7 @@ def test_a_categorical_draw_reproduces_the_declared_row_frequencies() -> None:
     assert_allclose(frequencies, MATRIX[0], atol=0.01)
 
 
+@pytest.mark.mathematical
 def test_a_gaussian_draw_reproduces_the_declared_moments() -> None:
     # Standard error of the mean at 40000 draws is 1.25 / 200 = 0.00625 for
     # the wider state; 0.03 is under five of those, and the same bound covers
@@ -228,6 +242,7 @@ def test_a_gaussian_draw_reproduces_the_declared_moments() -> None:
         assert_allclose(block.std(ddof=1), SCALE[state], atol=0.03)
 
 
+@pytest.mark.edge_case
 def test_a_gaussian_family_refuses_parameters_it_cannot_be() -> None:
     with pytest.raises(ValueError, match="same shape"):
         GaussianEmission(np.array([0.0, 1.0]), np.array([1.0]), FLOOR)
