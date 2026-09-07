@@ -391,6 +391,9 @@ class _Counted:
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return self.inner.constrain(theta)
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return self.inner.theta_from(named)
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         self.calls += 1
         return self.inner(theta)
