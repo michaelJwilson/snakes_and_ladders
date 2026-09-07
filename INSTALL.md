@@ -114,7 +114,8 @@ running `latexmk`:
 
 ```
 sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base \
-  texlive-latex-recommended texlive-fonts-recommended texlive-science
+  texlive-latex-recommended texlive-fonts-recommended texlive-science \
+  texlive-pictures
 uv sync --locked --extra test
 infra/build_technical_doc.sh
 ```
