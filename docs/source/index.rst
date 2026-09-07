@@ -48,6 +48,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.graph
    :members:
 
+.. automodule:: snakes_and_ladders.sim.factor_graph
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.potts
    :members:
 
@@ -88,6 +91,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.belief_propagation
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.message_passing
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.hmm_paths

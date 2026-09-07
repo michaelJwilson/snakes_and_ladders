@@ -382,7 +382,7 @@ File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count304
 \l__pdf_internal_box=\box56
 )
-(/home/user/snakes_and_ladders/docs/paper.aux)
+(/home/user/wt-repoint2/docs/paper.aux)
 \openout1 = `paper.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 10.
@@ -483,13 +483,11 @@ File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman
 )
 Package hyperref Info: Link coloring OFF on input line 10.
 
-(/home/user/snakes_and_ladders/docs/paper.out)
-(/home/user/snakes_and_ladders/docs/paper.out)
+(/home/user/wt-repoint2/docs/paper.out) (/home/user/wt-repoint2/docs/paper.out)
 \@outlinefile=\write3
 \openout3 = `paper.out'.
 
 LaTeX Font Info:    Trying to load font information for U+msa on input line 12.
-
 
 (/usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
@@ -506,60 +504,60 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 (/usr/share/texlive/texmf-dist/tex/latex/microtype/mt-msb.cfg
 File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
 )
-(/home/user/snakes_and_ladders/docs/paper.toc)
+(/home/user/wt-repoint2/docs/paper.toc)
 \tf@toc=\write4
 \openout4 = `paper.toc'.
 
  [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2]
-<figures/sim_example.pdf, id=110, 433.62pt x 289.08pt>
+<figures/sim_example.pdf, id=115, 433.62pt x 289.08pt>
 File: figures/sim_example.pdf Graphic file (type pdf)
 <use figures/sim_example.pdf>
 Package pdftex.def Info: figures/sim_example.pdf  used on input line 123.
 (pdftex.def)             Requested size: 362.37569pt x 241.59486pt.
-<figures/backend_agreement.pdf, id=111, 390.25798pt x 245.718pt>
+<figures/backend_agreement.pdf, id=116, 390.25798pt x 245.718pt>
 File: figures/backend_agreement.pdf Graphic file (type pdf)
 <use figures/backend_agreement.pdf>
 Package pdftex.def Info: figures/backend_agreement.pdf  used on input line 134.
 
 (pdftex.def)             Requested size: 362.37569pt x 228.16293pt.
-<figures/opt_recovery.pdf, id=112, 390.25798pt x 303.534pt>
+<figures/opt_recovery.pdf, id=117, 390.25798pt x 303.534pt>
 File: figures/opt_recovery.pdf Graphic file (type pdf)
 <use figures/opt_recovery.pdf>
 Package pdftex.def Info: figures/opt_recovery.pdf  used on input line 151.
 (pdftex.def)             Requested size: 407.66833pt x 317.08052pt.
-<figures/opt_coverage.pdf, id=113, 390.25798pt x 245.718pt>
+<figures/opt_coverage.pdf, id=118, 390.25798pt x 245.718pt>
 File: figures/opt_coverage.pdf Graphic file (type pdf)
 <use figures/opt_coverage.pdf>
 Package pdftex.def Info: figures/opt_coverage.pdf  used on input line 159.
 (pdftex.def)             Requested size: 339.72592pt x 213.90414pt.
-<figures/search_topologies.pdf, id=114, 390.25798pt x 303.534pt>
+<figures/search_topologies.pdf, id=119, 390.25798pt x 303.534pt>
 File: figures/search_topologies.pdf Graphic file (type pdf)
 <use figures/search_topologies.pdf>
 Package pdftex.def Info: figures/search_topologies.pdf  used on input line 174.
 
 (pdftex.def)             Requested size: 362.37569pt x 281.84833pt.
  [3 <./figures/sim_example.pdf>]
-(/home/user/snakes_and_ladders/docs/paper.bbl [4 <./figures/backend_agreement.p
-df>] [5 <./figures/opt_recovery.pdf>] [6 <./figures/opt_coverage.pdf>] [7 <./fi
-gures/search_topologies.pdf>] [8]) [9]
-(/home/user/snakes_and_ladders/docs/paper.aux)
+(./figures/likelihood_footprint.tex) (/home/user/wt-repoint2/docs/paper.bbl
+[4 <./figures/backend_agreement.pdf>] [5 <./figures/opt_recovery.pdf>] [6 <./fi
+gures/opt_coverage.pdf>] [7 <./figures/search_topologies.pdf>] [8]) [9]
+(/home/user/wt-repoint2/docs/paper.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
  ***********
 Package rerunfilecheck Info: File `paper.out' has not changed.
-(rerunfilecheck)             Checksum: 8CA384C9EC601C757242654CB9399075;2709.
+(rerunfilecheck)             Checksum: 1D2D35452D80E528B47935150C54A211;2972.
  ) 
 Here is how much of TeX's memory you used:
- 13355 strings out of 476106
- 205668 string characters out of 5793934
+ 13375 strings out of 476106
+ 206069 string characters out of 5793934
  1938975 words of memory out of 5000000
- 34995 multiletter control sequences out of 15000+600000
- 573560 words of font info for 149 fonts, out of 8000000 for 9000
+ 35007 multiletter control sequences out of 15000+600000
+ 573611 words of font info for 150 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
- 79i,7n,82p,1500b,584s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 79i,9n,82p,1500b,578s stack positions out of 10000i,1000n,20000p,200000b,200000s
  </root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk></u
 sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/sha
 re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/share/tex
@@ -572,11 +570,11 @@ ic/amsfonts/cm/cmr17.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
 onts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/c
 m/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols
 /msbm10.pfb>
-Output written on /home/user/snakes_and_ladders/docs/paper.pdf (9 pages, 229816
- bytes).
+Output written on /home/user/wt-repoint2/docs/paper.pdf (9 pages, 232861 bytes)
+.
 PDF statistics:
- 298 PDF objects out of 1000 (max. 8388607)
- 220 compressed objects within 3 object streams
- 42 named destinations out of 1000 (max. 500000)
- 30858 words of extra memory for PDF output out of 35830 (max. 10000000)
+ 306 PDF objects out of 1000 (max. 8388607)
+ 228 compressed objects within 3 object streams
+ 44 named destinations out of 1000 (max. 500000)
+ 30866 words of extra memory for PDF output out of 35830 (max. 10000000)
 

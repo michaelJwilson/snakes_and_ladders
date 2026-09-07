@@ -1,4 +1,4 @@
-\begin{thebibliography}{25}
+\begin{thebibliography}{27}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -46,6 +46,12 @@ Joseph Felsenstein.
 \newblock \emph{Inferring Phylogenies}.
 \newblock Sinauer Associates, Sunderland, Massachusetts, 2004.
 
+\bibitem[Forney(2001)]{forney2001}
+G.~David Forney.
+\newblock Codes on graphs: Normal realizations.
+\newblock \emph{IEEE Transactions on Information Theory}, 47\penalty0
+  (2):\penalty0 520--548, 2001.
+
 \bibitem[Frey(1998)]{frey1998}
 Brendan~J. Frey.
 \newblock \emph{Graphical Models for Machine Learning and Digital
@@ -68,6 +74,13 @@ Wen-mei~W. Hwu, David~B. Kirk, and Izzat El~Hajj.
 Daphne Koller and Nir Friedman.
 \newblock \emph{Probabilistic Graphical Models: Principles and Techniques}.
 \newblock MIT Press, Cambridge, Massachusetts, 2009.
+
+\bibitem[Kschischang et~al.(2001)Kschischang, Frey, and
+  Loeliger]{kschischang2001}
+Frank~R. Kschischang, Brendan~J. Frey, and Hans-Andrea Loeliger.
+\newblock Factor graphs and the sum-product algorithm.
+\newblock \emph{IEEE Transactions on Information Theory}, 47\penalty0
+  (2):\penalty0 498--519, 2001.
 
 \bibitem[Lapan(2020)]{lapan2020}
 Maxim Lapan.
