@@ -10,7 +10,7 @@ finding and exits 0 regardless: this reports, it does not gate. What gates is
 ``tests/regression/test_duplication_guards.py``, which asserts the three
 findings this consolidation closed and is tested to fail on a violating input.
 
-Counts are over ``python/phylo`` only. Tests legitimately repeat structure --
+Counts are over ``python/snakes_and_ladders`` only. Tests legitimately repeat structure --
 a test that shares a helper with the code it checks is testing the helper --
 so counting them would report the suite as the defect.
 """
@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = REPO_ROOT / "python" / "phylo"
+PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ def count(pattern: str, owner: str = "") -> int:
     Returns
     -------
     int
-        Total matches over every ``.py`` file under ``python/phylo``.
+        Total matches over every ``.py`` file under ``python/snakes_and_ladders``.
     """
     compiled = re.compile(pattern, re.MULTILINE)
     return sum(

@@ -8,7 +8,7 @@ gets trapped on it, that the trap is a genuine local optimum rather than a
 truncated episode, and that the generating topology is nonetheless the
 best-scoring one -- without which a search failing would say nothing.
 
-The surface is the fixed-branch-length one `phylo.search.rl` scores
+The surface is the fixed-branch-length one `snakes_and_ladders.search.rl` scores
 (`RewardModel.KNOWN`), because that is the surface an agent optimizes and the
 one issue #178 trains against. All 945 unrooted topologies on 7 leaves are
 enumerated, so "the best topology" is an enumerated fact.
@@ -20,13 +20,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from phylo.learn.rollout import greedy_rollout
-from phylo.search.infer import MoveSet
-from phylo.search.rl import RewardModel, TopologyEnvironment
-from phylo.search.topology import Topology, enumerate_topologies
-from phylo.sim.params import SimulationParams, load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import edges
+from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.search.infer import MoveSet
+from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.topology import Topology, enumerate_topologies
+from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import edges
 
 FIXTURE = Path("tests/regression/fixtures/simulation_params_hard.yaml")
 
@@ -62,7 +62,7 @@ def alignment(params: SimulationParams) -> dict[str, np.ndarray]:
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     return dict(dataset.alignment)
@@ -102,6 +102,7 @@ def _endpoints(environment: TopologyEnvironment, seed: int) -> list[Topology]:
     ]
 
 
+@pytest.mark.oracle
 def test_the_generating_topology_is_the_enumerated_maximum(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:
@@ -112,6 +113,7 @@ def test_the_generating_topology_is_the_enumerated_maximum(
     assert environment.score(params.tau) == _enumerated_maximum(environment, alignment)
 
 
+@pytest.mark.structural
 def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     alignment: dict[str, np.ndarray],
 ) -> None:
@@ -120,6 +122,7 @@ def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     assert len(list(enumerate_topologies(sorted(alignment)))) == 945
 
 
+@pytest.mark.simulated_truth
 def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:
@@ -144,6 +147,7 @@ def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
     assert abs(float(np.median(shortfalls)) - _NNI_MEDIAN_GAP) < 10.0
 
 
+@pytest.mark.mathematical
 def test_every_nni_failure_stops_at_a_genuine_local_optimum(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:
@@ -159,6 +163,7 @@ def test_every_nni_failure_stops_at_a_genuine_local_optimum(
     assert all(environment.is_terminal(state) for state in failures)
 
 
+@pytest.mark.oracle
 def test_spr_reaches_the_optimum_where_nni_does_not(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:

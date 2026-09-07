@@ -42,18 +42,18 @@ figure_total_start=$(date +%s.%N)
 # build actually runs -- which is how the old hardcoded list came to
 # regenerate figures the document had stopped citing.
 while read -r stem; do
-  time_it "$stem" uv run python -m phylo.qa.build \
+  time_it "$stem" uv run python -m snakes_and_ladders.qa.build \
     --output-dir "$scratch" --only "$stem"
-done < <(uv run python -m phylo.qa.build --all --list)
+done < <(uv run python -m snakes_and_ladders.qa.build --all --list)
 figure_total_end=$(date +%s.%N)
 printf '%-24s %8.1f\n' "ALL FIGURES" \
   "$(echo "$figure_total_end - $figure_total_start" | bc)"
 
 echo
 echo "=== cited-only selection (what a pull request rebuilds) ==="
-uv run python -m phylo.qa.build --list | tr '\n' ' '
+uv run python -m snakes_and_ladders.qa.build --list | tr '\n' ' '
 echo
-time_it "cited figures" uv run python -m phylo.qa.build \
+time_it "cited figures" uv run python -m snakes_and_ladders.qa.build \
   --output-dir "$scratch"
 
 echo

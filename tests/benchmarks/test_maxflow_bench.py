@@ -15,10 +15,10 @@ import sys
 
 import numpy as np
 import pytest
-from phylo.search import maxflow_rust
-from phylo.search.maxflow import ising_ground_state
-from phylo.sim.graph import BoundaryCondition, lattice_graph
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.search import maxflow_rust
+from snakes_and_ladders.search.maxflow import ising_ground_state
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
 # The Python blocking flow recurses to the depth of the level graph; the Rust
 # one uses an explicit stack. This raise is itself part of what the port buys.

@@ -15,7 +15,7 @@ produces them or in `STATUS.md`.
 ## What lives here
 
 `tex/` is the document, its bibliography, and the figures, tables and captions
-`phylo.qa` generates; a table ships as a fragment the document includes rather
+`snakes_and_ladders.qa` generates; a table ships as a fragment the document includes rather
 than as an image, so it matches the surrounding type. `source/` is Sphinx,
 built from the docstrings. `nb/` is one notebook per problem class, each
 running the application from a seeded fixture to a learned policy against

@@ -38,12 +38,12 @@ extension:
 pip install .
 ```
 
-This makes `phylo.oxiphylo` importable from Python: `double`, an example
+This makes `snakes_and_ladders.oxi_snakes_and_ladders` importable from Python: `double`, an example
 binding; `pruning_log_likelihood`, the Rust CPU Felsenstein pruning backend
-behind `phylo.likelihood.pruning_rust`; `sample_rows`, the categorical
-sampler behind `phylo.numerics_rust`, which `phylo.sim` and `phylo.opt` draw
+behind `snakes_and_ladders.likelihood.pruning_rust`; `sample_rows`, the categorical
+sampler behind `snakes_and_ladders.numerics_rust`, which `snakes_and_ladders.sim` and `snakes_and_ladders.opt` draw
 their fixtures through; and `max_flow` with `ising_ground_state`, the
-minimum-cut kernels behind `phylo.search.maxflow_rust`. Reinstall after
+minimum-cut kernels behind `snakes_and_ladders.search.maxflow_rust`. Reinstall after
 editing anything under `src/`; the compiled module does not rebuild itself.
 
 ## Running the tests
@@ -61,7 +61,7 @@ cargo bench # Rust: Criterion benchmarks (benches/)
 gate, including coverage:
 
 ```
-pytest --cov=phylo --cov-report=term-missing --cov-fail-under=90
+pytest --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
 ```
 
 ## Checks CI will run
@@ -108,7 +108,7 @@ matching CI, so a broken docstring or cross-reference fails locally rather
 than in review.
 
 The technical document — the scientific background, equations, and algorithms
-— is LaTeX under `docs/tex/`. Eleven `phylo.qa` scripts render the figures and
+— is LaTeX under `docs/tex/`. Eleven `snakes_and_ladders.qa` scripts render the figures and
 tables it includes, so building it regenerates those first rather than only
 running `latexmk`:
 

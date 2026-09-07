@@ -2,7 +2,7 @@
 
 The strongest test here is a *reduction*, not an enumeration. At two labels a
 single expansion offers every site the only other label, so alpha expansion is
-not an approximation at all --- it must reproduce `phylo.search.maxflow`'s
+not an approximation at all --- it must reproduce `snakes_and_ladders.search.maxflow`'s
 exact minimum cut, energy for energy. That pins the multi-label construction
 against something independently validated, and it is what caught the two
 errors this module was written with: the terminal capacities were swapped, and
@@ -25,16 +25,16 @@ import sys
 
 import numpy as np
 import pytest
-from phylo.search.alpha_expansion import (
+from snakes_and_ladders.search.alpha_expansion import (
     UNIFORM_POTTS_BOUND,
     alpha_expansion,
     energy,
     expand,
     iterated_conditional_modes,
 )
-from phylo.search.maxflow import energy as binary_energy
-from phylo.search.maxflow import ising_ground_state
-from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.search.maxflow import energy as binary_energy
+from snakes_and_ladders.search.maxflow import ising_ground_state
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 sys.setrecursionlimit(50_000)
 
@@ -46,6 +46,7 @@ def _enumerated(graph: PottsGraph, field_values: np.ndarray, n_states: int) -> f
     )
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(2, 2), (3, 3), (4, 3)])
 @pytest.mark.parametrize("coupling", [0.0, 0.5, 1.5])
 def test_two_labels_reproduce_the_exact_minimum_cut(
@@ -67,6 +68,7 @@ def test_two_labels_reproduce_the_exact_minimum_cut(
         assert realized == pytest.approx(exact, abs=1e-9)
 
 
+@pytest.mark.oracle
 def test_the_multi_state_energy_agrees_with_the_two_state_one() -> None:
     # The generalization must reduce to what `maxflow` already validates, or
     # the two modules are optimizing different objectives accurately.
@@ -82,6 +84,7 @@ def test_the_multi_state_energy_agrees_with_the_two_state_one() -> None:
         )
 
 
+@pytest.mark.mathematical
 def test_the_energy_never_rises_across_an_expansion() -> None:
     # An invariant that needs no oracle, and the one a sign error in the
     # construction breaks immediately. Checked move by move rather than only
@@ -100,6 +103,7 @@ def test_the_energy_never_rises_across_an_expansion() -> None:
             previous = current
 
 
+@pytest.mark.structural
 def test_the_cycle_terminates_well_inside_its_cap() -> None:
     # Termination follows from monotonicity over a finite state space, so
     # reaching the cap would be a defect rather than a budget. Measured: two
@@ -113,6 +117,7 @@ def test_the_cycle_terminates_well_inside_its_cap() -> None:
         assert result.cycles <= 6
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize("coupling", [0.3, 0.8, 1.5, 3.0])
 def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None:
     # The bound is `2 c_max / c_min`, exactly 2 for a uniform coupling. It is
@@ -143,6 +148,7 @@ def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None
         assert achieved <= 1.0 + 1e-9
 
 
+@pytest.mark.simulated_truth
 def test_expansion_beats_single_site_descent_past_enumeration() -> None:
     # Where the move set earns its complexity. At the sizes enumeration
     # reaches, the two are indistinguishable -- 3x3 with three labels had both
@@ -158,13 +164,16 @@ def test_expansion_beats_single_site_descent_past_enumeration() -> None:
 
         expansion = alpha_expansion(graph, field_values, 4).energy
         descent = min(
-            iterated_conditional_modes(graph, field_values, 4, seed)[1]
+            iterated_conditional_modes(
+                graph, field_values, 4, np.random.default_rng(seed)
+            )[1]
             for seed in range(8)
         )
 
         assert expansion < descent
 
 
+@pytest.mark.mathematical
 def test_single_site_descent_settles_at_a_local_minimum() -> None:
     # The baseline has to be a fair one: if it stopped early, beating it would
     # say nothing. On termination no single site can improve, which is the
@@ -173,7 +182,9 @@ def test_single_site_descent_settles_at_a_local_minimum() -> None:
     graph = lattice_graph((5, 5), BoundaryCondition.OPEN, 0.9)
     field_values = rng.normal(size=(graph.n_nodes, 3))
 
-    labelling, settled = iterated_conditional_modes(graph, field_values, 3, 1)
+    labelling, settled = iterated_conditional_modes(
+        graph, field_values, 3, np.random.default_rng(1)
+    )
 
     for node in range(graph.n_nodes):
         for label in range(3):
@@ -183,6 +194,8 @@ def test_single_site_descent_settles_at_a_local_minimum() -> None:
             assert energy(graph, field_values, candidate) >= settled - 1e-12
 
 
+@pytest.mark.edge_case
+@pytest.mark.oracle
 def test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term() -> None:
     # With no bonds the sites decouple and the optimum is `argmax` per node,
     # so the answer is known without enumerating or cutting anything.
@@ -195,6 +208,7 @@ def test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term() -> None:
     np.testing.assert_array_equal(result.labelling, field_values.argmax(axis=1))
 
 
+@pytest.mark.edge_case
 def test_a_dominant_coupling_drives_every_site_to_one_label() -> None:
     # The opposite corner: a coupling large enough that any disagreement costs
     # more than the whole field can repay, so the optimum is constant and
@@ -209,6 +223,7 @@ def test_a_dominant_coupling_drives_every_site_to_one_label() -> None:
     assert int(result.labelling[0]) == int(field_values.sum(axis=0).argmax())
 
 
+@pytest.mark.edge_case
 def test_a_negative_coupling_is_refused() -> None:
     # The metric condition the bound rests on. Without it the pairwise term is
     # not a metric, the binary sub-problem is not submodular, and the cut does
@@ -219,6 +234,7 @@ def test_a_negative_coupling_is_refused() -> None:
         alpha_expansion(graph, np.zeros(3), 3)
 
 
+@pytest.mark.edge_case
 def test_an_already_optimal_start_makes_no_moves() -> None:
     # Zero moves is information rather than a failure: it says the starting
     # labelling was already expansion-optimal, which is what the run reports.

@@ -1,1 +1,1 @@
-"""Regression tests for `phylo.qa`."""
+"""Regression tests for `snakes_and_ladders.qa`."""

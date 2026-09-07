@@ -1,11 +1,11 @@
-"""Regression tests for :mod:`phylo.sim.potts`.
+"""Regression tests for :mod:`snakes_and_ladders.sim.potts`.
 
 Two independent oracles, for the two regimes the module supports. On the
 loopy 3x3 lattice, exhaustive enumeration over every ``k ** n_nodes``
 configuration gives the exact partition function and the exact single-site
 and pairwise marginals -- a computation that shares no code with the Gibbs
 sampler under test. On the open chain, the exact sampler is checked by
-reduction: it must reproduce ``phylo.opt.potts.log_partition``'s
+reduction: it must reproduce ``snakes_and_ladders.opt.potts.log_partition``'s
 transfer-matrix ``log Z`` to machine precision, since both claim to describe
 the same distribution by different routes.
 """
@@ -19,9 +19,9 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.opt.potts import log_partition
-from phylo.sim.graph import BoundaryCondition, lattice_graph
-from phylo.sim.potts import load_potts_lattice_params, simulate_potts
+from snakes_and_ladders.opt.potts import log_partition
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import load_potts_lattice_params, simulate_potts
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -73,6 +73,7 @@ def _enumerate_lattice(
     return log_z, single_site, pair_marginals
 
 
+@pytest.mark.oracle
 def test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice() -> None:
     params = load_potts_lattice_params(FIXTURE)
     graph = lattice_graph(
@@ -87,7 +88,7 @@ def test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice() -> 
     dataset = simulate_potts(
         graph,
         params.field,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_samples=params.n_samples,
         burn_in=params.burn_in,
     )
@@ -108,6 +109,7 @@ def test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice() -> 
         assert_allclose(observed_pair, expected_pairs[edge], atol=params.tolerance)
 
 
+@pytest.mark.oracle
 def test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size() -> None:
     # An independent confirmation at a different (n_states, shape) than the
     # fixture, per the issue's own two named sizes: 2-state 4x4 is 65,536
@@ -118,7 +120,9 @@ def test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size() -> No
         graph.n_nodes, graph.edges, graph.coupling, field
     )
 
-    dataset = simulate_potts(graph, field, seed=20260904, n_samples=1500, burn_in=200)
+    dataset = simulate_potts(
+        graph, field, rng=np.random.default_rng(20260904), n_samples=1500, burn_in=200
+    )
     configurations = dataset.configurations
 
     observed_single = np.zeros((graph.n_nodes, 2))
@@ -136,16 +140,17 @@ def test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size() -> No
     assert_allclose(observed_pair, expected_pairs[edge], atol=0.06)
 
 
+@pytest.mark.oracle
 def test_the_open_chain_path_reproduces_the_transfer_matrix_log_z() -> None:
     # A reduction to an exact result, not sampler-vs-sampler agreement: the
-    # same distribution described by phylo.opt.potts's transfer matrix and
+    # same distribution described by snakes_and_ladders.opt.potts's transfer matrix and
     # by the backward-message sampler this module generalizes it from.
     coupling, length, n_states = 0.75, 10, 3
     field = np.array([0.4, -0.1, -0.3])
     graph = lattice_graph((length,), boundary=BoundaryCondition.OPEN, coupling=coupling)
     assert graph.is_open_chain()
 
-    dataset = simulate_potts(graph, field, seed=1, n_samples=4000)
+    dataset = simulate_potts(graph, field, rng=np.random.default_rng(1), n_samples=4000)
     observed = (
         np.bincount(dataset.configurations.ravel(), minlength=n_states)
         / dataset.configurations.size
@@ -178,6 +183,7 @@ def test_the_open_chain_path_reproduces_the_transfer_matrix_log_z() -> None:
     assert_allclose(observed, expected_single.mean(axis=0), atol=0.03)
 
 
+@pytest.mark.structural
 def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     # A shape/alphabet check needs no equilibration, so it runs at a tiny
     # burn-in and sample count rather than the fixture's full,
@@ -187,26 +193,40 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
         params.shape, boundary=params.boundary, coupling=params.coupling
     )
     dataset = simulate_potts(
-        graph, params.field, seed=params.seed, n_samples=20, burn_in=5
+        graph,
+        params.field,
+        rng=np.random.default_rng(params.seed),
+        n_samples=20,
+        burn_in=5,
     )
     assert dataset.configurations.shape == (20, graph.n_nodes)
     assert set(np.unique(dataset.configurations)) <= set(range(params.n_states))
 
 
+@pytest.mark.structural
 def test_simulation_is_reproducible_from_the_seed() -> None:
     params = load_potts_lattice_params(FIXTURE)
     graph = lattice_graph(
         params.shape, boundary=params.boundary, coupling=params.coupling
     )
     first = simulate_potts(
-        graph, params.field, seed=params.seed, n_samples=20, burn_in=5
+        graph,
+        params.field,
+        rng=np.random.default_rng(params.seed),
+        n_samples=20,
+        burn_in=5,
     )
     second = simulate_potts(
-        graph, params.field, seed=params.seed, n_samples=20, burn_in=5
+        graph,
+        params.field,
+        rng=np.random.default_rng(params.seed),
+        n_samples=20,
+        burn_in=5,
     )
     assert np.array_equal(first.configurations, second.configurations)
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("replace", "with_", "message"),
     [
@@ -226,6 +246,7 @@ def test_a_malformed_fixture_is_refused(
         load_potts_lattice_params(path)
 
 
+@pytest.mark.edge_case
 def test_a_missing_field_is_refused(tmp_path: Path) -> None:
     text = "\n".join(
         line

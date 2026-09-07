@@ -23,14 +23,14 @@ import math
 import numpy as np
 import pytest
 import torch
-from phylo.likelihood.objective import (
+from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from phylo.sim.gtr import gtr_rate_matrix
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
-from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.sim.gtr import gtr_rate_matrix
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 # ROADMAP.md's stated size, and a site count in the range the same document
 # assumes for the memory bound.
@@ -75,7 +75,9 @@ def _topology(n_taxa: int) -> Node:
 def objective() -> BranchLengthObjective:
     tau = _topology(_TAXA)
     pi = np.full(4, 0.25)
-    dataset = simulate_alignment(tau=tau, k=4, pi=pi, seed=_SEED, n_sites=_SITES)
+    dataset = simulate_alignment(
+        tau=tau, k=4, pi=pi, rng=np.random.default_rng(_SEED), n_sites=_SITES
+    )
     return BranchLengthObjective(tau, 4, pi, dict(dataset.alignment))
 
 
@@ -120,7 +122,12 @@ def test_general_model_gradient_update_at_roadmap_scale(
     pi = np.full(4, 0.25)
     rate = gtr_rate_matrix(np.array([1.6, 0.4, 0.9, 0.7, 2.1, 1.0]), pi)
     dataset = simulate_alignment(
-        tau=tau, k=4, pi=pi, seed=_SEED, n_sites=_SITES, rate_matrix=rate
+        tau=tau,
+        k=4,
+        pi=pi,
+        rng=np.random.default_rng(_SEED),
+        n_sites=_SITES,
+        rate_matrix=rate,
     )
     objective = SubstitutionModelObjective(tau, 4, dict(dataset.alignment))
     theta = objective.initial()

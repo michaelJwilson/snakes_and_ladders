@@ -15,9 +15,12 @@ import sys
 
 import numpy as np
 import pytest
-from phylo.search.alpha_expansion import alpha_expansion, iterated_conditional_modes
-from phylo.sim.graph import BoundaryCondition, lattice_graph
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.search.alpha_expansion import (
+    alpha_expansion,
+    iterated_conditional_modes,
+)
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
 sys.setrecursionlimit(50_000)
 
@@ -50,6 +53,12 @@ def test_single_site_descent_benchmark(
 ) -> None:
     graph, field_values = _problem(extent, n_states)
 
-    _, energy = benchmark(iterated_conditional_modes, graph, field_values, n_states, 1)
+    _, energy = benchmark(
+        iterated_conditional_modes,
+        graph,
+        field_values,
+        n_states,
+        np.random.default_rng(1),
+    )
 
     assert np.isfinite(energy)

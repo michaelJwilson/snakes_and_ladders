@@ -14,9 +14,9 @@ __pycache__/
 .ruff_cache/
 
 # In-place compiled extension from `pip install -e .`
-python/phylo/*.so
-python/phylo/*.pyd
-python/phylo/*.dylib
+python/snakes_and_ladders/*.so
+python/snakes_and_ladders/*.pyd
+python/snakes_and_ladders/*.dylib
 
 # Sphinx build output
 docs/_build/
