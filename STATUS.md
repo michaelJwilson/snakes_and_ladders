@@ -39,11 +39,13 @@ documents that describe it.
 
 Ten required checks gate a merge, and three of them do work no reviewer can
 do by inspection: the technical-document job rebuilds only the QA figures
-`docs/tex/main.tex` cites, comparing the rest at the release gate instead
+the documents under `docs/tex/` cite, comparing the rest at the release gate instead
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
-request whose rebuilt `docs/draft.pdf` differs from the committed one
+request whose rebuilt `docs/paper.pdf` or `docs/textbook.pdf` differs from the committed one
 ([#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72)); the notebooks job
-re-executes every notebook under `docs/nb/` and fails one whose printed
+re-executes every notebook under `docs/nb/`, fails one whose Further work
+section is missing or names no ticket
+([#278](https://github.com/michaelJwilson/snakes_and_ladders/issues/278)), and fails one whose printed
 output has moved; and the coverage floor cannot be lowered to pass a change. Cost is managed rather than absorbed:
 benchmarks run only when the diff touches code they measure, and the
 release-gated suite is excluded per pull request — measured at 138 s over 540
@@ -486,6 +488,29 @@ and the posterior standard deviation was 12% low, because divergent
 trajectories are rejected preferentially in the tails. Acceptance rate does
 not detect it; `max |dH|` tracks it monotonically.
 
+**A fourth-order integrator lands, and loses.** Yoshida's (1990) triple jump
+joins leapfrog as a selectable symplectic integrator, both expressed as
+compositions of the same kick-drift-kick sub-step so there is one
+implementation rather than two
+([#266](https://github.com/michaelJwilson/snakes_and_ladders/issues/266)). The
+orders are measured rather than claimed, as the ratio by which halving the
+step divides the energy error: leapfrog realizes 3.999, 4.000, 4.000, 4.000,
+4.000 against a predicted 4, and Yoshida 16.310, 16.077, 16.019, 16.005,
+16.001 against a predicted 16 — converging rather than drifting, which is what
+makes it an order and not a coincidence at one step size.
+
+**It is slower anyway, and the mechanism is worth recording.** A higher-order
+method pays where the step is limited by *accuracy*; here it is limited by
+*stability*. Yoshida's middle sub-step runs backwards in time with
+`|w0| = 1.70` times the nominal step, so its stability limit in the step size
+is about 0.59 of leapfrog's — measured at 0.0333 against 0.0500, a ratio of
+1.50 against the 1.70 the coefficient predicts. With three force evaluations
+per step on top, the order advantage is spent twice over. At equal
+acceptance on the Potts posterior, leapfrog reaches 0.855 at **21** gradient
+evaluations per trajectory while Yoshida needs **91** to reach 0.975 and
+accepts *nothing* at 61; on the analytic Gaussian it is 3 against 7. The
+default does not move.
+
 **Where a fit starts is now the caller's to choose, and multi-start is
 measured rather than assumed.** `Objective.initial()` was already the seam;
 what went through it was one fixed constant per objective.
@@ -744,6 +769,38 @@ ratio measured against it optimistic. That is asserted rather than glossed: on
 a complete bipartite graph, whose maximum cut is exactly `|E|`, the ratio
 comes out slightly **above 1** — impossible for an exact solve, and the
 measurable evidence of what the certificate does and does not cover.
+
+**Temperature is one object, and it lives where all three consumers can reach
+it.** `snakes_and_ladders.opt.schedule` carries the schedules — constant, linear,
+geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
+and checked against it to 1e-12 (1e-10 for the cosine, whose torch form is a
+recursion) — with both endpoints reached *exactly* at the declared steps, and
+a step past the end refused rather than clamped
+([#267](https://github.com/michaelJwilson/snakes_and_ladders/issues/267)). The
+Potts sampler takes a temperature as model scaling, which the model makes an
+exact statement: the tempered energies equal the energies over `T` with a
+deviation of **0.0**, and every move set's chain at `T = 2` and `T = 0.5` in a
+field passes the chi-square against `exp(-E/T)` enumerated from the unscaled
+model (p-values 0.016 to 0.89 at the 0.001 significance). The Hamiltonian
+sampler takes it as the momentum's variance — the tempered dynamics are the
+untempered ones in rescaled time, so the integrator is untouched — and on the
+analytic Gaussian a chain at `T` is the chain at 1 with its deviations scaled
+by `sqrt(T)` **draw for draw to 1e-10**. At `T = 1` every operation is the
+identity bitwise, and the 31 existing HMC and 13 Potts tests pass untouched.
+
+**Annealing is the sampler on a schedule, and the first instance is a wash.**
+`anneal_potts` and `hmc.anneal` run one sweep or one proposal per schedule
+step and return the best state seen. On the 9×9 periodic triangular
+antiferromagnet, whose ground-state energy is a closed form, geometric
+annealing from `T = 2` to `0.05` over 200 sweeps reaches it **20/20** against
+single-site descent's **2/20** and a constant `T = 1` control's **7/20** — the
+schedule, not the wandering. But descent converges in 2.6 sweeps, so the same
+200 sweeps buy 78 restarts, and the best of 78 also reaches it 20/20. On
+Rastrigin, annealed Hamiltonian proposals reach the global basin 7/20 at 11,000
+gradients against a single fit's 1/20 at a few dozen; at equal gradients
+restarts would win by the same arithmetic. Neither is a default; the
+comparison at equal evaluations on instances where restarts might lose, and
+parallel tempering with its swap oracle, are the ticket's second pull request.
 
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter

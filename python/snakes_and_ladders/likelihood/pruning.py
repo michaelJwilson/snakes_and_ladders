@@ -1,7 +1,8 @@
 """Vectorized NumPy Felsenstein pruning -- the oracle every backend is pinned against.
 
 Implements the pruning recursion, eq. (pruning), and the root marginalization,
-eq. (root), of ``docs/tex/main.tex`` (Sec. "Pruning"): the site log-likelihood
+eq. (pruning) of ``docs/tex/textbook.tex`` (Sec. "The algorithm: pruning"):
+the site log-likelihood
 is computed post-order over ``(site, state)`` NumPy arrays, reusing
 ``snakes_and_ladders.sim.jc.jc_transition_probabilities`` for P(t). Partial likelihoods
 underflow for realistic (site, taxa) counts, so they are rescaled per node
@@ -48,7 +49,8 @@ def log_likelihood(
         ``snakes_and_ladders.sim.simulate.SimulatedDataset.alignment`` produces.
     rescale : bool
         Whether to rescale partial likelihoods per node, accumulating the log
-        of the scale factor separately (docs/tex/main.tex, Sec. "Pruning").
+        of the scale factor separately (docs/tex/textbook.tex, Sec. "The algorithm:
+        pruning").
         Disabling this underflows for realistic (site, taxa) sizes; it exists
         so tests can check the two paths agree on small problems where both
         run.

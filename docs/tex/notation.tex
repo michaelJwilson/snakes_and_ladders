@@ -1,0 +1,43 @@
+% Shared notation for every document in this directory.
+%
+% One definition per symbol, input by both the paper and the textbook, so a
+% symbol cannot mean two things in two places (issue #249). A document that
+% needs a symbol adds it here rather than defining its own; the notation table
+% in the textbook is generated from this list by hand and reviewed against it.
+
+% --- Structures ----------------------------------------------------------
+\newcommand{\tree}{\mathcal{T}}          % a tree topology
+\newcommand{\graph}{\mathcal{G}}         % a general undirected graph
+\newcommand{\states}{\mathcal{A}}        % the state alphabet
+\newcommand{\rootnode}{\rho}             % the root of a rooted tree
+\newcommand{\neighbourhood}{\mathcal{N}} % a discrete move neighbourhood
+
+% --- Continuous parameters ------------------------------------------------
+\newcommand{\Q}{\mathbf{Q}}              % a rate matrix
+\newcommand{\Pmat}{\mathbf{P}}           % a transition probability matrix
+\newcommand{\SubMat}{\mathbf{S}}         % a symmetric exchangeability matrix
+\newcommand{\bpi}{\boldsymbol{\pi}}      % a stationary or initial distribution
+\newcommand{\branch}{\boldsymbol{\tau}}  % branch lengths
+\newcommand{\params}{\boldsymbol{\theta}}% unconstrained parameters
+\newcommand{\constrained}{\phi}          % the constraint map
+
+% --- Data and objectives --------------------------------------------------
+\newcommand{\data}{\mathbf{D}}           % observed data
+\newcommand{\objective}{\mathcal{L}}     % the scalar being optimized
+\newcommand{\energy}{H}                  % a Hamiltonian
+\newcommand{\hidden}{\mathbf{Z}}         % a hidden state path
+\newcommand{\emission}{\mathcal{E}}      % an emission family
+
+% --- Reading a generated caption -----------------------------------------
+% The captions under figures/ are written by the QA build, never by hand
+% (docs/CLAUDE.md). This reads one in so a document quotes it rather than
+% restating it.
+\newread\qacaptionfile
+\newcommand{\qacaptionread}[2]{%
+  \begingroup
+  \endlinechar=-1
+  \openin\qacaptionfile=#1\relax
+  \global\read\qacaptionfile to #2
+  \closein\qacaptionfile
+  \endgroup
+}

@@ -10,7 +10,7 @@ differentiates through. ``Node.branch_length`` is never read by
 ``log_likelihood``.
 
 JC transition probabilities default to the closed form of eq. (jc) in
-``docs/tex/main.tex``, built from ``torch.exp`` so the branch length stays
+``docs/tex/textbook.tex``, built from ``torch.exp`` so the branch length stays
 in the graph. Passing ``rate_matrix`` switches to the general
 ``torch.linalg.matrix_exp(Q * t)`` path -- the same path a fitted, non-JC
 rate matrix would use -- and must agree with the closed form when ``Q`` is
@@ -86,7 +86,7 @@ def branch_lengths_from_tree(
 
 
 def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
-    """Closed-form JC P(t) (eq. (jc) of ``docs/tex/main.tex``), differentiable in ``t``."""
+    """Closed-form JC P(t) (``docs/tex/textbook.tex``), differentiable in ``t``."""
     decay = torch.exp(-k * t / (k - 1))
     off_diagonal = (1.0 - decay) / k
     diagonal = 1.0 / k + (k - 1) / k * decay

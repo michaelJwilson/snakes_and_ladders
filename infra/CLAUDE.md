@@ -18,6 +18,11 @@ and is principle: `DEV.md` holds the CI budget, the repository settings and
 the CI jobs, including the size caps that keep an exact oracle available, and
 is not restated here.
 
+A run is read back from its log, so every line an entry point writes carries
+the elapsed time and the phase the run was in; libraries emit through the
+standard logger and never configure it, entry points configure it once.
+`DEV.md` shows the line and names the module.
+
 ## Tickets and the approval flow
 
 - **Priorities.** `high` runs immediately; `medium` runs at the next

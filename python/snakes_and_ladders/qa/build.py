@@ -1,6 +1,6 @@
 """Regenerate QA figures, selected by what the technical document cites.
 
-Per pull request, only the figures ``docs/tex/main.tex`` includes need
+Per pull request, only the figures the documents under ``docs/tex/`` include need
 rebuilding: those are the ones a change could make stale in the committed
 document, and regenerating the rest cost most of the ``technical-doc`` job
 while proving nothing about it (issue #154).
@@ -23,9 +23,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
+from snakes_and_ladders.log import get_logger, phase
 from snakes_and_ladders.qa.manifest import (
     FIGURES,
     FigureSpec,
@@ -46,7 +48,15 @@ SOURCE_DATE_EPOCH = "1735689600"
 # locate the document and the committed figures relative to this file. An
 # installed copy has neither, and nothing in the shipped package imports this.
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_MAIN_TEX = REPO_ROOT / "docs" / "tex" / "main.tex"
+#: The documents the repository builds, in build order. Plural since issue
+#: #249: the paper carries the results and the textbook the algorithms, and
+#: the per-pull-request figure selection is the union of what they cite --- a
+#: selection taken from one of them alone would stop regenerating the other's
+#: figures without failing anything.
+DEFAULT_DOCUMENTS = (
+    REPO_ROOT / "docs" / "tex" / "paper.tex",
+    REPO_ROOT / "docs" / "tex" / "textbook.tex",
+)
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "docs" / "tex" / "figures"
 
 
@@ -55,14 +65,16 @@ class UncitedFigureError(RuntimeError):
 
 
 def selected(
-    main_tex: Path, every: bool, only: Sequence[str] = ()
+    documents: Sequence[Path], every: bool, only: Sequence[str] = ()
 ) -> tuple[FigureSpec, ...]:
     """Choose the figures to regenerate.
 
     Parameters
     ----------
-    main_tex : Path
-        The document whose citations drive the per-PR selection.
+    documents : Sequence[Path]
+        The documents whose citations drive the per-PR selection, taken
+        together. Every document the repository builds belongs here: one
+        left out is a figure set that is silently too small.
     every : bool
         Select the whole manifest instead, as the release gate does.
     only : Sequence[str]
@@ -77,7 +89,7 @@ def selected(
     Raises
     ------
     UncitedFigureError
-        If the document cites a stem the manifest does not know, or ``only``
+        If a document cites a stem the manifest does not know, or ``only``
         names one. Silently skipping it would leave a figure in the document
         that no build regenerates, which is the failure this whole selection
         risks and so the one it must refuse.
@@ -90,12 +102,14 @@ def selected(
         return select(only)
     if every:
         return FIGURES
-    cited = cited_stems(main_tex)
+    cited = cited_stems(*documents)
     missing = unknown_stems(cited)
     if missing:
+        names = ", ".join(str(document) for document in documents)
         msg = (
-            f"{main_tex} cites {sorted(missing)}, which no snakes_and_ladders.qa.manifest "
-            f"entry renders; add an entry or correct the reference"
+            f"{names} cite {sorted(missing)}, which no "
+            f"snakes_and_ladders.qa.manifest entry renders; add an entry or "
+            f"correct the reference"
         )
         raise UncitedFigureError(msg)
     return select(cited)
@@ -158,7 +172,18 @@ def main(argv: list[str] | None = None) -> int:
         ``0`` on success; ``1`` if ``--check`` found a stale figure.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--main-tex", type=Path, default=DEFAULT_MAIN_TEX)
+    parser.add_argument(
+        "--document",
+        type=Path,
+        action="append",
+        default=[],
+        dest="documents",
+        metavar="TEX",
+        help=(
+            "a LaTeX source whose citations drive the selection; repeatable, "
+            "and every document the repository builds should be given"
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument(
         "--all",
@@ -185,33 +210,37 @@ def main(argv: list[str] | None = None) -> int:
         help="print the selected stems and exit",
     )
     args = parser.parse_args(argv)
+    log = get_logger(__name__, start_time=time.time())
 
-    specs = selected(args.main_tex, args.every, args.only)
+    specs = selected(args.documents or list(DEFAULT_DOCUMENTS), args.every, args.only)
 
     if args.list_only:
+        # Output, not a log line: the release script reads the stems.
         for spec in specs:
             print(spec.stem)
         return 0
 
     if not args.check:
         for spec in specs:
-            render(spec, args.output_dir)
+            with phase(f"render {spec.stem}"):
+                render(spec, args.output_dir)
         return 0
 
     with tempfile.TemporaryDirectory() as tmp:
         rebuilt_dir = Path(tmp)
         for spec in specs:
-            render(spec, rebuilt_dir)
-        stale = compare(rebuilt_dir, args.output_dir)
+            with phase(f"render {spec.stem}"):
+                render(spec, rebuilt_dir)
+        with phase("compare"):
+            stale = compare(rebuilt_dir, args.output_dir)
 
     if stale:
-        print(
-            f"stale QA figures: {', '.join(stale)} -- "
-            f"run infra/build_technical_doc.sh and commit the result",
-            file=sys.stderr,
+        log.error(
+            "stale QA figures: %s -- run infra/build_technical_doc.sh and commit the result",
+            ", ".join(stale),
         )
         return 1
-    print(f"{len(specs)} QA figures match the committed output")
+    log.info("%d QA figures match the committed output", len(specs))
     return 0
 
 
