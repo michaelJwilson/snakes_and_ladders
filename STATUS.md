@@ -508,6 +508,27 @@ search, keyed on its leaf bipartitions. The fit is the only unit worth
 counting: one candidate fit measures 213 ms against 22 us to generate an
 entire NNI neighbourhood, a factor of about 10 000.
 
+**A discrete result now states how sure it is**
+([#270](https://github.com/michaelJwilson/snakes_and_ladders/issues/270)).
+`search.support` reports three quantities and names which: the
+*neighbourhood* weight of the returned tree among itself and its neighbours
+under a move set, with the margin over the best neighbour beside it; the
+*enumerated* weight over every topology, the exact flat-prior posterior over
+maximized likelihoods where `(2n-5)!!` fits; and Felsenstein's *bootstrap*,
+per internal split, over site-resampled searches. The first is held to the
+second: equal to 1e-9 at four taxa under NNI, where the neighbourhood is the
+whole space, and at five taxa never smaller than it on any of the 15
+topologies, with the best tree's NNI margin equal to its enumerated margin.
+The bootstrap is held to its definition — a frequency over the returned
+topology's internal splits, reproducible from its generator — and gives the
+generating splits support of at least 0.8 at 1,000 sites. The exact weight is
+calibrated: over 24 NNI searches on the five-taxon fixture at 30 to 300
+sites, the fraction of returned trees equal to the generating one does not
+fall from one support bin to the next. Each weight is over *maximized*
+likelihoods under a flat prior over topologies and is named so, not called a
+posterior; a tempered ensemble over topologies, which would give a marginal
+one, does not exist.
+
 **The accuracy requirement's first half is met.** Normalized Robinson-Foulds
 distance from the inferred to the generating topology is met at the 0.05 bound
 from 125 sites upward, with 8 of 8 replicates recovering the topology exactly at
