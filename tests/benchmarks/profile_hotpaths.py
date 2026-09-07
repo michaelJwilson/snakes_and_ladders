@@ -72,7 +72,9 @@ def profile_sim(n_sites: int) -> str:
     pi = np.full(4, 0.25)
 
     def _run() -> None:
-        simulate_alignment(tau, k=4, pi=pi, seed=1, n_sites=n_sites)
+        simulate_alignment(
+            tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
+        )
 
     return self_time_ranking(_run, repeats=5)
 
@@ -102,10 +104,18 @@ def profile_search_hill_climb(n_sites: int) -> str:
     """
     tau = _branched(6, seed=2)
     pi = np.full(4, 0.25)
-    dataset = simulate_alignment(tau, k=4, pi=pi, seed=3, n_sites=n_sites)
+    dataset = simulate_alignment(
+        tau, k=4, pi=pi, rng=np.random.default_rng(3), n_sites=n_sites
+    )
 
     def _run() -> None:
-        infer(dataset.alignment, k=4, seed=4, moves=MoveSet.NNI, max_evaluations=20)
+        infer(
+            dataset.alignment,
+            k=4,
+            rng=np.random.default_rng(4),
+            moves=MoveSet.NNI,
+            max_evaluations=20,
+        )
 
     return self_time_ranking(_run, repeats=1)
 

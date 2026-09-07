@@ -250,7 +250,7 @@ def iterated_conditional_modes(
     graph: PottsGraph,
     field_values: np.ndarray,
     n_states: int,
-    seed: int,
+    rng: np.random.Generator,
     *,
     max_sweeps: int = 200,
 ) -> tuple[np.ndarray, float]:
@@ -274,7 +274,6 @@ def iterated_conditional_modes(
         The labelling it settles on, and its energy.
     """
     values = _site_field(graph, field_values)
-    rng = np.random.default_rng(seed)
     labelling = rng.integers(0, n_states, size=graph.n_nodes)
 
     neighbours: list[list[tuple[int, float]]] = [[] for _ in range(graph.n_nodes)]

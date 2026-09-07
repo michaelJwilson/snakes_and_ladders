@@ -31,6 +31,7 @@ POTTS_FIXTURE = FIXTURES_DIR / "potts_params.yaml"
 HMM_FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
 
 
+@pytest.mark.structural
 def test_potts_coverage_counts_every_parameter_of_every_replicate() -> None:
     params = load_potts_params(POTTS_FIXTURE)
     covered, total = potts_coverage(params, n_chains=100, replicates=3)
@@ -38,6 +39,7 @@ def test_potts_coverage_counts_every_parameter_of_every_replicate() -> None:
     assert 0 <= covered <= total
 
 
+@pytest.mark.structural
 def test_hmm_coverage_counts_every_parameter_of_every_replicate() -> None:
     params = load_hmm_params(HMM_FIXTURE)
     covered, total, boundary = hmm_coverage(params, n_sequences=600, replicates=2)
@@ -49,6 +51,7 @@ def test_hmm_coverage_counts_every_parameter_of_every_replicate() -> None:
     assert 0 <= covered <= total
 
 
+@pytest.mark.edge_case
 def test_a_boundary_fit_is_counted_and_contributes_no_intervals() -> None:
     # The reason hmm_coverage returns a third number. At a small enough
     # sample some fits put an emission probability at zero, where the
@@ -64,6 +67,7 @@ def test_a_boundary_fit_is_counted_and_contributes_no_intervals() -> None:
     assert 0 <= covered <= total
 
 
+@pytest.mark.structural
 def test_the_sizes_the_figure_sweeps_are_increasing() -> None:
     # The figure's whole argument is a trend, so a mis-ordered sweep would
     # make it unreadable rather than merely ugly.
@@ -72,6 +76,7 @@ def test_the_sizes_the_figure_sweeps_are_increasing() -> None:
     assert NOMINAL == 0.95
 
 
+@pytest.mark.structural
 def test_the_caption_reports_the_numbers_it_was_given() -> None:
     potts = [(100, 158, 160), (400, 155, 160), (1600, 96, 100)]
     hmm = [(150, 168, 192, 0), (600, 139, 144, 0), (2400, 91, 96, 0)]
@@ -87,6 +92,7 @@ def test_the_caption_reports_the_numbers_it_was_given() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
+@pytest.mark.structural
 def test_the_caption_declares_any_fit_that_had_no_interval() -> None:
     potts = [(100, 158, 160), (400, 155, 160), (1600, 96, 100)]
     hmm = [(150, 120, 144, 2), (600, 139, 144, 0), (2400, 91, 96, 0)]
@@ -98,6 +104,7 @@ def test_the_caption_declares_any_fit_that_had_no_interval() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
+@pytest.mark.structural
 def test_main_writes_a_figure_and_caption(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -121,6 +128,7 @@ def test_main_writes_a_figure_and_caption(
     assert written.caption_path.read_text() == written.caption
 
 
+@pytest.mark.edge_case
 def test_a_size_where_every_fit_hits_the_boundary_is_refused() -> None:
     # Rather than a ZeroDivisionError from an empty count. The message says
     # what to change, since the fix is a larger size, not a code change.
