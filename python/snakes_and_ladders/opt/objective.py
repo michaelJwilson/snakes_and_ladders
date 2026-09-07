@@ -69,6 +69,34 @@ class Objective(Protocol):
         """
         ...  # pragma: no cover
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``.
+
+        The inverse of :meth:`constrain`, and required rather than optional.
+        Without it a fit is only as useful as the coordinates that produced
+        it: an expectation-maximization run works directly in the model's own
+        parameters and never builds a ``theta``, so its point estimate could
+        carry no interval at all, while the gradient fit's could (issue #268).
+        The observed information is a property of *this objective at a point*
+        and not of the route that reached it, so any route may ask for it.
+
+        A constraint map that cannot be inverted is one whose fitted
+        parameters cannot be stated in the model's own units, which is a
+        problem worth failing on rather than working around --- hence
+        required.
+
+        Parameters
+        ----------
+        named : Mapping[str, torch.Tensor]
+            Constrained parameters, under the keys :meth:`constrain` returns.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns ``named``.
+        """
+        ...  # pragma: no cover
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """The value to **minimize**, differentiable with respect to ``theta``.
 
