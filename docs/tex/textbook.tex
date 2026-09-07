@@ -50,6 +50,13 @@ $\objective$   & the scalar being minimized \\
 $\energy$      & a Hamiltonian \\
 $\hidden$      & a hidden state path \\
 $\emission$    & an emission family \\
+\midrule
+$x_i$          & a discrete variable of a factor graph, $x_i \in \states$ \\
+$\psi_a$       & a factor: a non-negative function of the variables $x_{\partial a}$ it touches \\
+$m_{a \to i},\ m_{i \to a}$ & a message from factor to variable, and from variable to factor \\
+$b_i,\ b_a$    & a belief: the marginal of a variable or a factor, exact on a tree \\
+$Z$            & a partition function; $\log Z$ the evidence \\
+$T,\ \beta = 1/T$ & a temperature and its inverse; a schedule is $T(t)$ over a budget of $t$ steps \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -60,6 +67,18 @@ a negative log-likelihood. And $\objective$ is a function of $\params$, the
 unconstrained vector, not of the parameters a person names---the two are
 connected by $\constrained$ and Section~\ref{sec:abstraction} explains why the
 distinction is not cosmetic.
+
+A third convention governs the symbols the problem sections keep. Every model
+below is an instance of the factor graph of Section~\ref{sec:factor-graph}, and
+its variables are the $x_i$ of that section; but a spin is written $\sigma_i$
+and a hidden state $z_t$, because those are the names a reader arrives with.
+The identification is made once, where each model is stated as a factor graph,
+and not repeated: $x_i \equiv \sigma_i$ on a Potts graph, $x_t \equiv z_t$ on a
+chain, $x_u \equiv z_u$ at a node of a tree. Every section then carries the
+same four parts---the model, the model as a factor graph, the algorithm as the
+instance of Equation~\ref{eq:sum-product} or of the optimization it is, and
+the property that pins it---so that what differs between the problems is
+visible as content and not as presentation.
 
 \section{The Shape All Three Problems Share}
 \label{sec:shape}
@@ -123,7 +142,19 @@ $\ell_n \in \{1..M\}$, one hidden chain $k_{s,m}$ per class, and a
   \label{eq:joint}
 \end{equation}
 which is Equation~\ref{eq:factor-graph} with pairwise, chain and degree-two
-gated factors, and no fourth code path.
+gated factors, and no fourth code path. Section~\ref{sec:coupled} states the
+model in full, with the estimator its structure dictates.
+
+\paragraph{What pins the general algorithm.}
+Equation~\ref{eq:sum-product} is validated where each of its instances already
+has an oracle, and by nothing new: on a tree-shaped Potts graph against
+enumeration over $q^{|V|}$ configurations, on a chain against the sum over
+$k^T$ paths, on a tree at one site against pruning, and on a loopy graph
+against the pairwise belief propagation of Equation~\ref{eq:bp-message}---the
+same approximation reached by two codes, which is agreement and not truth. The
+Forney form is pinned by computing the same marginals on both drawings. A
+general algorithm that agreed only with itself would be a second opinion, not
+an evaluator (Section~\ref{sec:properties}).
 
 \subsection{The Continuous Optimization Abstraction}
 \label{sec:abstraction}
@@ -199,6 +230,16 @@ gradient varies by orders of magnitude between instances. The comparison
 against the greedy baseline is at a matched budget of objective evaluations per
 decision, never in wall-clock time.
 
+\paragraph{What pins it.}
+Equation~\ref{eq:return} is an identity and is asserted exactly on every
+recorded episode. Equation~\ref{eq:reinforce} is an expectation, so its
+estimator is pinned against the gradient of the exact expected return, which
+is computable by enumerating every episode on a small environment, and the
+baseline's unbiasedness is asserted by the same enumeration: the expected
+gradient with and without $b$ agree. An environment small enough to enumerate
+is therefore the oracle for the learning machinery, exactly as a tree small
+enough to enumerate is the oracle for the search.
+
 \section{Problem Statement: Phylogenetic Inference}
 \label{sec:phylo}
 
@@ -240,6 +281,21 @@ marginalizes every assignment $z$ of states to the internal nodes:
 the product over the branches $(u \to v)$ of the rooted tree with the leaves
 fixed by the data---$k^{\,n-2}$ terms per site for a binary tree. Summing it
 directly is the oracle every faster evaluation of it is checked against.
+
+\subsection{As a factor graph}
+One site is one instance of Equation~\ref{eq:factor-graph}. The variables are
+the states $x_u \equiv z_u \in \states$ at every node $u$ of the rooted tree,
+leaves included. The factors are the root prior $\psi_{\rootnode}(x_{\rootnode})
+= \pi_{x_{\rootnode}}$, one pairwise factor per branch,
+$\psi_v(x_u, x_v) = \Pmat_{x_u x_v}(\tau_v)$ for $u$ the parent of $v$, and one
+indicator per leaf, $\psi_\ell(x_\ell) = \mathbb{1}[x_\ell = \text{observed}]$,
+which folds the data in. The bipartite graph is a tree, so
+Equation~\ref{eq:sum-product} is exact, and $Z$ is the site likelihood
+$p(\data_s \mid \tree, \branch, \Q)$; sites being independent
+(Equation~\ref{eq:site-independence}), the alignment's likelihood is the
+product of $L$ such $Z$. In the Forney form every internal node's state is an
+edge through an equality factor of degree three---two branches and, at the
+root, the prior---which is the drawing Section~\ref{sec:coupled} uses.
 
 \qacaptionread{figures/sim_tree_caption.txt}{\simTreeCaption}
 \begin{figure}[htbp]
@@ -299,6 +355,31 @@ so each node's partials are rescaled and the logarithm of the scaling
 accumulated separately; the rescaling must remain differentiable, since
 $\branch$ and $\Q$ are what the continuous optimization fits.
 
+Equation~\ref{eq:pruning} is Equation~\ref{eq:sum-product} run leaf to root
+with the root as the last variable: $L_u(i)$ is the product over $u$'s
+children of the factor-to-variable messages $m_{\psi_v \to u}(i)$, each of
+which sums the branch factor against the message arriving from below, and
+Equation~\ref{eq:root} is the final factor-to-variable message from the
+prior. Replacing the sum by a maximum gives the most probable joint assignment
+of ancestral states; in the limit of short branches its cost counts
+substitutions, which is Fitch parsimony \citep{felsenstein2004}, the second
+criterion the search is scored against.
+
+\paragraph{Regime.}
+Exact on every input, because a tree has no cycle. The one failure mode is
+numerical---underflow of a product of $n$ factors each below one---and it is
+removed by the rescaling, not tolerated.
+
+\paragraph{What pins it.}
+Direct marginalization, Equation~\ref{eq:site-independence}, at the sizes it
+allows, to a relative tolerance (Section~\ref{sec:tolerance}). Two invariants
+past those sizes: the pulley principle, that a reversible model's likelihood
+does not depend on where the root is placed along a branch, and a gradient
+against central differences relative to its own norm. And the recovery test of
+Section~\ref{sec:properties}: on simulated data the fitted branch lengths
+cover the truth at their nominal rate, and the search recovers the generating
+topology at a stated site count.
+
 \subsection{The algorithm: discrete search}
 The number of unrooted binary topologies on $n$ taxa is $(2n-5)!!$
 \citep{rosen2019}, so exhaustive enumeration is an oracle at small $n$ and
@@ -310,6 +391,24 @@ $2(n-3)(2n-7)$ and containing NNI. Neither is complete in one step; both are
 complete in the transitive closure, which for NNI is the connectivity of the
 associated graph \citep{felsenstein2004} and is inherited by SPR because it
 dominates NNI.
+
+Hill climbing over either neighbourhood fits the continuous parameters of
+every candidate and moves to the best; its budget is counted in candidates
+scored, never in seconds, so a run reproduces from its seed. A candidate
+that shares all but a few branches with its parent may start its fit from the
+parent's lengths, a branch being identified by the leaf bipartition below it
+rather than by a node's name; and a neighbourhood may be \emph{ranked} by one
+evaluation at those lengths before the few best are fitted, the accepted move
+always in full, so every reported score is an optimum. Whether the ranking
+finds the fitted best is a property of the move set and is measured per move
+set, not assumed.
+
+\paragraph{What pins it.}
+Enumeration of the $(2n-5)!!$ topologies referees the search below eight taxa:
+the climb must reach the enumerated maximum, and the neighbourhood counts
+above are asserted exactly over every topology. A warm start is pinned by
+reaching the cold fit's optimum; a cached partial likelihood by equalling the
+recomputed one bitwise, since it is the same arithmetic in the same order.
 
 \section{Problem Statement: Potts Models in an External Field}
 \label{sec:potts}
@@ -326,6 +425,17 @@ with couplings $J_{ij}$ and an external field $h_i$ \citep{mezard2009}. The
 Boltzmann distribution is $p(\sigma) \propto \exp(-\energy(\sigma))$, and its
 normalizer sums over $q^{|V|}$ configurations.
 
+\subsection{As a factor graph}
+The variables are the spins, $x_i \equiv \sigma_i$. The factors are one unary
+$\psi_i(\sigma_i) = e^{h_i(\sigma_i)}$ per node and one pairwise
+$\psi_{ij}(\sigma_i, \sigma_j) = e^{J_{ij}\,\delta(\sigma_i, \sigma_j)}$ per
+edge, so Equation~\ref{eq:factor-graph} is the Boltzmann distribution and $Z$
+its normalizer. At a temperature $T$ the factors are raised to the power
+$\beta = 1/T$, which is the same graph with $J$ and $h$ scaled; nothing else
+about the model changes, and that is why a tempered chain can be held to the
+unscaled model's enumeration. The graph is a tree exactly when $\graph$ is,
+which is the regime every exact claim below is confined to.
+
 \subsection{Why an odd cycle is the whole story}
 A two-state antiferromagnet ($J < 0$) wants every edge to disagree, which is
 possible exactly when $\graph$ is $2$-colourable. So every bipartite
@@ -335,11 +445,13 @@ makes the ground state non-trivial, and where a counting argument closes
 exactly it fixes that ground state at every size. This is the difference
 between a fixture that exercises an optimizer and one that does not.
 
-\subsection{The algorithms}
+\subsection{The algorithm: belief propagation}
 Exact marginals come from enumeration at small sizes and from belief
 propagation on a tree, where it is exact; on a loopy graph it is an
 approximation whose accuracy is a property of the graph rather than of the
-implementation \citep{koller2009, frey1998}. The sum-product message from
+implementation \citep{koller2009, frey1998}. It is Equation~\ref{eq:sum-product}
+with every factor pairwise or unary: composing the variable-to-factor message
+with the unary factor gives the node-to-node form, in which the message from
 $i$ to a neighbour $j$ is
 \begin{equation}
   m_{i \to j}(\sigma_j) \;\propto\; \sum_{\sigma_i}
@@ -363,15 +475,173 @@ fixed point,
 \end{equation}
 with $E_{ij} = -J_{ij}\,\delta(\sigma_i,\sigma_j)$, $E_i = -h_i(\sigma_i)$ and
 $d_i$ the degree of $i$, equals $-\log Z$ exactly on a tree and approximates
-it on a loopy graph \citep{yedidia2005, mezard2009}. A fixed point the
-iteration never reached is not an estimate of anything, so non-convergence is
-a refusal rather than a number. Sampling is by single-site Gibbs
-updates or by cluster moves such as Swendsen--Wang, which flip correlated
-regions together and so decorrelate faster near a critical point
-\citep{newman1999}. Ground states of the two-state case reduce to a maximum
-cut, and to a minimum cut---hence a max-flow---when the couplings are
-submodular; more than two states is approximated by alpha expansion, whose
-guarantee is a factor of two.
+it on a loopy graph \citep{yedidia2005, mezard2009}; Appendix~\ref{app:bethe}
+states why. A fixed point the iteration never reached is not an estimate of
+anything, so non-convergence is a refusal rather than a number.
+
+\paragraph{Regime.}
+Exact on a tree, in two passes. On a loopy graph the flooding schedule is
+iterated with damping to a tolerance and returns the Bethe approximation, and
+the tree schedule is refused rather than run, because a number that looks
+exact and is not is the worst output an evaluator can produce.
+
+\paragraph{What pins it.}
+On a tree, $\log Z$ and every marginal against enumeration to a stated
+relative tolerance. On a loopy graph nothing asserts agreement with the
+truth---that would assert something false---and what is asserted is the
+structure the physics requires: exact at zero coupling, and a deviation from
+the exact transfer matrix that grows away from it and is reported as a
+measurement.
+
+\subsection{The algorithm: ground states as cuts}
+\label{sec:potts-cuts}
+With two states write $\sigma_i \in \{-1, +1\}$. The pairwise term of
+Equation~\ref{eq:potts} is constant on agreeing edges and pays $J_{ij}$ on
+disagreeing ones, so minimizing $\energy$ minimizes the weight of the
+\emph{cut}---the set of edges whose endpoints differ---plus the field:
+\begin{equation}
+  \energy(\sigma) = \sum_{\langle i,j \rangle : \sigma_i \ne \sigma_j} J_{ij}
+                    - \sum_i h_i(\sigma_i) + \text{const}.
+  \label{eq:cut-energy}
+\end{equation}
+When every $J_{ij} \ge 0$ the pairwise term is submodular, the field becomes
+a terminal edge to a source or a sink, and the ground state is a minimum
+$s$--$t$ cut, exact by max-flow in polynomial time \citep{greig1989, clrs2022}.
+When couplings are negative the problem is maximum cut, which is NP-hard; the
+semidefinite relaxation rounded by a random hyperplane gives a cut whose
+expected weight is at least $\alpha_{\mathrm{GW}} = 0.87856$ of the optimum,
+\begin{equation}
+  \mathbb{E}[\,w(\text{cut})\,] \;\ge\; \alpha_{\mathrm{GW}}\; \max_{\sigma} w(\sigma),
+  \qquad
+  \alpha_{\mathrm{GW}} = \min_{0 < \vartheta \le \pi}
+    \frac{2}{\pi}\,\frac{\vartheta}{1 - \cos\vartheta},
+  \label{eq:gw}
+\end{equation}
+and the relaxation's own value bounds the optimum from above
+\citep{goemans1995}. The bound is the claim that holds at every size; the
+realized ratio on an instance is measured beside it and is never quoted as the
+guarantee.
+
+\paragraph{Regime.}
+Exact where the couplings are submodular and refused rather than approximated
+where they are not (Section~\ref{sec:properties}): a wrong ground state on a
+structured instance is indistinguishable from a right one at any size worth
+solving. The relaxation runs on any instance and certifies a ratio, not an
+optimum.
+
+\paragraph{What pins it.}
+Enumeration over $2^{|V|}$ configurations where it reaches; where it does not,
+a \emph{reduction}: on a bipartite graph the maximum cut is every edge, on a
+uniform ferromagnet the ground state is constant, and a construction error in
+the cut graph yields a labelling that is merely worse, which only a regime
+where the general construction must reproduce a simpler validated one will
+catch. A fixture whose answer is trivial measures nothing, so the odd cycles
+of Section~\ref{sec:potts} are what the instances carry.
+
+\subsection{The algorithm: alpha expansion}
+\label{sec:alpha-expansion}
+With $q > 2$ states the ground state is NP-hard in general, and alpha
+expansion approximates it by a sequence of exact two-state problems
+\citep{boykov2001}. An \emph{expansion} on label $\alpha$ lets every site keep
+its label or switch to $\alpha$; the best such move is the minimum cut of a
+two-state graph built from the current labelling, exact when the pairwise term
+is a metric on labels, which $\delta(\sigma_i, \sigma_j)$ is. Cycling over
+$\alpha$ until no expansion lowers the energy reaches a local minimum within a
+constant of the global one,
+\begin{equation}
+  \energy(\hat\sigma) \;\le\; 2\,c\,\energy(\sigma^\star),
+  \qquad
+  c = \max_{\alpha \ne \beta'} d(\alpha, \beta') \big/ \min_{\alpha \ne \beta'} d(\alpha, \beta'),
+  \label{eq:alpha-expansion}
+\end{equation}
+so a factor of two for the Potts metric, where $c = 1$. The guarantee assumes
+each expansion is solved to optimality; where it is solved approximately the
+certificate is optimistic, and what can be asserted is the symptom---a value an
+exact solve could not have produced.
+
+\paragraph{What pins it.}
+The two-label case must reproduce the exact minimum cut of
+Section~\ref{sec:potts-cuts} exactly; enumeration referees the multi-label
+case where it reaches; and the realized ratio against the enumerated optimum
+is measured, since the bound is a theorem and the ratio is a number.
+
+\subsection{The algorithm: sampling}
+\label{sec:potts-sampling}
+The single-site heat bath draws each spin from its conditional,
+\begin{equation}
+  p(\sigma_i \mid \sigma_{\partial i}) \;\propto\;
+    \exp\!\Big(\beta \big[\textstyle\sum_{j \in \partial i} J_{ij}\,\delta(\sigma_i, \sigma_j) + h_i(\sigma_i)\big]\Big),
+  \label{eq:heat-bath}
+\end{equation}
+one site at a time; a \emph{sweep} is one update of every site. Near a
+critical coupling correlated regions span the lattice and single-site moves
+decorrelate slowly. Cluster moves flip such regions together
+\citep{swendsen1987, wolff1989, newman1999}: in the Edwards--Sokal
+representation \citep{edwards1988} a bond is placed between equal neighbours
+with probability $1 - e^{-\beta J_{ij}}$, and each bond-connected cluster is
+recoloured uniformly---every cluster at once in Swendsen--Wang, one cluster
+grown from a random seed in Wolff. The bond construction is exact at zero
+field only. In a field the recolouring is accepted with the Metropolis
+probability on the field energy alone,
+\begin{equation}
+  a = \min\Big\{1,\ \exp\!\Big(\beta \textstyle\sum_{i \in \mathcal{C}}
+      \big[h_i(\nu) - h_i(\mu)\big]\Big)\Big\},
+  \label{eq:cluster-accept}
+\end{equation}
+for a cluster $\mathcal{C}$ recoloured from $\mu$ to $\nu$, which restores
+detailed balance (Appendix~\ref{app:detailed-balance}).
+
+\paragraph{Regime.}
+Every move preserves the Boltzmann distribution at $\beta$, so a sweep may not
+stop on a state-dependent condition: composing a \emph{number} of steps chosen
+from the outcome biases toward the states that triggered the stop. The bond
+probability is a probability only for $J_{ij} \ge 0$, and an antiferromagnet
+has no like-spin clusters to flip, so the cluster moves refuse a negative
+coupling rather than run badly.
+
+\paragraph{What pins it.}
+A sampler is validated by the distribution it converges to and never by
+inspection: at an enumerable size the exact Boltzmann distribution is
+available, and a chain is held to it by a goodness-of-fit test at a declared
+significance, thinned by several autocorrelation times because successive
+sweeps are not independent draws. The test's power is itself pinned---a move
+set with the field accept step removed runs, mixes, and is rejected.
+
+\subsection{Temperature, annealing and tempering}
+\label{sec:tempering}
+A temperature $T$ scales the model, $\energy / T$, so a chain at $T$ targets
+$\exp(-\energy/T)$; a \emph{schedule} $T(t)$ over a budget of $t$ steps is one
+object, shared by every consumer of it, with both endpoints reached exactly at
+the declared steps and a step past the end refused. Simulated annealing is the
+sampler on a decreasing schedule, returning the lowest-energy state seen
+\citep{kirkpatrick1983}; at $T \to 0$ the heat bath is the argmin over each
+site's conditional, which is iterated conditional modes, so annealing and
+greedy descent are one search separated by the schedule alone.
+
+Parallel tempering runs $R$ replicas at fixed temperatures $T_1 < \dots < T_R$
+and, after each sweep, proposes to exchange the configurations of adjacent
+replicas, accepting with
+\begin{equation}
+  a_{ij} = \min\big\{1,\ \exp\!\big[(\beta_i - \beta_j)(E_i - E_j)\big]\big\},
+  \label{eq:exchange}
+\end{equation}
+the ratio of the joint target, a product of tempered marginals
+\citep{swendsenwang1986, geyer1991, earl2005}; Appendix~\ref{app:exchange}
+derives it. The hot replicas cross barriers the cold one cannot, and an
+exchange carries what they find down the ladder. Each replica draws from its
+own generator, spawned from one parent that then draws only the exchange
+uniforms, so no two replicas share a stream and one seed reproduces the run.
+
+\paragraph{What pins it.}
+Every replica's marginal must still be $\exp(-\energy/T_r)$, enumerated from
+the \emph{unscaled} model, with exchanges on: a wrong exchange ratio
+contaminates the cold replica with hot configurations and only that test says
+so. Its power is pinned by the paired negative---an exchange that omits the
+energy term still runs and still mixes, and is rejected on every replica.
+Whether tempering or annealing beats restarts of descent at an equal budget
+of sweeps is not a property of the algorithms but of the instance, and is
+measured on the frustrated, past-enumeration instances the roadmap needs,
+never asserted in general.
 
 \section{Problem Statement: Hidden Markov Models}
 \label{sec:hmm}
@@ -381,6 +651,17 @@ A hidden path $\hidden = (z_1, \dots, z_T)$ over $k$ states evolves by an
 initial distribution $\bpi$ and a transition matrix $\mathbf{A}$; each position
 emits an observation from an emission family $\emission$ indexed by its state.
 The evidence marginalizes $k^T$ paths.
+
+\subsection{As a factor graph}
+The variables are the hidden states, $x_t \equiv z_t$. The factors are
+$\psi_1(z_1) = \pi_{z_1}\, \emission_{z_1}(y_1)$ at the first position and,
+for $t > 1$, one pairwise $\psi_t(z_{t-1}, z_t) = \mathbf{A}_{z_{t-1} z_t}$ per
+transition and one unary $\emission_{z_t}(y_t)$ per emission: the observation
+$y_t$ is folded into the table, so a probability and a density enter the same
+way and the graph is over latent variables only. The chain is a tree, and $Z$
+is the evidence $p(\data)$. An interior state sits on three factors, so in
+the Forney form it passes through an equality node---the drawing
+Section~\ref{sec:coupled} uses for each class's chain.
 
 \paragraph{The emission family is the only part that knows what an observation
 is.} Everything else---the recursions, the expectation step, path
@@ -407,7 +688,38 @@ The forward recursion is Equation~\ref{eq:pruning} on a chain:
 Pruning on a caterpillar tree carrying one observed leaf per internal node
 \emph{is} this recursion \citep{durbin1998, koller2009}: the three problem
 classes are one marginalization over three structures, not three unrelated
-models sharing an optimizer.
+models sharing an optimizer. In the terms of Equation~\ref{eq:sum-product},
+$\alpha_t$ is the message arriving at $z_t$ from the left multiplied by the
+emission factor, the backward recursion $\beta_t$ is the same pass from the
+right, and the posterior at a position is their normalized product,
+\begin{equation}
+  p(z_t = i \mid \data) = \frac{\alpha_t(i)\, \beta_t(i)}{p(\data)},
+  \qquad
+  \beta_t(i) = \sum_j \mathbf{A}_{ij}\, \emission_j(y_{t+1})\, \beta_{t+1}(j),
+  \label{eq:posterior}
+\end{equation}
+which is the belief $b_t$ of Section~\ref{sec:notation}. Max-product on the
+same chain is Viterbi,
+\begin{equation}
+  \delta_t(i) = \Big[\max_j\ \delta_{t-1}(j)\, \mathbf{A}_{ji}\Big]\, \emission_i(y_t),
+  \label{eq:viterbi}
+\end{equation}
+with the path read back from the argmax at each step; on a chain with a
+unique maximum the max-marginals' argmax at every position is that path
+\citep{durbin1998}.
+
+\paragraph{Regime.}
+Exact for every length, the chain being a tree. The one hazard is the same
+underflow pruning meets, and the same remedy applies: the recursion runs in
+the logarithm.
+
+\paragraph{What pins it.}
+The sum over every one of the $k^T$ paths, written out term by term with no
+recursion, referees the evidence, the posteriors and the Viterbi path at the
+lengths it allows; a gradient against central differences past them. The
+enumeration is the oracle two decoders are separated by, so it cannot be
+validated by a decoder, and it is pinned in turn against algebra: quantities
+that can be worked out by hand on a two-state, two-step chain.
 
 \subsection{The algorithm: expectation-maximization}
 Baum--Welch alternates a posterior over hidden states given the parameters with
@@ -420,6 +732,14 @@ parameter whose score involves the digamma function is not, and its M step is
 itself an optimization---which is the case that says whether an interface
 built around closed forms was built correctly.
 
+\paragraph{What pins it.}
+Monotonicity, asserted at every iterate; agreement of the fixed point with a
+gradient fit of the same likelihood; and recovery of simulated parameters up
+to the permutation of hidden states, with the alignment part of the test
+(Section~\ref{sec:properties}). Where the family's M step is itself an
+optimization, its refusals at the boundary of the parameter space are pinned
+too: a dispersion the data cannot identify is refused, not clamped.
+
 \subsection{Two decodings, and they are different answers}
 Viterbi returns the single path of highest joint probability; posterior
 decoding returns, at each position independently, the state of highest marginal
@@ -427,7 +747,173 @@ probability. Where they disagree, the posterior-decoded sequence can be a path
 the model assigns zero probability to, because nothing constrains consecutive
 choices to be compatible. They agree on almost every instance, which is exactly
 why an implementation that computes one and reports the other survives a test
-suite with no case where they diverge.
+suite with no case where they diverge. Equation~\ref{eq:viterbi} and the
+argmax of Equation~\ref{eq:posterior} are those two decodings; the fixture on
+which they differ is constructed and kept, because it is the only kind of case
+that can tell an implementation of one from an implementation of the other.
+
+\section{Problem Statement: The Coupled Spatio-Sequential Model}
+\label{sec:coupled}
+
+\subsection{The model}
+Observations $x_{sn}$ are indexed by a spatial node $n$ of a graph $\graph$ and
+a sequential position $s = 1, \dots, S$. Each node carries a class label
+$\ell_n \in \{1, \dots, M\}$; each class $m$ carries its own hidden chain
+$k_{s,m} \in \{1, \dots, K\}$; and the observation at $(s, n)$ is emitted by
+the chain of the class the node belongs to, under that class's emission
+parameters $\theta_m$. The joint is Equation~\ref{eq:joint}. Its three terms
+are the three problem classes above: a Potts prior on the labels,
+\begin{equation}
+  \log p(\ell) = \beta \sum_{\langle n,n' \rangle} J_{nn'}\,\delta(\ell_n, \ell_{n'})
+                 - \log Z_{\mathrm{Potts}},
+  \qquad J_{nn'} \ge 0,
+  \label{eq:spatial-prior}
+\end{equation}
+ferromagnetic so that neighbouring nodes prefer one class---the penalty on
+disagreement, $-\beta \sum J_{nn'}\,\mathbb{1}[\ell_n \ne \ell_{n'}]$, is the same
+distribution up to a constant; one hidden Markov chain per class, in the
+simplest case with a circulant transition,
+\begin{equation}
+  \mathbf{A}_m(i, j) = t\,\delta_{ij} + \frac{1 - t}{K - 1}\,(1 - \delta_{ij}),
+  \label{eq:circulant}
+\end{equation}
+whose self-transition rate $t$ and initial distribution $\Pi_m$ are fitted;
+and a \emph{gated} emission, $\mathbb{1}[\ell_n = m]\,\log p(x_{sn} \mid k_{s,m},
+\theta_m)$, which is what couples the two. Marginalizing $k$ recovers a
+Potts model in a field the chains define; marginalizing $\ell$ recovers a
+mixture of hidden Markov models. Neither marginal is tractable on its own, and
+the structure of the joint is what dictates the estimator.
+
+\subsection{As a factor graph}
+The variables are the $N$ labels and the $S M$ chain states. The factors are
+the pairwise Potts factors of Section~\ref{sec:potts} on the labels, the chain
+factors of Section~\ref{sec:hmm} on each class's states, and one gated
+emission factor per $(n, s, m)$ over the pair $(\ell_n, k_{s,m})$, equal to
+$p(x_{sn} \mid k_{s,m}, \theta_m)$ when $\ell_n = m$ and to one otherwise. A
+label sits on every emission factor of its node and on every Potts factor of
+its edges; in the Forney form it passes through an equality node of that
+degree, and the gated factors are the higher-degree nodes that join the
+lattice to the chains (Figure~\ref{fig:coupled-factor-graph}). The graph has cycles, so Equation~\ref{eq:sum-product}
+is the Bethe approximation on it, and the exact quantities below come from
+enumeration on an instance small enough to enumerate---a $2 \times 2$ lattice
+with $M = 2$, $K = 2$, $S = 3$ has $2^4 \cdot 2^{12}$ joint states.
+
+\input{coupled_figure}
+
+\subsection{The estimator: block-coordinate ascent}
+The blocks are the emission parameters $\theta$ and the labels $\ell$, with the
+chain states marginalized. For $\theta$ given $\ell$, the gradient of the
+marginal likelihood is the posterior-weighted gradient of the emission terms,
+\begin{equation}
+  \nabla_{\theta} \log p(x \mid \ell, \theta)
+    = \sum_{n, m} \mathbb{1}[\ell_n = m] \sum_{s, k_{s,m}}
+      \mathbb{Q}(k_{s,m} \mid \theta, \ell; x)\,
+      \nabla_{\theta} \log p(x_{sn} \mid k_{s,m}, \theta_m),
+  \label{eq:coupled-m-step}
+\end{equation}
+where $\mathbb{Q}$ is the per-class posterior of Equation~\ref{eq:posterior}:
+this is expectation--maximization with the E step forward--backward on each
+class's chain over the nodes assigned to it, and $t$ and $\Pi_m$ re-estimate
+in closed form. For $\ell$ given $\theta$, the same posterior defines a
+per-node, per-class external field,
+\begin{equation}
+  H_{nm}(\theta, \theta'; \ell) \equiv
+    - \sum_{s, k_{s,m}} \mathbb{Q}(k_{s,m} \mid \theta', \ell; x)\,
+      \log p(x_{sn} \mid k_{s,m}, \theta),
+  \label{eq:external-field}
+\end{equation}
+and the label update is the ground state of a Potts model in that field,
+\begin{equation}
+  \ell^\star = \arg\min_{\ell}\ \beta \Big[
+      \sum_{\langle n,n' \rangle} J_{nn'}\,\mathbb{1}[\ell_n \ne \ell_{n'}]
+    + \sum_{n, m} \mathbb{1}[\ell_n = m]\, H_{nm} \Big],
+  \label{eq:label-ground-state}
+\end{equation}
+which is the problem of Section~\ref{sec:alpha-expansion}, solved by
+alpha expansion with its bound, descended by iterated conditional modes, or
+sampled by an annealed cluster move with a field
+(Section~\ref{sec:potts-sampling}). Each block does not decrease the joint
+likelihood, which is the monotonicity every expectation--maximization here is
+held to.
+
+\paragraph{Why a cluster move.}
+Under an effective spatial prior each class spans a contiguous region, and a
+single-site move must cross a region one node at a time against the prior's
+penalty; iterated conditional modes freezes into spurious disjoint clusters,
+and single-site annealing slows critically for the same reason. The Wolff move
+of Section~\ref{sec:potts-sampling} recolours a whole cluster at once, and
+Algorithm~\ref{alg:wolff-field} is that move with the field of
+Equation~\ref{eq:external-field} in its accept step. At $\beta \to 0$ it is a
+single-site Gibbs update; at $\beta \gg 1$ it is the greedy entrapment of
+iterated conditional modes; annealing in $\beta$ moves between them.
+
+\begin{algorithm}[htbp]
+\caption{One Wolff update on the labels, in the external field}
+\label{alg:wolff-field}
+\begin{algorithmic}[1]
+\State draw a root $\rho$ uniformly from the nodes; $\mu \gets \ell_\rho$;
+       $\mathcal{C} \gets \{\rho\}$; queue $Q \gets \{\rho\}$
+\While{$Q \ne \varnothing$}
+  \State pop $n$ from $Q$
+  \For{each neighbour $n'$ of $n$ with $\ell_{n'} = \mu$ and $n' \notin \mathcal{C}$}
+    \State with probability $1 - e^{-\beta J_{nn'}}$: add $n'$ to $\mathcal{C}$ and to $Q$
+  \EndFor
+\EndWhile
+\State draw a new label $\nu$ uniformly from $\{1, \dots, M\}$
+\State $\Delta H \gets \sum_{n \in \mathcal{C}} (H_{n\nu} - H_{n\mu})$
+\State with probability $\min\{1, e^{-\beta \Delta H}\}$: $\ell_n \gets \nu$ for every $n \in \mathcal{C}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{The initializer: data-sampled burn-in}
+A block ascent on this joint is only as good as where it starts, and a start
+that ignores the graph and the emission family---$k$-means$++$ on the raw
+observations, say---leaves degenerate classes and false positives that the
+ascent then polishes. Algorithm~\ref{alg:graph-burnin} anneals in $\beta$ from
+zero, so that early on the labels are nearly free and the chains and emission
+parameters are fitted to what the data alone supports, and the spatial prior
+is tightened only as the classes separate. Its seeding step,
+\textsc{EmissionMixture++}, is $k$-means$++$ with the emission family's own
+negative log-density in place of squared Euclidean distance
+\citep{arthur2007}: candidates are drawn proportionally to how badly the
+current parameters explain them, constrained to the observations the current
+labels and states assign to the class being seeded. The $8(\ln K + 2)$
+expected-cost bound of $k$-means$++$ is a statement about squared distance and
+is not inherited; what is measured instead is recovery against a uniform start
+at an equal budget, over seeds, reported whether it wins or not.
+
+\begin{algorithm}[htbp]
+\caption{Data-sampled burn-in on the coupled graph}
+\label{alg:graph-burnin}
+\begin{algorithmic}[1]
+\State $\beta \gets 0$; $H \gets 0$; $\ell_n \sim \mathrm{Uniform}\{1, \dots, M\}$ for every node
+\State $\theta \gets$ \textsc{EmissionMixture++}$(\beta, K, \theta, x)$
+\While{$\beta < \beta_0$}
+  \State \textsc{WolffUpdate}$(\beta, \ell, J, H)$ \Comment{Algorithm~\ref{alg:wolff-field}}
+  \For{each class $m$} draw the chain $k_{\cdot, m}$ by block Gibbs given $\ell$, $\theta$ \EndFor
+  \For{each state $k$} $\theta_k \gets$ \textsc{EmissionMixture++}$(\beta, K, \theta, x_k, \ell)$ \Comment{state-constrained}
+  \EndFor
+  \State $\mathbb{Q} \gets$ forward--backward per class (Equation~\ref{eq:posterior}); M step for $\theta$, $t$, $\Pi$
+  \State $H_{nm} \gets$ Equation~\ref{eq:external-field}
+  \State $\beta \gets \beta + \Delta\beta$
+\EndWhile
+\State \Return $\ell, \theta$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{What pins it, and what is built.}
+The structure and its evaluator are built: the graph of
+Equation~\ref{eq:joint} is constructed from the three adapters and its
+log-density equals the joint written out on every assignment of an enumerable
+instance. The fixture with its enumeration oracle, the E step and the field,
+the block ascent with the three label solvers, and the initializer are the
+remaining parts, each with its own pin: label and state marginals of the
+simulator against enumeration; the gradient identity
+Equation~\ref{eq:coupled-m-step} against central differences; the joint
+non-decreasing across every block; label accuracy up to permutation against
+the planted labels at an equal budget of sweeps, for each of the three label
+solvers, so the claim that a cluster move escapes what iterated conditional
+modes freezes into is a measurement here and not a premise.
 
 \section{The Properties That Referee Each Method}
 \label{sec:properties}
@@ -435,6 +921,11 @@ suite with no case where they diverge.
 An algorithm is accepted here against a property that is true independently of
 this implementation. The properties are not interchangeable, and which one
 applies is a statement about the method rather than a matter of convenience.
+Each \emph{What pins it} paragraph above names one of the five kinds below,
+and the regression suite marks every check with the kind it is: an oracle, a
+simulated truth, a mathematical invariant, an edge case, or a structural
+property of the code. A check that fits none of them is either a missing
+category or a test with nothing to assert.
 
 \subsection{Exact answers, where an oracle exists}
 Where a quantity can be computed a second way that shares no recursion with the
@@ -540,6 +1031,70 @@ exists once enumeration does.
 \bibliography{references}
 
 \appendix
+
+\section{Derivations Cited From the Text}
+\label{app:derivations}
+
+Each of these is standard; each is here because a claim in the main text
+depends on it, and the main text cites rather than derives, for the reader
+the preface names.
+
+\subsection{The Bethe free energy is stationary at a sum-product fixed point}
+\label{app:bethe}
+Write the beliefs of a pairwise graph as $b_i$ and $b_{ij}$ and constrain them
+to be normalized and locally consistent, $\sum_{\sigma_j} b_{ij} = b_i$.
+Introducing a multiplier $\lambda_{ij}(\sigma_i)$ for each consistency
+constraint and setting the derivative of Equation~\ref{eq:bethe} to zero gives
+$b_{ij} \propto \psi_{ij}\, e^{\lambda_{ij}(\sigma_i) + \lambda_{ji}(\sigma_j)}$
+and $b_i \propto \psi_i\, e^{\sum_{j \in \partial i} \lambda_{ji}(\sigma_i) / (d_i - 1)}$;
+identifying $e^{\lambda_{ji}(\sigma_i)}$ with $\prod_{l \in \partial i
+\setminus j} m_{l \to i}(\sigma_i)$ turns the consistency constraint into
+Equation~\ref{eq:bp-message}. So a fixed point of belief propagation is a
+stationary point of the Bethe free energy and conversely; on a tree the Bethe
+free energy is the exact variational free energy, which is why the fixed point
+there gives $-\log Z$ \citep{yedidia2005}.
+
+\subsection{Detailed balance for a cluster move in a field}
+\label{app:detailed-balance}
+In the Edwards--Sokal representation the joint over spins and bonds is
+$p(\sigma, \omega) \propto \prod_{\langle i,j \rangle : \omega_{ij} = 1}
+(1 - e^{-\beta J_{ij}})\,\delta(\sigma_i, \sigma_j) \prod_{\omega_{ij} = 0}
+e^{-\beta J_{ij}}\ \prod_i e^{\beta h_i(\sigma_i)}$, whose spin marginal is the
+Boltzmann distribution of Equation~\ref{eq:potts}. Drawing bonds given spins
+and then recolouring a bond cluster $\mathcal{C}$ uniformly are both Gibbs
+steps at zero field, so the move preserves $p$ there. With a field the
+recolouring is no longer a Gibbs step: the ratio of the target before and after
+recolouring $\mathcal{C}$ from $\mu$ to $\nu$ is $\exp(\beta \sum_{i \in
+\mathcal{C}} [h_i(\nu) - h_i(\mu)])$, the bond configuration being unchanged,
+and a uniform proposal accepted with the Metropolis probability of
+Equation~\ref{eq:cluster-accept} satisfies detailed balance with respect to
+that ratio. Omitting the accept step gives a chain that runs and mixes and
+converges to the zero-field distribution, which is why the distributional
+test is run with a field as well as without.
+
+\subsection{The exchange ratio in parallel tempering}
+\label{app:exchange}
+The replicas' joint target is the product $\prod_r \exp(-\beta_r E(\sigma_r))$.
+Swapping the configurations of replicas $i$ and $j$ changes it by
+$\exp(-\beta_i E_j - \beta_j E_i) / \exp(-\beta_i E_i - \beta_j E_j)
+= \exp[(\beta_i - \beta_j)(E_i - E_j)]$, and the proposal is symmetric, so the
+Metropolis acceptance is Equation~\ref{eq:exchange}. Each replica's marginal
+under the joint is its own tempered Boltzmann distribution whatever the
+exchanges do, which is the property the per-replica goodness-of-fit test
+asserts.
+
+\subsection{The delta method for an interval at a fit}
+\label{app:delta}
+At a maximum $\hat\params$ of the log-likelihood, the observed information
+$\mathcal{I} = -\nabla^2 \log p(\data \mid \hat\params)$ gives the asymptotic
+covariance $\Sigma = \mathcal{I}^{-1}$ of $\hat\params$. A constrained
+parameter $\constrained(\params)$ is a smooth function of $\params$, so to first
+order $\mathrm{Var}(\constrained(\hat\params)) \approx J \Sigma J^{\top}$ with
+$J = \partial \constrained / \partial \params$ at $\hat\params$. The statement
+is asymptotic in the sample size and requires $\mathcal{I}$ to be invertible;
+a singular or ill-conditioned information is a parameter the data does not
+identify, and the interval is refused rather than reported
+(Section~\ref{sec:properties}).
 
 \section{Reference Taxonomy}
 \label{app:taxonomy}
