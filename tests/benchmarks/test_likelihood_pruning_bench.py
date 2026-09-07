@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.likelihood.pruning import log_likelihood
@@ -35,7 +36,7 @@ def test_log_likelihood_benchmark(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
 

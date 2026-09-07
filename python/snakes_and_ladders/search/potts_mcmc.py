@@ -115,7 +115,7 @@ def sample_potts(
     graph: PottsGraph,
     field: np.ndarray,
     move: PottsMove,
-    seed: int,
+    rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
     thin: int = 1,
@@ -134,8 +134,9 @@ def sample_potts(
         The move set. All three leave the same Boltzmann distribution
         invariant, which is what
         `tests/regression/search/test_potts_mcmc.py` asserts.
-    seed : int
-        Seed for ``np.random.default_rng``.
+    rng : np.random.Generator
+        Passed in rather than seeded here: seeding inside a call makes every
+        draw of an ensemble identical (`sim/CLAUDE.md`, issue #240).
     n_sweeps : int
         Recorded sweeps. A sweep is ``n_nodes`` heat-bath updates, one
         Swendsen-Wang bond-and-recolour pass over the whole lattice, or *one*
@@ -178,7 +179,6 @@ def sample_potts(
         raise ValueError(msg)
 
     graph, field = tempered(graph, field, temperature)
-    rng = np.random.default_rng(seed)
     n_states = int(field.shape[0])
     state = rng.integers(0, n_states, size=graph.n_nodes)
     neighbours = _adjacency(graph)
@@ -231,7 +231,7 @@ def anneal_potts(
     graph: PottsGraph,
     field: np.ndarray,
     schedule: Schedule,
-    seed: int,
+    rng: np.random.Generator,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -255,14 +255,14 @@ def anneal_potts(
         External field, shape ``(n_states,)``.
     schedule : Schedule
         Temperature per sweep. Its length is the budget.
-    seed : int
-        Seed for ``np.random.default_rng``; the start is drawn from it.
+    rng : np.random.Generator
+        Source of every draw, the start included. Passed in rather than
+        seeded here, for the reason :func:`sample_potts` gives.
 
     Returns
     -------
     AnnealedPotts
     """
-    rng = np.random.default_rng(seed)
     field = np.asarray(field, dtype=float)
     state = rng.integers(0, int(field.shape[0]), size=graph.n_nodes)
     neighbours = _adjacency(graph)

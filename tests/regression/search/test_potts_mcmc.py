@@ -103,7 +103,7 @@ def _goodness_of_fit(move: PottsMove, field: np.ndarray, seed: int = SEED) -> fl
         graph,
         field,
         move,
-        seed,
+        np.random.default_rng(seed),
         SWEEPS,
         burn_in=SWEEPS // 10,
         thin=THINNING[move],
@@ -115,6 +115,7 @@ def _goodness_of_fit(move: PottsMove, field: np.ndarray, seed: int = SEED) -> fl
     return chi_square_p_value(observed, probability * SWEEPS)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("move", list(PottsMove))
 def test_the_chain_is_drawn_from_the_exact_boltzmann_distribution(
     move: PottsMove,
@@ -122,6 +123,7 @@ def test_the_chain_is_drawn_from_the_exact_boltzmann_distribution(
     assert _goodness_of_fit(move, NO_FIELD) > SIGNIFICANCE
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("move", list(PottsMove))
 def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
     # The case the ticket exists for. Wolff's cluster construction alone does
@@ -130,6 +132,7 @@ def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
     assert _goodness_of_fit(move, WITH_FIELD) > SIGNIFICANCE
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_dropping_the_field_accept_step_is_caught(
     move: PottsMove, monkeypatch: pytest.MonkeyPatch
@@ -150,6 +153,7 @@ def test_dropping_the_field_accept_step_is_caught(
     assert _goodness_of_fit(move, WITH_FIELD) < SIGNIFICANCE
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
     # `1 - exp(-J)` is above 1 for J < 0, so it is not a probability, and an
@@ -158,14 +162,17 @@ def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
 
     with pytest.raises(ValueError, match="needs every coupling >= 0"):
-        sample_potts(graph, NO_FIELD, move, SEED, 10)
+        sample_potts(graph, NO_FIELD, move, np.random.default_rng(SEED), 10)
 
 
+@pytest.mark.edge_case
 def test_single_site_still_runs_on_a_negative_coupling() -> None:
     # The refusal is a property of the cluster construction, not of the model.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
 
-    chain = sample_potts(graph, NO_FIELD, PottsMove.SINGLE_SITE, SEED, 10)
+    chain = sample_potts(
+        graph, NO_FIELD, PottsMove.SINGLE_SITE, np.random.default_rng(SEED), 10
+    )
 
     assert chain.states.shape == (10, graph.n_nodes)
 
@@ -189,12 +196,13 @@ def _autocorrelation_in_site_updates(move: PottsMove, extent: int) -> float:
     n_sweeps = 12_000 if move is PottsMove.WOLFF else 1_500
 
     chain: PottsChain = sample_potts(
-        graph, field, move, 7, n_sweeps, burn_in=n_sweeps // 5
+        graph, field, move, np.random.default_rng(7), n_sweeps, burn_in=n_sweeps // 5
     )
     tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
     return tau * chain.mean_cluster_size / graph.n_nodes
 
 
+@pytest.mark.mathematical
 def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
     # The reason for having them, as a number rather than an assertion. At
     # 12x12 the measured times are roughly 6.7, 4.2 and 2.3 site-updates for
@@ -209,13 +217,21 @@ def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
     assert wolff < single
 
 
+@pytest.mark.mathematical
 def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() -> None:
     # What makes the normalization above necessary, pinned so a change that
     # made every cluster a single site -- which would silently turn Wolff into
     # an expensive single-site sampler -- is visible.
     graph = lattice_graph((8, 8), BoundaryCondition.OPEN, TRANSITION)
 
-    chain = sample_potts(graph, np.zeros(3), PottsMove.WOLFF, 7, 2_000, burn_in=200)
+    chain = sample_potts(
+        graph,
+        np.zeros(3),
+        PottsMove.WOLFF,
+        np.random.default_rng(7),
+        2_000,
+        burn_in=200,
+    )
 
     assert 1.0 < chain.mean_cluster_size < graph.n_nodes
 
@@ -247,6 +263,7 @@ def _tempered_exact_distribution(
     return index, probability
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     # The consistency check the model itself provides: the coupling absorbs
@@ -264,6 +281,7 @@ def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     assert np.abs(scaled - expected).max() == 0.0
 
 
+@pytest.mark.structural
 @pytest.mark.parametrize("move", list(PottsMove))
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
@@ -280,7 +298,7 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
         graph,
         WITH_FIELD,
         move,
-        SEED,
+        np.random.default_rng(SEED),
         SWEEPS,
         burn_in=SWEEPS // 10,
         thin=THINNING[move],
@@ -293,17 +311,26 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     assert chi_square_p_value(observed, probability * SWEEPS) > SIGNIFICANCE
 
 
+@pytest.mark.edge_case
 def test_a_non_positive_temperature_is_refused() -> None:
     # At zero the heat bath is an argmin and the chain is a descent that
     # samples nothing; a negative temperature inverts the model.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     with pytest.raises(ValueError, match="temperature must be positive"):
-        sample_potts(graph, NO_FIELD, PottsMove.SINGLE_SITE, SEED, 10, temperature=0.0)
+        sample_potts(
+            graph,
+            NO_FIELD,
+            PottsMove.SINGLE_SITE,
+            np.random.default_rng(SEED),
+            10,
+            temperature=0.0,
+        )
     with pytest.raises(ValueError, match="temperature must be positive"):
         tempered(graph, NO_FIELD, -1.0)
 
 
+@pytest.mark.oracle
 def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not() -> (
     None
 ):
@@ -325,12 +352,17 @@ def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not(
     ground = float(minimum_frustrated_edges(graph))  # |J| = 1
     schedule = Exponential(2.0, 0.05, 200)
 
-    annealed = [anneal_potts(graph, field, schedule, seed) for seed in range(20)]
+    annealed = [
+        anneal_potts(graph, field, schedule, np.random.default_rng(seed))
+        for seed in range(20)
+    ]
     constant = [
-        anneal_potts(graph, field, Constant(1.0, 200), seed) for seed in range(20)
+        anneal_potts(graph, field, Constant(1.0, 200), np.random.default_rng(seed))
+        for seed in range(20)
     ]
     descended = [
-        iterated_conditional_modes(graph, field, 2, seed)[1] for seed in range(20)
+        iterated_conditional_modes(graph, field, 2, np.random.default_rng(seed))[1]
+        for seed in range(20)
     ]
 
     for result in annealed:

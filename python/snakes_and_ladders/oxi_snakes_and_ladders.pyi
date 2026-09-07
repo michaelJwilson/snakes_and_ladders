@@ -12,11 +12,12 @@ import numpy as np
 
 def double(x: int) -> int: ...
 def pruning_log_likelihood(
-    branch_length: list[float],
+    branch_length: np.ndarray,
     children: list[list[int]],
-    leaf_states: list[list[int]],
+    leaf_states: np.ndarray,
+    leaf_row: list[int],
     k: int,
-    pi: list[float],
+    pi: np.ndarray,
     rescale: bool,
 ) -> float: ...
 def sample_rows(
@@ -39,3 +40,12 @@ def ising_ground_state(
     edges: list[int],
     coupling: list[float],
 ) -> list[int]: ...
+def single_site_sweeps(
+    state: np.ndarray,
+    field: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    draws: np.ndarray,
+    n_sweeps: int,
+) -> None: ...

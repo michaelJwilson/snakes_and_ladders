@@ -63,7 +63,7 @@ def search_trajectories(
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)
@@ -74,7 +74,7 @@ def search_trajectories(
         result = infer(
             alignment,
             params.k,
-            seed=SEEDS[0],
+            rng=np.random.default_rng(SEEDS[0]),
             moves=moves,
             max_evaluations=MAX_EVALUATIONS,
         )
