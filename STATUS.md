@@ -725,6 +725,32 @@ log-density, exactly k-means++ under a squared distance) — is what recovers
 the labels. Both are recorded, and the escape claim is retracted for this
 instance.
 
+**One Gibbs sampler and one annealer serve every problem, over the factor
+graph** ([#309](https://github.com/michaelJwilson/snakes_and_ladders/issues/309)).
+`search.gibbs` runs a heat-bath sweep over any `FactorGraph` — a variable's
+conditional is the product of the factors touching it — tempered by a
+schedule for annealing, with an exact block move for a chain-shaped subset
+by forward filter and backward sample, and a Metropolis move over tree
+topologies on the fitted likelihood. Each instance is held to the
+distribution it targets by chi-square at 0.001: the 2x2 Potts lattice in a
+field against enumeration; the five-step chain against the enumerated path
+posterior, for the single-site sweep and for the block move, whose every
+draw is independent; the four-taxon tree at one site against sum-product's
+exact marginals; the coupled model's labels against the enumerated
+posterior. The sweep copies the Potts kernel's arithmetic — one uniform per
+variable, a search of the cumulative conditional — and agrees with it draw
+for draw on 2,000 of 2,000 sweeps; annealing reaches the triangular
+antiferromagnet's closed-form ground state on 6 of 6 seeds, as `anneal_potts`
+does at the same schedule. At temperature one the topology move's visits
+over the 15 five-taxon topologies match the flat-prior weight over fitted
+likelihoods, the quantity #270 enumerates, and annealed to 0.02 it reaches
+the enumerated best from 6 of 6 random starts with every topology fitted
+once. The price of generality is smaller than expected: twenty sweeps of an
+8x8 three-state lattice take 19.1 ms over factor tables against 15.0 ms for
+the Python Potts sweep and 5.9 ms for the Rust one, 1.3x and 3.2x, because
+the Python kernel already pays a NumPy call per site. The specialised kernels
+stay the default for the Potts lattice.
+
 **The accuracy requirement's first half is met.** Normalized Robinson-Foulds
 distance from the inferred to the generating topology is met at the 0.05 bound
 from 125 sites upward, with 8 of 8 replicates recovering the topology exactly at
