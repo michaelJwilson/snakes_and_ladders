@@ -102,6 +102,49 @@ through $\constrained$ by the delta method: $\mathrm{Var}(\constrained(\params))
 Section~\ref{sec:properties} makes realized interval coverage a measurement
 rather than an assumption.
 
+\subsection{The Discrete Search as a Decision Process}
+\label{sec:policy-gradient}
+
+The structural search is a Markov decision process \citep{suttonbarto2018}:
+the state is the current structure with its fitted parameters, an action is a
+move from the neighbourhood $\neighbourhood(\cdot)$, and the reward is the
+improvement in the objective. An episode ends on a step budget or when no move
+improves the score---a property of the state, and the same stopping rule the
+greedy baseline obeys, which is what makes the two comparable. Because the
+reward is a difference, the undiscounted return telescopes,
+\begin{equation}
+  G = \sum_{t=0}^{T-1} R_t
+    = \sum_{t=0}^{T-1} \big[\objective(s_t) - \objective(s_{t+1})\big]
+    = \objective(s_0) - \objective(s_T),
+  \label{eq:return}
+\end{equation}
+the improvement between the first and last state whatever path joined them.
+That is what licenses an undiscounted return---a discount would prefer
+improvement found early over the same improvement found late---and it is why a
+truncation landing between a sacrifice and its payoff teaches the opposite of
+the truth, so a truncated episode is recorded as one.
+
+The policy is a softmax over the scores of the \emph{available} actions,
+$\pi(a \mid s) \propto \exp f(s, a)$ for $a \in \neighbourhood(s)$, so a
+neighbourhood of any size is admissible. A scorer with a single weight on the
+improvement a move buys is an inverse temperature, and greedy search is its
+zero-temperature limit; what such an agent can learn is exactly how much it
+should accept a worsening move to reach a better optimum, which is the
+credit-assignment question this search makes sharp. It is trained by the
+score-function estimator with a baseline,
+\begin{equation}
+  \nabla J = \mathbb{E}\Big[\sum_{t} \nabla \log \pi(a_t \mid s_t)\,
+             \big(G_t - b(s_t)\big)\Big],
+  \qquad G_t = \sum_{u \ge t} R_u,
+  \label{eq:reinforce}
+\end{equation}
+where a baseline $b$ independent of the sample it is subtracted from leaves the
+estimator unbiased and is there to reduce its variance, not its bias: $G_t$ is
+a sum of objective differences whose scale is the problem's, so an uncentred
+gradient varies by orders of magnitude between instances. The comparison
+against the greedy baseline is at a matched budget of objective evaluations per
+decision, never in wall-clock time.
+
 \section{Problem Statement: Phylogenetic Inference}
 \label{sec:phylo}
 
@@ -113,9 +156,36 @@ time-reversible model factors as $\Q = \SubMat \operatorname{diag}(\bpi)$ with
 $\SubMat$ symmetric, and then satisfies detailed balance,
 $\pi_i \Q_{ij} = \pi_j \Q_{ji}$.
 
+The simplest such model is Jukes--Cantor on $k$ states: every substitution
+equally likely and $\bpi$ uniform, with $\Q$ scaled so that one unit of branch
+length is one expected substitution per site,
+\begin{equation}
+  -\sum_{i \in \states} \pi_i\, \Q_{ii} = 1,
+  \label{eq:normalization}
+\end{equation}
+which puts the transition probabilities in closed form
+\citep{felsenstein2004, durbin1998}:
+\begin{equation}
+  \Pmat_{ij}(t) = \frac{1}{k} + \Big(\delta_{ij} - \frac{1}{k}\Big)\,
+                  \exp\!\Big(-\frac{k}{k-1}\, t\Big).
+  \label{eq:jc}
+\end{equation}
+Rows sum to one, $\Pmat(0) = \mathbf{I}$, and every entry tends to $1/k$ as
+$t \to \infty$; the general time-reversible model replaces the single rate by
+$\SubMat$ and $\bpi$ and keeps Equation~\ref{eq:normalization}.
+
 Given a topology $\tree$ over $n$ taxa, branch lengths $\branch$, and an
-alignment $\data$ of $L$ sites, the likelihood marginalizes every assignment of
-states to the $n-2$ internal nodes---$k^{\,n-2}$ of them per site.
+alignment $\data$ of $L$ sites, sites evolve independently and the likelihood
+marginalizes every assignment $z$ of states to the internal nodes:
+\begin{equation}
+  p(\data \mid \tree, \branch, \Q)
+    = \prod_{s=1}^{L} \;\sum_{z}\; \pi_{z_{\rootnode}}
+      \prod_{(u \to v)} \Pmat_{z_u z_v}(\tau_v),
+  \label{eq:site-independence}
+\end{equation}
+the product over the branches $(u \to v)$ of the rooted tree with the leaves
+fixed by the data---$k^{\,n-2}$ terms per site for a binary tree. Summing it
+directly is the oracle every faster evaluation of it is checked against.
 
 \qacaptionread{figures/sim_tree_caption.txt}{\simTreeCaption}
 \begin{figure}[htbp]
@@ -133,6 +203,27 @@ states to the $n-2$ internal nodes---$k^{\,n-2}$ of them per site.
   \label{fig:jc-transition}
 \end{figure}
 
+\subsection{The algorithm: simulation}
+The generative direction of Equation~\ref{eq:site-independence} is a pre-order
+walk: draw the root state, then each node's state from the row of its
+parent's state. One site is Algorithm~\ref{alg:simulate}; $L$ sites are $L$
+independent runs, and the empirical substitution frequencies along any branch
+converge to Equation~\ref{eq:jc}, which is the check a simulator is held
+to---against the closed form, and never against the likelihood that will later
+be fitted to its output.
+
+\begin{algorithm}[htbp]
+\caption{Forward simulation of one site under $(\tree, \branch, \Q)$}
+\label{alg:simulate}
+\begin{algorithmic}[1]
+\State draw $z_{\rootnode} \sim \bpi$
+\For{each non-root node $v$ in pre-order, with parent $u$}
+  \State draw $z_v \sim \Pmat_{z_u,\,\cdot}(\tau_v)$
+\EndFor
+\State \Return the leaf states $(z_\ell)_{\ell \in \mathrm{leaves}(\tree)}$
+\end{algorithmic}
+\end{algorithm}
+
 \subsection{The algorithm: pruning}
 Felsenstein's pruning evaluates that marginal in $O(n L k^2)$ rather than
 $O(L k^{n-2})$, by a post-order recursion carrying a partial likelihood
@@ -144,7 +235,11 @@ state $i$:
   \label{eq:pruning}
 \end{equation}
 with $L_u(i) = \mathbb{1}[\,\text{$u$ observed in state $i$}\,]$ at a leaf, and
-the site likelihood $\sum_i \pi_i L_{\rootnode}(i)$ at the root
+the site likelihood read off at the root,
+\begin{equation}
+  p(\data_s \mid \tree, \branch, \Q) = \sum_{i \in \states} \pi_i\, L_{\rootnode}(i)
+  \label{eq:root}
+\end{equation}
 \citep{felsenstein2004, durbin1998}. Products of many small numbers underflow,
 so each node's partials are rescaled and the logarithm of the scaling
 accumulated separately; the rescaling must remain differentiable, since
@@ -190,7 +285,33 @@ between a fixture that exercises an optimizer and one that does not.
 Exact marginals come from enumeration at small sizes and from belief
 propagation on a tree, where it is exact; on a loopy graph it is an
 approximation whose accuracy is a property of the graph rather than of the
-implementation \citep{koller2009, frey1998}. Sampling is by single-site Gibbs
+implementation \citep{koller2009, frey1998}. The sum-product message from
+$i$ to a neighbour $j$ is
+\begin{equation}
+  m_{i \to j}(\sigma_j) \;\propto\; \sum_{\sigma_i}
+    \exp\!\big(J_{ij}\,\delta(\sigma_i,\sigma_j) + h_i(\sigma_i)\big)
+    \prod_{l \in \partial i \setminus j} m_{l \to i}(\sigma_i),
+  \label{eq:bp-message}
+\end{equation}
+iterated to a fixed point, with beliefs $b_i(\sigma_i) \propto e^{h_i(\sigma_i)}
+\prod_{l \in \partial i} m_{l \to i}(\sigma_i)$ at a node and likewise on an
+edge. The messages are carried in the logarithm and normalized every sweep,
+because a coupling of a few units on a small lattice already puts a product of
+exponentials past what a linear recursion holds. The Bethe free energy of the
+fixed point,
+\begin{equation}
+  F_{\mathrm{Bethe}}
+    = \sum_{\langle i,j \rangle} \sum_{\sigma_i,\sigma_j}
+        b_{ij}\,\big(E_{ij} + \log b_{ij}\big)
+    + \sum_i \sum_{\sigma_i} b_i\, E_i
+    - \sum_i (d_i - 1) \sum_{\sigma_i} b_i \log b_i,
+  \label{eq:bethe}
+\end{equation}
+with $E_{ij} = -J_{ij}\,\delta(\sigma_i,\sigma_j)$, $E_i = -h_i(\sigma_i)$ and
+$d_i$ the degree of $i$, equals $-\log Z$ exactly on a tree and approximates
+it on a loopy graph \citep{yedidia2005, mezard2009}. A fixed point the
+iteration never reached is not an estimate of anything, so non-convergence is
+a refusal rather than a number. Sampling is by single-site Gibbs
 updates or by cluster moves such as Swendsen--Wang, which flip correlated
 regions together and so decorrelate faster near a critical point
 \citep{newman1999}. Ground states of the two-state case reduce to a maximum
@@ -320,6 +441,19 @@ on measuring it, the data cannot tell one value from another. The two failures
 are mirror images, and they announce themselves differently---the first as a
 divergence, the second as a singular information matrix---which is why each is
 measured rather than inferred from the other.
+
+\subsection{Agreement across implementations is a tolerance}
+\label{sec:tolerance}
+An accelerated implementation is pinned against the reference within a
+declared \emph{relative} tolerance, never bitwise. Relative, because a
+log-likelihood is a sum over sites and an absolute bound fixed at one size does
+not transfer to another. Keyed on the \emph{lowest} precision in the
+comparison, because a single-precision device cannot be held to a
+double-precision bound, and one bound loose enough for single precision would
+let a broken double-precision backend pass. A discrepancy inside the tolerance
+is not a defect and is not corrected; one outside it is not a tolerance to
+loosen. The values themselves live beside the measurements they are derived
+from, not here.
 
 \subsection{Published constants, and asymptotic results}
 Some claims come from outside entirely: the $(2n-5)!!$ count, Goemans--Williamson's

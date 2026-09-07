@@ -34,8 +34,7 @@ enumerated from the *unscaled* model, which is the oracle the samplers already
 have. Tempering a likelihood is a different object (`snakes_and_ladders.opt.schedule`
 says why); here the objective is an energy and the temperature is physical.
 
-See ``docs/tex/textbook.tex``, "Problem Statement: Potts Models in an
-External Field" (Newman &
+See ``docs/tex/textbook.tex``, ``sec:potts`` (Newman &
 Barkema chs. 4 and 6 for both algorithms and for Sokal's windowing; Mezard &
 Montanari ch. 2).
 """

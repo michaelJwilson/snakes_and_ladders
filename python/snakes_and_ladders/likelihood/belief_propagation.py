@@ -19,8 +19,7 @@ that is -- `docs/CLAUDE.md`'s rule that an unstable number is not a
 measurement, applied where the instability is in the algorithm rather than in
 the machine.
 
-See ``docs/tex/textbook.tex``, "Problem Statement: Potts Models in an
-External Field"
+See ``eq:bp-message`` and ``eq:bethe`` of ``docs/tex/textbook.tex``
 (Yedidia, Freeman & Weiss for the free energy; Mezard & Montanari ch. 14;
 Koller & Friedman ch. 11).
 """
