@@ -36,7 +36,7 @@ from collections.abc import Iterator, Sequence
 
 import numpy as np
 
-from snakes_and_ladders.sim.tree import Node
+from snakes_and_ladders.sim.tree import Node, edges
 
 Topology = Node
 
@@ -198,6 +198,50 @@ def leaf_bipartitions(topology: Topology) -> frozenset[frozenset[str]]:
     splits: set[frozenset[str]] = set()
     _collect_splits(topology, all_leaves, anchor, splits)
     return frozenset(splits)
+
+
+def branch_splits(topology: Topology) -> list[frozenset[str]]:
+    """The split each branch induces, in ``pruning_torch.branch_order`` order.
+
+    A branch *is* the bipartition of the leaf set it separates, canonicalized
+    as :func:`leaf_bipartitions` canonicalizes it, so a branch can be matched
+    between a topology and its neighbour by what it separates rather than by
+    the name of the node below it -- and the names are synthetic
+    (``_from_adjacency`` numbers them), so nothing else would match. This is
+    what lets a fitted length be carried from a parent topology to every
+    neighbour that still has the branch (issue #289).
+
+    Parameters
+    ----------
+    topology : Topology
+        An unrooted binary topology in the trifurcating-root convention.
+
+    Returns
+    -------
+    list[frozenset[str]]
+        One split per non-root node, aligned with ``branch_order(topology)``
+        and therefore with a ``branch_lengths`` tensor.
+    """
+    all_leaves = _leaf_names(topology)
+    anchor = min(all_leaves)
+    below: dict[str, frozenset[str]] = {}
+
+    def visit(node: Node) -> frozenset[str]:
+        leaves = (
+            frozenset((node.name,))
+            if node.is_leaf
+            else frozenset().union(*(visit(child) for child in node.children))
+        )
+        below[node.name] = leaves
+        return leaves
+
+    visit(topology)
+    return [
+        below[child.name]
+        if anchor not in below[child.name]
+        else all_leaves - below[child.name]
+        for _, child in edges(topology)
+    ]
 
 
 def _leaf_names(node: Node) -> frozenset[str]:
