@@ -79,8 +79,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   key (#114)
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
   it costs per step
-- Temperature schedules, and the likelihood-versus-temperature curves that
-  judge exploration
+- Temperature schedules, annealing and parallel tempering, and the
+  likelihood-versus-temperature curves that judge exploration (#267)
 - Establish the external reference tools to benchmark against, and how they are
   installed (#126)
 - A classical baseline suite the three applications are scored against under
