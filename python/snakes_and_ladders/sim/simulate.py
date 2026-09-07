@@ -24,7 +24,11 @@ class SimulatedDataset:
     """A simulated alignment together with the parameters that generated it.
 
     Ground truth ships with the data: a dataset without its generating
-    ``(tau, k, pi, seed, n_sites)`` is not validation-usable.
+    ``(tau, k, pi, n_sites)`` is not validation-usable. The seed is not
+    among them. It is declared in the fixture and read from there --
+    `qa.sim_problem_sizes` prints `params.seed`, never a dataset's -- and a
+    generator cannot be asked which seed made it, so recording one here
+    would mean carrying a second source for one fact (issue #240).
 
     Parameters
     ----------
@@ -43,8 +47,6 @@ class SimulatedDataset:
         Number of states.
     pi : np.ndarray
         Root state distribution used.
-    seed : int
-        Seed used.
     n_sites : int
         Number of sites simulated.
     """
@@ -55,7 +57,6 @@ class SimulatedDataset:
     tau: Node
     k: int
     pi: np.ndarray
-    seed: int
     n_sites: int
 
 
@@ -63,7 +64,7 @@ def simulate_alignment(
     tau: Node,
     k: int,
     pi: np.ndarray,
-    seed: int,
+    rng: np.random.Generator,
     n_sites: int,
     rate_matrix: np.ndarray | None = None,
 ) -> SimulatedDataset:
@@ -78,8 +79,11 @@ def simulate_alignment(
         Number of states.
     pi : np.ndarray
         Root state distribution, shape (k,).
-    seed : int
-        Seed for ``np.random.default_rng``, so the dataset is reproducible.
+    rng : np.random.Generator
+        Passed in rather than seeded here, so a caller drawing an *ensemble*
+        gets independent datasets rather than the same one repeatedly --- the
+        mistake a `seed` parameter invites, which `sim/CLAUDE.md` forbids and
+        `qa.rl_reward_surface` has made once.
     n_sites : int
         Number of alignment columns to simulate.
     rate_matrix : np.ndarray | None
@@ -98,7 +102,6 @@ def simulate_alignment(
         msg = f"pi has shape {pi.shape}, expected ({k},)"
         raise ValueError(msg)
 
-    rng = np.random.default_rng(seed)
     node_states: dict[str, np.ndarray] = {}
 
     def _walk(node: Node, parent_states: np.ndarray | None) -> None:
@@ -133,6 +136,5 @@ def simulate_alignment(
         tau=tau,
         k=k,
         pi=pi,
-        seed=seed,
         n_sites=n_sites,
     )

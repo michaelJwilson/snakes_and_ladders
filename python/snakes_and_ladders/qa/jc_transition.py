@@ -57,7 +57,7 @@ def empirical_transitions(params: SimulationParams) -> list[tuple[float, float, 
         tau=params.tau,
         k=params.k,
         pi=params.pi,
-        seed=params.seed,
+        rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
 

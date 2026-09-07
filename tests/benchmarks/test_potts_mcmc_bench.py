@@ -36,6 +36,8 @@ def test_potts_sweep_benchmark(
 ) -> None:
     graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, TRANSITION)
 
-    chain = benchmark(sample_potts, graph, FIELD, move, 7, 50, 10)
+    chain = benchmark(
+        sample_potts, graph, FIELD, move, np.random.default_rng(7), 50, 10
+    )
 
     assert chain.states.shape == (50, graph.n_nodes)

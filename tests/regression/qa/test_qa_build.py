@@ -18,6 +18,8 @@ from snakes_and_ladders.qa import build, manifest
 from snakes_and_ladders.qa.build import UncitedFigureError, compare, selected
 from snakes_and_ladders.qa.manifest import FIGURES, cited_stems
 
+from tests._scale import stress_only
+
 DOCUMENTS = build.DEFAULT_DOCUMENTS
 COMMITTED_FIGURES = build.DEFAULT_OUTPUT_DIR
 
@@ -33,6 +35,8 @@ def _document_arguments() -> list[str]:
     ]
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_every_figure_the_documents_cite_has_a_manifest_entry() -> None:
     # The failure this prevents: a figure added to a document that no build
     # regenerates, left to drift from the code that produced it while the
@@ -40,6 +44,8 @@ def test_every_figure_the_documents_cite_has_a_manifest_entry() -> None:
     assert manifest.unknown_stems(cited_stems(*DOCUMENTS)) == set()
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_every_committed_figure_has_a_manifest_entry() -> None:
     # The release gate renders the manifest, so a committed figure absent from
     # it would be checked by nothing at all -- neither per PR nor at release.
@@ -50,6 +56,7 @@ def test_every_committed_figure_has_a_manifest_entry() -> None:
     assert committed - known == set()
 
 
+@pytest.mark.structural
 def test_the_document_selects_fewer_figures_than_the_release_gate() -> None:
     # The whole point of the change. If these were equal the per-PR build
     # would be doing the release gate's work, which is what it cost before.
@@ -60,6 +67,7 @@ def test_the_document_selects_fewer_figures_than_the_release_gate() -> None:
     assert len(every) == len(FIGURES)
 
 
+@pytest.mark.structural
 def test_a_cited_figure_is_selected_whichever_way_it_is_included(
     tmp_path: Path,
 ) -> None:
@@ -84,6 +92,7 @@ def test_a_cited_figure_is_selected_whichever_way_it_is_included(
     }
 
 
+@pytest.mark.edge_case
 def test_a_document_citing_an_unknown_figure_is_refused(tmp_path: Path) -> None:
     # Refused rather than skipped: skipping is exactly the silent failure the
     # selection would otherwise introduce.
@@ -94,6 +103,7 @@ def test_a_document_citing_an_unknown_figure_is_refused(tmp_path: Path) -> None:
         selected([document], every=False)
 
 
+@pytest.mark.structural
 def test_a_perturbed_figure_is_reported_as_stale(tmp_path: Path) -> None:
     # The check that has to keep working for the release gate to substitute
     # for the per-PR one: a committed figure whose bytes no longer match a
@@ -108,6 +118,7 @@ def test_a_perturbed_figure_is_reported_as_stale(tmp_path: Path) -> None:
     assert compare(rebuilt, committed) == ["figure.pdf"]
 
 
+@pytest.mark.edge_case
 def test_a_figure_missing_from_the_committed_set_is_reported_as_stale(
     tmp_path: Path,
 ) -> None:
@@ -120,6 +131,7 @@ def test_a_figure_missing_from_the_committed_set_is_reported_as_stale(
     assert compare(rebuilt, committed) == ["figure.pdf"]
 
 
+@pytest.mark.structural
 def test_matching_figures_are_reported_as_clean(tmp_path: Path) -> None:
     rebuilt = tmp_path / "rebuilt"
     committed = tmp_path / "committed"
@@ -131,6 +143,11 @@ def test_matching_figures_are_reported_as_clean(tmp_path: Path) -> None:
     assert compare(rebuilt, committed) == []
 
 
+@pytest.mark.structural
+@stress_only(
+    "renders every figure in the manifest, which is the release "
+    "gate's job; the cited-figure paths are checked at CI tier above"
+)
 def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None:
     # Both directions of the trade, on a real rendering. `sim_problem_sizes`
     # is committed and *not* cited by the document, so it is exactly the case
@@ -165,6 +182,7 @@ def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None
     assert release_gate == 1, "the release gate must catch it"
 
 
+@pytest.mark.structural
 def test_a_figure_only_the_textbook_cites_is_still_selected(
     tmp_path: Path,
 ) -> None:
@@ -183,6 +201,7 @@ def test_a_figure_only_the_textbook_cites_is_still_selected(
     assert together == {"sim_example", "sim_tree"}
 
 
+@pytest.mark.structural
 def test_leaving_a_document_out_selects_the_wrong_set(tmp_path: Path) -> None:
     # The paired half: the guard above is only worth having if the mistake it
     # forbids is one that changes the answer. It is -- the textbook's figure
@@ -199,6 +218,7 @@ def test_leaving_a_document_out_selects_the_wrong_set(tmp_path: Path) -> None:
     assert partial < {spec.stem for spec in selected([paper, textbook], every=False)}
 
 
+@pytest.mark.edge_case
 def test_a_selection_over_no_document_is_refused() -> None:
     # An empty union cites nothing and would render nothing, while passing
     # every check that asks whether the cited figures are fresh.
@@ -206,6 +226,7 @@ def test_a_selection_over_no_document_is_refused() -> None:
         cited_stems()
 
 
+@pytest.mark.structural
 def test_the_documents_the_build_defaults_to_all_exist() -> None:
     # `DEFAULT_DOCUMENTS` is what the build script and the release gate agree
     # on. A path renamed on one side only would raise far from its cause.
@@ -213,6 +234,7 @@ def test_the_documents_the_build_defaults_to_all_exist() -> None:
     assert all(document.is_file() for document in DOCUMENTS)
 
 
+@pytest.mark.structural
 def test_the_textbook_names_no_code() -> None:
     # The separation the split is for (issue #249): the textbook states
     # problem formulations, algorithms and the properties that referee them,

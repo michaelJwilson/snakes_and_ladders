@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import yaml
 
+from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.numerics import logsumexp, sample_rows
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph
 
@@ -126,12 +126,7 @@ def load_potts_lattice_params(path: Path) -> PottsLatticeParams:
         If a required field is missing, ``field`` has the wrong shape, or a
         size is too small to identify the model.
     """
-    raw = yaml.safe_load(path.read_text())
-
-    missing = _REQUIRED_FIELDS - raw.keys()
-    if missing:
-        msg = f"{path}: missing required field(s) {sorted(missing)}"
-        raise ValueError(msg)
+    raw = load_declared(path, _REQUIRED_FIELDS)
 
     shape = tuple(int(extent) for extent in raw["shape"])
     n_states = int(raw["n_states"])
@@ -169,20 +164,17 @@ class SimulatedPottsDataset:
         The graph the configurations were drawn on.
     field : np.ndarray
         The external field used, shape ``(n_states,)``.
-    seed : int
-        Seed used.
     """
 
     configurations: np.ndarray
     graph: PottsGraph
     field: np.ndarray
-    seed: int
 
 
 def simulate_potts(
     graph: PottsGraph,
     field: np.ndarray,
-    seed: int,
+    rng: np.random.Generator,
     n_samples: int,
     burn_in: int = 500,
 ) -> SimulatedPottsDataset:
@@ -194,8 +186,10 @@ def simulate_potts(
         The graph to sample on.
     field : np.ndarray
         External field ``h``, shape ``(n_states,)``.
-    seed : int
-        Seed for ``np.random.default_rng``.
+    rng : np.random.Generator
+        Passed in rather than seeded here, so a caller drawing an *ensemble*
+        gets independent datasets rather than the same one repeatedly ---
+        `sim/CLAUDE.md`'s standing rule (issue #240).
     n_samples : int
         Configurations to draw.
     burn_in : int
@@ -209,16 +203,16 @@ def simulate_potts(
         The configurations, the graph, and the generating truth.
     """
     if graph.is_open_chain():
-        configurations = _simulate_open_chain_exact(graph, field, seed, n_samples)
+        configurations = _simulate_open_chain_exact(graph, field, rng, n_samples)
     else:
-        configurations = _simulate_gibbs(graph, field, seed, n_samples, burn_in)
+        configurations = _simulate_gibbs(graph, field, rng, n_samples, burn_in)
     return SimulatedPottsDataset(
-        configurations=configurations, graph=graph, field=field, seed=seed
+        configurations=configurations, graph=graph, field=field
     )
 
 
 def _simulate_open_chain_exact(
-    graph: PottsGraph, field: np.ndarray, seed: int, n_samples: int
+    graph: PottsGraph, field: np.ndarray, rng: np.random.Generator, n_samples: int
 ) -> np.ndarray:
     """Exact i.i.d. samples on an open chain, by backward messages.
 
@@ -229,7 +223,6 @@ def _simulate_open_chain_exact(
     "Simulate Component-Wise"). Generalized to a per-edge coupling, which
     reduces to the uniform-coupling case ``snakes_and_ladders.opt.potts`` needs.
     """
-    rng = np.random.default_rng(seed)
     length = graph.n_nodes
     n_states = field.shape[0]
 
@@ -261,7 +254,7 @@ def _simulate_open_chain_exact(
 def _simulate_gibbs(
     graph: PottsGraph,
     field: np.ndarray,
-    seed: int,
+    rng: np.random.Generator,
     n_samples: int,
     burn_in: int,
 ) -> np.ndarray:
@@ -276,7 +269,6 @@ def _simulate_gibbs(
     loop is over sweeps, not over sweeps times samples: each site update is
     one vectorized draw across every chain.
     """
-    rng = np.random.default_rng(seed)
     n_states = field.shape[0]
     adjacency: list[list[tuple[int, float]]] = [[] for _ in range(graph.n_nodes)]
     for (a, b), coupling in graph.weighted_edges():

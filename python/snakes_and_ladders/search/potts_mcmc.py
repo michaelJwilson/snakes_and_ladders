@@ -75,7 +75,7 @@ def sample_potts(
     graph: PottsGraph,
     field: np.ndarray,
     move: PottsMove,
-    seed: int,
+    rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
     thin: int = 1,
@@ -92,8 +92,9 @@ def sample_potts(
         The move set. All three leave the same Boltzmann distribution
         invariant, which is what
         `tests/regression/search/test_potts_mcmc.py` asserts.
-    seed : int
-        Seed for ``np.random.default_rng``.
+    rng : np.random.Generator
+        Passed in rather than seeded here: seeding inside a call makes every
+        draw of an ensemble identical (`sim/CLAUDE.md`, issue #240).
     n_sweeps : int
         Recorded sweeps. A sweep is ``n_nodes`` heat-bath updates, one
         Swendsen-Wang bond-and-recolour pass over the whole lattice, or *one*
@@ -130,7 +131,6 @@ def sample_potts(
         )
         raise ValueError(msg)
 
-    rng = np.random.default_rng(seed)
     n_states = int(field.shape[0])
     state = rng.integers(0, n_states, size=graph.n_nodes)
     neighbours = _adjacency(graph)
