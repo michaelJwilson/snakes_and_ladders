@@ -32,6 +32,8 @@ from snakes_and_ladders.opt.hmc import (
 )
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 
+from tests._scale import stress_only
+
 EXACT = 1e-13
 
 
@@ -80,6 +82,7 @@ QUADRATURE_MEAN = (0.72051, -0.61289)
 QUADRATURE_SD = (0.05497, 0.04524)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize(("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (100, 0.02)])
 def test_the_integrator_is_reversible(n_steps: int, step_size: float) -> None:
     # Run forward, negate the momentum, run forward again: the exact statement
@@ -98,6 +101,7 @@ def test_the_integrator_is_reversible(n_steps: int, step_size: float) -> None:
     assert float((-back_momentum - momentum).abs().max()) < EXACT
 
 
+@pytest.mark.mathematical
 def test_the_energy_error_is_second_order_in_the_step_size() -> None:
     # Halving the step must quarter the error. The *trajectory length* is held
     # fixed and the step count scaled with it: varying the step at a fixed
@@ -118,6 +122,7 @@ def test_the_energy_error_is_second_order_in_the_step_size() -> None:
         assert ratio == pytest.approx(4.0, rel=0.02)
 
 
+@pytest.mark.oracle
 def test_the_chain_recovers_an_analytic_gaussian() -> None:
     # Mean and covariance in closed form, so nothing here rests on a second
     # sampler. The tolerance is set from the spread across eight independent
@@ -136,6 +141,11 @@ def test_the_chain_recovers_an_analytic_gaussian() -> None:
     )
 
 
+@pytest.mark.oracle
+@stress_only(
+    "the second moment needs pooled 2000-draw chains; a shorter run "
+    "estimates the spread badly and would assert less than it claims"
+)
 def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
     # The Potts chain's `theta` is two-dimensional at two states, so the
     # posterior can be integrated on a grid and there is a reference that is
@@ -170,6 +180,11 @@ def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
     )
 
 
+@pytest.mark.mathematical
+@stress_only(
+    "the bias is in the spread, which needs the same chain lengths "
+    "as the test above before it is measurable at all"
+)
 def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
     # The failure this module's `energy_error` exists for, and the reason
     # acceptance rate is not enough on its own. Measured against quadrature:
@@ -198,6 +213,7 @@ def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
     assert float(coarse.theta.std(dim=0)[0]) < float(fine.theta.std(dim=0)[0])
 
 
+@pytest.mark.mathematical
 def test_the_posterior_is_wider_than_the_laplace_approximation_predicts() -> None:
     # The comparison this module exists to make. The Laplace standard error is
     # the curvature at the mode; the HMC one is a quantile of the posterior.
@@ -215,6 +231,7 @@ def test_the_posterior_is_wider_than_the_laplace_approximation_predicts() -> Non
     np.testing.assert_allclose(laplace.numpy(), np.array(QUADRATURE_SD), rtol=0.15)
 
 
+@pytest.mark.edge_case
 def test_a_zero_length_trajectory_is_refused() -> None:
     # It would propose the current point every time: acceptance rate 1, energy
     # error 0, and a chain that has not moved. Every diagnostic reports health.
@@ -222,16 +239,19 @@ def test_a_zero_length_trajectory_is_refused() -> None:
         sample(GAUSSIAN, seed=1, n_samples=10, step_size=0.1, n_steps=0)
 
 
+@pytest.mark.edge_case
 def test_a_non_positive_step_size_is_refused() -> None:
     with pytest.raises(ValueError, match="step_size must be positive"):
         sample(GAUSSIAN, seed=1, n_samples=10, step_size=0.0)
 
 
+@pytest.mark.edge_case
 def test_a_non_positive_prior_scale_is_refused() -> None:
     with pytest.raises(ValueError, match="prior scale must be positive"):
         WithGaussianPrior(GAUSSIAN, scale=0.0)
 
 
+@pytest.mark.mathematical
 def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
     # The wrapper is what turns a likelihood into something with a posterior;
     # if it changed the likelihood term the chain would target a different
@@ -244,6 +264,7 @@ def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
     assert float(wrapped(point)) == pytest.approx(expected, rel=EXACT)
 
 
+@pytest.mark.structural
 def test_a_chain_is_reproducible_from_its_seed() -> None:
     first = sample(GAUSSIAN, seed=5, n_samples=50, step_size=0.2, n_steps=10)
     second = sample(GAUSSIAN, seed=5, n_samples=50, step_size=0.2, n_steps=10)
