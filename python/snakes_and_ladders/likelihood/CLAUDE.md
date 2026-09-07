@@ -37,6 +37,14 @@ application to infrastructure, never back.
   `device.py` states both tolerances and the measurements they are derived
   from, and every comparison reads them from there rather than retyping them.
 
+- **A boundary cost hides behind the fixture's size, never behind the
+  algorithm's.** A backend measured only where the existing fixtures sit
+  reports its kernel. A cost paid per element crossing into it grows with the
+  problem instead, so it is invisible at a fixture chosen for a different
+  reason and decisive at the scale the roadmap declares. Every accelerated
+  path is therefore measured at both, because the two answer different
+  questions and this repository has had them disagree.
+
 - **A backend is accepted or rejected against that tolerance, never adjusted
   until it matches.** A discrepancy inside the bound is not a bug and must not
   be "fixed"; one outside it is not a tolerance to loosen.

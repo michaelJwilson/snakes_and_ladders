@@ -53,6 +53,12 @@ def test_single_site_descent_benchmark(
 ) -> None:
     graph, field_values = _problem(extent, n_states)
 
-    _, energy = benchmark(iterated_conditional_modes, graph, field_values, n_states, 1)
+    _, energy = benchmark(
+        iterated_conditional_modes,
+        graph,
+        field_values,
+        n_states,
+        np.random.default_rng(1),
+    )
 
     assert np.isfinite(energy)

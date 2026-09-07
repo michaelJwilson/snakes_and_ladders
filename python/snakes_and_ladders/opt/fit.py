@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 import torch
 
+from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.objective import Objective
 
 # Two-sided normal quantile for a 95% interval. Written out rather than
@@ -289,3 +290,75 @@ def covers(
     """
     half_width = _Z_95 * standard_error
     return (truth >= estimate - half_width) & (truth <= estimate + half_width)
+
+
+@dataclass(frozen=True)
+class MultiStartResult:
+    """Every fit an initializer's starts produced, best first.
+
+    Parameters
+    ----------
+    best : FitResult
+        The lowest-valued fit. What a single-start caller would want.
+    all_fits : tuple[FitResult, ...]
+        Every fit, ordered by value ascending. Reported rather than discarded
+        because discarding them hides that the surface was multimodal, which is
+        exactly what `test_a_converged_fit_on_rastrigin_is_not_a_global_minimum`
+        exists to say out loud: a fit that reports one answer for a surface with
+        four basins is the failure this is about.
+    spread : float
+        ``max(value) - min(value)`` over the fits. Zero means every start
+        agreed, which is the evidence that one start would have sufficed;
+        anything else is the amount a single fit could have been wrong by.
+    """
+
+    best: FitResult
+    all_fits: tuple[FitResult, ...]
+    spread: float
+
+
+def fit_from(
+    objective: Objective,
+    initializer: Initializer,
+    max_iterations: int = 500,
+    gradient_tolerance: float = 1e-8,
+) -> MultiStartResult:
+    """Fit from every start an initializer offers, and report all of them.
+
+    A single-start initializer makes this exactly :func:`fit`, so the two are
+    not different code paths: `FromObjective` reproduces today's behaviour and
+    `spread` is then 0 by construction.
+
+    Parameters
+    ----------
+    objective : Objective
+        What to minimize.
+    initializer : Initializer
+        Where to start. See `snakes_and_ladders.opt.initialize`.
+    max_iterations : int
+        Passed to each fit.
+    gradient_tolerance : float
+        Passed to each fit.
+
+    Returns
+    -------
+    MultiStartResult
+        The best fit, every fit, and the spread across them.
+
+    Raises
+    ------
+    ValueError
+        If the initializer offers no starts. A caller asking for zero fits has
+        made a mistake that would otherwise surface as an empty ``min``.
+    """
+    starts = initializer.starts(objective)
+    if not starts:
+        msg = f"{type(initializer).__name__} offered no starting points"
+        raise ValueError(msg)
+
+    results = [
+        fit(objective, theta0, max_iterations, gradient_tolerance) for theta0 in starts
+    ]
+    ordered = tuple(sorted(results, key=lambda result: result.value))
+    spread = float(ordered[-1].value - ordered[0].value)
+    return MultiStartResult(best=ordered[0], all_fits=ordered, spread=spread)

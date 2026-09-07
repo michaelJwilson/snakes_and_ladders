@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.qa.opt_recovery import (
     build_figure,
@@ -28,6 +29,7 @@ POTTS_FIXTURE = FIXTURES_DIR / "potts_params.yaml"
 HMM_FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
 
 
+@pytest.mark.structural
 def test_potts_recovery_returns_one_entry_per_parameter() -> None:
     params = load_potts_params(POTTS_FIXTURE)
     truth, fitted, spread, hits = potts_recovery(params)
@@ -38,6 +40,7 @@ def test_potts_recovery_returns_one_entry_per_parameter() -> None:
     assert truth[0] == params.coupling
 
 
+@pytest.mark.simulated_truth
 def test_potts_recovery_covers_every_parameter_at_the_fixture() -> None:
     # Deterministic: fixed seed, so this is a pinned outcome rather than a
     # sample. A single dataset is a draw, not a rate -- the nominal rate is
@@ -47,6 +50,7 @@ def test_potts_recovery_covers_every_parameter_at_the_fixture() -> None:
     assert bool((spread > 0.0).all())
 
 
+@pytest.mark.mathematical
 def test_hmm_recovery_reports_probabilities_that_normalize() -> None:
     params = load_hmm_params(HMM_FIXTURE)
     truth, fitted, spread, hits = hmm_recovery(params)
@@ -70,6 +74,7 @@ def test_hmm_recovery_reports_probabilities_that_normalize() -> None:
     )
 
 
+@pytest.mark.oracle
 def test_hmm_recovery_aligns_the_state_permutation() -> None:
     # Without alignment the fitted emission rows land against the wrong true
     # rows and the figure would show a correct fit as a failure. Checked by
@@ -90,6 +95,7 @@ def test_hmm_recovery_aligns_the_state_permutation() -> None:
         assert own < min(others)
 
 
+@pytest.mark.structural
 def test_the_caption_reports_the_coverage_it_measured() -> None:
     potts_params = load_potts_params(POTTS_FIXTURE)
     hmm_params = load_hmm_params(HMM_FIXTURE)
@@ -106,6 +112,7 @@ def test_the_caption_reports_the_coverage_it_measured() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
+@pytest.mark.structural
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = main(
         [

@@ -18,6 +18,8 @@ from snakes_and_ladders.qa import build, manifest
 from snakes_and_ladders.qa.build import UncitedFigureError, compare, selected
 from snakes_and_ladders.qa.manifest import FIGURES, cited_stems
 
+from tests._scale import stress_only
+
 MAIN_TEX = build.DEFAULT_MAIN_TEX
 COMMITTED_FIGURES = build.DEFAULT_OUTPUT_DIR
 
@@ -26,6 +28,8 @@ COMMITTED_FIGURES = build.DEFAULT_OUTPUT_DIR
 CHEAP_STEM = "sim_problem_sizes"
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_every_figure_the_document_cites_has_a_manifest_entry() -> None:
     # The failure this prevents: a figure added to the document that no build
     # regenerates, left to drift from the code that produced it while the
@@ -33,6 +37,8 @@ def test_every_figure_the_document_cites_has_a_manifest_entry() -> None:
     assert manifest.unknown_stems(cited_stems(MAIN_TEX)) == set()
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_every_committed_figure_has_a_manifest_entry() -> None:
     # The release gate renders the manifest, so a committed figure absent from
     # it would be checked by nothing at all -- neither per PR nor at release.
@@ -43,6 +49,7 @@ def test_every_committed_figure_has_a_manifest_entry() -> None:
     assert committed - known == set()
 
 
+@pytest.mark.structural
 def test_the_document_selects_fewer_figures_than_the_release_gate() -> None:
     # The whole point of the change. If these were equal the per-PR build
     # would be doing the release gate's work, which is what it cost before.
@@ -53,6 +60,7 @@ def test_the_document_selects_fewer_figures_than_the_release_gate() -> None:
     assert len(every) == len(FIGURES)
 
 
+@pytest.mark.structural
 def test_a_cited_figure_is_selected_whichever_way_it_is_included(
     tmp_path: Path,
 ) -> None:
@@ -77,6 +85,7 @@ def test_a_cited_figure_is_selected_whichever_way_it_is_included(
     }
 
 
+@pytest.mark.edge_case
 def test_a_document_citing_an_unknown_figure_is_refused(tmp_path: Path) -> None:
     # Refused rather than skipped: skipping is exactly the silent failure the
     # selection would otherwise introduce.
@@ -87,6 +96,7 @@ def test_a_document_citing_an_unknown_figure_is_refused(tmp_path: Path) -> None:
         selected(document, every=False)
 
 
+@pytest.mark.structural
 def test_a_perturbed_figure_is_reported_as_stale(tmp_path: Path) -> None:
     # The check that has to keep working for the release gate to substitute
     # for the per-PR one: a committed figure whose bytes no longer match a
@@ -101,6 +111,7 @@ def test_a_perturbed_figure_is_reported_as_stale(tmp_path: Path) -> None:
     assert compare(rebuilt, committed) == ["figure.pdf"]
 
 
+@pytest.mark.edge_case
 def test_a_figure_missing_from_the_committed_set_is_reported_as_stale(
     tmp_path: Path,
 ) -> None:
@@ -113,6 +124,7 @@ def test_a_figure_missing_from_the_committed_set_is_reported_as_stale(
     assert compare(rebuilt, committed) == ["figure.pdf"]
 
 
+@pytest.mark.structural
 def test_matching_figures_are_reported_as_clean(tmp_path: Path) -> None:
     rebuilt = tmp_path / "rebuilt"
     committed = tmp_path / "committed"
@@ -124,6 +136,11 @@ def test_matching_figures_are_reported_as_clean(tmp_path: Path) -> None:
     assert compare(rebuilt, committed) == []
 
 
+@pytest.mark.structural
+@stress_only(
+    "renders every figure in the manifest, which is the release "
+    "gate's job; the cited-figure paths are checked at CI tier above"
+)
 def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None:
     # Both directions of the trade, on a real rendering. `sim_problem_sizes`
     # is committed and *not* cited by the document, so it is exactly the case

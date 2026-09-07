@@ -18,6 +18,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 REPOSITORY = Path(__file__).resolve().parents[3]
 INDEX = REPOSITORY / "docs" / "source" / "index.rst"
 PACKAGE = REPOSITORY / "python"
@@ -42,6 +44,8 @@ def _present() -> set[str]:
     return modules
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_every_module_has_an_entry() -> None:
     missing = sorted(_present() - _listed())
 
@@ -53,6 +57,8 @@ def test_every_module_has_an_entry() -> None:
     )
 
 
+@pytest.mark.critical
+@pytest.mark.structural
 def test_every_entry_names_a_module_that_exists() -> None:
     # The other direction, which `sphinx-build -W` *does* catch -- but it
     # catches it in a job that takes a minute, and this takes milliseconds.
