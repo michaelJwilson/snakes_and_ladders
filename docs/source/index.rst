@@ -108,6 +108,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.spatio_sequential
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.forward_backward
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.hmm_paths
    :members:
 
@@ -181,6 +184,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.support
+   :members:
+
+.. automodule:: snakes_and_ladders.search.spatio_sequential
    :members:
 
 .. automodule:: snakes_and_ladders.search.rl

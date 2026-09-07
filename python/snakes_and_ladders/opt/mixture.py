@@ -33,7 +33,7 @@ objective, its independent EM oracle, and the seeding a start needs.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -607,3 +607,58 @@ class KMeansPlusPlus:
             )
             for _ in range(self.n_starts)
         ]
+
+
+def emission_mixture_plus_plus(
+    observations: np.ndarray,
+    n_centres: int,
+    negative_log_density: Callable[[float, np.ndarray], np.ndarray],
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """``Emission_Mixture++``: k-means++ with a family's negative log-density as the distance (issue #306).
+
+    :func:`kmeans_plus_plus` draws each centre proportionally to squared
+    Euclidean distance from the nearest centre chosen so far, which assumes a
+    unit-normal emission. Here the distance is whatever the family says it
+    is: ``negative_log_density(seed, observations)`` scores every observation
+    under a family seeded at ``seed``, and the next seed is drawn
+    proportionally to the smallest such score across the seeds so far. With
+    ``0.5 * ((x - seed) / scale) ** 2`` it is k-means++ exactly, which is the
+    reduction the test pins.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        Shape ``(n_samples,)``; the seeds are drawn from these values.
+    n_centres : int
+        Seeds to draw, in ``[1, n_samples]``.
+    negative_log_density : Callable
+        ``(seed, observations) -> scores``, non-negative, shape ``(n_samples,)``.
+    rng : np.random.Generator
+        Generator, passed in rather than seeded here (``sim/CLAUDE.md``).
+
+    Returns
+    -------
+    np.ndarray
+        The seeds, shape ``(n_centres,)``, in the order chosen.
+    """
+    values = np.asarray(observations).reshape(-1)
+    if not 1 <= n_centres <= values.shape[0]:
+        msg = f"n_centres must lie in [1, {values.shape[0]}], got {n_centres}"
+        raise ValueError(msg)
+
+    # The same draws in the same order as kmeans_plus_plus, so that with a
+    # squared-distance score the two are one algorithm, draw for draw.
+    chosen = [rng.choice(values)]
+    nearest = np.asarray(negative_log_density(float(chosen[0]), values), dtype=float)
+    for _ in range(1, n_centres):
+        total = float(nearest.sum())
+        if total <= 0.0:
+            chosen.append(rng.choice(values))
+        else:
+            chosen.append(rng.choice(values, p=nearest / total))
+        nearest = np.minimum(
+            nearest,
+            np.asarray(negative_log_density(float(chosen[-1]), values), dtype=float),
+        )
+    return np.array(chosen)

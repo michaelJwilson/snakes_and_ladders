@@ -466,6 +466,14 @@ factor and a dictionary per message against a recursion that knows its shape.
 The specialised evaluators therefore stay; the factor graph is the structure
 for the model none of them can express.
 
+**Forward–backward is an evaluator** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
+closing #173). `likelihood.forward_backward` returns the evidence, the
+position posteriors and the pairwise posteriors of one chain in the log
+domain, and a forward-filter backward-sample draw of the path; it is pinned
+against the path enumeration on four chains to 1e-12 and the E step of the
+coupled model built on it against the enumerated conditional posterior to
+1e-11. Baum–Welch keeps its own recursion for the gradient it needs.
+
 **The tree was audited against the runtime-optimization opportunities, and
 five of the ten lines had a measurement behind them**
 ([#287](https://github.com/michaelJwilson/snakes_and_ladders/issues/287)). Profiling
@@ -752,6 +760,37 @@ fall from one support bin to the next. Each weight is over *maximized*
 likelihoods under a flat prior over topologies and is named so, not called a
 posterior; a tempered ensemble over topologies, which would give a marginal
 one, does not exist.
+
+**The coupled model is fitted, and the finding is about the start, not the
+move** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
+#290 parts 3 to 6). `search.spatio_sequential` runs block-coordinate ascent
+on `log p(x, l | theta)` with the chains marginalized: an E step per class,
+an M step through each family's `reestimate` with `Pi_m` and the shared `t`
+in closed form, and a label block that is the ground state of a Potts model
+in the external field the posterior defines — by alpha expansion, by
+single-site descent, or by an annealed Wolff move in the field whose best
+visited labelling is taken only when it improves the joint. The M-step
+identity holds through autograd on a Gaussian instance to 1e-10 relative;
+the joint is non-decreasing across every block for every solver; and with
+the parameters at the truth the label block reaches the enumerated MAP
+labelling from the planted labels on 5 of 6 draws of the canonical instance
+for every solver. Past enumeration, on a planted 10x10 lattice with weak
+emissions, the label problem alone is easy — 0.98 accuracy up to permutation
+with the parameters known — and every cold start freezes:
+
+| start, then ten blocks | alpha expansion | single-site descent | annealed Wolff |
+| --- | --- | --- | --- |
+| uniform labels, true parameters | 0.66 | 0.78 | 0.68 |
+| `Graph_BurnIn++` (thirty annealed steps), then alpha expansion | 0.97 | — | — |
+
+The cluster move does not escape what descent freezes into; the trap is the
+parameters, which a cold EM collapses before the labels can separate them.
+The annealed start — labels nearly free while the emissions are fitted to
+what the data alone supports, the prior tightening as the classes separate,
+seeded by `Emission_Mixture++` (k-means++ under the family's own negative
+log-density, exactly k-means++ under a squared distance) — is what recovers
+the labels. Both are recorded, and the escape claim is retracted for this
+instance.
 
 **The accuracy requirement's first half is met.** Normalized Robinson-Foulds
 distance from the inferred to the generating topology is met at the 0.05 bound

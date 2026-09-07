@@ -23,9 +23,9 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.enumeration import (
-    MAX_ENUMERABLE_CONFIGURATIONS,
     refuse_oversized,
 )
+from snakes_and_ladders.likelihood.forward_backward import forward_backward
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
 from snakes_and_ladders.sim.spatio_sequential import (
@@ -249,11 +249,131 @@ def log_evidence_by_forward(
     return float(logsumexp(terms[None, :], axis=1)[0])
 
 
-__all__ = [
-    "MAX_ENUMERABLE_CONFIGURATIONS",
-    "ExactSpatioSequential",
-    "conditional_state_posterior",
-    "enumerate_spatio_sequential",
-    "log_evidence_by_forward",
-    "log_joint_at",
-]
+# --- the E step, the field and the joint given a labelling (issue #306) ----
+
+
+def class_log_density(
+    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+) -> np.ndarray:
+    """Per class, the summed emission scores of its members, shape ``(M, S, K)``.
+
+    Given the labels the classes decouple, and each class's chain sees the
+    product of its members' emissions -- a class with no members sees a flat
+    score and its posterior is its prior.
+    """
+    gated = gated_log_density(params, observations)  # (n_nodes, S, M, K)
+    labels = np.asarray(labels, dtype=np.int64)
+    density = np.zeros((params.n_classes, params.n_positions, params.n_states))
+    for m in range(params.n_classes):
+        members = np.flatnonzero(labels == m)
+        if members.size:
+            density[m] = gated[members, :, m, :].sum(axis=0)
+    return density
+
+
+@dataclass(frozen=True)
+class ClassPosteriors:
+    """The E step of the coupled model, given a labelling.
+
+    Parameters
+    ----------
+    posterior : np.ndarray
+        ``Q(k_{s,m} | l, x)``, shape ``(M, S, K)``.
+    pairwise : np.ndarray
+        ``Q(k_{s-1,m}, k_{s,m} | l, x)``, shape ``(M, S - 1, K, K)``.
+    log_evidence : np.ndarray
+        Per class, ``log p(x_{., l = m} | chain m)``, shape ``(M,)``.
+    """
+
+    posterior: np.ndarray
+    pairwise: np.ndarray
+    log_evidence: np.ndarray
+
+
+def class_posteriors(
+    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+) -> ClassPosteriors:
+    """Forward--backward on every class's chain over its members' summed scores."""
+    density = class_log_density(params, observations, labels)
+    log_transition = np.log(params.transition)
+    posterior = np.empty_like(density)
+    pairwise = np.empty(
+        (
+            params.n_classes,
+            max(params.n_positions - 1, 0),
+            params.n_states,
+            params.n_states,
+        )
+    )
+    evidence = np.empty(params.n_classes)
+    for m in range(params.n_classes):
+        run = forward_backward(density[m], np.log(params.initial[m]), log_transition)
+        posterior[m] = run.posterior
+        pairwise[m] = run.pairwise
+        evidence[m] = run.log_evidence
+    return ClassPosteriors(posterior, pairwise, evidence)
+
+
+def external_field(
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    posterior: np.ndarray | None = None,
+) -> np.ndarray:
+    """``H_nm`` of the external-field equation of the textbook: minus the posterior-expected emission score, shape ``(n_nodes, M)``.
+
+    ``posterior`` defaults to the E step at ``labels``; passing one computed
+    under other parameters is the ``theta'`` of the equation.
+    """
+    if posterior is None:
+        posterior = class_posteriors(params, observations, labels).posterior
+    gated = gated_log_density(params, observations)  # (n_nodes, S, M, K)
+    return -np.asarray(np.einsum("nsmk,msk->nm", gated, posterior))
+
+
+def labelled_log_likelihood(
+    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+) -> float:
+    """``log p(x, l | theta)`` with the chains marginalized, up to ``log Z_Potts``.
+
+    The quantity a block ascent must not decrease. The Potts normalizer is
+    constant across the blocks (``beta`` and ``J`` are not fitted) and
+    intractable past enumeration, so it is left out; add
+    :attr:`ExactSpatioSequential.log_prior_normalizer` where enumeration
+    reaches, which is how the test pins this against the oracle.
+    """
+    own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
+    evidence = class_posteriors(params, observations, labels).log_evidence
+    return own + float(evidence.sum())
+
+
+def map_labelling(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> np.ndarray:
+    """The labelling of highest ``p(l | x)``, by enumeration: the oracle a label step is held to."""
+    labellings, _, table = _log_joint(params, observations)
+    per_labelling = logsumexp(table.reshape(labellings.shape[0], -1), axis=1)
+    return np.asarray(labellings[int(np.argmax(per_labelling))])
+
+
+def marginal_log_likelihood_torch(
+    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+) -> torch.Tensor:
+    """``log p(x | l, theta)`` as a differentiable scalar, through the forward recursion.
+
+    The left side of the M-step identity of the textbook's coupled-model section: its gradient with respect to a
+    family's parameters is what the posterior-weighted score must equal.
+    """
+    labels = np.asarray(labels, dtype=np.int64)
+    log_transition = torch.log(torch.as_tensor(params.transition))
+    total = torch.zeros((), dtype=torch.float64)
+    for m, family in enumerate(params.emissions):
+        members = np.flatnonzero(labels == m)
+        scores = family.log_density(
+            torch.as_tensor(observations[:, members], dtype=family.observation_dtype)
+        )  # (S, n_m, K)
+        density = scores.sum(dim=1)[None]  # (1, S, K)
+        total = total + forward_log_likelihood_from_density(
+            density, torch.log(torch.as_tensor(params.initial[m])), log_transition
+        )
+    return total

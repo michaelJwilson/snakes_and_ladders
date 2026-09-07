@@ -38,7 +38,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   zero-field benchmark measures the fixture (#245)
 - Coloured iterated conditional modes on CUDA and Metal through torch,
   measured against the 10× rule before any Triton kernel (#227)
-- Expose forward-backward as an evaluator, not as Baum-Welch's internals (#173)
 - One energy/likelihood evaluator API across the three problem classes,
   asserted by an import-graph test (#238)
 - CUDA dispatch for the pruning recursion, pinned against the NumPy oracle
