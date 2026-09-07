@@ -16,8 +16,8 @@ started**, on the terms §0.4 sets.
 | §0 Development loop | Landed | Nine required checks; committed PDF byte-compared and every notebook re-executed on each PR | [#49](https://github.com/michaelJwilson/snakes_and_ladders/pull/49), [#57](https://github.com/michaelJwilson/snakes_and_ladders/pull/57), [#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72), [#92](https://github.com/michaelJwilson/snakes_and_ladders/pull/92), [#102](https://github.com/michaelJwilson/snakes_and_ladders/pull/102), [#151](https://github.com/michaelJwilson/snakes_and_ladders/pull/151) |
 | 1.1 Simulation & ground truth | Trees, the HMM and Potts (1-D chain plus general N-D lattice/MRF) landed as first-class simulators | Simulated substitution frequencies against the closed-form JC probabilities; GTR reproduces JC to machine precision; HMM state and emission marginals against brute-force path enumeration; Potts single-site and pair marginals against exhaustive enumeration at 3-state 3x3 and 2-state 4x4 | [#58](https://github.com/michaelJwilson/snakes_and_ladders/pull/58), [#64](https://github.com/michaelJwilson/snakes_and_ladders/pull/64), [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#182](https://github.com/michaelJwilson/snakes_and_ladders/pull/182), [#190](https://github.com/michaelJwilson/snakes_and_ladders/pull/190) |
 | 1.2 Likelihood & energy engine | CPU landed (NumPy, PyTorch, Rust); belief propagation landed with two exact oracles; GPU dispatch not started | Worst relative deviation 4.0e-14 against brute-force marginalization across three backends and four site counts spanning a factor of 30 | [#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66), [#74](https://github.com/michaelJwilson/snakes_and_ladders/pull/74), [#81](https://github.com/michaelJwilson/snakes_and_ladders/pull/81), [#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148) |
-| 1.3 Continuous optimization | Landed for trees, the 1-D Potts chain and the HMM; Potts lattice not started | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120) |
-| 1.4 Move sets & classical baselines | Trees landed; Potts cluster updates landed; Viterbi not started | NNI and SPR neighbour counts exhaustively verified at `n = 5..8`; hill climbing reaches the enumerated optimum from 12 of 12 starts | [#82](https://github.com/michaelJwilson/snakes_and_ladders/pull/82), [#127](https://github.com/michaelJwilson/snakes_and_ladders/pull/127), [#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128) |
+| 1.3 Continuous optimization | Landed for trees, the HMM, the 1-D Potts chain and the 2-D lattice; posterior sampling landed beside the curvature-based intervals | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates; the lattice fitted against an enumerated normalizer, coverage 157/160 at 100 samples and 153/160 at 400 and 1600 | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120) |
+| 1.4 Move sets & classical baselines | Trees landed; Potts cluster updates landed; the exact-baseline family landed — minimum cut, alpha expansion with its proved bound, and Max-Cut with a certificate; Viterbi not started | NNI and SPR neighbour counts exhaustively verified at `n = 5..8`; hill climbing reaches the enumerated optimum from 12 of 12 starts; the two-state ground state exact against enumeration over 36 shape-coupling-field combinations | [#82](https://github.com/michaelJwilson/snakes_and_ladders/pull/82), [#127](https://github.com/michaelJwilson/snakes_and_ladders/pull/127), [#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#212](https://github.com/michaelJwilson/snakes_and_ladders/pull/212) |
 | 2.1 RL formulation & deployment | Estimator and both environments landed; a trained tree policy not started | Enumerated gradient against finite differences at 1.5e-11 relative; learned policy 86.6% against greedy's 80.2% on the Potts landscape, 8 of 8 seeds | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139) |
 | 2.2 Curriculum learning | Not started | — | — |
 | 2.3 Empirical validation | Not started | — | — |
@@ -333,6 +333,25 @@ because every one satisfied the first-order condition. `converged` is a
 statement about the gradient and says nothing about global optimality, and any
 result resting on a single fit of a multimodal surface has to say so.
 
+**The lattice is fitted, against an exact normalizer.** `log Z` is
+enumerated over all 19,683 configurations of a 3-state 3x3 lattice rather than
+approximated, so the fitted optimum is checked against a brute-force scan of
+the likelihood instead of against the optimizer's own convergence, and the
+enumerated normalizer reduces to `snakes_and_ladders.opt.potts.log_partition`'s transfer
+matrix on a chain to machine precision. Interval coverage over 40 replicates
+is 157/160 at 100 samples, 153/160 at 400 and 153/160 at 1600 — approaching
+the nominal rate from above and settling, as the Potts chain does.
+
+That closes the requirements row. It also leaves the hidden Markov model's
+half of the same row less settled than the committed coverage figure reads:
+its 45/48 = 0.938 at 150 sequences and 91/96 = 0.948 at 2400 both sit within
+one binomial standard error of 0.95 (0.032 and 0.022 respectively), so the
+under-coverage the caption describes is not distinguishable from sampling
+noise at those replicate counts. The two identified causes are real — an
+emission fitted near zero, and the post-selection cost of aligning the hidden
+states — but stating a sample size at which nominal coverage begins to hold
+would need more replicates than the figure runs, and none is claimed here.
+
 **Intervals now have a second, non-asymptotic source.** Hamiltonian Monte
 Carlo samples the posterior over any `Objective`, so an interval can be a
 quantile rather than a curvature estimate at the mode. The integrator is
@@ -575,25 +594,6 @@ their own state spaces: 19,683 configurations for a 3-state 3x3 lattice, 729
 paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
-
-**The lattice is fitted, against an exact normalizer.** `log Z` is
-enumerated over all 19,683 configurations of a 3-state 3x3 lattice rather than
-approximated, so the fitted optimum is checked against a brute-force scan of
-the likelihood instead of against the optimizer's own convergence, and the
-enumerated normalizer reduces to `snakes_and_ladders.opt.potts.log_partition`'s transfer
-matrix on a chain to machine precision. Interval coverage over 40 replicates
-is 157/160 at 100 samples, 153/160 at 400 and 153/160 at 1600 — approaching
-the nominal rate from above and settling, as the Potts chain does.
-
-That closes the requirements row. It also leaves the hidden Markov model's
-half of the same row less settled than the committed coverage figure reads:
-its 45/48 = 0.938 at 150 sequences and 91/96 = 0.948 at 2400 both sit within
-one binomial standard error of 0.95 (0.032 and 0.022 respectively), so the
-under-coverage the caption describes is not distinguishable from sampling
-noise at those replicate counts. The two identified causes are real — an
-emission fitted near zero, and the post-selection cost of aligning the hidden
-states — but stating a sample size at which nominal coverage begins to hold
-would need more replicates than the figure runs, and none is claimed here.
 
 ## §1.2 Requirements Ledger
 

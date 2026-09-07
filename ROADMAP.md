@@ -56,10 +56,11 @@ authoritative — where it and any other document disagree, it wins.
   every tolerance-based test beside the tolerance it was checked against, the
   documents the change made untrue, and anything deferred with the tracking
   issue that carries it.
-- **Gate:** nine required checks — `ruff`, `mypy --strict`, `clippy`,
-  `cargo fmt`, the Rust suite, the Python suite under its coverage floor, the
-  Sphinx build with warnings as errors, the technical-document build, the
-  re-execution of every committed notebook, and the dependency audits. Documentation Sync is part of the diff, not a follow-up:
+- **Gate:** nine required checks, enumerated in `DEV.md`, which is where a
+  contributor works through them and therefore where they are stated in full.
+  They span lint and types in both languages, both test suites, the
+  documentation and technical-document builds, the notebook re-execution, and
+  the dependency audits. Documentation Sync is part of the diff, not a follow-up:
   a change that makes `README.md`, `DEV.md`, `INSTALL.md`, a `CLAUDE.md`,
   `STATUS.md`, `ROADMAP.md` or `docs/tex/` untrue corrects it in the same pull
   request, and adds a `changelog.d/` fragment if it is user-visible.
@@ -120,7 +121,12 @@ bounded likelihoods/energies.
     confidence intervals; precise state-sequence decoding.
   - *Performance parity:* convergence metrics (ΔlnL or ΔE) must match or exceed
     exact oracles on small `n`, and state-of-the-art classical frameworks
-    (e.g. IQ-TREE 2 for trees) on large `n` under equivalent wall-clock time.
+    (e.g. IQ-TREE 2 for trees) on large `n` under an **equal budget of
+    objective evaluations**. The budget is counted in evaluations rather than
+    seconds because `DEV.md` forbids ranking performance on CI hardware, and a
+    wall-clock requirement would make the result a property of the machine that
+    produced it. A wall-clock comparison belongs on the fixed-hardware runner,
+    reported beside the evaluation count and never as the gate.
 - **Computational Scaling & Hardware:**
   - *Memory footprint:* bounded to `O(n×L×k)` — `n` nodes/taxa, `L`
     sequence/chain length, `k` alphabet/state size — strictly fitting within
@@ -205,6 +211,10 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
       ground state, and alpha expansion above two states, with its proved
       approximation bound. A heuristic past the size enumeration reaches has
       otherwise nothing to be checked against.
+    - *The NP-hard side of the same model:* Max-Cut, with a semidefinite
+      relaxation and the certificate it yields, so the boundary between what
+      is solved exactly and what is only bounded is drawn rather than
+      assumed.
 
 ## Stage 2: Reinforcement Learning & Variational Search
 
