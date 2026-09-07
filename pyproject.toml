@@ -25,6 +25,9 @@ readme = "README.md"
 dependencies = [
     "jupyter>=1.1.1",
     "matplotlib>=3.9.0",
+    # 10k+ GitHub stars; carries the deterministic Potts kernels
+    # (search/kernels.py), whose pin against the Python oracle is bitwise.
+    "numba>=0.61.0",
     "numpy>=1.26.0",
     "pyyaml>=6.0.3",
     "torch>=2.4.0",
@@ -132,6 +135,11 @@ mypy_path = "infra"
 [[tool.mypy.overrides]]
 # pytest-benchmark ships no py.typed marker.
 module = "pytest_benchmark.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# numba ships no type information; its decorator returns an untyped callable.
+module = "numba.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
