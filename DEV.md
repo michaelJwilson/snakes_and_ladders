@@ -156,12 +156,12 @@ textbook's; what follows is what the implementation guarantees.
 
 ### Run Logs
 
-Every entry point — a QA script, `snakes_and_ladders.qa.build`,
-`infra/check_notebooks.py` — logs through `snakes_and_ladders.log` (issue
+Every entry point — a QA script, `sal.qa.build`,
+`infra/check_notebooks.py` — logs through `sal.log` (issue
 #311), and a line reads
 
 ```
-2026-09-07 16:20:01 - 1.50m - INFO (render sim_tree) - snakes_and_ladders.qa.runner.figure_main:190 - wrote docs/tex/figures/sim_tree.pdf and docs/tex/figures/sim_tree_caption.txt
+2026-09-07 16:20:01 - 1.50m - INFO (render sim_tree) - sal.qa.runner.figure_main:190 - wrote docs/tex/figures/sim_tree.pdf and docs/tex/figures/sim_tree_caption.txt
 ```
 
 * **The second field is elapsed minutes** since the entry point started, so a

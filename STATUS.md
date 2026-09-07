@@ -246,9 +246,9 @@ Gaussian case showed and is why both were measured rather than one assumed
 from the other.
 
 **A Gaussian mixture: the emission seam with the Markov chain removed.**
-`snakes_and_ladders.sim.mixture` draws component labels and observations
+`sal.sim.mixture` draws component labels and observations
 jointly, retaining the label so a clustering has something to be checked
-against; `snakes_and_ladders.opt.mixture` fits
+against; `sal.opt.mixture` fits
 ([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)). Its
 component M step **is** `GaussianEmission.reestimate`, called with
 responsibilities where an HMM passes state posteriors, and a test asserts the
@@ -925,7 +925,7 @@ comes out slightly **above 1** — impossible for an exact solve, and the
 measurable evidence of what the certificate does and does not cover.
 
 **Temperature is one object, and it lives where all three consumers can reach
-it.** `snakes_and_ladders.opt.schedule` carries the schedules — constant, linear,
+it.** `sal.opt.schedule` carries the schedules — constant, linear,
 geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
 and checked against it to 1e-12 (1e-10 for the cosine, whose torch form is a
 recursion) — with both endpoints reached *exactly* at the declared steps, and
@@ -1125,8 +1125,8 @@ blocked on an oracle rather than on effort
 **The relaxation is an extension, checked at every corner.** Over every
 configuration of an enumerable instance the relaxed score equals the discrete
 one to `1e-11` relative, for both spaces. The HMM check crosses a module
-boundary — `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
-`RelaxedHmmPath.discrete` and `snakes_and_ladders.likelihood.hmm_paths.path_log_probability`
+boundary — `sal.learn` may not import `sal.likelihood`, so
+`RelaxedHmmPath.discrete` and `sal.likelihood.hmm_paths.path_log_probability`
 are independent implementations — and the relaxed objective's enumerated
 optimum is the Viterbi path.
 
