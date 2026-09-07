@@ -116,6 +116,5 @@ A discrete move changes the *structure* — a different topology, chain length
 or state count — and with it what the parameter vector means and how long it
 is, so it cannot be a step inside a fit over a fixed-length vector: it
 constructs a **new** `Objective`, and the loop that proposes moves owns that
-construction and calls `fit` per candidate. An optimizer that owned the outer
-loop would have to know what a move is, the model knowledge this module exists
-to exclude.
+construction and calls `fit` per candidate; an optimizer that owned the outer
+loop would need the model knowledge this module exists to exclude.

@@ -71,6 +71,12 @@ in. It is not restated here.
   fails on a broken entry and never on an absent one. Where a document claims
   coverage, a test asserts it.
 
+- **Code cites a label, never a title or a number.** A section title is
+  broken by the next retitle and an equation number by the next equation; a
+  `\label` survives both and the build resolves it. Every label a docstring
+  or test cites is asserted to exist, because the code once cited nine
+  equations that never had one and nothing said so.
+
 - **Every clock the build can read is pinned.** Creation dates and `\today`
   are separate switches and both are set, in the module that renders the
   artifacts rather than by each caller: a comparison run without them reports

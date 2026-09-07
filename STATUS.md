@@ -796,11 +796,37 @@ annealing from `T = 2` to `0.05` over 200 sweeps reaches it **20/20** against
 single-site descent's **2/20** and a constant `T = 1` control's **7/20** — the
 schedule, not the wandering. But descent converges in 2.6 sweeps, so the same
 200 sweeps buy 78 restarts, and the best of 78 also reaches it 20/20. On
-Rastrigin, annealed Hamiltonian proposals reach the global basin 7/20 at 11,000
-gradients against a single fit's 1/20 at a few dozen; at equal gradients
-restarts would win by the same arithmetic. Neither is a default; the
-comparison at equal evaluations on instances where restarts might lose, and
-parallel tempering with its swap oracle, are the ticket's second pull request.
+Rastrigin, measured at equal *objective evaluations* with a counting wrapper:
+at 14,400 evaluations annealed Hamiltonian proposals plus a polishing fit reach
+the global basin **6/20**, and 101 random-restart fits on the same budget
+**10/20**; at 2,900 evaluations it is 0/20 against 1/20. Restarts win on the
+continuous surface. Neither is a default.
+
+**Parallel tempering, and the instance where restarts lose.** Replicas at
+fixed temperatures exchange configurations on `(β_i − β_j)(E_i − E_j)`, each
+replica on its own spawned generator from one seed. The oracle is the one the
+samplers already have: with exchanges on, every replica passes the chi-square
+against `exp(-E/T_r)` enumerated from the unscaled model (p 0.024 to 0.70,
+exchange acceptance 0.78 and 0.57), and the paired negative case — an exchange
+that omits the energy term — is caught at p = 0.0 on every replica. Then the
+comparison the plan asked for, at **400 sweeps per method** on the planted
+Viana–Bray spin glass, against the best energy any method found over 12
+instances:
+
+| instance | restarts of descent (100 × ≤4 sweeps) | annealing (1 × 400) | tempering (4 × 100) |
+| --- | --- | --- | --- |
+| 60 sites, degree 4, frustration 0.2 | 5/12, mean gap 0.75 | **12/12** | **12/12** |
+| 60 sites, degree 4, frustration 0.35 | 5/12, gap 1.00 | 9/12, gap 0.50 | 9/12, gap 0.25 |
+| 100 sites, degree 6, frustration 0.3 | 2/12, gap 2.58 | 7/12, gap 1.08 | **8/12**, gap 0.50 |
+
+Every method beats the planted energy on every instance, as frustration
+predicts. **The plan's prediction that tempering would be hard to justify at
+these sizes is retracted**: on the one class of instance the roadmap needs —
+frustrated, past enumeration — the tempered methods beat restarts at equal
+budget and tempering carries the smallest gap. The triangular antiferromagnet
+was too easy to show it; the glass is not. The five-component mixture waits on
+the mixture branch (#263) landing, and the comparison on it belongs to the
+budgeted harness #281.
 
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter
@@ -901,22 +927,34 @@ specification, cut down in `14d32d6` from the academic-letter structure of
 [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), and it is the shape
 the document is in rather than the shape §1.3 asks for.
 
-Thirteen QA scripts run in the build, each committing a figure with a caption
+Thirteen QA scripts render the figures, each committing a figure with a caption
 naming the seed, the sizes and the model that produced it, and `docs/CLAUDE.md`
 states the rules that keep a CI-regenerated artifact true
-([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The document
-currently includes two of them — the worked simulation example and the backend
-agreement — so eleven committed figures are rebuilt by CI but cited nowhere.
+([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The two
+documents cite seven of them — the textbook the simulated tree and the
+Jukes–Cantor curves, the paper the worked simulation, the backend agreement,
+parameter recovery, interval coverage and the topology search — and the
+per-pull-request build regenerates only those; the remaining six are checked at
+the release gate
+([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)).
 
 Measured against §1.3's required contents: the model formulations are present
-for all three classes, at the level of a statement rather than a derivation.
-Absent are the derivations of pruning, belief propagation and forward-backward;
-the branch-and-bound bounds and their proofs, no such bound being implemented;
-and the parameter-recovery and convergence evidence, which exists as committed
-QA figures but is no longer included. Three framed placeholders stand in for
-the RL learning curve, the comparison against classical software, and hardware
-scaling — none of which is measured, and each labelled as a placeholder rather
-than drawn with invented data.
+for all three classes, and since
+[#274](https://github.com/michaelJwilson/snakes_and_ladders/issues/274) every
+equation and algorithm the code cites is stated in the textbook under a label —
+the Jukes–Cantor closed form and its normalization, site independence, pruning
+and the root marginalization, forward simulation, the forward recursion, the
+belief-propagation message and the Bethe free energy, the episode return and the
+REINFORCE estimator, and the cross-device tolerance — and
+`tests/regression/test_document_labels.py` fails on a citation no document
+resolves. The old document had labelled none of them, so nine citations had
+never resolved and two named equation numbers from a numbering that no longer
+existed. What remains at the level of a statement rather than a derivation is
+the pruning and forward–backward recursions; absent entirely are the
+branch-and-bound bounds and their proofs, no such bound being implemented.
+Three framed placeholders stand in for the RL learning curve, the comparison
+against classical software, and hardware scaling — none of which is measured,
+and each labelled as a placeholder rather than drawn with invented data.
 
 ## What Is Not Claimed
 

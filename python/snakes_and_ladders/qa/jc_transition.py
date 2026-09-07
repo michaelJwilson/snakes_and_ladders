@@ -1,6 +1,6 @@
 """QA figure: analytic Jukes-Cantor P(t) against simulated frequencies.
 
-Draws the closed-form transition probabilities of eq. (jc) as curves, and
+Draws the closed-form transition probabilities of ``eq:jc`` (``docs/tex/textbook.tex``) as curves, and
 overlays the substitution frequencies `snakes_and_ladders.sim.simulate` actually produced
 along each branch of a fixture's tree. The two must agree within the
 fixture's declared Monte Carlo tolerance -- the same check
