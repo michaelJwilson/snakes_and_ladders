@@ -1,4 +1,4 @@
-"""Self-time profiling over ``snakes_and_ladders.sim``, ``snakes_and_ladders.search`` and ``snakes_and_ladders.learn``.
+"""Self-time profiling over ``sal.sim``, ``sal.search`` and ``sal.learn``.
 
 Ranks each module's hot entry points by ``cProfile`` self time, at a
 CI-sized fixture and one larger, non-CI size (root `CLAUDE.md`'s

@@ -1,9 +1,9 @@
 """Regression tests for topology search.
 
 The claim this module carries is issue #63's, tested for the first time: the
-same model-agnostic ``snakes_and_ladders.opt.fit`` scores every candidate topology, with
+same model-agnostic ``sal.opt.fit`` scores every candidate topology, with
 the discrete move sitting outside it as an operation that builds a new
-objective. Nothing in ``snakes_and_ladders.opt`` changed to make that work, and the
+objective. Nothing in ``sal.opt`` changed to make that work, and the
 import-graph test in ``test_opt_objective.py`` still holds.
 
 Exhaustive validation of *search quality* -- whether hill climbing finds the

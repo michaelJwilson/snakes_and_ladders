@@ -3,8 +3,8 @@
 Root ``CLAUDE.md`` requires the fitting machinery to serve HMMs, the Potts
 model and phylogenetic trees alike (issue #63). That only holds if the
 interface is written without reference to any of them, so this module
-mentions no model, and ``snakes_and_ladders.opt`` imports nothing from ``snakes_and_ladders.sim``,
-``snakes_and_ladders.likelihood`` or ``snakes_and_ladders.search`` -- asserted by a test, not left to
+mentions no model, and ``sal.opt`` imports nothing from ``sal.sim``,
+``sal.likelihood`` or ``sal.search`` -- asserted by a test, not left to
 review.
 
 Three pieces are enough:
@@ -100,7 +100,7 @@ class Objective(Protocol):
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """The value to **minimize**, differentiable with respect to ``theta``.
 
-        Minimization is the convention throughout ``snakes_and_ladders.opt``, so a
+        Minimization is the convention throughout ``sal.opt``, so a
         likelihood-based objective returns a *negative* log-likelihood.
 
         Parameters

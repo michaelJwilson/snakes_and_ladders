@@ -2,9 +2,13 @@
 
 Infrastructure, not application: nothing here knows what a tree is, and a
 test asserts it. The interface is :class:`~snakes_and_ladders.learn.environment.Environment`
-and the reference instance is a Potts landscape, exactly as ``snakes_and_ladders.opt``
+and the reference instance is a Potts landscape, exactly as ``sal.opt``
 pairs :class:`~snakes_and_ladders.opt.objective.Objective` with a Potts chain and an HMM.
 
 Root ``CLAUDE.md`` re-exports nothing from a package's top level, so import
 submodule contents explicitly.
 """
+
+from snakes_and_ladders._lazy import submodule_getattr
+
+__getattr__ = submodule_getattr(__name__, __path__)

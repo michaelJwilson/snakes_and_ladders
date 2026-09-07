@@ -4,7 +4,7 @@ What is asserted here is what no instance can assert for itself -- that the
 return telescopes to the improvement it claims to be, that a rollout obeys
 its budget and reports truncation, and that a score shared by every action is
 unidentifiable. The last is the same failure ``log_simplex`` exists to
-prevent in ``snakes_and_ladders.opt``, one module over, and it is the reason no
+prevent in ``sal.opt``, one module over, and it is the reason no
 environment here supplies a bias feature.
 """
 

@@ -47,7 +47,7 @@ _ANCESTOR_SYMBOLS = (
 def display_newick(tau: Node) -> str:
     r"""The topology as a mathtext string, for display rather than for parsing.
 
-    ``snakes_and_ladders.sim.newick.to_newick`` is the package's serialization and stays
+    ``sal.sim.newick.to_newick`` is the package's serialization and stays
     the authority on what a Newick string is; this renders the same topology
     with symbols a reader can take in: ``\rho`` for the root, Greek letters
     for internal ancestors, and ``name\_length`` for leaves, since a raw

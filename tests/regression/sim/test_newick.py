@@ -1,4 +1,4 @@
-"""Regression tests for ``snakes_and_ladders.sim.newick``.
+"""Regression tests for ``sal.sim.newick``.
 
 Per root ``CLAUDE.md`` ("Pin to Independent Sources"), ``count_topologies``
 is checked against an independent brute-force enumeration rather than

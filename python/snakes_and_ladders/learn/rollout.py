@@ -12,7 +12,7 @@ policy scores every action in the neighbourhood and samples one. Both
 therefore evaluate ``len(actions(state))`` candidates per decision, so a
 decision -- not a reward evaluation -- is the unit at which the two are
 comparable, and ``max_steps`` counts decisions for both. This mirrors
-``snakes_and_ladders.search.infer``, which counts a budget in candidate fits for the same
+``sal.search.infer``, which counts a budget in candidate fits for the same
 reason: a wall-clock budget would make a result depend on the machine that
 produced it.
 """
@@ -119,7 +119,7 @@ def greedy_rollout[S, A](
 
     This is hill climbing, and it is the baseline ``ROADMAP.md``'s
     Milestone 8 requires a learned policy to beat --- the same rule
-    ``snakes_and_ladders.search.infer`` applies to topologies, on a landscape small enough
+    ``sal.search.infer`` applies to topologies, on a landscape small enough
     that the answer can be checked against exhaustive enumeration.
 
     It takes no ``rng``: given a start it is deterministic, with ties broken
