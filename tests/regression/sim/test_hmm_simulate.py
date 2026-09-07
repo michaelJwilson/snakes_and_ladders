@@ -57,6 +57,7 @@ def _enumerate_paths(
     return paths, probabilities
 
 
+@pytest.mark.structural
 def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     params = load_hmm_params(FIXTURE)
     dataset = simulate_sequences(params)
@@ -66,6 +67,7 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     assert set(np.unique(dataset.states)) <= set(range(params.n_states))
 
 
+@pytest.mark.structural
 def test_simulation_is_reproducible_from_the_seed() -> None:
     params = load_hmm_params(FIXTURE)
     first = simulate_sequences(params)
@@ -74,6 +76,8 @@ def test_simulation_is_reproducible_from_the_seed() -> None:
     assert np.array_equal(first.states, second.states)
 
 
+@pytest.mark.oracle
+@pytest.mark.simulated_truth
 def test_simulated_symbol_frequencies_match_the_analytic_marginal() -> None:
     # The stationary-free marginal is exact: average the emission rows over
     # the hidden-state distribution at each step, which is the initial
@@ -97,6 +101,8 @@ def test_simulated_symbol_frequencies_match_the_analytic_marginal() -> None:
     assert_allclose(observed, expected, atol=params.tolerance)
 
 
+@pytest.mark.oracle
+@pytest.mark.simulated_truth
 def test_realized_state_occupancy_matches_the_stationary_distribution() -> None:
     # The exact per-position marginals below do not pin this: at the
     # fixture's own sequence_length = 15, the chain has not mixed away from
@@ -121,6 +127,7 @@ def test_realized_state_occupancy_matches_the_stationary_distribution() -> None:
     assert_allclose(occupancy, stationary, atol=params.tolerance)
 
 
+@pytest.mark.oracle
 def test_realized_state_marginals_match_brute_force_enumeration() -> None:
     # The exact marginal p(state_t = s) at each of the first _ENUMERATION_LENGTH
     # positions, summed over every one of n_states ** length hidden paths --
@@ -145,6 +152,7 @@ def test_realized_state_marginals_match_brute_force_enumeration() -> None:
         assert_allclose(observed, expected[t], atol=_PER_POSITION_TOLERANCE)
 
 
+@pytest.mark.oracle
 def test_marginal_emission_distribution_matches_brute_force_enumeration() -> None:
     # The exact marginal emission distribution at each position, from the
     # same path enumeration as the state-marginal check, pushed through the
@@ -169,6 +177,7 @@ def test_marginal_emission_distribution_matches_brute_force_enumeration() -> Non
         assert_allclose(observed, expected[t], atol=_PER_POSITION_TOLERANCE)
 
 
+@pytest.mark.oracle
 def test_realized_path_posterior_matches_brute_force_enumeration() -> None:
     # The exact posterior p(state_t = s | observations) for one realized
     # observation sequence, computed by brute-force enumeration over every
@@ -220,6 +229,7 @@ def test_realized_path_posterior_matches_brute_force_enumeration() -> None:
     assert_allclose(estimated_posterior, exact_posterior, atol=5 * params.tolerance)
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     ("replace", "with_", "message"),
     [
@@ -239,6 +249,7 @@ def test_a_malformed_fixture_is_refused(
         load_hmm_params(path)
 
 
+@pytest.mark.edge_case
 def test_a_missing_field_is_refused(tmp_path: Path) -> None:
     text = "\n".join(
         line

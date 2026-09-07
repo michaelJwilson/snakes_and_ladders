@@ -1,4 +1,8 @@
 <!--
+Title: `[<base branch>] What the change does` -- the branch this PR targets, in
+brackets, first (DEV.md, issue #292). `[main]` for a root, the parent branch
+for a link in a chain.
+
 This template mirrors CLAUDE.md's "Definition of Done" and "Documentation
 Sync" rules. Fill in every section; delete none of them.
 -->
