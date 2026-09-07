@@ -30,6 +30,7 @@ from snakes_and_ladders.opt.hmc import (
     Integrator,
     WithGaussianPrior,
     _gradient,
+    anneal,
     hamiltonian,
     leapfrog,
     sample,
@@ -37,33 +38,15 @@ from snakes_and_ladders.opt.hmc import (
 )
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
+from snakes_and_ladders.opt.schedule import Constant, Exponential
 
+from tests._objective_checks import AnalyticGaussian
 from tests._scale import stress_only
 
 EXACT = 1e-13
 
 
-class Gaussian:
-    """``-log N(mean, covariance)`` up to a constant: an analytic target."""
-
-    def __init__(self, mean: list[float], covariance: list[list[float]]) -> None:
-        self.mean = torch.tensor(mean, dtype=torch.float64)
-        self.covariance = torch.tensor(covariance, dtype=torch.float64)
-        self._precision = torch.linalg.inv(self.covariance)
-
-    def initial(self) -> torch.Tensor:
-        return torch.zeros_like(self.mean)
-
-    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
-        return {"x": theta}
-
-    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
-        deviation = theta - self.mean
-        quadratic: torch.Tensor = 0.5 * deviation @ self._precision @ deviation
-        return quadratic
-
-
-GAUSSIAN = Gaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
+GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 
 
 def _potts_posterior() -> WithGaussianPrior:
@@ -275,6 +258,18 @@ def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
     assert float(wrapped(point)) == pytest.approx(expected, rel=EXACT)
 
 
+@pytest.mark.mathematical
+def test_the_prior_leaves_the_coordinates_it_is_stated_in_alone() -> None:
+    # The prior is isotropic *in unconstrained coordinates*, so the wrapper
+    # adds a term and changes no coordinate. An inverse of its own would mean
+    # the posterior's parameters were not the likelihood's, and an interval
+    # read at a sampled point would then be in the wrong units.
+    point = torch.tensor([0.3, -1.1], dtype=torch.float64)
+    wrapped = WithGaussianPrior(GAUSSIAN, scale=2.0)
+
+    assert torch.equal(wrapped.theta_from(wrapped.constrain(point)), point)
+
+
 @pytest.mark.structural
 def test_a_chain_is_reproducible_from_its_seed() -> None:
     first = sample(GAUSSIAN, seed=5, n_samples=50, step_size=0.2, n_steps=10)
@@ -396,6 +391,9 @@ class _Counted:
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return self.inner.constrain(theta)
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return self.inner.theta_from(named)
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         self.calls += 1
         return self.inner(theta)
@@ -472,3 +470,86 @@ def test_the_default_integrator_is_the_one_every_committed_result_used() -> None
     assert torch.equal(chain.theta, explicit.theta)
     assert leapfrog.order == 2
     assert leapfrog.weights == (1.0,)
+
+
+# --- temperature ------------------------------------------------------------
+
+
+@pytest.mark.structural
+def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None:
+    # Where the approximation is exact. For a Gaussian target the dynamics
+    # are linear, so a chain at temperature T *is* the chain at 1 with its
+    # deviations from the mean scaled by sqrt(T), draw for draw, once the
+    # start has been forgotten -- and its spread is sqrt(T) times the exact
+    # standard deviation. The first is the implementation check (momentum
+    # variance T, energy difference over T, and nothing else); the second is
+    # what tempering means. Realized: 1.0004 and 0.9953 of sqrt(T) sigma at
+    # both T = 2 and T = 0.5, the same digits at both because of the first.
+    exact = GAUSSIAN.covariance.diagonal().sqrt()
+    reference = sample(
+        GAUSSIAN, seed=3, n_samples=2000, step_size=0.2, n_steps=10, burn_in=200
+    )
+
+    for temperature in (2.0, 0.5):
+        chain = sample(
+            GAUSSIAN,
+            seed=3,
+            n_samples=2000,
+            step_size=0.2,
+            n_steps=10,
+            burn_in=200,
+            temperature=temperature,
+        )
+        scaled = GAUSSIAN.mean + math.sqrt(temperature) * (
+            reference.theta - GAUSSIAN.mean
+        )
+
+        assert torch.allclose(chain.theta, scaled, atol=1e-10, rtol=0.0)
+        np.testing.assert_allclose(
+            chain.theta.std(0).numpy(),
+            math.sqrt(temperature) * exact.numpy(),
+            rtol=0.05,
+        )
+
+
+@pytest.mark.edge_case
+def test_a_non_positive_temperature_is_refused() -> None:
+    with pytest.raises(ValueError, match="temperature must be positive"):
+        sample(GAUSSIAN, seed=1, n_samples=10, step_size=0.1, temperature=0.0)
+
+
+@pytest.mark.oracle
+def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
+    # The refactor's guarantee, stated as the plan asked: annealing on a
+    # constant schedule at temperature 1 reproduces the untempered chain at
+    # the same seed *bitwise*. Both go through one transition, so this is not
+    # two implementations agreeing but one implementation being one.
+    chain = sample(GAUSSIAN, seed=5, n_samples=200, step_size=0.2, n_steps=10)
+    annealed = anneal(GAUSSIAN, Constant(1.0, 200), seed=5, step_size=0.2, n_steps=10)
+
+    assert torch.equal(annealed.final, chain.theta[-1])
+    assert annealed.force_evaluations == 200 * leapfrog.force_evaluations(10)
+
+
+@pytest.mark.structural
+def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
+    # The final proposals run cold but not at zero, so the chain can leave
+    # the best point it found; what is returned is the best, and its value is
+    # the objective there and no larger than the start's or the end's.
+    start = torch.tensor([4.0, 3.0], dtype=torch.float64)
+    result = anneal(
+        GAUSSIAN,
+        Exponential(4.0, 0.01, 300),
+        seed=2,
+        step_size=0.2,
+        n_steps=10,
+        theta0=start,
+    )
+
+    assert result.value == pytest.approx(float(GAUSSIAN(result.theta)), rel=EXACT)
+    assert result.value <= float(GAUSSIAN(start))
+    assert result.value <= float(GAUSSIAN(result.final))
+    # On a quadratic bowl the cold end sits at the mode: within a tenth of a
+    # standard deviation of the exact minimizer after 300 proposals.
+    deviation = (result.theta - GAUSSIAN.mean) / GAUSSIAN.covariance.diagonal().sqrt()
+    assert float(deviation.abs().max()) < 0.1

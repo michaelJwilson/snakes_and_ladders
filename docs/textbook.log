@@ -382,7 +382,7 @@ File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count304
 \l__pdf_internal_box=\box56
 )
-(/home/user/snakes_and_ladders/docs/textbook.aux)
+(/home/user/wt-repoint2/docs/textbook.aux)
 \openout1 = `textbook.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 10.
@@ -483,8 +483,8 @@ File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman
 )
 Package hyperref Info: Link coloring OFF on input line 10.
 
-(/home/user/snakes_and_ladders/docs/textbook.out)
-(/home/user/snakes_and_ladders/docs/textbook.out)
+(/home/user/wt-repoint2/docs/textbook.out)
+(/home/user/wt-repoint2/docs/textbook.out)
 \@outlinefile=\write3
 \openout3 = `textbook.out'.
 
@@ -506,61 +506,79 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 (/usr/share/texlive/texmf-dist/tex/latex/microtype/mt-msb.cfg
 File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
 )
-(/home/user/snakes_and_ladders/docs/textbook.toc)
+(/home/user/wt-repoint2/docs/textbook.toc [1
+
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}])
 \tf@toc=\write4
 \openout4 = `textbook.toc'.
 
- [1
+ [2]
+Overfull \hbox (131.1084pt too wide) detected at line 124
+[][][][] \OML/cmm/m/it/10.95 p\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.95 `; k; x\O
+T1/cmr/m/n/10.95 ) = \OML/cmm/m/it/10.95 ^^L [] J[] ^^N\OT1/cmr/m/n/10.95 (\OML
+/cmm/m/it/10.95 `[]; `[]\OT1/cmr/m/n/10.95 ) + [] [] [] \OML/cmm/m/it/10.95 ^^Y
+[]\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.95 k[]\OT1/cmr/m/n/10.95 ) + [] [] \OML/
+cmm/m/it/10.95 A[]\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.95 k[]; k[]\OT1/cmr/m/n/
+10.95 )[] + [] [] [] \OML/cmm/m/it/10.95 P\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.
+95 x[] \OMS/cmsy/m/n/10.95 j \OML/cmm/m/it/10.95 k[]; ^^R[]\OT1/cmr/m/n/10.95 )
+ \OMS/cmsy/m/n/10.95 ^^@ [] \OML/cmm/m/it/10.95 Z[];
+ []
 
-{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2]
-<figures/sim_tree.pdf, id=150, 469.755pt x 289.08pt>
+[3]
+<figures/sim_tree.pdf, id=207, 469.755pt x 289.08pt>
 File: figures/sim_tree.pdf Graphic file (type pdf)
 <use figures/sim_tree.pdf>
-Package pdftex.def Info: figures/sim_tree.pdf  used on input line 123.
+Package pdftex.def Info: figures/sim_tree.pdf  used on input line 247.
 (pdftex.def)             Requested size: 317.07614pt x 195.12498pt.
-<figures/jc_transition.pdf, id=151, 390.25798pt x 245.718pt>
+ [4]
+<figures/jc_transition.pdf, id=219, 390.25798pt x 245.718pt>
 File: figures/jc_transition.pdf Graphic file (type pdf)
 <use figures/jc_transition.pdf>
-Package pdftex.def Info: figures/jc_transition.pdf  used on input line 131.
+Package pdftex.def Info: figures/jc_transition.pdf  used on input line 255.
 (pdftex.def)             Requested size: 317.07614pt x 199.64162pt.
- [3 <./figures/sim_tree.pdf>] [4 <./figures/jc_transition.pdf>] [5] [6] (/home/
-user/snakes_and_ladders/docs/textbook.bbl [7]
-[8]) [9] (/home/user/snakes_and_ladders/docs/textbook.aux)
+Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
+put line 270.
+ [5 <./figures/sim_tree.pdf>] [6 <./figures/jc_transition.pdf>] [7]
+[8] [9] (/home/user/wt-repoint2/docs/textbook.bbl [10]) [11] [12]
+(/home/user/wt-repoint2/docs/textbook.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
  ***********
 Package rerunfilecheck Info: File `textbook.out' has not changed.
-(rerunfilecheck)             Checksum: 8B79360A5B1B41729A99BC6C7D92B828;5351.
+(rerunfilecheck)             Checksum: E89106F0A477732C94A71D18FD7A79B2;6359.
  ) 
 Here is how much of TeX's memory you used:
- 13473 strings out of 476106
- 206682 string characters out of 5793934
- 1941975 words of memory out of 5000000
- 35037 multiletter control sequences out of 15000+600000
- 576707 words of font info for 176 fonts, out of 8000000 for 9000
+ 13563 strings out of 476106
+ 207894 string characters out of 5793934
+ 1942975 words of memory out of 5000000
+ 35087 multiletter control sequences out of 15000+600000
+ 577480 words of font info for 185 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
- 79i,12n,82p,1005b,620s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 79i,12n,82p,1005b,598s stack positions out of 10000i,1000n,20000p,200000b,200000s
  </root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk></u
 sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/sha
 re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/share/tex
 live/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texlive/t
 exmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-d
-ist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></usr/share/texlive/texmf-dist/fon
-ts/type1/public/amsfonts/cm/cmmib10.pfb></usr/share/texlive/texmf-dist/fonts/ty
-pe1/public/amsfonts/cmextra/cmmib8.pfb></usr/share/texlive/texmf-dist/fonts/typ
-e1/public/amsfonts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/publ
-ic/amsfonts/cm/cmr12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
-onts/cm/cmr17.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
-/cmr8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.
-pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></u
-sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/sha
-re/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on /home/user/snakes_and_ladders/docs/textbook.pdf (9 pages, 251
-092 bytes).
+ist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/fon
+ts/type1/public/amsfonts/cm/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type
+1/public/amsfonts/cm/cmmib10.pfb></usr/share/texlive/texmf-dist/fonts/type1/pub
+lic/amsfonts/cmextra/cmmib8.pfb></usr/share/texlive/texmf-dist/fonts/type1/publ
+ic/amsfonts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
+onts/cm/cmr12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
+/cmr17.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.p
+fb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr
+/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share
+/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb></usr/share/texliv
+e/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf
+-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/
+fonts/type1/public/amsfonts/symbols/msbm10.pfb>
+Output written on /home/user/wt-repoint2/docs/textbook.pdf (12 pages, 305574 by
+tes).
 PDF statistics:
- 379 PDF objects out of 1000 (max. 8388607)
- 319 compressed objects within 4 object streams
- 74 named destinations out of 1000 (max. 500000)
- 37067 words of extra memory for PDF output out of 42996 (max. 10000000)
+ 464 PDF objects out of 1000 (max. 8388607)
+ 395 compressed objects within 4 object streams
+ 97 named destinations out of 1000 (max. 500000)
+ 39147 words of extra memory for PDF output out of 42996 (max. 10000000)
 

@@ -50,8 +50,9 @@ no application module.
   orders of magnitude cheaper than scoring one.
 
 - **A structure is scored at most once per search**, keyed on a canonical form
-  that is independent of how it was spelled, because overlapping
-  neighbourhoods otherwise pay the dominant cost twice.
+  independent of how it was spelled, because overlapping neighbourhoods pay
+  the dominant cost twice otherwise. A returned structure states its support
+  and names which it is: neighbourhood, enumerated, or bootstrap (`support.py`).
 
 - **Truth is a terminal penalty, never a training signal.** An agent that can
   see the answer during training learns to look it up.
@@ -98,8 +99,9 @@ no application module.
 - **A sampler is validated by the distribution it converges to, never by
   inspection.** At an enumerable size the exact distribution is available, so
   a move set is tested by goodness-of-fit against it at a declared
-  significance and chain length. A chain that visibly moves is what a sampler
-  with a broken accept step also does.
+  significance and chain length. A chain that visibly moves is what a broken
+  accept step also does; a tempered chain is held to `exp(-E / T)` enumerated
+  from the *unscaled* model, which shares nothing with the scaling under test.
 
 - **A goodness-of-fit test must be thinned, and the thinning is part of the
   test.** Successive sweeps are not independent draws, so run on every sweep

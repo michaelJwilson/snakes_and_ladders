@@ -44,19 +44,19 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
 - **`converged` is a statement about the gradient, never about the global
   minimum.** A run satisfying the first-order condition reports convergence
   wherever it stopped, and on a multimodal surface that is routinely a local
-  minimum. A result resting on a single fit of such a surface says so, or
-  reports a multi-start rate instead.
+  minimum. A result resting on one fit of such a surface says so, or reports
+  a multi-start rate — through `budget.compare`, never a loop of its own.
 
 - **Where a likelihood is unbounded, refuse rather than clamp.** Some models
   have no maximum, and a fit returning normally at one was stopped by a floor
   or by its start rather than converged. State the bound and raise when it
   binds — issue #122's fault, reached from the other side.
 
-- **A test function is not a likelihood, so it has no observed information.**
-  The Hessian at its minimum is a curvature rather than an information matrix,
-  and an interval built from it carries no meaning. Issue #122 covers the
-  general form: an interval is refused where the quantity it would summarize
-  does not exist.
+- **An interval is a statement about a maximum, and about nothing else.** Not
+  the route: an EM fit, a gradient fit and the best of many starts get the same
+  interval through one door, so every objective inverts its constraint map. Not
+  a point that is no maximum: an unconverged fit, a parameter at a bound and a
+  test function's curvature are refused — issue #122's general form.
 
 - **An acceptance rate is not a diagnostic on its own.** An integrator step
   too large biases a posterior's *spread* downward while leaving its mean
@@ -68,7 +68,10 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
   likelihood as a density is a posterior under an improper flat prior, which
   for most models is not normalizable, and no diagnostic inside a sampler can
   notice. `hmc.WithGaussianPrior` makes the prior an explicit declaration by
-  the caller rather than an assumption by the sampler.
+  the caller rather than an assumption by the sampler. The same fault one
+  step over: tempering a likelihood is a power posterior, not a temperature
+  in the physical sense, and a schedule serves both without saying which —
+  the consumer says.
 
 - **No application imports.** Nothing here may import from `snakes_and_ladders.sim`,
   `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`. This is asserted by
@@ -110,11 +113,8 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
 ## Discrete moves are outside the interface
 
 A discrete move changes the *structure* — a different topology, chain length
-or state count — and so changes what the parameter vector means and how long
-it is. It cannot be a step inside a fit over a fixed-length vector: it
-constructs a **new** `Objective`. The loop that proposes moves owns that
-construction and calls `fit` per candidate.
-
-This is a seam, not a feature to build here. An optimizer that owned the
-outer loop would have to know what a move is, which is the model knowledge
-this module exists to exclude.
+or state count — and with it what the parameter vector means and how long it
+is, so it cannot be a step inside a fit over a fixed-length vector: it
+constructs a **new** `Objective`, and the loop that proposes moves owns that
+construction and calls `fit` per candidate; an optimizer that owned the outer
+loop would need the model knowledge this module exists to exclude.

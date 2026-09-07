@@ -27,8 +27,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of keeping
   its own copy of the exact open-chain recursion (#186)
-- An HMM with negative binomial emissions, the family whose M-step has no
-  closed form (#229)
 - Additional evolutionary models (#107)
 - Rate variation across sites, in the simulator and every backend
 - Simulate at the declared scale — `n` to 1000, `L` to 11000 — and report the
@@ -81,18 +79,20 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   key (#114)
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
   it costs per step
-- Temperature schedules, and the likelihood-versus-temperature curves that
-  judge exploration
+- Temperature schedules, annealing and parallel tempering, and the
+  likelihood-versus-temperature curves that judge exploration (#267)
 - Establish the external reference tools to benchmark against, and how they are
   installed (#126)
 - A classical baseline suite the three applications are scored against under
   one budget
+- Uncertainty for a discrete search result, where a Hessian is not defined:
+  a margin, a Boltzmann weight over the enumerated neighbourhood, or bootstrap
+  support, pinned against enumeration where it fits (#270)
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
 - A feature set for the tree environment, with the unidentifiable-constant
   invariance pinned
-- A tree fixture hard enough to separate a policy from greedy (#177)
 - PPO and a learned state-value critic
 - Truth as a terminal penalty, never a training signal
 - Train a phylogenetic policy and report its learning curve against the
@@ -160,5 +160,5 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   all three problem classes are documented to the same standard
 - Re-include the eleven committed QA figures the technical document no longer
   cites, so CI rebuilds nothing the document does not rest on
-- Restore the pruning derivation and the parameter-recovery evidence the
-  document dropped, against `ROADMAP.md` §1.3's required contents
+- The textbook carries every equation and algorithm the code cites, and a
+  guard resolves each citation (#274)

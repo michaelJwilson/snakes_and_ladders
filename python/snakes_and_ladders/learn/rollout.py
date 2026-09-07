@@ -1,8 +1,8 @@
 """Generating episodes: by a policy, and by the greedy baseline it must beat.
 
 Both agents live here because the comparison between them is the point, and
-it is only meaningful if they are driven through the *same* loop. ``docs/tex``
-puts it as a budget: the measure is not the objective reached but the
+it is only meaningful if they are driven through the *same* loop.
+``sec:policy-gradient`` of ``docs/tex/textbook.tex`` puts it as a budget: the measure is not the objective reached but the
 objective reached per evaluation, so every method has to be run at a matched
 one.
 
@@ -45,7 +45,7 @@ def rollout[S, A](
         every action drawn.
     max_steps : int
         Decision budget. Reaching it truncates the episode, which is
-        recorded: ``docs/tex`` notes that a truncation landing between a
+        recorded: ``sec:policy-gradient`` notes that a truncation landing between a
         sacrifice and its payoff teaches the opposite of the truth, so a
         consumer needs to know it happened.
     start : S | None

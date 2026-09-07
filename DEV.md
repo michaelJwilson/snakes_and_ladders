@@ -144,6 +144,30 @@ textbook's; what follows is what the implementation guarantees.
   is singular or worse-conditioned than a stated bound — an interval around a
   parameter the data does not identify summarizes nothing.
 
+### Run Logs
+
+Every entry point — a QA script, `snakes_and_ladders.qa.build`,
+`infra/check_notebooks.py` — logs through `snakes_and_ladders.log` (issue
+#311), and a line reads
+
+```
+2026-09-07 16:20:01 - 1.50m - INFO (render sim_tree) - snakes_and_ladders.qa.runner.figure_main:190 - wrote docs/tex/figures/sim_tree.pdf and docs/tex/figures/sim_tree_caption.txt
+```
+
+* **The second field is elapsed minutes** since the entry point started, so a
+  slow step is located by subtracting neighbours rather than by wall-clock
+  arithmetic.
+* **The parenthesis is the run's phase**, set with `phase("...")` around the
+  step and shared by every logger in the process; a line between phases has
+  none.
+* **Logs go to stderr**; stdout carries only what another script reads, such
+  as the stems `qa.build --list` prints.
+* **Libraries emit, entry points configure.** `opt.fit` and `search.infer` log
+  at DEBUG through `logging.getLogger(__name__)` and install no handler; an
+  entry point that wants those lines passes `level=logging.DEBUG` to
+  `get_logger`. `warning_once` and `info_once` say a repeated thing once per
+  logger, for a warning inside a loop.
+
 ### Profiling a Hot Path
 
 `CLAUDE.md`'s **Runtime Optimization Opportunities** lists what to look for; this is the order to look, on fixed hardware per **No CI Profiling** above.

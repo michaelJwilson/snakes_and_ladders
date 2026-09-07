@@ -1,7 +1,7 @@
 """Vectorized NumPy Felsenstein pruning -- the oracle every backend is pinned against.
 
-Implements the pruning recursion, eq. (pruning), and the root marginalization,
-eq. (pruning) of ``docs/tex/textbook.tex`` (Sec. "The algorithm: pruning"):
+Implements the pruning recursion, ``eq:pruning``, and the root marginalization,
+``eq:root``, of ``docs/tex/textbook.tex``:
 the site log-likelihood
 is computed post-order over ``(site, state)`` NumPy arrays, reusing
 ``snakes_and_ladders.sim.jc.jc_transition_probabilities`` for P(t). Partial likelihoods
@@ -49,8 +49,7 @@ def log_likelihood(
         ``snakes_and_ladders.sim.simulate.SimulatedDataset.alignment`` produces.
     rescale : bool
         Whether to rescale partial likelihoods per node, accumulating the log
-        of the scale factor separately (docs/tex/textbook.tex, Sec. "The algorithm:
-        pruning").
+        of the scale factor separately (``docs/tex/textbook.tex``, ``eq:pruning``).
         Disabling this underflows for realistic (site, taxa) sizes; it exists
         so tests can check the two paths agree on small problems where both
         run.
@@ -94,7 +93,7 @@ def log_likelihood(
                 raise ValueError(msg)
             child_partial = _post_order(child)
             transition = jc_transition_probabilities(child.branch_length, k=k)
-            # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq. (pruning).
+            # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
             partial = partial * (child_partial @ transition.T)
 
         if rescale:
@@ -111,5 +110,5 @@ def log_likelihood(
         return partial
 
     root_partial = _post_order(tau)
-    site_likelihood = root_partial @ pi  # eq. (root)
+    site_likelihood = root_partial @ pi  # eq:root
     return float(np.sum(np.log(site_likelihood) + log_scale))
