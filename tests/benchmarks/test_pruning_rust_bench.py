@@ -98,9 +98,7 @@ def _problem(
     names = [f"t{index}" for index in range(n_taxa)]
     tau = with_uniform_branch_lengths(random_topology(names, rng), 0.1)
     pi = np.full(4, 0.25)
-    dataset = simulate_alignment(
-        tau=tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
-    )
+    dataset = simulate_alignment(tau=tau, k=4, pi=pi, seed=1, n_sites=n_sites)
     return tau, pi, dict(dataset.alignment)
 
 

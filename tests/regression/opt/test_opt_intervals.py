@@ -203,7 +203,7 @@ def test_every_objective_inverts_its_own_constraint_map(
     assert_allclose(recovered.numpy(), theta.numpy(), atol=1e-14)
 
 
-@pytest.mark.structural
+@pytest.mark.oracle
 @pytest.mark.parametrize(("objective", "theta"), EVERY_OBJECTIVE, ids=OBJECTIVE_IDS)
 def test_the_new_door_is_the_old_one(objective: Objective, theta: torch.Tensor) -> None:
     # `standard_errors_at` must be `constrained_standard_errors` reached
@@ -224,7 +224,7 @@ def test_the_new_door_is_the_old_one(objective: Objective, theta: torch.Tensor) 
         assert_allclose(realized[name].numpy(), value.numpy(), rtol=1e-10)
 
 
-@pytest.mark.oracle
+@pytest.mark.mathematical
 def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -> None:
     # **The check this ticket is really for, and it costs nothing.** The two
     # algorithms share the model and nothing else -- no optimizer, no
@@ -296,7 +296,7 @@ def test_a_collapsing_component_is_refused_through_the_new_door_too() -> None:
         standard_errors_at(objective, collapsed)
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_a_multi_start_interval_belongs_beside_the_spread_that_qualifies_it() -> None:
     # An interval at the best of several starts is conditional on *that mode*.
     # The spread across starts is what says whether that matters, so the two
@@ -393,7 +393,7 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
     assert_allclose(chain.theta.std(0).numpy(), exact.numpy(), rtol=0.05)
 
 
-@pytest.mark.oracle
+@pytest.mark.structural
 def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
     # The comparison `hmc.py`'s docstring promises, in the regime where the
     # approximation is allowed to be one. A version already existed -- a raw

@@ -260,8 +260,8 @@ def anneal_potts(
     schedule : Schedule
         Temperature per sweep. Its length is the budget.
     rng : np.random.Generator
-        Passed in rather than seeded here (`sim/CLAUDE.md`, issue #240); the
-        start is drawn from it.
+        Source of every draw, the start included. Passed in rather than
+        seeded here, for the reason :func:`sample_potts` gives.
 
     backend : Backend
         :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` runs the oracle
@@ -365,8 +365,8 @@ def parallel_tempering(
     Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
 
     **The replicas must not share a stream and must be reproducible from one
-    generator.** The generator passed in spawns a child per replica and then
-    draws only the exchange uniforms. Sharing one stream would correlate
+    seed.** The passed generator spawns a child per replica; the parent
+    then draws only the exchange uniforms. Sharing one stream would correlate
     the replicas, which is the whole point lost while every diagnostic looks
     healthy.
 
@@ -382,7 +382,8 @@ def parallel_tempering(
         positive. The stationary distribution does not depend on the order,
         only which pairs are adjacent for exchange.
     rng : np.random.Generator
-        The parent generator; its children drive the replicas.
+        The parent generator: it spawns one child per replica and then draws
+        only the exchange uniforms, so one seeded generator reproduces the run.
     n_sweeps, burn_in, thin : int
         As :func:`sample_potts`, applied per replica.
     backend : Backend
@@ -414,8 +415,7 @@ def parallel_tempering(
     field = np.asarray(field, dtype=float)
     n_replicas = len(temperatures)
     betas = [1.0 / temperature for temperature in temperatures]
-    parent = rng
-    children = parent.spawn(n_replicas)
+    children = rng.spawn(n_replicas)
     n_states = int(field.shape[0])
     states = np.stack(
         [child.integers(0, n_states, size=graph.n_nodes) for child in children]
@@ -439,7 +439,7 @@ def parallel_tempering(
                 betas[pair], betas[pair + 1], current[pair], current[pair + 1]
             )
             proposed[pair] += 1
-            if log_ratio >= 0.0 or parent.random() < np.exp(log_ratio):
+            if log_ratio >= 0.0 or rng.random() < np.exp(log_ratio):
                 accepted[pair] += 1
                 states[[pair, pair + 1]] = states[[pair + 1, pair]]
                 current[[pair, pair + 1]] = current[[pair + 1, pair]]

@@ -306,7 +306,6 @@ def _hand_written_leapfrog(
     return position, velocity
 
 
-@pytest.mark.structural
 @pytest.mark.parametrize(
     ("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (7, 0.13), (1, 0.3)]
 )
@@ -351,7 +350,7 @@ def test_a_composition_that_integrates_the_wrong_interval_is_refused() -> None:
         Integrator(name="asymmetric", weights=(0.2, 0.3, 0.5), order=2)
 
 
-@pytest.mark.oracle
+@pytest.mark.mathematical
 def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
     # The companion of the second-order test above, and it needs that one to
     # be trustworthy: a slope estimator reporting 4 for both integrators is
@@ -400,7 +399,7 @@ class _Counted:
         return self.inner(theta)
 
 
-@pytest.mark.oracle
+@pytest.mark.structural
 @pytest.mark.parametrize("integrator", [leapfrog, yoshida])
 @pytest.mark.parametrize("n_steps", [1, 3, 20])
 def test_force_evaluations_counts_what_a_trajectory_actually_costs(
@@ -423,7 +422,7 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
     assert counted.calls == integrator.force_evaluations(n_steps)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.mathematical
 def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
     # **The measurement the ticket is for, and it is negative.** A fourth-order
     # method pays where the step is limited by *accuracy*; here it is limited
@@ -460,7 +459,7 @@ def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> N
     assert cheapest["yoshida"] >= 60
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_the_default_integrator_is_the_one_every_committed_result_used() -> None:
     # A default changed here silently redraws every chain in the repository.
     chain = sample(GAUSSIAN, seed=3, n_samples=40, step_size=0.2, n_steps=6)
@@ -476,7 +475,7 @@ def test_the_default_integrator_is_the_one_every_committed_result_used() -> None
 # --- temperature ------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None:
     # Where the approximation is exact. For a Gaussian target the dynamics
     # are linear, so a chain at temperature T *is* the chain at 1 with its
@@ -519,7 +518,7 @@ def test_a_non_positive_temperature_is_refused() -> None:
         sample(GAUSSIAN, seed=1, n_samples=10, step_size=0.1, temperature=0.0)
 
 
-@pytest.mark.structural
+@pytest.mark.oracle
 def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     # The refactor's guarantee, stated as the plan asked: annealing on a
     # constant schedule at temperature 1 reproduces the untempered chain at
@@ -532,7 +531,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     assert annealed.force_evaluations == 200 * leapfrog.force_evaluations(10)
 
 
-@pytest.mark.edge_case
+@pytest.mark.structural
 def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
     # The final proposals run cold but not at zero, so the chain can leave
     # the best point it found; what is returned is the best, and its value is

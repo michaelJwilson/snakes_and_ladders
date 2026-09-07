@@ -113,7 +113,7 @@ def _rate(
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_every_episode_ends_where_no_move_improves(
     environment: TopologyEnvironment, starts: list[Topology]
 ) -> None:
@@ -143,7 +143,7 @@ def test_every_episode_ends_where_no_move_improves(
     assert all(environment.is_terminal(state) for state in learned_ends)
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_an_untrained_policy_is_far_worse_than_greedy(
     environment: TopologyEnvironment, starts: list[Topology], maximum: float
 ) -> None:
@@ -166,7 +166,7 @@ def test_an_untrained_policy_is_far_worse_than_greedy(
     assert abs(rate - _UNTRAINED) < 0.02
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_a_trained_policy_is_no_worse_than_hill_climbing(
     environment: TopologyEnvironment, starts: list[Topology], maximum: float
 ) -> None:

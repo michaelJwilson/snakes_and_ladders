@@ -67,6 +67,16 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
 
 ## Infrastructure & Tooling
 
+*   **Documentation Sync:** Any change affecting behavior, CI, dev setup, or math models must update, in the same PR, whichever of these it makes untrue: e.g. `README.md`, `CLAUDE.md` (including a module's), `DEV.m\
+d`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md`, `TICKETS.md`, `docs/tex/`, `docs/nb/`. If the change is user-visible, add a fragment under `changelog.d/` (see `changelog.d/README.md`) rather than editing `CHANGELOG.md\
+` directly — `towncrier` merges fragments into `CHANGELOG.md` at release time, and CI's `towncrier check` enforces one exists.  Similarly, keep this	convention and doc. up to date also.
+*   **Single Version Source:** The package version lives exclusively in `Cargo.toml`'s `[package].version`.
+*   **Package Surface:** `python/snakes_and_ladders/__init__.py` re-exports nothing beyond the package's own top-level utilities (currently `double`); import submodule contents explicitly (`from snakes_and_ladders.\
+likelihood import ...`), not through the top-level namespace.
+*   **Code Standards:** Use type hints on all Python functions. Do not introduce silent behavior changes (e.g., default parameters). Keep dependencies minimal and justify additions.
+*   **Dev Standards:** The number of PRs should be minimized to limit the amount of review work and test runs, particularly given tickets are typically scoped to a work item.
+
+
 ### Build System
 
 `maturin` builds the Rust extension natively during `pip install .`.
@@ -144,6 +154,30 @@ textbook's; what follows is what the implementation guarantees.
   is singular or worse-conditioned than a stated bound — an interval around a
   parameter the data does not identify summarizes nothing.
 
+### Run Logs
+
+Every entry point — a QA script, `sal.qa.build`,
+`infra/check_notebooks.py` — logs through `sal.log` (issue
+#311), and a line reads
+
+```
+2026-09-07 16:20:01 - 1.50m - INFO (render sim_tree) - sal.qa.runner.figure_main:190 - wrote docs/tex/figures/sim_tree.pdf and docs/tex/figures/sim_tree_caption.txt
+```
+
+* **The second field is elapsed minutes** since the entry point started, so a
+  slow step is located by subtracting neighbours rather than by wall-clock
+  arithmetic.
+* **The parenthesis is the run's phase**, set with `phase("...")` around the
+  step and shared by every logger in the process; a line between phases has
+  none.
+* **Logs go to stderr**; stdout carries only what another script reads, such
+  as the stems `qa.build --list` prints.
+* **Libraries emit, entry points configure.** `opt.fit` and `search.infer` log
+  at DEBUG through `logging.getLogger(__name__)` and install no handler; an
+  entry point that wants those lines passes `level=logging.DEBUG` to
+  `get_logger`. `warning_once` and `info_once` say a repeated thing once per
+  logger, for a warning inside a loop.
+
 ### Profiling a Hot Path
 
 `CLAUDE.md`'s **Runtime Optimization Opportunities** lists what to look for; this is the order to look, on fixed hardware per **No CI Profiling** above.
@@ -175,6 +209,33 @@ textbook's; what follows is what the implementation guarantees.
 2. **Validate:** Must use OSI-approved licenses. Flag items with $<1000$ GitHub stars.
 3. **Lock:** Run `uv lock` or update `Cargo.lock` and commit in the same PR.
 4. **Justify:** Explain the inclusion in the PR description.
+
+### Experiments
+
+A measured comparison lives in `docs/experiments/` as one file per experiment,
+written from `TEMPLATE.md` (issue #314): YAML front matter with the commit,
+branch and pull request, the tickets it tests and files, the problem, fixture
+and size tier, the methods compared, the budget and its unit, the shared
+seeds, the hardware and a status; then fixed sections — feature under test,
+setup, results, figures, finding, conclusion and actions, what is not
+claimed. `infra/experiments.py` validates every file and generates the index
+`README.md`; `--check` fails on an invalid file or a stale index, and
+`tests/regression/test_experiments.py` runs it per pull request.
+
+* **A number stated against a baseline lives in an experiment file.** A pull
+  request that measures one method against another adds or updates the
+  experiment it belongs to, and `STATUS.md` cites the file rather than
+  restating its table. The matrix the ledger fills is problems × size tiers ×
+  method families, every cell run through `opt.budget.compare` at one budget
+  over shared seeds; the index shows each cell's status and finding.
+* **Status is a claim about the record.** `open` while the comparison runs,
+  `confirmed` once the finding is stated against its commit, `retracted` when
+  a later measurement contradicts it (the file stays, with the contradiction
+  in its finding), `superseded` when a later experiment replaces it.
+* **A run store, when one exists, generates the Results section.** Until the
+  Aim ledger of #75 lands, results are typed from the measurement with the
+  script that produced them named; after it, `qa/experiment.py` renders them
+  from the store and the Markdown stays the reviewed artefact.
 
 ### Release
 

@@ -76,3 +76,9 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
 - **Regression-test the layout, not the rendering.** matplotlib output isn't
   numerically pinnable; the coordinates and text a script computes before
   handing them to matplotlib are, and that is what a test pins.
+- **Series and states are two palettes with two rules, and a layout is
+  shared.** A series is traced across a plot and takes the four validated
+  hues with their markers; a state is read off a legend and takes the
+  eight-colour state palette; neither grows a hue, both facet. A composition
+  more than one figure needs — a spatial grid, grouped tracks, a joint
+  distribution — lives in `layout.py`, never in a script.

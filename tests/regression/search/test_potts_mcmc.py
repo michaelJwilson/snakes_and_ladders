@@ -32,6 +32,7 @@ import math
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.potts import log_weights
+from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.opt.schedule import Constant, Exponential
 from snakes_and_ladders.search import potts_mcmc
 from snakes_and_ladders.search.alpha_expansion import energy, iterated_conditional_modes
@@ -51,6 +52,7 @@ from snakes_and_ladders.search.statistics import (
     integrated_autocorrelation_time,
 )
 from snakes_and_ladders.sim.canonical import (
+    PlantedSpinGlass,
     frustrated_triangular_lattice,
     minimum_frustrated_edges,
     planted_spin_glass,
@@ -267,7 +269,7 @@ def _tempered_exact_distribution(
     return index, probability
 
 
-@pytest.mark.structural
+@pytest.mark.oracle
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     # The consistency check the model itself provides: the coupling absorbs
@@ -285,7 +287,7 @@ def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     assert np.abs(scaled - expected).max() == 0.0
 
 
-@pytest.mark.oracle
+@pytest.mark.structural
 @pytest.mark.parametrize("move", list(PottsMove))
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
@@ -461,7 +463,7 @@ def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -
     assert max(_replica_p_values(run, graph, WITH_FIELD)) < SIGNIFICANCE
 
 
-@pytest.mark.structural
+@pytest.mark.mathematical
 def test_replicas_draw_from_separate_streams_and_one_seed_reproduces_them() -> None:
     # Two replicas at the *same* temperature with no field would be identical
     # chains if they shared a stream, and the whole point would be lost while
@@ -480,7 +482,7 @@ def test_replicas_draw_from_separate_streams_and_one_seed_reproduces_them() -> N
     assert np.array_equal(first.states, second.states)
 
 
-@pytest.mark.mathematical
+@pytest.mark.oracle
 def test_the_best_configuration_is_the_lowest_energy_any_replica_visited() -> None:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
@@ -505,66 +507,68 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
         parallel_tempering(graph, NO_FIELD, (1.0, 0.0), np.random.default_rng(SEED), 10)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.structural
 def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
     # The comparison the ticket asked for, on the instance where restarts can
     # lose: the planted Viana-Bray spin glass, 60 sites at mean degree 4 and
     # frustration 0.2, whose planted energy upper-bounds the ground state and
     # whose ground state enumeration cannot reach. Budget: 400 heat-bath
-    # sweeps per method -- annealing spends them on one chain, tempering on
-    # four replicas of 100, and single-site descent on 100 restarts of at
-    # most 4 sweeps (it converges in 2 to 4). Realized over 12 instances,
-    # against the best energy any method found: annealing and tempering
-    # 12/12, restarts 5/12 with a mean gap of 0.75; at frustration 0.35 it
-    # is 9/12, 9/12 against 5/12, and at 100 sites and degree 6, 7/12 and
-    # 8/12 against 2/12. The plan predicted tempering would be hard to
-    # justify at these sizes; it is not, and the prediction is retracted.
+    # sweeps per method, held equal by `opt.budget.compare` (issue #281) --
+    # annealing spends them on one chain, tempering on four replicas of 100,
+    # and single-site descent on 100 restarts of at most 4 sweeps (it
+    # converges in 2 to 4). Realized over 12 instances, against the best
+    # energy any method found: annealing and tempering 12/12, restarts 5/12
+    # with a mean gap of 0.75 when first measured by hand; through the
+    # utility, with its own streams and the reference the best any method
+    # found, tempering 12/12, annealing 10/12 and restarts 4/12 with a mean
+    # gap of 0.75. The plan predicted tempering would be hard to justify at
+    # these sizes; it is not, and the prediction is retracted.
     #
     # Asserted at the margin the measurement supports, not the measurement:
     # restarts below both, and the two tempered methods at or below the
-    # planted energy on every instance (restarts miss it on 1 of 12).
-    budget, n_instances = 400, 12
+    # planted energy on every instance.
+    budget = Budget("sweeps", 400)
     ladder = (2.0, 1.2, 0.7, 0.4)
-    best: dict[str, list[float]] = {"restarts": [], "anneal": [], "tempering": []}
-    planted = []
-    for seed in range(n_instances):
-        instance = planted_spin_glass(60, 4.0, 0.2, np.random.default_rng(1000 + seed))
-        graph, field = instance.graph, np.zeros(2)
-        planted.append(instance.planted_energy)
-        best["restarts"].append(
-            min(
-                iterated_conditional_modes(
-                    graph,
-                    field,
-                    2,
-                    np.random.default_rng(5000 * seed + r),
-                    max_sweeps=4,
-                )[1]
-                for r in range(budget // 4)
-            )
-        )
-        best["anneal"].append(
-            anneal_potts(
-                graph,
-                field,
-                Exponential(2.0, 0.05, budget),
-                np.random.default_rng(seed),
-            ).energy
-        )
-        best["tempering"].append(
-            parallel_tempering(
-                graph, field, ladder, np.random.default_rng(seed), budget // len(ladder)
-            ).best_energy
-        )
+    instances = [
+        planted_spin_glass(60, 4.0, 0.2, np.random.default_rng(1000 + seed))
+        for seed in range(12)
+    ]
+    planted = np.array([instance.planted_energy for instance in instances])
 
-    known = np.min(np.array(list(best.values())), axis=0)
-    hits = {
-        name: int((np.array(values) <= known + 1e-9).sum())
-        for name, values in best.items()
-    }
+    def descent(
+        instance: PlantedSpinGlass, budget: Budget, rng: np.random.Generator
+    ) -> Outcome:
+        energy = iterated_conditional_modes(
+            instance.graph, np.zeros(2), 2, rng, max_sweeps=budget.size
+        )[1]
+        return Outcome(energy, budget.size)
 
-    for name in ("anneal", "tempering"):
-        assert bool((np.array(best[name]) <= np.array(planted) + 1e-9).all()), name
+    def anneal(
+        instance: PlantedSpinGlass, budget: Budget, rng: np.random.Generator
+    ) -> Outcome:
+        run = anneal_potts(
+            instance.graph, np.zeros(2), Exponential(2.0, 0.05, budget.size), rng
+        )
+        return Outcome(run.energy, budget.size)
+
+    def tempering(
+        instance: PlantedSpinGlass, budget: Budget, rng: np.random.Generator
+    ) -> Outcome:
+        per_replica = budget.size // len(ladder)
+        run = parallel_tempering(instance.graph, np.zeros(2), ladder, rng, per_replica)
+        return Outcome(run.best_energy, per_replica * len(ladder))
+
+    result = compare(
+        {"restarts": restarts(descent, 4), "anneal": anneal, "tempering": tempering},
+        instances,
+        budget,
+        seeds=(0,),
+    )
+    hits = result.hits()
+
+    for row, name in enumerate(result.methods):
+        if name != "restarts":
+            assert bool((result.best[row] <= planted + 1e-9).all()), name
     assert hits["restarts"] < hits["anneal"], hits
     assert hits["restarts"] < hits["tempering"], hits
     assert hits["anneal"] >= 10, hits

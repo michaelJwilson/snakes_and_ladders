@@ -93,11 +93,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - A feature set for the tree environment, with the unidentifiable-constant
   invariance pinned
-- A tree fixture hard enough to separate a policy from greedy (#177)
 - PPO and a learned state-value critic
 - Truth as a terminal penalty, never a training signal
-- Train a phylogenetic policy and report its learning curve against the
-  enumerated expected return (#178)
 
 ## Milestone 2.2 — Curriculum Learning
 
@@ -117,9 +114,13 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
-- Create a ledger of benchmarked and validated runs with Aim (#75)
+- Create a ledger of benchmarked and validated runs with Aim (#75), revived
+  from the closed draft as the run store behind the experiment files (#314,
+  part 2; the `tracking` extra needs the dependency's yes)
 - Reproduce a run from a single manifest, and assert it
-- Budget-matched ablation leaderboard across shared seeds
+- Budget-matched ablation leaderboard across shared seeds: the experiment
+  ledger and its generated index landed (#314); the cells that remain are the
+  stress and release tiers, on the fixed-hardware runner
 - Paired significance test required before a variant is adopted as
   state-of-the-art
 
@@ -158,6 +159,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
 - Make the public-facing reference to the work consistent (#250)
+- Derive the belief-propagation and forward-backward sections of `docs/tex/`, so
+  all three problem classes are documented to the same standard
 - Re-include the eleven committed QA figures the technical document no longer
   cites, so CI rebuilds nothing the document does not rest on
 - The textbook carries every equation and algorithm the code cites, and a

@@ -19,6 +19,7 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.emissions import GaussianEmission
+from snakes_and_ladders.opt.budget import Budget, Outcome, compare
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import align_by_key
 from snakes_and_ladders.opt.initialize import Initializer
@@ -67,7 +68,7 @@ def _dataset(
     return simulate_mixture(params).observations
 
 
-@pytest.mark.oracle
+@pytest.mark.mathematical
 def test_the_gradient_matches_central_differences() -> None:
     objective = GaussianMixtureObjective(_dataset(), 2)
 
@@ -102,7 +103,7 @@ def test_the_gradient_fit_and_expectation_maximization_reach_the_same_optimum() 
     assert_allclose(estimate["scale"].numpy(), em.components.scale.numpy(), atol=1e-5)
 
 
-@pytest.mark.structural
+@pytest.mark.simulated_truth
 def test_the_fit_recovers_the_generating_mixture_up_to_the_label_permutation() -> None:
     observations = _dataset()
     objective = GaussianMixtureObjective(observations, 2)
@@ -121,7 +122,7 @@ def test_the_fit_recovers_the_generating_mixture_up_to_the_label_permutation() -
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.oracle
 def test_the_component_m_step_is_the_emission_family_s_own() -> None:
     # Asserted rather than assumed: the mixture's EM and a direct call into
     # `GaussianEmission.reestimate` on the same responsibilities must produce
@@ -145,7 +146,7 @@ def test_the_component_m_step_is_the_emission_family_s_own() -> None:
     assert_allclose(one_step.weights.numpy(), posterior.mean(dim=0).numpy(), rtol=1e-15)
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_the_responsibilities_are_a_distribution_over_components() -> None:
     values = torch.as_tensor(_dataset(n_samples=100), dtype=torch.float64)
     components = GaussianEmission(MEAN, SCALE, 1e-12)
@@ -215,7 +216,7 @@ def test_the_optimal_clustering_is_exact_where_it_can_be_checked_by_hand() -> No
         optimal_clustering_cost(values, 7)
 
 
-@pytest.mark.oracle
+@pytest.mark.structural
 def test_kmeans_plus_plus_stays_inside_its_published_guarantee() -> None:
     # Arthur & Vassilvitskii (2007), theorem 1.1: the *expected* seeding cost
     # is within `8 (ln k + 2)` of optimal, so the mean over replicates is what
@@ -271,7 +272,7 @@ def test_kmeans_plus_plus_beats_uniform_seeding_on_the_cost_it_optimizes() -> No
     assert ratios["uniform"].max() > seeding_guarantee(3)
 
 
-@pytest.mark.edge_case
+@pytest.mark.structural
 def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
     # **The negative result, and it is the one worth having.** k-means++ is
     # 3.8x better on the cost it optimizes, and on this mixture that buys
@@ -307,15 +308,26 @@ def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
         ).log_likelihood
 
     best = -float(fit(objective).value)
-    reached = {}
-    for name, seeder in (("seeded", kmeans_plus_plus), ("uniform", uniform_seeds)):
-        rng = np.random.default_rng(11)
-        reached[name] = sum(
-            _from(seeder(observations, 3, rng)) >= best - 1e-6 for _ in range(20)
-        )
 
-    assert reached["seeded"] == 20
-    assert reached["uniform"] >= 18
+    def seeded(data: np.ndarray, _budget: Budget, rng: np.random.Generator) -> Outcome:
+        return Outcome(-_from(kmeans_plus_plus(data, 3, rng)), 1)
+
+    def uniform(data: np.ndarray, _budget: Budget, rng: np.random.Generator) -> Outcome:
+        return Outcome(-_from(uniform_seeds(data, 3, rng)), 1)
+
+    # Twenty replicates of one dataset, each its own instance so each draws
+    # its own stream; one EM fit per seeding is the budget (issue #281).
+    result = compare(
+        {"seeded": seeded, "uniform": uniform},
+        [observations] * 20,
+        Budget("fits", 1),
+        seeds=(11,),
+        known=[-best] * 20,
+    )
+    reached = result.hits(tolerance=1e-6)
+
+    assert reached["seeded"] == 20, reached
+    assert reached["uniform"] >= 18, reached
 
 
 @pytest.mark.structural
@@ -368,7 +380,7 @@ def test_an_initializer_that_reads_the_data_refuses_an_objective_it_cannot_read(
         KMeansPlusPlus(1, np.random.default_rng(0)).starts(unrelated)
 
 
-@pytest.mark.edge_case
+@pytest.mark.structural
 def test_a_mixture_needs_at_least_two_components() -> None:
     with pytest.raises(ValueError, match="n_components must be >= 2"):
         GaussianMixtureObjective(_dataset(n_samples=20), 1)
@@ -376,7 +388,7 @@ def test_a_mixture_needs_at_least_two_components() -> None:
         kmeans_plus_plus(np.arange(5.0), 6, np.random.default_rng(0))
 
 
-@pytest.mark.structural
+@pytest.mark.simulated_truth
 def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> None:
     objective = GaussianMixtureObjective(_dataset(n_samples=100), 2)
 

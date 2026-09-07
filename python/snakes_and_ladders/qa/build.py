@@ -23,9 +23,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
+from snakes_and_ladders.log import get_logger, phase
 from snakes_and_ladders.qa.manifest import (
     FIGURES,
     FigureSpec,
@@ -208,33 +210,37 @@ def main(argv: list[str] | None = None) -> int:
         help="print the selected stems and exit",
     )
     args = parser.parse_args(argv)
+    log = get_logger(__name__, start_time=time.time())
 
     specs = selected(args.documents or list(DEFAULT_DOCUMENTS), args.every, args.only)
 
     if args.list_only:
+        # Output, not a log line: the release script reads the stems.
         for spec in specs:
             print(spec.stem)
         return 0
 
     if not args.check:
         for spec in specs:
-            render(spec, args.output_dir)
+            with phase(f"render {spec.stem}"):
+                render(spec, args.output_dir)
         return 0
 
     with tempfile.TemporaryDirectory() as tmp:
         rebuilt_dir = Path(tmp)
         for spec in specs:
-            render(spec, rebuilt_dir)
-        stale = compare(rebuilt_dir, args.output_dir)
+            with phase(f"render {spec.stem}"):
+                render(spec, rebuilt_dir)
+        with phase("compare"):
+            stale = compare(rebuilt_dir, args.output_dir)
 
     if stale:
-        print(
-            f"stale QA figures: {', '.join(stale)} -- "
-            f"run infra/build_technical_doc.sh and commit the result",
-            file=sys.stderr,
+        log.error(
+            "stale QA figures: %s -- run infra/build_technical_doc.sh and commit the result",
+            ", ".join(stale),
         )
         return 1
-    print(f"{len(specs)} QA figures match the committed output")
+    log.info("%d QA figures match the committed output", len(specs))
     return 0
 
 

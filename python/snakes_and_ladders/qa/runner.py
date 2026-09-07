@@ -19,6 +19,7 @@ of routing them all through here.
 from __future__ import annotations
 
 import argparse
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
+from snakes_and_ladders.log import get_logger, phase
 from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.qa.figure import (
     QAFigure,
@@ -177,11 +179,14 @@ def figure_main(
     QAFigure
         Paths written, and the caption.
     """
+    log = get_logger(__name__, start_time=time.time())
     loaded, option_values, output_dir = _parse(description, params, options, argv)
-    fig, caption = build(*loaded, **option_values)
+    with phase(f"render {stem}"):
+        fig, caption = build(*loaded, **option_values)
     try:
-        written = write_qa_figure(output_dir, stem, fig, caption)
-        print(f"Wrote {written.figure_path} and {written.caption_path}")
+        with phase(f"write {stem}"):
+            written = write_qa_figure(output_dir, stem, fig, caption)
+        log.info("wrote %s and %s", written.figure_path, written.caption_path)
         return written
     finally:
         # Closed here rather than in the builder: a builder that returns a
@@ -227,10 +232,13 @@ def table_main(
     QATable
         Paths written, and the caption.
     """
+    log = get_logger(__name__, start_time=time.time())
     loaded, option_values, output_dir = _parse(description, params, options, argv)
-    body, caption = build(*loaded, **option_values)
-    written = write_qa_table(output_dir, stem, body, caption)
-    print(f"Wrote {written.table_path} and {written.caption_path}")
+    with phase(f"render {stem}"):
+        body, caption = build(*loaded, **option_values)
+    with phase(f"write {stem}"):
+        written = write_qa_table(output_dir, stem, body, caption)
+    log.info("wrote %s and %s", written.table_path, written.caption_path)
     return written
 
 

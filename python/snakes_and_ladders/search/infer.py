@@ -33,6 +33,7 @@ lazy scoring is opt-in because it changes which candidates are fitted.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -57,6 +58,8 @@ from snakes_and_ladders.search.topology import (
     random_topology,
     spr_neighbours,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class MoveSet(StrEnum):
@@ -364,6 +367,12 @@ def infer(
             break
         current, best = candidate, candidate_fit
         trace.append(best.value)
+        _log.debug(
+            "accepted move %d: log-likelihood %.6f after %d evaluations",
+            len(trace) - 1,
+            best.value,
+            evaluations,
+        )
 
     return Inference(
         topology=current,

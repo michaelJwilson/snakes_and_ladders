@@ -113,7 +113,7 @@ def test_the_generating_topology_is_the_enumerated_maximum(
     assert environment.score(params.tau) == _enumerated_maximum(environment, alignment)
 
 
-@pytest.mark.oracle
+@pytest.mark.structural
 def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     alignment: dict[str, np.ndarray],
 ) -> None:
@@ -122,7 +122,7 @@ def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     assert len(list(enumerate_topologies(sorted(alignment)))) == 945
 
 
-@pytest.mark.mathematical
+@pytest.mark.simulated_truth
 def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:
@@ -163,7 +163,7 @@ def test_every_nni_failure_stops_at_a_genuine_local_optimum(
     assert all(environment.is_terminal(state) for state in failures)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.oracle
 def test_spr_reaches_the_optimum_where_nni_does_not(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:

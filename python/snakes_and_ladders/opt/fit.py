@@ -16,6 +16,7 @@ against the objective's own magnitude.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 
@@ -23,6 +24,8 @@ import torch
 
 from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.objective import Objective
+
+_log = logging.getLogger(__name__)
 
 # Two-sided normal quantile for a 95% interval. Written out rather than
 # imported from scipy: one constant does not justify a dependency.
@@ -157,6 +160,13 @@ def fit(
         gradient_norm=_relative_gradient_norm(objective, theta),
         iterations=iterations,
         converged=converged,
+    )
+    _log.debug(
+        "fit %s after %d iterations at value %.6f, relative gradient norm %.2e",
+        "converged" if converged else "stopped",
+        iterations,
+        result.value,
+        result.gradient_norm,
     )
     return _with_intervals(objective, result) if include_intervals else result
 

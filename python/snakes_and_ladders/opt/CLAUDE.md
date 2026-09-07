@@ -44,8 +44,8 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
 - **`converged` is a statement about the gradient, never about the global
   minimum.** A run satisfying the first-order condition reports convergence
   wherever it stopped, and on a multimodal surface that is routinely a local
-  minimum. A result resting on a single fit of such a surface says so, or
-  reports a multi-start rate instead.
+  minimum. A result resting on one fit of such a surface says so, or reports
+  a multi-start rate — through `budget.compare`, never a loop of its own.
 
 - **Where a likelihood is unbounded, refuse rather than clamp.** Some models
   have no maximum, and a fit returning normally at one was stopped by a floor
@@ -64,11 +64,14 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
   rejected preferentially in the tails. The energy error tracks that and the
   acceptance rate does not, so a sampler here reports both.
 
-- **A negative log-likelihood is not a log posterior.** Read as a density it
-  is a posterior under an improper flat prior, often not normalizable, and no
-  sampler diagnostic can notice; `hmc.WithGaussianPrior` makes the prior the
-  caller's declaration. Tempering it is a power posterior, not a physical
-  temperature; the consumer says which it means.
+- **A negative log-likelihood is not a log posterior.** Reading a bare
+  likelihood as a density is a posterior under an improper flat prior, which
+  for most models is not normalizable, and no diagnostic inside a sampler can
+  notice. `hmc.WithGaussianPrior` makes the prior an explicit declaration by
+  the caller rather than an assumption by the sampler. The same fault one
+  step over: tempering a likelihood is a power posterior, not a temperature
+  in the physical sense, and a schedule serves both without saying which —
+  the consumer says.
 
 - **No application imports.** Nothing here may import from `sal.sim`,
   `sal.likelihood` or `sal.search`. This is asserted by
@@ -110,11 +113,8 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
 ## Discrete moves are outside the interface
 
 A discrete move changes the *structure* — a different topology, chain length
-or state count — and so changes what the parameter vector means and how long
-it is. It cannot be a step inside a fit over a fixed-length vector: it
-constructs a **new** `Objective`. The loop that proposes moves owns that
-construction and calls `fit` per candidate.
-
-This is a seam, not a feature to build here. An optimizer that owned the
-outer loop would have to know what a move is, which is the model knowledge
-this module exists to exclude.
+or state count — and with it what the parameter vector means and how long it
+is, so it cannot be a step inside a fit over a fixed-length vector: it
+constructs a **new** `Objective`, and the loop that proposes moves owns that
+construction and calls `fit` per candidate; an optimizer that owned the outer
+loop would need the model knowledge this module exists to exclude.

@@ -71,6 +71,60 @@ move changes what the parameter vector \emph{means} and how long it is, so it
 constructs a new objective rather than taking a step inside an existing one.
 Everything else in this document follows from that division.
 
+\subsection{Factor Graphs: The One Structure}
+\label{sec:factor-graph}
+
+A tree under a substitution model, a Potts model on a graph and a hidden
+Markov chain are one object: a set of discrete variables $x_1, \dots, x_N$ and
+a set of factors $\psi_a$, each a non-negative function of a subset
+$x_{\partial a}$, with
+\begin{equation}
+  p(x) = \frac{1}{Z} \prod_a \psi_a(x_{\partial a}),
+  \qquad
+  Z = \sum_x \prod_a \psi_a(x_{\partial a}).
+  \label{eq:factor-graph}
+\end{equation}
+The bipartite graph between variables and factors is the factor graph
+\citep{kschischang2001, koller2009}. In its \emph{normal} (Forney) form every
+variable is an edge between exactly two factors, a variable shared by more
+factors passing through an equality factor $\delta(x, x', \dots)$
+\citep{forney2001}; the form changes the drawing and not the distribution,
+which is checked by computing the same marginals on both. Observations enter
+as factors: a leaf's state is an indicator, an emission is a unary factor over
+the hidden state, so the graph is over latent variables only and a density and
+a probability are handled alike.
+
+Sum-product sends, from factor $a$ to variable $i$,
+\begin{equation}
+  m_{a \to i}(x_i) = \sum_{x_{\partial a \setminus i}}
+    \psi_a(x_{\partial a}) \prod_{j \in \partial a \setminus i} m_{j \to a}(x_j),
+  \qquad
+  m_{i \to a}(x_i) = \prod_{b \in \partial i \setminus a} m_{b \to i}(x_i),
+  \label{eq:sum-product}
+\end{equation}
+and on a tree one leaf-to-root and one root-to-leaf pass are exact: on the
+tree's factor graph this is pruning, Equation~\ref{eq:pruning}; on a chain it
+is the forward recursion, Equation~\ref{eq:forward}; on a pairwise graph it
+is Equation~\ref{eq:bp-message}. On a loopy graph the fixed point is the
+Bethe approximation of Equation~\ref{eq:bethe}. Replacing the sum by a
+maximum gives max-product, whose max-marginals carry the MAP assignment---on
+a chain, Viterbi. One implementation of Equation~\ref{eq:sum-product}
+therefore serves all three problem classes, and each is pinned to the
+evaluator that predates it.
+
+\paragraph{A fourth shape.}
+The coupled spatio-sequential model puts a Potts prior on spatial labels
+$\ell_n \in \{1..M\}$, one hidden chain $k_{s,m}$ per class, and a
+\emph{gated} emission joining one label to one chain state:
+\begin{equation}
+  \log p(\ell, k, x) = \beta \sum_{\langle n,n' \rangle} J_{nn'}\,\delta(\ell_n, \ell_{n'})
+    + \sum_m \Big[ \log \pi_m(k_{1,m}) + \sum_{s > 1} \log A_m(k_{s-1,m}, k_{s,m}) \Big]
+    + \sum_n \sum_s \log P(x_{sn} \mid k_{s,\ell_n}, \theta_{\ell_n}) - \log Z_{\mathrm{Potts}},
+  \label{eq:joint}
+\end{equation}
+which is Equation~\ref{eq:factor-graph} with pairwise, chain and degree-two
+gated factors, and no fourth code path.
+
 \subsection{The Continuous Optimization Abstraction}
 \label{sec:abstraction}
 

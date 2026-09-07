@@ -106,7 +106,6 @@ def _coverage(separation: float, replicates: int) -> tuple[int, int, int]:
     return covered, total, boundary
 
 
-@pytest.mark.oracle
 @pytest.mark.parametrize(
     ("n_states", "length", "seed"), [(2, 5, 1), (2, 7, 2), (3, 4, 3), (3, 6, 4)]
 )
@@ -172,7 +171,7 @@ def test_the_evidence_of_a_continuous_emission_can_exceed_one() -> None:
     assert enumerated.log_likelihood > 0.0
 
 
-@pytest.mark.oracle
+@pytest.mark.mathematical
 def test_the_gradient_matches_central_differences() -> None:
     observations = simulate_sequences(_params(_truth(), seed=21)).observations
     objective = GaussianHmmObjective(observations, 2)
@@ -184,7 +183,7 @@ def test_the_gradient_matches_central_differences() -> None:
     assert realized <= 1e-6
 
 
-@pytest.mark.oracle
+@pytest.mark.mathematical
 def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum() -> None:
     # Two fitting algorithms sharing only the model: one is L-BFGS in
     # unconstrained coordinates through a constraint map, the other is EM
@@ -248,7 +247,7 @@ def test_the_start_places_the_means_on_the_data_and_breaks_the_symmetry() -> Non
     assert_allclose(torch.exp(start["log_initial"]).numpy(), [0.5, 0.5], rtol=1e-14)
 
 
-@pytest.mark.structural
+@pytest.mark.simulated_truth
 def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> None:
     truth = _truth()
     observations = simulate_sequences(_params(truth, seed=24)).observations

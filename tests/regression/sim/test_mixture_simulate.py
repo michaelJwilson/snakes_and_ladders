@@ -42,7 +42,7 @@ def test_the_component_labels_appear_at_their_declared_weights() -> None:
     assert_allclose(frequencies, WEIGHTS, atol=0.005)
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_the_drawn_moments_match_the_law_of_total_variance() -> None:
     # `E[Y] = sum_k w_k mu_k` and
     # `Var[Y] = sum_k w_k (s_k**2 + mu_k**2) - E[Y]**2`, which is the closed
@@ -59,7 +59,7 @@ def test_the_drawn_moments_match_the_law_of_total_variance() -> None:
     assert_allclose(dataset.observations.var(ddof=1), expected_variance, atol=0.15)
 
 
-@pytest.mark.mathematical
+@pytest.mark.structural
 def test_each_component_s_own_draws_match_that_component() -> None:
     # The labels are retained so this check is possible at all: without them
     # only the mixture's moments could be checked, and a simulator that drew
