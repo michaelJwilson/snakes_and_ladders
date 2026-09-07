@@ -50,6 +50,7 @@ def _enumerated_minimum(graph: PottsGraph, field_values: np.ndarray) -> float:
     return float(energy(graph, field_values, configurations).min())
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(2, 2), (3, 3), (4, 3), (4, 4)])
 @pytest.mark.parametrize("coupling", [0.0, 0.4, 1.2])
 def test_the_cut_finds_the_enumerated_minimum_with_a_per_node_field(
@@ -71,6 +72,7 @@ def test_the_cut_finds_the_enumerated_minimum_with_a_per_node_field(
         )
 
 
+@pytest.mark.oracle
 def test_the_uniform_field_energy_is_the_negated_model_log_weight() -> None:
     # The per-node generalization must reduce to the model the rest of the
     # repository fits, or this is solving a different problem accurately.
@@ -86,6 +88,7 @@ def test_the_uniform_field_energy_is_the_negated_model_log_weight() -> None:
     np.testing.assert_array_equal(realized, -log_weights(graph, FIELD, configurations))
 
 
+@pytest.mark.oracle
 def test_a_zero_field_ground_state_is_aligned_at_the_analytic_energy() -> None:
     # Past enumeration: 16 sites is 65,536 configurations, but the answer is
     # known in closed form, so the check does not depend on the size.
@@ -97,6 +100,7 @@ def test_a_zero_field_ground_state_is_aligned_at_the_analytic_energy() -> None:
     assert realized == pytest.approx(-0.7 * len(graph.edges), abs=1e-12)
 
 
+@pytest.mark.oracle
 def test_a_zero_coupling_ground_state_follows_the_field_site_by_site() -> None:
     # With no bonds the sites decouple, so each independently takes its better
     # state and the answer is `argmax` per node -- again with no enumeration.
@@ -110,6 +114,7 @@ def test_a_zero_coupling_ground_state_follows_the_field_site_by_site() -> None:
     assert realized == pytest.approx(-field_values.max(axis=1).sum(), abs=1e-12)
 
 
+@pytest.mark.mathematical
 def test_the_flow_value_equals_the_capacity_of_the_cut_it_induces() -> None:
     # The max-flow min-cut theorem, as a self-check. Nothing here searches for
     # a cut: the source side is residual reachability on termination, and the
@@ -145,6 +150,7 @@ def test_the_flow_value_equals_the_capacity_of_the_cut_it_induces() -> None:
     assert crossing == pytest.approx(cut.value, rel=1e-11)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("extent", [4, 8, 12])
 def test_the_rust_kernel_reproduces_the_python_oracle_exactly(extent: int) -> None:
     # Exact equality of energy, not a tolerance: this is a combinatorial
@@ -160,6 +166,7 @@ def test_the_rust_kernel_reproduces_the_python_oracle_exactly(extent: int) -> No
     assert realized == pytest.approx(expected, abs=1e-12)
 
 
+@pytest.mark.oracle
 def test_the_rust_max_flow_reproduces_a_hand_computed_value() -> None:
     # Two disjoint paths carry 2 each; the cross edge carries a third unit a
     # greedy first path would have blocked. The minimum cut is the two arcs
@@ -170,6 +177,7 @@ def test_the_rust_max_flow_reproduces_a_hand_computed_value() -> None:
     assert maxflow_rust.max_flow(4, arcs, capacity, 0, 3) == pytest.approx(5.0)
 
 
+@pytest.mark.edge_case
 def test_a_negative_coupling_is_refused_by_both_implementations() -> None:
     # The submodularity boundary. Past it the ground state is NP-hard and no
     # cut computes it, so both return nothing rather than a lattice-shaped
@@ -182,6 +190,7 @@ def test_a_negative_coupling_is_refused_by_both_implementations() -> None:
         maxflow_rust.ising_ground_state(graph, FIELD)
 
 
+@pytest.mark.edge_case
 def test_more_than_two_states_is_refused_and_names_alpha_expansion() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
@@ -189,6 +198,7 @@ def test_more_than_two_states_is_refused_and_names_alpha_expansion() -> None:
         ising_ground_state(graph, np.zeros(3))
 
 
+@pytest.mark.edge_case
 def test_a_per_node_field_of_the_wrong_shape_is_refused() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
@@ -196,6 +206,7 @@ def test_a_per_node_field_of_the_wrong_shape_is_refused() -> None:
         ising_ground_state(graph, np.zeros((4, 2)))
 
 
+@pytest.mark.edge_case
 def test_coincident_terminals_are_refused() -> None:
     network = FlowNetwork(n_nodes=3)
 
@@ -203,6 +214,7 @@ def test_coincident_terminals_are_refused() -> None:
         max_flow(network, 1, 1)
 
 
+@pytest.mark.edge_case
 def test_a_negative_capacity_is_refused() -> None:
     network = FlowNetwork(n_nodes=2)
 
@@ -210,6 +222,7 @@ def test_a_negative_capacity_is_refused() -> None:
         network.add_edge(0, 1, -1.0)
 
 
+@pytest.mark.edge_case
 def test_a_disconnected_sink_carries_no_flow() -> None:
     network = FlowNetwork(n_nodes=3)
     network.add_edge(0, 1, 4.0)

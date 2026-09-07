@@ -32,6 +32,7 @@ PUBLISHED_PRECISION = 1e-5
 EXACT = 1e-11
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("dimension", [2, 3, 5])
 def test_rosenbrock_reaches_its_analytic_minimizer(dimension: int) -> None:
     # The valley is curved and nearly flat along its floor, so a line search
@@ -46,6 +47,7 @@ def test_rosenbrock_reaches_its_analytic_minimizer(dimension: int) -> None:
     assert float(result.value) == pytest.approx(0.0, abs=1e-20)
 
 
+@pytest.mark.oracle
 def test_rastrigin_reaches_its_analytic_minimizer_from_inside_the_central_cell() -> (
     None
 ):
@@ -60,6 +62,8 @@ def test_rastrigin_reaches_its_analytic_minimizer_from_inside_the_central_cell()
     assert float(torch.linalg.vector_norm(result.theta - objective.minimizer())) < EXACT
 
 
+@pytest.mark.mathematical
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     "objective",
     [Rosenbrock(dimension=4), Rastrigin(dimension=3), Himmelblau(start=(0.7, -1.3))],
@@ -78,6 +82,7 @@ def test_the_autodiff_gradient_matches_the_closed_form(objective: object) -> Non
     np.testing.assert_allclose(realized.numpy(), expected.numpy(), rtol=EXACT)
 
 
+@pytest.mark.mathematical
 @pytest.mark.parametrize(
     ("start", "expected_index"),
     [((1.0, 1.0), 0), ((-3.0, 2.0), 1), ((-3.0, -3.0), 2), ((3.0, -2.0), 3)],
@@ -94,6 +99,7 @@ def test_himmelblau_converges_to_the_basin_it_started_in(
     assert float(result.value) == pytest.approx(0.0, abs=1e-20)
 
 
+@pytest.mark.oracle
 def test_all_four_himmelblau_minima_are_reachable() -> None:
     # The property a single-minimum function cannot test. All four have value
     # 0, so no ordering distinguishes them and "the" optimum is not a
@@ -108,6 +114,7 @@ def test_all_four_himmelblau_minima_are_reachable() -> None:
     assert found == set(range(len(HIMMELBLAU_MINIMA)))
 
 
+@pytest.mark.edge_case
 def test_a_converged_fit_on_rastrigin_is_not_a_global_minimum() -> None:
     # Measured, not asserted as a success: over 40 starts drawn uniformly from
     # the standard domain, a single L-BFGS fit reached the global minimum 0
@@ -131,6 +138,7 @@ def test_a_converged_fit_on_rastrigin_is_not_a_global_minimum() -> None:
     assert converged_but_not_global >= 30
 
 
+@pytest.mark.edge_case
 def test_a_one_dimensional_rosenbrock_is_refused() -> None:
     # The function is a sum over adjacent pairs, so one coordinate has no
     # terms at all and the "minimum" would be every point.
@@ -138,6 +146,7 @@ def test_a_one_dimensional_rosenbrock_is_refused() -> None:
         Rosenbrock(dimension=1)
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("objective", [Rosenbrock(), Rastrigin(), Himmelblau()])
 def test_the_value_at_the_stated_minimizer_is_zero(objective: object) -> None:
     # All three are constructed to have value 0 at their minima, which is a

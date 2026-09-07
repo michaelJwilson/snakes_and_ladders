@@ -61,6 +61,7 @@ def _enumerate_topologies(taxa: tuple[str, ...]) -> Iterator[Node]:
                     )
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize("n_taxa", [1, 2, 3, 4, 5, 6])
 def test_count_topologies_matches_brute_force_enumeration(n_taxa: int) -> None:
     taxa = tuple(f"t{i}" for i in range(n_taxa))
@@ -69,6 +70,7 @@ def test_count_topologies_matches_brute_force_enumeration(n_taxa: int) -> None:
     assert count_topologies(n_taxa) == brute_force_count
 
 
+@pytest.mark.oracle
 @pytest.mark.parametrize(
     ("n_taxa", "expected"),
     [(1, 1), (2, 1), (3, 3), (4, 15), (5, 105), (6, 945)],
@@ -77,11 +79,13 @@ def test_count_topologies_matches_known_values(n_taxa: int, expected: int) -> No
     assert count_topologies(n_taxa) == expected
 
 
+@pytest.mark.edge_case
 def test_count_topologies_rejects_non_positive_n_taxa() -> None:
     with pytest.raises(ValueError, match="n_taxa"):
         count_topologies(0)
 
 
+@pytest.mark.structural
 def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
     params = load_simulation_params(BINARY_FIXTURE)
     dataset = simulate_alignment(
@@ -91,6 +95,7 @@ def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
     assert validate_newick(dataset.newick)
 
 
+@pytest.mark.edge_case
 def test_validate_newick_rejects_a_trifurcating_root() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
@@ -100,6 +105,7 @@ def test_validate_newick_rejects_a_trifurcating_root() -> None:
     assert not validate_newick(dataset.newick)
 
 
+@pytest.mark.oracle
 def test_to_newick_with_node_states_round_trips_ancestor_labels() -> None:
     params = load_simulation_params(BINARY_FIXTURE)
     dataset = simulate_alignment(
@@ -114,6 +120,7 @@ def test_to_newick_with_node_states_round_trips_ancestor_labels() -> None:
         assert f"[&state={expected_state}]" in labelled
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     "malformed",
     [
@@ -133,14 +140,17 @@ def test_validate_newick_rejects_malformed_strings(malformed: str) -> None:
     assert not validate_newick(malformed)
 
 
+@pytest.mark.edge_case
 def test_validate_newick_accepts_a_single_leaf() -> None:
     assert validate_newick("A;")
 
 
+@pytest.mark.structural
 def test_validate_newick_accepts_branch_lengths_and_internal_labels() -> None:
     assert validate_newick("(A:0.1,(B:0.2,C:0.3)anc:0.05)root;")
 
 
+@pytest.mark.structural
 def test_validate_unrooted_newick_accepts_a_trifurcating_root() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
@@ -150,6 +160,7 @@ def test_validate_unrooted_newick_accepts_a_trifurcating_root() -> None:
     assert validate_unrooted_newick(dataset.newick)
 
 
+@pytest.mark.edge_case
 def test_validate_unrooted_newick_rejects_a_strictly_binary_root() -> None:
     # A rooted binary tree (2 children at the root) is not the trifurcating-
     # root convention: validate_newick and validate_unrooted_newick partition
@@ -157,6 +168,7 @@ def test_validate_unrooted_newick_rejects_a_strictly_binary_root() -> None:
     assert not validate_unrooted_newick("(A,(B,C)anc);")
 
 
+@pytest.mark.edge_case
 @pytest.mark.parametrize(
     "malformed",
     [
@@ -175,5 +187,6 @@ def test_validate_unrooted_newick_rejects_malformed_strings(malformed: str) -> N
     assert not validate_unrooted_newick(malformed)
 
 
+@pytest.mark.structural
 def test_validate_unrooted_newick_accepts_binary_subtrees_under_the_root() -> None:
     assert validate_unrooted_newick("(A,B,(C,D)anc:0.1)root;")
