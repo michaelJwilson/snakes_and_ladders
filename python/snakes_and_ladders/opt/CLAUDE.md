@@ -113,11 +113,9 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
 ## Discrete moves are outside the interface
 
 A discrete move changes the *structure* — a different topology, chain length
-or state count — and so changes what the parameter vector means and how long
-it is. It cannot be a step inside a fit over a fixed-length vector: it
-constructs a **new** `Objective`. The loop that proposes moves owns that
-construction and calls `fit` per candidate.
-
-This is a seam, not a feature to build here. An optimizer that owned the
-outer loop would have to know what a move is, which is the model knowledge
-this module exists to exclude.
+or state count — and with it what the parameter vector means and how long it
+is, so it cannot be a step inside a fit over a fixed-length vector: it
+constructs a **new** `Objective`, and the loop that proposes moves owns that
+construction and calls `fit` per candidate. An optimizer that owned the outer
+loop would have to know what a move is, the model knowledge this module exists
+to exclude.
