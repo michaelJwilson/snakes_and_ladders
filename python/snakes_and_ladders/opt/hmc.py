@@ -19,18 +19,42 @@ chain is a sample *of* is stated by whoever built the objective.
 `Objective` supplies an unconstrained vector and a differentiable scalar,
 which is exactly the interface a gradient-based sampler wants.
 
-See Neal (2011), "MCMC using Hamiltonian dynamics"; Nocedal & Wright for the
-leapfrog integrator's symplectic structure.
+**The integrator is a composition, not a procedure.** Every method here is a
+sequence of second-order kick-drift-kick sub-steps differing only in their
+lengths, so :class:`Integrator` carries the weights and one driver runs them
+all. A higher order costs more force evaluations per step, which is why the
+choice between them is a measurement at equal *evaluations* and never at
+equal steps --- `search/CLAUDE.md`'s budget rule, and the reason
+:meth:`Integrator.force_evaluations` exists.
+
+**Temperature is the momentum's variance.** The tempered target
+``exp(-U / T)`` is the marginal of ``exp(-(U + K) / T)``, whose momentum is
+``N(0, T)``; and Hamilton's equations for ``(U + K) / T`` are the untempered
+ones in rescaled time, so the *same* integrator with the *same* step serves
+every temperature and only the momentum draw and the acceptance ratio change
+(issue #267). That is what makes :func:`anneal` the sampler on a schedule
+rather than a second sampler: at ``T = 1`` every operation is the identity
+bitwise, and every chain drawn before the temperature existed is unchanged.
+A quasi-Newton fit has no acceptance ratio to temper, which is why ``fit``
+takes no schedule and annealing a continuous objective enters here.
+
+See Neal (2011), "MCMC using Hamiltonian dynamics"; Yoshida (1990) for the
+fourth-order composition and Suzuki (1991) for why its middle coefficient
+must be negative; Nocedal & Wright for the symplectic structure; Kirkpatrick,
+Gelatt & Vecchi (1983) for annealing.
 """
 
 from __future__ import annotations
 
+import itertools
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.schedule import Schedule
 
 DEFAULT_STEPS = 20
 
@@ -74,6 +98,9 @@ class WithGaussianPrior:
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return self.objective.constrain(theta)
 
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return self.objective.theta_from(named)
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         penalty = (theta * theta).sum() / (2.0 * self.scale**2)
         return self.objective(theta) + penalty
@@ -103,46 +130,163 @@ class HmcChain:
     energy_error: torch.Tensor
 
 
-def leapfrog(
-    objective: Objective,
-    theta: torch.Tensor,
-    momentum: torch.Tensor,
-    step_size: float,
-    n_steps: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Integrate Hamiltonian dynamics: half-kick, drift, half-kick.
+#: The cube root that Yoshida's fourth-order composition is built from.
+_CUBE_ROOT_OF_TWO = 2.0 ** (1.0 / 3.0)
 
-    Separated from :func:`sample` because its two defining properties ---
-    reversibility and second-order accuracy --- are exact statements testable
-    without any sampling, and they are where an error actually localizes. A
-    distributional test says the chain is wrong; these say which half.
+#: Yoshida's (1990) fourth-order weights: three second-order sub-steps of
+#: lengths ``w1``, ``w0``, ``w1`` with ``2 * w1 + w0 == 1``.
+#:
+#: **``w0`` is negative --- the middle sub-step runs backwards in time.** That
+#: is not a sign error and not avoidable: no composition of a second-order
+#: symmetric method reaches fourth order with positive coefficients (Suzuki,
+#: 1991). The trajectory is therefore non-monotone in time, which is worth
+#: knowing before plotting one and concluding the integrator is broken.
+YOSHIDA_WEIGHTS = (
+    1.0 / (2.0 - _CUBE_ROOT_OF_TWO),
+    -_CUBE_ROOT_OF_TWO / (2.0 - _CUBE_ROOT_OF_TWO),
+    1.0 / (2.0 - _CUBE_ROOT_OF_TWO),
+)
+
+#: The trivial composition: one second-order sub-step of full length.
+LEAPFROG_WEIGHTS = (1.0,)
+
+
+@dataclass(frozen=True)
+class Integrator:
+    """A symplectic integrator, as the composition of sub-steps it is.
+
+    Every method here is a composition of the second-order kick-drift-kick
+    step, differing only in the sub-step lengths. Carrying the weights rather
+    than a procedure buys three things a bare function does not:
+
+    * **one implementation.** The kicks between adjacent sub-steps merge, so a
+      hand-written composition is the same arithmetic with more places to put
+      a wrong coefficient. :func:`leapfrog` is this object at
+      ``(1.0,)`` and reproduces the previous implementation exactly;
+    * **a declared cost.** A comparison between integrators is only meaningful
+      at equal force evaluations, and :meth:`force_evaluations` is where that
+      count comes from rather than a caller's arithmetic;
+    * **a declared order**, so a test can assert the one it was built for
+      instead of the one it happens to achieve.
 
     Parameters
     ----------
-    objective : Objective
-        Read as a negative log density, so its gradient is the force.
-    theta, momentum : torch.Tensor
-        Position and momentum, both 1-D of the same length.
-    step_size : float
-        Integrator step. Energy error grows as its square.
-    n_steps : int
-        Steps per trajectory.
+    name : str
+        For error messages and reports.
+    weights : tuple[float, ...]
+        Sub-step lengths, summing to 1. Reversibility requires the sequence be
+        a palindrome; both compositions here are.
+    order : int
+        The order of accuracy of the energy error in the step size.
 
-    Returns
-    -------
-    tuple[torch.Tensor, torch.Tensor]
-        Position and momentum after ``n_steps``.
+    Raises
+    ------
+    ValueError
+        If the weights do not sum to 1, or are not a palindrome. The first
+        integrates the wrong amount of time while leaving reversibility
+        intact, which is the one arithmetic slip a reversibility check does
+        not catch.
     """
-    position = theta.detach().clone()
-    velocity = momentum.detach().clone()
 
-    velocity = velocity - 0.5 * step_size * _gradient(objective, position)
-    for step in range(n_steps):
-        position = position + step_size * velocity
-        if step < n_steps - 1:
-            velocity = velocity - step_size * _gradient(objective, position)
-    velocity = velocity - 0.5 * step_size * _gradient(objective, position)
-    return position, velocity
+    name: str
+    weights: tuple[float, ...]
+    order: int
+
+    def __post_init__(self) -> None:
+        total = math.fsum(self.weights)
+        if abs(total - 1.0) > 1e-12:
+            msg = (
+                f"{self.name}: sub-step weights sum to {total!r}, expected 1.0; "
+                f"a composition that does not integrates the wrong interval "
+                f"while remaining perfectly reversible"
+            )
+            raise ValueError(msg)
+        if self.weights != tuple(reversed(self.weights)):
+            msg = f"{self.name}: weights must be a palindrome to be reversible"
+            raise ValueError(msg)
+
+    def force_evaluations(self, n_steps: int) -> int:
+        """Gradient evaluations one trajectory of ``n_steps`` costs.
+
+        ``len(weights) * n_steps + 1``: the kicks at the join between two
+        sub-steps merge into one, so a composition of ``s`` sub-steps costs
+        ``s`` gradients per step rather than ``2 s``.
+        """
+        return len(self.weights) * n_steps + 1
+
+    def __call__(
+        self,
+        objective: Objective,
+        theta: torch.Tensor,
+        momentum: torch.Tensor,
+        step_size: float,
+        n_steps: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Integrate Hamiltonian dynamics over ``n_steps`` steps.
+
+        Separated from :func:`sample` because its two defining properties ---
+        reversibility and its order of accuracy --- are exact statements
+        testable without any sampling, and they are where an error actually
+        localizes. A distributional test says the chain is wrong; these say
+        which half.
+
+        Parameters
+        ----------
+        objective : Objective
+            Read as a negative log density, so its gradient is the force.
+        theta, momentum : torch.Tensor
+            Position and momentum, both 1-D of the same length.
+        step_size : float
+            Integrator step. Energy error grows as its ``order`` power.
+        n_steps : int
+            Steps per trajectory.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Position and momentum after ``n_steps``.
+        """
+        position = theta.detach().clone()
+        velocity = momentum.detach().clone()
+        kicks, drifts = _coefficients(self.weights, n_steps)
+
+        velocity = velocity - kicks[0] * step_size * _gradient(objective, position)
+        for drift, kick in zip(drifts, kicks[1:], strict=True):
+            position = position + drift * step_size * velocity
+            velocity = velocity - kick * step_size * _gradient(objective, position)
+        return position, velocity
+
+
+def _coefficients(
+    weights: tuple[float, ...], n_steps: int
+) -> tuple[list[float], list[float]]:
+    """Kick and drift coefficients for ``n_steps`` of a composition.
+
+    Each sub-step is a kick-drift-kick of half, full, half its length, and the
+    trailing half-kick of one sub-step sits at the same position as the
+    leading half-kick of the next, so the two merge. That leaves one more kick
+    than there are sub-steps, which is where
+    :meth:`Integrator.force_evaluations` comes from.
+    """
+    sub_steps = list(weights) * n_steps
+    kicks = [0.5 * sub_steps[0]]
+    drifts = []
+    for current, following in itertools.pairwise(sub_steps):
+        drifts.append(current)
+        kicks.append(0.5 * (current + following))
+    drifts.append(sub_steps[-1])
+    kicks.append(0.5 * sub_steps[-1])
+    return kicks, drifts
+
+
+#: The second-order kick-drift-kick method. The default everywhere, and the
+#: reference every other integrator is checked against.
+leapfrog = Integrator(name="leapfrog", weights=LEAPFROG_WEIGHTS, order=2)
+
+#: Yoshida's fourth-order triple jump. Three force evaluations per step
+#: against leapfrog's one, so whether it pays is a measurement at equal
+#: evaluations rather than a consequence of the higher order.
+yoshida = Integrator(name="yoshida", weights=YOSHIDA_WEIGHTS, order=4)
 
 
 def hamiltonian(
@@ -163,8 +307,10 @@ def sample(
     n_steps: int = DEFAULT_STEPS,
     theta0: torch.Tensor | None = None,
     burn_in: int = 0,
+    integrator: Integrator = leapfrog,
+    temperature: float = 1.0,
 ) -> HmcChain:
-    """Draw ``n_samples`` from the density ``exp(-objective)``.
+    """Draw ``n_samples`` from the density ``exp(-objective / temperature)``.
 
     Parameters
     ----------
@@ -185,6 +331,17 @@ def sample(
         Starting point; ``objective.initial()`` when omitted.
     burn_in : int
         Draws discarded before recording.
+    integrator : Integrator
+        The symplectic method. ``leapfrog`` by default, which is what every
+        chain in this repository was drawn with. A higher-order method takes
+        more force evaluations per step, so it is worth choosing only against
+        a comparison at equal evaluations rather than at equal steps ---
+        :meth:`Integrator.force_evaluations` is what makes that comparison
+        possible.
+    temperature : float
+        The chain targets ``exp(-objective / temperature)``; 1 is the
+        objective as declared. Whether that is a tempered *energy* or a power
+        posterior is the caller's to say (`snakes_and_ladders.opt.schedule`).
 
     Returns
     -------
@@ -194,11 +351,137 @@ def sample(
     Raises
     ------
     ValueError
-        If ``step_size`` is not positive or ``n_steps`` is below 1. A
-        zero-length trajectory proposes the current point every time, which
-        accepts at rate 1 and samples nothing --- a chain that looks healthy
-        by every diagnostic and has not moved.
+        If ``step_size`` or ``temperature`` is not positive, or ``n_steps``
+        is below 1. A zero-length trajectory proposes the current point every
+        time, which accepts at rate 1 and samples nothing --- a chain that
+        looks healthy by every diagnostic and has not moved.
     """
+    _check_trajectory(step_size, n_steps)
+    if not temperature > 0.0:
+        msg = f"temperature must be positive, got {temperature}"
+        raise ValueError(msg)
+
+    generator = torch.Generator().manual_seed(seed)
+    position = _start(objective, theta0)
+
+    draws = torch.empty((n_samples, position.shape[0]), dtype=torch.float64)
+    errors = torch.empty(n_samples + burn_in, dtype=torch.float64)
+    accepted = 0
+
+    for index in range(n_samples + burn_in):
+        position, error, was_accepted = _transition(
+            objective, position, temperature, generator, step_size, n_steps, integrator
+        )
+        errors[index] = error
+        if index >= burn_in:
+            accepted += was_accepted
+            draws[index - burn_in] = position
+
+    return HmcChain(
+        theta=draws,
+        acceptance_rate=accepted / n_samples if n_samples else 0.0,
+        energy_error=errors[burn_in:],
+    )
+
+
+@dataclass(frozen=True)
+class Annealed:
+    """What one annealing run found, and what it cost.
+
+    Parameters
+    ----------
+    theta : torch.Tensor
+        The lowest-valued point visited, in unconstrained coordinates. The
+        *best* rather than the last: the final proposals run cold but not at
+        zero, so the chain can leave the best point it found.
+    value : float
+        The objective there.
+    final : torch.Tensor
+        Where the chain ended.
+    acceptance_rate : float
+        Over the whole schedule. Near zero at the cold end is the symptom of
+        a step too large for the final temperature.
+    force_evaluations : int
+        Gradients spent, so the run is comparable to any other optimizer at
+        equal evaluations.
+    """
+
+    theta: torch.Tensor
+    value: float
+    final: torch.Tensor
+    acceptance_rate: float
+    force_evaluations: int
+
+
+def anneal(
+    objective: Objective,
+    schedule: Schedule,
+    seed: int,
+    *,
+    step_size: float,
+    n_steps: int = DEFAULT_STEPS,
+    theta0: torch.Tensor | None = None,
+    integrator: Integrator = leapfrog,
+) -> Annealed:
+    """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
+
+    One proposal per schedule step at that step's temperature, tracking the
+    lowest objective seen. The transition at each step is exactly the one
+    :func:`sample` runs at a constant temperature, so a constant schedule
+    reproduces a chain draw for draw at the same seed; what annealing adds is
+    that the temperature falls, and what it buys is measured against the
+    alternatives at equal force evaluations and never assumed.
+
+    Parameters
+    ----------
+    objective : Objective
+        What to minimize. Read as an energy, so ``T`` is physical; a negative
+        log-likelihood here is a power posterior and the caller should know
+        which they meant.
+    schedule : Schedule
+        Temperature per proposal. Its length is the budget in proposals;
+        ``force_evaluations`` on the result is the budget in gradients.
+    seed : int
+        Seed for ``torch.Generator``.
+    step_size, n_steps, theta0, integrator
+        As :func:`sample`. The step needs no rescaling with temperature ---
+        see the module note --- but a step that is stable at the hot end can
+        still reject at the cold end, which the acceptance rate reports.
+
+    Returns
+    -------
+    Annealed
+    """
+    _check_trajectory(step_size, n_steps)
+    generator = torch.Generator().manual_seed(seed)
+    position = _start(objective, theta0)
+
+    best, best_value = position.clone(), float(objective(position))
+    accepted = 0
+    for step in range(schedule.n_steps):
+        position, _, was_accepted = _transition(
+            objective,
+            position,
+            schedule(step),
+            generator,
+            step_size,
+            n_steps,
+            integrator,
+        )
+        accepted += was_accepted
+        value = float(objective(position))
+        if value < best_value:
+            best, best_value = position.clone(), value
+    return Annealed(
+        theta=best,
+        value=best_value,
+        final=position,
+        acceptance_rate=accepted / schedule.n_steps,
+        force_evaluations=schedule.n_steps * integrator.force_evaluations(n_steps),
+    )
+
+
+def _check_trajectory(step_size: float, n_steps: int) -> None:
     if step_size <= 0.0:
         msg = f"step_size must be positive, got {step_size}"
         raise ValueError(msg)
@@ -210,43 +493,55 @@ def sample(
         )
         raise ValueError(msg)
 
-    generator = torch.Generator().manual_seed(seed)
-    position = (
+
+def _start(objective: Objective, theta0: torch.Tensor | None) -> torch.Tensor:
+    return (
         objective.initial().detach().clone()
         if theta0 is None
         else theta0.detach().clone()
     ).to(torch.float64)
 
-    draws = torch.empty((n_samples, position.shape[0]), dtype=torch.float64)
-    errors = torch.empty(n_samples + burn_in, dtype=torch.float64)
-    accepted = 0
 
-    for index in range(n_samples + burn_in):
-        momentum = torch.randn(position.shape, generator=generator, dtype=torch.float64)
-        current = hamiltonian(objective, position, momentum)
+def _transition(
+    objective: Objective,
+    position: torch.Tensor,
+    temperature: float,
+    generator: torch.Generator,
+    step_size: float,
+    n_steps: int,
+    integrator: Integrator,
+) -> tuple[torch.Tensor, float, int]:
+    """One Metropolis step with a Hamiltonian proposal at ``temperature``.
 
-        proposal, proposed_momentum = leapfrog(
-            objective, position, momentum, step_size, n_steps
-        )
-        # Negating the momentum makes the proposal symmetric, which is what
-        # leaves the acceptance ratio as the energy difference alone. It has
-        # no effect on the next iteration, where the momentum is redrawn.
-        proposed = hamiltonian(objective, proposal, -proposed_momentum)
+    Momentum is drawn with variance ``temperature`` and the acceptance ratio
+    divides the energy difference by it; the integrator itself is untempered.
+    At ``temperature = 1.0`` both are the identity bitwise, so this *is* the
+    untempered transition and not an approximation of it.
 
-        errors[index] = abs(proposed - current)
-        uniform = float(torch.rand(1, generator=generator))
-        if uniform < float(torch.exp(torch.tensor(current - proposed))):
-            position = proposal
-            if index >= burn_in:
-                accepted += 1
-        if index >= burn_in:
-            draws[index - burn_in] = position
+    Returns
+    -------
+    tuple[torch.Tensor, float, int]
+        The new position, the absolute energy error of the proposal, and 1
+        if it was accepted.
+    """
+    momentum = torch.randn(
+        position.shape, generator=generator, dtype=torch.float64
+    ) * math.sqrt(temperature)
+    current = hamiltonian(objective, position, momentum)
 
-    return HmcChain(
-        theta=draws,
-        acceptance_rate=accepted / n_samples if n_samples else 0.0,
-        energy_error=errors[burn_in:],
+    proposal, proposed_momentum = integrator(
+        objective, position, momentum, step_size, n_steps
     )
+    # Negating the momentum makes the proposal symmetric, which is what
+    # leaves the acceptance ratio as the energy difference alone. It has
+    # no effect on the next iteration, where the momentum is redrawn.
+    proposed = hamiltonian(objective, proposal, -proposed_momentum)
+
+    error = abs(proposed - current)
+    uniform = float(torch.rand(1, generator=generator))
+    if uniform < float(torch.exp(torch.tensor((current - proposed) / temperature))):
+        return proposal, error, 1
+    return position, error, 0
 
 
 def _gradient(objective: Objective, theta: torch.Tensor) -> torch.Tensor:

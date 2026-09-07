@@ -14,8 +14,9 @@ produces them, and the module docstrings say which.
 
 The pruning recursion and its backends, an exact and an approximate evaluator
 for the Potts MRF, Fitch parsimony as a second criterion over the same
-topology, path enumeration for the HMM, and the adapter that presents any of
-them to `snakes_and_ladders.opt`'s fitting interface. That adapter lives here and not in
+topology, path enumeration for the HMM, one sum-product over any factor graph
+that is pinned to each of those where they overlap, and the adapter that
+presents any of them to `snakes_and_ladders.opt`'s fitting interface. That adapter lives here and not in
 `opt/`, because `opt/` may import no application module — the dependency runs
 application to infrastructure, never back.
 
@@ -56,6 +57,14 @@ application to infrastructure, never back.
   `CLAUDE.md` forbids. What may be asserted in the approximate regime is
   structure fixed independently of this implementation — a limit where the
   approximation is exact, or an ordering physics predicts.
+
+- **A density is not a probability, and only one of them is bounded.** The
+  evidence of a model over a countable support is a probability, so its
+  logarithm is at most zero; the evidence of one over the reals is a density
+  and carries no such bound. A check written against the first fails on
+  correct code under the second, so what may be asserted is keyed on the
+  support the model declares, never assumed from the discrete case that
+  happened to come first.
 
 - **Refuse rather than return an unconverged number.** A quantity read off
   iterations that never settled is not an estimate of anything, and a caller

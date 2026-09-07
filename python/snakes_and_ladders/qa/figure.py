@@ -49,7 +49,7 @@ def check_latex_safe(text: str) -> None:
     """Raise if ``text`` contains an unescaped LaTeX special character.
 
     ``qa/CLAUDE.md`` requires captions to be plain text that
-    ``docs/tex/main.tex`` can ``\\input`` verbatim. Enforced here, at the
+    a document under ``docs/tex/`` can ``\\input`` verbatim. Enforced here, at the
     point of writing, rather than asserted separately in each caption test:
     a contract every caller must satisfy belongs in the one function every
     caller goes through.
@@ -96,7 +96,7 @@ def pearson_correlation(first: np.ndarray, second: np.ndarray) -> float:
     moves Spearman's rho by up to ``0.04``, and leaves this correlation
     unchanged to four decimals.
 
-    That matters beyond reproducibility. ``docs/draft.pdf`` is committed and
+    That matters beyond reproducibility. The rendered PDFs are committed and
     CI rebuilds it, so a caption reporting an unstable number fails the build;
     but the deeper point is that such a number is not a measurement of
     anything.
@@ -195,7 +195,7 @@ def write_qa_table(output_dir: Path, stem: str, body: str, caption: str) -> QATa
     stem : str
         Base filename, without extension, shared by both outputs.
     body : str
-        The ``tabular`` environment, complete, for ``main.tex`` to
+        The ``tabular`` environment, complete, for a document to
         ``\\input``.
     caption : str
         Caption text, subject to :func:`check_latex_safe`.
