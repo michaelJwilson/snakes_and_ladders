@@ -37,7 +37,13 @@ tolerance table, and the deferred-work section
 from `.github/labels.yml` by a workflow, so the taxonomy cannot drift from the
 documents that describe it.
 
-Ten required checks gate a merge, and three of them do work no reviewer can
+The package is imported as `sal` and every document names it so
+([#301](https://github.com/michaelJwilson/snakes_and_ladders/issues/301)): a
+module `__getattr__` on the package and each subpackage imports a submodule
+on first attribute access, so the top-level import loads nothing else, and
+`infra/abbreviate_package.py --check` fails a document that spells the long
+form in prose while every Sphinx role keeps it. Ten required checks gate a
+merge, and three of them do work no reviewer can
 do by inspection: the technical-document job rebuilds only the QA figures
 the documents under `docs/tex/` cite, comparing the rest at the release gate instead
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
@@ -68,10 +74,10 @@ development loop and the three problem classes, and `STATUS.md` and
 `TICKETS.md` now are
 ([#152](https://github.com/michaelJwilson/snakes_and_ladders/pull/152),
 [#153](https://github.com/michaelJwilson/snakes_and_ladders/pull/153)). The thirteen QA
-scripts were routed through one `snakes_and_ladders.qa.runner` rather than each carrying
+scripts were routed through one `sal.qa.runner` rather than each carrying
 its own argument parsing and figure-closing boilerplate
 ([#156](https://github.com/michaelJwilson/snakes_and_ladders/pull/156)), and
-`snakes_and_ladders.qa.manifest` now states which figure renders each output so a build can
+`sal.qa.manifest` now states which figure renders each output so a build can
 select a subset rather than regenerate all thirteen
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)). The regression
 suite was split by submodule and its documented budget corrected after being
@@ -106,28 +112,28 @@ machine precision.
 **Potts: 1-D chain plus a general N-D lattice/MRF simulator.** The 1-D chain
 in an external field still exists as an `opt` reference instance with an
 exact transfer-matrix oracle ([#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115)),
-and appears again as a `learn` environment. `snakes_and_ladders.sim.graph.PottsGraph`
+and appears again as a `learn` environment. `sal.sim.graph.PottsGraph`
 now generalizes it to an arbitrary undirected graph with a per-edge
-coupling, and `snakes_and_ladders.sim.potts.simulate_potts` samples on it — exactly, by
+coupling, and `sal.sim.potts.simulate_potts` samples on it — exactly, by
 the same backward-message recursion, when the graph is a 1-D open chain, and
 by single-site Gibbs (heat-bath) MCMC otherwise — with an N-D lattice a
 constructed case of the general graph rather than a second code path
 ([#190](https://github.com/michaelJwilson/snakes_and_ladders/pull/190), closing #170,
 superseding the
-sampling half of #149). `snakes_and_ladders.opt.potts.simulate_chains` cannot import
-`snakes_and_ladders.sim` under `opt/CLAUDE.md`'s "no application imports" rule, so it
+sampling half of #149). `sal.opt.potts.simulate_chains` cannot import
+`sal.sim` under `opt/CLAUDE.md`'s "no application imports" rule, so it
 keeps its own copy of the exact recursion rather than delegating to the new
 one — a duplication [#186](https://github.com/michaelJwilson/snakes_and_ladders/issues/186)
-tracks resolving, by moving `PottsParams` into `snakes_and_ladders.sim.potts` the way
+tracks resolving, by moving `PottsParams` into `sal.sim.potts` the way
 #171 moved the HMM's truth type. No fitting, cluster updates, or evaluator
 on the general graph yet (issues #172, #174).
 
-**HMMs: a first-class simulator.** `snakes_and_ladders.sim.hmm` draws a hidden state path
+**HMMs: a first-class simulator.** `sal.sim.hmm` draws a hidden state path
 and an observation sequence jointly from a declared `(pi, A, B)`, retaining
 the path alongside the data on the footing the tree simulator already has
 ([#182](https://github.com/michaelJwilson/snakes_and_ladders/pull/182), closing
 [#171](https://github.com/michaelJwilson/snakes_and_ladders/issues/171)). The generator
-embedded in `snakes_and_ladders.opt.hmm` — which validated only against brute-force path
+embedded in `sal.opt.hmm` — which validated only against brute-force path
 enumeration for the fitting objective's own use
 ([#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115)) — is deleted; `opt`
 now imports the truth type from `sim` and draws no data itself. Validated
@@ -137,7 +143,7 @@ posterior for one realized observation, and the transition matrix's own
 stationary distribution for long-run occupancy.
 
 **Emission families: what a state emits, separated from how it is fitted.**
-`snakes_and_ladders.emissions` holds the interface — draw, score, re-estimate —
+`sal.emissions` holds the interface — draw, score, re-estimate —
 with the categorical matrix one implementation of it and a univariate Gaussian
 the second; the simulator, the forward recursion, Baum-Welch, path enumeration
 and the state aligner all go through it
@@ -257,7 +263,7 @@ alone cannot tell the two apart. This is the repository's first fixture where
 a named method's failure is a theorem rather than a defect.
 
 **Belief propagation is now measured over an ensemble, not three fixtures.**
-`snakes_and_ladders.sim.graph.erdos_renyi_graph` draws `G(n, p)` beside `lattice_graph`,
+`sal.sim.graph.erdos_renyi_graph` draws `G(n, p)` beside `lattice_graph`,
 and BP is checked per draw against enumeration. Over 60 sparse draws, 106
 across two ensembles were acyclic and BP was exact on every one — worst
 relative deviation 3.7e-15 in `log Z` and 4.9e-13 in the marginals, inside
@@ -276,7 +282,7 @@ argument is asymptotic. The deviation is reported; nothing claims BP is more
 accurate on a random graph than on a lattice at these sizes.
 
 **Three canonical fixtures, each consumed by more than one module.**
-`snakes_and_ladders.sim.canonical` holds instances whose answer comes from outside this
+`sal.sim.canonical` holds instances whose answer comes from outside this
 repository, admitted on two clauses stated in `sim/CLAUDE.md`: the answer must
 be independently known, and more than one module must consume it
 ([#209](https://github.com/michaelJwilson/snakes_and_ladders/issues/209)).
@@ -357,8 +363,8 @@ and a map back to named constrained parameters
 ([#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115)). Four instances now
 run against it unchanged — the Potts chain, the HMM, branch lengths on a fixed
 topology, and the GTR substitution model — and none required a change to
-`snakes_and_ladders.opt`. A test asserts the module imports nothing from `snakes_and_ladders.sim`,
-`snakes_and_ladders.likelihood` or `snakes_and_ladders.search`, so the separation cannot decay by
+`sal.opt`. A test asserts the module imports nothing from `sal.sim`,
+`sal.likelihood` or `sal.search`, so the separation cannot decay by
 convenience import.
 
 **The optimizer is now pinned to minimizers known in closed form, not only to
@@ -383,7 +389,7 @@ result resting on a single fit of a multimodal surface has to say so.
 enumerated over all 19,683 configurations of a 3-state 3x3 lattice rather than
 approximated, so the fitted optimum is checked against a brute-force scan of
 the likelihood instead of against the optimizer's own convergence, and the
-enumerated normalizer reduces to `snakes_and_ladders.opt.potts.log_partition`'s transfer
+enumerated normalizer reduces to `sal.opt.potts.log_partition`'s transfer
 matrix on a chain to machine precision. Interval coverage over 40 replicates
 is 157/160 at 100 samples, 153/160 at 400 and 153/160 at 1600 — approaching
 the nominal rate from above and settling, as the Potts chain does.
@@ -445,7 +451,7 @@ default does not move.
 **Where a fit starts is now the caller's to choose, and multi-start is
 measured rather than assumed.** `Objective.initial()` was already the seam;
 what went through it was one fixed constant per objective.
-`snakes_and_ladders.opt.initialize` adds the objective's own start, a
+`sal.opt.initialize` adds the objective's own start, a
 deterministic perturbation, and random restarts from a passed-in generator, and
 `fit_from` reports every fit and their spread rather than only the best --
 returning one answer for a surface with four basins is the failure the
@@ -649,7 +655,7 @@ chain drawn under no field is rejected against the with-field truth, which is
 what says the test has the power it claims.
 
 **Not built:** Viterbi decoding, and iterated conditional modes over HMM state
-paths (`snakes_and_ladders.search.alpha_expansion` carries a lattice ICM as its baseline,
+paths (`sal.search.alpha_expansion` carries a lattice ICM as its baseline,
 which is a different object). Single-flip local search over the Potts chain exists as an RL
 environment, not as a classical baseline suite.
 
@@ -692,8 +698,8 @@ branch distinguishing them fits to zero and the tree collapses to the same
 polytomy — so a rank correlation moves by up to 0.04 under a perturbation of
 one part in 1e9 and is not a measurement.
 
-**All three problem classes are now MDPs.** `snakes_and_ladders.learn.Environment` had
-one instance, a 1-D Potts chain, which is the same position `snakes_and_ladders.opt` was in
+**All three problem classes are now MDPs.** `sal.learn.Environment` had
+one instance, a 1-D Potts chain, which is the same position `sal.opt` was in
 before four instances made its model-agnosticism a measurement rather than an
 assertion. It now carries the Potts landscape over an arbitrary graph — the
 chain is the one-dimensional case of the same class, not a second one — and
@@ -702,8 +708,8 @@ than an energy. Both are pinned against the enumerated estimator oracle
 carried over unchanged from the chain, and against exhaustive enumeration of
 their own state spaces: 19,683 configurations for a 3-state 3x3 lattice, 729
 paths for a 3-state sequence of six. Neither takes an application type, so
-`snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
-`snakes_and_ladders.search`, and a test asserts it.
+`sal.learn` still imports nothing from `sal.sim`, `sal.likelihood` or
+`sal.search`, and a test asserts it.
 
 ## §1.2 Requirements Ledger
 

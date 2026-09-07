@@ -14,7 +14,7 @@ implementations differ in *arithmetic alone* -- so the comparison between
 them is exact equality rather than a tolerance, and a regression that
 changed a single index would be visible.
 
-**The generator does not cross the boundary.** ``snakes_and_ladders.sim``'s
+**The generator does not cross the boundary.** ``sal.sim``'s
 reproducibility contract is that a seeded ``numpy.random.Generator``
 determines the alignment; a second stream inside Rust would break that
 without failing anything. So this module draws ``rng.random`` exactly as the

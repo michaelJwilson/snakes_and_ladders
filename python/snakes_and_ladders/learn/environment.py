@@ -1,11 +1,11 @@
 """The reinforcement-learning interface, and nothing that knows what it searches.
 
-This module is to ``snakes_and_ladders.learn`` what ``objective.py`` is to ``snakes_and_ladders.opt``,
+This module is to ``sal.learn`` what ``objective.py`` is to ``sal.opt``,
 and deliberately so. ``opt/CLAUDE.md`` records why the optimizer may not know
 what it optimizes; the same argument applies here with one more step. An
 interface justified by a single application is shaped by that application, so
-this one is written against no application at all: ``snakes_and_ladders.learn`` imports
-nothing from ``snakes_and_ladders.sim``, ``snakes_and_ladders.likelihood`` or ``snakes_and_ladders.search``, asserted
+this one is written against no application at all: ``sal.learn`` imports
+nothing from ``sal.sim``, ``sal.likelihood`` or ``sal.search``, asserted
 by a test rather than left to review.
 
 Four pieces are enough, and they are the ones ``sec:policy-gradient`` of ``docs/tex/textbook.tex`` names:
@@ -22,7 +22,7 @@ telescopes to the total improvement an episode achieved and ``gamma = 1``
 needs no separate justification.
 
 **No inner optimization.** A reward here is a closed-form function of the
-state under *known* parameters, never a quantity solved for by ``snakes_and_ladders.opt``.
+state under *known* parameters, never a quantity solved for by ``sal.opt``.
 That is issue #131's simplification, and it is what makes an RL loop
 affordable at all: a fitted reward costs one L-BFGS solve per action, and a
 single episode evaluates the whole neighbourhood at every step.
@@ -92,7 +92,7 @@ class Environment[S, A](Protocol):
         A feature that takes the same value for every action in a state is
         **unidentifiable**: the policy is a softmax over these scores, and a
         constant shared by every action cancels. That is the same gauge
-        ``snakes_and_ladders.opt.constrain.log_simplex`` fixes, and the reason no
+        ``sal.opt.constrain.log_simplex`` fixes, and the reason no
         implementation here supplies a bias term.
         """
         ...  # pragma: no cover

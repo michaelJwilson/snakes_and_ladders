@@ -1,4 +1,4 @@
-"""Validation-error paths for ``snakes_and_ladders.likelihood.pruning_torch``.
+"""Validation-error paths for ``sal.likelihood.pruning_torch``.
 
 Separated from tests/regression/test_pruning_torch.py, which pins
 scientific correctness; these pin the guardrails around malformed inputs,

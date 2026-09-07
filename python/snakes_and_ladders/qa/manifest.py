@@ -5,7 +5,7 @@ invocations in ``infra/build_technical_doc.sh``, which nothing connected to
 the document: when the document stopped citing eleven of the figures, the
 build kept regenerating all thirteen and no check noticed.
 
-Two consumers read this. Per pull request, ``snakes_and_ladders.qa.build`` regenerates only
+Two consumers read this. Per pull request, ``sal.qa.build`` regenerates only
 what the documents under ``docs/tex/`` cite, so the cost tracks them rather than
 drifting from it. At release, ``infra/release.sh`` regenerates every entry, so
 a figure the document has stopped citing still cannot rot unnoticed -- the

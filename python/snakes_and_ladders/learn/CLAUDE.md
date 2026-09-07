@@ -24,12 +24,12 @@ loop is shared. `reinforce.py` is the score-function estimator and `exact.py`
 its oracle, by enumerating trajectories.
 
 The environments here are **reference instances**, not applications, over the
-same models `snakes_and_ladders.opt` fits.
+same models `sal.opt` fits.
 
 ## Local rules
 
-- **No application imports.** Nothing here may import from `snakes_and_ladders.sim`,
-  `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`, asserted by
+- **No application imports.** Nothing here may import from `sal.sim`,
+  `sal.likelihood` or `sal.search`, asserted by
   `tests/regression/test_learn_environment.py`.
 - **Closed form rewards at known parameters are vital for testing**  Rewards will also
   be solved for in future development.
@@ -54,7 +54,7 @@ same models `snakes_and_ladders.opt` fits.
 - **A budget is counted in decisions, never in seconds.** Both the greedy
   searcher and a policy score the whole neighbourhood per decision, so
   decisions are the unit at which they are comparable — the same reasoning
-  that makes `snakes_and_ladders.search.infer` count candidate fits.
+  that makes `sal.search.infer` count candidate fits.
 
 - **An episode that may leave a local optimum is scored on its best state,
   not its last.** `rollout(..., stop_at_local_optimum=False)` runs to its
@@ -81,7 +81,7 @@ cannot support.
 
 The count is the point: an interface justified by one model is shaped by that
 model, so this one carries an energy landscape, a decoding problem, and — in
-`snakes_and_ladders.search`, which may import both halves — a topology search. None of them
+`sal.search`, which may import both halves — a topology search. None of them
 takes an application type. The caller unpacks a model into index and
 log-probability arrays, because the no-application-imports rule admits no
 exception for convenience.

@@ -161,12 +161,12 @@ class RelaxedHmmPath:
     emission terms are linear in the per-site probabilities and the transition
     term is bilinear in adjacent pairs. At a one-hot it is
     :func:`snakes_and_ladders.likelihood.hmm_paths.path_log_probability` exactly, which a
-    test pins --- across the module boundary, since ``snakes_and_ladders.learn`` may not
-    import ``snakes_and_ladders.likelihood`` and the two implementations are therefore
+    test pins --- across the module boundary, since ``sal.learn`` may not
+    import ``sal.likelihood`` and the two implementations are therefore
     genuinely independent.
 
     Parameters are taken as *log* matrices rather than as an ``HmmParams``
-    because ``learn/CLAUDE.md`` forbids importing ``snakes_and_ladders.sim``. That is a
+    because ``learn/CLAUDE.md`` forbids importing ``sal.sim``. That is a
     constraint doing real work here: the objective ends up depending on three
     arrays rather than on a fixture type.
 

@@ -5,11 +5,11 @@ observation *is*. The rest --- the forward recursion, the Baum-Welch E step,
 path enumeration --- needs three things from it and nothing else: draw an
 observation given a state, score an observation given a state, and
 re-estimate itself from posterior state weights. This module is that
-interface and its implementations; ``snakes_and_ladders.opt.hmm`` holds the
+interface and its implementations; ``sal.opt.hmm`` holds the
 recursions that consume it.
 
 **Why it is here rather than in a module that owns a model.** ``opt/CLAUDE.md``
-forbids ``snakes_and_ladders.opt`` from importing ``snakes_and_ladders.sim``, and
+forbids ``sal.opt`` from importing ``sal.sim``, and
 ``tests/regression/opt/test_opt_objective.py`` asserts it, so a family defined
 in ``sim`` would be unreachable from the objective that has to score with it.
 A family names no tree, no alignment and no lattice, so it sits beside
@@ -34,8 +34,8 @@ clamped fit returns normally and its intervals mean nothing --- issue #122's
 case, arrived at from a second direction.
 
 Parameterization for an unconstrained optimizer is deliberately *not* here.
-That is what ``snakes_and_ladders.opt.constrain`` is for, and putting it here
-would make :mod:`snakes_and_ladders.sim` import ``snakes_and_ladders.opt``
+That is what ``sal.opt.constrain`` is for, and putting it here
+would make :mod:`snakes_and_ladders.sim` import ``sal.opt``
 transitively to draw a sequence.
 """
 

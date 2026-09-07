@@ -7,8 +7,8 @@ one gradient-descent step fitting a general rate matrix Q via
 ``pruning_torch.log_likelihood``'s ``rate_matrix`` (``torch.matrix_exp``)
 path -- the general-Q path issue #70 asks be exercised, even though JC's Q
 is fully determined by k. The fitting loop lives in this test only:
-``snakes_and_ladders.likelihood`` gains no parameter-fitting feature, out of scope for
-issue #70 (that is ``snakes_and_ladders.opt``'s follow-on job).
+``sal.likelihood`` gains no parameter-fitting feature, out of scope for
+issue #70 (that is ``sal.opt``'s follow-on job).
 """
 
 from __future__ import annotations
