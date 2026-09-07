@@ -132,6 +132,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.initialize
    :members:
 
+.. automodule:: snakes_and_ladders.opt.budget
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.testfunctions
    :members:
 
@@ -180,6 +183,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.infer
    :members:
 
+.. automodule:: snakes_and_ladders.search.support
+   :members:
+
 .. automodule:: snakes_and_ladders.search.spatio_sequential
    :members:
 
@@ -211,6 +217,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.figure
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.layout
    :members:
 
 .. automodule:: snakes_and_ladders.qa.style

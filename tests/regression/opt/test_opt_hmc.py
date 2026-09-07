@@ -40,32 +40,13 @@ from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 from snakes_and_ladders.opt.schedule import Constant, Exponential
 
+from tests._objective_checks import AnalyticGaussian
 from tests._scale import stress_only
 
 EXACT = 1e-13
 
 
-class Gaussian:
-    """``-log N(mean, covariance)`` up to a constant: an analytic target."""
-
-    def __init__(self, mean: list[float], covariance: list[list[float]]) -> None:
-        self.mean = torch.tensor(mean, dtype=torch.float64)
-        self.covariance = torch.tensor(covariance, dtype=torch.float64)
-        self._precision = torch.linalg.inv(self.covariance)
-
-    def initial(self) -> torch.Tensor:
-        return torch.zeros_like(self.mean)
-
-    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
-        return {"x": theta}
-
-    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
-        deviation = theta - self.mean
-        quadratic: torch.Tensor = 0.5 * deviation @ self._precision @ deviation
-        return quadratic
-
-
-GAUSSIAN = Gaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
+GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 
 
 def _potts_posterior() -> WithGaussianPrior:
@@ -277,6 +258,18 @@ def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
     assert float(wrapped(point)) == pytest.approx(expected, rel=EXACT)
 
 
+@pytest.mark.mathematical
+def test_the_prior_leaves_the_coordinates_it_is_stated_in_alone() -> None:
+    # The prior is isotropic *in unconstrained coordinates*, so the wrapper
+    # adds a term and changes no coordinate. An inverse of its own would mean
+    # the posterior's parameters were not the likelihood's, and an interval
+    # read at a sampled point would then be in the wrong units.
+    point = torch.tensor([0.3, -1.1], dtype=torch.float64)
+    wrapped = WithGaussianPrior(GAUSSIAN, scale=2.0)
+
+    assert torch.equal(wrapped.theta_from(wrapped.constrain(point)), point)
+
+
 @pytest.mark.structural
 def test_a_chain_is_reproducible_from_its_seed() -> None:
     first = sample(GAUSSIAN, seed=5, n_samples=50, step_size=0.2, n_steps=10)
@@ -397,6 +390,9 @@ class _Counted:
 
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         return self.inner.constrain(theta)
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return self.inner.theta_from(named)
 
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         self.calls += 1

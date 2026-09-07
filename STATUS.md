@@ -171,6 +171,8 @@ against the separation of the emitting means:
 | 4.0 | 93/96 | 0.969 | 0/24 |
 | 6.0 | 92/96 | 0.958 | 0/24 |
 
+Recorded as `docs/experiments/002-hmm-gaussian-interval-coverage.md`.
+
 Coverage reaches nominal from two standard deviations of separation upward and
 degrades below it, seen twice over: the intervals that exist under-cover, and
 most replicates produce **no interval at all** — the observed information is
@@ -615,7 +617,9 @@ satisfying the first-order condition, sixteen restarts reach the global minimum
 **2 times in 30** against **0 in 30** from one start -- sixteen times the cost
 for a success rate still near zero, and widening the draw does not help
 (the same 2 in 30 at scale 4.0 as at 2.0), because the obstacle is the density
-of the minima and not the reach of the proposal.
+of the minima and not the reach of the proposal. Held to eight fits by
+`opt.budget.compare` ([#281](https://github.com/michaelJwilson/snakes_and_ladders/issues/281))
+it is 0 of 10 either way.
 
 No default changes on that evidence. Every number below was produced from the
 objective's own start and still is.
@@ -672,6 +676,48 @@ change would need. So **no default moves**; k-means++ lands as a strategy a
 caller may choose, at a cost of one objective evaluation (271 us of seeding
 against 260 us per evaluation at 4000 points).
 
+**An interval at a fit, whatever produced the fit.** The observed information
+is a property of an objective *at a point*, not of the route that reached it,
+but until now only a gradient fit could ask for one — expectation-maximization
+works in the model's own parameters and never builds an unconstrained vector,
+so the half of the fits with an independent oracle reported a point estimate
+and nothing else
+([#268](https://github.com/michaelJwilson/snakes_and_ladders/issues/268)).
+Every objective now inverts its own constraint map, exactly: the round trip
+`constrain(theta_from(named))` returns its input to between 0 and 4.4e-16
+across all eight likelihoods, and bitwise for the three closed-form test
+functions and the Gaussian-prior wrapper. `fit(include_intervals=True)` and
+`fit_from(include_intervals=True)` attach the interval to the fit — the latter
+to the best start only, one Hessian rather than one per start — and refuse it
+at an unconverged point rather than report a curvature that is not an
+information; off, they compute nothing and return `None`, so a fit inside a
+search loop costs what it did.
+
+**The check that costs nothing.** The gradient fit and Baum-Welch share the
+model and nothing else, and converge to the same optimum — log-likelihoods
+within 3.6e-9 relative. So their intervals must agree, and they do to **0.31%**,
+the width of the flat ridge EM approaches slowly. A broken round trip fails
+that loudly. The EM-derived intervals then cover truth at **243/264 = 0.920**
+over 12 replicates, with 1 of 12 reaching the boundary and contributing none.
+
+**The refusals survive, which is the part that mattered.** An interval from a
+Hessian is a statement about a maximum, and a Gaussian component at its
+variance floor is not one: the likelihood is unbounded there, the information
+is not positive definite, and the new entry point refuses exactly as the old
+one does — checked against the healthy point beside it, since a guard that
+refused everything would pass a refusal-only test.
+
+**And the comparison `hmc.py` promised is now complete, in both regimes.** A
+version already existed — a raw Hessian in unconstrained coordinates against
+grid quadrature. The missing halves are the delta-method interval on the
+parameters a person names, against a chain, where the approximation is exact
+and where it is not. On the analytic Gaussian the Laplace interval equals
+`sqrt(diag(covariance))` to 1e-8 and the chain's spread matches it to **0.04%
+and 0.47%** at 4000 draws, so agreement is asserted. On the Potts posterior the
+sampled spread is **1.057, 1.031 and 1.036** times the Laplace one: slightly
+optimistic, the expected direction for a mildly non-Gaussian posterior, and
+reported rather than asserted away.
+
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
@@ -693,6 +739,27 @@ so a run reproduces from its seed, and a topology is scored at most once per
 search, keyed on its leaf bipartitions. The fit is the only unit worth
 counting: one candidate fit measures 213 ms against 22 us to generate an
 entire NNI neighbourhood, a factor of about 10 000.
+
+**A discrete result now states how sure it is**
+([#270](https://github.com/michaelJwilson/snakes_and_ladders/issues/270)).
+`search.support` reports three quantities and names which: the
+*neighbourhood* weight of the returned tree among itself and its neighbours
+under a move set, with the margin over the best neighbour beside it; the
+*enumerated* weight over every topology, the exact flat-prior posterior over
+maximized likelihoods where `(2n-5)!!` fits; and Felsenstein's *bootstrap*,
+per internal split, over site-resampled searches. The first is held to the
+second: equal to 1e-9 at four taxa under NNI, where the neighbourhood is the
+whole space, and at five taxa never smaller than it on any of the 15
+topologies, with the best tree's NNI margin equal to its enumerated margin.
+The bootstrap is held to its definition — a frequency over the returned
+topology's internal splits, reproducible from its generator — and gives the
+generating splits support of at least 0.8 at 1,000 sites. The exact weight is
+calibrated: over 24 NNI searches on the five-taxon fixture at 30 to 300
+sites, the fraction of returned trees equal to the generating one does not
+fall from one support bin to the next. Each weight is over *maximized*
+likelihoods under a flat prior over topologies and is named so, not called a
+posterior; a tempered ensemble over topologies, which would give a marginal
+one, does not exist.
 
 **The coupled model is fitted, and the finding is about the start, not the
 move** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
@@ -767,7 +834,8 @@ normalized to sites touched:
 Single-site slows by 3.2x between extent 8 and 24 while both cluster
 algorithms slow by roughly 1.9x, so the gap is 2.1x at extent 24 and widening.
 That understates the asymptotic separation: these lattices are small and their
-boundary is open, both of which soften the transition.
+boundary is open, both of which soften the transition. Recorded as
+`docs/experiments/001-potts-cluster-autocorrelation.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
@@ -900,9 +968,14 @@ predicts. **The plan's prediction that tempering would be hard to justify at
 these sizes is retracted**: on the one class of instance the roadmap needs —
 frustrated, past enumeration — the tempered methods beat restarts at equal
 budget and tempering carries the smallest gap. The triangular antiferromagnet
-was too easy to show it; the glass is not. The five-component mixture waits on
-the mixture branch (#263) landing, and the comparison on it belongs to the
-budgeted harness #281.
+was too easy to show it; the glass is not. The first row is now held equal
+by `opt.budget.compare`
+([#281](https://github.com/michaelJwilson/snakes_and_ladders/issues/281)):
+with the utility's own streams and the best any method found as the
+reference, tempering **12/12**, annealing 10/12 with a mean gap of 0.17, and
+restarts of descent 4/12 with a mean gap of 0.75, every method at or below
+the planted energy. The five-component mixture comparison waits on the
+mixture branch (#263) landing and belongs to the same utility.
 
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter
@@ -946,7 +1019,8 @@ the reward decomposes exactly into the two features the policy scores, which
 puts hill climbing *inside* the policy class as the weight vector proportional
 to `(J, 1)`. The learned policy reaches the enumerated optimum from 86.6% of
 the 81 starts against greedy's 80.2%, in 8 of 8 training seeds — a statement
-about learning rather than about two unrelated algorithms.
+about learning rather than about two unrelated algorithms. Recorded as
+`docs/experiments/003-potts-chain-reinforce-vs-greedy.md`.
 
 **The phylogenetic environment exists, and the reward it can afford is
 measured** ([#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137)). A state
@@ -979,6 +1053,23 @@ their own state spaces: 19,683 configurations for a 3-state 3x3 lattice, 729
 paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
+
+## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
+
+**The ledger has a record format before it has a run store**
+([#314](https://github.com/michaelJwilson/snakes_and_ladders/issues/314)). An
+experiment is a file under `docs/experiments/`, written from a template: the
+commit, the feature under test, the fixture and its size tier, the methods
+compared at one budget over shared seeds, the results, the finding, and the
+tickets it filed. `infra/experiments.py` validates every file against the
+template's fields, vocabularies and sections and generates the index that is
+the leaderboard, and a guard runs it per pull request. Three measured
+comparisons this file already stated are the first entries — the cluster
+updates' autocorrelation at the transition, the Gaussian-emission interval
+coverage against separation, and REINFORCE against greedy on the Potts chain —
+and this file now cites them. The Aim run store (#75) is part 2, behind the
+dependency's approval; until then the Results section is typed from the
+measurement and names the script that produced it.
 
 ## §1.2 Requirements Ledger
 
@@ -1034,12 +1125,14 @@ and each labelled as a placeholder rather than drawn with invented data.
 
 ## What Is Not Claimed
 
-- That a learned policy beats hill climbing on trees. The 6-taxon fixture
-  cannot support the claim in either direction, because greedy already reaches
-  the enumerated optimum from every start. Separating a policy from greedy
-  needs a problem harder than exhaustive enumeration can referee, so the oracle
-  that validates the search cannot validate the agent replacing it
-  (issues #177 and #178).
+- That a learned policy beats hill climbing on trees. A fixture that could
+  settle it now exists — 7 taxa, internal branches an order of magnitude
+  shorter than the pendant ones, where NNI hill climbing reaches the
+  enumerated maximum from 24 of 50 seeded starts and stops at a genuine local
+  optimum on the other 26 — but no policy has been trained on it and no
+  budget-matched comparison has been run (issue #178). The 6-taxon fixture
+  cannot support the claim in either direction, because greedy reaches the
+  enumerated optimum from every start there.
 - Any comparison against established software. IQ-TREE 2 and RAxML-NG are not
   installed, and no statement anywhere in the repository compares against them.
 - Runtime scaling. Benchmarks are not ranked on CI hardware, so timings live in

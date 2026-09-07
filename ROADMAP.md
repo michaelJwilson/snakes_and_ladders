@@ -254,6 +254,8 @@ parameterized by neural networks.
     using budget-matched metrics across shared random seeds. Require
     statistical significance via paired tests before adopting a new
     state-of-the-art.
+    The leaderboard is the generated index of `docs/experiments/` (#314), one
+    file per experiment against its commit.
 
 ## Stage 3: Research Extensions (Blue Sky)
 

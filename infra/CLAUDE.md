@@ -23,6 +23,11 @@ the elapsed time and the phase the run was in; libraries emit through the
 standard logger and never configure it, entry points configure it once.
 `DEV.md` shows the line and names the module.
 
+A measurement against a baseline that is not in an experiment file with its
+commit and its budget is an anecdote; the Markdown under `docs/experiments/`
+is the ledger, a run store is its source, and the index is generated from
+the files, never edited.
+
 ## Tickets and the approval flow
 
 - **Priorities.** `high` runs immediately; `medium` runs at the next
