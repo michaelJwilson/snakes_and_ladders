@@ -1,4 +1,4 @@
-# snakes_and_ladders
+# snakes_and_ladders a.k.a sal
 
 [![CI](https://github.com/michaelJwilson/snakes_and_ladders/actions/workflows/ci.yml/badge.svg)](https://github.com/michaelJwilson/snakes_and_ladders/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
