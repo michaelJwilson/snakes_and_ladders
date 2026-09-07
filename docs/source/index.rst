@@ -18,6 +18,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.enumeration
    :members:
 
+.. automodule:: snakes_and_ladders.log
+   :members:
+
 .. automodule:: snakes_and_ladders.emissions
    :members:
 
@@ -55,6 +58,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sim.hmm
+   :members:
+
+.. automodule:: snakes_and_ladders.sim.mixture
    :members:
 
 .. automodule:: snakes_and_ladders.sim.canonical
@@ -108,6 +114,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.constrain
    :members:
 
+.. automodule:: snakes_and_ladders.opt.schedule
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.fit
    :members:
 
@@ -124,6 +133,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.opt.hmm
+   :members:
+
+.. automodule:: snakes_and_ladders.opt.mixture
    :members:
 
 .. automodule:: snakes_and_ladders.learn

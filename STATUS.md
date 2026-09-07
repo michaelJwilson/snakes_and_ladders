@@ -180,6 +180,75 @@ since excluding them unannounced would select for the well-behaved samples.
 Reported as a finding: a fixture using only well-separated means would have
 been testing the fixture.
 
+**Count emissions: the dispersion axis, bracketed.** Four count families join
+the seam — binomial below equidispersion, Poisson exactly at it, negative
+binomial and beta-binomial above
+([#229](https://github.com/michaelJwilson/snakes_and_ladders/issues/229),
+[#260](https://github.com/michaelJwilson/snakes_and_ladders/issues/260)). The
+bracketing is the point: an interface exercised only by overdispersed families
+has never been asked whether it assumes overdispersion somewhere. Each referees
+the neighbour it is a limit of, so the oracles come from outside this
+repository rather than from a second call into it: `BetaBinomial(n, 1, 1)` is
+the discrete uniform and `Binomial(1, p)` is Bernoulli, both to 1e-14 or
+better; the negative binomial approaches Poisson as `r -> inf` and the
+beta-binomial approaches the binomial as `a + b -> inf`, both at the `O(1/x)`
+rate the truncation predicts, with `r` times the deviation measured at 18.75,
+18.88, 18.94, 18.97 and 18.98 across `r` from 500 to 8000 — converging rather
+than drifting, which is what makes the extrapolated tolerance legitimate.
+
+**Two of the four have an M step that is an optimization**, which is what
+tests whether the seam is real: `reestimate` now returns what its M step did,
+not only what it produced. **Both solves bracket rather than step**, and that
+was a measurement, not a preference. Newton on the negative binomial's
+weighted score converges for moderate `r` and, on a near-Poisson sample,
+overshoots in `log r` and underflows to zero — arriving as a domain error
+rather than a bad answer; safeguarded bisection reaches `|score| / weight` of
+1e-14 to 1e-16 in 45 evaluations and agrees with a 40001-point grid search to
+zero relative difference. Minka's fixed point for the beta-binomial is
+monotone but linearly convergent: at a true concentration of 120 it was still
+moving in the third decimal after 500 iterations and returned that as though
+it were an estimate. Alternating bisection in `(p, a + b)` settles in 3 to 9
+iterations at a residual of exactly zero. An M step that does not settle is
+refused, per `likelihood/CLAUDE.md`.
+
+**The flat-likelihood hazard is the mirror of the Gaussian's, and it is
+measured.** Where a Gaussian likelihood is *unbounded* as a variance falls, a
+count likelihood goes *flat* as the dispersion rises toward its Poisson or
+binomial limit. The bound is derived on the same construction for both count
+families — the dispersion at which the overdispersion the model is for falls
+below the sampling noise on measuring it, `mu sqrt(W/2)` for the negative
+binomial and `(n-1) sqrt(W/2)` for the beta-binomial. Coverage of the 95%
+intervals over 16 replicates of 480 counts, against the true dispersion:
+
+| true `r` | intervals covering | rate | replicates with no interval at all |
+| --- | --- | --- | --- |
+| 0.5 | 44/48 | 0.917 | 4/16 |
+| 1.0 | 60/64 | 0.938 | 0/16 |
+| 2.0 | 58/64 | 0.906 | 0/16 |
+| 5.0 | 59/64 | 0.922 | 0/16 |
+| 20.0 | 58/64 | 0.906 | 0/16 |
+| 100.0 | 32/36 | 0.889 | 7/16 |
+
+**The finding is not the coverage column.** Coverage sits near nominal at every
+dispersion; what degrades is *whether an interval exists*, and it degrades at
+**both** ends — a heavy tail at `r = 0.5`, a flat likelihood at `r = 100`.
+A non-identified count model announces itself as a singular information matrix,
+not as an interval in the wrong place, which is the opposite of what the
+Gaussian case showed and is why both were measured rather than one assumed
+from the other.
+
+**A Gaussian mixture: the emission seam with the Markov chain removed.**
+`snakes_and_ladders.sim.mixture` draws component labels and observations
+jointly, retaining the label so a clustering has something to be checked
+against; `snakes_and_ladders.opt.mixture` fits
+([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)). Its
+component M step **is** `GaussianEmission.reestimate`, called with
+responsibilities where an HMM passes state posteriors, and a test asserts the
+two produce identical numbers on the same responsibilities rather than merely
+similar ones — the evidence that the seam extracted from an HMM was not shaped
+by one. The unbounded likelihood transfers unchanged with it: a component
+collapsed onto a single observation is refused, not clamped.
+
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
 **Felsenstein pruning: three CPU backends, one oracle.** Vectorized NumPy is
@@ -543,6 +612,36 @@ removing an exactly flat direction that would otherwise leave every parameter
 without an interval. The roadmap's sub-second gradient update at `n = 100` is
 now measured — 203 ms at 1000 sites — rather than assumed.
 
+**k-means++ lands, and buys nothing the fit can use.** The first initializer
+that reads its objective's data
+([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)), and
+the case [#251](https://github.com/michaelJwilson/snakes_and_ladders/issues/251)
+built the `Initializer` protocol for. **The protocol needed no change.** A
+data-dependent strategy turns out to be model-*specific* rather than
+protocol-incompatible: it takes an `Objective` like every other initializer and
+refuses the ones whose parameter vector it cannot interpret, which is why it
+lives beside the mixture rather than with the model-free strategies.
+
+Measured against its published guarantee — Arthur & Vassilvitskii (2007) bound
+the expected seeding cost at `8 (ln k + 2)` times optimal, and in one dimension
+the optimal clustering is computable exactly by dynamic programming over
+contiguous runs, so the bound has something to be checked against. On three
+components six standard deviations apart, over 200 replicates: mean cost ratio
+**2.91** against a bound of **24.79**, worst draw 14.41. Uniform seeding
+realizes **11.03** mean and a worst draw of **58.08**, outside the k-means++
+guarantee.
+
+**And none of that reaches the likelihood, which is the finding.** EM reaches
+the same optimum from either seeding on that mixture — 200/200 from k-means++,
+195/200 from uniform — and from the objective's own quantile start too. Harder
+fixtures do not reverse it, they make both fail: at five components 1.5
+standard deviations apart neither seeding reached the best optimum found in 200
+draws, and at five with unequal weights uniform reached it 9 times in 150
+against k-means++'s 3 — noise, in the direction opposite to the one a default
+change would need. So **no default moves**; k-means++ lands as a strategy a
+caller may choose, at a cost of one objective evaluation (271 us of seeding
+against 260 us per evaluation at 4000 points).
+
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
@@ -686,6 +785,64 @@ a complete bipartite graph, whose maximum cut is exactly `|E|`, the ratio
 comes out slightly **above 1** — impossible for an exact solve, and the
 measurable evidence of what the certificate does and does not cover.
 
+**Temperature is one object, and it lives where all three consumers can reach
+it.** `snakes_and_ladders.opt.schedule` carries the schedules — constant, linear,
+geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
+and checked against it to 1e-12 (1e-10 for the cosine, whose torch form is a
+recursion) — with both endpoints reached *exactly* at the declared steps, and
+a step past the end refused rather than clamped
+([#267](https://github.com/michaelJwilson/snakes_and_ladders/issues/267)). The
+Potts sampler takes a temperature as model scaling, which the model makes an
+exact statement: the tempered energies equal the energies over `T` with a
+deviation of **0.0**, and every move set's chain at `T = 2` and `T = 0.5` in a
+field passes the chi-square against `exp(-E/T)` enumerated from the unscaled
+model (p-values 0.016 to 0.89 at the 0.001 significance). The Hamiltonian
+sampler takes it as the momentum's variance — the tempered dynamics are the
+untempered ones in rescaled time, so the integrator is untouched — and on the
+analytic Gaussian a chain at `T` is the chain at 1 with its deviations scaled
+by `sqrt(T)` **draw for draw to 1e-10**. At `T = 1` every operation is the
+identity bitwise, and the 31 existing HMC and 13 Potts tests pass untouched.
+
+**Annealing is the sampler on a schedule, and the first instance is a wash.**
+`anneal_potts` and `hmc.anneal` run one sweep or one proposal per schedule
+step and return the best state seen. On the 9×9 periodic triangular
+antiferromagnet, whose ground-state energy is a closed form, geometric
+annealing from `T = 2` to `0.05` over 200 sweeps reaches it **20/20** against
+single-site descent's **2/20** and a constant `T = 1` control's **7/20** — the
+schedule, not the wandering. But descent converges in 2.6 sweeps, so the same
+200 sweeps buy 78 restarts, and the best of 78 also reaches it 20/20. On
+Rastrigin, measured at equal *objective evaluations* with a counting wrapper:
+at 14,400 evaluations annealed Hamiltonian proposals plus a polishing fit reach
+the global basin **6/20**, and 101 random-restart fits on the same budget
+**10/20**; at 2,900 evaluations it is 0/20 against 1/20. Restarts win on the
+continuous surface. Neither is a default.
+
+**Parallel tempering, and the instance where restarts lose.** Replicas at
+fixed temperatures exchange configurations on `(β_i − β_j)(E_i − E_j)`, each
+replica on its own spawned generator from one seed. The oracle is the one the
+samplers already have: with exchanges on, every replica passes the chi-square
+against `exp(-E/T_r)` enumerated from the unscaled model (p 0.024 to 0.70,
+exchange acceptance 0.78 and 0.57), and the paired negative case — an exchange
+that omits the energy term — is caught at p = 0.0 on every replica. Then the
+comparison the plan asked for, at **400 sweeps per method** on the planted
+Viana–Bray spin glass, against the best energy any method found over 12
+instances:
+
+| instance | restarts of descent (100 × ≤4 sweeps) | annealing (1 × 400) | tempering (4 × 100) |
+| --- | --- | --- | --- |
+| 60 sites, degree 4, frustration 0.2 | 5/12, mean gap 0.75 | **12/12** | **12/12** |
+| 60 sites, degree 4, frustration 0.35 | 5/12, gap 1.00 | 9/12, gap 0.50 | 9/12, gap 0.25 |
+| 100 sites, degree 6, frustration 0.3 | 2/12, gap 2.58 | 7/12, gap 1.08 | **8/12**, gap 0.50 |
+
+Every method beats the planted energy on every instance, as frustration
+predicts. **The plan's prediction that tempering would be hard to justify at
+these sizes is retracted**: on the one class of instance the roadmap needs —
+frustrated, past enumeration — the tempered methods beat restarts at equal
+budget and tempering carries the smallest gap. The triangular antiferromagnet
+was too easy to show it; the glass is not. The five-component mixture waits on
+the mixture branch (#263) landing, and the comparison on it belongs to the
+budgeted harness #281.
+
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter
 iteration per site per sweep, five NumPy calls to move one spin. The port runs
@@ -785,22 +942,34 @@ specification, cut down in `14d32d6` from the academic-letter structure of
 [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), and it is the shape
 the document is in rather than the shape §1.3 asks for.
 
-Thirteen QA scripts run in the build, each committing a figure with a caption
+Thirteen QA scripts render the figures, each committing a figure with a caption
 naming the seed, the sizes and the model that produced it, and `docs/CLAUDE.md`
 states the rules that keep a CI-regenerated artifact true
-([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The document
-currently includes two of them — the worked simulation example and the backend
-agreement — so eleven committed figures are rebuilt by CI but cited nowhere.
+([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The two
+documents cite seven of them — the textbook the simulated tree and the
+Jukes–Cantor curves, the paper the worked simulation, the backend agreement,
+parameter recovery, interval coverage and the topology search — and the
+per-pull-request build regenerates only those; the remaining six are checked at
+the release gate
+([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)).
 
 Measured against §1.3's required contents: the model formulations are present
-for all three classes, at the level of a statement rather than a derivation.
-Absent are the derivations of pruning, belief propagation and forward-backward;
-the branch-and-bound bounds and their proofs, no such bound being implemented;
-and the parameter-recovery and convergence evidence, which exists as committed
-QA figures but is no longer included. Three framed placeholders stand in for
-the RL learning curve, the comparison against classical software, and hardware
-scaling — none of which is measured, and each labelled as a placeholder rather
-than drawn with invented data.
+for all three classes, and since
+[#274](https://github.com/michaelJwilson/snakes_and_ladders/issues/274) every
+equation and algorithm the code cites is stated in the textbook under a label —
+the Jukes–Cantor closed form and its normalization, site independence, pruning
+and the root marginalization, forward simulation, the forward recursion, the
+belief-propagation message and the Bethe free energy, the episode return and the
+REINFORCE estimator, and the cross-device tolerance — and
+`tests/regression/test_document_labels.py` fails on a citation no document
+resolves. The old document had labelled none of them, so nine citations had
+never resolved and two named equation numbers from a numbering that no longer
+existed. What remains at the level of a statement rather than a derivation is
+the pruning and forward–backward recursions; absent entirely are the
+branch-and-bound bounds and their proofs, no such bound being implemented.
+Three framed placeholders stand in for the RL learning curve, the comparison
+against classical software, and hardware scaling — none of which is measured,
+and each labelled as a placeholder rather than drawn with invented data.
 
 ## What Is Not Claimed
 

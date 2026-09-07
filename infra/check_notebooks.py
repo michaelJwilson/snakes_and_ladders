@@ -47,7 +47,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import re
-import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -299,9 +299,12 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     arguments = parser.parse_args(argv)
+    from snakes_and_ladders.log import get_logger, phase
+
+    log = get_logger("check_notebooks", start_time=time.time())
     paths = arguments.notebooks or sorted(NOTEBOOK_DIR.glob("*.ipynb"))
     if not paths:
-        print(f"no notebooks found under {NOTEBOOK_DIR}", file=sys.stderr)
+        log.error("no notebooks found under %s", NOTEBOOK_DIR)
         return 1
 
     if arguments.write:
@@ -309,30 +312,31 @@ def main(argv: list[str] | None = None) -> int:
 
         failed = False
         for path in paths:
-            rewrite(path)
-            print(f"wrote {path}")
+            with phase(f"execute {path.name}"):
+                rewrite(path)
+            log.info("wrote %s", path)
             for problem in structure_problems(
                 path.name, nbformat.read(path, as_version=4).cells
             ):
                 failed = True
-                print(problem, file=sys.stderr)
+                log.error("%s", problem)
         return 1 if failed else 0
 
     failed = False
     for path in paths:
-        problems = compare(path)
+        with phase(f"compare {path.name}"):
+            problems = compare(path)
         if problems:
             failed = True
-            print(f"FAIL {path}", file=sys.stderr)
+            log.error("FAIL %s", path)
             for problem in problems:
-                print(problem, file=sys.stderr)
-            print(
-                "  regenerate with: uv run python infra/check_notebooks.py "
-                f"--write {path}",
-                file=sys.stderr,
+                log.error("%s", problem)
+            log.error(
+                "regenerate with: uv run python infra/check_notebooks.py --write %s",
+                path,
             )
         else:
-            print(f"ok   {path}")
+            log.info("ok   %s", path)
     return 1 if failed else 0
 
 
