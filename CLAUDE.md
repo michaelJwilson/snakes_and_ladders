@@ -35,6 +35,8 @@ This file is authoritative. Each of the remainder has a defined task:
 | `ROADMAP.md` | The development loop, the scientific goal, requirements, and milestones |
 | `STATUS.md` | What has landed against each roadmap milestone, the evidence, and the PR carrying it |
 | `TICKETS.md` | The titles of the tickets that remain between `STATUS.md` and `ROADMAP.md` |
+| `PROBLEMS.md` | The supported problems, each with the code that simulates, evaluates, fits, searches and learns on it |
+| `CHECKS.md` | The checks the roadmap's claims rest on, generated from the tests' own markers |
 | `CHANGELOG.md` | What has landed, per dated release section; built from `changelog.d/` fragments by `towncrier` |
 | `docs/tex/` | Two documents: a paper reporting results, and a textbook of the problem statements, algorithms, and the properties that referee them |
 | `docs/nb/` | One worked notebook per problem class, from a fixture to a learned policy |
