@@ -12,9 +12,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.qa import backend_agreement
-from phylo.qa.backend_agreement import BACKENDS, SITE_COUNTS, agreement, build_figure
-from phylo.sim.params import load_simulation_params
+from snakes_and_ladders.qa import backend_agreement
+from snakes_and_ladders.qa.backend_agreement import (
+    BACKENDS,
+    SITE_COUNTS,
+    agreement,
+    build_figure,
+)
+from snakes_and_ladders.sim.params import load_simulation_params
 
 from tests._fixtures import FIXTURES_DIR
 

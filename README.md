@@ -1,13 +1,13 @@
 # snakes_and_ladders
 
-[![CI](https://github.com/michaelJwilson/phylo/actions/workflows/ci.yml/badge.svg)](https://github.com/michaelJwilson/phylo/actions/workflows/ci.yml)
+[![CI](https://github.com/michaelJwilson/snakes_and_ladders/actions/workflows/ci.yml/badge.svg)](https://github.com/michaelJwilson/snakes_and_ladders/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Mixed discrete-continuous optimization over graph-structured models —
 phylogenetic trees, Potts models in an external field, and hidden Markov
 models. Autodiff fits the continuous half, a learned policy is intended to
-propose the discrete half, and a Rust backend (`phylo.oxiphylo`, via
+propose the discrete half, and a Rust backend (`snakes_and_ladders.oxi_snakes_and_ladders`, via
 [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs)) carries the
 CPU-bound recursions.
 
@@ -70,12 +70,12 @@ working in.
 | Contract | Governs |
 | --- | --- |
 | [`CLAUDE.md`](CLAUDE.md) | The repository-wide rules: environment, conventions, performance, testing, the Definition of Done, the reference routing table |
-| [`python/phylo/sim/CLAUDE.md`](python/phylo/sim/CLAUDE.md) | Data generation and ground-truth retention |
-| [`python/phylo/likelihood/CLAUDE.md`](python/phylo/likelihood/CLAUDE.md) | Pruning, the backends, and the cross-device tolerance they are held to |
-| [`python/phylo/opt/CLAUDE.md`](python/phylo/opt/CLAUDE.md) | Continuous fitting, and why no application may be imported here |
-| [`python/phylo/learn/CLAUDE.md`](python/phylo/learn/CLAUDE.md) | The RL interface, its oracles, and the rules a reward and a baseline obey |
-| [`python/phylo/search/CLAUDE.md`](python/phylo/search/CLAUDE.md) | Move sets, search budgets, and the phylogenetic environment |
-| [`python/phylo/qa/CLAUDE.md`](python/phylo/qa/CLAUDE.md) | QA figures: rendering, never recomputing |
+| [`python/snakes_and_ladders/sim/CLAUDE.md`](python/snakes_and_ladders/sim/CLAUDE.md) | Data generation and ground-truth retention |
+| [`python/snakes_and_ladders/likelihood/CLAUDE.md`](python/snakes_and_ladders/likelihood/CLAUDE.md) | Pruning, the backends, and the cross-device tolerance they are held to |
+| [`python/snakes_and_ladders/opt/CLAUDE.md`](python/snakes_and_ladders/opt/CLAUDE.md) | Continuous fitting, and why no application may be imported here |
+| [`python/snakes_and_ladders/learn/CLAUDE.md`](python/snakes_and_ladders/learn/CLAUDE.md) | The RL interface, its oracles, and the rules a reward and a baseline obey |
+| [`python/snakes_and_ladders/search/CLAUDE.md`](python/snakes_and_ladders/search/CLAUDE.md) | Move sets, search budgets, and the phylogenetic environment |
+| [`python/snakes_and_ladders/qa/CLAUDE.md`](python/snakes_and_ladders/qa/CLAUDE.md) | QA figures: rendering, never recomputing |
 | [`infra/CLAUDE.md`](infra/CLAUDE.md) | CI/CD, the agentic workflow, experiment tracking |
 | [`docs/CLAUDE.md`](docs/CLAUDE.md) | How the technical document is built and kept true |
 
@@ -127,8 +127,8 @@ That shape is not unique to phylogenies. Felsenstein pruning, the HMM forward
 algorithm, and the Potts transfer matrix are the same sum-product recursion on
 different graphs — a tree, a chain, a lattice — so one discrete/continuous
 interface serves all three. The project treats that as a design constraint
-rather than a coincidence, and enforces it structurally: `phylo.opt` and
-`phylo.learn` may import no application module, asserted by test.
+rather than a coincidence, and enforces it structurally: `snakes_and_ladders.opt` and
+`snakes_and_ladders.learn` may import no application module, asserted by test.
 
 [ROADMAP.md](ROADMAP.md) states the goal, the accuracy and hardware
 requirements, and the milestones.
@@ -139,7 +139,7 @@ requirements, and the milestones.
 parameter vector, a differentiable scalar, and a map back to named constrained
 parameters. Four instances run against it unchanged — a Potts chain, a discrete
 HMM, branch lengths on a fixed topology, and the GTR substitution model — and
-none required a change to `phylo.opt`.
+none required a change to `snakes_and_ladders.opt`.
 
 **Fitting with intervals, not just convergence.** L-BFGS under a strong-Wolfe
 line search, with confidence intervals from the observed Fisher information
@@ -169,7 +169,7 @@ an exact trajectory-enumeration oracle for the expected return and its
 gradient. Claims rest on that oracle rather than on a training curve.
 
 **A QA pipeline that is the evidence.** Every figure and table in the technical
-document is rendered by `phylo.qa` from the code it reports on, and CI rebuilds
+document is rendered by `snakes_and_ladders.qa` from the code it reports on, and CI rebuilds
 and compares them, so a plot cannot drift from what produced it.
 
 ## What exists, measured

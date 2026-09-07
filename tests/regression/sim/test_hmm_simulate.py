@@ -1,7 +1,7 @@
 """Regression tests for the HMM data generator.
 
 Validated against brute-force enumeration and the transition matrix's own
-stationary distribution -- never against ``phylo.opt``'s fitted likelihood,
+stationary distribution -- never against ``snakes_and_ladders.opt``'s fitted likelihood,
 per ``sim/CLAUDE.md``'s "validate against the analytic result" rule. The
 generator draws a hidden path and an observation sequence jointly; every
 check here is a property of that joint distribution, computed independently
@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.sim.hmm import load_hmm_params, simulate_sequences
+from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 

@@ -4,7 +4,7 @@ See `tests/regression/test_numerics_rust.py` for correctness. What is timed
 here is the *Python-visible* cost, which is the number that decides whether
 the port is worth having and is smaller than the kernel's own speedup: the
 arrays have to cross the FFI boundary and the oracle's do not.
-`benches/oxiphylo_bench.rs` measures the kernel alone, and reporting only
+`benches/oxi_snakes_and_ladders_bench.rs` measures the kernel alone, and reporting only
 that one would overstate what a caller gets.
 
 The sizes are the ones issue #181's audit profiled, where `sample_rows` was
@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.numerics import sample_rows as oracle
-from phylo.numerics_rust import sample_rows as accelerated
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.numerics import sample_rows as oracle
+from snakes_and_ladders.numerics_rust import sample_rows as accelerated
 
 N_CATEGORIES = 4
 SEED = 20260904
@@ -43,7 +43,7 @@ def test_numpy_sample_rows_benchmark(benchmark: BenchmarkFixture, n_draws: int) 
 
 @pytest.mark.parametrize("n_draws", [200_000, 2_000_000])
 def test_rust_sample_rows_benchmark(benchmark: BenchmarkFixture, n_draws: int) -> None:
-    """The same call through `oxiphylo`, including the boundary it crosses."""
+    """The same call through `oxi_snakes_and_ladders`, including the boundary it crosses."""
     distributions, rows = _inputs(n_draws)
 
     sampled = benchmark(accelerated, np.random.default_rng(SEED), distributions, rows)

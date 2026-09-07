@@ -1,6 +1,6 @@
 # Ground truth for the Potts-lattice generator
 # (tests/regression/sim/test_potts_simulate.py). Every field is required --
-# see python/phylo/sim/potts.py and sim/CLAUDE.md.
+# see python/snakes_and_ladders/sim/potts.py and sim/CLAUDE.md.
 #
 # 3x3 at 3 states is small enough for exhaustive enumeration (3**9 = 19,683
 # configurations) to give the exact partition function and marginals, so the

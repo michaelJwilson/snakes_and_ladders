@@ -11,10 +11,10 @@ from __future__ import annotations
 import math
 
 import pytest
-from phylo.likelihood.pruning import log_likelihood
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 

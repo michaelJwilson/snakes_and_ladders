@@ -14,11 +14,11 @@ pruning pass -- and this is where the size of that difference is measured.
 from __future__ import annotations
 
 import numpy as np
-from phylo.search.rl import RewardModel, TopologyEnvironment
-from phylo.search.topology import random_topology
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.topology import random_topology
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 

@@ -20,15 +20,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from phylo.search.infer import MoveSet, infer, score_topology
-from phylo.search.topology import (
+from snakes_and_ladders.search.infer import MoveSet, infer, score_topology
+from snakes_and_ladders.search.topology import (
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
 )
-from phylo.sim.newick import count_topologies, to_newick, validate_unrooted_newick
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.newick import (
+    count_topologies,
+    to_newick,
+    validate_unrooted_newick,
+)
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 

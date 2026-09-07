@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.likelihood import pruning, pruning_torch
-from phylo.likelihood.device import (
+from snakes_and_ladders.likelihood import pruning, pruning_torch
+from snakes_and_ladders.likelihood.device import (
     CROSS_DEVICE_RTOL_FLOAT32,
     CROSS_DEVICE_RTOL_FLOAT64,
     available_device,
@@ -21,7 +21,7 @@ from phylo.likelihood.device import (
     default_dtype,
     select_device,
 )
-from phylo.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FOUR_TAXA, SMALL_SITES, load_fixture
 

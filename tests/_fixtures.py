@@ -13,10 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from phylo.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import load_simulation_params
 
 if TYPE_CHECKING:
-    from phylo.sim.params import SimulationParams
+    from snakes_and_ladders.sim.params import SimulationParams
 
 FIXTURES_DIR = Path(__file__).parent / "regression" / "fixtures"
 

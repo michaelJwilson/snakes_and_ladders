@@ -22,12 +22,12 @@ import math
 
 import numpy as np
 import pytest
-from phylo.likelihood.belief_propagation import (
+from snakes_and_ladders.likelihood.belief_propagation import (
     ConvergenceError,
     belief_propagation,
 )
-from phylo.likelihood.potts import enumerate_potts, strip_log_partition
-from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_partition
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 RELATIVE_TOLERANCE = 1e-11
 

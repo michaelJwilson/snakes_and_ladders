@@ -1,4 +1,4 @@
-"""Validation-error paths for ``phylo.likelihood``.
+"""Validation-error paths for ``snakes_and_ladders.likelihood``.
 
 Separated from tests/regression/test_likelihood_pruning.py, which pins
 scientific correctness; these pin the guardrails around malformed inputs,
@@ -11,9 +11,9 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
-from phylo.likelihood.brute_force import brute_force_log_likelihood
-from phylo.likelihood.pruning import log_likelihood
-from phylo.sim.tree import Node
+from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
+from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.sim.tree import Node
 
 _LikelihoodFunc = Callable[[Node, int, np.ndarray, dict[str, np.ndarray]], float]
 

@@ -1,4 +1,4 @@
-"""Benchmarks for `phylo.sim.potts.simulate_potts`.
+"""Benchmarks for `snakes_and_ladders.sim.potts.simulate_potts`.
 
 Correctness is pinned in `tests/regression/sim/test_potts_simulate.py`
 against exhaustive enumeration; these measure cost. Both sampling paths are
@@ -13,9 +13,9 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from phylo.sim.graph import BoundaryCondition, lattice_graph
-from phylo.sim.potts import simulate_potts
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import simulate_potts
 
 _FIELD = np.array([0.40, -0.10, -0.30])
 _SEED = 20260903

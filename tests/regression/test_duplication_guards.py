@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PACKAGE = REPO_ROOT / "python" / "phylo"
+PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 
 # The consolidated home of each pattern, which legitimately contains it once.
 LOGSUMEXP_OWNER = "numerics.py"
@@ -82,9 +82,9 @@ def test_each_guard_fails_on_violating_source() -> None:
         CAP_LITERAL: "MAX_ENUMERABLE_THINGS = 200_000\n",
     }
     clean = {
-        PRIVATE_LOGSUMEXP: "from phylo.numerics import logsumexp\n",
+        PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
         OPEN_CODED_EDGES: "for edge, coupling in graph.weighted_edges():\n",
-        CAP_LITERAL: "from phylo.enumeration import refuse_oversized\n",
+        CAP_LITERAL: "from snakes_and_ladders.enumeration import refuse_oversized\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []

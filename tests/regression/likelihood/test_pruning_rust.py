@@ -1,4 +1,4 @@
-"""Regression tests for ``phylo.likelihood.pruning_rust`` (the Rust CPU backend).
+"""Regression tests for ``snakes_and_ladders.likelihood.pruning_rust`` (the Rust CPU backend).
 
 Checks per ``likelihood/CLAUDE.md``, mirroring ``test_pruning_torch.py``'s
 structure for the PyTorch backend:
@@ -23,11 +23,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.likelihood import pruning, pruning_rust
-from phylo.likelihood.brute_force import brute_force_log_likelihood
-from phylo.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
+from snakes_and_ladders.likelihood import pruning, pruning_rust
+from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
+from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 

@@ -31,14 +31,19 @@ import math
 
 import numpy as np
 import pytest
-from phylo.likelihood.potts import log_weights
-from phylo.search import potts_mcmc
-from phylo.search.potts_mcmc import PottsChain, PottsMove, energies, sample_potts
-from phylo.search.statistics import (
+from snakes_and_ladders.likelihood.potts import log_weights
+from snakes_and_ladders.search import potts_mcmc
+from snakes_and_ladders.search.potts_mcmc import (
+    PottsChain,
+    PottsMove,
+    energies,
+    sample_potts,
+)
+from snakes_and_ladders.search.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
 )
-from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 # Declared significance. The worst p-value over 36 runs -- six seeds across
 # all three move sets, with and without a field -- was 0.0145, so 0.001 does

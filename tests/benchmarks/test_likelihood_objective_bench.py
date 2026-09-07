@@ -23,14 +23,14 @@ import math
 import numpy as np
 import pytest
 import torch
-from phylo.likelihood.objective import (
+from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
-from phylo.sim.gtr import gtr_rate_matrix
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node
-from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.sim.gtr import gtr_rate_matrix
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node
 
 # ROADMAP.md's stated size, and a site count in the range the same document
 # assumes for the memory bound.

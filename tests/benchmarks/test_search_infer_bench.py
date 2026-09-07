@@ -13,10 +13,10 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from phylo.search.infer import MoveSet, infer, score_topology
-from phylo.search.topology import nni_neighbours, random_topology
-from phylo.sim.simulate import simulate_alignment
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.search.infer import MoveSet, infer, score_topology
+from snakes_and_ladders.search.topology import nni_neighbours, random_topology
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import SMALL_SITES, load_fixture
 

@@ -1,4 +1,4 @@
-"""Validation-error paths for ``phylo.likelihood.pruning_torch``.
+"""Validation-error paths for ``snakes_and_ladders.likelihood.pruning_torch``.
 
 Separated from tests/regression/test_pruning_torch.py, which pins
 scientific correctness; these pin the guardrails around malformed inputs,
@@ -11,8 +11,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from phylo.likelihood.pruning_torch import branch_lengths_from_tree, log_likelihood
-from phylo.sim.tree import Node
+from snakes_and_ladders.likelihood.pruning_torch import (
+    branch_lengths_from_tree,
+    log_likelihood,
+)
+from snakes_and_ladders.sim.tree import Node
 
 _TAU = Node(
     name="root",

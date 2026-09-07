@@ -2,7 +2,7 @@
 
 The forward recursion is checked against brute-force enumeration over every
 hidden path -- the same independent-oracle pattern
-``phylo.likelihood.brute_force`` establishes for pruning, and for the same
+``snakes_and_ladders.likelihood.brute_force`` establishes for pruning, and for the same
 reason: a recursion checked only against itself is checked against nothing.
 ``opt/CLAUDE.md``'s finite-difference derivative check is here too.
 """
@@ -15,13 +15,13 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.opt.hmm import (
+from snakes_and_ladders.opt.hmm import (
     HmmObjective,
     align_states,
     baum_welch,
     forward_log_likelihood,
 )
-from phylo.sim.hmm import load_hmm_params, simulate_sequences
+from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences

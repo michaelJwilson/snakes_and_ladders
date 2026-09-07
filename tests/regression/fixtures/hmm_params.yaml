@@ -1,6 +1,6 @@
 # Ground truth for the discrete-HMM reference instance
 # (tests/regression/opt/test_opt_hmm.py, tests/regression/sim/test_hmm_simulate.py).
-# Every field is required -- see python/phylo/sim/hmm.py and sim/CLAUDE.md.
+# Every field is required -- see python/snakes_and_ladders/sim/hmm.py and sim/CLAUDE.md.
 #
 # The emission rows are deliberately well separated: a near-uniform emission
 # makes the hidden states nearly exchangeable, and a recovery test on an

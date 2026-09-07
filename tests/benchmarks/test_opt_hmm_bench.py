@@ -11,9 +11,9 @@ from __future__ import annotations
 import math
 
 import torch
-from phylo.opt.hmm import HmmObjective
-from phylo.sim.hmm import load_hmm_params, simulate_sequences
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.opt.hmm import HmmObjective
+from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 

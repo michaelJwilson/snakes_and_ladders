@@ -17,14 +17,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.qa import topology_accuracy
-from phylo.qa.topology_accuracy import REPLICATES, REQUIREMENT, SITE_COUNTS
-from phylo.search.topology import (
+from snakes_and_ladders.qa import topology_accuracy
+from snakes_and_ladders.qa.topology_accuracy import REPLICATES, REQUIREMENT, SITE_COUNTS
+from snakes_and_ladders.search.topology import (
     enumerate_topologies,
     normalized_robinson_foulds,
     robinson_foulds,
 )
-from phylo.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import load_simulation_params
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -46,7 +46,7 @@ def test_a_topology_is_at_distance_zero_from_itself() -> None:
 def test_the_distance_is_the_symmetric_difference_of_the_splits() -> None:
     # Against the definition, computed here independently of the
     # implementation: splits in one tree and not the other, both ways.
-    from phylo.search.topology import leaf_bipartitions
+    from snakes_and_ladders.search.topology import leaf_bipartitions
 
     topologies = list(enumerate_topologies(list("ABCDE")))
     for first in topologies[:4]:

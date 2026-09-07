@@ -11,8 +11,12 @@ from __future__ import annotations
 import math
 
 import torch
-from phylo.opt.potts import PottsObjective, load_potts_params, simulate_chains
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.opt.potts import (
+    PottsObjective,
+    load_potts_params,
+    simulate_chains,
+)
 
 from tests._fixtures import FIXTURES_DIR
 

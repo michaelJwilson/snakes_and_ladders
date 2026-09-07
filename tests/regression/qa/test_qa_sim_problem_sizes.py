@@ -1,4 +1,4 @@
-"""Regression test for phylo.qa.sim_problem_sizes.
+"""Regression test for snakes_and_ladders.qa.sim_problem_sizes.
 
 Pins the tabulated values against each fixture's yaml, read independently,
 not just that the figure renders without raising (CLAUDE.md's
@@ -10,12 +10,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from phylo.qa.sim_problem_sizes import (
+from snakes_and_ladders.qa.sim_problem_sizes import (
     build_caption,
     main,
 )
-from phylo.sim.params import load_simulation_params
-from phylo.sim.tree import preorder
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import FIXTURES_DIR
 

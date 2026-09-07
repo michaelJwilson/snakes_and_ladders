@@ -2,7 +2,7 @@
 
 The strongest test here is a *reduction*, not an enumeration. At two labels a
 single expansion offers every site the only other label, so alpha expansion is
-not an approximation at all --- it must reproduce `phylo.search.maxflow`'s
+not an approximation at all --- it must reproduce `snakes_and_ladders.search.maxflow`'s
 exact minimum cut, energy for energy. That pins the multi-label construction
 against something independently validated, and it is what caught the two
 errors this module was written with: the terminal capacities were swapped, and
@@ -25,16 +25,16 @@ import sys
 
 import numpy as np
 import pytest
-from phylo.search.alpha_expansion import (
+from snakes_and_ladders.search.alpha_expansion import (
     UNIFORM_POTTS_BOUND,
     alpha_expansion,
     energy,
     expand,
     iterated_conditional_modes,
 )
-from phylo.search.maxflow import energy as binary_energy
-from phylo.search.maxflow import ising_ground_state
-from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.search.maxflow import energy as binary_energy
+from snakes_and_ladders.search.maxflow import ising_ground_state
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 sys.setrecursionlimit(50_000)
 

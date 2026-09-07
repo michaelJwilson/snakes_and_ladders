@@ -1,4 +1,4 @@
-"""Regression test for phylo.qa.sim_example.
+"""Regression test for snakes_and_ladders.qa.sim_example.
 
 Pins the caption's content against the generating parameters and the
 alignment table against sequences recomputed independently, not just that
@@ -10,15 +10,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from phylo.qa.figure import latex_integer, state_label
-from phylo.qa.sim_example import (
+from snakes_and_ladders.qa.figure import latex_integer, state_label
+from snakes_and_ladders.qa.sim_example import (
     build_caption,
     display_newick,
     main,
 )
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node, preorder
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 

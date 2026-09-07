@@ -1,4 +1,4 @@
-"""Regression tests for ``phylo.sim.newick``.
+"""Regression tests for ``snakes_and_ladders.sim.newick``.
 
 Per root ``CLAUDE.md`` ("Pin to Independent Sources"), ``count_topologies``
 is checked against an independent brute-force enumeration rather than
@@ -14,15 +14,15 @@ from collections.abc import Iterator
 from itertools import combinations
 
 import pytest
-from phylo.sim.newick import (
+from snakes_and_ladders.sim.newick import (
     count_topologies,
     to_newick,
     validate_newick,
     validate_unrooted_newick,
 )
-from phylo.sim.params import load_simulation_params
-from phylo.sim.simulate import simulate_alignment
-from phylo.sim.tree import Node, preorder
+from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 

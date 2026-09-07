@@ -17,8 +17,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from phylo.opt.fit import fit
-from phylo.opt.testfunctions import (
+from snakes_and_ladders.opt.fit import fit
+from snakes_and_ladders.opt.testfunctions import (
     HIMMELBLAU_MINIMA,
     Himmelblau,
     Rastrigin,

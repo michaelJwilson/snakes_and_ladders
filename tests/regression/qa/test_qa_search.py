@@ -13,9 +13,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from phylo.qa import search_topologies, search_trajectory
-from phylo.sim.params import SimulationParams, load_simulation_params
-from phylo.sim.tree import Node, preorder
+from snakes_and_ladders.qa import search_topologies, search_trajectory
+from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 

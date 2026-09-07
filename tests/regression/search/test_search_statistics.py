@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from phylo.search.statistics import (
+from snakes_and_ladders.search.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
 )

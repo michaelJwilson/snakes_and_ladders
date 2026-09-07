@@ -15,15 +15,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from phylo.qa import rl_reward_surface
-from phylo.qa.figure import pearson_correlation
-from phylo.qa.rl_reward_surface import (
+from snakes_and_ladders.qa import rl_reward_surface
+from snakes_and_ladders.qa.figure import pearson_correlation
+from snakes_and_ladders.qa.rl_reward_surface import (
     BRANCH_LENGTHS,
     build_figure,
     mean_branch_length,
     reward_surfaces,
 )
-from phylo.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import load_simulation_params
 
 from tests._fixtures import FIXTURES_DIR
 

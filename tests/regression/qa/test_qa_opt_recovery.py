@@ -1,4 +1,4 @@
-"""Regression test for phylo.qa.opt_recovery.
+"""Regression test for snakes_and_ladders.qa.opt_recovery.
 
 The figure's claim is that the same model-agnostic fit recovers the
 generating parameters of two unrelated models, with intervals that mean what
@@ -14,9 +14,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from phylo.opt.potts import load_potts_params
-from phylo.qa.opt_recovery import build_figure, hmm_recovery, main, potts_recovery
-from phylo.sim.hmm import load_hmm_params
+from snakes_and_ladders.opt.potts import load_potts_params
+from snakes_and_ladders.qa.opt_recovery import (
+    build_figure,
+    hmm_recovery,
+    main,
+    potts_recovery,
+)
+from snakes_and_ladders.sim.hmm import load_hmm_params
 
 from tests._fixtures import FIXTURES_DIR
 

@@ -13,17 +13,17 @@ pub use sampling::sample_rows;
 /// Placeholder binding: it demonstrates the Rust-to-Python pattern real
 /// numerical kernels follow (`pruning::pruning_log_likelihood` is now the
 /// substantive one) and implements no phylogenetics itself. Left in place
-/// because `phylo.__init__` re-exports it and `tests/test_oxiphylo_bindings.py`
+/// because `snakes_and_ladders.__init__` re-exports it and `tests/test_oxiphylo_bindings.py`
 /// asserts it exists.
 #[pyfunction]
 pub fn double(x: i64) -> i64 {
     x * 2
 }
 
-/// The compiled extension module. `python/phylo/__init__.py` re-exports it as
-/// `phylo.oxiphylo` (see `module-name` in `pyproject.toml`).
+/// The compiled extension module. `python/snakes_and_ladders/__init__.py` re-exports it as
+/// `snakes_and_ladders.oxi_snakes_and_ladders` (see `module-name` in `pyproject.toml`).
 #[pymodule]
-fn oxiphylo(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(double, m)?)?;
     m.add_function(wrap_pyfunction!(pruning_log_likelihood, m)?)?;
     m.add_function(wrap_pyfunction!(sample_rows, m)?)?;

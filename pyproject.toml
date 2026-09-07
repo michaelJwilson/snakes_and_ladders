@@ -3,7 +3,7 @@ requires = ["maturin>=1,<2"]
 build-backend = "maturin"
 
 [project]
-name = "phylo"
+name = "snakes_and_ladders"
 # Single source of truth for the version is Cargo.toml's [package].version;
 # maturin reads it from there when `dynamic = ["version"]` is set, so the
 # two files can't silently drift out of sync.
@@ -13,9 +13,9 @@ authors = [{ name = "M. J. Wilson" }]
 license = "MIT"
 requires-python = ">=3.12.2"
 readme = "README.md"
-# phylo.sim imports numpy (simulation) and pyyaml (simulation_params.yaml
-# loading) directly; phylo.qa imports matplotlib to render the figures
-# docs/tex/ includes; phylo.likelihood.pruning_torch imports torch, the
+# snakes_and_ladders.sim imports numpy (simulation) and pyyaml (simulation_params.yaml
+# loading) directly; snakes_and_ladders.qa imports matplotlib to render the figures
+# docs/tex/ includes; snakes_and_ladders.likelihood.pruning_torch imports torch, the
 # autodiff backend CLAUDE.md's Performance section already decided on --
 # added here, by the first PR whose code imports it, per that section's
 # note. All four are core dependencies rather than front-loaded ahead of
@@ -60,11 +60,11 @@ test = [
 ]
 
 [project.scripts]
-run_phylo = "phylo.scripts.run_phylo:main"
+run_snakes_and_ladders = "snakes_and_ladders.scripts.run_snakes_and_ladders:main"
 
 [tool.maturin]
 python-source = "python"
-module-name = "phylo.oxiphylo"
+module-name = "snakes_and_ladders.oxi_snakes_and_ladders"
 
 [tool.ruff]
 target-version = "py312"
@@ -206,7 +206,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["phylo"]
+source = ["snakes_and_ladders"]
 
 [tool.coverage.report]
 exclude_lines = [

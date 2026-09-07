@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import matplotlib as mpl
 import pytest
-from phylo.qa.style import (
+from snakes_and_ladders.qa.style import (
     INK,
     INK_MUTED,
     LINESTYLES,

@@ -9,7 +9,7 @@ matches a full evaluation when a site has more than two neighbours, and that
 a chain built as a graph is the chain.
 
 The graph arrives as plain edge indices. `learn/CLAUDE.md` forbids importing
-`phylo.sim`, so a `PottsGraph` is unpacked by the caller; these tests do that
+`snakes_and_ladders.sim`, so a `PottsGraph` is unpacked by the caller; these tests do that
 inline, which is also the demonstration that the adaptation is a two-field
 read rather than a layer.
 """
@@ -20,11 +20,18 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.learn.exact import exact_policy_gradient, finite_difference_gradient
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.potts import PottsLandscape, enumerate_configurations, optimum
-from phylo.learn.rollout import greedy_rollout
-from phylo.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.learn.exact import (
+    exact_policy_gradient,
+    finite_difference_gradient,
+)
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.potts import (
+    PottsLandscape,
+    enumerate_configurations,
+    optimum,
+)
+from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
 FIELD = np.array([0.4, -0.1, -0.3])
 COUPLING = 0.75
@@ -115,7 +122,7 @@ def test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice() -> None:
 @pytest.mark.oracle
 def test_the_enumerated_gradient_matches_central_differences_on_a_lattice() -> None:
     # The oracle that makes this an instance rather than a lookalike:
-    # `phylo.learn.exact` carries it unchanged from the chain. A 2x2 lattice
+    # `snakes_and_ladders.learn.exact` carries it unchanged from the chain. A 2x2 lattice
     # keeps |A| ** horizon affordable at 8 actions and horizon 2.
     landscape = _lattice((2, 2), BoundaryCondition.OPEN)
     policy = LinearPolicy(2)

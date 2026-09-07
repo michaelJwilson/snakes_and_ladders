@@ -1,4 +1,4 @@
-"""Regression tests for :mod:`phylo.sim.graph`.
+"""Regression tests for :mod:`snakes_and_ladders.sim.graph`.
 
 Node and edge counts are checked against closed-form combinatorics -- not
 against a second traversal of the same graph -- across 1-D, 2-D and 3-D
@@ -8,7 +8,7 @@ shapes and both boundary conditions.
 from __future__ import annotations
 
 import pytest
-from phylo.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 
 @pytest.mark.oracle

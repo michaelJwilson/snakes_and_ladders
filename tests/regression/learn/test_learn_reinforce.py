@@ -21,15 +21,19 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from phylo.learn.exact import (
+from snakes_and_ladders.learn.exact import (
     exact_expected_return,
     exact_policy_gradient,
     finite_difference_gradient,
 )
-from phylo.learn.policy import LinearPolicy
-from phylo.learn.potts import PottsLandscape, enumerate_configurations, optimum
-from phylo.learn.reinforce import reinforce, surrogate_loss
-from phylo.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.potts import (
+    PottsLandscape,
+    enumerate_configurations,
+    optimum,
+)
+from snakes_and_ladders.learn.reinforce import reinforce, surrogate_loss
+from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 
 FIELD = np.array([0.4, -0.1, -0.3])
 CHAIN_LENGTH = 4
