@@ -153,7 +153,8 @@ this LaTeX documentation. It must contain:
 - Complete mathematical formulations of all substitution models, energy
   landscapes, and transition probabilities across the four problem classes.
 - Rigorous derivations of the exact inference algorithms (Felsenstein's
-  pruning, belief propagation, forward-backward).
+  pruning, belief propagation, forward-backward; Appendix A of the textbook,
+  #326).
 - Formal definitions of the Markov decision process (MDP) formulations for the
   RL agents.
 - Proofs for any proposed upper/lower bounds used for branch-and-bound pruning

@@ -1813,6 +1813,19 @@ point, detailed balance for a cluster move in a field, the exchange ratio, the
 delta method — sit in an appendix cited from the point of use. The document
 is 21 pages; `texlive-pictures` joins the CI TeX install for the figure.
 
+**The three exact evaluators are derived, not stated**
+([#326](https://github.com/michaelJwilson/snakes_and_ladders/issues/326)).
+The derivations appendix carries pruning as the marginalization over internal
+states (`app:pruning`), forward–backward as the same marginalization on a
+chain, with pruning on the caterpillar tree shown to be the backward pass
+(`app:forward-backward`), and sum-product on a tree from the subtree
+factorization, with max-product as the same argument under a maximum and the
+Bethe free energy of a factor graph of any degree (`eq:bethe-factor`) as the
+loopy stationary point the existing Bethe derivation identifies
+(`app:sum-product`). Each is cited from the point of use in the main text and
+from the module that implements it, so the guard of #274 resolves them; the
+`TICKETS.md` bullet that named this work without an issue is closed by it.
+
 ## What Is Not Claimed
 
 - That a learned policy beats hill climbing on trees. It has now been
