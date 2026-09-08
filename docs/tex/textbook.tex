@@ -80,7 +80,7 @@ instance of Equation~\ref{eq:sum-product} or of the optimization it is, and
 the property that pins it---so that what differs between the problems is
 visible as content and not as presentation.
 
-\section{The Shape All Three Problems Share}
+\section{The Shape All Four Problems Share}
 \label{sec:shape}
 
 Each problem class below couples a \emph{combinatorial} search over a
@@ -144,6 +144,16 @@ $\ell_n \in \{1..M\}$, one hidden chain $k_{s,m}$ per class, and a
 which is Equation~\ref{eq:factor-graph} with pairwise, chain and degree-two
 gated factors, and no fourth code path. Section~\ref{sec:coupled} states the
 model in full, with the estimator its structure dictates.
+
+\paragraph{A parity-check code.}
+A low-density parity-check code is Equation~\ref{eq:factor-graph} with
+binary variables, a unary factor per bit carrying the channel's
+log-likelihood ratio, and a hard parity constraint per row of the check
+matrix (Section~\ref{sec:ldpc}). It is the problem message passing was
+invented for \citep{gallager1962}, and the fourth problem class: its
+decoder is Equation~\ref{eq:sum-product} specialised to one number per
+message, and is held to the general implementation on codes small enough
+for both.
 
 \paragraph{What pins the general algorithm.}
 Equation~\ref{eq:sum-product} is validated where each of its instances already
@@ -1181,6 +1191,149 @@ the planted labels at an equal budget of sweeps, for each of the three label
 solvers, so the claim that a cluster move escapes what iterated conditional
 modes freezes into is a measurement here and not a premise.
 
+\section{Problem Statement: LDPC Decoding}
+\label{sec:ldpc}
+
+\subsection{The model}
+A binary linear code of length $n$ is the null space of a parity-check
+matrix $\mathbf{H} \in \{0,1\}^{m \times n}$ over $\mathrm{GF}(2)$: the
+codewords are the $c$ with $\mathbf{H} c = 0$, there are $2^k$ of them with
+$k = n - \operatorname{rank} \mathbf{H}$, and the rate is $k/n$. A
+low-density code makes $\mathbf{H}$ sparse. Gallager's regular
+$(d_v, d_c)$ ensemble \citep{gallager1962} puts $d_v$ ones in every column
+and $d_c$ in every row: $\mathbf{H}$ is $d_v$ bands of $n / d_c$ rows, the
+first band's row $i$ covering bits $i d_c$ to $(i+1) d_c - 1$ and every
+other band the first under a uniformly random permutation of the columns,
+so $n$ is a multiple of $d_c$ and $m = n d_v / d_c$. The rows of one band
+sum to the all-ones vector, so at least $d_v - 1$ rows are dependent and
+$k \ge n - m + d_v - 1$. The instance this repository carries is
+$(3, 6)$ at $n = 19{,}998$, the multiple of six nearest the $20{,}000$ the
+ticket names: $m = 9{,}999$ checks, $59{,}994$ nonzeros, design rate $1/2$.
+
+A codeword is sent through a memoryless binary-input channel and $y$ is
+received. Three channels are supported, each seen only through its
+log-likelihood ratio,
+\begin{equation}
+  L_i = \log \frac{p(y_i \mid c_i = 0)}{p(y_i \mid c_i = 1)}
+  = \begin{cases}
+      (1 - 2 y_i) \log \dfrac{1 - p}{p}
+        & \text{binary symmetric, flip probability } p, \\[1.2ex]
+      0 \text{ if erased, else } \pm\infty \text{ with the sign of } 1 - 2 y_i
+        & \text{binary erasure, erasure probability } \epsilon, \\[0.6ex]
+      2 y_i / \sigma^2
+        & \text{binary-input Gaussian, } y_i = (1 - 2 c_i) + \sigma z_i,
+    \end{cases}
+  \label{eq:ldpc-llr}
+\end{equation}
+positive when the received symbol favours zero. The posterior over the code
+is then
+\begin{equation}
+  p(c \mid y) \;\propto\; \mathbb{1}[\mathbf{H} c = 0]\, \exp(-c \cdot L),
+  \label{eq:ldpc-code}
+\end{equation}
+since $\log p(y \mid c) = \sum_i \log p(y_i \mid 0) - \sum_i c_i L_i$ and the
+first sum is the same for every word. Decoding asks two different questions
+of Equation~\ref{eq:ldpc-code}: the \emph{bitwise} MAP, each bit at the mode
+of its own marginal, which minimizes the bit error rate and need not be a
+codeword; and the \emph{blockwise} MAP, the single most probable codeword,
+which minimizes the block error rate. They are different answers, as
+Section~\ref{sec:hmm} says of the chain, and the fixture that separates them
+is a test.
+
+\subsection{As a factor graph}
+The variables are the bits, $x_i \equiv c_i \in \{0, 1\}$. The factors are a
+unary $\psi_i(c_i) = e^{-c_i L_i}$ per bit, the channel folded in as an
+observation is everywhere in this document, and a parity factor
+$\psi_a(c_{\partial a}) = \mathbb{1}[\bigoplus_{i \in \partial a} c_i = 0]$
+per row of $\mathbf{H}$, a hard constraint of degree $d_c$ whose log table
+is zero on even-parity assignments and $-\infty$ elsewhere. This is the
+Tanner graph of the code; a bit sits on $d_v$ parity factors and one unary,
+so in the Forney form every bit passes through an equality node of degree
+$d_v + 1$. The graph has cycles---a random draw of the ensemble does not
+avoid short ones---so Equation~\ref{eq:sum-product} is the Bethe
+approximation on it, and the exact quantities below come from enumerating
+the $2^k$ codewords where $2^k \le 200{,}000$ (a $(3,6)$ code at $n = 24$
+has $k \ge 14$) and from the tree schedule on a cycle-free code, where
+message passing is exact.
+
+\subsection{The algorithm: sum-product in the log domain}
+A binary variable's message is one number, its log-odds, and
+Equation~\ref{eq:sum-product} on a parity factor has a closed form
+\citep{gallager1962, mackay2003, richardson2008}. From bit $i$ to check $a$,
+and from check $a$ to bit $i$,
+\begin{equation}
+  m_{i \to a} = L_i + \sum_{b \in \partial i \setminus a} m_{b \to i},
+  \qquad
+  m_{a \to i} = 2 \operatorname{artanh}
+    \prod_{j \in \partial a \setminus i} \tanh \frac{m_{j \to a}}{2},
+  \qquad
+  \tilde L_i = L_i + \sum_{b \in \partial i} m_{b \to i},
+  \label{eq:tanh-rule}
+\end{equation}
+where the check update follows from $\tanh(L/2) = p(0) - p(1)$ and the fact
+that the parity of independent bits has a difference of probabilities equal
+to the product of theirs. The hard decision $\hat c_i = \mathbb{1}[\tilde L_i
+< 0]$ is the bitwise MAP under the Bethe beliefs. Replacing the sum by a
+maximum in Equation~\ref{eq:sum-product} gives max-product, whose log-domain
+check update is
+\begin{equation}
+  m_{a \to i} = \Big( \prod_{j \in \partial a \setminus i} \operatorname{sgn} m_{j \to a} \Big)
+                \min_{j \in \partial a \setminus i} |m_{j \to a}|,
+  \label{eq:min-sum}
+\end{equation}
+the min-sum decoder, whose decision is the blockwise MAP and is exact on a
+cycle-free code with a unique maximum; on a loopy code it is the cheaper
+and the weaker of the two, and the gap is measured rather than assumed.
+
+Three details are load-bearing in the implementation. The schedule is
+flooding: every check reads the bit messages of the previous half-iteration
+and every bit reads the check messages just written, one Jacobi sweep per
+direction over all edges at once, which is the schedule the general
+implementation runs and so the one it is compared against. The loop stops at
+the first iteration whose hard decision has every bit decided and satisfies
+$\mathbf{H} \hat c = 0$, the syndrome check, and otherwise at an iteration
+cap, which is a decoding failure and the event a block error rate counts. And
+messages are clipped at $\pm L_{\max}$ with $L_{\max} = 30$ before the check
+update, because a certain bit's ratio is infinite on the erasure channel and
+the leave-one-out sums in Equation~\ref{eq:tanh-rule} are formed by
+subtraction: $\tanh(L_{\max}/2)$ is below one by $1.9 \times 10^{-13}$ in
+double precision, and a belief formed under the cap differs from the exact
+one by less than $e^{-L_{\max}}$ in probability, which the oracle tests
+absorb.
+
+\subsection{The all-zero codeword}
+Every simulation past the reach of an encoder sends the zero word, and the
+argument that this loses nothing is standard \citep[Sec.~4.1]{richardson2008}.
+Each channel of Equation~\ref{eq:ldpc-llr} is output symmetric: sending
+$c_i = 1$ instead of $0$ negates $L_i$ in distribution, and on the symmetric
+and erasure channels it negates it on every realization, since a flip or an
+erasure is applied to the bit whatever its value. Both check updates are odd
+in each argument and the bit update is linear, so negating the ratios at the
+bits where $c_i = 1$ negates every message and every posterior at exactly
+those bits, and the hard decision under $c$ is the hard decision under $0$
+with $c$ added: the error pattern $c \oplus \hat c$ has the same
+distribution whatever codeword was sent. Bit and block error rates measured
+on the zero word are therefore the rates on any codeword. Where an encoder
+exists---Gauss--Jordan elimination over $\mathrm{GF}(2)$ to a systematic
+form, at $n \le 512$---the identity is checked per realization on a
+non-trivial codeword, so the shortcut is itself pinned.
+
+\paragraph{What pins it.}
+Four oracles, none sharing code with the decoder. On a cycle-free code the
+tree schedule of the general implementation and the enumeration over all
+$2^k$ codewords are exact, and the decoder equals both; min-sum equals the
+general max-product there and returns the enumerated maximum-likelihood
+codeword, with the margin over the runner-up pinned so that no tie is being
+broken. On loopy codes the decoder and the general damped flooding are the
+same Bethe approximation and reach the same fixed point, which is agreement
+and not truth. The encoder is pinned by $\mathbf{H} c = 0$ and the offsets
+layout by the dense product it stands in for. And at size, where no
+enumeration reaches, the closed form is density evolution
+(Appendix~\ref{app:density-evolution}): on the erasure channel the $(3,6)$
+ensemble has a threshold $\epsilon^\star = 0.4294$ below which the
+infinite-length decoder resolves every erasure and above which it does not,
+and the $19{,}998$-bit code is held to bracketing it.
+
 \section{The Properties That Referee Each Method}
 \label{sec:properties}
 
@@ -1477,6 +1630,34 @@ under the joint is its own tempered Boltzmann distribution whatever the
 exchanges do, which is the property the per-replica goodness-of-fit test
 asserts.
 
+\subsection{Density evolution on the erasure channel}
+\label{app:density-evolution}
+On a cycle-free $(d_v, d_c)$ graph the messages arriving at a node are
+independent, so the erasure probability of a message is a number rather than
+a distribution and Equation~\ref{eq:tanh-rule} reduces to a scalar
+recursion. A check-to-bit message is known only if every other incoming
+bit message is known; a bit-to-check message is erased only if the channel
+and every other incoming check message are. With $x_\ell$ the probability
+that a bit-to-check message is erased after $\ell$ iterations,
+\begin{equation}
+  x_0 = \epsilon,
+  \qquad
+  x_\ell = \epsilon \big( 1 - (1 - x_{\ell-1})^{d_c - 1} \big)^{d_v - 1},
+  \label{eq:density-evolution}
+\end{equation}
+the recursion \citet[Sec.~3.12]{richardson2008} derives and names density
+evolution. The right-hand side is increasing in $x_{\ell-1}$ and in
+$\epsilon$, so $x_\ell$ is non-increasing and its limit is the largest fixed
+point in $[0, \epsilon]$; the threshold $\epsilon^\star$ is the largest
+$\epsilon$ for which that fixed point is zero, found by bisection, and for
+$(3,6)$ it is $0.4294$, with $0.3834$ for $(4,8)$ and $0.5176$ for
+$(3,5)$. A finite code is not cycle-free, but the neighbourhood of a bit to
+depth $\ell$ is a tree with probability tending to one as $n$ grows at
+fixed $\ell$, which is why the recursion is the limit of the flooding
+decoder and why the code at size is held to bracketing $\epsilon^\star$
+rather than to a per-draw agreement---the rule \texttt{sim/CLAUDE.md}
+states for every asymptotic result.
+
 \subsection{The delta method for an interval at a fit}
 \label{app:delta}
 At a maximum $\hat\params$ of the log-likelihood, the observed information
@@ -1631,6 +1812,7 @@ message passing: \citet{mackay2003}, \citet{koller2009}, \citet{frey1998},
 \paragraph{Application (the science).}
 Phylogenetics: \citet{felsenstein2004}, \citet{durbin1998},
 \citet{compeau2015}, \citet{pachter2005}. Information and coding:
-\citet{blahut2003}, with \citet{nielsen2010} as background only.
+\citet{blahut2003}, \citet{gallager1962}, \citet{richardson2008}, with
+\citet{nielsen2010} as background only.
 
 \end{document}
