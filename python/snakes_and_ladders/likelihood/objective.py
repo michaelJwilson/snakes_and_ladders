@@ -114,6 +114,21 @@ class BranchLengthObjective:
         )
 
     @property
+    def topology(self) -> Node:
+        """The topology held fixed, as given; its branch lengths are not read."""
+        return self._tau
+
+    @property
+    def k(self) -> int:
+        """Number of states."""
+        return self._k
+
+    @property
+    def alignment(self) -> Mapping[str, np.ndarray]:
+        """The observed states per taxon, for an initializer that reads the data."""
+        return self._alignment
+
+    @property
     def parameter_names(self) -> list[str]:
         """Names of the *estimable* parameters, in ``theta`` order.
 
@@ -343,6 +358,21 @@ class SubstitutionModelObjective:
         rows, columns = np.triu_indices(k, k=1)
         self._rows = torch.as_tensor(rows, device=device)
         self._columns = torch.as_tensor(columns, device=device)
+
+    @property
+    def topology(self) -> Node:
+        """The topology held fixed, as given; its branch lengths are not read."""
+        return self._tau
+
+    @property
+    def k(self) -> int:
+        """Number of states."""
+        return self._k
+
+    @property
+    def alignment(self) -> Mapping[str, np.ndarray]:
+        """The observed states per taxon, for an initializer that reads the data."""
+        return self._alignment
 
     @property
     def n_parameters(self) -> int:

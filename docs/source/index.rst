@@ -84,6 +84,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.objective
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.distance
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.hadamard
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.pruning
    :members:
 
@@ -214,6 +220,12 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.infer
+   :members:
+
+.. automodule:: snakes_and_ladders.search.neighbor_joining
+   :members:
+
+.. automodule:: snakes_and_ladders.search.initialize
    :members:
 
 .. automodule:: snakes_and_ladders.search.support
