@@ -115,8 +115,8 @@ def m_step(
             emissions.append(family)
             continue
         block = torch.as_tensor(
-            observations[:, members].T, dtype=family.observation_dtype
-        )  # (n_m, S)
+            np.moveaxis(observations[:, members], 1, 0), dtype=family.observation_dtype
+        )  # (n_m, S), plus any channel axes the family's observation carries
         weights = torch.as_tensor(posteriors.posterior[m])[None].expand(
             members.size, -1, -1
         )  # (n_m, S, K)

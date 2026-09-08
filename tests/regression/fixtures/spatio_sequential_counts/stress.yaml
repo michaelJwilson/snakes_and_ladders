@@ -1,0 +1,76 @@
+model: spatio-sequential-counts
+oracle: none
+
+# The coupled model at the size ROADMAP.md's Stage 1 asks for on a triangular
+# lattice: 71 x 71 = 5,041 vertices, M = 10 classes, K = 10 hidden states per
+# class, S = 20,000 sequential positions, two-channel count emissions. Every
+# field is required -- see python/snakes_and_ladders/sim/count_pairs.py.
+#
+# 1.008e8 count pairs. The fine instance is simulated once from the seed below
+# when a caller first asks for it and held in memory as one
+# (S, n_nodes, 2) int16 array: 403,280,000 bytes, 384.6 MiB. Peak resident
+# memory of the draw itself is 897 MiB, measured on the 4-core reference host.
+# Nothing is committed and nothing is streamed; the file is the seed and the
+# parameters, and the counts are what they imply. The coarse instances are
+# 153.8 MiB at factor 5 and 76.9 MiB at factor 10.
+#
+# The stated oracle is none: at 5,041 vertices there is no exact evidence to
+# compare against. What referees a result here is the planted labelling the
+# draw is conditioned on, and the ci instance, where the same code is held to
+# the transfer matrix.
+#
+# beta = 1.0: the spatial prior has to be strong enough that a labelling is
+# worth solving for. The planted labelling is ten contiguous bands of rows
+# (sim.count_pairs.planted_labels), which is the smooth labelling the
+# ferromagnetic prior agrees with -- a prior fighting the truth would make a
+# recovery test measure that fight.
+seed: 20260908
+shape: [71, 71]
+boundary: open
+coupling: 1.0
+n_classes: 10
+n_states: 10
+n_positions: 20000
+beta: 1.0
+self_transition: 0.7
+
+# Class m starts in state m with probability 0.19 and in each other state with
+# 0.09. The initial distribution is nearly irrelevant over 20,000 positions;
+# what it must not be is exactly uniform, which would make the M chains
+# exchangeable at s = 0.
+initial:
+  - [0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19, 0.09]
+  - [0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.19]
+
+# One simulation, three instances: 20,000, 4,000 and 2,000 positions. `marker`
+# is the tier each factor's full test runs in, from the measurement recorded
+# in DEV.md and STATUS.md: the key instance is the largest whose full test
+# fits the 120 s key budget.
+bin:
+  - factor: 1
+    marker: release
+  - factor: 5
+    marker: key
+  - factor: 10
+    marker: stress
+
+# Ladders over the K = 10 states, shared by every class, and two per-class
+# vectors that separate the M = 10 classes. 5K + 2M = 70 numbers rather than
+# the 500 an M x K table of five-parameter families would be.
+emissions:
+  form: independent
+  mean: [20.0, 40.0, 60.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0, 200.0]
+  dispersion: [4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0]
+  trials: [20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 44.0, 48.0, 52.0, 56.0]
+  rate: [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65]
+  concentration: [12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0]
+  class_mean_scale: [0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.40, 1.50]
+  class_rate_shift: [-0.14, -0.11, -0.08, -0.05, -0.02, 0.01, 0.04, 0.07, 0.10, 0.13]

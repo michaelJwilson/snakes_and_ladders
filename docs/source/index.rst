@@ -66,6 +66,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.spatio_sequential
    :members:
 
+.. automodule:: snakes_and_ladders.sim.count_pairs
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.potts
    :members:
 

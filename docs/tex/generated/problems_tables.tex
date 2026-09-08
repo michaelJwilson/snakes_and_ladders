@@ -17,6 +17,7 @@
     Low-density parity-check code, Gallager (3,6) & $\checkmark$ & -- & $\checkmark$ & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
     Hidden Markov model, six emission families & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\circ$ & -- & -- & $\checkmark^{\dagger}$ & -- & -- & $\checkmark$ & $\checkmark$ \\
     Coupled spatio-sequential model & $\checkmark$ & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\checkmark^{\dagger}$ & -- & $\checkmark$ & -- & -- & -- & -- \\
+    Count-pair coupled spatio-sequential model & $\checkmark$ & $\checkmark$ & -- & -- & $\checkmark$ & -- & -- & -- & $\checkmark$ & -- & -- & -- \\
     Gaussian mixture & $\checkmark$ & $\circ$ & -- & $\checkmark^{\dagger}$ & $\checkmark$ & $\circ$ & -- & -- & -- & -- & -- & -- \\
     Continuous test functions & -- & $\checkmark$ & -- & $\checkmark$ & -- & $\checkmark^{\dagger}$ & -- & $\checkmark$ & -- & -- & -- & -- \\
     \bottomrule
@@ -35,12 +36,13 @@
     Phylogenetic tree, Jukes--Cantor & $\checkmark$ & -- & -- & -- & oracle & oracle & oracle \\
     Phylogenetic tree, general time-reversible & $\checkmark$ & -- & -- & -- & oracle & -- & oracle \\
     Phylogenetic tree, parsimony & $\checkmark$ & -- & -- & -- & oracle & oracle & oracle \\
-    Potts chain in a field & $\checkmark$ & -- & -- & -- & oracle & -- & truth$^{\dagger}$ \\
-    Potts lattice and Markov random field & $\checkmark$ & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
-    Frustrated Potts: triangular antiferromagnet, planted spin glass & -- & $\checkmark$ & -- & $\checkmark$ & oracle & -- & -- \\
+    Potts chain in a field & $\checkmark$ & -- & -- & -- & oracle & -- & oracle \\
+    Potts lattice and Markov random field & $\checkmark$ & -- & $\checkmark$ & -- & oracle & -- & oracle \\
+    Frustrated Potts: triangular antiferromagnet, planted spin glass & -- & $\checkmark$ & -- & $\checkmark$ & oracle & -- & oracle \\
     Low-density parity-check code, Gallager (3,6) & $\checkmark$ & $\checkmark$ & -- & -- & oracle & -- & truth$^{\dagger}$ \\
     Hidden Markov model, six emission families & $\checkmark$ & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
     Coupled spatio-sequential model & $\checkmark$ & -- & -- & -- & oracle & -- & -- \\
+    Count-pair coupled spatio-sequential model & -- & -- & $\checkmark$ & -- & oracle & -- & -- \\
     Gaussian mixture & -- & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
     Continuous test functions & -- & $\checkmark$ & -- & -- & oracle & -- & truth$^{\dagger}$ \\
     \bottomrule
@@ -65,6 +67,7 @@
     Low-density parity-check code, Gallager (3,6) & -- & -- & -- \\
     Hidden Markov model, six emission families & -- & -- & -- \\
     Coupled spatio-sequential model & ci & truth$^{\dagger}$ & The annealed data-sampled burn-in beats a uniform start at an equal budget on the planted lattice, where it is the start and not the move that decides the labelling; it is refereed by the planted labels alone. \\
+    Count-pair coupled spatio-sequential model & -- & -- & -- \\
     Gaussian mixture & -- & untested & The seeding cost is within the published factor of the exact clustering cost, which is the one oracle this initializer has; whether a seeded start reaches a better likelihood optimum than a uniform one is not pinned by any test of either significant kind, so the pairing reads untested. \\
     Continuous test functions & ci & truth$^{\dagger}$ & Multi-start is what makes Himmelblau's four basins reachable at all; on a unimodal surface it spends the budget for nothing, and it is refereed by the analytic minimizers rather than by an oracle of its own. \\
     \bottomrule
@@ -89,6 +92,7 @@
     Low-density parity-check code, Gallager (3,6) & -- & -- & -- \\
     Hidden Markov model, six emission families & ci & truth$^{\dagger}$ & The block sweep draws a whole path from its conditional in one pass, where a single-site sweep would move one position at a time against the chain; it is refereed by the simulated truth alone, an oracle being wanted. \\
     Coupled spatio-sequential model & ci & oracle & The factor-graph sweep is one algorithm over the whole coupled graph and is refereed by enumeration on the canonical instance; it is slower per sweep than the specialized Potts kernel it generalizes. \\
+    Count-pair coupled spatio-sequential model & -- & -- & -- \\
     Gaussian mixture & -- & -- & -- \\
     Continuous test functions & ci & oracle & The annealed Hamiltonian chain with a polishing fit is beaten by plain restarts on the mixture at 3,000 evaluations (experiment 004); on Rastrigin it is the only method that crosses the ripple, and which wins is a property of the surface. \\
     \bottomrule
@@ -113,6 +117,7 @@
     Low-density parity-check code, Gallager (3,6) & ci & oracle & Sum-product decodes to the bitwise posterior and min-sum to the most probable codeword; both are exact on a cycle-free code and the Bethe approximation on a loopy one, where min-sum is the cheaper and the weaker and the gap is measured. \\
     Hidden Markov model, six emission families & ci & oracle & Expectation--maximization re-estimates in closed form for every family whose M step has one and wins on cost there; the gradient fit is the only route where it does not, and the two must reach the same optimum. Interval coverage is nominal from two standard deviations of separation upward (experiment 002). \\
     Coupled spatio-sequential model & ci & oracle & Block-coordinate ascent does not decrease the joint at any block, for every label solver; iterated conditional modes freezes into disjoint clusters where the cluster move does not, and which wins is measured at an equal budget rather than assumed. \\
+    Count-pair coupled spatio-sequential model & ci & oracle & Block-coordinate ascent recovers the planted labelling at every declared bin factor on the 5,041-vertex instance, where the E step is the Rust kernel and the label block is alpha-expansion on its field; what it is refereed by at that size is the planted labelling alone, since no exact evidence reaches 5,041 vertices. \\
     Gaussian mixture & ci & oracle & Restarts reach the best-known optimum from 7 of 40 starts against tempering's 4 and annealing's 1 at 3,000 evaluations (experiment 004); where components overlap the fixed point is approached linearly, so an iterate stopped at a count needs a polish. \\
     Continuous test functions & ci & oracle & The quasi-Newton fit reaches the analytic minimizer in every dimension tried on Rosenbrock; on Rastrigin the fraction of starts reaching the global minimum is asserted low, which bounds what one fit of a multimodal surface may claim. \\
     \bottomrule
@@ -137,6 +142,7 @@
     Low-density parity-check code, Gallager (3,6) & -- & -- & -- \\
     Hidden Markov model, six emission families & ci & oracle & The relaxation of the state path is exact at every corner and gives a gradient over paths; it says nothing at a length past which the path enumeration that referees it cannot run. \\
     Coupled spatio-sequential model & -- & -- & -- \\
+    Count-pair coupled spatio-sequential model & -- & -- & -- \\
     Gaussian mixture & -- & -- & -- \\
     Continuous test functions & -- & -- & -- \\
     \bottomrule

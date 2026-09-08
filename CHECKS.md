@@ -367,7 +367,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
-## `tests/regression/sim/` (50)
+## `tests/regression/sim/` (55)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -380,6 +380,11 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_canonical.py::test_the_viterbi_path_is_unique_by_a_stated_margin` | oracle | Without this the disagreement above could be an `argmax` tie-break, and a correct decoder returning the other tied path would "fail". |
 | `test_canonical.py::test_the_posterior_marginals_are_decisive_at_every_site` | oracle | The mirror of the test above, for the other decoder. |
 | `test_canonical.py::test_the_posterior_path_is_a_poor_path_and_that_is_the_point` | oracle | Posterior decoding maximizes each site's marginal, which says nothing about the sequence as a whole: the path it returns here is the 5th most likely of 32, 0.6066 nats below the Viterbi path. |
+| `test_count_pairs.py::test_binning_is_the_sum_over_each_block_of_positions` | oracle | Pinned against the sum written out position by position, in both channels. |
+| `test_count_pairs.py::test_the_simulator_draws_from_the_declared_families` | simulated_truth | Per (class, state), both channels' sample mean and variance against the closed forms the families state. |
+| `test_count_pairs.py::test_the_negative_binomial_channel_aggregates_exactly` | oracle | A sum of f independent NB(r, p) counts is NB(f r, p): both the mean and the dispersion scale by f. |
+| `test_count_pairs.py::test_the_binned_counts_follow_the_aggregated_negative_binomial` | simulated_truth | The claim above, on the data rather than on the family: over the bins whose positions share a hidden state --- two states are two values of p, and only within one state are the summands identically distributed --- the binned totals' mean and variance are the aggregated family's. |
+| `test_count_pairs.py::test_the_beta_binomial_channel_is_misspecified_under_aggregation` | oracle | A sum of f beta-binomials is not beta-binomial. |
 | `test_erdos_renyi.py::test_belief_propagation_is_exact_on_every_acyclic_draw` | oracle | The strong claim, and far broader than one hand-built tree supports: the ensemble supplies isolated vertices, several components, and varying degree, and BP must be exact on all of them. |
 | `test_erdos_renyi.py::test_the_expected_edge_count_matches_the_closed_form` | oracle | A property of the generator, checked against `p n (n - 1) / 2` rather than against a run. |
 | `test_generator_signatures.py::test_two_draws_from_one_generator_differ` | simulated_truth | The property the rule exists for, per converted function. |
@@ -422,4 +427,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-379 checks.
+384 checks.
