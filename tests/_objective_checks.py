@@ -19,6 +19,32 @@ if TYPE_CHECKING:
     from snakes_and_ladders.opt.objective import Objective
 
 
+class Counted:
+    """An objective that records how often it was evaluated.
+
+    Every call counts one, with or without a gradient taken through it, so
+    a budget in *evaluations* is what the wrapped objective saw and not what
+    a method's own arithmetic claims (issue #281).
+    """
+
+    def __init__(self, inner: Objective) -> None:
+        self.inner = inner
+        self.calls = 0
+
+    def initial(self) -> torch.Tensor:
+        return self.inner.initial()
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        return self.inner.constrain(theta)
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return self.inner.theta_from(named)
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        self.calls += 1
+        return self.inner(theta)
+
+
 class AnalyticGaussian:
     """``-log N(mean, covariance)`` up to a constant: the one analytic target.
 

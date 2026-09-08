@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Mapping
 
 import numpy as np
 import pytest
@@ -33,6 +32,7 @@ from snakes_and_ladders.opt.hmc import (
     anneal,
     hamiltonian,
     leapfrog,
+    parallel_tempering,
     sample,
     yoshida,
 )
@@ -40,7 +40,7 @@ from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 from snakes_and_ladders.opt.schedule import Constant, Exponential
 
-from tests._objective_checks import AnalyticGaussian
+from tests._objective_checks import AnalyticGaussian, Counted
 from tests._scale import stress_only
 
 EXACT = 1e-13
@@ -378,27 +378,6 @@ def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
     assert errors[-1] > 1e-12
 
 
-class _Counted:
-    """An objective that records how often its gradient was taken."""
-
-    def __init__(self, inner: Objective) -> None:
-        self.inner = inner
-        self.calls = 0
-
-    def initial(self) -> torch.Tensor:
-        return self.inner.initial()
-
-    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
-        return self.inner.constrain(theta)
-
-    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
-        return self.inner.theta_from(named)
-
-    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
-        self.calls += 1
-        return self.inner(theta)
-
-
 @pytest.mark.structural
 @pytest.mark.parametrize("integrator", [leapfrog, yoshida])
 @pytest.mark.parametrize("n_steps", [1, 3, 20])
@@ -409,7 +388,7 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
     # than derived, because a comparison at equal *steps* says nothing and one
     # at equal evaluations says everything -- and an off-by-one here would
     # quietly favour whichever method the arithmetic was written for.
-    counted = _Counted(GAUSSIAN)
+    counted = Counted(GAUSSIAN)
 
     integrator(
         counted,
@@ -553,3 +532,72 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
     # standard deviation of the exact minimizer after 300 proposals.
     deviation = (result.theta - GAUSSIAN.mean) / GAUSSIAN.covariance.diagonal().sqrt()
     assert float(deviation.abs().max()) < 0.1
+
+
+@pytest.mark.mathematical
+def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() -> None:
+    # With exchanges on, replica r targets exp(-U / T_r): on the analytic
+    # Gaussian that is the same mean and covariance scaled by T_r, which is
+    # what makes the exchange checkable rather than admired. The ladder is
+    # close enough that exchanges happen -- a swap rate of 0 would leave four
+    # independent chains, which would pass this test while exchanging nothing.
+    ladder = (1.0, 2.0, 4.0)
+    run = parallel_tempering(
+        GAUSSIAN, ladder, seed=11, n_rounds=2000, step_size=0.25, n_steps=12
+    )
+    draws = run.positions[400:]
+
+    for replica, temperature in enumerate(ladder):
+        mean = draws[:, replica].mean(dim=0)
+        centred = draws[:, replica] - mean
+        covariance = centred.T @ centred / (centred.shape[0] - 1)
+        np.testing.assert_allclose(
+            mean.numpy(), GAUSSIAN.mean.numpy(), atol=0.12 * math.sqrt(temperature)
+        )
+        np.testing.assert_allclose(
+            covariance.numpy(),
+            temperature * GAUSSIAN.covariance.numpy(),
+            atol=0.2 * temperature,
+        )
+    assert bool((run.swap_acceptance > 0.2).all()), run.swap_acceptance
+    assert bool((run.swap_acceptance < 1.0).all()), run.swap_acceptance
+    assert run.value == pytest.approx(float(GAUSSIAN(run.theta)), rel=EXACT)
+
+
+@pytest.mark.structural
+def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
+    # One value at the start; then per replica per round one Hamiltonian at
+    # the current point, the trajectory's gradients, one at the proposal and
+    # the value where the replica landed. Counted, for the reason
+    # `test_force_evaluations_counts_what_a_trajectory_actually_costs` gives.
+    counted = Counted(GAUSSIAN)
+    ladder = (1.0, 2.0, 4.0, 8.0)
+
+    run = parallel_tempering(
+        counted, ladder, seed=5, n_rounds=25, step_size=0.2, n_steps=6
+    )
+
+    assert run.force_evaluations == 25 * 4 * leapfrog.force_evaluations(6)
+    assert counted.calls == 1 + 25 * 4 * (leapfrog.force_evaluations(6) + 3)
+    again = parallel_tempering(
+        GAUSSIAN, ladder, seed=5, n_rounds=25, step_size=0.2, n_steps=6
+    )
+    assert torch.equal(run.positions, again.positions)
+    assert torch.equal(run.theta, again.theta)
+    assert run.positions.shape == (25, 4, 2)
+
+
+@pytest.mark.edge_case
+def test_a_ladder_that_cannot_exchange_is_refused() -> None:
+    with pytest.raises(ValueError, match="at least two temperatures"):
+        parallel_tempering(GAUSSIAN, (1.0,), seed=1, n_rounds=5, step_size=0.2)
+    with pytest.raises(ValueError, match="positive and increasing"):
+        parallel_tempering(GAUSSIAN, (2.0, 1.0), seed=1, n_rounds=5, step_size=0.2)
+    with pytest.raises(ValueError, match="positive and increasing"):
+        parallel_tempering(GAUSSIAN, (0.0, 1.0), seed=1, n_rounds=5, step_size=0.2)
+    with pytest.raises(ValueError, match="n_rounds must be at least 1"):
+        parallel_tempering(GAUSSIAN, (1.0, 2.0), seed=1, n_rounds=0, step_size=0.2)
+    with pytest.raises(ValueError, match="n_steps must be at least 1"):
+        parallel_tempering(
+            GAUSSIAN, (1.0, 2.0), seed=1, n_rounds=5, step_size=0.2, n_steps=0
+        )
