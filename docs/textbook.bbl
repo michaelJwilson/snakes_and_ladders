@@ -1,4 +1,4 @@
-\begin{thebibliography}{40}
+\begin{thebibliography}{42}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -81,6 +81,12 @@ Brendan~J. Frey.
 \newblock \emph{Graphical Models for Machine Learning and Digital
   Communication}.
 \newblock MIT Press, Cambridge, Massachusetts, 1998.
+
+\bibitem[Gallager(1962)]{gallager1962}
+Robert~G. Gallager.
+\newblock Low-density parity-check codes.
+\newblock \emph{IRE Transactions on Information Theory}, 8\penalty0
+  (1):\penalty0 21--28, 1962.
 
 \bibitem[Geyer(1991)]{geyer1991}
 Charles~J. Geyer.
@@ -186,6 +192,11 @@ Simon J.~D. Prince.
 Sebastian Raschka.
 \newblock \emph{Build a Large Language Model (From Scratch)}.
 \newblock Manning Publications, 2024.
+
+\bibitem[Richardson and Urbanke(2008)]{richardson2008}
+Tom Richardson and R{\"u}diger Urbanke.
+\newblock \emph{Modern Coding Theory}.
+\newblock Cambridge University Press, Cambridge, 2008.
 
 \bibitem[Rosen(2019)]{rosen2019}
 Kenneth~H. Rosen.
