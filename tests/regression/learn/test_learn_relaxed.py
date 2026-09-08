@@ -43,7 +43,7 @@ from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequ
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 # An antiferromagnetic chain with two nearly-degenerate states. The
-# repository's own `potts_params.yaml` has `J = 0.75 > 0`, so its optimum is
+# repository's own `potts_chain/ci.yaml` has `J = 0.75 > 0`, so its optimum is
 # `argmax(h)` repeated and *every* method finds it -- a fixture that cannot
 # separate anything, which is the recurring lesson of #177 and #198.
 HARD = (-0.9, np.array([0.4, 0.35, -0.6]), 7)
@@ -54,7 +54,7 @@ def _landscape() -> PottsLandscape:
 
 
 def _hmm(length: int = 8) -> tuple[RelaxedHmmPath, HmmParams, np.ndarray]:
-    params = load_hmm_params(FIXTURES / "hmm_params.yaml")
+    params = load_hmm_params(FIXTURES / "hmm/ci.yaml")
     observations = np.asarray(simulate_sequences(params).observations[0][:length])
     objective = RelaxedHmmPath(
         log_initial=torch.log(torch.from_numpy(params.initial)),

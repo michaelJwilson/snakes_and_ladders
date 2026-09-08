@@ -38,7 +38,7 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import SMALL_SITES, load_fixture
 
-FIVE_TAXA = "simulation_params_5taxa.yaml"
+FIVE_TAXA = "tree_search/ci.yaml"
 N_SITES = 200
 
 

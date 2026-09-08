@@ -1,0 +1,25 @@
+model: ldpc
+oracle: enumeration
+
+# The (3,6) Gallager code at the block length exact decoding reaches
+# (docs/nb/ldpc.ipynb). Every field is required -- see
+# python/snakes_and_ladders/sim/ldpc.py and sim/CLAUDE.md.
+#
+# n = 12 gives m = 6 checks, at least two of them dependent, so the code has
+# 2**k codewords with k >= 7 and `likelihood.ldpc.exact_decoding` enumerates
+# them: the belief-propagation posterior is checked against the exact one
+# rather than against a second run of itself. The ensemble member is the
+# seed's rather than a matrix written out here, because a written-out H at
+# the larger tiers is a file no reader could check.
+seed: 340
+n_bits: 12
+column_weight: 3
+row_weight: 6
+
+# The three channels this instance is decoded on. 0.15 is well above the
+# (3,6) belief-propagation threshold of 0.084, so the tiny code decodes with
+# errors and the comparison against the exact posterior has something to
+# compare.
+flip_probability: 0.15
+erasure_probability: 0.4
+noise_scale: 1.0

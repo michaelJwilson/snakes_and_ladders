@@ -45,6 +45,15 @@ known from outside this repository.
   oracle can referee they say nothing. Check the property *per draw* against
   the oracle, and report the limit for orientation rather than asserting it.
 
+- **A supported instance is a fixture, never a literal.** A problem the
+  catalogue supports declares its instance in a file, one per size tier, and
+  every caller --- test, figure, notebook, experiment --- reads it from there.
+  An instance typed into a caller is one nothing else can find: the next
+  caller writes its own, the two drift, and a claim about "the problem" is a
+  claim about whichever copy the reader opened. A literal stays only where
+  the point *is* the literal --- a malformed input, an ensemble drawn over
+  sizes, a test of the constructor itself --- and the module says which.
+
 - **A fixture is admitted on two clauses, and both are load-bearing.** Its
   answer must be known from *outside* this repository — a closed form, a
   published result, or an enumeration sharing no code with what it tests — and

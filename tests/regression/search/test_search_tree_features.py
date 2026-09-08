@@ -49,7 +49,7 @@ from snakes_and_ladders.sim.tree import edges
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "simulation_params_hard.yaml"
+FIXTURE = FIXTURES_DIR / "tree_search/release.yaml"
 
 # Issue #178's budget, unchanged so the comparison is the one that ticket
 # specified: 50 starts at seed + 1000 and 30 decisions per episode, as

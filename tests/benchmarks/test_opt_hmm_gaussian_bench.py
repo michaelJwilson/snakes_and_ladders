@@ -19,7 +19,7 @@ from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequ
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
+FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
 def _objective() -> tuple[GaussianHmmObjective, torch.Tensor]:

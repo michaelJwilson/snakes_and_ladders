@@ -21,7 +21,7 @@ from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
+FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 # Brute force is O(n_states ** length); 3 ** 7 = 2187 paths, matching the
 # scale tests/regression/opt/test_opt_hmm.py already uses for the same

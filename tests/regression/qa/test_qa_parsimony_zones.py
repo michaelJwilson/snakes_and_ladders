@@ -31,7 +31,7 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 
-PARAMS_PATH = FIXTURES_DIR / "simulation_params_8taxa.yaml"
+PARAMS_PATH = FIXTURES_DIR / "tree_jc/release.yaml"
 
 
 @pytest.mark.oracle

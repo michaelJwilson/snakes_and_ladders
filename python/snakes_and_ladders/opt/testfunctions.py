@@ -37,8 +37,11 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
+
+from snakes_and_ladders.fixtures import load_declared
 
 
 @dataclass(frozen=True)
@@ -204,3 +207,166 @@ class Himmelblau:
         ]
         best = min(range(len(distances)), key=distances.__getitem__)
         return best, distances[best]
+
+
+_REQUIRED_FIELDS = frozenset({"seed", "grid", "at_minimum", "functions"})
+_FUNCTION_FIELDS = frozenset(
+    {"name", "dimension", "start", "restarts", "scale", "domain", "minimizers"}
+)
+
+#: The three functions this module defines, by the name a fixture states.
+_FUNCTIONS = ("Rosenbrock", "Rastrigin", "Himmelblau")
+
+
+@dataclass(frozen=True)
+class TestFunctionParams:
+    """One test function as a declared instance: where it starts and where it ends.
+
+    Parameters
+    ----------
+    name : str
+        One of :data:`_FUNCTIONS`.
+    dimension : int
+        Coordinates. Himmelblau is two-dimensional by definition and the
+        loader refuses any other value for it.
+    start : float
+        Every coordinate of the nominal start.
+    restarts : int
+        Random restarts a multi-start fit of this function draws.
+    scale : float
+        Standard deviation of the displacement each restart is drawn at, in
+        the function's own coordinates.
+    domain : tuple[float, float, float, float]
+        ``(x_min, x_max, y_min, y_max)``, the region a surface of it is drawn
+        over.
+    minimizers : tuple[tuple[float, ...], ...]
+        The published global minimizers. These are the oracle: they are
+        quoted from the sources the module docstring names, never computed
+        here.
+    """
+
+    name: str
+    dimension: int
+    start: float
+    restarts: int
+    scale: float
+    domain: tuple[float, float, float, float]
+    minimizers: tuple[tuple[float, ...], ...]
+
+    def objective(self) -> Rosenbrock | Rastrigin | Himmelblau:
+        """The function itself, at this instance's dimension and start.
+
+        Returns
+        -------
+        Rosenbrock | Rastrigin | Himmelblau
+
+        Raises
+        ------
+        ValueError
+            If the name is not one of the three.
+        """
+        if self.name == "Rosenbrock":
+            return Rosenbrock(dimension=self.dimension, start=self.start)
+        if self.name == "Rastrigin":
+            return Rastrigin(dimension=self.dimension, start=self.start)
+        if self.name == "Himmelblau":
+            return Himmelblau(start=(self.start, self.start))
+        msg = f"unknown test function {self.name!r}, expected one of {_FUNCTIONS}"
+        raise ValueError(msg)
+
+
+@dataclass(frozen=True)
+class TestFunctionSuite:
+    """The functions a fixture declares, and the knobs a study of them shares.
+
+    Parameters
+    ----------
+    functions : tuple[TestFunctionParams, ...]
+        In the file's order, which is the order a figure lays them out in.
+    seed : int
+        Seed a study of this suite builds its generator from.
+    grid : int
+        Points per axis when a surface is drawn.
+    at_minimum : float
+        Distance within which a fit counts as having reached a minimizer.
+    """
+
+    functions: tuple[TestFunctionParams, ...]
+    seed: int
+    grid: int
+    at_minimum: float
+
+    def named(self) -> dict[str, TestFunctionParams]:
+        """The functions by name, in the file's order.
+
+        Returns
+        -------
+        dict[str, TestFunctionParams]
+        """
+        return {function.name: function for function in self.functions}
+
+
+def load_test_function_params(path: Path) -> TestFunctionSuite:
+    """Load and validate a continuous-test-function fixture yaml.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the yaml file.
+
+    Returns
+    -------
+    TestFunctionSuite
+        The parsed suite.
+
+    Raises
+    ------
+    ValueError
+        If a required field is missing, a function names one this module does
+        not define, or a declared minimizer does not have the function's
+        dimension.
+    """
+    raw = load_declared(path, _REQUIRED_FIELDS)
+
+    functions: list[TestFunctionParams] = []
+    for entry in raw["functions"]:
+        missing = _FUNCTION_FIELDS - set(entry)
+        if missing:
+            msg = f"{path}: a function lacks {sorted(missing)}"
+            raise ValueError(msg)
+        name = str(entry["name"])
+        if name not in _FUNCTIONS:
+            msg = (
+                f"{path}: unknown test function {name!r}, expected one of {_FUNCTIONS}"
+            )
+            raise ValueError(msg)
+        dimension = int(entry["dimension"])
+        minimizers = tuple(
+            tuple(float(value) for value in minimizer)
+            for minimizer in entry["minimizers"]
+        )
+        if any(len(minimizer) != dimension for minimizer in minimizers):
+            msg = f"{path}: {name} declares a minimizer that is not {dimension}-dimensional"
+            raise ValueError(msg)
+        domain = tuple(float(edge) for edge in entry["domain"])
+        if len(domain) != 4:
+            msg = f"{path}: {name} declares a domain of {len(domain)} edges, expected 4"
+            raise ValueError(msg)
+        functions.append(
+            TestFunctionParams(
+                name=name,
+                dimension=dimension,
+                start=float(entry["start"]),
+                restarts=int(entry["restarts"]),
+                scale=float(entry["scale"]),
+                domain=(domain[0], domain[1], domain[2], domain[3]),
+                minimizers=minimizers,
+            )
+        )
+
+    return TestFunctionSuite(
+        functions=tuple(functions),
+        seed=int(raw["seed"]),
+        grid=int(raw["grid"]),
+        at_minimum=float(raw["at_minimum"]),
+    )

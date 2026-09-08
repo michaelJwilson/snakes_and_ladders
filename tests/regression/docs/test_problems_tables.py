@@ -95,6 +95,48 @@ def test_a_pairing_with_a_method_carries_a_note() -> None:
 
 
 @pytest.mark.structural
+def test_every_untested_pairing_states_why_it_is_untested() -> None:
+    # "Every compatible method is applied to every supported problem" is a
+    # claim, and this is where it is checked rather than reviewed: a fixture
+    # and a family the catalogue pairs, with no significant test naming both,
+    # is listed with the reason it is not tested. A pairing loses its entry
+    # only by gaining a test (issue #382).
+    pairs = [
+        f"{problem} / {name}" for problem, name in problems_tables.untested_pairs()
+    ]
+    stated = problems_tables.untested_notes()
+
+    assert sorted(stated) == pairs
+    assert all(reason.strip() for reason in stated.values())
+
+
+@pytest.mark.structural
+def test_a_fixture_is_read_from_a_call_or_from_a_path() -> None:
+    # The reading behind the table above: a test names its instance either
+    # through the registry or by path, and both count, or a pairing would
+    # read as untested because of how the test spells the fixture.
+    assert problems_tables.fixtures_named('fixture("mixture", "ci")') == {
+        ("mixture", "ci")
+    }
+    assert problems_tables.fixtures_named('at_fixture("x", "tree_search")') == {
+        ("tree_search", "")
+    }
+    assert problems_tables.fixtures_named('load("tree_jc/release.yaml")') == {
+        ("tree_jc", "release")
+    }
+
+
+@pytest.mark.structural
+def test_a_marked_test_keeps_its_tier_and_an_unmarked_one_takes_the_fixtures() -> None:
+    # The tier column: the scheduling marker decides where there is one,
+    # because that is what the selection obeys, and the fixtures the test
+    # names decide where there is not.
+    assert problems_tables.tier_of({"stress"}, {("tree_jc", "ci")}) == "stress"
+    assert problems_tables.tier_of(set(), {("tree_search", "release")}) == "release"
+    assert problems_tables.tier_of(set(), set()) == "ci"
+
+
+@pytest.mark.structural
 def test_every_experiment_a_note_cites_exists() -> None:
     # A renumbered or retracted experiment must break the generation rather
     # than leave the textbook pointing at a file that is not there.

@@ -6,7 +6,7 @@ branch: claude/search-328-tree-features
 pr: 0
 tickets: [328, 178, 177]
 problem: tree
-fixture: tests/regression/fixtures/simulation_params_hard.yaml, the 7-taxon hard fixture of #177
+fixture: tests/regression/fixtures/tree_search/release.yaml, the 7-taxon hard fixture of #177
 size: release
 methods: [greedy, reinforce-improvement, reinforce-full]
 budget: 640

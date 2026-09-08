@@ -20,14 +20,14 @@ from snakes_and_ladders.sim.tree import edges
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "simulation_params.yaml"
+FIXTURE = FIXTURES_DIR / "tree_jc/stress.yaml"
 
 # A variety of site and taxa sizes, per sim/CLAUDE.md's local rule, sharing
 # one validation body below.
 SITE_AND_TAXA_FIXTURES = (
-    "simulation_params.yaml",  # 4 taxa, 200_000 sites
-    "simulation_params_small_sites.yaml",  # 4 taxa, 20_000 sites
-    "simulation_params_8taxa.yaml",  # 8 taxa, 200_000 sites
+    "tree_jc/stress.yaml",  # 4 taxa, 200_000 sites
+    "tree_jc/ci.yaml",  # 4 taxa, 20_000 sites
+    "tree_jc/release.yaml",  # 8 taxa, 200_000 sites
 )
 
 

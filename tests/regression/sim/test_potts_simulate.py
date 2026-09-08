@@ -25,7 +25,7 @@ from snakes_and_ladders.sim.potts import load_potts_lattice_params, simulate_pot
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "potts_lattice_params.yaml"
+FIXTURE = FIXTURES_DIR / "potts_lattice/ci.yaml"
 
 _RTOL_ORACLE = 1e-12
 

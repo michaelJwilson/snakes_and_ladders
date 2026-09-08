@@ -44,8 +44,8 @@ from tests._fixtures import (
     load_fixture,
 )
 
-FIVE_TAXA = "simulation_params_5taxa.yaml"
-SIX_TAXA = "simulation_params_6taxa.yaml"
+FIVE_TAXA = "tree_search/ci.yaml"
+SIX_TAXA = "tree_search/stress.yaml"
 
 # Transitions cost 1, transversions 2: a metric, so the unrooted score is
 # well defined, and a weighting under which the search is a different

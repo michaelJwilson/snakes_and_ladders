@@ -34,9 +34,9 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
 )
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.hmm import HmmParams
 from snakes_and_ladders.sim.spatio_sequential import (
-    canonical_spatio_sequential,
     gated_log_density,
     simulate_spatio_sequential,
 )
@@ -87,7 +87,7 @@ def test_forward_backward_is_the_path_enumeration(
 
 @pytest.mark.oracle
 def test_the_class_e_step_is_the_conditional_posterior_by_enumeration() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(1))
 
     posteriors = class_posteriors(params, data.observations, data.labels)
@@ -98,7 +98,7 @@ def test_the_class_e_step_is_the_conditional_posterior_by_enumeration() -> None:
 
 @pytest.mark.oracle
 def test_the_labelled_joint_is_the_enumeration_s_per_labelling_term() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(2))
     exact = enumerate_spatio_sequential(params, data.observations)
     # log p(x, l) = logsumexp over every joint path of the written-out joint.
@@ -123,7 +123,7 @@ def test_the_labelled_joint_is_the_enumeration_s_per_labelling_term() -> None:
 
 @pytest.mark.mathematical
 def test_the_field_is_minus_the_posterior_expected_emission_score() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(3))
     posterior = class_posteriors(params, data.observations, data.labels).posterior
     gated = gated_log_density(params, data.observations)
@@ -145,7 +145,7 @@ def test_the_m_step_identity_holds_through_autograd() -> None:
     # the M-step identity: the gradient of log p(x | l, theta) equals the
     # posterior-weighted gradient of the emission terms. The left side goes
     # through the forward recursion, the right through the E step.
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     means = (np.array([0.0, 2.0]), np.array([-1.0, 1.0]))
     gaussian = replace(
         params,
@@ -219,7 +219,7 @@ def test_the_backward_sampler_draws_paths_from_the_posterior() -> None:
 
 @pytest.mark.mathematical
 def test_the_map_labelling_has_the_largest_labelled_joint() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(5))
 
     best = map_labelling(params, data.observations)

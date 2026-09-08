@@ -32,10 +32,12 @@ The three:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
 from snakes_and_ladders.emissions import CategoricalEmission
+from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
     PottsGraph,
@@ -318,4 +320,131 @@ def ambiguous_hmm() -> HmmParams:
         emissions=CategoricalEmission(np.array([[0.83, 0.17], [0.17, 0.83]])),
         seed=20260904,
         tolerance=1e-12,
+    )
+
+
+_REQUIRED_FIELDS = frozenset(
+    {
+        "seed",
+        "shape",
+        "boundary",
+        "coupling",
+        "glass_nodes",
+        "glass_mean_degree",
+        "glass_magnitude",
+        "glass_frustrations",
+        "glass_restarts",
+    }
+)
+
+
+@dataclass(frozen=True)
+class FrustratedLatticeParams:
+    """The two frustrated instances of one fixture, and the scan over them.
+
+    One file rather than two because the pair is what the problem is: the
+    triangular antiferromagnet is the case whose ground state a counting
+    argument fixes, and the planted glass is the case that survives past the
+    size enumeration reaches, and a claim about frustration is made against
+    both or against neither.
+
+    Parameters
+    ----------
+    shape : tuple[int, int]
+        Extent of the triangular lattice.
+    boundary : BoundaryCondition
+        ``PERIODIC`` is the case the closed form covers.
+    coupling : float
+        The lattice coupling; negative is the antiferromagnet.
+    glass_nodes : int
+        Sites of the planted glass.
+    glass_mean_degree : float
+        Target expected degree of its Erdos-Renyi skeleton.
+    glass_magnitude : float
+        ``|J|`` on every coupling.
+    glass_frustrations : tuple[float, ...]
+        The frustrations the scan draws one instance at each of.
+    glass_restarts : int
+        Descents run per instance.
+    seed : int
+        Seed the scan's generator is built from.
+    """
+
+    shape: tuple[int, int]
+    boundary: BoundaryCondition
+    coupling: float
+    glass_nodes: int
+    glass_mean_degree: float
+    glass_magnitude: float
+    glass_frustrations: tuple[float, ...]
+    glass_restarts: int
+    seed: int
+
+    def lattice(self) -> PottsGraph:
+        """The declared triangular antiferromagnet.
+
+        Returns
+        -------
+        PottsGraph
+        """
+        return frustrated_triangular_lattice(self.shape, self.boundary, self.coupling)
+
+    def glass(self, frustration: float, rng: np.random.Generator) -> PlantedSpinGlass:
+        """One planted instance of the scan, at ``frustration``.
+
+        Parameters
+        ----------
+        frustration : float
+            Fraction of couplings set against the planted state.
+        rng : np.random.Generator
+            Passed in, never seeded here (``sim/CLAUDE.md``).
+
+        Returns
+        -------
+        PlantedSpinGlass
+        """
+        return planted_spin_glass(
+            self.glass_nodes,
+            self.glass_mean_degree,
+            frustration,
+            rng,
+            magnitude=self.glass_magnitude,
+        )
+
+
+def load_frustrated_lattice_params(path: Path) -> FrustratedLatticeParams:
+    """Load and validate a frustrated-lattice fixture yaml.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the yaml file.
+
+    Returns
+    -------
+    FrustratedLatticeParams
+        The parsed truth. The size and range checks belong to the two
+        constructors and run when an instance is built.
+
+    Raises
+    ------
+    ValueError
+        If a required field is missing, or the lattice extent is not
+        two-dimensional.
+    """
+    raw = load_declared(path, _REQUIRED_FIELDS)
+    shape = tuple(int(extent) for extent in raw["shape"])
+    if len(shape) != 2:
+        msg = f"{path}: shape {shape} is not a two-dimensional lattice"
+        raise ValueError(msg)
+    return FrustratedLatticeParams(
+        shape=(shape[0], shape[1]),
+        boundary=BoundaryCondition(str(raw["boundary"])),
+        coupling=float(raw["coupling"]),
+        glass_nodes=int(raw["glass_nodes"]),
+        glass_mean_degree=float(raw["glass_mean_degree"]),
+        glass_magnitude=float(raw["glass_magnitude"]),
+        glass_frustrations=tuple(float(value) for value in raw["glass_frustrations"]),
+        glass_restarts=int(raw["glass_restarts"]),
+        seed=int(raw["seed"]),
     )

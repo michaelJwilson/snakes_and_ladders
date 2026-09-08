@@ -28,7 +28,7 @@ from tests._fixtures import load_fixture
 torch_geometric = pytest.importorskip("torch_geometric")
 from torch_geometric.nn import GINConv, global_add_pool  # noqa: E402
 
-FIVE_TAXA = "simulation_params_5taxa.yaml"
+FIVE_TAXA = "tree_search/ci.yaml"
 HIDDEN = 8
 
 

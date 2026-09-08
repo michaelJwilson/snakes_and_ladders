@@ -17,7 +17,7 @@ from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
+FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
 def test_hmm_objective_benchmark(benchmark: BenchmarkFixture) -> None:

@@ -34,7 +34,10 @@ class Scale(StrEnum):
     ``CI`` is the size at which an exact oracle is still available and the
     per-pull-request suite stays inside its budget; ``STRESS`` is the size
     that demonstrates behaviour where the CI size cannot, and is run under
-    the ``stress`` marker rather than on every pull request.
+    the ``stress`` marker rather than on every pull request; ``RELEASE`` is
+    the size only the release gate pays for. The three are `DEV.md`'s tiers,
+    and are the tier a fixture file is named for
+    (:mod:`snakes_and_ladders.sim.fixtures`).
 
     The distinction is *what the size is for*, not how slow it happens to
     be: a slow test at an oracle size is still ``CI``, and a fast test whose
@@ -43,6 +46,7 @@ class Scale(StrEnum):
 
     CI = "ci"
     STRESS = "stress"
+    RELEASE = "release"
 
 
 def load_declared(path: Path, required: Iterable[str]) -> Mapping[str, Any]:

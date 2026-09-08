@@ -27,7 +27,7 @@ from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 
-PARAMS_PATH = FIXTURES_DIR / "simulation_params_8taxa.yaml"
+PARAMS_PATH = FIXTURES_DIR / "tree_jc/release.yaml"
 
 
 def _expected_depth(node: Node, parent_depth: float, target: str) -> float | None:
@@ -43,7 +43,7 @@ def _expected_depth(node: Node, parent_depth: float, target: str) -> float | Non
 
 @pytest.mark.oracle
 def test_tree_layout_depths_match_branch_length_sums() -> None:
-    params = load_simulation_params(FIXTURES_DIR / "simulation_params_8taxa.yaml")
+    params = load_simulation_params(FIXTURES_DIR / "tree_jc/release.yaml")
     layout = tree_layout(params.tau)
 
     for node in preorder(params.tau):
@@ -55,7 +55,7 @@ def test_tree_layout_depths_match_branch_length_sums() -> None:
 
 @pytest.mark.structural
 def test_tree_layout_gives_every_leaf_a_distinct_ordered_y() -> None:
-    params = load_simulation_params(FIXTURES_DIR / "simulation_params_8taxa.yaml")
+    params = load_simulation_params(FIXTURES_DIR / "tree_jc/release.yaml")
     layout = tree_layout(params.tau)
     leaves = [node.name for node in preorder(params.tau) if node.is_leaf]
 
@@ -67,7 +67,7 @@ def test_tree_layout_gives_every_leaf_a_distinct_ordered_y() -> None:
 def test_main_writes_a_figure_and_caption_with_generating_truth(
     tmp_path: Path,
 ) -> None:
-    params_path = FIXTURES_DIR / "simulation_params_8taxa.yaml"
+    params_path = FIXTURES_DIR / "tree_jc/release.yaml"
     params = load_simulation_params(params_path)
 
     qa_figure = main(["--params", str(params_path), "--output-dir", str(tmp_path)])
@@ -86,7 +86,7 @@ def test_main_reads_sys_argv_when_no_argv_is_given(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    params_path = FIXTURES_DIR / "simulation_params_8taxa.yaml"
+    params_path = FIXTURES_DIR / "tree_jc/release.yaml"
     monkeypatch.setattr(
         "sys.argv",
         ["sim_tree", "--params", str(params_path), "--output-dir", str(tmp_path)],

@@ -17,11 +17,11 @@ import numpy as np
 import pytest
 from snakes_and_ladders.emissions import CategoricalEmission
 from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.spatio_sequential import (
     SimulatedSpatioSequential,
     SpatioSequentialParams,
-    canonical_spatio_sequential,
     circulant_transition,
     simulate_spatio_sequential,
 )
@@ -32,14 +32,14 @@ BURN_IN = 200
 
 
 def _draws(n: int) -> list[SimulatedSpatioSequential]:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     rng = np.random.default_rng(7)
     return [simulate_spatio_sequential(params, rng, burn_in=BURN_IN) for _ in range(n)]
 
 
 @pytest.mark.simulated_truth
 def test_the_labels_are_drawn_from_the_potts_prior() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     configurations = list(product(range(params.n_classes), repeat=4))
     energies = np.zeros(len(configurations))
     for index, labelling in enumerate(configurations):
@@ -59,7 +59,7 @@ def test_the_labels_are_drawn_from_the_potts_prior() -> None:
 
 @pytest.mark.simulated_truth
 def test_the_chains_follow_the_circulant_transition_and_the_initial() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     draws = _draws(N_DRAWS)
     stays = sum(
         int((draw.states[:, 1:] == draw.states[:, :-1]).sum()) for draw in draws
@@ -81,7 +81,7 @@ def test_the_chains_follow_the_circulant_transition_and_the_initial() -> None:
 def test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain() -> (
     None
 ):
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     draws = _draws(N_DRAWS)
     n_symbols = 3
     for m, family in enumerate(params.emissions):
@@ -111,7 +111,7 @@ def test_the_circulant_transition_is_row_stochastic_with_the_declared_diagonal()
 
 @pytest.mark.structural
 def test_planted_labels_are_kept_and_the_generator_reproduces_the_draw() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     planted = np.array([0, 1, 1, 0])
 
     first = simulate_spatio_sequential(params, np.random.default_rng(3), labels=planted)
@@ -163,14 +163,14 @@ def test_planted_labels_are_kept_and_the_generator_reproduces_the_draw() -> None
     ],
 )
 def test_an_inconsistent_truth_is_refused(change: dict[str, Any], match: str) -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     with pytest.raises(ValueError, match=match):
         replace(params, **change)
 
 
 @pytest.mark.edge_case
 def test_planted_labels_of_the_wrong_shape_or_range_are_refused() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     with pytest.raises(ValueError, match="planted labels"):
         simulate_spatio_sequential(
             params, np.random.default_rng(0), labels=np.array([0, 1])
@@ -183,6 +183,6 @@ def test_planted_labels_of_the_wrong_shape_or_range_are_refused() -> None:
 
 @pytest.mark.edge_case
 def test_the_open_lattice_is_the_graph_the_canonical_instance_declares() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     assert params.graph == lattice_graph((2, 2), BoundaryCondition.OPEN, 1.0)
     assert isinstance(params, SpatioSequentialParams)

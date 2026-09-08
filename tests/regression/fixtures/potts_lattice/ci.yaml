@@ -1,3 +1,6 @@
+model: potts-lattice
+oracle: enumeration
+
 # Ground truth for the Potts-lattice generator
 # (tests/regression/sim/test_potts_simulate.py). Every field is required --
 # see python/snakes_and_ladders/sim/potts.py and sim/CLAUDE.md.

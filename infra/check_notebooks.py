@@ -237,13 +237,35 @@ def code(cells: Sequence[dict[str, Any]]) -> str:
     return "\n\n".join(sources)
 
 
+def _named_fixtures(source: str) -> list[Path]:
+    """Every fixture file the notebook's code names, by path or by registry key.
+
+    A notebook reaches a fixture two ways since issue #382: as a path, and as
+    ``fixture("<problem>", "<tier>")``. Both count, or a notebook whose
+    instance changed would keep a stamp saying it had not.
+
+    Returns
+    -------
+    list[Path]
+        The named files, sorted.
+    """
+    found = []
+    for path in sorted(FIXTURES.rglob("*.yaml")):
+        problem, tier = path.parent.name, path.stem
+        named_by_path = f"{problem}/{path.name}" in source
+        named_by_key = f'"{problem}"' in source and f'"{tier}"' in source
+        if named_by_path or named_by_key:
+            found.append(path)
+    return found
+
+
 def input_digest(path: Path) -> str:
     """Hash what the notebook at ``path`` computes from.
 
     The code cells, the import closure of every ``snakes_and_ladders`` module
     they import (a magic line or a shell escape is dropped before parsing),
-    every fixture under ``tests/regression/fixtures/`` the cells name, and
-    the library versions.
+    every fixture the cells name --- by path or as a registry problem and
+    tier --- and the library versions.
 
     Returns
     -------
@@ -263,9 +285,7 @@ def input_digest(path: Path) -> str:
         line for line in source.splitlines() if not line.lstrip().startswith(("%", "!"))
     )
     modules = imported_names(plain, "notebook")
-    fixtures = [
-        fixture for fixture in sorted(FIXTURES.iterdir()) if fixture.name in source
-    ]
+    fixtures = _named_fixtures(source)
     return digest(
         [*module_closure(modules, REPO_ROOT), *fixtures],
         REPO_ROOT,

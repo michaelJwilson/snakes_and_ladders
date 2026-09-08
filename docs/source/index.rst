@@ -51,6 +51,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.params
    :members:
 
+.. automodule:: snakes_and_ladders.sim.fixtures
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.simulate
    :members:
 

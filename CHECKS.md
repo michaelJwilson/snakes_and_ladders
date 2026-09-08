@@ -8,7 +8,7 @@ what each milestone claims; this is what pins it. Do not edit by hand --
 run `uv run python infra/checks_ledger.py --write`.
 
 
-## `tests/regression/` (14)
+## `tests/regression/` (17)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -20,11 +20,14 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_emissions.py::test_overdispersed_data_recovers_its_dispersion_and_does_not_flag` | simulated_truth | The paired half of the check above: a guard that flagged everything would pass that test and mean nothing. |
 | `test_emissions.py::test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform` | oracle | `BetaBinomial(n, 1, 1)` puts equal mass on every one of the n + 1 outcomes. |
 | `test_emissions.py::test_the_closed_form_count_m_steps_are_the_weighted_mean` | oracle |  |
+| `test_fixture_registry.py::test_the_coupled_fixture_is_the_canonical_instance` | oracle | The file restates `canonical_spatio_sequential`, whose enumerable size is the reason the instance exists. |
+| `test_fixture_registry.py::test_the_frustrated_fixture_builds_the_lattice_with_the_known_ground_state` | oracle |  |
 | `test_numerics_rust.py::test_the_rust_sampler_is_bit_identical_to_the_oracle` | oracle |  |
 | `test_numerics_rust.py::test_both_agree_on_a_row_that_does_not_quite_sum_to_one` | oracle | The case `snakes_and_ladders.numerics`' docstring calls out as ordinary float64 behaviour: the row leaves a sliver of the unit interval above its own total, and a draw landing there crosses no column. |
 | `test_numerics_rust.py::test_the_generator_is_consumed_identically_by_both` | oracle | A caller may swap the implementations without its stream diverging, and that is a property of the port rather than a coincidence: both draw one uniform per entry, in order, before doing any lookup. |
 | `test_numerics_rust.py::test_a_non_contiguous_input_gives_the_same_answer` | oracle | Borrowing rather than copying makes stride a real concern where it was not before. |
 | `test_pairwise_distance.py::test_pairwise_distance_small_fixed_input` | oracle | Small, hand-checkable input. |
+| `test_scale_tiers.py::test_at_fixture_hands_the_body_a_loaded_instance` | simulated_truth | Exercised end to end: the CI case runs on every pull request, and the other two are deselected there by their markers. |
 | `test_scale_tiers.py::test_the_budget_script_states_both_budgets` | simulated_truth | The numbers `DEV.md` documents and the numbers the script measures against have to be the same two, or the report is against a budget nothing else knows about. |
 
 ## `tests/regression/learn/` (41)
@@ -238,7 +241,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_optimizer_landscapes.py::test_rosenbrock_is_reached_from_every_restart_and_himmelblau_lands_on_a_minimum` | oracle |  |
 | `test_qa_optimizer_landscapes.py::test_every_rastrigin_endpoint_is_a_stationary_point_of_the_closed_form` | oracle | A fit that reports convergence sits where the closed-form gradient vanishes; whether that is the origin is what the caption counts. |
 | `test_qa_optimizer_landscapes.py::test_the_surface_is_the_objective_on_its_grid` | oracle |  |
-| `test_qa_optimizer_landscapes.py::test_known_minimizers_are_the_published_ones` | oracle |  |
+| `test_qa_optimizer_landscapes.py::test_known_minimizers_are_the_published_ones` | oracle | The fixture states the published values; this is what holds the file to the module's own copy of Himmelblau's four and to the two exact ones. |
 | `test_qa_parsimony_zones.py::test_the_long_branch_grouping_is_the_other_split_of_the_zone_tree` | oracle | `AC\|BD` against the zone's `AB\|CD`: the figure's whole claim is about which split parsimony prefers, so the two trees must be different unrooted topologies on the same leaves. |
 | `test_qa_parsimony_zones.py::test_the_zone_gap_is_the_brute_force_gap_on_a_small_alignment` | oracle | The figure divides a Fitch difference by the site count; the brute force over internal labellings shares no traversal with Fitch and gives the same integer, so the per-site gap is pinned to it. |
 | `test_qa_parsimony_zones.py::test_the_zones_separate_in_sign` | simulated_truth | The theorem the figure illustrates: the wrong tree is cheaper in the Felsenstein zone and dearer in the Farris zone, on average, at every site count. |
@@ -419,4 +422,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-376 checks.
+379 checks.

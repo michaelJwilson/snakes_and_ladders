@@ -23,7 +23,7 @@ from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 
-PARAMS_PATH = FIXTURES_DIR / "simulation_params.yaml"
+PARAMS_PATH = FIXTURES_DIR / "tree_jc/stress.yaml"
 
 
 @pytest.mark.structural

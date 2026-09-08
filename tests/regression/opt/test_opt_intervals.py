@@ -55,7 +55,7 @@ from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import AnalyticGaussian
 
-HMM_FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
+HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 INITIAL = np.array([0.5, 0.5])
 TRANSITION = np.array([[0.75, 0.25], [0.25, 0.75]])

@@ -182,7 +182,7 @@ def test_changing_a_test_selects_its_module() -> None:
         "Cargo.lock",
         "src/lib.rs",
         "tests/_fixtures.py",
-        "tests/regression/fixtures/simulation_params.yaml",
+        "tests/regression/fixtures/tree_jc/stress.yaml",
         ".github/workflows/ci.yml",
         "python/snakes_and_ladders/numerics.py",
     ],

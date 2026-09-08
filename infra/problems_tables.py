@@ -42,7 +42,14 @@ CATALOGUE = REPO_ROOT / "PROBLEMS.md"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "problems_tables.tex"
 #: The one hand-written input: a sentence per pairing on when the method wins.
 METHOD_NOTES = REPO_ROOT / "docs" / "tex" / "generated" / "method_notes.yaml"
+#: The block of that file holding the reason each untested pairing is
+#: untested, keyed ``"<fixture> / <family>"``.
+UNTESTED_KEY = "untested pairings"
 EXPERIMENTS = REPO_ROOT / "docs" / "experiments"
+#: The fixture registry's files, read as data: which problems exist, and at
+#: which tiers. Read from the tree rather than imported, because nothing here
+#: may hold an application reference (``infra/CLAUDE.md``).
+FIXTURES = REPO_ROOT / "tests" / "regression" / "fixtures"
 
 #: The prefix every code symbol in the catalogue carries. A backticked cell
 #: without it is a path (a fixture, a notebook) and names no algorithm.
@@ -100,6 +107,14 @@ ORACLE_COLUMNS = (
 #: The size tiers ``DEV.md`` defines, by the scheduling marker that selects
 #: each; a test with neither marker runs at the CI tier.
 TIERS = ("ci", "stress", "release")
+
+#: How a fixture is named in a test: as a registry problem and tier, as a
+#: problem parameterized over every tier it declares, or as the file's path.
+#: All three are read, because a pairing must not read as untested for the
+#: way its test spells the fixture (issue #382).
+_FIXTURE_CALL = re.compile(r'(?<!at_)fixture\(\s*"([a-z_0-9]+)"\s*,\s*"([a-z]+)"')
+_AT_FIXTURE_CALL = re.compile(r'at_fixture\(\s*"[a-z_0-9]+"\s*,\s*"([a-z_0-9]+)"')
+_FIXTURE_PATH = re.compile(r"([a-z_0-9]+)/([a-z]+)\.yaml")
 
 #: How a cell is marked: pinned by an oracle; by the simulated truth only,
 #: an oracle wanted; by neither significant kind, an oracle wanted.
@@ -225,6 +240,10 @@ ORACLES: dict[str, str] = {
 }
 
 _SYMBOL = re.compile(r"`([^`]+)`")
+#: A fixture named by a catalogue row: the problem, then the tier.
+_CATALOGUE_FIXTURE = re.compile(
+    r"tests/regression/fixtures/([a-z_0-9]+)/([a-z]+)\.yaml"
+)
 
 
 class UnnamedSymbolError(ValueError):
@@ -347,6 +366,59 @@ def _tier(markers: set[str]) -> str:
     return "ci"
 
 
+def fixtures_named(source: str) -> set[tuple[str, str]]:
+    """The ``(problem, tier)`` fixtures a test file names, however it names them.
+
+    Read per file rather than per function: a module that loads its instance
+    once at the top and uses it in every test is naming it for all of them,
+    and attributing it to the one line would say the tests below run on
+    nothing.
+
+    Returns
+    -------
+    set[tuple[str, str]]
+        A tier of ``""`` means the file named the problem without a tier ---
+        ``at_fixture`` parameterizes over every tier the problem declares.
+    """
+    found = set(_FIXTURE_CALL.findall(source))
+    found |= {(problem, "") for problem in _AT_FIXTURE_CALL.findall(source)}
+    return found | set(_FIXTURE_PATH.findall(source))
+
+
+def fixture_tiers(problem: str, directory: Path = FIXTURES) -> list[str]:
+    """The tiers one fixture problem declares, smallest first.
+
+    Returns
+    -------
+    list[str]
+    """
+    present = {path.stem for path in (directory / problem).glob("*.yaml")}
+    return [tier for tier in TIERS if tier in present]
+
+
+def tier_of(markers: set[str], named: set[tuple[str, str]]) -> str:
+    """The size tier a test validates a pairing at.
+
+    The scheduling marker decides where it carries one, because that is what
+    the selection obeys. Where it does not, the fixtures the test names do:
+    an unmarked test runs per pull request, and the smallest instance it
+    names is the size its claim is made at.
+
+    Returns
+    -------
+    str
+        One of :data:`TIERS`.
+    """
+    if markers & {"release", "stress"}:
+        return _tier(markers)
+    tiers = {
+        tier or found
+        for problem, tier in named
+        for found in fixture_tiers(problem) or [""]
+    }
+    return next((tier for tier in TIERS if tier in tiers), "ci")
+
+
 def referees(
     tests: Path = checks_ledger.TESTS,
 ) -> dict[str, set[tuple[str, str]]]:
@@ -361,7 +433,9 @@ def referees(
     }
     found: dict[str, set[tuple[str, str]]] = {}
     for path in sorted(tests.rglob("test_*.py")):
-        tree = ast.parse(path.read_text())
+        source = path.read_text()
+        tree = ast.parse(source)
+        named = fixtures_named(source)
         references = _references_by_function(tree)
         relative = str(path.relative_to(REPO_ROOT))
         for node in tree.body:
@@ -372,10 +446,46 @@ def referees(
             kinds = significant.get((relative, node.name))
             if kinds is None:
                 continue
-            tier = _tier(checks_ledger._markers(node))
+            tier = tier_of(checks_ledger._markers(node), named)
             for symbol in references[node.name]:
                 for kind in kinds:
                     found.setdefault(symbol, set()).add((kind, tier))
+    return found
+
+
+def fixtures_by_symbol(
+    tests: Path = checks_ledger.TESTS,
+) -> dict[str, set[str]]:
+    """``symbol -> {fixture problem}`` over the significant tests that name both.
+
+    What makes "every method is applied to every supported problem" a
+    question the tables can answer rather than one a reviewer has to: a
+    method is applied to a problem when a test of either significant kind
+    names a symbol of the method and a fixture of the problem.
+
+    Returns
+    -------
+    dict[str, set[str]]
+    """
+    significant = {(file, name) for file, name, _, _ in checks_ledger.rows()}
+    found: dict[str, set[str]] = {}
+    for path in sorted(tests.rglob("test_*.py")):
+        source = path.read_text()
+        problems = {problem for problem, _ in fixtures_named(source)}
+        if not problems:
+            continue
+        tree = ast.parse(source)
+        references = _references_by_function(tree)
+        relative = str(path.relative_to(REPO_ROOT))
+        for node in tree.body:
+            if not (
+                isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
+            ):
+                continue
+            if (relative, node.name) not in significant:
+                continue
+            for symbol in references[node.name]:
+                found.setdefault(symbol, set()).update(problems)
     return found
 
 
@@ -458,7 +568,78 @@ def family(symbol: str) -> str | None:
 def notes(path: Path = METHOD_NOTES) -> dict[str, dict[str, str]]:
     """``problem -> family -> note``, from the committed YAML."""
     loaded = yaml.safe_load(path.read_text())
-    return {} if loaded is None else loaded
+    if loaded is None:
+        return {}
+    return {key: value for key, value in loaded.items() if key != UNTESTED_KEY}
+
+
+def untested_notes(path: Path = METHOD_NOTES) -> dict[str, str]:
+    """``"<fixture> / <family>" -> reason``, from the committed YAML.
+
+    Why a method the catalogue pairs with a problem is not run on that
+    problem's fixture. A pairing may be untested for a good reason --- the
+    method has no meaning there, the instance is past the oracle --- and the
+    reason is stated rather than left to be rediscovered.
+
+    Returns
+    -------
+    dict[str, str]
+    """
+    loaded = yaml.safe_load(path.read_text())
+    return {} if loaded is None else dict(loaded.get(UNTESTED_KEY, {}))
+
+
+def catalogue_rows(
+    catalogue: Path = CATALOGUE,
+) -> list[tuple[str, list[str], list[str]]]:
+    """``(problem, fixture problems, symbols)`` per row of the catalogue.
+
+    Returns
+    -------
+    list[tuple[str, list[str], list[str]]]
+    """
+    found: list[tuple[str, list[str], list[str]]] = []
+    for line in catalogue.read_text().splitlines():
+        if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        problem, rest = cells[0], " ".join(cells[1:])
+        symbols = [
+            name[len(PACKAGE) :]
+            for name in _SYMBOL.findall(rest)
+            if name.startswith(PACKAGE)
+        ]
+        fixtures = sorted({match[0] for match in _CATALOGUE_FIXTURE.findall(rest)})
+        found.append((problem, fixtures, symbols))
+    return found
+
+
+def untested_pairs(catalogue: Path = CATALOGUE) -> list[tuple[str, str]]:
+    """``(fixture problem, method family)`` pairings no significant test makes.
+
+    The catalogue says a problem carries a family; the registry says the
+    problem has an instance; the suite says which tests name both. A pairing
+    the first two assert and the third does not is what "every compatible
+    method is applied to every supported problem" is checked by, and each one
+    is either given a test or a reason in
+    ``docs/tex/generated/method_notes.yaml``.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        Sorted, without repeats.
+    """
+    by_symbol = fixtures_by_symbol()
+    found = set()
+    for _, fixtures, symbols in catalogue_rows(catalogue):
+        for name in METHOD_FAMILIES:
+            here = [symbol for symbol in symbols if family(symbol) == name]
+            if not here:
+                continue
+            for problem in fixtures:
+                if not any(problem in by_symbol.get(symbol, ()) for symbol in here):
+                    found.add((problem, name))
+    return sorted(found)
 
 
 _EXPERIMENT = re.compile(r"experiment (\d+)")
@@ -689,6 +870,8 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--check", action="store_true", help="exit 1 if stale")
     arguments = parser.parse_args(argv)
     text = render()
+    for problem, name in untested_pairs():
+        print(f"untested: {problem} / {name}", file=sys.stderr)
     if arguments.write:
         GENERATED.parent.mkdir(parents=True, exist_ok=True)
         GENERATED.write_text(text)

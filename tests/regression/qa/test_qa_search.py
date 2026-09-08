@@ -19,7 +19,7 @@ from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "simulation_params_6taxa.yaml"
+FIXTURE = FIXTURES_DIR / "tree_search/stress.yaml"
 
 # A 5-taxon tree is 15 unrooted topologies against the 6-taxon fixture's 105,
 # so the same sweep runs in a few seconds. Written per test rather than added
@@ -54,7 +54,7 @@ tau:
 
 
 def _small_fixture(tmp_path: Path) -> Path:
-    path = tmp_path / "simulation_params_5taxa.yaml"
+    path = tmp_path / "params.yaml"
     path.write_text(_SMALL_PARAMS)
     return path
 

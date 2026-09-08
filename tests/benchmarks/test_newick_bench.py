@@ -21,9 +21,9 @@ from tests._fixtures import FIXTURES_DIR
 @pytest.mark.parametrize(
     "fixture_name",
     [
-        "simulation_params.yaml",  # 4 taxa, 200_000 sites
-        "simulation_params_small_sites.yaml",  # 4 taxa, 20_000 sites
-        "simulation_params_8taxa.yaml",  # 8 taxa, 200_000 sites
+        "tree_jc/stress.yaml",  # 4 taxa, 200_000 sites
+        "tree_jc/ci.yaml",  # 4 taxa, 20_000 sites
+        "tree_jc/release.yaml",  # 8 taxa, 200_000 sites
     ],
 )
 def test_to_newick_with_states_benchmark(

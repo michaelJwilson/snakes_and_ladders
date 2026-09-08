@@ -6,7 +6,7 @@ branch: main
 pr: 259
 tickets: [228, 122]
 problem: hmm-path
-fixture: two-state HMM with univariate Gaussian emissions, 24 replicates of 240 observations per separation
+fixture: tests/regression/fixtures/hmm/, with the categorical family replaced by univariate Gaussian emissions --- two states, 24 replicates of 240 observations per separation
 size: ci
 methods: [gradient-fit-wald-intervals]
 budget: 24

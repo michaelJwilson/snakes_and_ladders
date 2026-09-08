@@ -1,3 +1,6 @@
+model: hidden-markov
+oracle: enumeration
+
 # Ground truth for the discrete-HMM reference instance
 # (tests/regression/opt/test_opt_hmm.py, tests/regression/sim/test_hmm_simulate.py).
 # Every field is required -- see python/snakes_and_ladders/sim/hmm.py and sim/CLAUDE.md.

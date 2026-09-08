@@ -8,6 +8,11 @@ assertion is that they are the *same* approximation; and the erasure
 threshold the size measurement brackets is a closed form of density
 evolution (``app:density-evolution``), pinned to its published value before
 the code at size is held to it.
+
+Codes are drawn here at several block lengths and seeds rather than read from
+the LDPC fixture: the claim is about the (3,6) *ensemble*, and an ensemble
+reaches structures one declared member does not (``sim/CLAUDE.md``). The
+declared members are what the notebook and the figures run on.
 """
 
 from __future__ import annotations

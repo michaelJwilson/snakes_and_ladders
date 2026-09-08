@@ -48,7 +48,7 @@ from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import FIXTURES_DIR, load_fixture
 
-FIVE_TAXA = "simulation_params_5taxa.yaml"
+FIVE_TAXA = "tree_search/ci.yaml"
 N_SITES = 200
 FIELD = np.array([0.3, -0.2, 0.1])
 

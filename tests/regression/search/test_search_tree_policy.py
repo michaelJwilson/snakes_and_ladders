@@ -40,7 +40,7 @@ from snakes_and_ladders.sim.params import SimulationParams, load_simulation_para
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import edges
 
-FIXTURE = Path("tests/regression/fixtures/simulation_params_hard.yaml")
+FIXTURE = Path("tests/regression/fixtures/tree_search/release.yaml")
 
 # Realized over 16 training seeds at 640 episodes: the policy reaches the
 # enumerated maximum on 0.485 of episodes against greedy's 0.480, a difference

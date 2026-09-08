@@ -27,14 +27,14 @@ from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "simulation_params.yaml"
+FIXTURE = FIXTURES_DIR / "tree_jc/stress.yaml"
 
-# simulation_params.yaml's root has 3 children (A, B, ancestor_CD): the
+# tree_jc/stress.yaml's root has 3 children (A, B, ancestor_CD): the
 # common "unrooted tree drawn at a trifurcating root" convention, correctly
 # rejected by validate_newick as not strictly binary. The 8-taxon fixture is
 # binary at every node including the root, so it exercises validate_newick
 # and the state-labelled round trip below.
-BINARY_FIXTURE = FIXTURES_DIR / "simulation_params_8taxa.yaml"
+BINARY_FIXTURE = FIXTURES_DIR / "tree_jc/release.yaml"
 
 
 def _enumerate_topologies(taxa: tuple[str, ...]) -> Iterator[Node]:

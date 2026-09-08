@@ -6,7 +6,7 @@ branch: main
 pr: 0
 tickets: [0]
 problem: potts-lattice
-fixture: tests/regression/fixtures/potts_params.yaml
+fixture: tests/regression/fixtures/potts_chain/ci.yaml
 size: ci
 methods: [greedy, candidate]
 budget: 0
