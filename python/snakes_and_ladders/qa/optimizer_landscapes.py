@@ -113,14 +113,20 @@ def surface(
     return xs, ys, values
 
 
-def endpoints(seed: int = SEED) -> dict[str, MultiStartResult]:
+def endpoints(rng: np.random.Generator) -> dict[str, MultiStartResult]:
     """Fit every function from its random restarts.
+
+    Parameters
+    ----------
+    rng : np.random.Generator
+        Spawns one generator per function, in a fixed order; passed in
+        rather than seeded here (``sim/CLAUDE.md``).
 
     Returns
     -------
     dict[str, MultiStartResult]
     """
-    generators = np.random.default_rng(seed).spawn(len(RESTARTS))
+    generators = rng.spawn(len(RESTARTS))
     return {
         name: fit_from(
             objective,
@@ -237,7 +243,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
         stem="optimizer_landscapes",
         description=__doc__,
         params=(),
-        build=lambda: build_figure(endpoints()),
+        build=lambda: build_figure(endpoints(np.random.default_rng(SEED))),
         argv=argv,
     )
 

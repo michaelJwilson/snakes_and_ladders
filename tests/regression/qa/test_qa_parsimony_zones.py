@@ -56,7 +56,7 @@ def test_the_zone_gap_is_the_brute_force_gap_on_a_small_alignment() -> None:
     )
     wrong = brute_force_parsimony_score(LONG_BRANCH_GROUPING, dataset.alignment, 4)
     right = brute_force_parsimony_score(FELSENSTEIN_ZONE, dataset.alignment, 4)
-    gaps = zone_gaps(seed=3)
+    gaps = zone_gaps(np.random.default_rng(3))
 
     assert gaps["Felsenstein"].shape == (len(SITE_COUNTS), REPLICATES)
     # Every gap is a multiple of 1 / n_sites, as a difference of integers is.
@@ -71,7 +71,7 @@ def test_the_zones_separate_in_sign() -> None:
     # The theorem the figure illustrates: the wrong tree is cheaper in the
     # Felsenstein zone and dearer in the Farris zone, on average, at every
     # site count.
-    gaps = zone_gaps(seed=20260904)
+    gaps = zone_gaps(np.random.default_rng(20260904))
 
     assert (gaps["Felsenstein"].mean(axis=1) < 0).all()
     assert (gaps["Farris"].mean(axis=1) > 0).all()

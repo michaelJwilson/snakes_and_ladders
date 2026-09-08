@@ -101,8 +101,16 @@ class SeedingRatios:
     optimal: float
 
 
-def seeding_ratios(observations: np.ndarray, seed: int) -> SeedingRatios:
+def seeding_ratios(observations: np.ndarray, rng: np.random.Generator) -> SeedingRatios:
     """Seed the observations `SEEDINGS` times each way and cost every seeding.
+
+    Parameters
+    ----------
+    observations : np.ndarray
+        The fixture's draws.
+    rng : np.random.Generator
+        Every seeding draws from it, in order; passed in rather than seeded
+        here (``sim/CLAUDE.md``).
 
     Returns
     -------
@@ -110,7 +118,6 @@ def seeding_ratios(observations: np.ndarray, seed: int) -> SeedingRatios:
     """
     n_centres = len(MEANS)
     optimal = optimal_clustering_cost(observations, n_centres)
-    rng = np.random.default_rng(seed)
     plus_plus = np.array(
         [
             clustering_cost(
@@ -130,15 +137,15 @@ def seeding_ratios(observations: np.ndarray, seed: int) -> SeedingRatios:
     return SeedingRatios(kmeans_plus_plus=plus_plus, uniform=uniform, optimal=optimal)
 
 
-def fitted(observations: np.ndarray, seed: int) -> MixtureFit:
-    """Expectation--maximization from one k-means++ start.
+def fitted(observations: np.ndarray, rng: np.random.Generator) -> MixtureFit:
+    """Expectation--maximization from one k-means++ start drawn from ``rng``.
 
     Returns
     -------
     MixtureFit
     """
     objective = GaussianMixtureObjective(observations, len(MEANS))
-    start = KMeansPlusPlus(1, np.random.default_rng(seed)).starts(objective)[0]
+    start = KMeansPlusPlus(1, rng).starts(objective)[0]
     named = objective.constrain(start)
     return expectation_maximization(
         observations,
@@ -277,8 +284,11 @@ def main(argv: list[str] | None = None) -> QAFigure:
 
     def build() -> tuple[Figure, str]:
         observations = simulate_mixture(fixture()).observations
+        fit_rng, seeding_rng = np.random.default_rng(SEED).spawn(2)
         return build_figure(
-            observations, fitted(observations, SEED), seeding_ratios(observations, SEED)
+            observations,
+            fitted(observations, fit_rng),
+            seeding_ratios(observations, seeding_rng),
         )
 
     return figure_main(

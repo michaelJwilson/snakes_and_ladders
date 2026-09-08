@@ -32,7 +32,7 @@ from snakes_and_ladders.sim.mixture import simulate_mixture
 @pytest.mark.oracle
 def test_no_seeding_beats_the_exact_optimal_cost_and_kmeanspp_meets_its_bound() -> None:
     observations = simulate_mixture(fixture()).observations
-    ratios = seeding_ratios(observations, SEED)
+    ratios = seeding_ratios(observations, np.random.default_rng(SEED))
 
     assert ratios.kmeans_plus_plus.shape == ratios.uniform.shape == (SEEDINGS,)
     assert ratios.kmeans_plus_plus.min() >= 1.0
@@ -56,7 +56,7 @@ def test_the_fit_lands_within_the_generating_density_scale() -> None:
     # component sits inside the generating range with a scale of the same
     # order, which a collapsed or runaway component would break.
     observations = simulate_mixture(fixture()).observations
-    fit = fitted(observations, SEED)
+    fit = fitted(observations, np.random.default_rng(SEED))
 
     assert fit.iterations <= EM_ITERATIONS
     assert (fit.components.mean.numpy() > min(MEANS) - 1.0).all()

@@ -31,7 +31,7 @@ from snakes_and_ladders.qa.optimizer_landscapes import (
 def test_rosenbrock_is_reached_from_every_restart_and_himmelblau_lands_on_a_minimum() -> (
     None
 ):
-    results = endpoints(seed=20260908)
+    results = endpoints(np.random.default_rng(20260908))
 
     assert reached("Rosenbrock", results["Rosenbrock"]) == RESTARTS["Rosenbrock"]
     assert reached("Himmelblau", results["Himmelblau"]) == RESTARTS["Himmelblau"]
@@ -44,7 +44,7 @@ def test_rosenbrock_is_reached_from_every_restart_and_himmelblau_lands_on_a_mini
 def test_every_rastrigin_endpoint_is_a_stationary_point_of_the_closed_form() -> None:
     # A fit that reports convergence sits where the closed-form gradient
     # vanishes; whether that is the origin is what the caption counts.
-    results = endpoints(seed=20260908)
+    results = endpoints(np.random.default_rng(20260908))
     rastrigin = objectives()["Rastrigin"]
 
     for fit in results["Rastrigin"].all_fits:
@@ -75,7 +75,7 @@ def test_known_minimizers_are_the_published_ones() -> None:
 
 @pytest.mark.structural
 def test_the_caption_counts_the_endpoints_it_was_handed(tmp_path: Path) -> None:
-    results = endpoints(seed=20260908)
+    results = endpoints(np.random.default_rng(20260908))
     _, caption = build_figure(results)
     for name in RESTARTS:
         assert f"{reached(name, results[name])} of {RESTARTS[name]}" in caption

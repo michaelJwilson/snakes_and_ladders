@@ -86,13 +86,14 @@ LONG_BRANCH_GROUPING = Node(
 )
 
 
-def zone_gaps(seed: int) -> dict[str, np.ndarray]:
+def zone_gaps(rng: np.random.Generator) -> dict[str, np.ndarray]:
     """Per-site Fitch gap, long-branch grouping minus generating tree, per zone.
 
     Parameters
     ----------
-    seed : int
-        Seeds one generator per zone, spawned from it in a fixed order.
+    rng : np.random.Generator
+        Spawns one generator per zone, in a fixed order; passed in rather
+        than seeded here (``sim/CLAUDE.md``).
 
     Returns
     -------
@@ -101,10 +102,10 @@ def zone_gaps(seed: int) -> dict[str, np.ndarray]:
         ``(len(SITE_COUNTS), REPLICATES)``. Negative means parsimony prefers
         the wrong tree.
     """
-    generators = np.random.default_rng(seed).spawn(2)
+    generators = rng.spawn(2)
     uniform = np.full(_ZONE_STATES, 1.0 / _ZONE_STATES)
     gaps: dict[str, np.ndarray] = {}
-    for name, tau, rng in (
+    for name, tau, zone_rng in (
         ("Felsenstein", FELSENSTEIN_ZONE, generators[0]),
         ("Farris", FARRIS_ZONE, generators[1]),
     ):
@@ -112,7 +113,7 @@ def zone_gaps(seed: int) -> dict[str, np.ndarray]:
         for row, n_sites in enumerate(SITE_COUNTS):
             for replicate in range(REPLICATES):
                 dataset = simulate_alignment(
-                    tau=tau, k=_ZONE_STATES, pi=uniform, rng=rng, n_sites=n_sites
+                    tau=tau, k=_ZONE_STATES, pi=uniform, rng=zone_rng, n_sites=n_sites
                 )
                 wrong = fitch_score(
                     LONG_BRANCH_GROUPING, dataset.alignment, _ZONE_STATES
@@ -298,7 +299,7 @@ def main(argv: list[str] | None = None) -> QAFigure:
         description=__doc__,
         params=[SIMULATION_PARAMS],
         build=lambda params: build_figure(
-            zone_gaps(params.seed), ranking(params), params
+            zone_gaps(np.random.default_rng(params.seed)), ranking(params), params
         ),
         argv=argv,
     )

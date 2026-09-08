@@ -86,7 +86,7 @@ def test_descent_reaches_the_planted_energy_where_nothing_is_frustrated() -> Non
     # any start reaches its energy; above zero descent may only tie or beat
     # the planted energy, never sit above it after twenty restarts on this
     # instance size.
-    scan = glass_scan(seed=20260908)
+    scan = glass_scan(np.random.default_rng(20260908))
 
     assert FRUSTRATIONS[0] == 0.0
     assert scan.descended[0] == scan.planted[0]

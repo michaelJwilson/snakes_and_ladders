@@ -155,14 +155,19 @@ class GlassScan:
     descended: np.ndarray
 
 
-def glass_scan(seed: int = SEED) -> GlassScan:
+def glass_scan(rng: np.random.Generator) -> GlassScan:
     """Build one instance per frustration and descend on each from restarts.
+
+    Parameters
+    ----------
+    rng : np.random.Generator
+        Every draw, the instances and the starts, comes from it; passed in
+        rather than seeded here (``sim/CLAUDE.md``).
 
     Returns
     -------
     GlassScan
     """
-    rng = np.random.default_rng(seed)
     field = np.zeros(2)
     planted = np.zeros(len(FRUSTRATIONS))
     descended = np.zeros(len(FRUSTRATIONS))
@@ -278,7 +283,9 @@ def main(argv: list[str] | None = None) -> QAFigure:
         graph = frustrated_triangular_lattice(LATTICE_SHAPE)
         labelling, agreeing = ground_state(graph)
         assert agreeing == minimum_frustrated_edges(graph)
-        return build_figure(graph, labelling, agreeing, glass_scan())
+        return build_figure(
+            graph, labelling, agreeing, glass_scan(np.random.default_rng(SEED))
+        )
 
     return figure_main(
         stem="frustrated_lattices",
