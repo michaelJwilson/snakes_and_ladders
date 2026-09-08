@@ -22,15 +22,16 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders.learn.environment import Environment, Episode
-from snakes_and_ladders.learn.policy import LinearPolicy
+from snakes_and_ladders.learn.policy import Policy
 
 
 def rollout[S, A](
     environment: Environment[S, A],
-    policy: LinearPolicy,
+    policy: Policy,
     rng: np.random.Generator,
     max_steps: int,
     start: S | None = None,
+    stop_at_local_optimum: bool = True,
 ) -> Episode[S, A]:
     """Run one episode under ``policy``.
 
@@ -38,8 +39,10 @@ def rollout[S, A](
     ----------
     environment : Environment[S, A]
         The problem to search.
-    policy : LinearPolicy
-        Scores the available actions; sampled from, not maximized over.
+    policy : Policy
+        Chooses among the available actions. :class:`LinearPolicy` samples
+        from its softmax; :class:`EpsilonGreedyPolicy` takes the greedy action
+        except a declared fraction of the time.
     rng : np.random.Generator
         The only source of randomness, covering both the starting state and
         every action drawn.
@@ -50,6 +53,20 @@ def rollout[S, A](
         consumer needs to know it happened.
     start : S | None
         Starting state; ``None`` draws one from ``environment.reset``.
+    stop_at_local_optimum : bool
+        Whether reaching a state ``environment.is_terminal`` accepts ends the
+        episode. ``True`` is the historical behaviour and stays the default,
+        because it is what makes an episode's end mean "nothing here improves".
+
+        ``False`` lets the episode run to ``max_steps`` regardless, which is
+        the only way an agent can leave a local optimum at all (issue #194).
+        Two things follow and are the caller's to handle. The episode's
+        outcome is then the best state it *visited*, not the state it ended
+        in, since a wandering searcher keeps its best. And the budget is no
+        longer bounded by reaching a local optimum, so a comparison against
+        hill climbing has to match budgets explicitly --- restarting greedy
+        until it has spent the same number of decisions is the honest
+        baseline, not a single greedy run.
 
     Returns
     -------
@@ -70,8 +87,13 @@ def rollout[S, A](
     actions: list[A] = []
     rewards: list[float] = []
     terminated = environment.is_terminal(state)
-    while not terminated and len(actions) < max_steps:
+    while (not terminated or not stop_at_local_optimum) and len(actions) < max_steps:
         available = environment.actions(state)
+        if not available:
+            # An absorbing state with no actions ends the episode whatever
+            # the stopping rule says: there is nothing to sample from, and
+            # asking a policy to choose among no actions is not a decision.
+            break
         index = policy.sample(environment.features(state, available), rng)
         action = available[index]
         state, reward = environment.step(state, action)

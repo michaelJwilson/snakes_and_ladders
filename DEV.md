@@ -13,6 +13,7 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 | --- | --- |
 | `benches/`, `tests/` | Criterion benchmarks (Rust), pytest suite, and integration tests. |
 | `docs/source/` | Sphinx API documentation. |
+| `PROBLEMS.md`, `CHECKS.md` | The problem catalogue, hand-written and resolved by a test; the checks ledger, written by `infra/checks_ledger.py --write` from the `oracle` and `simulated_truth` markers and compared by CI. |
 | `python/snakes_and_ladders/` | Python package: re-exports, typed extension stubs, stub CLI. |
 | `python/snakes_and_ladders/sim/` | Data generation and ground-truth retention. |
 | `python/snakes_and_ladders/likelihood/` | Felsenstein pruning; CPU dispatch landed (NumPy, PyTorch, Rust), CUDA and Metal dispatch not yet implemented. Also the phylogenetic `Objective` (`objective.py`), which adapts the recursion to `opt/`'s fitting interface — it is here because `opt/` may import no application module. |
@@ -80,7 +81,7 @@ Ten required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs a
 
 | Job | Execution |
 | --- | --- |
-| `lint` | `ruff check`, `ruff format --check`, strict `mypy`, `towncrier check` |
+| `lint` | `ruff check`, `ruff format --check`, strict `mypy`, `towncrier check`, `infra/checks_ledger.py --check` |
 | `rust-lint` | `cargo clippy -D warnings`, `cargo fmt --check` |
 | `rust-tests` | `cargo test --locked`, `cargo bench` (informational) |
 | `build` | `pip install .` (no lockfile, mimics fresh consumer), smoke import |

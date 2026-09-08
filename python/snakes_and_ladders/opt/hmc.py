@@ -685,6 +685,190 @@ def anneal(
     )
 
 
+@dataclass(frozen=True)
+class Tempered:
+    """What one parallel-tempering run found, and what it cost.
+
+    Parameters
+    ----------
+    theta : torch.Tensor
+        The lowest-valued point visited at any temperature.
+    value : float
+        The objective there.
+    positions : torch.Tensor
+        Every replica after every round, shape ``(n_rounds, n_replicas,
+        dimension)``; replica ``r`` sits at ``temperatures[r]`` throughout,
+        because an exchange swaps *positions* between temperatures rather
+        than moving a chain along the ladder. Recorded so a replica's
+        marginal can be checked against the tempered target, as the discrete
+        version's are.
+    acceptance_rate : torch.Tensor
+        Fraction of Hamiltonian proposals accepted per replica, shape
+        ``(n_replicas,)``.
+    swap_acceptance : torch.Tensor
+        Fraction of proposed exchanges accepted per adjacent pair, shape
+        ``(n_replicas - 1,)``. Near zero means the ladder has a gap no
+        position crosses and the replicas are independent chains; near one
+        means two temperatures are close enough that one is redundant.
+    force_evaluations : int
+        Gradients spent over every replica, so the run is comparable to any
+        other optimizer at equal evaluations.
+    """
+
+    theta: torch.Tensor
+    value: float
+    positions: torch.Tensor
+    acceptance_rate: torch.Tensor
+    swap_acceptance: torch.Tensor
+    force_evaluations: int
+
+
+def _swap_log_ratio(
+    temperature_cold: float, temperature_hot: float, value_cold: float, value_hot: float
+) -> float:
+    """Log acceptance of exchanging the positions at two temperatures.
+
+    The joint target is the product of the tempered marginals, so the ratio
+    is ``(1/T_cold - 1/T_hot)(U_cold - U_hot)``: an exchange that hands the
+    colder replica the lower value is always accepted. The same expression
+    :func:`snakes_and_ladders.search.potts_mcmc.parallel_tempering` accepts
+    on, with the objective where that has an energy.
+    """
+    return (1.0 / temperature_cold - 1.0 / temperature_hot) * (value_cold - value_hot)
+
+
+def parallel_tempering(
+    objective: Objective,
+    temperatures: tuple[float, ...],
+    seed: int,
+    n_rounds: int,
+    *,
+    step_size: float,
+    n_steps: int = DEFAULT_STEPS,
+    theta0: torch.Tensor | None = None,
+    integrator: Integrator = leapfrog,
+) -> Tempered:
+    """Replicas at fixed temperatures, exchanging positions by Metropolis.
+
+    Each round is one :func:`sample` transition per replica at its own
+    temperature, then every adjacent pair proposes to exchange positions and
+    accepts on :func:`_swap_log_ratio`. The hot replicas cross barriers the
+    cold one cannot, and an exchange carries what they find down the ladder
+    (Swendsen & Wang, 1986; Geyer, 1991; Earl & Deem, 2005). The continuous
+    counterpart of :func:`snakes_and_ladders.search.potts_mcmc.parallel_tempering`,
+    which ``opt`` cannot import and which moves spins rather than a vector.
+
+    **The replicas must not share a stream and must be reproducible from one
+    seed.** One generator seeded from ``seed`` draws a seed per replica and
+    then only the exchange uniforms, so the replicas are independent streams
+    and one seed reproduces the run. Sharing one stream would correlate the
+    replicas, which is the whole point lost while every diagnostic looks
+    healthy.
+
+    Parameters
+    ----------
+    objective : Objective
+        What to minimize. Read as an energy, so ``T`` is physical; a negative
+        log-likelihood here is a power posterior and the caller should know
+        which they meant.
+    temperatures : tuple[float, ...]
+        The ladder, coldest first; at least two, all positive, strictly
+        increasing so that adjacent pairs are the ones that exchange.
+    seed : int
+        Seed for the parent ``torch.Generator``.
+    n_rounds : int
+        Transitions per replica, at least one. The budget in proposals is
+        ``n_rounds * len(temperatures)``; ``force_evaluations`` on the result
+        is the budget in gradients.
+    step_size, n_steps, theta0, integrator
+        As :func:`sample`; every replica starts at ``theta0``.
+
+    Returns
+    -------
+    Tempered
+
+    Raises
+    ------
+    ValueError
+        If fewer than two temperatures are given --- a ladder of one has
+        nothing to exchange and is :func:`sample` --- if any is not positive
+        or the ladder is not increasing, or if ``n_rounds`` is below one.
+    """
+    _check_trajectory(step_size, n_steps)
+    if len(temperatures) < 2:
+        msg = (
+            f"parallel tempering needs at least two temperatures, got "
+            f"{len(temperatures)}: a ladder of one has nothing to exchange"
+        )
+        raise ValueError(msg)
+    for cold, hot in itertools.pairwise(temperatures):
+        if not 0.0 < cold < hot:
+            msg = (
+                f"temperatures must be positive and increasing, coldest first, "
+                f"got {temperatures}"
+            )
+            raise ValueError(msg)
+    if n_rounds < 1:
+        msg = f"n_rounds must be at least 1, got {n_rounds}"
+        raise ValueError(msg)
+
+    parent = torch.Generator().manual_seed(seed)
+    n_replicas = len(temperatures)
+    children = [
+        torch.Generator().manual_seed(int(child))
+        for child in torch.randint(0, 2**31 - 1, (n_replicas,), generator=parent)
+    ]
+    start = _start(objective, theta0)
+    positions = [start.clone() for _ in range(n_replicas)]
+    values = [float(objective(start))] * n_replicas
+    best, best_value = start.clone(), values[0]
+    accepted = torch.zeros(n_replicas, dtype=torch.float64)
+    swapped = torch.zeros(n_replicas - 1, dtype=torch.float64)
+    recorded = torch.empty((n_rounds, n_replicas, start.shape[0]), dtype=torch.float64)
+
+    for round_index in range(n_rounds):
+        for replica in range(n_replicas):
+            positions[replica], _, was_accepted = _transition(
+                objective,
+                positions[replica],
+                temperatures[replica],
+                children[replica],
+                step_size,
+                n_steps,
+                integrator,
+            )
+            accepted[replica] += was_accepted
+            values[replica] = float(objective(positions[replica]))
+        for pair in range(n_replicas - 1):
+            log_ratio = _swap_log_ratio(
+                temperatures[pair],
+                temperatures[pair + 1],
+                values[pair],
+                values[pair + 1],
+            )
+            uniform = float(torch.rand(1, generator=parent))
+            if log_ratio >= 0.0 or uniform < math.exp(log_ratio):
+                swapped[pair] += 1
+                positions[pair], positions[pair + 1] = (
+                    positions[pair + 1],
+                    positions[pair],
+                )
+                values[pair], values[pair + 1] = values[pair + 1], values[pair]
+        lowest = min(range(n_replicas), key=values.__getitem__)
+        if values[lowest] < best_value:
+            best, best_value = positions[lowest].clone(), values[lowest]
+        recorded[round_index] = torch.stack(positions)
+
+    return Tempered(
+        theta=best,
+        value=best_value,
+        positions=recorded,
+        acceptance_rate=accepted / n_rounds,
+        swap_acceptance=swapped / n_rounds,
+        force_evaluations=n_rounds * n_replicas * integrator.force_evaluations(n_steps),
+    )
+
+
 def _check_trajectory(step_size: float, n_steps: int) -> None:
     if step_size <= 0.0:
         msg = f"step_size must be positive, got {step_size}"
