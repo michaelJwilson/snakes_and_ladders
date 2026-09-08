@@ -25,7 +25,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LONG = re.compile(r"(?<![\w/\-])snakes_and_ladders\.(?=[a-z_]+)")
-SKIP = {REPO_ROOT / "CHANGELOG.md", Path(__file__).resolve()}
+SKIP = {REPO_ROOT / "CHANGELOG.md", REPO_ROOT / "CHECKS.md", Path(__file__).resolve()}
 PROSE_GLOBS = ("*.md", "docs/tex/*.tex", "changelog.d/*.md")
 NOTEBOOK_GLOB = "docs/nb/*.ipynb"
 PYTHON_ROOTS = ("python", "tests", "infra")

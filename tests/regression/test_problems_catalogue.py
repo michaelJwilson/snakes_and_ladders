@@ -29,6 +29,8 @@ def _resolves(symbol: str) -> bool:
     """A repository path, or an importable dotted name."""
     if "/" in symbol or symbol.endswith((".md", ".yaml", ".ipynb")):
         return (REPO_ROOT / symbol).exists()
+    if symbol.startswith("sal."):
+        symbol = "snakes_and_ladders." + symbol.removeprefix("sal.")
     module_path, _, attribute = symbol.rpartition(".")
     try:
         return hasattr(importlib.import_module(module_path), attribute)
