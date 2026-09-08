@@ -6,7 +6,7 @@ branch: main
 pr: 212
 tickets: [212]
 problem: potts-lattice
-fixture: open square lattice, q = 3, at the exact transition J_c = ln(1 + sqrt(q)), extents 8 to 24
+fixture: tests/regression/fixtures/potts_lattice/, swept around the declared instance --- open square lattices, q = 3, at the exact transition J_c = ln(1 + sqrt(q)), extents 8 to 24
 size: stress
 methods: [single-site, swendsen-wang, wolff]
 budget: 0

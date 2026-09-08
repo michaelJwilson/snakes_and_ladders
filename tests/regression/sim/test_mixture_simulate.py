@@ -4,6 +4,11 @@ Validated against closed forms rather than against a likelihood computed
 here: the mixture's mean and variance follow from the law of total variance,
 and the fraction of draws from each component follows from the weights, both
 to a Monte Carlo bound stated from the sample size (``sim/CLAUDE.md``).
+
+The instances are built inline because the sample size is the variable a
+Monte Carlo bound is checked over, and because several are deliberately
+malformed --- a weight of zero, weights that do not sum to one --- which is
+the pathological input a fixture must not carry.
 """
 
 from __future__ import annotations

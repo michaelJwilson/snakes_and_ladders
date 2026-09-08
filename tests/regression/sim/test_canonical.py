@@ -5,6 +5,14 @@ its answer is known independently of anything here, and more than one module
 consumes it. The tests below are where the second clause is visible ---
 ``sim`` builds the instance, and ``likelihood`` and ``search`` supply the
 oracle.
+
+The instances here are built inline, and that is the exception
+``sim/CLAUDE.md`` allows: these are the tests *of* the constructors, run over
+a range of sizes and boundaries, so a fixture file would fix the one size the
+constructor must not be checked at alone. The declared instance of the
+frustrated problem is the fixture, and
+``tests/regression/test_fixture_registry.py`` pins the file to what these
+constructors build.
 """
 
 from __future__ import annotations

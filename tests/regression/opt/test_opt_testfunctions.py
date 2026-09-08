@@ -10,6 +10,11 @@ Three properties, three functions, and the third is the one that changes what
 may be claimed elsewhere: on a multimodal surface `converged` means the
 first-order condition holds, not that the global minimum was found, and the
 measured rate below says how far apart those are.
+
+The functions are constructed inline at the dimensions and starts each
+property needs --- including ones chosen to be hard --- rather than read from
+the test-function fixture, which declares the two-dimensional instances the
+figure and the multi-start study are run on.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ branch: claude/opt-332-mixture-budget
 pr: 0
 tickets: [332, 284, 303]
 problem: mixture
-fixture: five-component Gaussian mixture from `sim.mixture`, means 1.5 standard deviations apart, weights (0.30, 0.10, 0.25, 0.15, 0.20), 500 observations, seed 20260908
+fixture: tests/regression/fixtures/mixture/ci.yaml, the five-component Gaussian mixture --- means 1.5 standard deviations apart, weights (0.30, 0.10, 0.25, 0.15, 0.20), 500 observations, seed 20260908
 size: release
 methods: [restarts, anneal, tempering]
 budget: 3000

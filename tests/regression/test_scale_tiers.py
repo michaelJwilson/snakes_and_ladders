@@ -24,8 +24,8 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from snakes_and_ladders.sim.fixtures import Fixture
+
 from tests._scale import at_fixture, at_scale
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -105,9 +105,11 @@ def test_at_fixture_runs_one_case_per_declared_tier() -> None:
         "tree_search-stress",
         "tree_search-release",
     ]
-    assert [
-        [mark.name for mark in parameter.marks] for parameter in parameters
-    ] == [[], ["stress"], ["release"]]
+    assert [[mark.name for mark in parameter.marks] for parameter in parameters] == [
+        [],
+        ["stress"],
+        ["release"],
+    ]
 
 
 @pytest.mark.simulated_truth

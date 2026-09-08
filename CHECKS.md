@@ -241,7 +241,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_optimizer_landscapes.py::test_rosenbrock_is_reached_from_every_restart_and_himmelblau_lands_on_a_minimum` | oracle |  |
 | `test_qa_optimizer_landscapes.py::test_every_rastrigin_endpoint_is_a_stationary_point_of_the_closed_form` | oracle | A fit that reports convergence sits where the closed-form gradient vanishes; whether that is the origin is what the caption counts. |
 | `test_qa_optimizer_landscapes.py::test_the_surface_is_the_objective_on_its_grid` | oracle |  |
-| `test_qa_optimizer_landscapes.py::test_known_minimizers_are_the_published_ones` | oracle |  |
+| `test_qa_optimizer_landscapes.py::test_known_minimizers_are_the_published_ones` | oracle | The fixture states the published values; this is what holds the file to the module's own copy of Himmelblau's four and to the two exact ones. |
 | `test_qa_parsimony_zones.py::test_the_long_branch_grouping_is_the_other_split_of_the_zone_tree` | oracle | `AC\|BD` against the zone's `AB\|CD`: the figure's whole claim is about which split parsimony prefers, so the two trees must be different unrooted topologies on the same leaves. |
 | `test_qa_parsimony_zones.py::test_the_zone_gap_is_the_brute_force_gap_on_a_small_alignment` | oracle | The figure divides a Fitch difference by the site count; the brute force over internal labellings shares no traversal with Fitch and gives the same integer, so the per-site gap is pinned to it. |
 | `test_qa_parsimony_zones.py::test_the_zones_separate_in_sign` | simulated_truth | The theorem the figure illustrates: the wrong tree is cheaper in the Felsenstein zone and dearer in the Farris zone, on average, at every site count. |

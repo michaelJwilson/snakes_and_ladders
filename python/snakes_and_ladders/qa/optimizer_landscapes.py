@@ -25,13 +25,11 @@ from snakes_and_ladders.opt.fit import MultiStartResult, fit_from
 from snakes_and_ladders.opt.initialize import RandomRestart
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.testfunctions import (
-    HIMMELBLAU_MINIMA,
-    Himmelblau,
-    Rastrigin,
-    Rosenbrock,
+    TestFunctionParams,
+    TestFunctionSuite,
 )
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import figure_main
+from snakes_and_ladders.qa.runner import TEST_FUNCTION_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK,
     ONE_COLUMN_SHORT,
@@ -39,71 +37,41 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 
-SEED = 20260908
 
-#: Restarts per function and the scale of the Gaussian displacement around
-#: each function's own start, in its coordinates.
-RESTARTS: dict[str, int] = {"Rosenbrock": 4, "Rastrigin": 16, "Himmelblau": 8}
-SCALES: dict[str, float] = {"Rosenbrock": 1.0, "Rastrigin": 2.0, "Himmelblau": 3.0}
-
-#: The domain each function is drawn over: ``(x_min, x_max, y_min, y_max)``.
-DOMAINS: dict[str, tuple[float, float, float, float]] = {
-    "Rosenbrock": (-2.0, 2.0, -1.0, 3.0),
-    "Rastrigin": (-5.12, 5.12, -5.12, 5.12),
-    "Himmelblau": (-5.0, 5.0, -5.0, 5.0),
-}
-
-#: Grid points per axis for the contours.
-GRID = 81
-
-#: A fit within this distance of a closed-form minimizer counts as at it.
-AT_MINIMUM = 1e-4
-
-
-def objectives() -> dict[str, Objective]:
-    """The three functions, two-dimensional.
+def objectives(suite: TestFunctionSuite) -> dict[str, Objective]:
+    """The declared functions, in the fixture's order.
 
     Returns
     -------
     dict[str, Objective]
     """
-    return {
-        "Rosenbrock": Rosenbrock(dimension=2),
-        # Restarts are drawn around the objective's own start, so Rastrigin's
-        # is put at the origin: the question is which cell a start falls in.
-        "Rastrigin": Rastrigin(dimension=2, start=0.0),
-        "Himmelblau": Himmelblau(),
-    }
+    return {function.name: function.objective() for function in suite.functions}
 
 
-def known_minimizers(name: str) -> np.ndarray:
-    """The closed-form minimizers of the named function, shape ``(m, 2)``.
+def known_minimizers(function: TestFunctionParams) -> np.ndarray:
+    """The published minimizers of one function, shape ``(m, dimension)``.
 
     Returns
     -------
     np.ndarray
     """
-    if name == "Himmelblau":
-        return np.array(HIMMELBLAU_MINIMA)
-    objective = objectives()[name]
-    assert isinstance(objective, Rosenbrock | Rastrigin)
-    return objective.minimizer().numpy()[None, :]
+    return np.array(function.minimizers)
 
 
 def surface(
-    objective: Objective, name: str
+    objective: Objective, function: TestFunctionParams, grid: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The objective evaluated on the function's drawing grid.
+    """The objective evaluated on the function's declared drawing grid.
 
     Returns
     -------
     tuple[np.ndarray, np.ndarray, np.ndarray]
-        ``xs``, ``ys`` of length `GRID`, and ``values`` of shape
-        ``(GRID, GRID)`` indexed ``[y, x]``.
+        ``xs``, ``ys`` of length ``grid``, and ``values`` of shape
+        ``(grid, grid)`` indexed ``[y, x]``.
     """
-    x_min, x_max, y_min, y_max = DOMAINS[name]
-    xs = np.linspace(x_min, x_max, GRID)
-    ys = np.linspace(y_min, y_max, GRID)
+    x_min, x_max, y_min, y_max = function.domain
+    xs = np.linspace(x_min, x_max, grid)
+    ys = np.linspace(y_min, y_max, grid)
     values = np.array(
         [
             [float(objective(torch.tensor([x, y], dtype=torch.float64))) for x in xs]
@@ -113,11 +81,15 @@ def surface(
     return xs, ys, values
 
 
-def endpoints(rng: np.random.Generator) -> dict[str, MultiStartResult]:
-    """Fit every function from its random restarts.
+def endpoints(
+    suite: TestFunctionSuite, rng: np.random.Generator
+) -> dict[str, MultiStartResult]:
+    """Fit every declared function from its declared random restarts.
 
     Parameters
     ----------
+    suite : TestFunctionSuite
+        The functions and their restart counts and scales.
     rng : np.random.Generator
         Spawns one generator per function, in a fixed order; passed in
         rather than seeded here (``sim/CLAUDE.md``).
@@ -126,47 +98,59 @@ def endpoints(rng: np.random.Generator) -> dict[str, MultiStartResult]:
     -------
     dict[str, MultiStartResult]
     """
-    generators = rng.spawn(len(RESTARTS))
+    generators = rng.spawn(len(suite.functions))
     return {
-        name: fit_from(
-            objective,
-            RandomRestart(RESTARTS[name], SCALES[name], rng, include_nominal=False),
+        function.name: fit_from(
+            function.objective(),
+            RandomRestart(
+                function.restarts, function.scale, rng, include_nominal=False
+            ),
             workers=1,
         )
-        for (name, objective), rng in zip(objectives().items(), generators, strict=True)
+        for function, rng in zip(suite.functions, generators, strict=True)
     }
 
 
-def reached(name: str, result: MultiStartResult) -> int:
-    """How many of the fits ended within `AT_MINIMUM` of a global minimizer.
+def reached(
+    function: TestFunctionParams, result: MultiStartResult, at_minimum: float
+) -> int:
+    """How many of the fits ended within ``at_minimum`` of a global minimizer.
 
     Returns
     -------
     int
     """
-    minimizers = known_minimizers(name)
+    minimizers = known_minimizers(function)
     return sum(
         bool(
-            np.min(np.linalg.norm(minimizers - fit.theta.numpy(), axis=1)) < AT_MINIMUM
+            np.min(np.linalg.norm(minimizers - fit.theta.numpy(), axis=1)) < at_minimum
         )
         for fit in result.all_fits
     )
 
 
-def build_figure(results: dict[str, MultiStartResult]) -> tuple[Figure, str]:
+def build_figure(
+    suite: TestFunctionSuite, results: dict[str, MultiStartResult]
+) -> tuple[Figure, str]:
     """Assemble the three panels and the caption.
 
     Returns
     -------
     tuple[matplotlib.figure.Figure, str]
     """
-    hits = {name: reached(name, result) for name, result in results.items()}
+    declared = suite.named()
+    hits = {
+        name: reached(declared[name], result, suite.at_minimum)
+        for name, result in results.items()
+    }
+    restarts = {name: function.restarts for name, function in declared.items()}
+    scales = {name: function.scale for name, function in declared.items()}
     with letter_style():
         fig, axes = plt.subplots(1, 3, figsize=ONE_COLUMN_SHORT)
         for axis, (label, (name, objective)) in zip(
-            axes, zip("abc", objectives().items(), strict=True), strict=True
+            axes, zip("abc", objectives(suite).items(), strict=True), strict=True
         ):
-            xs, ys, values = surface(objective, name)
+            xs, ys, values = surface(objective, declared[name], suite.grid)
             axis.contour(
                 xs,
                 ys,
@@ -177,7 +161,7 @@ def build_figure(results: dict[str, MultiStartResult]) -> tuple[Figure, str]:
                 alpha=0.6,
             )
             axis.grid(False)
-            minimizers = known_minimizers(name)
+            minimizers = known_minimizers(declared[name])
             truth_style = series_style(1)
             axis.plot(
                 minimizers[:, 0],
@@ -213,16 +197,16 @@ def build_figure(results: dict[str, MultiStartResult]) -> tuple[Figure, str]:
         f"The three continuous test functions in two dimensions, with the "
         f"minimizers known in closed form and the endpoints of L-BFGS fits "
         f"from Gaussian random restarts around each function's own start, "
-        f"the origin for Rastrigin (seed {SEED}). (a) Rosenbrock, {RESTARTS['Rosenbrock']} restarts at "
-        f"scale {SCALES['Rosenbrock']:g}: {hits['Rosenbrock']} of "
-        f"{RESTARTS['Rosenbrock']} reach the minimizer (1, 1). (b) Rastrigin, "
-        f"{RESTARTS['Rastrigin']} restarts at scale {SCALES['Rastrigin']:g}: "
-        f"{hits['Rastrigin']} of {RESTARTS['Rastrigin']} reach the global "
+        f"the origin for Rastrigin (seed {suite.seed}). (a) Rosenbrock, {restarts['Rosenbrock']} restarts at "
+        f"scale {scales['Rosenbrock']:g}: {hits['Rosenbrock']} of "
+        f"{restarts['Rosenbrock']} reach the minimizer (1, 1). (b) Rastrigin, "
+        f"{restarts['Rastrigin']} restarts at scale {scales['Rastrigin']:g}: "
+        f"{hits['Rastrigin']} of {restarts['Rastrigin']} reach the global "
         f"minimum at the origin, every fit stopping at the local minimum of "
         f"the cell it started in, so a single fit of this surface reports "
         f"convergence and not optimality. (c) Himmelblau, "
-        f"{RESTARTS['Himmelblau']} restarts at scale {SCALES['Himmelblau']:g}: "
-        f"{hits['Himmelblau']} of {RESTARTS['Himmelblau']} reach one of the "
+        f"{restarts['Himmelblau']} restarts at scale {scales['Himmelblau']:g}: "
+        f"{hits['Himmelblau']} of {restarts['Himmelblau']} reach one of the "
         f"four equal minima, which one depending on the basin the start fell "
         f"in. Contours are drawn in log(1 + value)."
     )
@@ -242,11 +226,15 @@ def main(argv: list[str] | None = None) -> QAFigure:
     QAFigure
         Paths written, and the caption.
     """
+
+    def build(suite: TestFunctionSuite) -> tuple[Figure, str]:
+        return build_figure(suite, endpoints(suite, np.random.default_rng(suite.seed)))
+
     return figure_main(
         stem="optimizer_landscapes",
         description=__doc__,
-        params=(),
-        build=lambda: build_figure(endpoints(np.random.default_rng(SEED))),
+        params=(TEST_FUNCTION_PARAMS,),
+        build=build,
         argv=argv,
     )
 

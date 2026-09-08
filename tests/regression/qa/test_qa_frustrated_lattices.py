@@ -13,8 +13,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 from snakes_and_ladders.qa.frustrated_lattices import (
-    FRUSTRATIONS,
-    LATTICE_SHAPE,
     GlassScan,
     build_figure,
     edge_segments,
@@ -23,16 +21,19 @@ from snakes_and_ladders.qa.frustrated_lattices import (
     lattice_layout,
     main,
 )
-from snakes_and_ladders.sim.canonical import (
-    frustrated_triangular_lattice,
-    minimum_frustrated_edges,
-)
+from snakes_and_ladders.sim.canonical import minimum_frustrated_edges
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+
+FIXTURE = fixture("frustrated_lattice", "ci")
+PARAMS = FIXTURE.params
+FRUSTRATIONS = PARAMS.glass_frustrations
+LATTICE_SHAPE = PARAMS.shape
 
 
 @pytest.mark.oracle
 def test_the_coloured_ground_state_agrees_on_exactly_one_bond_in_three() -> None:
-    graph = frustrated_triangular_lattice(LATTICE_SHAPE)
+    graph = PARAMS.lattice()
     labelling, agreeing = ground_state(graph)
 
     assert agreeing == minimum_frustrated_edges(graph) == graph.n_nodes
@@ -44,7 +45,7 @@ def test_the_coloured_ground_state_agrees_on_exactly_one_bond_in_three() -> None
 
 @pytest.mark.mathematical
 def test_every_drawn_bond_has_unit_length_and_wraps_only_across_the_torus() -> None:
-    graph = frustrated_triangular_lattice(LATTICE_SHAPE)
+    graph = PARAMS.lattice()
     layout = lattice_layout(graph)
     rows, columns = LATTICE_SHAPE
     row_height = rows * np.sqrt(3.0) / 2.0
@@ -86,7 +87,7 @@ def test_descent_reaches_the_planted_energy_where_nothing_is_frustrated() -> Non
     # any start reaches its energy; above zero descent may only tie or beat
     # the planted energy, never sit above it after twenty restarts on this
     # instance size.
-    scan = glass_scan(np.random.default_rng(20260908))
+    scan = glass_scan(PARAMS, np.random.default_rng(PARAMS.seed))
 
     assert FRUSTRATIONS[0] == 0.0
     assert scan.descended[0] == scan.planted[0]
@@ -95,17 +96,17 @@ def test_descent_reaches_the_planted_energy_where_nothing_is_frustrated() -> Non
 
 @pytest.mark.structural
 def test_the_caption_counts_matches_and_undercuts(tmp_path: Path) -> None:
-    graph = frustrated_triangular_lattice(LATTICE_SHAPE)
+    graph = PARAMS.lattice()
     labelling, agreeing = ground_state(graph)
     scan = GlassScan(
         planted=np.array([-6.0, -5.0, -4.0] + [0.0] * (len(FRUSTRATIONS) - 3)),
         descended=np.array([-6.0, -7.0, -4.0] + [-1.0] * (len(FRUSTRATIONS) - 3)),
     )
-    _, caption = build_figure(graph, labelling, agreeing, scan)
+    _, caption = build_figure(PARAMS, graph, labelling, agreeing, scan)
 
     assert "9 of 27" in caption
     assert f"at 2 of {len(FRUSTRATIONS)} frustrations and goes below it at 6" in caption
 
-    qa_figure = main(["--output-dir", str(tmp_path)])
+    qa_figure = main(["--params", str(FIXTURE.path), "--output-dir", str(tmp_path)])
     assert qa_figure.figure_path.is_file()
     assert "seed 20260908" in qa_figure.caption

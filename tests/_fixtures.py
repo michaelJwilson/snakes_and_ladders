@@ -20,9 +20,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from snakes_and_ladders.search.topology import leaf_bipartitions
-from snakes_and_ladders.sim.fixtures import FIXTURES_DIR
+from snakes_and_ladders.sim import fixtures as registry
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.tree import Node
+
+#: Where the fixtures live, re-exported from the registry so the suite and the
+#: figures cannot disagree about it.
+FIXTURES_DIR = registry.FIXTURES_DIR
 
 if TYPE_CHECKING:
     from snakes_and_ladders.sim.params import SimulationParams

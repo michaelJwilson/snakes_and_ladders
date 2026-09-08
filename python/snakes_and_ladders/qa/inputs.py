@@ -148,6 +148,22 @@ def library_versions(libraries: Sequence[str] = LIBRARIES) -> list[str]:
     return versions
 
 
+def _expanded(files: Iterable[Path]) -> list[Path]:
+    """Every file among ``files``, a directory replaced by the files under it.
+
+    Returns
+    -------
+    list[Path]
+    """
+    found: list[Path] = []
+    for path in files:
+        if path.is_dir():
+            found += sorted(child for child in path.rglob("*") if child.is_file())
+        else:
+            found.append(path)
+    return found
+
+
 def digest(files: Iterable[Path], root: Path, *extra: str) -> str:
     """Hash file contents and extra strings into one hex digest.
 
@@ -156,6 +172,10 @@ def digest(files: Iterable[Path], root: Path, *extra: str) -> str:
     files : Iterable[Path]
         Files whose bytes enter the hash, keyed by their path relative to
         ``root`` so the digest does not depend on where the checkout lives.
+        A directory stands for the files under it: a fixture named as a
+        problem rather than as one tier (issue #382) is a directory, and
+        hashing it as a unit is what makes adding a tier to it a change the
+        stamp sees.
     root : Path
         The repository root.
     *extra : str
@@ -167,7 +187,7 @@ def digest(files: Iterable[Path], root: Path, *extra: str) -> str:
         A SHA-256 hex digest.
     """
     hasher = hashlib.sha256()
-    for path in sorted(set(files)):
+    for path in sorted(set(_expanded(files))):
         hasher.update(str(path.relative_to(root)).encode())
         hasher.update(b"\0")
         hasher.update(path.read_bytes())

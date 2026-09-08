@@ -164,7 +164,7 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         "likelihood_footprint",
         "snakes_and_ladders.qa.likelihood_footprint",
-        (),
+        ("--params", f"{FIXTURES}/tree_jc/ci.yaml"),
         seconds=2.6,
     ),
     FigureSpec(
@@ -256,8 +256,8 @@ FIGURES: tuple[FigureSpec, ...] = (
     ),
     # The textbook's problem-statement figures (issue #358). The parsimony
     # figure scores every topology of the 8-taxon fixture at a reduced site
-    # count; the other three declare their instances in the module, since no
-    # fixture file carries a frustrated lattice, a mixture or a test function.
+    # count; the other three name the fixture their instance is declared in,
+    # as every entry here does since issue #382.
     FigureSpec(
         "parsimony_zones",
         "snakes_and_ladders.qa.parsimony_zones",
@@ -267,19 +267,19 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         "frustrated_lattices",
         "snakes_and_ladders.qa.frustrated_lattices",
-        (),
+        ("--params", f"{FIXTURES}/frustrated_lattice/ci.yaml"),
         seconds=3.9,
     ),
     FigureSpec(
         "mixture_seeding",
         "snakes_and_ladders.qa.mixture_seeding",
-        (),
+        ("--params", f"{FIXTURES}/mixture/ci.yaml"),
         seconds=27.4,
     ),
     FigureSpec(
         "optimizer_landscapes",
         "snakes_and_ladders.qa.optimizer_landscapes",
-        (),
+        ("--params", f"{FIXTURES}/test_functions/ci.yaml"),
         seconds=6.6,
     ),
 )
