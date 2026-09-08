@@ -16,6 +16,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 - Support the different lattice types (#231)
+- Declare a Potts lattice at the transition as a fixture, so the one
+  instance where the cluster moves earn their name is not built by hand in
+  the test and the notebook alike (#413)
 - A turbo code problem, fixture and belief-propagation example (#233)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code rather than the zero word (#340)
@@ -117,7 +120,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Weight transfer across problem sizes for a policy, and the schedule from
   `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
-  and from 3×3 to 4×6 lattices, and a policy does not yet
+  and from 3×3 to 4×6 lattices, and a policy does not yet — the lattice
+  half is filed (#414)
 - Batched episode rollout, so a budget at `n = 200` is affordable
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed
