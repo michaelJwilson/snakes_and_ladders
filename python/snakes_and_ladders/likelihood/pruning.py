@@ -1,8 +1,8 @@
 """Vectorized NumPy Felsenstein pruning -- the oracle every backend is pinned against.
 
 Implements the pruning recursion, ``eq:pruning``, and the root marginalization,
-``eq:root``, of ``docs/tex/textbook.tex``:
-the site log-likelihood
+``eq:root``, of ``docs/tex/textbook.tex``, which ``app:pruning`` derives as the
+marginalization over internal states: the site log-likelihood
 is computed post-order over ``(site, state)`` NumPy arrays, reusing
 ``snakes_and_ladders.sim.jc.jc_transition_probabilities`` for P(t). Partial likelihoods
 underflow for realistic (site, taxa) counts, so they are rescaled per node
@@ -57,8 +57,8 @@ def log_likelihood(
     Returns
     -------
     float
-        ``sum_s log Pr(data_s | tau, t, Q, pi)``, summed over sites (eq.
-        site-independence).
+        ``sum_s log Pr(data_s | tau, t, Q, pi)``, summed over sites
+        (``eq:site-independence``).
 
     Raises
     ------

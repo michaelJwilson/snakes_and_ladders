@@ -2,8 +2,9 @@
 
 One chain, one pass each way in the log domain: the evidence, the posterior
 at every position, and the pairwise posterior across every transition --
-the the posterior equation of the textbook of the textbook, and the E step every chain-shaped model
-here shares. Baum--Welch in :mod:`snakes_and_ladders.opt.hmm` keeps its own
+``eq:forward`` and ``eq:posterior`` of ``docs/tex/textbook.tex``, derived in
+``app:forward-backward`` as pruning on a chain, and the E step every
+chain-shaped model here shares. Baum--Welch in :mod:`snakes_and_ladders.opt.hmm` keeps its own
 recursion for the gradient it needs; this one exists so the coupled model,
 and any caller that wants a posterior rather than a fit, does not reach into
 an optimizer's internals to get one. Pinned against the path enumeration,

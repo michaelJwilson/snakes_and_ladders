@@ -63,17 +63,20 @@
 \contentsline {subsection}{\numberline {7.6}Published constants, and asymptotic results}{19}{subsection.7.6}%
 \contentsline {section}{\numberline {8}Relevance to the Roadmap}{19}{section.8}%
 \contentsline {section}{\numberline {A}Derivations Cited From the Text}{21}{appendix.A}%
-\contentsline {subsection}{\numberline {A.1}The Bethe free energy is stationary at a sum-product fixed point}{21}{subsection.A.1}%
-\contentsline {subsection}{\numberline {A.2}Detailed balance for a cluster move in a field}{22}{subsection.A.2}%
-\contentsline {subsection}{\numberline {A.3}The exchange ratio in parallel tempering}{22}{subsection.A.3}%
-\contentsline {subsection}{\numberline {A.4}The delta method for an interval at a fit}{22}{subsection.A.4}%
-\contentsline {section}{\numberline {B}Derivations of the Bounds}{22}{appendix.B}%
-\contentsline {paragraph}{The plug-in bound, \eqref {eq:plugin-bound}.}{22}{section*.27}%
-\contentsline {paragraph}{The parsimony bound, \eqref {eq:parsimony-bound}.}{22}{section*.28}%
-\contentsline {paragraph}{The mean-field bound, \eqref {eq:mean-field-bound}.}{23}{section*.29}%
-\contentsline {paragraph}{The spanning-tree bound, \eqref {eq:spanning-tree-bound}.}{23}{section*.30}%
-\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{23}{section*.31}%
-\contentsline {section}{\numberline {C}Reference Taxonomy}{23}{appendix.C}%
-\contentsline {paragraph}{Infrastructure (build, structure, and speed).}{23}{section*.32}%
-\contentsline {paragraph}{Optimization (discrete and continuous).}{23}{section*.33}%
-\contentsline {paragraph}{Application (the science).}{23}{section*.34}%
+\contentsline {subsection}{\numberline {A.1}Pruning is the marginalization over internal states}{21}{subsection.A.1}%
+\contentsline {subsection}{\numberline {A.2}Forward--backward is the same marginalization on a chain}{22}{subsection.A.2}%
+\contentsline {subsection}{\numberline {A.3}Sum-product on a tree, and its loopy stationary point}{22}{subsection.A.3}%
+\contentsline {subsection}{\numberline {A.4}The Bethe free energy is stationary at a sum-product fixed point}{23}{subsection.A.4}%
+\contentsline {subsection}{\numberline {A.5}Detailed balance for a cluster move in a field}{23}{subsection.A.5}%
+\contentsline {subsection}{\numberline {A.6}The exchange ratio in parallel tempering}{23}{subsection.A.6}%
+\contentsline {subsection}{\numberline {A.7}The delta method for an interval at a fit}{24}{subsection.A.7}%
+\contentsline {section}{\numberline {B}Derivations of the Bounds}{24}{appendix.B}%
+\contentsline {paragraph}{The plug-in bound, \eqref {eq:plugin-bound}.}{24}{section*.27}%
+\contentsline {paragraph}{The parsimony bound, \eqref {eq:parsimony-bound}.}{24}{section*.28}%
+\contentsline {paragraph}{The mean-field bound, \eqref {eq:mean-field-bound}.}{24}{section*.29}%
+\contentsline {paragraph}{The spanning-tree bound, \eqref {eq:spanning-tree-bound}.}{24}{section*.30}%
+\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{24}{section*.31}%
+\contentsline {section}{\numberline {C}Reference Taxonomy}{25}{appendix.C}%
+\contentsline {paragraph}{Infrastructure (build, structure, and speed).}{25}{section*.32}%
+\contentsline {paragraph}{Optimization (discrete and continuous).}{25}{section*.33}%
+\contentsline {paragraph}{Application (the science).}{25}{section*.34}%
