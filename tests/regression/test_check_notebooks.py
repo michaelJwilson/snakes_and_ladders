@@ -143,6 +143,20 @@ def test_text_outputs_reads_streams_and_results_but_not_images() -> None:
 
 @pytest.mark.critical
 @pytest.mark.edge_case
+def test_a_stream_split_into_a_different_number_of_chunks_is_the_same_output() -> None:
+    # ipykernel flushes stdout on its own schedule: one `print` loop arrives
+    # as one stream output on one run and as four on another. `ldpc.ipynb`
+    # failed CI on exactly this with an empty diff, since the text agreed.
+    committed = [_cell(_stream("a\n"), _stream("b\n"), _stream("c\n"))]
+    executed = [_cell(_stream("a\nb\nc\n"))]
+
+    assert text_outputs(committed[0]) == ["a\nb\nc\n"]
+    assert differences("n.ipynb", committed, executed) == []
+    assert differences("n.ipynb", committed, [_cell(_stream("a\nb\nd\n"))]) != []
+
+
+@pytest.mark.critical
+@pytest.mark.edge_case
 def test_a_notebook_of_a_different_length_is_refused() -> None:
     # `zip(strict=True)`: comparing a truncated run against a full one by
     # silently stopping at the shorter would hide the truncation.
