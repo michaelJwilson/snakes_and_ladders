@@ -135,10 +135,16 @@ bounded likelihoods/energies.
     short enough to enumerate, and the block error rate reported against the
     channel where they are not (#340).
   - *Performance parity:* convergence metrics (ΔlnL or ΔE) must match or exceed
-    exact oracles on small `n`, and state-of-the-art classical frameworks
-    (e.g. IQ-TREE 2 for trees) on large `n` under an **equal budget of
-    objective evaluations**. The budget is counted in evaluations rather than
-    seconds because `DEV.md` forbids ranking performance on CI hardware, and a
+    exact oracles on small `n`, and on large `n` the referees this repository
+    has — its own exact oracles where they still reach, and the simulated truth
+    that generated the fixture, meaning the RF bound above and recovery of the
+    generating parameters — under an **equal budget of objective evaluations**.
+    Comparison against a state-of-the-art classical framework (e.g. IQ-TREE 2
+    for trees) is deferred rather than dropped: `CLAUDE.md` admits no external
+    solver today, and this requirement returns, at the same equal budget, if
+    one is adopted (`docs/external_tools.md` surveys the candidates). The
+    budget is counted in evaluations rather than seconds because `DEV.md`
+    forbids ranking performance on CI hardware, and a
     wall-clock requirement would make the result a property of the machine that
     produced it. A wall-clock comparison belongs on the fixed-hardware runner,
     reported beside the evaluation count and never as the gate.
@@ -278,10 +284,13 @@ parameterized by neural networks.
     weights and progressively scaling to fine-tune on `n = 50`, `n = 200`, and
     `n = 1000` environments.
 - **Milestone 2.3: Empirical Validation & Benchmarking**
-  - *Deliverable:* benchmark the RL agents on high-dimensional, empirical
-    datasets.
-  - *Validation:* compare convergence speed and final objectives against
-    state-of-the-art domain heuristics.
+  - *Deliverable:* benchmark the RL agents on high-dimensional simulated
+    datasets past the size enumeration reaches, each carrying the parameters
+    that generated it.
+  - *Validation:* compare convergence speed and final objectives against the
+    classical domain heuristics this repository implements — large parsimony
+    under NNI and SPR, and hill climbing — since no external solver is admitted
+    (`docs/external_tools.md`).
 - **Milestone 2.4: Experiment Tracking, Ablations & Leaderboard**
   - *Deliverable:* deploy a localized tracking manifest (e.g. Aim) logging git
     commits, objective traces, compute budgets, and QA figures.
