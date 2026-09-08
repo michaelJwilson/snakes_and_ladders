@@ -189,6 +189,18 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.surrogate
    :members:
 
+.. automodule:: snakes_and_ladders.learn.critic
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.actor_critic
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.ppo
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.planning
+   :members:
+
 .. automodule:: snakes_and_ladders.search
    :members:
 

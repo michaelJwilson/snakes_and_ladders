@@ -78,6 +78,29 @@ demonstrated rather than asserted.
   decisions are the unit at which they are comparable — the same reasoning
   that makes `snakes_and_ladders.search.infer` count candidate fits.
 
+- **An episode that may leave a local optimum is scored on its best state,
+  not its last.** `rollout(..., stop_at_local_optimum=False)` runs to its
+  budget, so its final state is wherever the walk happened to stop, and a
+  real search keeps the best thing it saw. Scoring the last state instead
+  would make a better searcher look worse the longer it ran.
+
+- **A comparison against a wandering searcher is against *restarts*.** Once
+  an episode is no longer bounded by reaching a local optimum, a single
+  greedy run is not a budget-matched baseline: greedy stops after a few
+  decisions and leaves the rest of the budget unspent. Restarting it until
+  the budget is gone is the honest comparison, and on the issue #177 fixture
+  it reaches the enumerated maximum from every start at 60 decisions, where
+  no epsilon measured does (issue #194; `STATUS.md` has the numbers). A
+  result stated against single-run greedy alone overstates itself.
+
+- **A critic is pinned to enumeration, never to its loss.** Where the return
+  is exact so is the state value, and a critic's number is its fit to that;
+  a baseline may read the state and never the action sampled at that step.
+
+- **A planner is counted in evaluations, and its answer is compared with
+  greedy's at the same count.** A search that reaches the optimum by
+  evaluating more successors than hill climbing has not won.
+
 ## Framework
 
 **PyTorch**, per root `CLAUDE.md`, and `float64` throughout: the exact
