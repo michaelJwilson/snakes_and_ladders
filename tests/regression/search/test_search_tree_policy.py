@@ -144,6 +144,7 @@ def test_every_episode_ends_where_no_move_improves(
 
 
 @pytest.mark.structural
+@pytest.mark.release
 def test_an_untrained_policy_is_far_worse_than_greedy(
     environment: TopologyEnvironment, starts: list[Topology], maximum: float
 ) -> None:
