@@ -322,6 +322,7 @@ def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
         [observations] * 20,
         Budget("fits", 1),
         seeds=(11,),
+        workers=1,
         known=[-best] * 20,
     )
     reached = result.hits(tolerance=1e-6)
