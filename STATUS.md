@@ -87,6 +87,65 @@ section — is stated in `ROADMAP.md` §0.2, `DEV.md`, and `infra/CLAUDE.md`
 alike, alongside the rule that decides which documents may repeat detail
 ([#164](https://github.com/michaelJwilson/snakes_and_ladders/pull/164)).
 
+**CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
+three negative results
+([#344](https://github.com/michaelJwilson/snakes_and_ladders/issues/344)).**
+`snakes_and_ladders.parallel.map_tasks` runs a loop of independent tasks on a
+thread or process pool with results in input order and one generator per
+task, spawned in item order, so a run at four workers is bitwise the run at
+one; `opt.fit.fit_from`, `opt.budget.compare` and
+`search.support.bootstrap_support` go through it with an explicit `workers=`,
+and each pins `workers=1` against `workers=4` with `==` or `torch.equal`. The
+inventory below is the serial baseline each site was measured from, the
+matrix the result at 1, 2 and 4 process workers with the intra-op thread
+count at 1 and at the default (4). Measured once per cell on the 4-core
+development host at a 1-minute load of 2.2 rising to 3.8 during the run —
+shared with other jobs, so the wall clocks carry contention and the ratios
+are what is read. The pool's spawn and import cost 1.81 s for 4 workers with
+trivial tasks, more than the multi-start fit or the comparison does in total
+and a third of the bootstrap; no site reaches the 2× at 4 workers the plan
+set, so all three stay serial by recommendation (callers pass `1`) and keep
+the argument, which is the contract a bigger tier or a bigger machine is
+measured against. The one positive number is inside a task, not across
+them: the serial multi-start fit at the default thread count is 2.87× the
+fit at one thread, because torch's intra-op parallelism over 1000 sites
+already uses the cores, which is why the sites leave the count at the
+default rather than pinning one thread per worker as the plan assumed.
+
+| site | per-task (s) | count | serial wall (s) | loop fraction | Amdahl bound at 4 |
+| --- | --- | --- | --- | --- | --- |
+| `opt.fit.fit_from` (8 taxa, 1000 sites, 8 starts) | 0.17 | 8 | 1.40 | 0.999 | 3.99× |
+| `opt.budget.compare` (Rastrigin, 4 instances × 4 seeds, 4 fits each) | 0.03 | 16 | 0.53 | 1.000 | 4.00× |
+| `search.support.bootstrap_support` (5 taxa, 300 sites, 8 replicates, NNI) | 0.66 | 8 | 5.81 | 0.910 | 3.15× |
+
+| site | intra-op threads | workers | wall (s) | speedup | equal to serial |
+| --- | --- | --- | --- | --- | --- |
+| `opt.fit.fit_from` | 1 | 1 | 1.40 | 1.00× | yes |
+| `opt.fit.fit_from` | 1 | 2 | 3.24 | 0.43× | yes |
+| `opt.fit.fit_from` | 1 | 4 | 3.05 | 0.46× | yes |
+| `opt.fit.fit_from` | default | 1 | 0.49 | 2.87× | yes |
+| `opt.fit.fit_from` | default | 2 | 3.14 | 0.44× | yes |
+| `opt.fit.fit_from` | default | 4 | 3.21 | 0.44× | yes |
+| `opt.budget.compare` | 1 | 1 | 0.53 | 1.00× | yes |
+| `opt.budget.compare` | 1 | 2 | 3.19 | 0.17× | yes |
+| `opt.budget.compare` | 1 | 4 | 2.95 | 0.18× | yes |
+| `opt.budget.compare` | default | 1 | 0.49 | 1.09× | yes |
+| `opt.budget.compare` | default | 2 | 3.13 | 0.17× | yes |
+| `opt.budget.compare` | default | 4 | 3.13 | 0.17× | yes |
+| `search.support.bootstrap_support` | 1 | 1 | 5.28 | 1.00× | yes |
+| `search.support.bootstrap_support` | 1 | 2 | 5.41 | 0.98× | yes |
+| `search.support.bootstrap_support` | 1 | 4 | 4.79 | 1.10× | yes |
+| `search.support.bootstrap_support` | default | 1 | 4.89 | 1.08× | yes |
+| `search.support.bootstrap_support` | default | 2 | 4.70 | 1.12× | yes |
+| `search.support.bootstrap_support` | default | 4 | 5.65 | 0.93× | yes |
+
+Speedup is against the site's serial run at one intra-op thread; the serial
+wall clock in the inventory includes the setup the loop does not carry (the
+alignment and the starting search for the bootstrap). The sites the plan
+lists after these — the candidate fits of `search.infer`, `learn.rollout`
+batches, tempering replicas, `qa.build`, `check_notebooks` and `pytest-xdist`
+— are measured on the same matrix before any is switched on (`TICKETS.md`).
+
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
@@ -1277,6 +1336,61 @@ of episodes against greedy's 0.480 (sign test p = 0.79) and the full set from
 now scores GTR from a given rate matrix through the pruning recursion. Not
 measured: the full set against random-restart hill climbing, which #194 showed
 reaches every start on this fixture, and any column's individual necessity.
+
+**A critic, an actor–critic and PPO, each pinned to enumeration before it is
+measured** ([#313](https://github.com/michaelJwilson/snakes_and_ladders/issues/313),
+part 1). `learn.exact` now returns action values and the optimal value beside
+the expected return, and the three agree where they must: Bellman's equation
+to 1e-12 on every state checked, the optimal value above every policy's, and
+over eight decisions equal to the gap to the enumerated minimum energy. A
+critic reads state features derived from the action features the protocol
+already supplies (their mean and maximum, and the log of the neighbourhood's
+size), so no instance changed; fitted to the exact `V^pi` on all 81
+configurations of the chain, the linear critic explains 0.87 of its variance
+and a 16-unit MLP 0.996. The advantage-weighted score function with the exact
+critic as baseline is unbiased for the enumerated gradient to 5e-3 over 4,000
+episodes, and the unclipped PPO objective at the collecting policy has the
+actor–critic's gradient exactly. At the budget #135 trained REINFORCE on (60
+iterations of 32 episodes) the trained policy reaches the enumerated optimum
+from 88.9% of the 81 starts under REINFORCE, 88.9% under the actor–critic and
+**96.3% under PPO** (greedy: 80.2%), with mean exact expected return 2.21,
+2.23 and 2.28; at a quarter of that budget REINFORCE reaches it from 32.1% and
+PPO from 87.7%. An `MLPPolicy` trained by PPO reaches it from 97.5% with mean
+return 2.55, the worsening move a chain needs being representable where two
+linear features cannot.
+
+**On the hard tree fixture every algorithm lands on greedy, and the feature
+set is why.** At #178's budget (40 iterations of 16 episodes, horizon 30, 50
+seeded starts, the fixed-length NNI reward) greedy reaches the enumerated
+maximum from 0.48 of the starts, REINFORCE from 0.49, PPO from 0.47, and PPO
+collecting under an epsilon-greedy behaviour policy on a linear schedule from
+0.3 to 0.02 from 0.46 — all within the noise #178 measured (standard
+deviation 0.014 over seeds). The environment exposes one feature, the
+improvement a move buys, so the policy is an inverse temperature and no
+algorithm can learn what that class cannot express; the off-policy variant
+is correct by the ratio `pi / beta` and buys nothing here. The feature set of
+Milestone 2.1's first bullet is the prerequisite for a tree result, not a
+better optimizer.
+
+**A planner reaches the optimum at a fraction of greedy's evaluations, once
+its prior and critic are trained.** `learn.planning` runs PUCT search over
+any environment with the policy as prior and the critic as leaf value, and
+expert iteration fits the policy to the root visit distributions and the
+critic to the achieved returns. Pinned by enumeration: with the exact
+optimal value as leaf and one decision of depth the most visited move is an
+argmax of `Q*` on every state checked, and at depth three the visit
+distribution's one-step value under `Q^pi` is no less than the prior's on 13
+of 14 states. Measured on the chain, counted in successor evaluations: an
+untrained prior with a fresh critic reaches the enumerated optimum from
+76.5% of the 81 starts at 57 evaluations per episode against greedy's 80.2%
+at 48; after 10 iterations of 8 planned episodes (1,066 evaluations of
+training) the planner reaches it from **92.6% at 8.3 evaluations per
+episode**, and at six simulations, 6.3 evaluations, matches greedy's 80.2%
+— the same answer at an eighth of the cost. The policy alone, without the
+search, reaches 30.9%: the visit distributions at 20 simulations are flat
+targets, and what expert iteration taught here is the critic. The
+factor-graph environment and the surrogate reward model wait on #296 and
+#308 landing on `dev`.
 
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 

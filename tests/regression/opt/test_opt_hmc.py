@@ -122,7 +122,12 @@ def test_the_chain_recovers_an_analytic_gaussian() -> None:
     # sampler. The tolerance is set from the spread across eight independent
     # chains, measured at 0.030 and 0.041 on the two coordinates.
     chain = sample(
-        GAUSSIAN, seed=11, n_samples=4000, step_size=0.25, n_steps=12, burn_in=400
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(11),
+        n_samples=4000,
+        step_size=0.25,
+        n_steps=12,
+        burn_in=400,
     )
 
     mean = chain.theta.mean(dim=0)
@@ -156,7 +161,7 @@ def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
         [
             sample(
                 posterior,
-                seed=200 + index,
+                generator=torch.Generator().manual_seed(200 + index),
                 n_samples=700,
                 step_size=0.01,
                 n_steps=15,
@@ -195,10 +200,20 @@ def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
     posterior = _potts_posterior()
 
     coarse = sample(
-        posterior, seed=3, n_samples=400, step_size=0.05, n_steps=20, burn_in=50
+        posterior,
+        generator=torch.Generator().manual_seed(3),
+        n_samples=400,
+        step_size=0.05,
+        n_steps=20,
+        burn_in=50,
     )
     fine = sample(
-        posterior, seed=3, n_samples=400, step_size=0.005, n_steps=40, burn_in=50
+        posterior,
+        generator=torch.Generator().manual_seed(3),
+        n_samples=400,
+        step_size=0.005,
+        n_steps=40,
+        burn_in=50,
     )
 
     assert float(coarse.energy_error.max()) > 100.0 * float(fine.energy_error.max())
@@ -230,13 +245,24 @@ def test_a_zero_length_trajectory_is_refused() -> None:
     # It would propose the current point every time: acceptance rate 1, energy
     # error 0, and a chain that has not moved. Every diagnostic reports health.
     with pytest.raises(ValueError, match="looks healthy and samples nothing"):
-        sample(GAUSSIAN, seed=1, n_samples=10, step_size=0.1, n_steps=0)
+        sample(
+            GAUSSIAN,
+            generator=torch.Generator().manual_seed(1),
+            n_samples=10,
+            step_size=0.1,
+            n_steps=0,
+        )
 
 
 @pytest.mark.edge_case
 def test_a_non_positive_step_size_is_refused() -> None:
     with pytest.raises(ValueError, match="step_size must be positive"):
-        sample(GAUSSIAN, seed=1, n_samples=10, step_size=0.0)
+        sample(
+            GAUSSIAN,
+            generator=torch.Generator().manual_seed(1),
+            n_samples=10,
+            step_size=0.0,
+        )
 
 
 @pytest.mark.edge_case
@@ -271,9 +297,21 @@ def test_the_prior_leaves_the_coordinates_it_is_stated_in_alone() -> None:
 
 
 @pytest.mark.structural
-def test_a_chain_is_reproducible_from_its_seed() -> None:
-    first = sample(GAUSSIAN, seed=5, n_samples=50, step_size=0.2, n_steps=10)
-    second = sample(GAUSSIAN, seed=5, n_samples=50, step_size=0.2, n_steps=10)
+def test_a_chain_is_reproducible_from_generators_seeded_alike() -> None:
+    first = sample(
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(5),
+        n_samples=50,
+        step_size=0.2,
+        n_steps=10,
+    )
+    second = sample(
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(5),
+        n_samples=50,
+        step_size=0.2,
+        n_steps=10,
+    )
 
     assert torch.equal(first.theta, second.theta)
 
@@ -422,7 +460,7 @@ def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> N
         for n_steps in (4, 6, 8, 10, 14, 20, 30, 45, 70):
             chain = sample(
                 target,
-                seed=11,
+                generator=torch.Generator().manual_seed(11),
                 n_samples=200,
                 step_size=1.0 / n_steps,
                 n_steps=n_steps,
@@ -441,9 +479,20 @@ def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> N
 @pytest.mark.structural
 def test_the_default_integrator_is_the_one_every_committed_result_used() -> None:
     # A default changed here silently redraws every chain in the repository.
-    chain = sample(GAUSSIAN, seed=3, n_samples=40, step_size=0.2, n_steps=6)
+    chain = sample(
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(3),
+        n_samples=40,
+        step_size=0.2,
+        n_steps=6,
+    )
     explicit = sample(
-        GAUSSIAN, seed=3, n_samples=40, step_size=0.2, n_steps=6, integrator=leapfrog
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(3),
+        n_samples=40,
+        step_size=0.2,
+        n_steps=6,
+        integrator=leapfrog,
     )
 
     assert torch.equal(chain.theta, explicit.theta)
@@ -466,13 +515,18 @@ def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None
     # both T = 2 and T = 0.5, the same digits at both because of the first.
     exact = GAUSSIAN.covariance.diagonal().sqrt()
     reference = sample(
-        GAUSSIAN, seed=3, n_samples=2000, step_size=0.2, n_steps=10, burn_in=200
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(3),
+        n_samples=2000,
+        step_size=0.2,
+        n_steps=10,
+        burn_in=200,
     )
 
     for temperature in (2.0, 0.5):
         chain = sample(
             GAUSSIAN,
-            seed=3,
+            generator=torch.Generator().manual_seed(3),
             n_samples=2000,
             step_size=0.2,
             n_steps=10,
@@ -494,17 +548,35 @@ def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None
 @pytest.mark.edge_case
 def test_a_non_positive_temperature_is_refused() -> None:
     with pytest.raises(ValueError, match="temperature must be positive"):
-        sample(GAUSSIAN, seed=1, n_samples=10, step_size=0.1, temperature=0.0)
+        sample(
+            GAUSSIAN,
+            generator=torch.Generator().manual_seed(1),
+            n_samples=10,
+            step_size=0.1,
+            temperature=0.0,
+        )
 
 
 @pytest.mark.oracle
 def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     # The refactor's guarantee, stated as the plan asked: annealing on a
     # constant schedule at temperature 1 reproduces the untempered chain at
-    # the same seed *bitwise*. Both go through one transition, so this is not
-    # two implementations agreeing but one implementation being one.
-    chain = sample(GAUSSIAN, seed=5, n_samples=200, step_size=0.2, n_steps=10)
-    annealed = anneal(GAUSSIAN, Constant(1.0, 200), seed=5, step_size=0.2, n_steps=10)
+    # generators seeded alike *bitwise*. Both go through one transition, so
+    # this is not two implementations agreeing but one implementation being one.
+    chain = sample(
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(5),
+        n_samples=200,
+        step_size=0.2,
+        n_steps=10,
+    )
+    annealed = anneal(
+        GAUSSIAN,
+        Constant(1.0, 200),
+        generator=torch.Generator().manual_seed(5),
+        step_size=0.2,
+        n_steps=10,
+    )
 
     assert torch.equal(annealed.final, chain.theta[-1])
     assert annealed.force_evaluations == 200 * leapfrog.force_evaluations(10)
@@ -519,7 +591,7 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
     result = anneal(
         GAUSSIAN,
         Exponential(4.0, 0.01, 300),
-        seed=2,
+        generator=torch.Generator().manual_seed(2),
         step_size=0.2,
         n_steps=10,
         theta0=start,
@@ -543,7 +615,12 @@ def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() ->
     # independent chains, which would pass this test while exchanging nothing.
     ladder = (1.0, 2.0, 4.0)
     run = parallel_tempering(
-        GAUSSIAN, ladder, seed=11, n_rounds=2000, step_size=0.25, n_steps=12
+        GAUSSIAN,
+        ladder,
+        generator=torch.Generator().manual_seed(11),
+        n_rounds=2000,
+        step_size=0.25,
+        n_steps=12,
     )
     draws = run.positions[400:]
 
@@ -574,13 +651,23 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
     ladder = (1.0, 2.0, 4.0, 8.0)
 
     run = parallel_tempering(
-        counted, ladder, seed=5, n_rounds=25, step_size=0.2, n_steps=6
+        counted,
+        ladder,
+        generator=torch.Generator().manual_seed(5),
+        n_rounds=25,
+        step_size=0.2,
+        n_steps=6,
     )
 
     assert run.force_evaluations == 25 * 4 * leapfrog.force_evaluations(6)
     assert counted.calls == 1 + 25 * 4 * (leapfrog.force_evaluations(6) + 3)
     again = parallel_tempering(
-        GAUSSIAN, ladder, seed=5, n_rounds=25, step_size=0.2, n_steps=6
+        GAUSSIAN,
+        ladder,
+        generator=torch.Generator().manual_seed(5),
+        n_rounds=25,
+        step_size=0.2,
+        n_steps=6,
     )
     assert torch.equal(run.positions, again.positions)
     assert torch.equal(run.theta, again.theta)
@@ -590,14 +677,43 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
 @pytest.mark.edge_case
 def test_a_ladder_that_cannot_exchange_is_refused() -> None:
     with pytest.raises(ValueError, match="at least two temperatures"):
-        parallel_tempering(GAUSSIAN, (1.0,), seed=1, n_rounds=5, step_size=0.2)
+        parallel_tempering(
+            GAUSSIAN,
+            (1.0,),
+            generator=torch.Generator().manual_seed(1),
+            n_rounds=5,
+            step_size=0.2,
+        )
     with pytest.raises(ValueError, match="positive and increasing"):
-        parallel_tempering(GAUSSIAN, (2.0, 1.0), seed=1, n_rounds=5, step_size=0.2)
+        parallel_tempering(
+            GAUSSIAN,
+            (2.0, 1.0),
+            generator=torch.Generator().manual_seed(1),
+            n_rounds=5,
+            step_size=0.2,
+        )
     with pytest.raises(ValueError, match="positive and increasing"):
-        parallel_tempering(GAUSSIAN, (0.0, 1.0), seed=1, n_rounds=5, step_size=0.2)
+        parallel_tempering(
+            GAUSSIAN,
+            (0.0, 1.0),
+            generator=torch.Generator().manual_seed(1),
+            n_rounds=5,
+            step_size=0.2,
+        )
     with pytest.raises(ValueError, match="n_rounds must be at least 1"):
-        parallel_tempering(GAUSSIAN, (1.0, 2.0), seed=1, n_rounds=0, step_size=0.2)
+        parallel_tempering(
+            GAUSSIAN,
+            (1.0, 2.0),
+            generator=torch.Generator().manual_seed(1),
+            n_rounds=0,
+            step_size=0.2,
+        )
     with pytest.raises(ValueError, match="n_steps must be at least 1"):
         parallel_tempering(
-            GAUSSIAN, (1.0, 2.0), seed=1, n_rounds=5, step_size=0.2, n_steps=0
+            GAUSSIAN,
+            (1.0, 2.0),
+            generator=torch.Generator().manual_seed(1),
+            n_rounds=5,
+            step_size=0.2,
+            n_steps=0,
         )
