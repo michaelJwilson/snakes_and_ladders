@@ -172,6 +172,30 @@ FIGURES: tuple[FigureSpec, ...] = (
         "snakes_and_ladders.qa.topology_accuracy",
         ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
     ),
+    # The textbook's problem-statement figures (issue #358). The parsimony
+    # figure scores every topology of the 8-taxon fixture at a reduced site
+    # count; the other three declare their instances in the module, since no
+    # fixture file carries a frustrated lattice, a mixture or a test function.
+    FigureSpec(
+        "parsimony_zones",
+        "snakes_and_ladders.qa.parsimony_zones",
+        ("--params", f"{FIXTURES}/simulation_params_8taxa.yaml"),
+    ),
+    FigureSpec(
+        "frustrated_lattices",
+        "snakes_and_ladders.qa.frustrated_lattices",
+        (),
+    ),
+    FigureSpec(
+        "mixture_seeding",
+        "snakes_and_ladders.qa.mixture_seeding",
+        (),
+    ),
+    FigureSpec(
+        "optimizer_landscapes",
+        "snakes_and_ladders.qa.optimizer_landscapes",
+        (),
+    ),
 )
 
 # Any reference to `figures/<stem>` in the document, whichever way it is
