@@ -17,8 +17,10 @@ checked against `rustworkx`'s generators, and convertible to its graphs — and
 the samplers that draw spin configurations on them; hidden state paths and
 their emissions; the factor graph the three of those are shapes of, with its
 adapters, and the coupled spatio-sequential model that joins them, with its
-simulator; the package's single source of Newick; and `canonical.py`, the
-problem instances whose answer is known from outside this repository.
+simulator; a regular parity-check ensemble with the channels that corrupt
+its codewords, held as offsets into one edge array; the package's single
+source of Newick; and `canonical.py`, the problem instances whose answer is
+known from outside this repository.
 
 ## Local rules
 

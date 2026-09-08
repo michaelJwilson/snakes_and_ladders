@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.ldpc import ParityCheck
 from snakes_and_ladders.sim.tree import Node, edges, preorder
 
 
@@ -236,7 +237,7 @@ class FactorGraph:
         return FactorGraph(variables, factors)
 
 
-# --- adapters: the three problem classes, and the coupled model ---------------
+# --- adapters: the problem classes, and the coupled model ---------------
 
 
 def from_potts(graph: PottsGraph, field_values: np.ndarray) -> FactorGraph:
@@ -406,4 +407,40 @@ def from_coupled(
                 table = np.zeros((n_classes, n_states))
                 table[m, :] = gated_log_density[n, s, m]
                 factors.append(Factor(f"x{n},{s},{m}", (f"l{n}", f"k{s},{m}"), table))
+    return FactorGraph(variables, factors)
+
+
+def from_parity_check(code: ParityCheck, llr: np.ndarray) -> FactorGraph:
+    """A parity-check code with its channel output folded in (``sec:ldpc``).
+
+    One binary variable ``x{i}`` per bit; one unary factor ``y{i}`` per bit
+    with log table ``(0, -L_i)``, the channel's log-likelihood ratio in the
+    convention of ``eq:ldpc-llr``; one parity factor ``c{j}`` per row of
+    ``H`` over its bits, zero where they sum to zero mod 2 and ``-inf``
+    elsewhere. ``log_density`` is then ``-c . L`` on a codeword and ``-inf``
+    off it, which is ``eq:ldpc-code`` up to the constant a test states, and
+    :func:`snakes_and_ladders.likelihood.message_passing.sum_product` on it is
+    the oracle the vectorized decoder is held to.
+
+    Parameters
+    ----------
+    code : ParityCheck
+    llr : np.ndarray
+        Shape ``(n_bits,)``.
+    """
+    ratios = np.asarray(llr, dtype=float)
+    if ratios.shape != (code.n_bits,):
+        msg = f"llr has shape {ratios.shape}, the code has {code.n_bits} bits"
+        raise ValueError(msg)
+    variables = [Variable(f"x{i}", 2) for i in range(code.n_bits)]
+    factors = [
+        Factor(f"y{i}", (f"x{i}",), np.array([0.0, -ratios[i]]))
+        for i in range(code.n_bits)
+    ]
+    members = code.edge_variable[code.check_order]
+    for j in range(code.n_checks):
+        bits = members[code.check_offsets[j] : code.check_offsets[j + 1]]
+        parity = np.indices((2,) * bits.size).sum(axis=0) % 2
+        table = np.where(parity == 0, 0.0, -np.inf)
+        factors.append(Factor(f"c{j}", tuple(f"x{i}" for i in bits), table))
     return FactorGraph(variables, factors)
