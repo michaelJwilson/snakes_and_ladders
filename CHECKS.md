@@ -21,7 +21,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_emissions.py::test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform` | oracle | `BetaBinomial(n, 1, 1)` puts equal mass on every one of the n + 1 outcomes. |
 | `test_emissions.py::test_the_closed_form_count_m_steps_are_the_weighted_mean` | oracle |  |
 | `test_numerics_rust.py::test_the_rust_sampler_is_bit_identical_to_the_oracle` | oracle |  |
-| `test_numerics_rust.py::test_both_agree_on_a_row_that_does_not_quite_sum_to_one` | oracle | The case `snakes_and_ladders.numerics`' docstring calls out as ordinary float64 behaviour: the row leaves a sliver of the unit interval above its own total, and a draw landing there crosses no column. |
+| `test_numerics_rust.py::test_both_agree_on_a_row_that_does_not_quite_sum_to_one` | oracle | The case `sal.numerics`' docstring calls out as ordinary float64 behaviour: the row leaves a sliver of the unit interval above its own total, and a draw landing there crosses no column. |
 | `test_numerics_rust.py::test_the_generator_is_consumed_identically_by_both` | oracle | A caller may swap the implementations without its stream diverging, and that is a property of the port rather than a coincidence: both draw one uniform per entry, in order, before doing any lookup. |
 | `test_numerics_rust.py::test_a_non_contiguous_input_gives_the_same_answer` | oracle | Borrowing rather than copying makes stride a real concern where it was not before. |
 | `test_pairwise_distance.py::test_pairwise_distance_small_fixed_input` | oracle | Small, hand-checkable input. |
@@ -35,7 +35,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_hmm.py::test_the_local_reward_matches_re_evaluating_the_joint_probability` | oracle | The failure this class is most exposed to: an O(1) update that disagrees with a full evaluation would be invisible to any test that only checked the search improved. |
 | `test_learn_hmm.py::test_enumeration_counts_every_path` | oracle |  |
 | `test_learn_hmm.py::test_hill_climbing_reaches_the_enumerated_optimum` | oracle | 729 paths, so "did the search find the best one" has an answer. |
-| `test_learn_hmm.py::test_the_enumerated_gradient_matches_central_differences` | oracle | The oracle that makes this an *instance* rather than a second class with the same method names: `snakes_and_ladders.learn.exact` carries it unchanged from the Potts landscape, and the agreement it reaches here is the same claim at 1.5e-11 that one reports. |
+| `test_learn_hmm.py::test_the_enumerated_gradient_matches_central_differences` | oracle | The oracle that makes this an *instance* rather than a second class with the same method names: `sal.learn.exact` carries it unchanged from the Potts landscape, and the agreement it reaches here is the same claim at 1.5e-11 that one reports. |
 | `test_learn_potts.py::test_energy_matches_its_definition_term_by_term` | oracle | E(s) = J * (agreeing adjacent pairs) + sum of the field at each site, written out here independently of the implementation's loop. |
 | `test_learn_potts.py::test_the_local_reward_equals_a_full_energy_difference` | oracle | The step function updates two bonds and one site rather than re-evaluating E. |
 | `test_learn_potts.py::test_the_neighbourhood_has_one_flip_per_site_and_alternative_state` | oracle |  |
@@ -46,13 +46,13 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_potts_lattice.py::test_the_local_reward_matches_re_evaluating_the_energy_on_a_lattice` | oracle | A 3x3 open lattice has interior sites with four neighbours, which the chain never exercises: its delta only ever sums two terms. |
 | `test_learn_potts_lattice.py::test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary` | oracle | Periodic wrapping gives every site the same degree and makes a 2-extent dimension list the same pair twice, as a doubled bond. |
 | `test_learn_potts_lattice.py::test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice` | oracle | 3**9 = 19,683 configurations, the same size #170's simulator validates against, so the best configuration is an enumerated fact. |
-| `test_learn_potts_lattice.py::test_the_enumerated_gradient_matches_central_differences_on_a_lattice` | oracle | The oracle that makes this an instance rather than a lookalike: `snakes_and_ladders.learn.exact` carries it unchanged from the chain. |
+| `test_learn_potts_lattice.py::test_the_enumerated_gradient_matches_central_differences_on_a_lattice` | oracle | The oracle that makes this an instance rather than a lookalike: `sal.learn.exact` carries it unchanged from the chain. |
 | `test_learn_reinforce.py::test_the_enumerated_gradient_matches_finite_differences` | oracle | Autodiff against numerical differentiation of the same closed form. |
 | `test_learn_reinforce.py::test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient` | oracle | The claim REINFORCE rests on, checked rather than cited. |
 | `test_learn_reinforce.py::test_training_raises_the_enumerated_expected_return` | oracle | Against the enumerated J, not the sampled mean the training loop reports: that curve is a Monte Carlo estimate under a moving policy and can rise while the estimator is wrong. |
 | `test_learn_reinforce.py::test_the_learned_policy_is_at_least_as_good_as_hill_climbing` | simulated_truth | Milestone 8's criterion, at a size where the answer is enumerable. |
 | `test_learn_relaxed.py::test_the_potts_relaxation_is_exact_at_every_corner` | oracle | The first thing that must be true. |
-| `test_learn_relaxed.py::test_the_hmm_relaxation_is_exact_at_every_corner` | oracle | The same check across a module boundary, which makes it stronger than the one above: `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely independent implementations of `log P(path, observations)`. |
+| `test_learn_relaxed.py::test_the_hmm_relaxation_is_exact_at_every_corner` | oracle | The same check across a module boundary, which makes it stronger than the one above: `sal.learn` may not import `sal.likelihood`, so `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely independent implementations of `log P(path, observations)`. |
 | `test_learn_relaxed.py::test_the_relaxed_optimum_of_the_hmm_is_the_viterbi_path` | oracle | The relaxed objective's discrete optimum must be the answer another module computes for the same question, or the relaxation is optimizing something else. |
 | `test_learn_relaxed.py::test_the_expected_discrete_score_equals_the_score_at_the_marginals` | oracle |  |
 | `test_learn_relaxed.py::test_the_exact_gradient_matches_a_finite_difference` | oracle | The reference every estimator is measured against needs its own check, or a bias measurement is only evidence that two wrong things differ. |
@@ -274,7 +274,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_newick.py::test_to_newick_with_node_states_round_trips_ancestor_labels` | oracle |  |
 | `test_potts_simulate.py::test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice` | oracle |  |
 | `test_potts_simulate.py::test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size` | oracle | An independent confirmation at a different (n_states, shape) than the fixture, per the issue's own two named sizes: 2-state 4x4 is 65,536 configurations. |
-| `test_potts_simulate.py::test_the_open_chain_path_reproduces_the_transfer_matrix_log_z` | oracle | A reduction to an exact result, not sampler-vs-sampler agreement: the same distribution described by snakes_and_ladders.opt.potts's transfer matrix and by the backward-message sampler this module generalizes it from. |
+| `test_potts_simulate.py::test_the_open_chain_path_reproduces_the_transfer_matrix_log_z` | oracle | A reduction to an exact result, not sampler-vs-sampler agreement: the same distribution described by sal.opt.potts's transfer matrix and by the backward-message sampler this module generalizes it from. |
 | `test_spatio_sequential.py::test_the_labels_are_drawn_from_the_potts_prior` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |

@@ -25,19 +25,19 @@ loop is shared. `reinforce.py` is the score-function estimator and `exact.py`
 its oracle, by enumerating trajectories.
 
 The environments here are **reference instances**, not applications, over the
-same models `snakes_and_ladders.opt` fits. That is deliberate: one model appears here as an
+same models `sal.opt` fits. That is deliberate: one model appears here as an
 environment searched discretely and there as an objective fitted continuously,
 so the claim that both halves of the project share one abstraction is
 demonstrated rather than asserted.
 
 ## Local rules
 
-- **No application imports.** Nothing here may import from `snakes_and_ladders.sim`,
-  `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`, asserted by
+- **No application imports.** Nothing here may import from `sal.sim`,
+  `sal.likelihood` or `sal.search`, asserted by
   `tests/regression/test_learn_environment.py`. An agent developed against a
   tree is an agent shaped by trees, and the phylogenetic environment
-  therefore lives in `snakes_and_ladders.search`, which may import both halves.
-  `snakes_and_ladders.opt` is not forbidden: it is infrastructure too, and reusing its
+  therefore lives in `sal.search`, which may import both halves.
+  `sal.opt` is not forbidden: it is infrastructure too, and reusing its
   Potts fixture is the point rather than a shortcut.
 - **A reward is a closed form at known parameters, never an inner solve.**
   That is what makes an episode affordable: a fitted reward costs a full solve
@@ -50,7 +50,7 @@ demonstrated rather than asserted.
   improvement found early over the same improvement found late.
 - **A feature constant across a state's actions is unidentifiable.** A
   softmax over scores cancels anything every action shares — the same gauge
-  `snakes_and_ladders.opt` fixes for a simplex. No environment supplies a bias term, and a
+  `sal.opt` fixes for a simplex. No environment supplies a bias term, and a
   test pins the invariance.
 - **The greedy searcher must be inside the policy class.** Where the reward
   decomposes into the features, some weight vector *is* the greedy baseline at
@@ -76,7 +76,7 @@ demonstrated rather than asserted.
 - **A budget is counted in decisions, never in seconds.** Both the greedy
   searcher and a policy score the whole neighbourhood per decision, so
   decisions are the unit at which they are comparable — the same reasoning
-  that makes `snakes_and_ladders.search.infer` count candidate fits.
+  that makes `sal.search.infer` count candidate fits.
 
 - **An episode that may leave a local optimum is scored on its best state,
   not its last.** `rollout(..., stop_at_local_optimum=False)` runs to its
@@ -111,7 +111,7 @@ cannot support.
 
 The count is the point: an interface justified by one model is shaped by that
 model, so this one carries an energy landscape, a decoding problem, and — in
-`snakes_and_ladders.search`, which may import both halves — a topology search. None of them
+`sal.search`, which may import both halves — a topology search. None of them
 takes an application type. The caller unpacks a model into index and
 log-probability arrays, because the no-application-imports rule admits no
 exception for convenience.
