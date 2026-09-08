@@ -10,8 +10,8 @@ the truth reads as a weakly identified parameter, and an optimizer that stops
 early produces the same symptom.
 
 These three functions separate them, because their minimizers are known in
-closed form and have nothing to do with phylogenetics. Each targets a
-different failure:
+closed form and have nothing to do with phylogenetics (``sec:testfunctions``).
+Each targets a different failure:
 
 * :class:`Rosenbrock` --- a narrow curved valley, where a wrong line search
   shows up as slowness rather than as a wrong answer.
@@ -43,7 +43,7 @@ import torch
 
 @dataclass(frozen=True)
 class Rosenbrock:
-    """``sum_i b (x_{i+1} - x_i^2)^2 + (a - x_i)^2``, minimized at ``(a, ..., a)``.
+    """``sum_i b (x_{i+1} - x_i^2)^2 + (a - x_i)^2``, minimized at ``(a, ..., a)`` (``eq:rosenbrock``).
 
     The valley is curved and its floor is nearly flat, so the gradient points
     across it rather than along it and steepest descent zig-zags. What makes
@@ -106,7 +106,7 @@ class Rosenbrock:
 
 @dataclass(frozen=True)
 class Rastrigin:
-    """``10 n + sum_i (x_i^2 - 10 cos(2 pi x_i))``, minimized at the origin.
+    """``10 n + sum_i (x_i^2 - 10 cos(2 pi x_i))``, minimized at the origin (``eq:rastrigin``).
 
     A quadratic bowl with a cosine ripple, so the global structure points at
     the answer and the local structure does not: there are roughly ``10 ** n``
@@ -157,7 +157,7 @@ HIMMELBLAU_MINIMA = (
 
 @dataclass(frozen=True)
 class Himmelblau:
-    """``(x^2 + y - 11)^2 + (x + y^2 - 7)^2``, with four equal global minima.
+    """``(x^2 + y - 11)^2 + (x + y^2 - 7)^2``, with four equal global minima (``eq:himmelblau``).
 
     Two dimensions only; the function is defined that way. The four minima all
     have value 0, so no ordering distinguishes them and "the" optimum is not a

@@ -8,7 +8,8 @@ what makes it belong *here* rather than in a module's own ticket: **more than
 one module consumes it.**
 
 Nothing in this module performs inference. Each entry is a construction plus
-the quantity that is known about it in advance; the oracles that consume them
+the quantity that is known about it in advance (the two lattices are stated as
+a problem in ``sec:frustrated``); the oracles that consume them
 live in :mod:`snakes_and_ladders.likelihood` and :mod:`snakes_and_ladders.search`, which is the point of
 the second rule.
 
@@ -130,7 +131,7 @@ def frustrated_triangular_lattice(
 
 
 def minimum_frustrated_edges(graph: PottsGraph) -> int:
-    """Edges that must agree in any two-state ground state, exactly.
+    """Edges that must agree in any two-state ground state, exactly (``eq:triangular-ground-state``).
 
     For the periodic triangular lattice on ``N`` sites the answer is ``N``,
     and the argument is a double count rather than a search:
@@ -181,7 +182,7 @@ def planted_spin_glass(
     *,
     magnitude: float = 1.0,
 ) -> PlantedSpinGlass:
-    """A ``+/- J`` spin glass on a sparse random graph, built around a state.
+    """A ``+/- J`` spin glass on a sparse random graph, built around a state (``eq:planted-energy``).
 
     Viana-Bray rather than Edwards-Anderson: the couplings sit on an
     Erdos-Renyi graph rather than a lattice, so connectivity is a knob instead

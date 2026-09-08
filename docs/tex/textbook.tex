@@ -12,8 +12,8 @@ and the Properties That Referee Them}
 
 \begin{abstract}
 \noindent
-A self-contained account of the three problem classes this project supports,
-the algorithms that solve them, and---the part a methods section usually
+A self-contained account of the problem classes this project supports---four
+primary ones and the instances derived from them---the algorithms that solve them, and---the part a methods section usually
 omits---the mathematical properties each algorithm is validated against, and
 why those properties are the right referees. Written for a reader with a
 scientific and performance-computing background but no background in
@@ -80,7 +80,7 @@ instance of Equation~\ref{eq:sum-product} or of the optimization it is, and
 the property that pins it---so that what differs between the problems is
 visible as content and not as presentation.
 
-\section{The Shape All Three Problems Share}
+\section{The Shape All the Problems Share}
 \label{sec:shape}
 
 Each problem class below couples a \emph{combinatorial} search over a
@@ -128,10 +128,10 @@ is Equation~\ref{eq:bp-message}. On a loopy graph the fixed point is the
 Bethe approximation of Equation~\ref{eq:bethe}. Replacing the sum by a
 maximum gives max-product, whose max-marginals carry the MAP assignment---on
 a chain, Viterbi. One implementation of Equation~\ref{eq:sum-product}
-therefore serves all three problem classes, and each is pinned to the
+therefore serves every problem class, and each is pinned to the
 evaluator that predates it.
 
-\paragraph{A fourth shape.}
+\paragraph{A coupled shape.}
 The coupled spatio-sequential model puts a Potts prior on spatial labels
 $\ell_n \in \{1..M\}$, one hidden chain $k_{s,m}$ per class, and a
 \emph{gated} emission joining one label to one chain state:
@@ -1156,19 +1156,351 @@ at an equal budget, over seeds, reported whether it wins or not.
 \end{algorithmic}
 \end{algorithm}
 
-\paragraph{What pins it, and what is built.}
-The structure and its evaluator are built: the graph of
-Equation~\ref{eq:joint} is constructed from the three adapters and its
-log-density equals the joint written out on every assignment of an enumerable
-instance. The fixture with its enumeration oracle, the E step and the field,
-the block ascent with the three label solvers, and the initializer are the
-remaining parts, each with its own pin: label and state marginals of the
-simulator against enumeration; the gradient identity
-Equation~\ref{eq:coupled-m-step} against central differences; the joint
-non-decreasing across every block; label accuracy up to permutation against
-the planted labels at an equal budget of sweeps, for each of the three label
-solvers, so the claim that a cluster move escapes what iterated conditional
-modes freezes into is a measurement here and not a premise.
+\paragraph{What pins it.}
+The graph of Equation~\ref{eq:joint} is constructed from the three adapters
+and its log-density equals the joint written out on every assignment of an
+enumerable instance; the simulator's label and state marginals are held to
+enumeration; the gradient identity Equation~\ref{eq:coupled-m-step} to
+central differences; the joint is non-decreasing across every block for every
+label solver; and label accuracy up to permutation against the planted labels
+is measured at an equal budget of sweeps for each of the three solvers, so
+whether a cluster move escapes what iterated conditional modes freezes into
+is a measurement here and not a premise---and on the planted lattice it is
+the start, not the move, that decides it.
+
+\section{Problem Statement: Large Parsimony}
+\label{sec:parsimony}
+
+\subsection{The model}
+Parsimony is the phylogenetic criterion with no model: a topology is scored
+by the fewest state changes that explain the alignment, Equation~\ref{eq:fitch}
+under unit costs and Equation~\ref{eq:sankoff} under a step matrix, with no
+branch lengths and no probabilities, so the score is an integer where the
+likelihood is a real number. \emph{Small} parsimony scores a given tree;
+\emph{large} parsimony is the search,
+\begin{equation}
+  \tree^{\ast} = \arg\min_{\tree} F(\tree),
+  \qquad
+  F(\tree) = \sum_{s=1}^{L} F_s(\tree),
+  \label{eq:large-parsimony}
+\end{equation}
+over the $(2n-5)!!$ unrooted topologies \citep{felsenstein2004}. It is
+NP-hard in general, which is why it is stated as the discrete half of
+Section~\ref{sec:phylo} with the continuous half removed, and why the same
+neighbourhoods and the same budget accounting serve it.
+
+\subsection{As a factor graph}
+One site is the tree factor graph of Section~\ref{sec:phylo} in the
+min-plus semiring: the pairwise factor on a branch is the cost of a change,
+$0$ on agreement and $W_{ij}$ otherwise, a leaf's indicator is $0$ at its
+observed state and $\infty$ elsewhere, and the root prior is constant.
+Max-product with the sum replaced by a minimum and the product by a sum is
+Sankoff's recursion, and under the unit matrix Fitch's set recursion carries
+the same minimum. The criterion is therefore the short-branch limit of
+Equation~\ref{eq:pruning}, and Equation~\ref{eq:parsimony-bound} is where
+that limit re-enters the likelihood problem, as an upper bound on
+$\ell^{\ast}(\tree)$ a search can rank a neighbourhood by.
+
+\qacaptionread{figures/parsimony_zones_caption.txt}{\parsimonyZonesCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/parsimony_zones}
+  \caption{\parsimonyZonesCaption}
+  \label{fig:parsimony-zones}
+\end{figure}
+
+\subsection{The algorithm: hill climbing on the score}
+The climb of Section~\ref{sec:phylo} with the fit replaced by one
+post-order pass: a random start by stepwise insertion, the best neighbour
+under nearest-neighbour interchange or subtree prune-and-regraft taken while
+one improves, each topology scored at most once, and the budget counted in
+candidates scored. A candidate costs one pass rather than one optimization,
+so the same budget reaches a neighbourhood an order of magnitude larger, and
+the trade is that the criterion it climbs is the wrong one in a region that
+can be named.
+
+\paragraph{Regime.}
+The step matrix must be a metric, since an unrooted topology has one score
+only when every rooting scores the same; an asymmetric matrix is refused
+rather than scored at an arbitrary root. And the criterion is
+\emph{statistically inconsistent} in the Felsenstein zone
+(Figure~\ref{fig:parsimony-zones}): with two long branches that are not a
+cherry, convergent change on them is cheaper to explain by grouping them than
+by the true tree, so the error rate goes to one as the alignment grows
+\citep{felsenstein2004}. Moving the same branches to be a cherry gives the
+Farris zone, where the criterion is consistent and fast; the pair is what
+makes a measurement interpretable, because an implementation that is merely
+broken fails both.
+
+\paragraph{What pins it.}
+The score against a brute force over every labelling of the internal nodes,
+which shares no traversal with either recursion, at exact equality; Sankoff
+under the unit matrix against Fitch on every topology of a fixture; and the
+search against the enumeration of Equation~\ref{eq:large-parsimony}'s domain
+from every start where it reaches, with the Felsenstein-zone fixture asserted
+to return the wrong tree while the likelihood optimum on the same alignment
+is the right one.
+
+\section{Problem Statement: Frustrated Lattices}
+\label{sec:frustrated}
+
+\subsection{The model}
+Two instances of Equation~\ref{eq:potts} whose ground-state energy is known
+from outside, admitted because more than one algorithm is scored against
+them. The first is the two-state antiferromagnet, $J < 0$, on the periodic
+triangular lattice: $N$ sites, $3N$ bonds, $2N$ triangles, every bond in
+exactly two triangles. A triangle is not two-colourable, so each keeps at
+least one agreeing bond, and counting (triangle, agreeing bond) pairs gives
+$2 A \ge 2N$ for the agreeing bonds $A$ of any configuration; with a zero
+field and $J = -|J|$,
+\begin{equation}
+  E_{\min} = |J|\, N ,
+  \label{eq:triangular-ground-state}
+\end{equation}
+attained, and attained by many configurations: the residual entropy per site
+tends to Wannier's $0.3231$ in the thermodynamic limit, a value reported for
+orientation and never asserted at a finite size. The second is a planted
+Viana--Bray spin glass: couplings $\pm J$ on a sparse random graph, built
+around a state $\sigma^{\ast}$ by setting each coupling to reward what the
+state does and then inverting a fraction $f$ of them, so that with $u$
+inverted bonds
+\begin{equation}
+  E(\sigma^{\ast}) = -J\,\big(|E| - 2u\big),
+  \qquad
+  E_{\min} \le E(\sigma^{\ast}),
+  \label{eq:planted-energy}
+\end{equation}
+a known energy at any size and an upper bound on the ground state, never the
+ground state itself: at $f = 0$ the instance is a gauge transform of the
+ferromagnet and trivial, and as $f$ grows the planted state stops being
+near-optimal (Figure~\ref{fig:frustrated-lattices}).
+
+\subsection{As a factor graph}
+The factor graph of Section~\ref{sec:potts} with $\psi_{ij} = e^{J_{ij}
+\delta(\sigma_i, \sigma_j)}$ and $J_{ij} < 0$ on some or every bond. Nothing
+changes in the graph; what changes is that the odd cycles of
+Section~\ref{sec:potts} are now present, so the ground state is not a
+colouring and the bond probability $1 - e^{-\beta J_{ij}}$ of the cluster
+moves is not a probability.
+
+\qacaptionread{figures/frustrated_lattices_caption.txt}{\frustratedLatticesCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/frustrated_lattices}
+  \caption{\frustratedLatticesCaption}
+  \label{fig:frustrated-lattices}
+\end{figure}
+
+\subsection{The algorithms that apply}
+Enumeration over $2^N$ configurations and the maximum cut of
+Section~\ref{sec:potts-cuts}, where they reach; the semidefinite relaxation
+of Equation~\ref{eq:gw}, which certifies a ratio at any size; single-site
+descent, and the annealing and parallel tempering of
+Section~\ref{sec:tempering}, which are the searches these instances exist
+to separate. The exact cut refuses a negative coupling, since the energy is
+not submodular, and the cluster moves refuse it for the reason above, so the
+instances draw the boundary between what is solved exactly and what is only
+bounded or sampled.
+
+\subsection{The initializer}
+A uniformly random configuration, and restarts of it: on a landscape whose
+optimum is degenerate, which start is drawn decides which ground state is
+reached and the count of restarts is part of the budget the comparison
+charges.
+
+\paragraph{What pins it.}
+Equation~\ref{eq:triangular-ground-state} at every size, and enumeration
+attaining it at the sizes enumeration reaches, with the degeneracy asserted
+and the entropy reported; Equation~\ref{eq:planted-energy} as an inequality
+on every search's result, with descent landing on the planted energy at low
+$f$ and below it at high $f$ measured rather than assumed. Whether annealing
+or tempering beats restarts is a property of the instance, stated as a
+measurement at equal sweeps (Section~\ref{sec:tempering}).
+
+\section{Problem Statement: The Gaussian Mixture}
+\label{sec:mixture}
+
+\subsection{The model}
+Independent observations $y_1, \dots, y_N$, each drawn from one of $K$
+components chosen by a weight vector,
+\begin{equation}
+  p(y_i) = \sum_{k=1}^{K} w_k\, \mathcal{N}(y_i;\ \mu_k, \sigma_k^2),
+  \qquad
+  \sum_k w_k = 1,\quad w_k > 0 ,
+  \label{eq:mixture}
+\end{equation}
+with the component label $z_i$ latent and retained by the simulator so that
+a clustering has something to be checked against. It is the hidden Markov
+model of Section~\ref{sec:hmm} with the chain removed: the Gaussian family is
+the same emission family, and the likelihood inherits its lack of a maximum
+(Section~\ref{sec:properties}) unchanged.
+
+\subsection{As a factor graph}
+$N$ variables $x_i \equiv z_i$ with one unary factor each,
+$\psi_i(z_i) = w_{z_i}\, \mathcal{N}(y_i; \mu_{z_i}, \sigma_{z_i}^2)$, and no
+pairwise factor at all. Equation~\ref{eq:sum-product} is then a
+normalization per variable, and the belief at $i$ is the responsibility
+\begin{equation}
+  r_{ik} = \frac{w_k\, \mathcal{N}(y_i; \mu_k, \sigma_k^2)}
+                {\sum_{k'} w_{k'}\, \mathcal{N}(y_i; \mu_{k'}, \sigma_{k'}^2)} ,
+  \label{eq:responsibilities}
+\end{equation}
+the object an HMM's forward--backward pass produces with a recursion and a
+mixture produces with a division. That the M step receives the same object
+either way is what lets one emission family serve both.
+
+\qacaptionread{figures/mixture_seeding_caption.txt}{\mixtureSeedingCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/mixture_seeding}
+  \caption{\mixtureSeedingCaption}
+  \label{fig:mixture-seeding}
+\end{figure}
+
+\subsection{The algorithms: expectation--maximization and the gradient fit}
+Expectation--maximization alternates Equation~\ref{eq:responsibilities}
+with the weighted re-estimate of each component's mean and variance and of
+the weights as the mean responsibility, and increases the likelihood at every
+iterate \citep{mackay2003}; the same objective is also fitted by the
+quasi-Newton optimizer of Section~\ref{sec:abstraction} over an unconstrained
+vector, the weights through a softmax and the scales through a logarithm.
+The two share the model and nothing else, which is what makes their agreement
+evidence. Where the components overlap the fixed point is approached
+linearly, so a raw iterate stopped at a count sits above its basin's optimum
+by an amount a gradient polish removes, and an equal-budget comparison
+charges the polish to every method.
+
+\subsection{The initializer: k-means++}
+The first initializer here that reads the data. The first centre is an
+observation drawn uniformly; each subsequent one is an observation $y$ drawn
+with probability proportional to its squared distance from the nearest centre
+already chosen,
+\begin{equation}
+  \Pr(c_{j+1} = y) = \frac{D(y)^2}{\sum_{y'} D(y')^2},
+  \qquad
+  D(y) = \min_{j' \le j} |y - c_{j'}| ,
+  \label{eq:kmeanspp}
+\end{equation}
+and the expected $k$-means cost of the seeding, before any refinement, is
+within a factor of the optimum \citep{arthur2007}:
+\begin{equation}
+  \mathbb{E}\big[\,\phi(c)\,\big] \;\le\; 8\,(\ln K + 2)\; \phi^{\ast} .
+  \label{eq:kmeanspp-bound}
+\end{equation}
+In one dimension $\phi^{\ast}$ is computable exactly---an optimal clustering
+partitions the sorted observations into contiguous runs, and a dynamic
+programme over the cut positions finds it---so the bound has something to be
+checked against, which it does not in higher dimension where the problem is
+NP-hard. Seeding is a statement about the cost and not about the likelihood:
+whether a seeded start reaches a better optimum of Equation~\ref{eq:mixture}
+than a uniform one is measured over seeds and reported whichever way it falls.
+
+\paragraph{What pins it.}
+The component M step against the hidden Markov model's on the same
+responsibilities, at equality; expectation--maximization against the
+gradient fit at the same optimum, and its iterates monotone; the seeding cost
+against the exact dynamic programme, with the mean over seedings held to
+Equation~\ref{eq:kmeanspp-bound}; and recovery of the generating parameters
+up to the permutation of components, with the alignment part of the test. A
+component whose variance reaches the floor of Section~\ref{sec:properties}
+is a refusal, in either algorithm.
+
+\section{Problem Statement: Continuous Test Functions}
+\label{sec:testfunctions}
+
+\subsection{The functions}
+Three standard functions with minimizers known in closed form, so the
+optimizer of Section~\ref{sec:abstraction} is checked against something that
+is not a likelihood surface: on a likelihood, a fit that stops early and a
+parameter the data identify weakly look the same, and these separate the
+two \citep{nocedal2006}.
+\begin{align}
+  f_{\mathrm{R}}(x) &= \sum_{i=1}^{d-1} \Big[ b\,(x_{i+1} - x_i^2)^2 + (a - x_i)^2 \Big],
+  \qquad x^{\ast} = (a, \dots, a),\ a = 1,\ b = 100,
+  \label{eq:rosenbrock} \\
+  f_{\mathrm{Ra}}(x) &= 10\,d + \sum_{i=1}^{d} \Big[ x_i^2 - 10 \cos(2\pi x_i) \Big],
+  \qquad x^{\ast} = 0,
+  \label{eq:rastrigin} \\
+  f_{\mathrm{H}}(x, y) &= (x^2 + y - 11)^2 + (x + y^2 - 7)^2,
+  \label{eq:himmelblau}
+\end{align}
+the last with four equal minima of value $0$, at $(3, 2)$ and three
+published points. Rosenbrock is a curved valley whose difficulty is
+conditioning alone; Rastrigin is a quadratic bowl under a cosine ripple with
+about $10^d$ local minima, every one satisfying the first-order condition;
+Himmelblau has no single answer, so ``the'' optimum is not a well-formed
+question and a method that always returns the same minimum is reading its
+start. They are not likelihoods: the Hessian at a minimum is not an observed
+information, and no interval is built from it.
+
+\qacaptionread{figures/optimizer_landscapes_caption.txt}{\optimizerLandscapesCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/optimizer_landscapes}
+  \caption{\optimizerLandscapesCaption}
+  \label{fig:optimizer-landscapes}
+\end{figure}
+
+\subsection{The algorithms that apply}
+Each function is an instance of the objective abstraction with the identity
+as its constraint map, so everything that runs on a likelihood runs on it:
+the quasi-Newton fit, the Hamiltonian sampler of Section~\ref{sec:hmc} read
+as an energy, and annealing with Hamiltonian proposals on a schedule
+(Section~\ref{sec:tempering}). They are the continuous counterpart of the
+frustrated lattices: an equal budget of objective evaluations is spent by
+restarts of the fit and by an annealed chain with a polishing fit, and which
+wins is a property of the surface rather than of the algorithms.
+
+\subsection{The initializers}
+The three model-free strategies: the function's own start, that start tilted
+by a fixed alternating amount for a surface whose nominal start is stationary,
+and Gaussian restarts around it from a passed-in generator, every start
+fitted and every fit reported with its spread rather than the best alone
+(Figure~\ref{fig:optimizer-landscapes}). A multi-start that reports one
+answer for a surface with four basins is the failure the abstraction exists
+to expose.
+
+\paragraph{What pins it.}
+The fit against the analytic minimizer to a stated tolerance, in several
+dimensions for Equation~\ref{eq:rosenbrock}; the automatic gradient against
+the hand-written closed form, exactly; every one of Himmelblau's minima
+reachable from its own basin; and on Equation~\ref{eq:rastrigin} a
+\emph{rate}---the fraction of starts from which a converged fit is the global
+minimum---asserted low rather than asserted to succeed, which is the
+measurement that bounds what a single fit of any multimodal surface here may
+claim.
+
+\section{Problem Statement: Low-Density Parity-Check Decoding}
+\label{sec:ldpc}
+
+The fourth problem class the roadmap names: a Gallager ensemble of codes,
+transmission through a channel, and decoding as Equation~\ref{eq:sum-product}
+on the code's factor graph---variables the transmitted bits, factors the
+parity checks and the channel likelihoods---with exhaustive maximum-likelihood
+decoding as the oracle where the code is short enough to enumerate. The
+section, its figure and its row in Section~\ref{sec:applicability} land with
+the pull request that carries the decoder (\#356, ticket \#340); nothing is
+stated here ahead of it.
+
+\section{The Problems, and What Applies to Each}
+\label{sec:applicability}
+
+Tables~\ref{tab:algorithms-problems} and~\ref{tab:oracles-problems} are
+generated from the problem catalogue and the regression suite, not written:
+a row is a problem, a column an algorithm family or a kind of referee, and a
+cell says whether the pair exists and what pins it. Two readings are
+load-bearing. The first is the standard: where an oracle is affordable at a
+size, the method is pinned to it; where none is, recovering the simulated
+truth---the generating parameters or structure of a seeded fixture, to a
+stated tolerance or at a stated coverage---is sufficient, and the oracle
+remains desired. The second is the marks that say where that second case
+holds, per method and per size tier, so the oracle each would need can be
+named rather than left implicit: a branch-and-bound bound for trees past the
+enumerable taxon count, a boundary contraction for lattices past the
+transfer-matrix width, and density evolution for codes past the enumerable
+length.
+
+\input{generated/problems_tables}
 
 \section{The Properties That Referee Each Method}
 \label{sec:properties}
@@ -1267,7 +1599,7 @@ orientation and the per-instance property is what is asserted.
 \section{Relevance to the Roadmap}
 \label{sec:roadmap}
 
-The three problem classes are not three applications. They are chosen so that
+The problem classes are not applications. They are chosen so that
 each abstraction is tested against something that is not the model it was
 extracted from: a likelihood engine justified only by trees would be a
 phylogenetics library, and an optimizer justified only by an HMM would
