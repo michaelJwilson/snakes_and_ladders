@@ -194,7 +194,7 @@ def _anneal(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Outco
     run = anneal(
         counted,
         Exponential(LADDER[-1], LADDER[0], n_proposals),
-        int(rng.integers(2**31 - 1)),
+        torch.Generator().manual_seed(int(rng.integers(2**31 - 1))),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,
         theta0=theta,
@@ -211,7 +211,7 @@ def _tempering(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Ou
     run = parallel_tempering(
         counted,
         LADDER,
-        int(rng.integers(2**31 - 1)),
+        torch.Generator().manual_seed(int(rng.integers(2**31 - 1))),
         n_rounds,
         step_size=STEP_SIZE,
         n_steps=N_STEPS,

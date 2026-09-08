@@ -388,7 +388,11 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     relaxed = np.array(
         [
             optimize(
-                objective, seed=seed, temperature=0.5, steps=100, stochastic=False
+                objective,
+                generator=torch.Generator().manual_seed(seed),
+                temperature=0.5,
+                steps=100,
+                stochastic=False,
             ).score
             > best - 1e-9
             for seed in range(40)
@@ -425,7 +429,11 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
         sampled = np.array(
             [
                 optimize(
-                    objective, seed=seed, temperature=0.5, steps=100, mode=mode
+                    objective,
+                    generator=torch.Generator().manual_seed(seed),
+                    temperature=0.5,
+                    steps=100,
+                    mode=mode,
                 ).score
                 > best - 1e-9
                 for seed in range(40)
@@ -447,7 +455,11 @@ def test_the_hmm_path_is_recovered_from_every_restart() -> None:
 
     reached = sum(
         optimize(
-            objective, seed=seed, temperature=0.5, steps=150, stochastic=False
+            objective,
+            generator=torch.Generator().manual_seed(seed),
+            temperature=0.5,
+            steps=150,
+            stochastic=False,
         ).score
         > best - 1e-9
         for seed in range(20)
@@ -557,10 +569,16 @@ def test_annealing_reaches_the_final_temperature_during_optimization() -> None:
     # actually anneals rather than silently holding `temperature`.
     objective = RelaxedPotts(_landscape())
 
-    fixed = optimize(objective, seed=1, temperature=0.5, steps=40, stochastic=False)
+    fixed = optimize(
+        objective,
+        generator=torch.Generator().manual_seed(1),
+        temperature=0.5,
+        steps=40,
+        stochastic=False,
+    )
     annealed = optimize(
         objective,
-        seed=1,
+        generator=torch.Generator().manual_seed(1),
         temperature=0.5,
         final_temperature=0.01,
         steps=40,

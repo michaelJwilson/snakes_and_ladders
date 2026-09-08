@@ -25,6 +25,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Convert the sixteen signatures that still take a seed where the rule says a
   generator (#240)
 - Move `PottsParams`/`load_potts_params` out of `sal.opt.potts`, so
+
+- Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of keeping
   its own copy of the exact open-chain recursion (#186)
 - Additional evolutionary models (#107)
