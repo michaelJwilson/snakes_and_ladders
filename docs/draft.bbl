@@ -1,0 +1,138 @@
+\begin{thebibliography}{25}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Amari(2016)]{amari2016}
+Shun-ichi Amari.
+\newblock \emph{Information Geometry and Its Applications}.
+\newblock Springer, Tokyo, 2016.
+
+\bibitem[Blahut(2003)]{blahut2003}
+Richard~E. Blahut.
+\newblock \emph{Algebraic Codes for Data Transmission}.
+\newblock Cambridge University Press, Cambridge, 2003.
+
+\bibitem[Blandy et~al.(2021)Blandy, Orendorff, and Tindall]{blandy2021}
+Jim Blandy, Jason Orendorff, and Leonora F.~S. Tindall.
+\newblock \emph{Programming Rust: Fast, Safe Systems Development}.
+\newblock O'Reilly Media, 2nd edition, 2021.
+
+\bibitem[Bryant and O'Hallaron(2015)]{bryant2015}
+Randal~E. Bryant and David~R. O'Hallaron.
+\newblock \emph{Computer Systems: A Programmer's Perspective}.
+\newblock Pearson, 3rd edition, 2015.
+
+\bibitem[Compeau and Pevzner(2015)]{compeau2015}
+Phillip Compeau and Pavel Pevzner.
+\newblock \emph{Bioinformatics Algorithms: An Active Learning Approach}.
+\newblock Active Learning Publishers, 2015.
+
+\bibitem[Cormen et~al.(2022)Cormen, Leiserson, Rivest, and Stein]{clrs2022}
+Thomas~H. Cormen, Charles~E. Leiserson, Ronald~L. Rivest, and Clifford Stein.
+\newblock \emph{Introduction to Algorithms}.
+\newblock MIT Press, Cambridge, Massachusetts, 4th edition, 2022.
+
+\bibitem[Durbin et~al.(1998)Durbin, Eddy, Krogh, and Mitchison]{durbin1998}
+Richard Durbin, Sean~R. Eddy, Anders Krogh, and Graeme Mitchison.
+\newblock \emph{Biological Sequence Analysis: Probabilistic Models of Proteins
+  and Nucleic Acids}.
+\newblock Cambridge University Press, Cambridge, 1998.
+
+\bibitem[Felsenstein(2004)]{felsenstein2004}
+Joseph Felsenstein.
+\newblock \emph{Inferring Phylogenies}.
+\newblock Sinauer Associates, Sunderland, Massachusetts, 2004.
+
+\bibitem[Frey(1998)]{frey1998}
+Brendan~J. Frey.
+\newblock \emph{Graphical Models for Machine Learning and Digital
+  Communication}.
+\newblock MIT Press, Cambridge, Massachusetts, 1998.
+
+\bibitem[Goodfellow et~al.(2016)Goodfellow, Bengio, and
+  Courville]{goodfellow2016}
+Ian Goodfellow, Yoshua Bengio, and Aaron Courville.
+\newblock \emph{Deep Learning}.
+\newblock MIT Press, Cambridge, Massachusetts, 2016.
+
+\bibitem[Hwu et~al.(2022)Hwu, Kirk, and El~Hajj]{pmpp2022}
+Wen-mei~W. Hwu, David~B. Kirk, and Izzat El~Hajj.
+\newblock \emph{Programming Massively Parallel Processors: A Hands-on
+  Approach}.
+\newblock Morgan Kaufmann, 4th edition, 2022.
+
+\bibitem[Koller and Friedman(2009)]{koller2009}
+Daphne Koller and Nir Friedman.
+\newblock \emph{Probabilistic Graphical Models: Principles and Techniques}.
+\newblock MIT Press, Cambridge, Massachusetts, 2009.
+
+\bibitem[Lapan(2020)]{lapan2020}
+Maxim Lapan.
+\newblock \emph{Deep Reinforcement Learning Hands-On}.
+\newblock Packt Publishing, 2nd edition, 2020.
+
+\bibitem[MacKay(2003)]{mackay2003}
+David J.~C. MacKay.
+\newblock \emph{Information Theory, Inference, and Learning Algorithms}.
+\newblock Cambridge University Press, Cambridge, 2003.
+
+\bibitem[Martin(2008)]{martin2008}
+Robert~C. Martin.
+\newblock \emph{Clean Code: A Handbook of Agile Software Craftsmanship}.
+\newblock Prentice Hall, 2008.
+
+\bibitem[M{\'e}zard and Montanari(2009)]{mezard2009}
+Marc M{\'e}zard and Andrea Montanari.
+\newblock \emph{Information, Physics, and Computation}.
+\newblock Oxford University Press, Oxford, 2009.
+
+\bibitem[Newman and Barkema(1999)]{newman1999}
+M.~E.~J. Newman and G.~T. Barkema.
+\newblock \emph{Monte Carlo Methods in Statistical Physics}.
+\newblock Oxford University Press, Oxford, 1999.
+
+\bibitem[Nielsen and Chuang(2010)]{nielsen2010}
+Michael~A. Nielsen and Isaac~L. Chuang.
+\newblock \emph{Quantum Computation and Quantum Information}.
+\newblock Cambridge University Press, Cambridge, 10th anniversary edition,
+  2010.
+
+\bibitem[Nocedal and Wright(2006)]{nocedal2006}
+Jorge Nocedal and Stephen~J. Wright.
+\newblock \emph{Numerical Optimization}.
+\newblock Springer, 2nd edition, 2006.
+
+\bibitem[Ortega(2022)]{ortega2022}
+Antonio Ortega.
+\newblock \emph{Introduction to Graph Signal Processing}.
+\newblock Cambridge University Press, Cambridge, 2022.
+
+\bibitem[Pachter and Sturmfels(2005)]{pachter2005}
+Lior Pachter and Bernd Sturmfels, editors.
+\newblock \emph{Algebraic Statistics for Computational Biology}.
+\newblock Cambridge University Press, Cambridge, 2005.
+
+\bibitem[Prince(2023)]{prince2023}
+Simon J.~D. Prince.
+\newblock \emph{Understanding Deep Learning}.
+\newblock MIT Press, Cambridge, Massachusetts, 2023.
+
+\bibitem[Raschka(2024)]{raschka2024}
+Sebastian Raschka.
+\newblock \emph{Build a Large Language Model (From Scratch)}.
+\newblock Manning Publications, 2024.
+
+\bibitem[Rosen(2019)]{rosen2019}
+Kenneth~H. Rosen.
+\newblock \emph{Discrete Mathematics and Its Applications}.
+\newblock McGraw-Hill, 8th edition, 2019.
+
+\bibitem[Sutton and Barto(2018)]{suttonbarto2018}
+Richard~S. Sutton and Andrew~G. Barto.
+\newblock \emph{Reinforcement Learning: An Introduction}.
+\newblock MIT Press, Cambridge, Massachusetts, 2nd edition, 2018.
+
+\end{thebibliography}
