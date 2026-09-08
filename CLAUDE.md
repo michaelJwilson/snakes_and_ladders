@@ -114,7 +114,7 @@ Checked in this order when a hot path is proposed; `DEV.md` carries the procedur
 
 **Application (The Science)**
 *   **Phylogenetics:** Felsenstein (*Inferring Phylogenies*); Durbin et al. (*Biological Sequence Analysis*); Compeau & Pevzner (*Bioinformatics Algorithms*); Pachter & Sturmfels (*Algebraic Statistics for Computational Biology*); Yang (*Molecular Evolution: A Statistical Approach*, the substitution models). Papers: Whidden & Matsen 2015 (mixing over the SPR graph); Azouri et al. 2021 (learned SPR ranking); Zhang & Matsen 2018 (subsplit networks); Zhang & Matsen 2019 (variational inference over topologies, the differentiable-topology oracle); Speyer & Sturmfels 2004 (the tropical Grassmannian); Altekar et al. 2004 (Metropolis-coupled MCMC over topologies); Minh et al. 2020 (IQ-TREE 2, external baseline); Kozlov et al. 2019 (RAxML-NG, external baseline)
-*   **Information/Quantum:** Blahut (*Algebraic Codes for Data Transmission*); Nielsen & Chuang (*Quantum Computation and Quantum Information* — background only). Papers: Gallager 1962 (low-density parity-check codes); Nachmani et al. 2018 (neural belief propagation, the learned decoder)
+*   **Information/Quantum:** Blahut (*Algebraic Codes for Data Transmission*); Richardson & Urbanke (*Modern Coding Theory*, the LDPC decoder and density evolution); Nielsen & Chuang (*Quantum Computation and Quantum Information* — background only). Papers: Gallager 1962 (low-density parity-check codes); Nachmani et al. 2018 (neural belief propagation, the learned decoder)
 
 ## Definition of Done
 1.  **Regression Test:** Asserts scientific validity (not just shape/execution/coverage theatre) and pins expected output.
