@@ -22,6 +22,25 @@ paragraph of the textbook cannot break a likelihood, but it can break a label
 or a citation, and `tests/regression/test_document_labels.py` is what checks
 that; the planning files, the `CLAUDE.md` files, the experiment ledger and the
 notebooks each have their guard. Those run, and nothing else does.
+
+`--budget` bounds the fallback, and only the fallback (issue #409). Answering
+"everything" is right for safety and wrong for a merge gate: it took 23 to 36
+minutes on the two pull requests that merged on 2026-09-08, against 156 seconds
+for the nine other jobs together, and with several agents opening pull requests
+at once a serial merge chain forms behind it. Under `--budget` a change that
+would select everything selects instead what it can attribute plus what always
+runs, and the whole suite runs after the merge, on the push to `main`, where
+nobody waits for it. The safety moves rather than disappearing, which is the
+same trade `snakes_and_ladders.qa.build` makes for figures.
+
+`UNBOUNDABLE` is where that trade is refused. A change touching the likelihood
+kernels, the Rust sources or a lockfile keeps whatever the unbounded selection
+would have given it, because those are where a regression moves a number rather
+than breaking a build: nothing fails loudly, and every branch cut before the
+post-merge run inherits it. Most such changes are attributable and never reach
+the fallback anyway; the list matters for the ones that touch a kernel *and*
+something the mapping cannot place, which is exactly when a bound would be
+least safe.
 """
 
 from __future__ import annotations
@@ -71,6 +90,18 @@ EVERYTHING = (
     "python/snakes_and_ladders/numerics_rust.py",
     "python/snakes_and_ladders/oxi_snakes_and_ladders.pyi",
     "python/snakes_and_ladders/scripts/",
+)
+
+# These refuse a bounded fallback, `--budget` or not: a regression here moves a
+# number rather than breaking a build, so catching it after the merge is
+# catching it too late (issue #409).
+UNBOUNDABLE = (
+    "python/snakes_and_ladders/likelihood/",
+    "src/",
+    "pyproject.toml",
+    "uv.lock",
+    "Cargo.toml",
+    "Cargo.lock",
 )
 
 # Nothing here can change what a test does, so no test needs to run.
@@ -230,13 +261,74 @@ def guards_for(changed: Iterable[str]) -> list[str]:
     return sorted(selected)
 
 
-def select(changed: Iterable[str]) -> dict[str, list[str]]:
+def unboundable(changed: Iterable[str]) -> list[str]:
+    """The changed paths that refuse a bounded selection.
+
+    Parameters
+    ----------
+    changed : Iterable[str]
+        Repository-relative paths.
+
+    Returns
+    -------
+    list[str]
+        Those touching ``UNBOUNDABLE``, sorted. Empty when ``--budget`` may
+        bound the fallback.
+    """
+    return sorted({path for path in changed if _touches(path, UNBOUNDABLE)})
+
+
+def _bounded(
+    touched: set[str], guards: list[str], relevant: list[str]
+) -> dict[str, list[str]]:
+    """The selection that replaces "everything" under ``--budget``.
+
+    What a bounded fallback still runs: whatever modules the change can be
+    attributed to, with their dependents; the always-run tests, which cover
+    what belongs to no single module; and the guards. The critical tier runs
+    before this in the workflow, unconditionally, so it is not repeated here.
+
+    Parameters
+    ----------
+    touched : set[str]
+        Modules the change touched; may be empty, which is the case where the
+        unbounded answer would have been the whole suite for want of an
+        attribution.
+    guards : list[str]
+        The guards the non-code part of the change selects.
+    relevant : list[str]
+        The code paths of the change, which decide whether benchmarks run.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        ``paths`` and ``cov`` as :func:`select` returns them.
+    """
+    selected = dependents(touched) if touched else set()
+    paths = [f"tests/regression/{module}" for module in sorted(selected)]
+    paths += list(ALWAYS)
+    paths += [guard for guard in guards if guard not in paths]
+    if selected and any(
+        path.startswith("python/snakes_and_ladders/") for path in relevant
+    ):
+        paths += _benchmarks_for(selected & set(BENCHMARKED))
+    return {
+        "paths": paths,
+        "cov": [f"snakes_and_ladders.{module}" for module in sorted(selected)],
+    }
+
+
+def select(changed: Iterable[str], budget: bool = False) -> dict[str, list[str]]:
     """Choose test paths and coverage targets for a set of changed files.
 
     Parameters
     ----------
     changed : Iterable[str]
         Repository-relative paths, as `git diff --name-only` gives them.
+    budget : bool
+        Bound the fallback rather than answering with the whole suite, for a
+        merge gate that runs before the post-merge run rather than instead of
+        it (issue #409). A change touching ``UNBOUNDABLE`` ignores this.
 
     Returns
     -------
@@ -249,6 +341,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     changed = list(changed)
     if not changed:
         return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
+    budget = budget and not unboundable(changed)
 
     relevant = [
         path
@@ -260,8 +353,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     if not relevant:
         return {"paths": guards, "cov": []}
 
-    if any(_touches(path, EVERYTHING) for path in relevant):
-        return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
+    everything = any(_touches(path, EVERYTHING) for path in relevant)
 
     touched: set[str] = set()
     for path in relevant:
@@ -270,9 +362,13 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
                 (f"python/snakes_and_ladders/{module}/", f"tests/regression/{module}/")
             ):
                 touched.add(module)
-    if not touched:
-        # Recognised as code, but not attributable to a module: run everything.
-        return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
+
+    # Recognised as code, but not attributable to a module: the whole suite,
+    # unless a budget is asked for and the change is one it may bound.
+    if everything or not touched:
+        if not budget:
+            return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
+        return _bounded(touched, guards, relevant)
 
     selected = dependents(touched)
     paths = [f"tests/regression/{module}" for module in sorted(selected)]
@@ -297,10 +393,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("changed", nargs="*", help="changed paths; else stdin")
     parser.add_argument("--format", choices=("json", "shell"), default="shell")
+    parser.add_argument(
+        "--budget",
+        action="store_true",
+        help="bound the fallback for a merge gate; the post-merge run is unbounded",
+    )
     args = parser.parse_args(argv)
 
     changed = args.changed or [line.strip() for line in sys.stdin if line.strip()]
-    chosen = select(changed)
+    refused = unboundable(changed) if args.budget else []
+    if refused:
+        print(
+            "budget refused, the whole suite runs: " + " ".join(refused),
+            file=sys.stderr,
+        )
+    chosen = select(changed, budget=args.budget)
+    if args.budget and not refused and chosen["paths"] != ["tests"]:
+        print("selection bounded for the merge gate", file=sys.stderr)
 
     if args.format == "json":
         print(json.dumps(chosen))
