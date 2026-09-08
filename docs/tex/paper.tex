@@ -13,22 +13,26 @@ Applications in Phylogenetics, Potts Models, and Hidden Markov Models}
 \begin{abstract}
 \noindent
 Inference over graph-structured models---phylogenetic trees, lattice-based
-Potts models, and hidden Markov models---is a coupled discrete-continuous
+Potts models, hidden Markov models, and the low-density parity-check codes
+that share their message passing---is a coupled discrete-continuous
 optimization problem. The structural search space is combinatorial, while
 scoring each candidate structure requires continuously optimizing its
 parameters. We present a framework that strictly decouples differentiable
 continuous optimization from discrete structural search, so that one optimizer
-serves all three model classes and a structural move constructs a new objective
-rather than taking a step inside an existing one. By framing structural search
-as a Markov decision process, we enable reinforcement-learning agents to learn
-topological proposal policies against exact, approximate, or neural-surrogate
-objectives. We validate the engine against exact oracles---brute-force
-marginalization, path enumeration, and exhaustive topology enumeration---and
-report realized interval coverage rather than asserting it. We then outline
-the extensions required for curriculum learning, differentiable topology
-search, and canonical directed-acyclic-graph representations. Formulations,
-algorithms, and the properties each is validated against are given in the
-companion textbook; this paper reports results.
+serves every model class and a structural move constructs a new objective
+rather than taking a step inside an existing one. Framing structural search
+as a Markov decision process admits learned proposal policies, a critic and
+a planner over exact, approximate, bounded or learned surrogate objectives.
+We validate the engine against exact oracles---brute-force marginalization,
+path enumeration, and exhaustive topology enumeration---and report realized
+interval coverage rather than asserting it. Every comparison between methods
+is run at an equal budget of objective evaluations over shared seeds with a
+paired test, and the negative results are reported beside the positive ones:
+restarts are not beaten on the continuous surfaces measured, a learned tree
+policy ties hill climbing on the one fixture that separates them, and no
+site reaches a two-fold speedup from process parallelism on a four-core host.
+Formulations, algorithms, and the properties each is validated against are
+given in the companion textbook; this paper reports results.
 \end{abstract}
 
 \tableofcontents
@@ -42,23 +46,38 @@ of unrooted binary topologies over $n$ taxa is $(2n-5)!!$ \citep{rosen2019}. In
 statistical physics, the ground state of an $N$-dimensional Potts model
 requires traversing an exponentially large configuration space
 \citep{mezard2009}. Decoding a hidden Markov model poses the same coupled
-problem on a chain \citep{mackay2003}.
+problem on a chain \citep{mackay2003}, and decoding a low-density parity-check
+code poses it on the sparse bipartite graph of a code's parity checks, where
+the sum-product algorithm was rediscovered as belief propagation
+\citep{kschischang2001}. The four are one marginalization over four
+structures, and two derived instances sit between them: a coupled
+spatio-sequential model, a Potts prior over class labels gating one hidden
+chain per class, and the Gaussian mixture, a hidden Markov model with the
+chain removed.
 
 Classical frameworks rely on fixed, hand-designed heuristics---nearest-neighbour
 interchange for trees, Swendsen--Wang cluster updates for lattices---applied
-greedily or under simulated annealing. This paper takes an alternative: the
-discrete search is a reinforcement-learning problem in which a neural policy
-proposes structural updates, while continuous parameters are fitted by
-reverse-mode automatic differentiation.
+greedily or under simulated annealing. This paper builds those baselines
+first, pins each to an oracle, and only then asks whether a learned component
+beats them: a policy over the same neighbourhoods trained by the
+score-function estimator, an actor--critic and proximal policy optimization,
+a planner with the policy as prior and the critic as leaf value, certified
+bounds and learned surrogates that rank a neighbourhood before it is fitted,
+and a continuous relaxation of the discrete configurations. The continuous
+parameters are fitted by reverse-mode automatic differentiation throughout.
 
 \subsection{Scope}
 This paper reports what has been built and measured. The formulations it
 rests on---the substitution model, the Potts energy, the hidden Markov
-recursions, the discrete move sets, and the mathematical properties each
-algorithm is refereed by---are stated in the companion textbook rather than
-repeated here. \textbf{Empirical benchmarking of trained policies against
-state-of-the-art classical tools} (IQ-TREE~2, RAxML-NG) is slated for a later
-milestone and appears as marked placeholders in Section~\ref{sec:results}.
+recursions, the discrete move sets, the decision process, the bounds, and the
+mathematical properties each algorithm is refereed by---are stated in the
+companion textbook rather than repeated here. Three things are outside it and
+are stated as such rather than left implicit. The low-density parity-check
+class is under review and its results are not in this version. No comparison
+against IQ-TREE~2 or RAxML-NG has been run: the tools are not in the
+environment, and installing them is a ticket of its own (\#126). And no
+accelerator exists to measure on, so hardware scaling is reported for the CPU
+alone.
 
 \section{Methods}
 \label{sec:methods}
@@ -74,39 +93,69 @@ An objective is a differentiable scalar $\objective(\params)$ over an
 unconstrained vector $\params \in \mathbb{R}^d$, with an injective map
 $\constrained$ to the constrained parameters the model is stated in. The same
 quasi-Newton optimizer \citep{nocedal2006} therefore minimizes negative
-log-likelihoods of phylogenetic alignments, free energies of Potts models, and
-sequence log-likelihoods of hidden Markov models without knowing which it has.
-Standard errors come from the observed information at the optimum, pushed
-through $\constrained$ by the delta method.
+log-likelihoods of phylogenetic alignments, free energies of Potts models,
+sequence log-likelihoods of hidden Markov models, the mixture likelihood and
+three closed-form test functions without knowing which it has. Standard errors
+come from the observed information at the optimum, pushed through
+$\constrained$ by the delta method, at any fit whatever produced it---an
+expectation--maximization fit inverts the same constraint map to be given the
+same interval---and are refused where the information is singular. A
+Hamiltonian sampler over the same interface gives an interval as a posterior
+quantile instead, with a warm-up that adapts its step and mass matrix and a
+parallel-tempering ladder chosen from its measured exchange acceptance.
 
 \subsection{Differentiable likelihoods and energies}
 Partial likelihoods are evaluated by a post-order recursion, with branch
 lengths $\branch$ and the rate matrix $\Q$ kept inside the automatic
 differentiation graph, so gradients are exact rather than numerical
 \citep{goodfellow2016, prince2023}. Rescaling against underflow is part of that
-graph.
+graph. The Potts energy is normalized by a transfer matrix on a chain and by
+belief propagation on a lattice; the hidden Markov evidence by the forward
+recursion, with forward--backward exposed as an evaluator; and all of them by
+one sum-product and max-product implementation over a factor graph that also
+expresses the coupled model, pinned to each specialized evaluator and slower
+than it, so the specialized evaluators stay.
+
+\subsection{Discrete search and its surrogates}
+Hill climbing over nearest-neighbour interchange or subtree
+prune-and-regraft fits the continuous parameters of every candidate, counts
+its budget in candidates scored, and scores each topology once. A neighbour
+starts its fit from its parent's branch lengths matched by leaf split, and a
+neighbourhood may be ranked by one cached evaluation, by a certified analytic
+bound, or by a learned predictor before only the top candidates are fitted;
+the accepted move is always fitted in full. Large parsimony runs the same
+climb on the Fitch or Sankoff score. Potts ground states are exact by minimum
+cut where the couplings are submodular, within a proved factor by alpha
+expansion above two states, and bounded by a semidefinite relaxation where
+the couplings are negative; samplers, annealing and parallel tempering run
+over one temperature schedule, and a Gibbs sampler and annealer over any
+factor graph.
 
 \subsection{Structural search as a Markov decision process}
 \label{sec:rl}
 Discrete graph traversal is formulated as a Markov decision process
-\citep{suttonbarto2018}: the \textbf{state} is the current topology, its
+\citep{suttonbarto2018}: the \textbf{state} is the current structure, its
 optimized continuous parameters, and observation summaries; an \textbf{action}
 is a structural perturbation from a classical neighbourhood; the
-\textbf{reward} is the improvement in the objective.
+\textbf{reward} is the improvement in the objective. Every learning claim is
+pinned to an oracle before it is measured: on an environment small enough to
+enumerate, the expected return, its gradient, the action values and the
+optimal value are exact. On that footing the score-function estimator with a
+baseline, an actor--critic with a fitted critic, proximal policy optimization
+with generalized advantage estimation and an optional epsilon-greedy
+behaviour policy, and a planner running PUCT search with the policy as prior
+and the critic as leaf value, trained by expert iteration, are compared at
+matched budgets. A Gumbel-softmax relaxation of Potts configurations and
+hidden state paths is the differentiable alternative, admitted where its
+optimum is enumerable so the claim is falsifiable.
 
-\subsubsection{Planned architectural extensions}
-\begin{itemize}
-    \item \textbf{Neural surrogate modelling.} Rather than running exact
-      inference on every proposal, a graph neural network or transformer
-      approximates $\objective$; the agent filters proposals with the surrogate
-      and evaluates exactly only the top candidates.
-    \item \textbf{Curriculum learning.} The policy is trained on small state
-      spaces before transferring to progressively larger graphs, to avoid
-      policy collapse.
-    \item \textbf{Differentiable topology search.} Continuous relaxations embed
-      the discrete structure in a manifold, enabling end-to-end topological
-      updates by natural gradients \citep{amari2016}.
-\end{itemize}
+\subsection{Budgets and the ledger}
+Every comparison between methods spends an equal budget in one declared
+unit---candidate fits, sweeps, or objective evaluations---over shared seeds,
+derives the restart baseline's count from that budget, refuses a method that
+spends past it, and reports an exact McNemar test on the paired hits. The
+measured comparisons are recorded in an experiment ledger, one file per
+experiment against its commit, and cited here by number.
 
 \section{Results}
 \label{sec:results}
@@ -140,10 +189,13 @@ generated caption naming the seed, sizes, and model that produced it.
 \label{sec:res-recovery}
 
 Recovery is the acceptance test for a fit, and a Wald interval from the
-observed information is an \emph{asymptotic} claim. The two figures below are
+observed information is an \emph{asymptotic} claim. The figures below are
 the evidence for it rather than an assertion of it: the first shows each fitted
-parameter against the value that generated the data, the second shows the
-realized coverage against the amount of data each fit sees.
+parameter of the Potts chain and the hidden Markov model against the value
+that generated the data, the second the realized coverage against the amount
+of data each fit sees, and the third and fourth the phylogenetic instance,
+branch lengths and the general time-reversible model, where two directions
+of the parameter space are gauges and are fitted as such.
 
 \qacaptionread{figures/opt_recovery_caption.txt}{\optRecoveryCaption}
 \begin{figure}[htbp]
@@ -161,12 +213,37 @@ realized coverage against the amount of data each fit sees.
   \label{fig:opt-coverage}
 \end{figure}
 
+\qacaptionread{figures/opt_branch_recovery_caption.txt}{\optBranchRecoveryCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/opt_branch_recovery}
+  \caption{\optBranchRecoveryCaption}
+  \label{fig:opt-branch-recovery}
+\end{figure}
+
+\qacaptionread{figures/opt_model_recovery_caption.txt}{\optModelRecoveryCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/opt_model_recovery}
+  \caption{\optModelRecoveryCaption}
+  \label{fig:opt-model-recovery}
+\end{figure}
+
 \subsection{Discrete search against exhaustive enumeration}
 \label{sec:res-search}
 
 Below the size at which every topology can be enumerated, enumeration is the
 only independent statement available about whether a search found the best tree
-or merely a good one.
+or merely a good one. The first figure is the climb and the landscape it
+climbed; the second the tree it selected beside the best one it rejected.
+
+\qacaptionread{figures/search_trajectory_caption.txt}{\searchTrajectoryCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/search_trajectory}
+  \caption{\searchTrajectoryCaption}
+  \label{fig:search-trajectory}
+\end{figure}
 
 \qacaptionread{figures/search_topologies_caption.txt}{\searchTopologiesCaption}
 \begin{figure}[htbp]
@@ -176,30 +253,52 @@ or merely a good one.
   \label{fig:search-topologies}
 \end{figure}
 
-\subsection{Memory footprint at the declared scale}
-\label{sec:res-footprint}
+\subsection{The reward an agent can afford}
+\label{sec:res-reward}
 
-The roadmap bounds the working set to $O(n \times L \times k)$ inside 16\,GB of unified memory. Table~\ref{tab:likelihood-footprint} settles it, splitting the cost the data carries from the cost the evaluator adds: the simulator retains every node's states, while pruning retains a partial likelihood only for nodes whose parent has not yet consumed it and so tracks the tree's depth. Both are reported on a caterpillar, the deepest tree on its leaves, which makes the bound tight rather than loose and the reported total a worst case rather than a typical one.
+Fitting branch lengths per candidate costs a full optimization where scoring
+at fixed parameters costs one pruning pass, and only the second makes an
+episode affordable. The substitution is validated rather than assumed: the
+two surfaces agree on the best topology and correlate at 0.9568 on the
+six-taxon fixture, and the agreement holds across a 50-fold range of the
+fixed branch length.
 
-\qacaptionread{figures/likelihood_footprint_caption.txt}{\likelihoodFootprintCaption}
-\begin{table}[htbp]
+\qacaptionread{figures/rl_reward_surface_caption.txt}{\rlRewardSurfaceCaption}
+\begin{figure}[htbp]
   \centering
-  \input{figures/likelihood_footprint}
-  \caption{\likelihoodFootprintCaption}
-  \label{tab:likelihood-footprint}
-\end{table}
+  \includegraphics[width=0.8\linewidth]{figures/rl_reward_surface}
+  \caption{\rlRewardSurfaceCaption}
+  \label{fig:rl-reward-surface}
+\end{figure}
 
-\subsection{Empirical benchmarking [PLACEHOLDERS]}
+\subsection{Learned proposals against hill climbing}
+\label{sec:res-learning}
 
-Figure~\ref{fig:rl-convergence} poses Milestone 2.1's phylogenetic comparison on a
+Where the landscape can be enumerated, learning is refereed by the exact
+expected return. On the Potts chain the reward decomposes into the two
+features the policy scores, which puts hill climbing inside the policy class:
+the learned policy reaches the enumerated optimum from 86.6\% of the 81 starts
+against greedy's 80.2\%, in 8 of 8 training seeds (ledger entry 003); at the
+same budget the actor--critic reaches it from 88.9\% and proximal policy
+optimization from 96.3\%, and at a quarter of the budget 87.7\% against the
+score-function estimator's 32.1\%. A planner with a trained prior and critic
+reaches it from 92.6\% of starts at 8.3 successor evaluations per episode
+against greedy's 80.2\% at 48, and matches greedy at 6.3.
+
+Figure~\ref{fig:rl-convergence} poses the phylogenetic comparison on a
 topology landscape where hill climbing demonstrably fails, which is the
 condition that makes the comparison askable at all: on a landscape the
 baseline already solves from every start, a policy can be neither better nor
-worse than it. Its outcome bears on two items the roadmap schedules --- the
-richer feature set of Milestone 2.1, and the accepted-worsening steps of
-Stage 3's stochastic escape mechanisms --- because the limits it runs into are
-the ones those items remove. The remaining figures are populated on completion
-of the benchmarking milestone.
+worse than it. The answer is a tie. Every algorithm---the score-function
+estimator, the actor--critic, proximal policy optimization on and off
+policy---lands on greedy's 0.48 within the 0.014 standard deviation over
+seeds, because the environment exposes one feature, the improvement a move
+buys, so the policy is an inverse temperature and no algorithm can learn
+what that class cannot express. Random-restart hill climbing reaches the
+enumerated maximum from every start at the same 60-decision budget, so the
+baseline the next comparison has to beat is 1.000 and a fixture that
+separates anything from restarts is what it needs. A richer feature set is
+under review (\#328).
 
 \qacaptionread{figures/rl_tree_policy_caption.txt}{\rlTreePolicyCaption}
 \begin{figure}[htbp]
@@ -209,29 +308,109 @@ of the benchmarking milestone.
   \label{fig:rl-convergence}
 \end{figure}
 
-\begin{figure}[htbp]
-  \centering
-  \framebox[\linewidth]{\rule{0pt}{150pt} \textbf{PLACEHOLDER: Competitiveness against classical software}}
-  \caption{Wall-clock convergence against IQ-TREE~2 and RAxML-NG on empirical benchmark datasets.}
-  \label{fig:benchmark-iqtree}
-\end{figure}
+\subsection{Budgeted comparisons}
+\label{sec:res-budget}
 
-\begin{figure}[htbp]
+Which search wins is a property of the instance, and every comparison below
+is at an equal budget over shared seeds. On the planted Viana--Bray spin
+glass at 60 sites, degree 4 and frustration 0.2, at 400 sweeps per method
+over 12 instances, parallel tempering reaches the best energy any method
+found on 12 of 12, annealing on 10 of 12 with a mean gap of 0.17, and
+restarts of descent on 4 of 12 with a mean gap of 0.75; every method beats
+the planted energy. On the five-component Gaussian mixture at 3,000
+likelihood evaluations per start over 40 shared starts, restarts of
+expectation--maximization reach the best-known optimum from 7 starts,
+parallel tempering from 4 ($p = 0.549$ against restarts) and annealing from
+1 ($p = 0.031$), with mean gaps of 2.6, 4.2 and 8.0 nats (ledger entry 004).
+On Rastrigin, held to eight fits, neither multi-start nor annealing reaches
+the global minimum from any of 10 starts. Restarts are therefore not beaten
+on the continuous surfaces measured and are beaten on the frustrated
+lattice, the one instance class past enumeration the roadmap needs. On an
+antiferromagnetic chain whose optimum needs coordinated flips the
+deterministic relaxation reaches it from 18 of 40 seeds against greedy's 5
+($p = 0.00098$), and every sampled variant of it ties at 11 ($p = 0.18$).
+At the Potts critical coupling, single-site sampling slows by 3.2 times
+between lattice extents 8 and 24 while the cluster moves slow by 1.9
+(ledger entry 001). The comparison against classical phylogenetic software
+is ticketed (\#126) and not run.
+
+\subsection{Hardware scaling}
+\label{sec:res-hardware}
+
+No accelerator exists in the environment, so what is measured is the CPU.
+The Rust pruning backend runs at 2.5 times the NumPy oracle at 200 taxa by
+11,000 sites, with peak memory 22.6\,MB, and the minimum-cut kernel at 26 to
+32 times the reference as a kernel and 6.3 to 10.7 times as a caller sees it,
+the difference being the Python energy evaluation and not the boundary copy.
+Process parallelism over independent tasks---the multi-start fit, the
+budgeted comparison, the bootstrap---was measured on a four-core host at 1, 2
+and 4 workers with the intra-op thread count at 1 and at the default: no
+site reaches a two-fold speedup at 4 workers, the pool's spawn and import
+costing 1.81\,s, more than the multi-start fit does in total, while the
+serial fit at the default thread count runs 2.87 times the fit at one thread
+because the tensor library already parallelizes over sites. All three sites
+stay serial by recommendation, with the argument kept for a larger tier or
+machine. Table~\ref{tab:likelihood-footprint} settles the memory
+requirement: the roadmap bounds the working set to $O(n \times L \times k)$
+inside 16\,GB, the simulator retains every node's states and pruning retains
+a partial likelihood only for nodes whose parent has not yet consumed it,
+and both are reported on a caterpillar, the deepest tree on its leaves, so
+the bound is tight rather than loose.
+
+\qacaptionread{figures/likelihood_footprint_caption.txt}{\likelihoodFootprintCaption}
+\begin{table}[htbp]
   \centering
-  \framebox[\linewidth]{\rule{0pt}{150pt} \textbf{PLACEHOLDER: Hardware scaling}}
-  \caption{Throughput in nodes evaluated per second across CPU, Apple Silicon, and CUDA backends.}
-  \label{fig:hardware-scaling}
-\end{figure}
+  \input{figures/likelihood_footprint}
+  \caption{\likelihoodFootprintCaption}
+  \label{tab:likelihood-footprint}
+\end{table}
+
+\section{Discussion}
+\label{sec:discussion}
+
+Three findings recur across the problem classes, and each is a statement
+about the instance rather than about the algorithms. First, most fixtures are
+too easy to separate methods: the six-taxon tree is solved from every start,
+the Potts chain's optimum is a constant, the triangular antiferromagnet is
+reached by restarts of descent as often as by annealing, and it took a
+planted glass past enumeration and a seven-taxon tree with short internal
+branches to make a comparison askable. The budgeted comparison is therefore
+run before any claim is made, and a fixture that fails to separate methods
+is recorded as such. Second, where a learned component loses or ties, the
+cause is named and measured rather than argued: the tree policy ties greedy
+because its feature set is one number, and the relaxation's sampled variants
+tie greedy because the sampling, not the relaxation, is what costs. Third,
+the negative engineering results are as load-bearing as the positive ones:
+the fourth-order integrator loses to leapfrog at equal gradient evaluations,
+k-means++ seeding buys nothing the likelihood can use, warm starts save less
+than lazy scoring, and process parallelism buys nothing at the mid-size tier.
+Each stays as a measured decision rather than a default that moved.
+
+What referees each method is read from the suite and typeset in the
+companion textbook: where an oracle is affordable at a size the method is
+pinned to it, and where none is, recovery of the simulated truth stands in
+while the oracle remains desired. The cells where that second case holds are
+marked there, and the oracle each would need is named---a certified
+branch-and-bound bound for trees past the enumerable taxon count, a
+boundary contraction for lattices past the transfer-matrix width, and
+density evolution for codes past the enumerable length.
 
 \section{Conclusions}
 \label{sec:conclusions}
 
 Decoupling structural exploration from continuous fitting yields a
-model-agnostic optimization engine that serves phylogenetics, Potts models, and
-hidden Markov models without encoding any of them. Formulating graph search as
-a Markov decision process gives a foundation for learned topological proposals
-and neural surrogate modelling. Future work populates the benchmarking
-placeholders and demonstrates competitiveness at scale.
+model-agnostic optimization engine that serves phylogenetics, Potts models,
+hidden Markov models, the coupled model and the mixture without encoding any
+of them, with the parity-check class following. Every evaluator is pinned to
+an oracle that shares no code with it, every fit is judged by recovery at its
+nominal coverage, and every search by the enumeration that referees it where
+enumeration reaches. Formulating the search as a Markov decision process gave
+a critic, a policy-gradient family and a planner that beat hill climbing
+where the landscape can be enumerated and tie it on the tree fixture, for a
+reason that is measured and ticketed. What remains is stated as tickets
+rather than as future work: the feature set that would change the tree
+result, the parity-check class, the external tools the competitiveness claim
+needs, and the accelerator the scaling claim needs.
 
 \bibliographystyle{plainnat}
 \bibliography{references}
