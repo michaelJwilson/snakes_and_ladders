@@ -369,6 +369,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.qa.optimizer_landscapes
    :members:
 
+.. automodule:: snakes_and_ladders.qa.tanner_graph
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.coupled_labelling
+   :members:
+
 .. automodule:: snakes_and_ladders.scripts
    :members:
 

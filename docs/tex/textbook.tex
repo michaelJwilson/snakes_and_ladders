@@ -1370,12 +1370,22 @@ $p(x_{sn} \mid k_{s,m}, \theta_m)$ when $\ell_n = m$ and to one otherwise. A
 label sits on every emission factor of its node and on every Potts factor of
 its edges; in the Forney form it passes through an equality node of that
 degree, and the gated factors are the higher-degree nodes that join the
-lattice to the chains (Figure~\ref{fig:coupled:sketch}). The graph has cycles, so Equation~\ref{eq:sum-product}
+lattice to the chains (Figure~\ref{fig:coupled:sketch}). What that structure
+is for is a labelling, which Figure~\ref{fig:coupled-labelling} shows on a
+lattice past enumeration, planted beside recovered. The graph has cycles, so Equation~\ref{eq:sum-product}
 is the Bethe approximation on it, and the exact quantities below come from
 enumeration on an instance small enough to enumerate---a $2 \times 2$ lattice
 with $M = 2$, $K = 2$, $S = 3$ has $2^4 \cdot 2^{12}$ joint states.
 
 \input{coupled_figure}
+
+\qacaptionread{figures/coupled_labelling_caption.txt}{\coupledLabellingCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/coupled_labelling}
+  \caption{\coupledLabellingCaption}
+  \label{fig:coupled-labelling}
+\end{figure}
 
 \subsection{The estimator: block-coordinate ascent}
 The blocks are the emission parameters $\theta$ and the labels $\ell$, with the
@@ -2105,7 +2115,9 @@ per row of $\parity$, a hard constraint of degree $d_c$ whose log table
 is zero on even-parity assignments and $-\infty$ elsewhere. This is the
 Tanner graph of the code; a bit sits on $d_v$ parity factors and one unary,
 so in the Forney form every bit passes through an equality node of degree
-$d_v + 1$ (Figure~\ref{fig:ldpc:sketch}). The graph has cycles---a random draw of the ensemble does not
+$d_v + 1$ (Figure~\ref{fig:ldpc:sketch}). The sketch states the structure;
+Figure~\ref{fig:ldpc-tanner} draws one member of the ensemble, where which
+bits a check covers is the draw and not the design. The graph has cycles---a random draw of the ensemble does not
 avoid short ones---so Equation~\ref{eq:sum-product} is the Bethe
 approximation on it, and the exact quantities below come from enumerating
 the $2^k$ codewords where $2^k \le 200{,}000$ (a $(3,6)$ code at $n = 24$
@@ -2113,6 +2125,14 @@ has $k \ge 14$) and from the tree schedule on a cycle-free code, where
 message passing is exact.
 
 \input{ldpc_figure}
+
+\qacaptionread{figures/tanner_graph_caption.txt}{\tannerGraphCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/tanner_graph}
+  \caption{\tannerGraphCaption}
+  \label{fig:ldpc-tanner}
+\end{figure}
 
 \subsection{The algorithm: sum-product in the log domain}
 A binary variable's message is one number, its log-odds, and

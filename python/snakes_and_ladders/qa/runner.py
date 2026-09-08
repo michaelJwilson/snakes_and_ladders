@@ -39,8 +39,10 @@ from snakes_and_ladders.qa.figure import (
 )
 from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
 from snakes_and_ladders.sim.hmm import load_hmm_params
+from snakes_and_ladders.sim.ldpc import load_ldpc_params
 from snakes_and_ladders.sim.mixture import load_mixture_params
 from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
 
 
 @dataclass(frozen=True)
@@ -259,3 +261,5 @@ HMM_PARAMS = ParamsArgument("hmm-params", load_hmm_params)
 MIXTURE_PARAMS = ParamsArgument("params", load_mixture_params)
 FRUSTRATED_LATTICE_PARAMS = ParamsArgument("params", load_frustrated_lattice_params)
 TEST_FUNCTION_PARAMS = ParamsArgument("params", load_test_function_params)
+LDPC_PARAMS = ParamsArgument("params", load_ldpc_params)
+SPATIO_SEQUENTIAL_PARAMS = ParamsArgument("params", load_spatio_sequential_params)
