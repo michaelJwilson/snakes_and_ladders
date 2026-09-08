@@ -10,6 +10,7 @@ tree with nothing changed that rendered something anyway.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -77,7 +78,38 @@ def test_the_closure_follows_imports_transitively(tmp_path: Path) -> None:
 
     assert {"first.py", "shared.py", "tree.py", "params.yaml"} <= names
     assert "second.py" not in names
-    assert {path.name for path in second.inputs(tmp_path)} == {"second.py"}
+    # `second` carries the two package ``__init__`` files, whose statements its
+    # own import runs, and nothing `first` reaches through `shared`.
+    assert {"second.py", "__init__.py"} == {
+        path.name for path in second.inputs(tmp_path)
+    }
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+@pytest.mark.parametrize(
+    ("touch", "addition"),
+    [
+        ("python/snakes_and_ladders/qa/first.py", "TAXA = 8\n"),
+        ("python/snakes_and_ladders/sim/tree.py", "TAXA = 8\n"),
+        ("tests/regression/fixtures/params.yaml", "taxa: 8\n"),
+    ],
+)
+def test_a_changed_input_moves_only_its_own_stamp(
+    tmp_path: Path, touch: str, addition: str
+) -> None:
+    # The case the cache exists for, and its mirror: the renderer, a module
+    # two imports away, or the fixture changes and `first` is stale, while
+    # `second`, which reads none of them, is not.
+    first, second = _tree(tmp_path)
+    before = first.input_digest(tmp_path), second.input_digest(tmp_path)
+
+    path = tmp_path / touch
+    path.write_text(path.read_text() + addition)
+
+    after = first.input_digest(tmp_path), second.input_digest(tmp_path)
+    assert after[0] != before[0]
+    assert after[1] == before[1]
 
 
 @pytest.mark.critical
@@ -87,22 +119,19 @@ def test_the_closure_follows_imports_transitively(tmp_path: Path) -> None:
     [
         "python/snakes_and_ladders/qa/first.py",
         "python/snakes_and_ladders/sim/tree.py",
-        "tests/regression/fixtures/params.yaml",
     ],
 )
-def test_a_changed_input_moves_only_its_own_stamp(tmp_path: Path, touch: str) -> None:
-    # The case the cache exists for, and its mirror: the renderer, a module
-    # two imports away, or the fixture changes and `first` is stale, while
-    # `second`, which reads none of them, is not.
-    first, second = _tree(tmp_path)
-    before = first.input_digest(tmp_path), second.input_digest(tmp_path)
+def test_a_comment_on_an_input_moves_no_stamp(tmp_path: Path, touch: str) -> None:
+    # The other half of the rule above, and the reason the digest is over an
+    # AST rather than over bytes: prose in a module a figure reaches is not
+    # a figure the code no longer produces (issue #418).
+    first, _ = _tree(tmp_path)
+    before = first.input_digest(tmp_path)
 
     path = tmp_path / touch
-    path.write_text(path.read_text() + "# changed\n")
+    path.write_text(f"# what this is for\n{path.read_text()}")
 
-    after = first.input_digest(tmp_path), second.input_digest(tmp_path)
-    assert after[0] != before[0]
-    assert after[1] == before[1]
+    assert first.input_digest(tmp_path) == before
 
 
 @pytest.mark.critical
@@ -265,3 +294,358 @@ def test_a_cited_figure_renders_inside_the_cap_or_carries_a_waiver() -> None:
 @pytest.mark.structural
 def test_every_manifest_entry_states_a_measured_time() -> None:
     assert all(spec.seconds > 0 for spec in FIGURES)
+
+
+# --- Reachability, in both directions ---------------------------------------
+#
+# The stamp narrowed from "every module the renderer imports" to "every
+# definition it executes" (issue #418, part 3). The saving is worth nothing on
+# its own: a stamp that misses a change publishes a committed figure the code
+# no longer produces, and nothing else in the suite would notice. So each test
+# below that pins a saving has a sibling pinning the fire, and the walk's own
+# escape hatch --- a module it cannot narrow --- is asserted rather than
+# trusted.
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+#: The module every figure renderer imports, and the one whose edits were
+#: measured: #394's agent declared two constants here and restamped all 17
+#: cited figures then committed, with zero PDF bytes changed.
+SHARED = "python/snakes_and_ladders/qa/runner.py"
+
+
+@pytest.fixture
+def repo_copy(tmp_path: Path) -> Path:
+    """A copy of the package, the fixtures and the Rust sources under ``tmp_path``.
+
+    The measured case is about the real import graph -- thirty modules deep,
+    one of them shared by every renderer -- and a synthetic package would only
+    pin the analysis against itself. The copy is edited instead of the
+    checkout so a failing test cannot leave the tree modified.
+
+    Returns
+    -------
+    Path
+        A repository root the real :data:`FIGURES` can be digested against.
+    """
+    for source in ("python", "src", "tests/regression/fixtures"):
+        shutil.copytree(
+            REPO_ROOT / source,
+            tmp_path / source,
+            ignore=shutil.ignore_patterns("__pycache__", "*.so", "*.pyc"),
+        )
+    shutil.copy(REPO_ROOT / "Cargo.lock", tmp_path / "Cargo.lock")
+    return tmp_path
+
+
+def _cited() -> tuple[FigureSpec, ...]:
+    """The figures the documents cite, which are the ones a stamp is read for.
+
+    Returns
+    -------
+    tuple[FigureSpec, ...]
+    """
+    return build.selected(list(build.DEFAULT_DOCUMENTS), every=False)
+
+
+def _staled_by(root: Path, edit: tuple[str, str, str]) -> set[str]:
+    """The cited figures whose digest an edit moves.
+
+    Parameters
+    ----------
+    root : Path
+        A repository root to edit, not the checkout.
+    edit : tuple[str, str, str]
+        Repository-relative path, the text to replace, and its replacement.
+
+    Returns
+    -------
+    set[str]
+        The stems that went stale.
+    """
+    specs = _cited()
+    before = {spec.stem: spec.input_digest(root) for spec in specs}
+    path = root / edit[0]
+    text = path.read_text()
+    assert edit[1] in text, f"{edit[0]} no longer contains the text this edits"
+    path.write_text(text.replace(edit[1], edit[2], 1))
+    return {spec.stem for spec in specs if spec.input_digest(root) != before[spec.stem]}
+
+
+@pytest.mark.structural
+def test_no_cited_figure_falls_back_to_a_whole_module() -> None:
+    # What makes the counts below mean anything. Each is measured on a walk
+    # that narrowed every module it crossed; one renderer falling back to a
+    # whole module would restamp on any edit to it and the saving would be
+    # reported for a case that is not being exercised.
+    reported = {
+        spec.stem: spec.reach(REPO_ROOT).fallbacks
+        for spec in _cited()
+        if spec.reach(REPO_ROOT).fallbacks
+    }
+
+    assert reported == {}
+
+
+@pytest.mark.structural
+def test_prose_in_a_shared_module_stales_no_figure(repo_copy: Path) -> None:
+    # The case the AST hash exists for. `qa/runner.py` is in every cited
+    # figure's closure, so before this a reworded docstring there restamped
+    # all 19 with zero PDF bytes changed.
+    staled = _staled_by(
+        repo_copy,
+        (
+            SHARED,
+            "Shared command-line entry point for the QA figure and table scripts.",
+            "The shared command-line entry point for the QA scripts.",
+        ),
+    )
+
+    assert staled == set()
+
+
+@pytest.mark.structural
+def test_a_comment_in_a_shared_module_stales_no_figure(repo_copy: Path) -> None:
+    staled = _staled_by(
+        repo_copy,
+        (
+            SHARED,
+            "# Closed here rather than in the builder",
+            "# Closed here, not there",
+        ),
+    )
+
+    assert staled == set()
+
+
+@pytest.mark.structural
+def test_a_constant_no_renderer_reads_stales_no_figure(repo_copy: Path) -> None:
+    # #394's measured case exactly: two parameter constants declared beside
+    # the ones the renderers do read.
+    declaration = 'LDPC_PARAMS = ParamsArgument("params", load_ldpc_params)'
+    staled = _staled_by(
+        repo_copy,
+        (
+            SHARED,
+            declaration,
+            f'{declaration}\nUNREAD_A = ParamsArgument("a", load_ldpc_params)\n'
+            'UNREAD_B = ParamsArgument("b", load_ldpc_params)',
+        ),
+    )
+
+    assert staled == set()
+
+
+@pytest.mark.structural
+def test_an_edit_to_a_reached_function_stales_every_figure_that_calls_it(
+    repo_copy: Path,
+) -> None:
+    # The direction that matters. `figure_main` is what every figure renderer
+    # calls; `table_main` is what only the table renderers call. Each must
+    # stale exactly its callers -- fewer is a figure published against code
+    # that no longer produces it.
+    tables = {
+        spec.stem
+        for spec in _cited()
+        if "table_main"
+        in (REPO_ROOT / "python" / Path(*spec.module.split(".")))
+        .with_suffix(".py")
+        .read_text()
+    }
+    figures = {spec.stem for spec in _cited()} - tables
+    assert tables, "the cited set must contain a table renderer"
+    assert figures, "the cited set must contain a figure renderer"
+
+    staled = _staled_by(
+        repo_copy,
+        (
+            SHARED,
+            'log.info("wrote %s and %s", written.figure_path, written.caption_path)',
+            'log.info("wrote %s then %s", written.figure_path, written.caption_path)',
+        ),
+    )
+
+    assert staled == figures
+
+
+@pytest.mark.structural
+def test_an_edit_reached_by_one_renderer_stales_only_that_one(
+    repo_copy: Path,
+) -> None:
+    tables = {
+        spec.stem
+        for spec in _cited()
+        if "table_main"
+        in (REPO_ROOT / "python" / Path(*spec.module.split(".")))
+        .with_suffix(".py")
+        .read_text()
+    }
+
+    staled = _staled_by(
+        repo_copy,
+        (
+            SHARED,
+            'log.info("wrote %s and %s", written.table_path, written.caption_path)',
+            'log.info("wrote %s / %s", written.table_path, written.caption_path)',
+        ),
+    )
+
+    assert staled == tables
+
+
+def _opaque_tree(root: Path, extra: str) -> FigureSpec:
+    """A two-module package whose shared module carries ``extra``.
+
+    ``entry`` calls ``shared.used`` and never names ``shared.unused``, so a
+    walk that narrows correctly hashes the first and not the second. ``extra``
+    is the line that decides whether it may narrow at all.
+
+    Returns
+    -------
+    FigureSpec
+        A spec whose module is ``entry``.
+    """
+    package = root / "python" / "snakes_and_ladders"
+    (package / "qa").mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "qa" / "__init__.py").write_text("")
+    (package / "reg.py").write_text("def register(f):\n    return f\n")
+    (package / "other.py").write_text("VALUE = 1\n")
+    (package / "shared.py").write_text(
+        f"{extra}\n\n\ndef used():\n    return 1\n\n\ndef unused():\n    return 2\n"
+    )
+    (package / "qa" / "entry.py").write_text(
+        "from snakes_and_ladders.shared import used\n\n\ndef main():\n    return used()\n"
+    )
+    return FigureSpec("entry", "snakes_and_ladders.qa.entry", (), seconds=1.0)
+
+
+#: One line per way a module can reach a definition no name in it points at.
+#: Each must put the module in `Reach.fallbacks`; the test below then pins that
+#: the fallback restores the guarantee rather than merely reporting a doubt.
+OPAQUE_LINES = (
+    "from snakes_and_ladders.other import *",
+    "import snakes_and_ladders.other",
+    "from snakes_and_ladders import other\nX = getattr(other, 'VALUE')",
+    "import importlib",
+    "def __getattr__(name):\n    return name",
+    "X = globals()",
+    "from snakes_and_ladders.reg import register\n\n\n@register\ndef hidden():\n    return 3",
+)
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+@pytest.mark.parametrize("extra", OPAQUE_LINES)
+def test_a_module_the_walk_cannot_narrow_is_named_and_hashed_whole(
+    tmp_path: Path, extra: str
+) -> None:
+    # The guarantee's escape hatch, asserted rather than silent. Each line is
+    # a way to call a definition the import graph does not name; the walk must
+    # say so and then hash the module whole, so a change to a function nothing
+    # references still moves the digest.
+    spec = _opaque_tree(tmp_path, extra)
+    reach = spec.reach(tmp_path)
+    before = spec.input_digest(tmp_path)
+
+    assert [entry.split(":")[0] for entry in reach.fallbacks] == [
+        "snakes_and_ladders.shared"
+    ]
+
+    shared = tmp_path / "python" / "snakes_and_ladders" / "shared.py"
+    shared.write_text(shared.read_text().replace("return 2", "return 22"))
+
+    assert spec.input_digest(tmp_path) != before
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_a_module_the_walk_can_narrow_charges_only_what_is_reached(
+    tmp_path: Path,
+) -> None:
+    # The saving, and its bound: with nothing opaque in it, the unreached
+    # function is not an input and the reached one is.
+    spec = _opaque_tree(tmp_path, "CONSTANT = 1")
+    before = spec.input_digest(tmp_path)
+
+    assert spec.reach(tmp_path).fallbacks == ()
+
+    shared = tmp_path / "python" / "snakes_and_ladders" / "shared.py"
+    shared.write_text(shared.read_text().replace("return 2", "return 22"))
+    assert spec.input_digest(tmp_path) == before
+
+    shared.write_text(shared.read_text().replace("return 1", "return 11"))
+    assert spec.input_digest(tmp_path) != before
+
+
+#: Ways one definition reaches another that are not a plain call. Each is a way
+#: the walk could under-fire, which is the direction that breaks the guarantee.
+INDIRECT_REFERENCES = (
+    "HANDLERS = {'a': target}\n\n\ndef used():\n    return HANDLERS['a']()",
+    "def used(f=target):\n    return f()",
+    "class Used:\n    def go(self):\n        return target()\n\n\ndef used():\n    return Used().go()",
+    "def used():\n    def inner():\n        return target()\n    return inner()",
+    "class Base:\n    pass\n\n\nclass Used(target):\n    pass\n\n\ndef used():\n    return Used()",
+    "def used():\n    return [target() for _ in range(1)]",
+)
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+@pytest.mark.parametrize("shape", INDIRECT_REFERENCES)
+def test_a_definition_reached_indirectly_is_still_an_input(
+    tmp_path: Path, shape: str
+) -> None:
+    # A call is not the only way one definition reaches another: a dispatch
+    # table, a default argument, a method, a closure, a base class and a
+    # comprehension all do. Each must be followed, or the digest under-fires.
+    package = tmp_path / "python" / "snakes_and_ladders"
+    (package / "qa").mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "qa" / "__init__.py").write_text("")
+    (package / "target.py").write_text("class target:\n    VALUE = 1\n")
+    (package / "shared.py").write_text(
+        f"from snakes_and_ladders.target import target\n\n\n{shape}\n"
+    )
+    (package / "qa" / "entry.py").write_text(
+        "from snakes_and_ladders.shared import used\n\n\ndef main():\n    return used()\n"
+    )
+    spec = FigureSpec("entry", "snakes_and_ladders.qa.entry", (), seconds=1.0)
+    before = spec.input_digest(tmp_path)
+
+    (package / "target.py").write_text("class target:\n    VALUE = 2\n")
+
+    assert spec.input_digest(tmp_path) != before
+
+
+@pytest.mark.structural
+def test_the_rust_sources_are_inputs_only_where_a_renderer_reaches_the_extension(
+    tmp_path: Path,
+) -> None:
+    # The same narrowing, applied to the kernel: a figure that runs no Rust
+    # is not restamped by a kernel change, and one that does still is.
+    package = tmp_path / "python" / "snakes_and_ladders"
+    (package / "qa").mkdir(parents=True)
+    (package / "__init__.py").write_text("from .oxi_snakes_and_ladders import double\n")
+    (package / "qa" / "__init__.py").write_text("")
+    (package / "fast.py").write_text(
+        "from snakes_and_ladders import oxi_snakes_and_ladders\n\n\n"
+        "def run():\n    return oxi_snakes_and_ladders.double(1)\n"
+    )
+    (package / "qa" / "kernel.py").write_text(
+        "from snakes_and_ladders.fast import run\n\n\ndef main():\n    return run()\n"
+    )
+    (package / "qa" / "pure.py").write_text("def main():\n    return 1\n")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "lib.rs").write_text("// one\n")
+    (tmp_path / "Cargo.lock").write_text("")
+    kernel = FigureSpec("kernel", "snakes_and_ladders.qa.kernel", (), seconds=1.0)
+    pure = FigureSpec("pure", "snakes_and_ladders.qa.pure", (), seconds=1.0)
+    before = kernel.input_digest(tmp_path), pure.input_digest(tmp_path)
+
+    assert kernel.reach(tmp_path).extension
+    assert not pure.reach(tmp_path).extension
+
+    (tmp_path / "src" / "lib.rs").write_text("// two\n")
+
+    assert kernel.input_digest(tmp_path) != before[0]
+    assert pure.input_digest(tmp_path) == before[1]
