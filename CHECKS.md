@@ -165,7 +165,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_mean_field_and_spanning_tree_bounds_sandwich_log_z` | oracle |  |
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
-## `tests/regression/opt/` (56)
+## `tests/regression/opt/` (57)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -198,6 +198,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_hmm_gaussian.py::test_coverage_against_the_separation_of_the_emitting_states` | simulated_truth | The full sweep behind the table in `STATUS.md`. |
 | `test_opt_initialize.py::test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one` | simulated_truth | The case multi-start is for, measured against four analytic minima. |
 | `test_opt_initialize.py::test_restarts_barely_help_on_rastrigin_and_the_number_says_so` | simulated_truth | The negative result, kept because it is the more useful one. |
+| `test_opt_initialize.py::test_every_restart_lands_on_a_published_himmelblau_minimizer` | oracle | The multi-start initializer was refereed by basin *coverage*: four restarts reach four distinct basins. |
 | `test_opt_intervals.py::test_the_new_door_is_the_old_one` | oracle | `standard_errors_at` must be `constrained_standard_errors` reached another way, not a second implementation of it. |
 | `test_opt_intervals.py::test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it` | oracle | The comparison on the one target where it has an exact answer. |
 | `test_opt_intervals.py::test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate` | simulated_truth | An interval that exists and does not cover is worse than no interval, so the EM path is held to exactly the standard the gradient path is. |
@@ -433,4 +434,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-390 checks.
+391 checks.

@@ -154,8 +154,10 @@
 "Continuous test functions":
   initializers: >-
     Multi-start is what makes Himmelblau's four basins reachable at all; on a
-    unimodal surface it spends the budget for nothing, and it is refereed by
-    the analytic minimizers rather than by an oracle of its own.
+    unimodal surface it spends the budget for nothing. Every fit from every
+    restart lands within 6.2e-07 of one of the four published minimizers, so
+    the closed form referees where in a basin the fit stopped and not only
+    which basin it found.
   samplers: >-
     The annealed Hamiltonian chain with a polishing fit is beaten by plain
     restarts on the mixture at 3,000 evaluations (experiment 004); on
