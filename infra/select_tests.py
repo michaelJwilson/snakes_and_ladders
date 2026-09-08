@@ -16,6 +16,12 @@ list goes stale silently and an import does not.
 Anything the mapping does not recognise selects everything. A changed lockfile,
 a changed shared fixture, a changed workflow -- the safe answer is the whole
 suite, and the unsafe answer is the one that looks like a saving.
+
+A change that is not code selects the guards that read it (issue #372). A
+paragraph of the textbook cannot break a likelihood, but it can break a label
+or a citation, and `tests/regression/test_document_labels.py` is what checks
+that; the planning files, the `CLAUDE.md` files, the experiment ledger and the
+notebooks each have their guard. Those run, and nothing else does.
 """
 
 from __future__ import annotations
@@ -70,6 +76,44 @@ EVERYTHING = (
 # Nothing here can change what a test does, so no test needs to run.
 NO_TESTS_SUFFIXES = (".md", ".tex", ".bib", ".pdf", ".txt", ".rst")
 NO_TESTS_PREFIXES = ("docs/", "changelog.d/", "infra/")
+
+# The guards a non-code change selects: what a path starts with, and the tests
+# that read files under it. A guard reads the repository directly, so it is
+# the one test a change to that file can fail. `changelog.d/` has no guard
+# here because `towncrier check` in the lint job is its guard.
+GUARDS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        ("docs/tex/",),
+        (
+            "tests/regression/test_document_labels.py",
+            "tests/regression/docs/test_reference_taxonomy.py",
+            "tests/regression/qa/test_qa_build.py",
+        ),
+    ),
+    (
+        ("ROADMAP.md", "STATUS.md", "TICKETS.md"),
+        (
+            "tests/regression/test_planning_documents_agree.py",
+            "tests/regression/test_repository_links.py",
+        ),
+    ),
+    (
+        ("CLAUDE.md",),
+        (
+            "tests/regression/test_claude_md_pointers.py",
+            "tests/regression/docs/test_reference_taxonomy.py",
+        ),
+    ),
+    (("docs/experiments/",), ("tests/regression/test_experiments.py",)),
+    (("docs/nb/",), ("tests/regression/test_check_notebooks.py",)),
+    (
+        ("docs/source/",),
+        ("tests/regression/docs/test_docs_index_covers_every_module.py",),
+    ),
+    (("CHECKS.md", "PROBLEMS.md"), ("tests/regression/test_problems_catalogue.py",)),
+    (("DEV.md",), ("tests/regression/test_scale_tiers.py",)),
+    (("README.md", "INSTALL.md"), ("tests/regression/test_repository_links.py",)),
+)
 
 
 def _module_imports() -> dict[str, set[str]]:
@@ -164,6 +208,28 @@ def _touches(path: str, markers: Iterable[str]) -> bool:
     return any(path.startswith(marker) for marker in markers)
 
 
+def guards_for(changed: Iterable[str]) -> list[str]:
+    """The guard tests that read any of ``changed``.
+
+    A `CLAUDE.md` under a module directory is matched by its name, not the
+    module prefix: a module's source is code and is attributed by module,
+    while its `CLAUDE.md` is prose the pointer guard reads.
+
+    Returns
+    -------
+    list[str]
+        Test paths, sorted and without duplicates.
+    """
+    selected: set[str] = set()
+    for path in changed:
+        for markers, tests in GUARDS:
+            if (path.endswith("CLAUDE.md") and "CLAUDE.md" in markers) or any(
+                path.startswith(marker) for marker in markers
+            ):
+                selected.update(tests)
+    return sorted(selected)
+
+
 def select(changed: Iterable[str]) -> dict[str, list[str]]:
     """Choose test paths and coverage targets for a set of changed files.
 
@@ -177,7 +243,8 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     dict[str, list[str]]
         ``paths`` to hand pytest and ``cov`` targets to measure, both empty
         when nothing needs running. ``paths`` is ``["tests"]`` when the whole
-        suite is selected.
+        suite is selected, and the guards alone, with no coverage target,
+        when nothing but prose changed.
     """
     changed = list(changed)
     if not changed:
@@ -189,8 +256,9 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
         if not (path.endswith(NO_TESTS_SUFFIXES) and not path.startswith("tests/"))
         and not _touches(path, NO_TESTS_PREFIXES)
     ]
+    guards = guards_for(path for path in changed if path not in relevant)
     if not relevant:
-        return {"paths": [], "cov": []}
+        return {"paths": guards, "cov": []}
 
     if any(_touches(path, EVERYTHING) for path in relevant):
         return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
@@ -209,6 +277,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     selected = dependents(touched)
     paths = [f"tests/regression/{module}" for module in sorted(selected)]
     paths += list(ALWAYS)
+    paths += [guard for guard in guards if guard not in paths]
     if any(path.startswith("python/snakes_and_ladders/") for path in relevant):
         paths += _benchmarks_for(selected & set(BENCHMARKED))
     return {

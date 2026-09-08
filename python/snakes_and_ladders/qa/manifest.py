@@ -23,7 +23,22 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from snakes_and_ladders.qa.inputs import digest, library_versions, module_closure
+
 FIXTURES = "tests/regression/fixtures"
+
+#: The most a figure the documents cite may take to render, in seconds on the
+#: reference host (4 cores). A per-pull-request build is the sum of its stale
+#: cited figures, and one figure over this cap is a third of the 300 s budget
+#: `DEV.md` gives the whole validation (issue #372). A figure that cannot fit
+#: is cited by nothing and rendered at the release gate, as `topology_accuracy`
+#: is; one cited and over the cap is refused by a guard unless it is waived
+#: here with the ticket that will bring it under.
+CITED_RENDER_CAP = 30.0
+
+#: Cited figures over the cap, each with the ticket that owns cutting it.
+#: A waiver is a debt with a name, not an exemption.
+CAP_WAIVERS: dict[str, str] = {"rl_tree_policy": "#372", "search_trajectory": "#372"}
 
 
 @dataclass(frozen=True)
@@ -44,11 +59,63 @@ class FigureSpec:
     arguments : tuple[str, ...]
         Everything but ``--output-dir``, which the runner supplies. Paths are
         relative to the repository root.
+    seconds : float
+        Wall clock of one render on the reference host, measured alone with
+        ``infra/measure_build.sh`` and stated here so the cap on a cited
+        figure is checked against a number rather than an impression.
     """
 
     stem: str
     module: str
     arguments: tuple[str, ...]
+    seconds: float
+
+    def inputs(self, root: Path) -> list[Path]:
+        """Every file whose change can change what this figure renders.
+
+        Parameters
+        ----------
+        root : Path
+            The repository root.
+
+        Returns
+        -------
+        list[Path]
+            The renderer's source and its import closure within the package,
+            then every argument that names an existing file under ``root``.
+        """
+        fixtures = [root / argument for argument in self.arguments]
+        return module_closure([self.module], root) + [
+            path for path in fixtures if path.is_file()
+        ]
+
+    def input_digest(self, root: Path) -> str:
+        """Hash of the inputs, the spec itself and the drawing libraries.
+
+        Returns
+        -------
+        str
+            A SHA-256 hex digest; equal for two trees that render the same
+            figure, different when any input differs.
+        """
+        return digest(
+            self.inputs(root),
+            root,
+            self.stem,
+            self.module,
+            *self.arguments,
+            *library_versions(),
+        )
+
+    def stamp(self, output_dir: Path) -> Path:
+        """The file recording the digest the committed figure was rendered from.
+
+        Returns
+        -------
+        Path
+            ``<output_dir>/<stem>.inputs``.
+        """
+        return output_dir / f"{self.stem}.inputs"
 
     def command(self, output_dir: Path) -> list[str]:
         """Build the argument vector that renders this figure.
@@ -72,16 +139,19 @@ FIGURES: tuple[FigureSpec, ...] = (
         "sim_tree",
         "snakes_and_ladders.qa.sim_tree",
         ("--params", f"{FIXTURES}/simulation_params_8taxa.yaml"),
+        seconds=2.7,
     ),
     FigureSpec(
         "sim_example",
         "snakes_and_ladders.qa.sim_example",
         ("--params", f"{FIXTURES}/simulation_params.yaml"),
+        seconds=2.7,
     ),
     FigureSpec(
         "jc_transition",
         "snakes_and_ladders.qa.jc_transition",
         ("--params", f"{FIXTURES}/simulation_params.yaml"),
+        seconds=2.7,
     ),
     # Brute-force marginalization costs k**m for m internal nodes, so this
     # runs on the 4-taxon fixture and nowhere larger.
@@ -89,11 +159,13 @@ FIGURES: tuple[FigureSpec, ...] = (
         "backend_agreement",
         "snakes_and_ladders.qa.backend_agreement",
         ("--params", f"{FIXTURES}/simulation_params.yaml"),
+        seconds=3.1,
     ),
     FigureSpec(
         "likelihood_footprint",
         "snakes_and_ladders.qa.likelihood_footprint",
         (),
+        seconds=2.6,
     ),
     FigureSpec(
         "sim_problem_sizes",
@@ -106,6 +178,7 @@ FIGURES: tuple[FigureSpec, ...] = (
             "--params",
             f"{FIXTURES}/simulation_params_8taxa.yaml",
         ),
+        seconds=2.5,
     ),
     # The optimization figures refit both reference instances many times over.
     FigureSpec(
@@ -117,6 +190,7 @@ FIGURES: tuple[FigureSpec, ...] = (
             "--hmm-params",
             f"{FIXTURES}/hmm_params.yaml",
         ),
+        seconds=5.0,
     ),
     FigureSpec(
         "opt_coverage",
@@ -127,6 +201,7 @@ FIGURES: tuple[FigureSpec, ...] = (
             "--hmm-params",
             f"{FIXTURES}/hmm_params.yaml",
         ),
+        seconds=27.3,
     ),
     FigureSpec(
         "opt_branch_recovery",
@@ -137,11 +212,13 @@ FIGURES: tuple[FigureSpec, ...] = (
             "--rooted-params",
             f"{FIXTURES}/simulation_params_8taxa.yaml",
         ),
+        seconds=5.0,
     ),
     FigureSpec(
         "opt_model_recovery",
         "snakes_and_ladders.qa.opt_model_recovery",
         ("--params", f"{FIXTURES}/simulation_params_8taxa.yaml"),
+        seconds=7.5,
     ),
     # The search figures each sweep all 105 unrooted topologies on the
     # 6-taxon fixture.
@@ -149,16 +226,19 @@ FIGURES: tuple[FigureSpec, ...] = (
         "search_trajectory",
         "snakes_and_ladders.qa.search_trajectory",
         ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
+        seconds=39.6,
     ),
     FigureSpec(
         "search_topologies",
         "snakes_and_ladders.qa.search_topologies",
         ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
+        seconds=29.6,
     ),
     FigureSpec(
         "rl_reward_surface",
         "snakes_and_ladders.qa.rl_reward_surface",
         ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
+        seconds=28.4,
     ),
     # Trains eight policies, so it is the most expensive entry here; the
     # budget it trains at is chosen in the module for that reason.
@@ -166,11 +246,13 @@ FIGURES: tuple[FigureSpec, ...] = (
         "rl_tree_policy",
         "snakes_and_ladders.qa.rl_tree_policy",
         ("--params", f"{FIXTURES}/simulation_params_hard.yaml"),
+        seconds=101.4,
     ),
     FigureSpec(
         "topology_accuracy",
         "snakes_and_ladders.qa.topology_accuracy",
         ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
+        seconds=124.0,
     ),
     # The textbook's problem-statement figures (issue #358). The parsimony
     # figure scores every topology of the 8-taxon fixture at a reduced site
@@ -180,21 +262,25 @@ FIGURES: tuple[FigureSpec, ...] = (
         "parsimony_zones",
         "snakes_and_ladders.qa.parsimony_zones",
         ("--params", f"{FIXTURES}/simulation_params_8taxa.yaml"),
+        seconds=4.6,
     ),
     FigureSpec(
         "frustrated_lattices",
         "snakes_and_ladders.qa.frustrated_lattices",
         (),
+        seconds=3.9,
     ),
     FigureSpec(
         "mixture_seeding",
         "snakes_and_ladders.qa.mixture_seeding",
         (),
+        seconds=27.4,
     ),
     FigureSpec(
         "optimizer_landscapes",
         "snakes_and_ladders.qa.optimizer_landscapes",
         (),
+        seconds=6.6,
     ),
 )
 

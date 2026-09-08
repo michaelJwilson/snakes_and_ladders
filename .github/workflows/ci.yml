@@ -265,7 +265,10 @@ jobs:
           # selected that is the package, as before; where a subset is, the
           # claim is that each touched module is covered by its own tests.
           # DEV.md states the difference.
-          uv run pytest -m "not release" $paths \
+          # `--durations=10`: the slowest tests are printed, not asserted --
+          # a test over the cap fails on the reference host through
+          # tests/conftest.py, never here (DEV.md, No CI Profiling).
+          uv run pytest -m "not release" $paths --durations=10 \
             $cov --cov-report=term-missing --cov-fail-under=90
 
   docs:
@@ -325,8 +328,9 @@ jobs:
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
       - run: uv sync --locked --extra notebooks
-      # Runs every notebook and diffs what it printed against what is
-      # committed. Measured at 92 s for the three, so it is its own job
+      # Re-executes every notebook whose inputs changed since its committed
+      # stamp (docs/nb/<name>.inputs, issue #372) and diffs what it printed
+      # against what is committed; an unchanged one is skipped. Its own job
       # rather than release-gated: a notebook that stopped running would
       # otherwise reach main and sit there until a release.
       - run: uv run python infra/check_notebooks.py

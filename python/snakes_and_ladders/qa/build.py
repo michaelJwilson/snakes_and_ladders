@@ -13,6 +13,15 @@ document has stopped citing cannot rot unnoticed.
 ``--check`` regenerates into a temporary directory and compares bytes instead
 of overwriting, so a verification run cannot itself produce the state it was
 meant to detect.
+
+A figure is rendered only when its inputs changed (issue #372). Each committed
+figure has a stamp beside it, ``<stem>.inputs``, recording the digest of the
+renderer's source, its import closure, the fixtures it reads and the drawing
+libraries (``snakes_and_ladders.qa.inputs``) at the render that produced it.
+A cited figure whose stamp equals the digest of the current tree is skipped;
+``--all`` ignores the stamps, so the release gate still renders everything.
+A pull request that changed only ``docs/tex/`` therefore renders nothing and
+its build is LaTeX alone.
 """
 
 from __future__ import annotations
@@ -28,6 +37,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from snakes_and_ladders.log import get_logger, phase
+from snakes_and_ladders.qa.inputs import read_stamp, write_stamp
 from snakes_and_ladders.qa.manifest import (
     FIGURES,
     FigureSpec,
@@ -115,11 +125,43 @@ def selected(
     return select(cited)
 
 
+#: Thread-count variables a figure's process does not inherit. The suite
+#: pins them to one so a process is one core (``tests/conftest.py``); a
+#: figure is rendered the way the manifest renders it, with the threading
+#: the committed bytes were produced under, since a reduction split across a
+#: different number of threads can move a last bit (``qa/CLAUDE.md``).
+THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+
+
+def stale(specs: Sequence[FigureSpec], output_dir: Path) -> tuple[FigureSpec, ...]:
+    """The specs whose committed stamp differs from the current inputs' digest.
+
+    Parameters
+    ----------
+    specs : Sequence[FigureSpec]
+        Candidates, in manifest order.
+    output_dir : Path
+        Where the committed figures and their stamps live.
+
+    Returns
+    -------
+    tuple[FigureSpec, ...]
+        Those with no stamp, or a stamp that does not match; order kept.
+    """
+    return tuple(
+        spec
+        for spec in specs
+        if read_stamp(spec.stamp(output_dir)) != spec.input_digest(REPO_ROOT)
+    )
+
+
 def render(spec: FigureSpec, output_dir: Path) -> None:
-    """Run one figure's script, writing into ``output_dir``.
+    """Run one figure's script, writing into ``output_dir``, and stamp it.
 
     Each figure renders in its own process, as it did when a shell script
     invoked them, so none inherits matplotlib state from the one before it.
+    The stamp is written after the script succeeds, so a failed render leaves
+    the figure marked stale.
 
     Raises
     ------
@@ -130,12 +172,15 @@ def render(spec: FigureSpec, output_dir: Path) -> None:
     # An explicit setting wins, so a caller can still render against another
     # clock; absent one, this is the clock the committed figures assume.
     environment.setdefault("SOURCE_DATE_EPOCH", SOURCE_DATE_EPOCH)
+    for variable in THREAD_VARIABLES:
+        environment.pop(variable, None)
     subprocess.run(
         [sys.executable, *spec.command(output_dir)],
         cwd=REPO_ROOT,
         check=True,
         env=environment,
     )
+    write_stamp(spec.stamp(output_dir), spec.input_digest(REPO_ROOT))
 
 
 def compare(rebuilt_dir: Path, committed_dir: Path) -> list[str]:
@@ -189,7 +234,10 @@ def main(argv: list[str] | None = None) -> int:
         "--all",
         action="store_true",
         dest="every",
-        help="render every manifest entry, not only what the document cites",
+        help=(
+            "render every manifest entry, not only what the document cites, "
+            "and ignore the stamps"
+        ),
     )
     parser.add_argument(
         "--check",
@@ -213,6 +261,10 @@ def main(argv: list[str] | None = None) -> int:
     log = get_logger(__name__, start_time=time.time())
 
     specs = selected(args.documents or list(DEFAULT_DOCUMENTS), args.every, args.only)
+    if not args.every and not args.only:
+        fresh = len(specs)
+        specs = stale(specs, args.output_dir)
+        log.info("%d of %d cited figures have changed inputs", len(specs), fresh)
 
     if args.list_only:
         # Output, not a log line: the release script reads the stems.
@@ -232,12 +284,15 @@ def main(argv: list[str] | None = None) -> int:
             with phase(f"render {spec.stem}"):
                 render(spec, rebuilt_dir)
         with phase("compare"):
-            stale = compare(rebuilt_dir, args.output_dir)
+            # The stamps the renders wrote are compared too: a figure whose
+            # bytes still match but whose stamp does not is reported, so the
+            # next build stops re-rendering it once the stamp is committed.
+            differing = compare(rebuilt_dir, args.output_dir)
 
-    if stale:
+    if differing:
         log.error(
             "stale QA figures: %s -- run infra/build_documents.sh and commit the result",
-            ", ".join(stale),
+            ", ".join(differing),
         )
         return 1
     log.info("%d QA figures match the committed output", len(specs))

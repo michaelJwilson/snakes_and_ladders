@@ -29,6 +29,15 @@ a question for the release gate, not this tool.
 Exits 0 when every notebook agrees, 1 on the first that does not, printing a
 unified diff of the cell's output.
 
+A notebook whose inputs are unchanged is not re-executed (issue #372). Each
+committed notebook has a stamp beside it, ``<name>.inputs``, recording the
+digest of its code cells, every ``snakes_and_ladders`` module they reach by
+import, the fixtures they name and the library versions, at the execution that
+produced its outputs -- the mechanism ``snakes_and_ladders.qa.inputs`` gives
+the figures. A notebook whose stamp equals the digest of the current tree is
+reported as unchanged and skipped; ``--all`` executes every notebook
+regardless, and ``--write`` refreshes the stamp with the outputs.
+
 ``--write`` re-executes and saves instead of comparing, which is how a
 notebook is regenerated after a change moves what it prints. Both live here
 rather than in two tools because they must execute a notebook *identically* --
@@ -54,6 +63,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK_DIR = REPO_ROOT / "docs" / "nb"
+FIXTURES = REPO_ROOT / "tests" / "regression" / "fixtures"
 
 # Generous: `potts_chain.ipynb` trains eight policies. A timeout here would
 # read as a rotted notebook, which is the one failure this must not invent.
@@ -210,6 +220,84 @@ def differences(
     return problems
 
 
+def code(cells: Sequence[dict[str, Any]]) -> str:
+    """The source of every code cell, in order, as one string.
+
+    Returns
+    -------
+    str
+        Cell sources joined by a blank line; the text the digest is over.
+    """
+    sources = []
+    for cell in cells:
+        if cell.get("cell_type") != "code":
+            continue
+        source = cell.get("source", "")
+        sources.append("".join(source) if isinstance(source, list) else str(source))
+    return "\n\n".join(sources)
+
+
+def input_digest(path: Path) -> str:
+    """Hash what the notebook at ``path`` computes from.
+
+    The code cells, the import closure of every ``snakes_and_ladders`` module
+    they import (a magic line or a shell escape is dropped before parsing),
+    every fixture under ``tests/regression/fixtures/`` the cells name, and
+    the library versions.
+
+    Returns
+    -------
+    str
+        A SHA-256 hex digest.
+    """
+    import nbformat
+    from snakes_and_ladders.qa.inputs import (
+        digest,
+        imported_names,
+        library_versions,
+        module_closure,
+    )
+
+    source = code(nbformat.read(path, as_version=4).cells)
+    plain = "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith(("%", "!"))
+    )
+    modules = imported_names(plain, "notebook")
+    fixtures = [
+        fixture for fixture in sorted(FIXTURES.iterdir()) if fixture.name in source
+    ]
+    return digest(
+        [*module_closure(modules, REPO_ROOT), *fixtures],
+        REPO_ROOT,
+        source,
+        *library_versions(),
+    )
+
+
+def stamp(path: Path) -> Path:
+    """The file recording the digest ``path`` was last executed from.
+
+    Returns
+    -------
+    Path
+        ``<name>.inputs`` beside the notebook.
+    """
+    return path.with_suffix(".inputs")
+
+
+def unchanged(path: Path) -> bool:
+    """Whether the notebook's stamp matches the digest of the current tree.
+
+    Returns
+    -------
+    bool
+        True when re-executing it could not change what it prints.
+    """
+    from snakes_and_ladders.qa.inputs import read_stamp
+
+    return read_stamp(stamp(path)) == input_digest(path)
+
+
 def execute(path: Path) -> Any:
     """Run ``path`` in place and return the executed notebook.
 
@@ -253,8 +341,10 @@ def rewrite(path: Path) -> None:
     figure runs ``infra/build_documents.sh``.
     """
     import nbformat
+    from snakes_and_ladders.qa.inputs import write_stamp
 
     nbformat.write(execute(path), path)
+    write_stamp(stamp(path), input_digest(path))
 
 
 def compare(path: Path) -> list[str]:
@@ -311,6 +401,12 @@ def main(argv: list[str] | None = None) -> int:
             "change moves what a notebook prints, then commit the result."
         ),
     )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="every",
+        help="Execute every notebook, ignoring the stamps.",
+    )
     arguments = parser.parse_args(argv)
     from snakes_and_ladders.log import get_logger, phase
 
@@ -337,6 +433,9 @@ def main(argv: list[str] | None = None) -> int:
 
     failed = False
     for path in paths:
+        if not arguments.every and unchanged(path):
+            log.info("skip %s (inputs unchanged since its last execution)", path)
+            continue
         with phase(f"compare {path.name}"):
             problems = compare(path)
         if problems:
