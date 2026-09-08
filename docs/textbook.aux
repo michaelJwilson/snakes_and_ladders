@@ -112,54 +112,54 @@
 \newlabel{sec:tempering}{{4.8}{13}{Temperature, annealing and tempering}{subsection.4.8}{}}
 \citation{swendsenwang1986,geyer1991,earl2005}
 \newlabel{eq:exchange}{{27}{14}{Temperature, annealing and tempering}{equation.4.27}{}}
+\newlabel{eq:tempered-weight}{{28}{14}{Temperature, annealing and tempering}{equation.4.28}{}}
 \@writefile{toc}{\contentsline {paragraph}{What pins it.}{14}{section*.18}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {5}Problem Statement: Hidden Markov Models}{14}{section.5}\protected@file@percent }
 \newlabel{sec:hmm}{{5}{14}{Problem Statement: Hidden Markov Models}{section.5}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.1}The model}{14}{subsection.5.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.2}As a factor graph}{14}{subsection.5.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{The emission family is the only part that knows what an observation is.}{14}{section*.19}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{A density is not a probability.}{14}{section*.20}\protected@file@percent }
 \citation{durbin1998,koller2009}
 \citation{durbin1998}
 \citation{mackay2003}
+\@writefile{toc}{\contentsline {paragraph}{The emission family is the only part that knows what an observation is.}{15}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{A density is not a probability.}{15}{section*.20}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.3}The algorithm: forward--backward}{15}{subsection.5.3}\protected@file@percent }
-\newlabel{eq:forward}{{28}{15}{The algorithm: forward--backward}{equation.5.28}{}}
-\newlabel{eq:posterior}{{29}{15}{The algorithm: forward--backward}{equation.5.29}{}}
-\newlabel{eq:viterbi}{{30}{15}{The algorithm: forward--backward}{equation.5.30}{}}
+\newlabel{eq:forward}{{29}{15}{The algorithm: forward--backward}{equation.5.29}{}}
+\newlabel{eq:posterior}{{30}{15}{The algorithm: forward--backward}{equation.5.30}{}}
+\newlabel{eq:viterbi}{{31}{15}{The algorithm: forward--backward}{equation.5.31}{}}
 \@writefile{toc}{\contentsline {paragraph}{Regime.}{15}{section*.21}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{What pins it.}{15}{section*.22}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.4}The algorithm: expectation-maximization}{15}{subsection.5.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{What pins it.}{15}{section*.23}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Two decodings, and they are different answers}{15}{subsection.5.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{What pins it.}{16}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Two decodings, and they are different answers}{16}{subsection.5.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {6}Problem Statement: The Coupled Spatio-Sequential Model}{16}{section.6}\protected@file@percent }
 \newlabel{sec:coupled}{{6}{16}{Problem Statement: The Coupled Spatio-Sequential Model}{section.6}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.1}The model}{16}{subsection.6.1}\protected@file@percent }
-\newlabel{eq:spatial-prior}{{31}{16}{The model}{equation.6.31}{}}
-\newlabel{eq:circulant}{{32}{16}{The model}{equation.6.32}{}}
+\newlabel{eq:spatial-prior}{{32}{16}{The model}{equation.6.32}{}}
+\newlabel{eq:circulant}{{33}{16}{The model}{equation.6.33}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.2}As a factor graph}{16}{subsection.6.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}The estimator: block-coordinate ascent}{16}{subsection.6.3}\protected@file@percent }
-\newlabel{eq:coupled-m-step}{{33}{16}{The estimator: block-coordinate ascent}{equation.6.33}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces The coupled spatio-sequential model as a Forney-style factor graph. Each spatial node $n$ carries a class label $\ell _n \in \{1, \dots  , M\}$ (circles on the lattice, coloured by class for $M = 2$); each class $m$ carries a hidden chain $k_{s,m} \in \{1, \dots  , K\}$ with initial distribution $\Pi _m$ (the two chains at the sides). Pairwise factors (squares) carry the Potts prior on the labels, Equation~\ref {eq:spatial-prior}, and the chain prior, Equation~\ref {eq:circulant}. The gated emission factors (triangles) join one label to one chain state and contribute $\log p(x_{sn} \mid k_{s,m}, \theta _m)$ only when $\ell _n = m$; the observations $x_{sn}$ are the small circles along each column. Every second observation column is drawn along each spatial axis, and an illustrative subset of the gated factors, so the structure is legible.}}{17}{figure.3}\protected@file@percent }
 \newlabel{fig:coupled-factor-graph}{{3}{17}{The coupled spatio-sequential model as a Forney-style factor graph. Each spatial node $n$ carries a class label $\ell _n \in \{1, \dots , M\}$ (circles on the lattice, coloured by class for $M = 2$); each class $m$ carries a hidden chain $k_{s,m} \in \{1, \dots , K\}$ with initial distribution $\Pi _m$ (the two chains at the sides). Pairwise factors (squares) carry the Potts prior on the labels, Equation~\ref {eq:spatial-prior}, and the chain prior, Equation~\ref {eq:circulant}. The gated emission factors (triangles) join one label to one chain state and contribute $\log p(x_{sn} \mid k_{s,m}, \theta _m)$ only when $\ell _n = m$; the observations $x_{sn}$ are the small circles along each column. Every second observation column is drawn along each spatial axis, and an illustrative subset of the gated factors, so the structure is legible}{figure.3}{}}
 \citation{arthur2007}
-\newlabel{eq:external-field}{{34}{18}{The estimator: block-coordinate ascent}{equation.6.34}{}}
-\newlabel{eq:label-ground-state}{{35}{18}{The estimator: block-coordinate ascent}{equation.6.35}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}The estimator: block-coordinate ascent}{18}{subsection.6.3}\protected@file@percent }
+\newlabel{eq:coupled-m-step}{{34}{18}{The estimator: block-coordinate ascent}{equation.6.34}{}}
+\newlabel{eq:external-field}{{35}{18}{The estimator: block-coordinate ascent}{equation.6.35}{}}
+\newlabel{eq:label-ground-state}{{36}{18}{The estimator: block-coordinate ascent}{equation.6.36}{}}
 \@writefile{toc}{\contentsline {paragraph}{Why a cluster move.}{18}{section*.24}\protected@file@percent }
 \@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces One Wolff update on the labels, in the external field}}{18}{algorithm.2}\protected@file@percent }
 \newlabel{alg:wolff-field}{{2}{18}{Why a cluster move}{algorithm.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.4}The initializer: data-sampled burn-in}{18}{subsection.6.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{What pins it, and what is built.}{18}{section*.25}\protected@file@percent }
 \@writefile{loa}{\contentsline {algorithm}{\numberline {3}{\ignorespaces Data-sampled burn-in on the coupled graph}}{19}{algorithm.3}\protected@file@percent }
 \newlabel{alg:graph-burnin}{{3}{19}{The initializer: data-sampled burn-in}{algorithm.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{What pins it, and what is built.}{19}{section*.25}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {7}The Properties That Referee Each Method}{19}{section.7}\protected@file@percent }
 \newlabel{sec:properties}{{7}{19}{The Properties That Referee Each Method}{section.7}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Exact answers, where an oracle exists}{19}{subsection.7.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Structural invariants, where no oracle reaches}{19}{subsection.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Structural invariants, where no oracle reaches}{20}{subsection.7.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {7.3}Recovery, which is the acceptance test for a fit}{20}{subsection.7.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {7.4}Where the likelihood has no maximum, or no curvature}{20}{subsection.7.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {7.5}Agreement across implementations is a tolerance}{20}{subsection.7.5}\protected@file@percent }
 \newlabel{sec:tolerance}{{7.5}{20}{Agreement across implementations is a tolerance}{subsection.7.5}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.6}Published constants, and asymptotic results}{20}{subsection.7.6}\protected@file@percent }
 \bibstyle{plainnat}
 \bibdata{references}
 \bibcite{amari2016}{{1}{2016}{{Amari}}{{}}}
@@ -173,9 +173,10 @@
 \bibcite{clrs2022}{{9}{2022}{{Cormen et~al.}}{{Cormen, Leiserson, Rivest, and Stein}}}
 \bibcite{durbin1998}{{10}{1998}{{Durbin et~al.}}{{Durbin, Eddy, Krogh, and Mitchison}}}
 \bibcite{earl2005}{{11}{2005}{{Earl and Deem}}{{}}}
-\bibcite{edwards1988}{{12}{1988}{{Edwards and Sokal}}{{}}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.6}Published constants, and asymptotic results}{21}{subsection.7.6}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {8}Relevance to the Roadmap}{21}{section.8}\protected@file@percent }
 \newlabel{sec:roadmap}{{8}{21}{Relevance to the Roadmap}{section.8}{}}
+\bibcite{edwards1988}{{12}{1988}{{Edwards and Sokal}}{{}}}
 \bibcite{felsenstein2004}{{13}{2004}{{Felsenstein}}{{}}}
 \bibcite{forney2001}{{14}{2001}{{Forney}}{{}}}
 \bibcite{frey1998}{{15}{1998}{{Frey}}{{}}}
@@ -209,11 +210,10 @@
 \bibcite{wolff1989}{{43}{1989}{{Wolff}}{{}}}
 \bibcite{yedidia2005}{{44}{2005}{{Yedidia et~al.}}{{Yedidia, Freeman, and Weiss}}}
 \citation{yedidia2005}
-\@writefile{toc}{\contentsline {section}{\numberline {A}Derivations Cited From the Text}{23}{appendix.A}\protected@file@percent }
-\newlabel{app:derivations}{{A}{23}{Derivations Cited From the Text}{appendix.A}{}}
 \citation{suttonbarto2018}
 \citation{schulman2016}
-\citation{suttonbarto2018,silver2017}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Derivations Cited From the Text}{24}{appendix.A}\protected@file@percent }
+\newlabel{app:derivations}{{A}{24}{Derivations Cited From the Text}{appendix.A}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {A.1}The Bethe free energy is stationary at a sum-product fixed point}{24}{subsection.A.1}\protected@file@percent }
 \newlabel{app:bethe}{{A.1}{24}{The Bethe free energy is stationary at a sum-product fixed point}{subsection.A.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Detailed balance for a cluster move in a field}{24}{subsection.A.2}\protected@file@percent }
@@ -225,17 +225,17 @@
 \@writefile{toc}{\contentsline {section}{\numberline {B}Derivations for the Actor--Critic}{24}{appendix.B}\protected@file@percent }
 \newlabel{app:rl}{{B}{24}{Derivations for the Actor--Critic}{appendix.B}{}}
 \@writefile{toc}{\contentsline {paragraph}{Any state-dependent baseline leaves the estimator unbiased.}{24}{section*.27}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{The generalized advantage telescopes to its two limits.}{24}{section*.28}\protected@file@percent }
+\citation{suttonbarto2018,silver2017}
 \citation{schulman2017}
 \citation{mackay2003,mezard2009}
-\citation{wainwright2005}
+\@writefile{toc}{\contentsline {paragraph}{The generalized advantage telescopes to its two limits.}{25}{section*.28}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{PUCT as policy improvement.}{25}{section*.29}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{The clipped objective at the collecting policy.}{25}{section*.30}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {C}Derivations of the Bounds}{25}{appendix.C}\protected@file@percent }
 \newlabel{app:bounds}{{C}{25}{Derivations of the Bounds}{appendix.C}{}}
 \@writefile{toc}{\contentsline {paragraph}{The plug-in bound, \eqref  {eq:plugin-bound}.}{25}{section*.31}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{The parsimony bound, \eqref  {eq:parsimony-bound}.}{25}{section*.32}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{The mean-field bound, \eqref  {eq:mean-field-bound}.}{25}{section*.33}\protected@file@percent }
+\citation{wainwright2005}
 \citation{martin2008}
 \citation{blandy2021}
 \citation{bryant2015}
@@ -261,6 +261,7 @@
 \citation{pachter2005}
 \citation{blahut2003}
 \citation{nielsen2010}
+\@writefile{toc}{\contentsline {paragraph}{The mean-field bound, \eqref  {eq:mean-field-bound}.}{26}{section*.33}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{The spanning-tree bound, \eqref  {eq:spanning-tree-bound}.}{26}{section*.34}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{The ground-state bracket, \eqref  {eq:ground-state-bounds}.}{26}{section*.35}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {D}Reference Taxonomy}{26}{appendix.D}\protected@file@percent }
