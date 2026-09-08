@@ -674,7 +674,7 @@ File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count325
 \l__pdf_internal_box=\box67
 )
-(/home/user/wt-313-rl/docs/textbook.aux)
+(/home/user/wt-335/docs/textbook.aux)
 \openout1 = `textbook.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 10.
@@ -775,8 +775,7 @@ File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman
 )
 Package hyperref Info: Link coloring OFF on input line 10.
 
-(/home/user/wt-313-rl/docs/textbook.out)
-(/home/user/wt-313-rl/docs/textbook.out)
+(/home/user/wt-335/docs/textbook.out) (/home/user/wt-335/docs/textbook.out)
 \@outlinefile=\write4
 \openout4 = `textbook.out'.
 
@@ -798,7 +797,7 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 (/usr/share/texlive/texmf-dist/tex/latex/microtype/mt-msb.cfg
 File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
 )
-(/home/user/wt-313-rl/docs/textbook.toc [1
+(/home/user/wt-335/docs/textbook.toc [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}])
 \tf@toc=\write5
@@ -830,9 +829,9 @@ Package pdftex.def Info: figures/jc_transition.pdf  used on input line 442.
 Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
 put line 457.
  [8 <./figures/sim_tree.pdf>] [9 <./figures/jc_transition.pdf>]
-[10] [11] [12] [13] [14] [15] (./coupled_figure.tex) [16] [17] [18] [19]
-[20] (/home/user/wt-313-rl/docs/textbook.bbl [21] [22]) [23] [24] [25] [26]
-(/home/user/wt-313-rl/docs/textbook.aux)
+[10] [11] [12] [13] [14] [15] [16] (./coupled_figure.tex) [17] [18] [19]
+[20] (/home/user/wt-335/docs/textbook.bbl [21] [22]) [23] [24] [25] [26]
+(/home/user/wt-335/docs/textbook.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
@@ -841,10 +840,10 @@ Package rerunfilecheck Info: File `textbook.out' has not changed.
 (rerunfilecheck)             Checksum: 5E6B14CD604A5D1D838B942DB93B904A;11538.
  ) 
 Here is how much of TeX's memory you used:
- 25094 strings out of 476106
- 456805 string characters out of 5793934
- 2025975 words of memory out of 5000000
- 46256 multiletter control sequences out of 15000+600000
+ 25108 strings out of 476106
+ 457000 string characters out of 5793934
+ 2030975 words of memory out of 5000000
+ 46266 multiletter control sequences out of 15000+600000
  579278 words of font info for 204 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
  89i,12n,96p,1005b,1182s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -871,11 +870,11 @@ s/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type
 c/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
 nts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/sy
 mbols/msbm10.pfb>
-Output written on /home/user/wt-313-rl/docs/textbook.pdf (26 pages, 462655 byte
-s).
+Output written on /home/user/wt-335/docs/textbook.pdf (26 pages, 467572 bytes).
+
 PDF statistics:
- 857 PDF objects out of 1000 (max. 8388607)
- 758 compressed objects within 8 object streams
- 200 named destinations out of 1000 (max. 500000)
+ 868 PDF objects out of 1000 (max. 8388607)
+ 769 compressed objects within 8 object streams
+ 204 named destinations out of 1000 (max. 500000)
  41383 words of extra memory for PDF output out of 42996 (max. 10000000)
 
