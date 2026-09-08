@@ -223,11 +223,12 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_testfunctions.py::test_all_four_himmelblau_minima_are_reachable` | oracle | The property a single-minimum function cannot test. |
 | `test_opt_testfunctions.py::test_the_value_at_the_stated_minimizer_is_zero` | oracle | All three are constructed to have value 0 at their minima, which is a property of the functions rather than of any optimizer -- so this fails if a constant or a sign in the implementation is wrong, independently of whether `fit` can find it. |
 
-## `tests/regression/qa/` (33)
+## `tests/regression/qa/` (34)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
 | `test_qa_backend_agreement.py::test_every_backend_agrees_with_brute_force` | oracle |  |
+| `test_qa_coupled_labelling.py::test_the_recovered_labelling_agrees_with_the_planted_one` | simulated_truth | The claim the figure makes: on this replicate the annealed start recovers the planting. |
 | `test_qa_frustrated_lattices.py::test_the_coloured_ground_state_agrees_on_exactly_one_bond_in_three` | oracle |  |
 | `test_qa_frustrated_lattices.py::test_descent_reaches_the_planted_energy_where_nothing_is_frustrated` | oracle | At frustration zero the instance is a gauge transform of the ferromagnet, so the planted state is the ground state and descent from any start reaches its energy; above zero descent may only tie or beat the planted energy, never sit above it after twenty restarts on this instance size. |
 | `test_qa_jc_transition.py::test_empirical_transitions_match_the_analytic_form` | oracle, simulated_truth | The figure's whole assertion. |
@@ -261,7 +262,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (107)
+## `tests/regression/search/` (108)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -273,7 +274,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_gibbs.py::test_the_generic_sweep_samples_the_potts_boltzmann_distribution` | simulated_truth |  |
 | `test_gibbs.py::test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw` | oracle | Same uniforms, same site order, same cumulative search: the only way the two could differ is a uniform within rounding of a boundary, and over 2,000 sweeps of four sites none did. |
 | `test_gibbs.py::test_the_generic_sweep_samples_the_hidden_path_posterior` | simulated_truth |  |
-| `test_gibbs.py::test_the_block_move_draws_the_whole_chain_exactly` | simulated_truth | Every block draw is an independent sample from the posterior, so no thinning is needed: that is what "exact" buys. |
+| `test_gibbs.py::test_the_block_move_draws_the_whole_chain_from_the_enumerated_path_posterior` | oracle |  |
 | `test_gibbs.py::test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree` | oracle |  |
 | `test_gibbs.py::test_the_generic_sweep_samples_the_coupled_model_s_label_posterior` | simulated_truth |  |
 | `test_gibbs.py::test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_does` | oracle |  |
@@ -370,6 +371,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
 | `test_search_tree_features.py::test_both_feature_sets_train_away_from_the_recorded_untrained_rate` | simulated_truth | The fast sibling of the two release-tier measurements above. |
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
+| `test_spatio_sequential_fit.py::test_the_burn_in_start_reaches_the_enumerated_map_of_the_model_it_reached` | oracle | What an initializer is asked for is the mode of the labelling posterior under the parameters it has fitted, and at 2x2 that mode is enumerable. |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
@@ -428,4 +430,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-385 checks.
+387 checks.
