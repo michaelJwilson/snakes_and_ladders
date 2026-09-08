@@ -29,6 +29,7 @@ MODULE_DIRECTORIES = (
     "python/snakes_and_ladders/learn",
     "python/snakes_and_ladders/search",
     "python/snakes_and_ladders/qa",
+    "python/snakes_and_ladders/sandbox",
     "infra",
     "docs",
 )
@@ -81,7 +82,7 @@ def _module_claude_files() -> list[Path]:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_every_named_module_directory_has_a_claude_md() -> None:
-    # Root `CLAUDE.md` names these eight; a missing file would mean the rules
+    # Root `CLAUDE.md` names these nine; a missing file would mean the rules
     # reach a module through nothing at all.
     missing = [
         directory
