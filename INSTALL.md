@@ -45,6 +45,11 @@ needs `frameworks`: every test that uses one of its packages skips without
 it, and `snakes_and_ladders.search.gym` is the only module that imports one
 at module level.
 
+`scipy` is in no extra and is not a dependency. Three regression modules
+referee our neighbor joining, our Hadamard transform and our fit against it
+and skip without it, so `--all-extras` does not run them; install it
+separately to see them run. Whether to declare it is open (issue #376).
+
 ## Building
 
 `maturin` is the PEP 517 build backend, so a normal install compiles the Rust
