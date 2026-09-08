@@ -199,6 +199,7 @@ def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
     assert "test_pairwise_distance_bench.py" not in chosen
 
 
+
 @pytest.mark.critical
 @pytest.mark.structural
 def test_a_widely_imported_module_selects_its_dependents_benchmarks() -> None:
