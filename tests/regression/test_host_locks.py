@@ -197,3 +197,26 @@ def test_wide_does_not_forfeit_exclusivity(scratch: Path) -> None:
     assert elapsed >= 1.5 * JOB, (
         f"a wide measurement ran beside a validation: {elapsed:.2f}s"
     )
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
+@pytest.mark.structural
+def test_measure_works_from_a_copy_without_the_execute_bit(
+    scratch: Path, tmp_path: Path
+) -> None:
+    # The script is meant to be sourced, so it must not require its own execute
+    # bit to re-enter itself. A copy extracted with `git show`, or a checkout
+    # that dropped the mode, failed `measure` with a bare "Permission denied"
+    # -- found by hitting it, which is why this is pinned.
+    copy = tmp_path / "locks_copy.sh"
+    copy.write_text(LOCKS.read_text())
+    copy.chmod(0o644)
+    finished = subprocess.run(
+        ["bash", "-c", f". {copy}; with_lock measure -- true"],
+        cwd=REPO_ROOT,
+        env={"SAL_SCRATCH": str(scratch), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert finished.returncode == 0, finished.stderr

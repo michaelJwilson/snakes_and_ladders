@@ -73,6 +73,11 @@
 #   with_lock measure  -- uv run pytest tests/benchmarks -q
 #   with_lock measure --wide -- cargo bench --bench parallel_sweep
 #
+# Re-entry goes through `bash "${BASH_SOURCE[0]}"` rather than executing the
+# path directly, so the file need not carry the execute bit: it is meant to
+# be sourced, and a copy extracted with `git show` or checked out without
+# the mode would otherwise fail `measure` with a bare "Permission denied".
+#
 # Waits in the foreground, as the agent rules require: no sleep, no polling.
 # SAL_LOCK_WAIT (default 1800) bounds the wait; exceeding it fails rather than
 # proceeding unlocked, because a measurement taken beside another job is worse
@@ -125,7 +130,7 @@ with_lock() {
       # Exclusive against other measurements, then against every validation:
       # the measurement runs alone, which is the only reason this lock exists.
       flock -w "$SAL_LOCK_WAIT" "$dir/measure.lock" \
-        "${BASH_SOURCE[0]}" --hold-all-validate-slots "$dir" "$@"
+        bash "${BASH_SOURCE[0]}" --hold-all-validate-slots "$dir" "$@"
       ;;
     *) echo "with_lock: unknown kind '$kind'" >&2; return 2 ;;
   esac
