@@ -223,11 +223,12 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_testfunctions.py::test_all_four_himmelblau_minima_are_reachable` | oracle | The property a single-minimum function cannot test. |
 | `test_opt_testfunctions.py::test_the_value_at_the_stated_minimizer_is_zero` | oracle | All three are constructed to have value 0 at their minima, which is a property of the functions rather than of any optimizer -- so this fails if a constant or a sign in the implementation is wrong, independently of whether `fit` can find it. |
 
-## `tests/regression/qa/` (33)
+## `tests/regression/qa/` (34)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
 | `test_qa_backend_agreement.py::test_every_backend_agrees_with_brute_force` | oracle |  |
+| `test_qa_coupled_labelling.py::test_the_recovered_labelling_agrees_with_the_planted_one` | simulated_truth | The claim the figure makes: on this replicate the annealed start recovers the planting. |
 | `test_qa_frustrated_lattices.py::test_the_coloured_ground_state_agrees_on_exactly_one_bond_in_three` | oracle |  |
 | `test_qa_frustrated_lattices.py::test_descent_reaches_the_planted_energy_where_nothing_is_frustrated` | oracle | At frustration zero the instance is a gauge transform of the ferromagnet, so the planted state is the ground state and descent from any start reaches its energy; above zero descent may only tie or beat the planted energy, never sit above it after twenty restarts on this instance size. |
 | `test_qa_jc_transition.py::test_empirical_transitions_match_the_analytic_form` | oracle, simulated_truth | The figure's whole assertion. |
@@ -428,4 +429,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-385 checks.
+386 checks.
