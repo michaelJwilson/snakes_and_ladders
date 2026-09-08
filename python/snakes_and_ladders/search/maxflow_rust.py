@@ -11,16 +11,19 @@ over an adjacency structure: there is no array arithmetic here for NumPy to
 vectorize, so the reference pays full Python interpreter cost per arc.
 
 Measured on square lattices with a random per-node field, **two numbers, and
-both belong in any claim made here**: the kernel alone is 28-34x the Python
-reference, while a caller of this wrapper sees 6.6-10.6x. The difference is
-the marshalling below --- flattening the edge list and the field into Python
-lists that cross the boundary by copy. That is the same FFI copy gap issue
-#199 measured for the categorical sampler and #202 closed with `rust-numpy`;
-the same fix applies here and is deferred to it rather than solved twice.
+both belong in any claim made here**: the kernel alone is 26-32x the Python
+reference, while a caller of this wrapper sees 6.3-10.7x. Issue #220 attributed
+the difference to the Python lists that crossed the boundary by copy, and
+issue #336 replaced them with `rust-numpy` buffers, the fix issue #202
+applied to the categorical sampler. Measured, that copy was 0.03-0.2 ms of a
+0.7-17 ms call at extents 16-64, and removing it moved the caller-visible
+number by under 3%. The term that remains is :func:`snakes_and_ladders.search.maxflow.energy`,
+which scores the returned configuration edge by edge in Python: 0.6, 2.6 and
+9.9 ms at extents 16, 32 and 64, against 0.14, 0.84 and 6.9 ms for the kernel.
+`STATUS.md` carries the table.
 
-A caller that solves the *same graph* repeatedly, which is what alpha
-expansion (issue #207) does once per label per cycle, can hoist the edge and
-coupling lists out of its loop and recover most of that gap without waiting.
+A caller that needs only the configuration can call the extension directly
+with the arrays this wrapper builds and skip that term.
 
 The port also removes a fragility rather than only a cost. The reference
 recurses to the depth of the level graph, so a lattice past a few thousand
@@ -65,12 +68,14 @@ def ising_ground_state(
         also report itself as right.
     """
     values = site_field(graph, field_values)
-    flat_edges = [node for edge in graph.edges for node in edge]
+    # `as_slice` on the Rust side succeeds only for a C-contiguous array, so
+    # every argument is normalized here; `ascontiguousarray` is free when the
+    # array already is one, and `site_field` already returns `float64`.
     states = oxi_snakes_and_ladders.ising_ground_state(
         graph.n_nodes,
-        [float(value) for value in values.reshape(-1)],
-        flat_edges,
-        [float(coupling) for coupling in graph.coupling],
+        np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
+        np.asarray(graph.edges, dtype=np.int64).reshape(-1),
+        np.asarray(graph.coupling, dtype=np.float64),
     )
     configuration = np.asarray(states, dtype=np.int64)
     return configuration, float(energy(graph, values, configuration))
@@ -90,5 +95,12 @@ def max_flow(
     mirrored on both sides of the boundary is a structure that can fall out
     of step, and the only thing a caller needs back is a number.
     """
-    flat = [node for arc in arcs for node in arc]
-    return float(oxi_snakes_and_ladders.max_flow(n_nodes, flat, capacity, source, sink))
+    return float(
+        oxi_snakes_and_ladders.max_flow(
+            n_nodes,
+            np.asarray(arcs, dtype=np.int64).reshape(-1),
+            np.asarray(capacity, dtype=np.float64),
+            source,
+            sink,
+        )
+    )

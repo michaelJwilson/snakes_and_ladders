@@ -11,6 +11,9 @@ started**, on the terms §0.4 sets.
 
 ## Summary
 
+The checks each row rests on are listed, per test, in `CHECKS.md`, generated
+from the suite; `PROBLEMS.md` names the code behind each problem class.
+
 | Roadmap item | Status | Evidence | Key PRs |
 | --- | --- | --- | --- |
 | §0 Development loop | Landed | Ten required checks; committed PDF byte-compared and every notebook re-executed on each PR | [#49](https://github.com/michaelJwilson/snakes_and_ladders/pull/49), [#57](https://github.com/michaelJwilson/snakes_and_ladders/pull/57), [#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72), [#92](https://github.com/michaelJwilson/snakes_and_ladders/pull/92), [#102](https://github.com/michaelJwilson/snakes_and_ladders/pull/102), [#151](https://github.com/michaelJwilson/snakes_and_ladders/pull/151) |
@@ -22,7 +25,7 @@ started**, on the terms §0.4 sets.
 | 2.2 Curriculum learning | Not started | — | — |
 | 2.3 Empirical validation | Not started | — | — |
 | 2.4 Tracking, ablations & leaderboard | Not started | — | — |
-| Stage 3 Research extensions | Not started | — | — |
+| Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half not started, and blocked on an oracle | Relaxation exact at every corner to 1e-11; estimator bias 0.598 to 0.036 as `tau` falls 2.0 to 0.1, standard deviation 0.165 to 3.39 over 20000 draws; deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098` | [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225) |
 
 ## §0 The Development Loop
 
@@ -507,6 +510,30 @@ gradient moves by 1.5e-11 absolute, autograd summing the same terms in a
 different order; the finite-difference check that pins the gradient is
 unaffected.
 
+**Bounds with proofs, certified rather than trusted**
+([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
+surrogate carries its claim — lower bound, upper bound or point prediction —
+and `certify` holds it to the claim on every structure an oracle can score.
+Two one-pass bounds bracket a topology's maximized log-likelihood: one pruning
+evaluation at non-negative least-squares lengths from below, and
+`sum_s log pi(x_1s) - F log k` from above, where `F` is the Fitch score — a
+vertex argument on the multilinear Jukes–Cantor site likelihood that the
+suite checks by enumerating all 256 vertices at five taxa and finding the
+bound attained on every site. Over the 15 topologies of the five-taxon
+fixture at 1,200 sites both hold with no violation; the plug-in bound's worst
+gap is 6.7 nats and its mean 2.9, at 2.4 ms against 254 ms for the fit; the
+parsimony bound costs 0.1 ms and its gap is 2.2 nats per site, so it is a
+bound and not an estimate. The entrywise-limit bound the plan proposed was
+derived and dropped: it sits above zero on every fixture, and the parsimony
+bound dominates it. For a lattice, the naive mean-field bound and the
+tree-reweighted spanning-tree bound (one tree per edge, uniform) sandwich
+`log Z` within 0.049 and 0.028 nats per node on average over 40 random
+open lattices (worst 0.078 and 0.052), both differentiable in the field and
+couplings and both agreeing with central differences to 1e-6 relative; from
+them a bracket on the ground-state energy that on the same lattices at
+`beta = 3` sits 0.028 nats per node below the enumerated minimum. The
+proofs are Appendix B of the textbook.
+
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
@@ -676,6 +703,32 @@ change would need. So **no default moves**; k-means++ lands as a strategy a
 caller may choose, at a cost of one objective evaluation (271 us of seeding
 against 260 us per evaluation at 4000 points).
 
+**Tempering against restarts on the mixture, at equal evaluations.** The
+comparison [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284)
+and [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303)
+deferred, recorded whichever way it fell
+([#332](https://github.com/michaelJwilson/snakes_and_ladders/issues/332),
+[`docs/experiments/004`](docs/experiments/004-mixture-tempering-vs-restarts.md)).
+Five components 1.5 standard deviations apart with unequal weights, 500
+observations, built from `sim.mixture` under seed 20260908 since #262 committed
+neither of the five-component fixtures it measured. Multi-start EM, simulated
+annealing with Hamiltonian proposals and parallel tempering — the continuous
+counterpart of the Potts one, now in `opt.hmc` beside `anneal` — each spend
+3,000 likelihood evaluations per start through `opt.budget.compare`, every
+method ending with the same charged L-BFGS polish because raw EM sits 4 to 6
+nats above its basin's optimum 500 iterations in. Against the best-known optimum — 1111.596 nats, reached by 16 of 1,000
+polished restarts and 8.3 nats below the polished simulated parameters, whose
+basin is not the maximum on this sample — over 40 shared starts: **restarts
+7/40**, tempering 4/40 (McNemar p = 0.549 against restarts), annealing 1/40
+(p = 0.031); mean gaps 2.6, 4.2 and 8.0 nats. **Restarts are not beaten on
+the mixture**, at 3,000 evaluations: tempering does not separate from them
+and annealing loses to them, the opposite of the glass row above and the
+same finding as Rastrigin. The 8-start tier of the same test runs per pull
+request and pins the ordering.
+The paired test `ROADMAP.md` §2.4 asks for is now in the utility:
+`opt.budget.mcnemar` on the per-start hits, exact rather than chi-square,
+because 40 starts cannot support the approximation.
+
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
 but until now only a gradient fit could ask for one — expectation-maximization
@@ -818,6 +871,49 @@ the Python Potts sweep and 5.9 ms for the Rust one, 1.3x and 3.2x, because
 the Python kernel already pays a NumPy call per site. The specialised kernels
 stay the default for the Potts lattice.
 
+**What carries between neighbours, and what does not.** A branch is now
+identified by the leaf split it induces rather than by a node name, so a
+neighbour that shares all but a few branches with its parent starts its fit
+from the parent's lengths
+([#289](https://github.com/michaelJwilson/snakes_and_ladders/issues/289)). The
+warm fit reaches the cold optimum — worst relative gap 5.3e-12 in
+log-likelihood over the 90 SPR neighbours of an eight-taxon tree — and the
+search's answer does not move. What it saves is smaller than the ticket
+hoped, and in one measurement negative: over those 90 neighbours the warm
+fits spent 6,053 likelihood evaluations against 5,145 cold, a single
+neighbour fit costs the same 49 either way, and only a refit of the *same*
+topology from its own lengths drops to 14 — L-BFGS spends its evaluations on
+the branches the move changed, not on the ones it kept. The larger saving is
+lazy scoring: one cached likelihood evaluation at the warm lengths ranks a
+neighbourhood and only the top `K` candidates are fitted, the accepted move
+always in full. Subtree partials are cached keyed on the subtree's structure
+and lengths, and a cached partial equals a recomputed one bitwise, so the
+ranking evaluation is the same arithmetic in the same order. Over four
+random starts on the eight-taxon fixture at 2,000 sites, budget 400 candidates,
+counted in what the search reports:
+
+| move set | run | same optimum as cold | fits | likelihood evaluations |
+| --- | --- | --- | --- | --- |
+| NNI | cold | 4/4 | 68.8 | 5,061 |
+| NNI | warm | 4/4 | 68.8 | 3,660 |
+| NNI | warm, `lazy_top=3` | 4/4 | 26.5 | 1,354 |
+| NNI | warm, `lazy_top=1` | 4/4 | 9.5 | 493 |
+| SPR | cold | 4/4 | 336.8 | 24,423 |
+| SPR | warm | 4/4 | 339.5 | 22,677 |
+| SPR | warm, `lazy_top=3` | 4/4 | 13.8 | 1,032 |
+| SPR | warm, `lazy_top=1` | **2/4** | 5.2 | 579 |
+
+Warm starts alone are worth 28% on NNI and 7% on SPR. Lazy scoring at
+`K = 3` reaches the cold optimum on every start at 3.7x fewer evaluations on
+NNI and 24x fewer on SPR; at `K = 1` it holds on NNI and loses half the SPR
+starts, because the cheap surface ranks an SPR neighbourhood poorly — the
+fitted best sits at lazy rank one in 6 of 6 NNI neighbourhoods and 1 of 6 SPR
+neighbourhoods. So warm starts are the default, `lazy_top` is opt-in with
+`K` chosen per move set from this table, the budget stays in candidates
+scored, and `Inference` reports fits and likelihood evaluations beside it.
+RAxML's three-branch local optimization is not built; its gap to the full
+optimum is the measurement that would license it.
+
 **The accuracy requirement's first half is met.** Normalized Robinson-Foulds
 distance from the inferred to the generating topology is met at the 0.05 bound
 from 125 sites upward, with 8 of 8 replicates recovering the topology exactly at
@@ -878,15 +974,34 @@ past it — zero field gives an aligned state at `-J |E|`, zero coupling gives
 `argmax` per site; and by the max-flow min-cut theorem as a self-check, the
 flow value equalling the capacity of the cut residual reachability induces.
 
-A Rust kernel (`src/maxflow.rs`) runs **28-34x** faster than the NumPy
-reference measured on its own, and **6.6-10.6x** as a caller sees it; the
-difference is the list marshalling crossing the FFI boundary, which is the
-same gap #202 closes for the categorical sampler and is deferred to it rather
-than solved twice. The reference stays as the oracle. The port also removes a
-fragility: the
-Python blocking flow recurses to the depth of the level graph and needs
-`setrecursionlimit` raised past a few thousand nodes, while the Rust one uses
-an explicit stack.
+A Rust kernel (`src/maxflow.rs`) runs **26-32x** faster than the NumPy
+reference measured on its own, and **6.3-10.7x** as a caller sees it. #220
+attributed the difference to the Python lists crossing the FFI boundary by
+copy, the gap #202 closed for the categorical sampler, and deferred the fix;
+[#336](https://github.com/michaelJwilson/snakes_and_ladders/issues/336)
+applied it, passing `float64` and `int64` buffers through `rust-numpy` and
+returning the configuration as an array, and measured that the copy was not
+the term. Minimum of 20 or more rounds, in ms, on square lattices with a
+random per-node field:
+
+| Extent | NumPy reference | Kernel, lists (#220) | Kernel, buffers (#336) | Caller (#220) | Caller (#336) | `energy()` |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 | 4.47 | 0.142 | 0.138 | 0.733 | 0.711 | 0.575 |
+| 32 | 22.0 | 0.835 | 0.836 | 3.30 | 3.22 | 2.60 |
+| 64 | 180 | 7.15 | 6.93 | 17.3 | 16.9 | 9.94 |
+
+The boundary copy was 0.03-0.2 ms of a 0.7-17 ms call and removing it moved
+the caller-visible number by under 3%. What a caller pays for is
+`snakes_and_ladders.search.maxflow.energy`, which scores the returned
+configuration edge by edge in Python and is 59-81% of the wrapper's time; it
+is the oracle's function and is left as it is, so a caller wanting the
+kernel's speedup takes the configuration from the extension and scores it
+itself. Output is unchanged: the configuration is
+equal element by element to the reference's and to the previous binding's at
+extents 16, 32 and 64, and the energy is bitwise equal. The reference stays as
+the oracle. The port also removes a fragility: the Python blocking flow
+recurses to the depth of the level graph and needs `setrecursionlimit` raised
+past a few thousand nodes, while the Rust one uses an explicit stack.
 
 The boundary is refused rather than approximated. A negative coupling is
 NP-hard and raises; more than two states is alpha expansion (#207), which
@@ -1000,8 +1115,10 @@ by `opt.budget.compare`
 with the utility's own streams and the best any method found as the
 reference, tempering **12/12**, annealing 10/12 with a mean gap of 0.17, and
 restarts of descent 4/12 with a mean gap of 0.75, every method at or below
-the planted energy. The five-component mixture comparison waits on the
-mixture branch (#263) landing and belongs to the same utility.
+the planted energy. The five-component mixture comparison, the one problem
+class where restarts are the standard answer, is under Milestone 1.3 and in
+[`docs/experiments/004`](docs/experiments/004-mixture-tempering-vs-restarts.md)
+([#332](https://github.com/michaelJwilson/snakes_and_ladders/issues/332)).
 
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter
@@ -1026,6 +1143,38 @@ what says the test has the power it claims.
 paths (`snakes_and_ladders.search.alpha_expansion` carries a lattice ICM as its baseline,
 which is a different object). Single-flip local search over the Potts chain exists as an RL
 environment, not as a classical baseline suite.
+
+**A surrogate ranks the SPR neighbourhood the lazy score could not**
+([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). The
+one-evaluation lazy score of #289 put the fitted best at rank one in 1 of 6
+SPR neighbourhoods; on the same six neighbourhoods of the eight-taxon fixture
+at 1,000 sites the plug-in bound puts it first in 6 of 6 and the parsimony
+bound in 5 of 6, at 1.7 ms and 0.1 ms per candidate against 206 ms per fit.
+`infer(..., lazy_top=1, surrogate=)` ranks by any surrogate and fits only the
+top candidate. Over four random SPR starts at budget 400: the full search
+reaches its optimum from 4/4 at 312 fits and 20,718 likelihood evaluations;
+`lazy_top=1` alone reaches it from 2/4 at 5.5 fits; ranked by the plug-in
+bound, the parsimony bound, or a learned predictor, 4/4 at 5 fits and 275
+evaluations — 62 times fewer fits and 75 times fewer evaluations for the same
+answer. Learned predictors read the bound features and are trained on the
+gap above the plug-in bound, so a poor fit falls back to the bound: a linear
+model, a deep MLP, a Deep Sets model over branch tokens, a one-block
+attention model and a graph network over the tree all reach held-out R^2 at
+or above 0.999 on 15-topology neighbourhoods of the five-taxon fixture
+(16 alignments, split 10/3/3 by alignment) and 0.98 on the two held-out SPR
+neighbourhoods at eight taxa, ranking the fitted best first on every held-out
+neighbourhood; the three token models return the same value for a tree with
+its children shuffled, to 1e-13. The curriculum 5 → 6 taxa measures what
+ROADMAP §2.2 predicts: zero-shot at six taxa the set model falls to R^2 0.68
+and recovers to 0.94 after transfer; the MLP holds 0.92 zero-shot and 0.95
+transferred. On lattices the models predict the gap above the mean-field
+bound with R^2 0.996–0.999 held out (2×2 to 2×4), transfer zero-shot to
+3×4 and 4×6 at 0.99, and the ground-state energy is learned exactly because
+alpha expansion, one of the features, reaches it on every small lattice.
+A calibrated bound is a rate claim: at nominal coverage 0.9 the lower bound
+held on 100% of 45 held-out examples and the upper on 80%, so the claim
+transfers on one side and not the other with three calibration alignments,
+and `certify` at the stated rate is what says which.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
@@ -1181,6 +1330,90 @@ coverage against separation, and REINFORCE against greedy on the Potts chain —
 and this file now cites them. The Aim run store (#75) is part 2, behind the
 dependency's approval; until then the Results section is typed from the
 measurement and names the script that produced it.
+
+## Stage 3 — Research Extensions
+
+**Only the half with an oracle is built.** `ROADMAP.md`'s differentiable-search
+bullet names two relaxations. Potts configurations and HMM state paths are
+enumerable, so the exact optimum, the exact expected score and the exact
+gradient are all computable and "does the relaxation find what discrete search
+finds" is falsifiable. Tree topologies at any interesting size are not, so the
+tropical Grassmannian half is not started and `TICKETS.md` records that it is
+blocked on an oracle rather than on effort
+([#211](https://github.com/michaelJwilson/snakes_and_ladders/issues/211)).
+
+**The relaxation is an extension, checked at every corner.** Over every
+configuration of an enumerable instance the relaxed score equals the discrete
+one to `1e-11` relative, for both spaces. The HMM check crosses a module
+boundary — `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
+`RelaxedHmmPath.discrete` and `snakes_and_ladders.likelihood.hmm_paths.path_log_probability`
+are independent implementations — and the relaxed objective's enumerated
+optimum is the Viterbi path.
+
+**One identity carries the result, and its boundary is not what it looks
+like.** For a multilinear objective under a factorized `q`,
+`E_q[score] = score(q)` exactly: the relaxed form at the marginals *is* the
+expected discrete score. Two plausible statements of the limit are false and
+are refuted by tests — it is not that the model must be a chain, and it is not
+that terms must be pairwise. What breaks it is a term using one site twice,
+since `E[X**2] = E[X]` for an indicator; measured, 1.000 against 0.557. It
+follows that the relaxed maximum is attained at a vertex, so the relaxation
+introduces **no optimum the discrete problem lacks** — everything a relaxed
+search loses is lost to local optima of the ascent.
+
+**The estimator bias is measured, not assumed.** Against the exact gradient
+over 20000 draws, scaled by the largest exact component:
+
+| `tau` | soft bias (SEM) | soft sd | straight-through bias (SEM) | ST sd |
+| --- | --- | --- | --- | --- |
+| 2.00 | 0.5975 (0.0012) | 0.165 | 0.5620 (0.0027) | 0.382 |
+| 1.00 | 0.3373 (0.0034) | 0.487 | 0.3233 (0.0051) | 0.723 |
+| 0.50 | 0.1400 (0.0076) | 1.077 | 0.1418 (0.0090) | 1.272 |
+| 0.20 | 0.0475 (0.0157) | 2.220 | 0.0502 (0.0165) | 2.340 |
+| 0.10 | 0.0356 (0.0240) | 3.392 | 0.0380 (0.0246) | 3.472 |
+
+Bias falls by a factor of 17 while the standard deviation rises by a factor of
+21, so no temperature is good at both. Straight-through's bias matches the soft
+estimator's within error and its variance is higher at every temperature, so on
+this problem it buys nothing.
+
+**The sampling is what costs, not the relaxation.** Against single-flip hill
+climbing over 40 shared seeds, on an antiferromagnetic chain whose optimum
+needs coordinated flips:
+
+| Method | Reached the optimum | McNemar |
+| --- | --- | --- |
+| Greedy hill climbing | 5/40 | — |
+| Deterministic relaxation | 18/40 | `p = 0.00098` |
+| Soft Gumbel-softmax | 11/40 | `p = 0.18` |
+| Straight-through | 11/40 | `p = 0.18` |
+| Annealed soft, 0.5 to 0.05 | 11/40 | `p = 0.18` |
+
+The deterministic ascent — which the identity licenses, so it is not a
+shortcut — is significantly better than the baseline; adding Gumbel noise gives
+that up for a tie, and annealing does not recover it. It is also 15% cheaper
+per run: 43.6 ms against 50.1 ms for 100 gradient steps. Three of four variants
+tie, and that is reported as a tie, per the precedent
+[#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193) set.
+
+**The budgets are not the same unit and no claim is made that they are.**
+Greedy stops at a local maximum after 3.5 decisions on average at 14 discrete
+evaluations each; the relaxation takes gradient steps and evaluates no discrete
+configuration until the end. What is matched is the restart count and the
+seeds. The advantage is not bought with the larger budget: the relaxation
+already wins at 25 gradient steps (15/40, `p = 0.0064`).
+
+**The comparison fixture is not the repository's own.** `potts_params.yaml` has
+`J = 0.75 > 0`, so its optimum is `argmax(h)` repeated and every method finds
+it. That is the third time a fixture has been too easy to separate methods —
+after [#177](https://github.com/michaelJwilson/snakes_and_ladders/issues/177),
+[#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198) and #209's planted
+spin glass — and it is why the baseline is now run before any claim is made.
+
+**Not built:** the tropical Grassmannian relaxation; the relaxation on the
+Potts *lattice*, where the identity holds but nothing has been measured; and
+any joint optimization of structure alongside continuous parameters, which is
+what the roadmap bullet ultimately asks for.
 
 ## §1.2 Requirements Ledger
 

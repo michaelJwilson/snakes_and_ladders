@@ -45,8 +45,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Metal/MPS dispatch, and the `float32` tolerance it forces
 - Evaluate a Triton or JAX kernel for the site-parallel recursion against the
   10× rule before porting
-- Bounded and approximate likelihoods for branch-and-bound pruning, with the
-  proofs `ROADMAP.md` §1.3 requires
+- Branch-and-bound over topologies with the certified bounds of #308, and a
+  bound for a non-Jukes–Cantor model, whose transition matrix is not affine
+  in one variable per branch
 - Put `stubtest` in CI — the type stub has already drifted (#37)
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
