@@ -69,7 +69,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_models_explain_the_target_on_held_out_groups` | simulated_truth | The token models see the bilinear term the MLP cannot, so their held-out R^2 clears 0.9 while the MLP, which reads only the feature vector, is held to what the features explain. |
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 
-## `tests/regression/likelihood/` (61)
+## `tests/regression/likelihood/` (66)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -110,6 +110,11 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_message_passing.py::test_sum_product_per_site_sums_to_pruning` | oracle |  |
 | `test_message_passing.py::test_the_coupled_log_density_is_the_joint_written_out` | oracle | eq:joint (textbook, sec:factor-graph): beta * sum_edges J delta(l_i, l_j) + sum_m [log pi_m(k_{0,m}) + sum_s log A_m(k_{s-1,m}, k_{s,m})] + sum_n sum_s log P(x_{sn} \| k_{s,l_n}, theta_{l_n}). |
 | `test_message_passing.py::test_message_passing_on_the_forney_form_gives_the_same_marginals` | oracle |  |
+| `test_message_passing.py::test_the_tree_schedule_reproduces_the_dictionary_oracle_bitwise` | oracle |  |
+| `test_message_passing.py::test_sum_and_max_product_on_the_chain_reproduce_the_dictionary_oracle_bitwise` | oracle |  |
+| `test_message_passing.py::test_the_tree_site_reproduces_the_dictionary_oracle_bitwise` | oracle | Hard zeros: the leaf indicators put ``-inf`` in the tables. |
+| `test_message_passing.py::test_flooding_reproduces_the_dictionary_oracle_bitwise` | oracle |  |
+| `test_message_passing.py::test_the_tree_schedule_on_a_deep_chain_is_the_forward_recursion` | oracle | 2,000 positions: past the interpreter's recursion limit for the reference's depth-first order, and the levelled schedule is breadth-first. |
 | `test_potts_exact.py::test_the_transfer_matrix_reproduces_exhaustive_enumeration` | oracle |  |
 | `test_potts_exact.py::test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix` | oracle |  |
 | `test_potts_exact.py::test_log_weights_matches_the_hamiltonian_evaluated_by_hand` | oracle | Two sites, one bond. |
@@ -359,4 +364,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-316 checks.
+321 checks.
