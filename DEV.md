@@ -24,7 +24,7 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 | `python/snakes_and_ladders/sandbox/` | The oracle home: a hand-rolled implementation a framework replaced on a hot path, kept to referee it. Imported by `tests/` and `qa/` only, asserted by test; empty until an adoption is measured (issue #322). |
 | `src/lib.rs` | Rust extension (`oxi_snakes_and_ladders`), exposed through PyO3. |
 | `docs/tex/` | LaTeX source for the paper and the textbook, with the notation and preamble both share. |
-| `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/paper.pdf` and `docs/textbook.pdf` (both committed; the `.aux`, `.bbl`, `.log` and other files `latexmk` leaves beside them are ignored, never committed). |
+| `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/paper.pdf` and `docs/textbook.pdf` (both committed, rebuilt only by a "Rebuild the documents" pull request; the `.aux`, `.bbl`, `.log` and other files `latexmk` leaves beside them are ignored, never committed). |
 
 *Note: Each directory contains a localized `CLAUDE.md` defining specific constraints (e.g., `sim/` oracles, `search/` constraints). These append to, rather than override, the root `CLAUDE.md`.*
 
@@ -77,6 +77,10 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
 * **Requirement:** A Rust toolchain is required for consumers.
 * **Known Gap:** The typed stub `python/snakes_and_ladders/oxi_snakes_and_ladders.pyi` is hand-written. Run `python -m mypy.stubtest snakes_and_ladders.oxi_snakes_and_ladders` periodically to prevent drift.
 
+### Technical Documents
+
+Pull requests change `docs/tex/` and never `docs/paper.pdf` or `docs/textbook.pdf`. The two PDFs are committed for readers and are rebuilt, from `main`, by the pull request a **Rebuild the documents** ticket asks for (`.github/ISSUE_TEMPLATE/documents.yml`), whose title carries that phrase; CI refuses a PDF change in any other pull request. Between rebuilds the PDFs lag the sources by design. The trade (issue #369): comparing the committed PDFs on every pull request made every document pull request conflict with every merge and cost one rebuild per merge per open pull request, eleven builds in one afternoon; a lag that one ticket closes costs nothing. Every pull request still builds both documents in CI and fails on an unresolved or duplicated reference or citation, so the sources are always buildable. `infra/build_technical_doc.sh` runs against the synced environment (`uv run --no-sync`) and no longer rebuilds the Rust extension per build.
+
 ### Continuous Integration
 
 Ten required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs against `main`:
@@ -89,7 +93,7 @@ Ten required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs a
 | `build` | `pip install .` (no lockfile, mimics fresh consumer), smoke import |
 | `python-tests` | `pytest -m "not release"`, gated on minimum coverage; benchmarks skipped unless computational code changed |
 | `docs` | Sphinx build (warnings as errors) |
-| `technical-doc` | Regenerate the QA figures the documents cite (`infra/build_technical_doc.sh`), then LaTeX build. Fails on an undefined reference or citation, a multiply-defined label in either log, or a rebuilt PDF that differs from its committed copy |
+| `technical-doc` | Regenerate the QA figures the documents cite (`infra/build_technical_doc.sh`), then LaTeX build. Fails on an undefined reference or citation, a multiply-defined label in either log, or a pull request that changes a committed PDF without being the rebuild (see Technical Documents) |
 | `notebooks` | Re-execute every notebook under `docs/nb/` (`infra/check_notebooks.py`) and fail on a re-executed output that differs from the committed one. Text is compared; a figure is checked only for still being produced. Regenerate with `--write` on the same script |
 | `audit` | `pip-audit`, `cargo audit` (skips on cache hit if lockfiles are unchanged) |
 | `pr-title` | The title starts with `[<base branch>]`, the branch the pull request targets (issue #292). One shell line; runs only where the workflow does, so on a stacked pull request it is the reviewer's until #273 lands |
@@ -111,7 +115,7 @@ Ten required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs a
   * **Use `pytest -m "not release and not stress"` while developing.** That is the CI tier, and the gate a pull request is judged against.
   * **The 5 minutes is the worst case, not the average.** `infra/select_tests.py` usually selects less, but it answers "everything" for any change it cannot attribute to one module — a lockfile, a shared fixture, `infra/` — so the full CI tier is the number that has to fit.
   * **A size that exists to show scaling is parameterized, never duplicated.** `tests/_scale.py`'s `at_scale` runs one test body at both sizes, so a change to the assertion reaches the large size by construction; two tests would let the large one drift until it asserted something the small one no longer did. `stress_only` is for a claim with no smaller size that still asserts it, and states the reason on the marker.
-  * **Measured on one development machine, uncontended:** the CI tier runs in 141 s over 825 tests, the stress tier in 51 s over 10. Before issue #132 the same tests were one tier at 263 s, inside the 5-minute budget by 37 s and rising. `infra/measure_test_budget.sh` reproduces both and reports each against its budget. The previously documented figure — 138 s over 540 tests — had gone stale by a factor of 1.5 in tests and 1.9 in wall clock.
+  * **Measured on one development machine, uncontended:** the CI tier runs in 141 s over 825 tests, the stress tier in 51 s over 10. Before issue #132 the same tests were one tier at 263 s, inside the 5-minute budget by 37 s and rising. `infra/measure_test_budget.sh --full` reproduces both and reports each against its budget; without `--full` it measures the critical tier only, since the full tiers take a shared host for their duration. The previously documented figure — 138 s over 540 tests — had gone stale by a factor of 1.5 in tests and 1.9 in wall clock.
   * **The budgets are not asserted in the suite.** A wall-clock assertion would fail for the machine rather than for the change, which the "No CI Profiling" rule above forbids. What is asserted is structural: `tests/regression/test_scale_tiers.py` checks that the stress tier stays reachable and that no test carries a size marker it does not use.
   * **Plain `pytest` (no `-m` filter) is the release gate's job, not a development command.** `infra/release.sh` runs it as part of cutting a release; run it by hand only when you are cutting one, or when you have changed a release-gated test itself.
 * **Two axes select tests, and they answer different questions.** `infra/select_tests.py` chooses **by module path** — what a diff could have broken. The *kind* markers choose **by what a test is checked against** — `oracle`, `simulated_truth`, `mathematical`, `edge_case`, `structural`, registered in `pyproject.toml` and required of every test outside `tests/benchmarks/` by `tests/regression/test_test_kinds.py`. They sit beside each other rather than one replacing the other: path selection carries the dependency reasoning issue #161 built, and the kinds are how you ask for a class of check independently of where the change landed. `--strict-markers` is on, so a misspelled marker fails collection instead of silently selecting nothing.
