@@ -1,10 +1,14 @@
 # learn/
 
-Reinforcement learning applied to discrete search problems. The interface is
-model-agnostic by construction, on exactly the terms `opt/CLAUDE.md` sets.
+Reinforcement learning over discrete search problems. The interface is
+model-agnostic by construction, on exactly the terms `opt/CLAUDE.md` sets:
+the same machinery must serve a Potts landscape and a tree search (issue
+#131), and the phylogenetic case is one instance of it rather than its
+author.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this module too.  It is referenced here, never restated. What follows is local,
+section binds this file too — and every docstring, comment and commit message
+in this module. It is referenced here, never restated. What follows is local,
 and is principle: the numbers behind each rule live with the code that
 produces them or in `STATUS.md`.
 
@@ -12,11 +16,8 @@ produces them or in `STATUS.md`.
 
 `environment.py` is the interface — a state, an action set that varies with
 the state, a step returning the next state and a reward, and features of each
-available action.
-
-
-`policy.py` currently holds the softmax-over-scored-actions policy the technical
-document specifies.
+available action. `policy.py` holds the softmax-over-scored-actions policy
+the technical document specifies.
 
 `rollout.py` generates episodes under a policy and under the greedy searcher
 through the same loop: a comparison between them is only meaningful if the
@@ -24,17 +25,38 @@ loop is shared. `reinforce.py` is the score-function estimator and `exact.py`
 its oracle, by enumerating trajectories.
 
 The environments here are **reference instances**, not applications, over the
-same models `sal.opt` fits.
+same models `snakes_and_ladders.opt` fits. That is deliberate: one model appears here as an
+environment searched discretely and there as an objective fitted continuously,
+so the claim that both halves of the project share one abstraction is
+demonstrated rather than asserted.
 
 ## Local rules
 
-- **No application imports.** Nothing here may import from `sal.sim`,
-  `sal.likelihood` or `sal.search`, asserted by
-  `tests/regression/test_learn_environment.py`.
-- **Closed form rewards at known parameters are vital for testing**  Rewards will also
-  be solved for in future development.
-- **`gamma = 1` currently, but will be a hyperparameter.** With this, the reward telescopes to the total
-  improvement an episode achieved. Any `gamma < 1` is more greedy.
+- **No application imports.** Nothing here may import from `snakes_and_ladders.sim`,
+  `snakes_and_ladders.likelihood` or `snakes_and_ladders.search`, asserted by
+  `tests/regression/test_learn_environment.py`. An agent developed against a
+  tree is an agent shaped by trees, and the phylogenetic environment
+  therefore lives in `snakes_and_ladders.search`, which may import both halves.
+  `snakes_and_ladders.opt` is not forbidden: it is infrastructure too, and reusing its
+  Potts fixture is the point rather than a shortcut.
+- **A reward is a closed form at known parameters, never an inner solve.**
+  That is what makes an episode affordable: a fitted reward costs a full solve
+  per action and an episode evaluates a whole neighbourhood per step. Where
+  the fitted reward is the honest one, the two are *compared* rather than
+  swapped silently — the cheap surface can rank candidates differently.
+- **`gamma = 1`, and it is not a hyperparameter.** The reward is a difference
+  of the objective, so the undiscounted return telescopes to the total
+  improvement an episode achieved. Any `gamma < 1` breaks that and prefers
+  improvement found early over the same improvement found late.
+- **A feature constant across a state's actions is unidentifiable.** A
+  softmax over scores cancels anything every action shares — the same gauge
+  `snakes_and_ladders.opt` fixes for a simplex. No environment supplies a bias term, and a
+  test pins the invariance.
+- **The greedy searcher must be inside the policy class.** Where the reward
+  decomposes into the features, some weight vector *is* the greedy baseline at
+  zero temperature. That is what makes "the agent beat the baseline" a
+  statement about learning rather than about two unrelated algorithms, and a
+  test checks the two produce identical trajectories.
 - **A sampled return is a diagnostic, never a result.** It is a Monte Carlo
   estimate under a changing policy, so it rises for reasons that include a
   broken estimator. Learning is claimed against the enumerated expected
@@ -54,22 +76,7 @@ same models `sal.opt` fits.
 - **A budget is counted in decisions, never in seconds.** Both the greedy
   searcher and a policy score the whole neighbourhood per decision, so
   decisions are the unit at which they are comparable — the same reasoning
-  that makes `sal.search.infer` count candidate fits.
-
-- **An episode that may leave a local optimum is scored on its best state,
-  not its last.** `rollout(..., stop_at_local_optimum=False)` runs to its
-  budget, so its final state is wherever the walk happened to stop, and a
-  real search keeps the best thing it saw. Scoring the last state instead
-  would make a better searcher look worse the longer it ran.
-
-- **A comparison against a wandering searcher is against *restarts*.** Once
-  an episode is no longer bounded by reaching a local optimum, a single
-  greedy run is not a budget-matched baseline: greedy stops after a few
-  decisions and leaves the rest of the budget unspent. Restarting it until
-  the budget is gone is the honest comparison, and on the issue #177 fixture
-  it reaches the enumerated maximum from every start where the best epsilon
-  measured does not (issue #194; the numbers are in `STATUS.md`). A result
-  stated against single-run greedy alone overstates itself.
+  that makes `snakes_and_ladders.search.infer` count candidate fits.
 
 ## Framework
 
@@ -81,17 +88,21 @@ cannot support.
 
 The count is the point: an interface justified by one model is shaped by that
 model, so this one carries an energy landscape, a decoding problem, and — in
-`sal.search`, which may import both halves — a topology search. None of them
+`snakes_and_ladders.search`, which may import both halves — a topology search. None of them
 takes an application type. The caller unpacks a model into index and
 log-probability arrays, because the no-application-imports rule admits no
 exception for convenience.
 
-## Relaxations
+## What is not here yet
+
+PPO and a learned state-value critic; `docs/tex`'s reinforcement-learning
+section states the theory they are built against.
 
 A relaxation must reduce to the discrete objective exactly at every corner of
-the simplex, checked over every configuration of an enumerable instance. Under
-a factorized distribution the expected discrete score equals the relaxed score
-at the marginals whenever no term reuses a site — multilinearity, not graph
-shape, is the boundary — so the maximum sits at a vertex and a relaxation adds
-no optimum the discrete problem lacks. A gradient estimator's bias is measured
-against the exact gradient enumeration supplies, never assumed small.
+the simplex, checked over every configuration of an enumerable instance. Under a
+factorized distribution the expected discrete score equals the relaxed score at
+the marginals whenever no term reuses a site — multilinearity, not graph shape,
+is the boundary — so the maximum sits at a vertex and a relaxation adds no
+optimum the discrete problem lacks. A gradient estimator's bias is measured
+against the exact gradient enumeration supplies, never assumed small. A learned
+surrogate predicts the gap above an analytic bound, scored on unseen groups.

@@ -154,7 +154,8 @@ this LaTeX documentation. It must contain:
   pruning, belief propagation, forward-backward).
 - Formal definitions of the Markov decision process (MDP) formulations for the
   RL agents.
-- Proofs for any proposed upper/lower bounds used for branch-and-bound pruning.
+- Proofs for any proposed upper/lower bounds used for branch-and-bound pruning
+  (the first four are Appendix B of the textbook, #308).
 - Dynamically generated QA figures and tables (parameter recovery, convergence
   curves) sourced directly from tracked CI runs to guarantee empirical
   reproducibility.

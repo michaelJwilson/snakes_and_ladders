@@ -1,72 +1,79 @@
 \contentsline {section}{\numberline {1}Notation}{2}{section.1}%
 \contentsline {section}{\numberline {2}The Shape All Three Problems Share}{3}{section.2}%
 \contentsline {subsection}{\numberline {2.1}Factor Graphs: The One Structure}{3}{subsection.2.1}%
-\contentsline {paragraph}{A fourth shape.}{3}{section*.2}%
+\contentsline {paragraph}{A fourth shape.}{4}{section*.2}%
 \contentsline {paragraph}{What pins the general algorithm.}{4}{section*.3}%
 \contentsline {subsection}{\numberline {2.2}The Continuous Optimization Abstraction}{4}{subsection.2.2}%
 \contentsline {paragraph}{Why the map and not a projection.}{4}{section*.4}%
-\contentsline {paragraph}{Why the map must be injective.}{4}{section*.5}%
-\contentsline {paragraph}{What follows for inference.}{4}{section*.6}%
-\contentsline {subsection}{\numberline {2.3}The Discrete Search as a Decision Process}{4}{subsection.2.3}%
+\contentsline {paragraph}{Why the map must be injective.}{5}{section*.5}%
+\contentsline {paragraph}{What follows for inference.}{5}{section*.6}%
+\contentsline {subsection}{\numberline {2.3}The Discrete Search as a Decision Process}{5}{subsection.2.3}%
 \contentsline {paragraph}{What pins it.}{5}{section*.7}%
-\contentsline {section}{\numberline {3}Problem Statement: Phylogenetic Inference}{5}{section.3}%
-\contentsline {subsection}{\numberline {3.1}The model}{5}{subsection.3.1}%
-\contentsline {subsection}{\numberline {3.2}As a factor graph}{6}{subsection.3.2}%
-\contentsline {subsection}{\numberline {3.3}The algorithm: simulation}{6}{subsection.3.3}%
-\contentsline {subsection}{\numberline {3.4}The algorithm: pruning}{6}{subsection.3.4}%
-\contentsline {paragraph}{Regime.}{7}{section*.8}%
-\contentsline {paragraph}{What pins it.}{7}{section*.9}%
-\contentsline {subsection}{\numberline {3.5}The algorithm: discrete search}{8}{subsection.3.5}%
-\contentsline {paragraph}{What pins it.}{8}{section*.10}%
-\contentsline {section}{\numberline {4}Problem Statement: Potts Models in an External Field}{8}{section.4}%
-\contentsline {subsection}{\numberline {4.1}The model}{8}{subsection.4.1}%
-\contentsline {subsection}{\numberline {4.2}As a factor graph}{8}{subsection.4.2}%
-\contentsline {subsection}{\numberline {4.3}Why an odd cycle is the whole story}{8}{subsection.4.3}%
-\contentsline {subsection}{\numberline {4.4}The algorithm: belief propagation}{9}{subsection.4.4}%
-\contentsline {paragraph}{Regime.}{9}{section*.11}%
-\contentsline {paragraph}{What pins it.}{9}{section*.12}%
-\contentsline {subsection}{\numberline {4.5}The algorithm: ground states as cuts}{9}{subsection.4.5}%
-\contentsline {paragraph}{Regime.}{10}{section*.13}%
-\contentsline {paragraph}{What pins it.}{10}{section*.14}%
-\contentsline {subsection}{\numberline {4.6}The algorithm: alpha expansion}{10}{subsection.4.6}%
-\contentsline {paragraph}{What pins it.}{10}{section*.15}%
-\contentsline {subsection}{\numberline {4.7}The algorithm: sampling}{10}{subsection.4.7}%
-\contentsline {paragraph}{Regime.}{10}{section*.16}%
-\contentsline {paragraph}{What pins it.}{11}{section*.17}%
-\contentsline {subsection}{\numberline {4.8}Temperature, annealing and tempering}{11}{subsection.4.8}%
-\contentsline {paragraph}{What pins it.}{11}{section*.18}%
-\contentsline {section}{\numberline {5}Problem Statement: Hidden Markov Models}{11}{section.5}%
-\contentsline {subsection}{\numberline {5.1}The model}{11}{subsection.5.1}%
-\contentsline {subsection}{\numberline {5.2}As a factor graph}{11}{subsection.5.2}%
-\contentsline {paragraph}{The emission family is the only part that knows what an observation is.}{12}{section*.19}%
-\contentsline {paragraph}{A density is not a probability.}{12}{section*.20}%
-\contentsline {subsection}{\numberline {5.3}The algorithm: forward--backward}{12}{subsection.5.3}%
-\contentsline {paragraph}{Regime.}{12}{section*.21}%
-\contentsline {paragraph}{What pins it.}{12}{section*.22}%
-\contentsline {subsection}{\numberline {5.4}The algorithm: expectation-maximization}{12}{subsection.5.4}%
-\contentsline {paragraph}{What pins it.}{13}{section*.23}%
-\contentsline {subsection}{\numberline {5.5}Two decodings, and they are different answers}{13}{subsection.5.5}%
-\contentsline {section}{\numberline {6}Problem Statement: The Coupled Spatio-Sequential Model}{13}{section.6}%
-\contentsline {subsection}{\numberline {6.1}The model}{13}{subsection.6.1}%
-\contentsline {subsection}{\numberline {6.2}As a factor graph}{13}{subsection.6.2}%
-\contentsline {subsection}{\numberline {6.3}The estimator: block-coordinate ascent}{15}{subsection.6.3}%
-\contentsline {paragraph}{Why a cluster move.}{15}{section*.24}%
-\contentsline {subsection}{\numberline {6.4}The initializer: data-sampled burn-in}{15}{subsection.6.4}%
-\contentsline {paragraph}{What pins it, and what is built.}{16}{section*.25}%
-\contentsline {section}{\numberline {7}The Properties That Referee Each Method}{16}{section.7}%
-\contentsline {subsection}{\numberline {7.1}Exact answers, where an oracle exists}{16}{subsection.7.1}%
-\contentsline {subsection}{\numberline {7.2}Structural invariants, where no oracle reaches}{17}{subsection.7.2}%
-\contentsline {subsection}{\numberline {7.3}Recovery, which is the acceptance test for a fit}{17}{subsection.7.3}%
-\contentsline {subsection}{\numberline {7.4}Where the likelihood has no maximum, or no curvature}{17}{subsection.7.4}%
-\contentsline {subsection}{\numberline {7.5}Agreement across implementations is a tolerance}{17}{subsection.7.5}%
-\contentsline {subsection}{\numberline {7.6}Published constants, and asymptotic results}{18}{subsection.7.6}%
-\contentsline {section}{\numberline {8}Relevance to the Roadmap}{18}{section.8}%
-\contentsline {section}{\numberline {A}Derivations Cited From the Text}{20}{appendix.A}%
-\contentsline {subsection}{\numberline {A.1}The Bethe free energy is stationary at a sum-product fixed point}{20}{subsection.A.1}%
-\contentsline {subsection}{\numberline {A.2}Detailed balance for a cluster move in a field}{20}{subsection.A.2}%
-\contentsline {subsection}{\numberline {A.3}The exchange ratio in parallel tempering}{21}{subsection.A.3}%
-\contentsline {subsection}{\numberline {A.4}The delta method for an interval at a fit}{21}{subsection.A.4}%
-\contentsline {section}{\numberline {B}Reference Taxonomy}{21}{appendix.B}%
-\contentsline {paragraph}{Infrastructure (build, structure, and speed).}{21}{section*.27}%
-\contentsline {paragraph}{Optimization (discrete and continuous).}{21}{section*.28}%
-\contentsline {paragraph}{Application (the science).}{21}{section*.29}%
+\contentsline {subsection}{\numberline {2.4}Surrogates and Bounds}{5}{subsection.2.4}%
+\contentsline {section}{\numberline {3}Problem Statement: Phylogenetic Inference}{6}{section.3}%
+\contentsline {subsection}{\numberline {3.1}The model}{6}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}As a factor graph}{7}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}The algorithm: simulation}{7}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}The algorithm: pruning}{8}{subsection.3.4}%
+\contentsline {paragraph}{Regime.}{9}{section*.8}%
+\contentsline {paragraph}{What pins it.}{9}{section*.9}%
+\contentsline {subsection}{\numberline {3.5}The algorithm: discrete search}{9}{subsection.3.5}%
+\contentsline {paragraph}{What pins it.}{9}{section*.10}%
+\contentsline {section}{\numberline {4}Problem Statement: Potts Models in an External Field}{9}{section.4}%
+\contentsline {subsection}{\numberline {4.1}The model}{9}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}As a factor graph}{10}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Why an odd cycle is the whole story}{10}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}The algorithm: belief propagation}{10}{subsection.4.4}%
+\contentsline {paragraph}{Regime.}{10}{section*.11}%
+\contentsline {paragraph}{What pins it.}{10}{section*.12}%
+\contentsline {subsection}{\numberline {4.5}The algorithm: ground states as cuts}{11}{subsection.4.5}%
+\contentsline {paragraph}{Regime.}{11}{section*.13}%
+\contentsline {paragraph}{What pins it.}{11}{section*.14}%
+\contentsline {subsection}{\numberline {4.6}The algorithm: alpha expansion}{11}{subsection.4.6}%
+\contentsline {paragraph}{What pins it.}{11}{section*.15}%
+\contentsline {subsection}{\numberline {4.7}The algorithm: sampling}{12}{subsection.4.7}%
+\contentsline {paragraph}{Regime.}{12}{section*.16}%
+\contentsline {paragraph}{What pins it.}{12}{section*.17}%
+\contentsline {subsection}{\numberline {4.8}Temperature, annealing and tempering}{12}{subsection.4.8}%
+\contentsline {paragraph}{What pins it.}{12}{section*.18}%
+\contentsline {section}{\numberline {5}Problem Statement: Hidden Markov Models}{13}{section.5}%
+\contentsline {subsection}{\numberline {5.1}The model}{13}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}As a factor graph}{13}{subsection.5.2}%
+\contentsline {paragraph}{The emission family is the only part that knows what an observation is.}{13}{section*.19}%
+\contentsline {paragraph}{A density is not a probability.}{13}{section*.20}%
+\contentsline {subsection}{\numberline {5.3}The algorithm: forward--backward}{13}{subsection.5.3}%
+\contentsline {paragraph}{Regime.}{14}{section*.21}%
+\contentsline {paragraph}{What pins it.}{14}{section*.22}%
+\contentsline {subsection}{\numberline {5.4}The algorithm: expectation-maximization}{14}{subsection.5.4}%
+\contentsline {paragraph}{What pins it.}{14}{section*.23}%
+\contentsline {subsection}{\numberline {5.5}Two decodings, and they are different answers}{14}{subsection.5.5}%
+\contentsline {section}{\numberline {6}Problem Statement: The Coupled Spatio-Sequential Model}{14}{section.6}%
+\contentsline {subsection}{\numberline {6.1}The model}{14}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}As a factor graph}{15}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}The estimator: block-coordinate ascent}{16}{subsection.6.3}%
+\contentsline {paragraph}{Why a cluster move.}{16}{section*.24}%
+\contentsline {subsection}{\numberline {6.4}The initializer: data-sampled burn-in}{16}{subsection.6.4}%
+\contentsline {paragraph}{What pins it, and what is built.}{17}{section*.25}%
+\contentsline {section}{\numberline {7}The Properties That Referee Each Method}{17}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Exact answers, where an oracle exists}{17}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Structural invariants, where no oracle reaches}{18}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Recovery, which is the acceptance test for a fit}{18}{subsection.7.3}%
+\contentsline {subsection}{\numberline {7.4}Where the likelihood has no maximum, or no curvature}{18}{subsection.7.4}%
+\contentsline {subsection}{\numberline {7.5}Agreement across implementations is a tolerance}{18}{subsection.7.5}%
+\contentsline {subsection}{\numberline {7.6}Published constants, and asymptotic results}{19}{subsection.7.6}%
+\contentsline {section}{\numberline {8}Relevance to the Roadmap}{19}{section.8}%
+\contentsline {section}{\numberline {A}Derivations Cited From the Text}{21}{appendix.A}%
+\contentsline {subsection}{\numberline {A.1}The Bethe free energy is stationary at a sum-product fixed point}{21}{subsection.A.1}%
+\contentsline {subsection}{\numberline {A.2}Detailed balance for a cluster move in a field}{22}{subsection.A.2}%
+\contentsline {subsection}{\numberline {A.3}The exchange ratio in parallel tempering}{22}{subsection.A.3}%
+\contentsline {subsection}{\numberline {A.4}The delta method for an interval at a fit}{22}{subsection.A.4}%
+\contentsline {section}{\numberline {B}Derivations of the Bounds}{22}{appendix.B}%
+\contentsline {paragraph}{The plug-in bound, \eqref {eq:plugin-bound}.}{22}{section*.27}%
+\contentsline {paragraph}{The parsimony bound, \eqref {eq:parsimony-bound}.}{22}{section*.28}%
+\contentsline {paragraph}{The mean-field bound, \eqref {eq:mean-field-bound}.}{23}{section*.29}%
+\contentsline {paragraph}{The spanning-tree bound, \eqref {eq:spanning-tree-bound}.}{23}{section*.30}%
+\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{23}{section*.31}%
+\contentsline {section}{\numberline {C}Reference Taxonomy}{23}{appendix.C}%
+\contentsline {paragraph}{Infrastructure (build, structure, and speed).}{23}{section*.32}%
+\contentsline {paragraph}{Optimization (discrete and continuous).}{23}{section*.33}%
+\contentsline {paragraph}{Application (the science).}{23}{section*.34}%

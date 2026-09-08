@@ -516,6 +516,30 @@ gradient moves by 1.5e-11 absolute, autograd summing the same terms in a
 different order; the finite-difference check that pins the gradient is
 unaffected.
 
+**Bounds with proofs, certified rather than trusted**
+([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
+surrogate carries its claim — lower bound, upper bound or point prediction —
+and `certify` holds it to the claim on every structure an oracle can score.
+Two one-pass bounds bracket a topology's maximized log-likelihood: one pruning
+evaluation at non-negative least-squares lengths from below, and
+`sum_s log pi(x_1s) - F log k` from above, where `F` is the Fitch score — a
+vertex argument on the multilinear Jukes–Cantor site likelihood that the
+suite checks by enumerating all 256 vertices at five taxa and finding the
+bound attained on every site. Over the 15 topologies of the five-taxon
+fixture at 1,200 sites both hold with no violation; the plug-in bound's worst
+gap is 6.7 nats and its mean 2.9, at 2.4 ms against 254 ms for the fit; the
+parsimony bound costs 0.1 ms and its gap is 2.2 nats per site, so it is a
+bound and not an estimate. The entrywise-limit bound the plan proposed was
+derived and dropped: it sits above zero on every fixture, and the parsimony
+bound dominates it. For a lattice, the naive mean-field bound and the
+tree-reweighted spanning-tree bound (one tree per edge, uniform) sandwich
+`log Z` within 0.049 and 0.028 nats per node on average over 40 random
+open lattices (worst 0.078 and 0.052), both differentiable in the field and
+couplings and both agreeing with central differences to 1e-6 relative; from
+them a bracket on the ground-state energy that on the same lattices at
+`beta = 3` sits 0.028 nats per node below the enumerated minimum. The
+proofs are Appendix B of the textbook.
+
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
@@ -870,6 +894,49 @@ the Python Potts sweep and 5.9 ms for the Rust one, 1.3x and 3.2x, because
 the Python kernel already pays a NumPy call per site. The specialised kernels
 stay the default for the Potts lattice.
 
+**What carries between neighbours, and what does not.** A branch is now
+identified by the leaf split it induces rather than by a node name, so a
+neighbour that shares all but a few branches with its parent starts its fit
+from the parent's lengths
+([#289](https://github.com/michaelJwilson/snakes_and_ladders/issues/289)). The
+warm fit reaches the cold optimum — worst relative gap 5.3e-12 in
+log-likelihood over the 90 SPR neighbours of an eight-taxon tree — and the
+search's answer does not move. What it saves is smaller than the ticket
+hoped, and in one measurement negative: over those 90 neighbours the warm
+fits spent 6,053 likelihood evaluations against 5,145 cold, a single
+neighbour fit costs the same 49 either way, and only a refit of the *same*
+topology from its own lengths drops to 14 — L-BFGS spends its evaluations on
+the branches the move changed, not on the ones it kept. The larger saving is
+lazy scoring: one cached likelihood evaluation at the warm lengths ranks a
+neighbourhood and only the top `K` candidates are fitted, the accepted move
+always in full. Subtree partials are cached keyed on the subtree's structure
+and lengths, and a cached partial equals a recomputed one bitwise, so the
+ranking evaluation is the same arithmetic in the same order. Over four
+random starts on the eight-taxon fixture at 2,000 sites, budget 400 candidates,
+counted in what the search reports:
+
+| move set | run | same optimum as cold | fits | likelihood evaluations |
+| --- | --- | --- | --- | --- |
+| NNI | cold | 4/4 | 68.8 | 5,061 |
+| NNI | warm | 4/4 | 68.8 | 3,660 |
+| NNI | warm, `lazy_top=3` | 4/4 | 26.5 | 1,354 |
+| NNI | warm, `lazy_top=1` | 4/4 | 9.5 | 493 |
+| SPR | cold | 4/4 | 336.8 | 24,423 |
+| SPR | warm | 4/4 | 339.5 | 22,677 |
+| SPR | warm, `lazy_top=3` | 4/4 | 13.8 | 1,032 |
+| SPR | warm, `lazy_top=1` | **2/4** | 5.2 | 579 |
+
+Warm starts alone are worth 28% on NNI and 7% on SPR. Lazy scoring at
+`K = 3` reaches the cold optimum on every start at 3.7x fewer evaluations on
+NNI and 24x fewer on SPR; at `K = 1` it holds on NNI and loses half the SPR
+starts, because the cheap surface ranks an SPR neighbourhood poorly — the
+fitted best sits at lazy rank one in 6 of 6 NNI neighbourhoods and 1 of 6 SPR
+neighbourhoods. So warm starts are the default, `lazy_top` is opt-in with
+`K` chosen per move set from this table, the budget stays in candidates
+scored, and `Inference` reports fits and likelihood evaluations beside it.
+RAxML's three-branch local optimization is not built; its gap to the full
+optimum is the measurement that would license it.
+
 **The accuracy requirement's first half is met.** Normalized Robinson-Foulds
 distance from the inferred to the generating topology is met at the 0.05 bound
 from 125 sites upward, with 8 of 8 replicates recovering the topology exactly at
@@ -1078,6 +1145,38 @@ what says the test has the power it claims.
 paths (`sal.search.alpha_expansion` carries a lattice ICM as its baseline,
 which is a different object). Single-flip local search over the Potts chain exists as an RL
 environment, not as a classical baseline suite.
+
+**A surrogate ranks the SPR neighbourhood the lazy score could not**
+([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). The
+one-evaluation lazy score of #289 put the fitted best at rank one in 1 of 6
+SPR neighbourhoods; on the same six neighbourhoods of the eight-taxon fixture
+at 1,000 sites the plug-in bound puts it first in 6 of 6 and the parsimony
+bound in 5 of 6, at 1.7 ms and 0.1 ms per candidate against 206 ms per fit.
+`infer(..., lazy_top=1, surrogate=)` ranks by any surrogate and fits only the
+top candidate. Over four random SPR starts at budget 400: the full search
+reaches its optimum from 4/4 at 312 fits and 20,718 likelihood evaluations;
+`lazy_top=1` alone reaches it from 2/4 at 5.5 fits; ranked by the plug-in
+bound, the parsimony bound, or a learned predictor, 4/4 at 5 fits and 275
+evaluations — 62 times fewer fits and 75 times fewer evaluations for the same
+answer. Learned predictors read the bound features and are trained on the
+gap above the plug-in bound, so a poor fit falls back to the bound: a linear
+model, a deep MLP, a Deep Sets model over branch tokens, a one-block
+attention model and a graph network over the tree all reach held-out R^2 at
+or above 0.999 on 15-topology neighbourhoods of the five-taxon fixture
+(16 alignments, split 10/3/3 by alignment) and 0.98 on the two held-out SPR
+neighbourhoods at eight taxa, ranking the fitted best first on every held-out
+neighbourhood; the three token models return the same value for a tree with
+its children shuffled, to 1e-13. The curriculum 5 → 6 taxa measures what
+ROADMAP §2.2 predicts: zero-shot at six taxa the set model falls to R^2 0.68
+and recovers to 0.94 after transfer; the MLP holds 0.92 zero-shot and 0.95
+transferred. On lattices the models predict the gap above the mean-field
+bound with R^2 0.996–0.999 held out (2×2 to 2×4), transfer zero-shot to
+3×4 and 4×6 at 0.99, and the ground-state energy is learned exactly because
+alpha expansion, one of the features, reaches it on every small lattice.
+A calibrated bound is a rate claim: at nominal coverage 0.9 the lower bound
+held on 100% of 45 held-out examples and the upper on 80%, so the claim
+transfers on one side and not the other with three calibration alignments,
+and `certify` at the stated rate is what says which.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
