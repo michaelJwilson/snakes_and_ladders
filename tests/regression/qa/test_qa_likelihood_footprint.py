@@ -122,7 +122,7 @@ def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
         tau = with_uniform_branch_lengths(topology, 0.1)
         alignment = dict(
             simulate_alignment(
-                tau=tau, k=4, pi=pi, seed=1, n_sites=FIXED_SITES
+                tau=tau, k=4, pi=pi, rng=np.random.default_rng(1), n_sites=FIXED_SITES
             ).alignment
         )
         tracemalloc.start()
