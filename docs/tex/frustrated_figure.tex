@@ -1,0 +1,59 @@
+% The frustrated instances of Section~\ref{sec:frustrated}, drawn by hand.
+% Input by textbook.tex; a sketch and not a rendered figure, so it is outside
+% the figure cache and the render cap, which govern generated output only.
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    scale=1.05,
+    spin/.style={circle, draw, minimum size=0.44cm, inner sep=0pt, font=\tiny, fill=white},
+    up/.style={circle, draw, fill=black!10, minimum size=0.44cm, inner sep=0pt, font=\tiny},
+    down/.style={circle, draw, fill=black!45, text=white, minimum size=0.44cm, inner sep=0pt, font=\tiny},
+    bond/.style={draw, thick},
+    agree/.style={draw, very thick, dashed}
+]
+  % A patch of the triangular lattice: each row offset by half a spacing.
+  \foreach \j in {0,1,2} {
+    \foreach \i in {0,...,3} {
+      \coordinate (n\i\j) at ({\i + 0.5*\j}, {0.87*\j});
+    }
+  }
+  \foreach \j in {0,1,2} {
+    \foreach \i in {0,1,2} {
+      \draw[bond] (n\i\j) -- ({\i + 1 + 0.5*\j}, {0.87*\j});
+    }
+  }
+  \foreach \j in {0,1} {
+    \foreach \i in {0,1,2} {
+      \draw[bond] (n\i\j) -- ({\i + 0.5*\j + 0.5}, {0.87*\j + 0.87});
+      \draw[bond] ({\i + 1 + 0.5*\j}, {0.87*\j}) -- ({\i + 0.5*\j + 0.5}, {0.87*\j + 0.87});
+    }
+  }
+  \foreach \j in {0,1,2} {
+    \foreach \i in {0,...,3} {
+      \node[spin] at (n\i\j) {};
+    }
+  }
+  % One triangle: two spins disagree and the third bond cannot.
+  \draw[agree] (n00) -- (n01);
+  \node[up]   at (n00) {$+$};
+  \node[down] at (n10) {$-$};
+  \node[up]   at (n01) {$+$};
+  \node[anchor=west, font=\footnotesize] at (4.2, 1.30)
+    {one agreeing bond per triangle};
+  \node[anchor=west, font=\footnotesize] at (4.2, 0.75)
+    {$3N$ bonds, $2N$ triangles};
+  \node[anchor=west, font=\footnotesize] at (4.2, 0.20)
+    {$E_{\min} = |J|\,N$ at zero field};
+\end{tikzpicture}
+\caption{A patch of the periodic triangular antiferromagnet. Every bond wants
+its endpoints to disagree, and a triangle is not two-colourable, so at least
+one bond per triangle agrees --- the dashed bond of the labelled triangle,
+where $+$ and $-$ are the two states. Counting (triangle, agreeing bond)
+pairs over the $2N$ triangles and $3N$ bonds gives
+Equation~\ref{eq:triangular-ground-state}, a ground-state energy known at
+every size and attained by many configurations. The planted spin glass of
+Equation~\ref{eq:planted-energy} is the same picture on a sparse random graph
+with a fraction of the couplings inverted. A sketch of the structure and not
+a rendering of any instance.}
+\label{fig:frustrated:sketch}
+\end{figure}

@@ -1,0 +1,42 @@
+% The min-plus tree of Section~\ref{sec:parsimony}, drawn by hand. Input by
+% textbook.tex; a sketch and not a rendered figure, so it is outside the
+% figure cache and the render cap, which govern generated output only.
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    scale=1.0,
+    node distance=0pt,
+    internal/.style={circle, draw, minimum size=0.72cm, inner sep=0.5pt, font=\footnotesize, fill=white},
+    leaf/.style={circle, draw, fill=black!12, minimum size=0.55cm, inner sep=0.5pt, font=\footnotesize},
+    cost/.style={rectangle, draw, fill=white, minimum size=0.16cm, inner sep=0pt},
+    branch/.style={draw, thick}
+]
+  \node[internal] (root) at (0, 3.4) {$\{A\}$};
+  \node[internal] (u)    at (-2.0, 1.9) {$\{A\}$};
+  \node[internal] (v)    at (2.0, 1.9) {$\{A,C\}$};
+  \foreach \name/\pos/\state in {a/-3.1/A, b/-0.9/A, c/0.9/A, d/3.1/C} {
+    \node[leaf] (\name) at (\pos, 0.4) {$\state$};
+  }
+  \foreach \parent/\child in {root/u, root/v, u/a, u/b, v/c, v/d} {
+    \draw[branch] (\parent) -- node[cost, pos=0.5] {} (\child);
+  }
+  % The one change any labelling must pay, on the branch the union forces.
+  \draw[thick, dashed] (2.0, 1.9) -- (3.1, 0.4);
+  \node[anchor=west, font=\footnotesize] at (3.3, 1.1) {one change};
+  \node[anchor=west, font=\footnotesize] at (3.3, 3.4)
+    {$W_{ij}$ on each branch};
+  \node[anchor=west, font=\footnotesize] at (3.3, 2.9)
+    {$0$ on agreement};
+\end{tikzpicture}
+\caption{One site of large parsimony as the same tree factor graph in the
+min-plus semiring. Shaded circles are the observed characters, open circles
+the Fitch sets of Equation~\ref{eq:fitch} carried up the tree, and squares
+the branch factors, whose table is $0$ on agreement and $W_{ij}$ otherwise
+(Equation~\ref{eq:sankoff}). The right-hand cherry disagrees, so its parent
+takes the union and the site's score is one change, drawn dashed on the
+branch that pays it. The structure is Figure~\ref{fig:phylo:sketch} with the
+probabilities replaced by costs and the branch lengths removed; the search
+over the $(2n-5)!!$ topologies is what makes the problem large parsimony. A
+sketch of the structure and not a rendering of any instance.}
+\label{fig:parsimony:sketch}
+\end{figure}

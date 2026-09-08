@@ -50,6 +50,8 @@ $\objective$   & the scalar being minimized \\
 $\energy$      & a Hamiltonian \\
 $\hidden$      & a hidden state path \\
 $\emission$    & an emission family \\
+$\parity$      & a parity-check matrix; the codewords are the $c$ with $\parity c = 0$ \\
+$\hadamard$    & the Sylvester--Hadamard matrix, italic where $\parity$ is bold \\
 \midrule
 $x_i$          & a discrete variable of a factor graph, $x_i \in \states$ \\
 $\psi_a$       & a factor: a non-negative function of the variables $x_{\partial a}$ it touches \\
@@ -75,10 +77,14 @@ and a hidden state $z_t$, because those are the names a reader arrives with.
 The identification is made once, where each model is stated as a factor graph,
 and not repeated: $x_i \equiv \sigma_i$ on a Potts graph, $x_t \equiv z_t$ on a
 chain, $x_u \equiv z_u$ at a node of a tree. Every section then carries the
-same four parts---the model, the model as a factor graph, the algorithm as the
-instance of Equation~\ref{eq:sum-product} or of the optimization it is, and
-the property that pins it---so that what differs between the problems is
-visible as content and not as presentation.
+same five parts, in this order: the model; the sizes it is supported at,
+stated from the fixtures and the size tiers; the model as a factor graph,
+with a sketch of that structure; the algorithms as instances of
+Equation~\ref{eq:sum-product} or of the optimization each is, stated in the
+appendix and cited from the section; and the validation, one referee at a
+time with what it does and does not establish. What differs between the
+problems is then visible as content and not as presentation, and a section
+missing one of the five parts fails a guard rather than a review.
 
 \section{The Shape All Four Problems Share}
 \label{sec:shape}
@@ -423,9 +429,9 @@ proved (Appendix~\ref{app:bounds}) and \emph{certified}: checked against the
 exact value on every structure an oracle can score, with no violation allowed.
 A learned predictor is \emph{calibrated} instead, shifted by a quantile of its
 held-out residuals, and certified to the coverage it claims. The search
-ranks a neighbourhood by a surrogate and fits only the top candidates; the
-accepted move is always evaluated in full, so a surrogate changes what is
-fitted and never what is reported.
+ranks a neighbourhood by a surrogate and fits only the top candidates
+(Algorithm~\ref{alg:surrogate-rank}); the accepted move is always evaluated
+in full, so a surrogate changes what is fitted and never what is reported.
 
 For a topology the maximized log-likelihood $\ell^\ast(\tree) = \max_{\branch}
 \ell(\tree, \branch)$ is bracketed by two one-pass quantities. Any feasible
@@ -482,6 +488,7 @@ $e^{-\beta E_{\min}} \le Z(\beta) \le k^N e^{-\beta E_{\min}}$,
 \label{sec:phylo}
 
 \subsection{The model}
+\label{sec:phylo:model}
 Character evolution along a branch is a continuous-time Markov chain with rate
 matrix $\Q$; the transition probabilities over a branch of length $t$ are the
 matrix exponential $\Pmat(t) = \exp(\Q t)$ \citep{felsenstein2004}. A
@@ -520,6 +527,22 @@ the product over the branches $(u \to v)$ of the rooted tree with the leaves
 fixed by the data---$k^{\,n-2}$ terms per site for a binary tree. Summing it
 directly is the oracle every faster evaluation of it is checked against.
 
+\paragraph{Supported sizes.}
+\label{par:phylo:sizes}
+The declared range is $n \in [10, 1000]$ taxa by $L \in [100, 11{,}000]$ sites,
+and the largest evaluation measured is 200 taxa by 11,000 sites. What is
+\emph{refereed} is smaller, because the referee is an enumeration: the
+$(2n-5)!!$ unrooted topologies number 15 at five taxa, 105 at six, 945 at
+seven and 10,395 at eight, so the per-pull-request tier carries the five- and
+six-taxon fixtures, the stress tier seven, and the release tier eight and the
+twenty- and fifty-taxon trees that only the distance start referees. Direct
+marginalization over the $k^{\,n-2}$ internal assignments of
+Equation~\ref{eq:site-independence} referees the likelihood on the same
+fixtures at $k = 4$ and $L$ from 200 to 200,000 sites. The Hadamard start is
+offered from three to twelve taxa, its spectrum having $2^{n-1}$ entries, and
+every enumeration here refuses more than 200,000 configurations rather than
+attempting them.
+
 \subsection{As a factor graph}
 One site is one instance of Equation~\ref{eq:factor-graph}. The variables are
 the states $x_u \equiv z_u \in \states$ at every node $u$ of the rooted tree,
@@ -534,6 +557,9 @@ $p(\data_s \mid \tree, \branch, \Q)$; sites being independent
 product of $L$ such $Z$. In the Forney form every internal node's state is an
 edge through an equality factor of degree three---two branches and, at the
 root, the prior---which is the drawing Section~\ref{sec:coupled} uses.
+Figure~\ref{fig:phylo:sketch} is that structure on four taxa.
+
+\input{phylo_figure}
 
 \qacaptionread{figures/sim_tree_caption.txt}{\simTreeCaption}
 \begin{figure}[htbp]
@@ -753,14 +779,14 @@ pairwise. \citet{hendy1993} index the $2^{n-1}$ site patterns by the set of
 taxa differing from a reference taxon, and the same subsets index the splits
 of the leaf set; with $s$ the pattern frequencies and $q$ the branch length on
 each split, zero where the tree has no such branch, the two are conjugate
-under the Sylvester--Hadamard matrix $H$ of that order,
+under the Sylvester--Hadamard matrix $\hadamard$ of that order,
 \begin{equation}
-  s = H^{-1} \exp(H q), \qquad q = H^{-1} \log(H s),
+  s = \hadamard^{-1} \exp(\hadamard q), \qquad q = \hadamard^{-1} \log(\hadamard s),
   \label{eq:hadamard}
 \end{equation}
 so the exact spectrum returns the tree's own lengths on its splits and zero
-elsewhere. The \emph{closest tree} takes the $n-3$ largest mutually
-compatible weights of an estimated $q$. A four-state Jukes--Cantor alignment
+elsewhere. The \emph{closest tree}, Algorithm~\ref{alg:hadamard-start}, takes the $n-3$
+largest mutually compatible weights of an estimated $q$. A four-state Jukes--Cantor alignment
 reduces to the two-state model exactly by grouping the states in pairs, at
 $\tfrac{2}{3}$ of every branch length; the four-state conjugation proper is
 over the Klein four-group and is not implemented. Both estimators are a
@@ -780,10 +806,52 @@ evaluated on every pattern, which shares nothing with the transform. And the
 starts against the objective's own, at equal evaluations, through the
 budgeted comparison of Section~\ref{sec:properties}.
 
+\subsection{Validation}
+\label{sec:phylo:validation}
+Each referee below establishes one thing and is silent about the rest; the
+list is what the section may claim, and the paragraphs above say where each
+check sits.
+\begin{itemize}
+  \item \emph{Direct marginalization} over the $k^{\,n-2}$ internal
+    assignments, Equation~\ref{eq:site-independence}, shares no traversal
+    with Equation~\ref{eq:pruning} and establishes that the recursion
+    computes the marginal it claims, to a relative tolerance. It does not
+    reach past the taxon count the supported sizes above give, and says
+    nothing about the rescaling at lengths where the unscaled product would
+    underflow.
+  \item \emph{The closed form} Equation~\ref{eq:jc} referees the simulator
+    through the empirical substitution frequencies along a branch. It
+    establishes that the generative direction is the model; it does not check
+    the likelihood, and deliberately so, since a simulator checked against the
+    evaluator fitted to its output referees nothing.
+  \item \emph{The pulley principle} --- a reversible model's likelihood is
+    unchanged by where the root sits along a branch --- and the gradient
+    against central differences hold past every enumerable size. They are
+    invariants, not answers: both are satisfied by a wrong likelihood that is
+    wrong reversibly.
+  \item \emph{Topology enumeration} of the $(2n-5)!!$ candidates referees the
+    search, which must reach the enumerated maximum, and the neighbourhood
+    counts $2(n-3)$ and $2(n-3)(2n-7)$ are asserted exactly over every
+    topology. It establishes that the climb found the best tree at those
+    sizes; past them nothing here says the climb succeeded, which is what a
+    branch-and-bound bound would supply.
+  \item \emph{Recovery of the simulated truth} --- the generating topology at
+    a stated site count, and branch lengths covered by their intervals at the
+    nominal rate --- is the referee where no oracle reaches. It establishes
+    that the whole pipeline is calibrated on data from its own model; it
+    establishes nothing about data the model does not describe.
+  \item \emph{The path lengths of a known tree} referee neighbor joining
+    exactly on an additive matrix, and Atteson's radius bounds when an
+    estimated matrix still recovers the topology. Outside that radius the
+    start is a start and not an estimate, and only the fit that follows it is
+    reported.
+\end{itemize}
+
 \section{Problem Statement: Potts Models in an External Field}
 \label{sec:potts}
 
 \subsection{The model}
+\label{sec:potts:model}
 On a graph $\graph$, each node $i$ carries a spin $\sigma_i \in \{1, \dots, q\}$
 and the energy is
 \begin{equation}
@@ -795,6 +863,21 @@ with couplings $J_{ij}$ and an external field $h_i$ \citep{mezard2009}. The
 Boltzmann distribution is $p(\sigma) \propto \exp(-\energy(\sigma))$, and its
 normalizer sums over $q^{|V|}$ configurations.
 
+\paragraph{Supported sizes.}
+\label{par:potts:sizes}
+The exact referee is the $q^{|V|}$ enumeration, refused past 200,000
+configurations, which puts the ceiling at eleven nodes at three states and
+seventeen at two. The fixtures sit under it: a chain of twelve sites at three
+states over 400 replicates, and an open $3 \times 3$ lattice at three states,
+whose $3^9 = 19{,}683$ configurations give the exact normalizer and every
+marginal. Above it the transfer matrix referees a strip of any length at a
+width that fits, belief propagation is compared on the $8 \times 8$ lattice
+where nothing is exact, the minimum cut is checked at extents 8, 12 and 16,
+and the cluster moves are separated from single-site sweeps at extents 8 and
+24. The general graph carries $G(n, p)$ instances to a thousand nodes,
+refereed by the planted energy of Section~\ref{sec:frustrated} rather than by
+any enumeration.
+
 \subsection{As a factor graph}
 The variables are the spins, $x_i \equiv \sigma_i$. The factors are one unary
 $\psi_i(\sigma_i) = e^{h_i(\sigma_i)}$ per node and one pairwise
@@ -805,6 +888,9 @@ $\beta = 1/T$, which is the same graph with $J$ and $h$ scaled; nothing else
 about the model changes, and that is why a tempered chain can be held to the
 unscaled model's enumeration. The graph is a tree exactly when $\graph$ is,
 which is the regime every exact claim below is confined to.
+Figure~\ref{fig:potts:sketch} is that structure on the square lattice.
+
+\input{potts_figure}
 
 \subsection{Why an odd cycle is the whole story}
 A two-state antiferromagnet ($J < 0$) wants every edge to disagree, which is
@@ -915,8 +1001,8 @@ expansion approximates it by a sequence of exact two-state problems
 \citep{boykov2001}. An \emph{expansion} on label $\alpha$ lets every site keep
 its label or switch to $\alpha$; the best such move is the minimum cut of a
 two-state graph built from the current labelling, exact when the pairwise term
-is a metric on labels, which $\delta(\sigma_i, \sigma_j)$ is. Cycling over
-$\alpha$ until no expansion lowers the energy reaches a local minimum within a
+is a metric on labels, which $\delta(\sigma_i, \sigma_j)$ is. Cycling over $\alpha$ until no expansion lowers the energy,
+Algorithm~\ref{alg:alpha-expansion}, reaches a local minimum within a
 constant of the global one,
 \begin{equation}
   \energy(\hat\sigma) \;\le\; 2\,c\,\energy(\sigma^\star),
@@ -943,7 +1029,8 @@ The single-site heat bath draws each spin from its conditional,
     \exp\!\Big(\beta \big[\textstyle\sum_{j \in \partial i} J_{ij}\,\delta(\sigma_i, \sigma_j) + h_i(\sigma_i)\big]\Big),
   \label{eq:heat-bath}
 \end{equation}
-one site at a time; a \emph{sweep} is one update of every site. Near a
+one site at a time; a \emph{sweep} is one update of every site,
+Algorithm~\ref{alg:heat-bath}. Near a
 critical coupling correlated regions span the lattice and single-site moves
 decorrelate slowly. Cluster moves flip such regions together
 \citep{swendsen1987, wolff1989, newman1999}: in the Edwards--Sokal
@@ -960,6 +1047,9 @@ probability on the field energy alone,
 \end{equation}
 for a cluster $\mathcal{C}$ recoloured from $\mu$ to $\nu$, which restores
 detailed balance (Appendix~\ref{app:detailed-balance}).
+Algorithm~\ref{alg:cluster-move} is the construction and
+Algorithm~\ref{alg:parallel-tempering} the replica exchange of
+Section~\ref{sec:tempering} over it.
 
 \paragraph{Regime.}
 Every move preserves the Boltzmann distribution at $\beta$, so a sweep may not
@@ -1030,14 +1120,63 @@ of sweeps is not a property of the algorithms but of the instance, and is
 measured on the frustrated, past-enumeration instances the roadmap needs,
 never asserted in general.
 
+\subsection{Validation}
+\label{sec:potts:validation}
+\begin{itemize}
+  \item \emph{Enumeration of the $q^{|V|}$ configurations} referees $\log Z$,
+    every marginal, and the ground state at the sizes above. It establishes
+    exactness there and nothing at all past them, which is why every claim
+    about a larger lattice is either a structural invariant or a measurement.
+  \item \emph{The transfer matrix} referees the normalizer of a strip
+    independently of the message passing, so a chain and a narrow lattice have
+    an oracle past enumeration. It establishes agreement at a width, not a
+    bound on the error at any width.
+  \item \emph{Zero coupling} is where belief propagation is exact on any
+    graph. It establishes that the loopy implementation reduces correctly; the
+    deviation away from it is reported as a measurement and asserted against
+    nothing, because asserting agreement with the truth on a loopy graph would
+    assert something false.
+  \item \emph{A minimum cut} referees the two-state submodular ground state
+    exactly at any size max-flow reaches, and alpha expansion must reproduce
+    it at two labels. It establishes the multi-label solver's construction; it
+    does not establish the multi-label optimum, whose bound
+    Equation~\ref{eq:alpha-expansion} states as a theorem while the realized
+    ratio is measured beside it.
+  \item \emph{A goodness-of-fit test against the enumerated Boltzmann
+    distribution}, thinned by several autocorrelation times, referees a
+    sampler. It establishes the distribution the chain converges to at an
+    enumerable size; it establishes no mixing time, and its power is itself
+    pinned by a paired negative --- the same move set with the field accept
+    step removed runs, mixes, and is rejected.
+  \item \emph{The unscaled model's enumeration}, with exchanges on, referees
+    every replica's marginal in parallel tempering. It establishes that the
+    exchange ratio does not contaminate the cold replica; whether tempering
+    beats restarts at an equal budget is a property of the instance and is
+    measured on the frustrated instances of Section~\ref{sec:frustrated},
+    never asserted in general.
+\end{itemize}
+
 \section{Problem Statement: Hidden Markov Models}
 \label{sec:hmm}
 
 \subsection{The model}
+\label{sec:hmm:model}
 A hidden path $\hidden = (z_1, \dots, z_T)$ over $k$ states evolves by an
 initial distribution $\bpi$ and a transition matrix $\mathbf{A}$; each position
 emits an observation from an emission family $\emission$ indexed by its state.
 The evidence marginalizes $k^T$ paths.
+
+\paragraph{Supported sizes.}
+\label{par:hmm:sizes}
+The exact referee is that $k^T$ path enumeration, refused past 200,000 paths,
+so the oracle reaches eleven positions at three states and seventeen at two.
+The fixture is three states, four symbols and fifteen positions over 600
+sequences: long enough that a fit recovers the transition matrix, short enough
+that any window of it enumerates. Six emission families run against the same
+recursions, and the recursions themselves are exact at every length, the chain
+being a tree; the release tier fits sequences past the enumerable length and
+is refereed there by recovery of the simulated parameters alone, up to the
+permutation of hidden states.
 
 \subsection{As a factor graph}
 The variables are the hidden states, $x_t \equiv z_t$. The factors are
@@ -1049,6 +1188,9 @@ way and the graph is over latent variables only. The chain is a tree, and $Z$
 is the evidence $p(\data)$. An interior state sits on three factors, so in
 the Forney form it passes through an equality node---the drawing
 Section~\ref{sec:coupled} uses for each class's chain.
+Figure~\ref{fig:hmm:sketch} is that structure on five positions.
+
+\input{hmm_figure}
 
 \paragraph{The emission family is the only part that knows what an observation
 is.} Everything else---the recursions, the expectation step, path
@@ -1110,9 +1252,10 @@ validated by a decoder, and it is pinned in turn against algebra: quantities
 that can be worked out by hand on a two-state, two-step chain.
 
 \subsection{The algorithm: expectation-maximization}
-Baum--Welch alternates a posterior over hidden states given the parameters with
-a re-estimate of the parameters given that posterior, and increases the
-likelihood at every iteration \citep{mackay2003}. The initial distribution and
+Baum--Welch, Algorithm~\ref{alg:baum-welch}, alternates a posterior over
+hidden states given the parameters with a re-estimate of the parameters given
+that posterior, and increases the likelihood at every iteration
+\citep{mackay2003}. The initial distribution and
 the transitions re-estimate in closed form for every family; the emission
 re-estimate is the family's own, and \emph{whether it is a formula} is the
 property that separates the families. A weighted mean is; a dispersion
@@ -1139,11 +1282,45 @@ suite with no case where they diverge. Equation~\ref{eq:viterbi} and the
 argmax of Equation~\ref{eq:posterior} are those two decodings; the fixture on
 which they differ is constructed and kept, because it is the only kind of case
 that can tell an implementation of one from an implementation of the other.
+Sampling the path posterior rather than decoding it is
+Algorithm~\ref{alg:chain-block}, the block sweep the coupled model's E step
+also uses.
+
+\subsection{Validation}
+\label{sec:hmm:validation}
+\begin{itemize}
+  \item \emph{The sum over all $k^T$ paths}, written out term by term with no
+    recursion, referees the evidence, both decodings and every posterior at
+    the lengths above. It establishes the recursions exactly; it is the oracle
+    that separates the two decodings, so it cannot itself be checked by a
+    decoder, and it is pinned in turn against quantities worked out by hand on
+    a two-state, two-step chain.
+  \item \emph{Central differences} referee the gradient past the enumerable
+    length. They establish that the differentiable path agrees with the
+    recursion's own value; they establish nothing about that value.
+  \item \emph{Monotonicity} referees expectation--maximization at every
+    iterate. It establishes that the M step is an ascent, which is the one
+    property the algorithm guarantees; it does not establish that the fixed
+    point is the maximum, which is why the fixed point is also required to
+    agree with an independent gradient fit of the same likelihood.
+  \item \emph{Recovery up to the permutation of hidden states} is the referee
+    where no oracle reaches. It establishes calibration on data from the
+    model, with the alignment an explicit part of the test rather than an
+    accident of labelling; on a family whose M step is itself an optimization
+    it also pins the refusals at the boundary, a dispersion the data cannot
+    identify being refused and not clamped.
+  \item \emph{The declared support} decides what may be asserted at all: for
+    a family over a countable alphabet the evidence is a probability and
+    $\log p(\data) \le 0$; for a family over the reals it is a density and
+    carries no such bound. A check written against the first is false under
+    the second.
+\end{itemize}
 
 \section{Problem Statement: The Coupled Spatio-Sequential Model}
 \label{sec:coupled}
 
 \subsection{The model}
+\label{sec:coupled:model}
 Observations $x_{sn}$ are indexed by a spatial node $n$ of a graph $\graph$ and
 a sequential position $s = 1, \dots, S$. Each node carries a class label
 $\ell_n \in \{1, \dots, M\}$; each class $m$ carries its own hidden chain
@@ -1172,6 +1349,18 @@ Potts model in a field the chains define; marginalizing $\ell$ recovers a
 mixture of hidden Markov models. Neither marginal is tractable on its own, and
 the structure of the joint is what dictates the estimator.
 
+\paragraph{Supported sizes.}
+\label{par:coupled:sizes}
+The joint has $M^{N} K^{SM}$ states, so the enumerable instance is small: the
+canonical one is a $2 \times 2$ open lattice at $M = K = 2$ over $S = 6$
+positions, $2^4 \cdot 2^{12} = 65{,}536$ joint states, inside the 200,000-state
+refusal and with its emissions separated far enough that a draw at $S = 6$
+identifies the classes. Past it the model runs on the lattices of
+Section~\ref{sec:potts} at the sizes stated there, with the number of classes
+and chain states in single figures and the number of positions in the tens,
+and is refereed by the planted labels alone --- which is the cell
+Section~\ref{sec:applicability} marks as wanting an oracle.
+
 \subsection{As a factor graph}
 The variables are the $N$ labels and the $S M$ chain states. The factors are
 the pairwise Potts factors of Section~\ref{sec:potts} on the labels, the chain
@@ -1181,7 +1370,7 @@ $p(x_{sn} \mid k_{s,m}, \theta_m)$ when $\ell_n = m$ and to one otherwise. A
 label sits on every emission factor of its node and on every Potts factor of
 its edges; in the Forney form it passes through an equality node of that
 degree, and the gated factors are the higher-degree nodes that join the
-lattice to the chains (Figure~\ref{fig:coupled-factor-graph}). The graph has cycles, so Equation~\ref{eq:sum-product}
+lattice to the chains (Figure~\ref{fig:coupled:sketch}). The graph has cycles, so Equation~\ref{eq:sum-product}
 is the Bethe approximation on it, and the exact quantities below come from
 enumeration on an instance small enough to enumerate---a $2 \times 2$ lattice
 with $M = 2$, $K = 2$, $S = 3$ has $2^4 \cdot 2^{12}$ joint states.
@@ -1301,10 +1490,38 @@ whether a cluster move escapes what iterated conditional modes freezes into
 is a measurement here and not a premise---and on the planted lattice it is
 the start, not the move, that decides it.
 
+\subsection{Validation}
+\label{sec:coupled:validation}
+\begin{itemize}
+  \item \emph{The joint written out} on every assignment of the enumerable
+    instance referees the constructed factor graph's log-density, at equality.
+    It establishes that the three adapters compose into the model
+    Equation~\ref{eq:joint} states; it establishes nothing about any inference
+    on it.
+  \item \emph{Enumeration} of the same instance referees the simulator's
+    label and state marginals and the per-class posteriors. It establishes
+    exactness at $2^4 \cdot 2^{12}$ states and stops there.
+  \item \emph{Central differences} referee the gradient identity
+    Equation~\ref{eq:coupled-m-step}. It establishes the M step's derivative,
+    not the E step's posterior, which the enumeration above covers separately.
+  \item \emph{Monotonicity of the joint across every block}, for each of the
+    three label solvers, referees the ascent. It establishes that no block
+    decreases the likelihood; it does not order the solvers, and cannot, since
+    a monotone ascent to a worse fixed point is still monotone.
+  \item \emph{The planted labels}, recovered up to permutation at an equal
+    budget of sweeps, are the referee for the label solvers past enumeration.
+    They establish which solver reaches the planted labelling on this fixture
+    --- where the measurement says it is the start and not the move that
+    decides it --- and they do not establish that the planted labelling is the
+    maximum of Equation~\ref{eq:label-ground-state}, which is what the
+    enumerated MAP labelling on the canonical instance would add.
+\end{itemize}
+
 \section{Problem Statement: Large Parsimony}
 \label{sec:parsimony}
 
 \subsection{The model}
+\label{sec:parsimony:model}
 Parsimony is the phylogenetic criterion with no model: a topology is scored
 by the fewest state changes that explain the alignment, Equation~\ref{eq:fitch}
 under unit costs and Equation~\ref{eq:sankoff} under a step matrix, with no
@@ -1322,9 +1539,23 @@ NP-hard in general, which is why it is stated as the discrete half of
 Section~\ref{sec:phylo} with the continuous half removed, and why the same
 neighbourhoods and the same budget accounting serve it.
 
+\paragraph{Supported sizes.}
+\label{par:parsimony:sizes}
+The same sizes as Section~\ref{sec:phylo}, with the ceiling set by the same
+$(2n-5)!!$ enumeration --- five and six taxa per pull request, seven at the
+stress tier, eight at the release tier, where 10,395 topologies each cost one
+post-order pass rather than one optimization. A candidate being that much
+cheaper is the point: at an equal budget of candidates scored, the parsimony
+climb reaches a neighbourhood an order of magnitude larger than the likelihood
+climb, and the trade is that the criterion is the wrong one in the region
+Figure~\ref{fig:parsimony-zones} names. The brute force over every labelling
+of the internal nodes is $k^{\,n-2}$ per site and obeys the same 200,000-state
+refusal.
+
 \subsection{As a factor graph}
 One site is the tree factor graph of Section~\ref{sec:phylo} in the
-min-plus semiring: the pairwise factor on a branch is the cost of a change,
+min-plus semiring (Figure~\ref{fig:parsimony:sketch}): the pairwise factor on
+a branch is the cost of a change,
 $0$ on agreement and $W_{ij}$ otherwise, a leaf's indicator is $0$ at its
 observed state and $\infty$ elsewhere, and the root prior is constant.
 Max-product with the sum replaced by a minimum and the product by a sum is
@@ -1333,6 +1564,8 @@ the same minimum. The criterion is therefore the short-branch limit of
 Equation~\ref{eq:pruning}, and Equation~\ref{eq:parsimony-bound} is where
 that limit re-enters the likelihood problem, as an upper bound on
 $\ell^{\ast}(\tree)$ a search can rank a neighbourhood by.
+
+\input{parsimony_figure}
 
 \qacaptionread{figures/parsimony_zones_caption.txt}{\parsimonyZonesCaption}
 \begin{figure}[htbp]
@@ -1343,8 +1576,8 @@ $\ell^{\ast}(\tree)$ a search can rank a neighbourhood by.
 \end{figure}
 
 \subsection{The algorithm: hill climbing on the score}
-The climb of Section~\ref{sec:phylo} with the fit replaced by one
-post-order pass: a random start by stepwise insertion, the best neighbour
+The climb of Section~\ref{sec:phylo}, Algorithm~\ref{alg:hill-climbing},
+with the fit replaced by one post-order pass: a random start by stepwise insertion, the best neighbour
 under nearest-neighbour interchange or subtree prune-and-regraft taken while
 one improves, each topology scored at most once, and the budget counted in
 candidates scored. A candidate costs one pass rather than one optimization,
@@ -1374,10 +1607,39 @@ from every start where it reaches, with the Felsenstein-zone fixture asserted
 to return the wrong tree while the likelihood optimum on the same alignment
 is the right one.
 
+\subsection{Validation}
+\label{sec:parsimony:validation}
+\begin{itemize}
+  \item \emph{A brute force over every labelling of the internal nodes},
+    which shares no traversal with either recursion, referees the score at
+    exact equality. It establishes both recursions on a given tree; it says
+    nothing about the search.
+  \item \emph{Fitch against Sankoff under the unit step matrix}, on every
+    topology of a fixture, referees the two implementations against each
+    other. It establishes that the set recursion and the cost recursion are
+    the same criterion; being two of ours, it is agreement and not truth,
+    which is what the brute force above supplies.
+  \item \emph{Enumeration of Equation~\ref{eq:large-parsimony}'s domain}
+    referees the climb from every start where it reaches. It establishes that
+    the search found the minimum-score topology at those taxon counts.
+  \item \emph{The Felsenstein-zone fixture} referees the criterion rather
+    than the code: its enumerated parsimony optimum is asserted to be the
+    wrong tree while the likelihood optimum on the same alignment is the right
+    one. It establishes that the implementation reproduces a known statistical
+    inconsistency, which is the one case an implementation that is merely
+    broken cannot pass; it establishes nothing about accuracy outside that
+    zone, for which the Farris-zone pair is kept.
+  \item \emph{The metric condition on the step matrix} is checked as a
+    refusal, not as a result: an asymmetric matrix scores each rooting of an
+    unrooted topology differently and is refused rather than scored at an
+    arbitrary root.
+\end{itemize}
+
 \section{Problem Statement: Frustrated Lattices}
 \label{sec:frustrated}
 
 \subsection{The model}
+\label{sec:frustrated:model}
 Two instances of Equation~\ref{eq:potts} whose ground-state energy is known
 from outside, admitted because more than one algorithm is scored against
 them. The first is the two-state antiferromagnet, $J < 0$, on the periodic
@@ -1408,13 +1670,29 @@ ground state itself: at $f = 0$ the instance is a gauge transform of the
 ferromagnet and trivial, and as $f$ grows the planted state stops being
 near-optimal (Figure~\ref{fig:frustrated-lattices}).
 
+\paragraph{Supported sizes.}
+\label{par:frustrated:sizes}
+Both instances state their answer at every size, so unlike every other
+section here the size is not bounded by an oracle. The periodic triangular
+lattice is carried at $3 \times 3$, $4 \times 4$ and $9 \times 9$; the first
+two are inside the $2^{|V|}$ enumeration, which attains
+Equation~\ref{eq:triangular-ground-state} and measures its degeneracy, and
+the third is past it, where the same closed form still holds. The planted
+spin glass is carried from ten to a thousand nodes at mean connectivity
+three and four, with the inverted fraction $f$ swept: at $f = 0$ the instance
+is a gauge transform of the ferromagnet and measures nothing, and the useful
+range is where the planted state stops being near-optimal.
+
 \subsection{As a factor graph}
 The factor graph of Section~\ref{sec:potts} with $\psi_{ij} = e^{J_{ij}
 \delta(\sigma_i, \sigma_j)}$ and $J_{ij} < 0$ on some or every bond. Nothing
 changes in the graph; what changes is that the odd cycles of
 Section~\ref{sec:potts} are now present, so the ground state is not a
 colouring and the bond probability $1 - e^{-\beta J_{ij}}$ of the cluster
-moves is not a probability.
+moves is not a probability. Figure~\ref{fig:frustrated:sketch} is the
+counting argument drawn on one triangle.
+
+\input{frustrated_figure}
 
 \qacaptionread{figures/frustrated_lattices_caption.txt}{\frustratedLatticesCaption}
 \begin{figure}[htbp]
@@ -1428,9 +1706,10 @@ moves is not a probability.
 Enumeration over $2^N$ configurations and the maximum cut of
 Section~\ref{sec:potts-cuts}, where they reach; the semidefinite relaxation
 of Equation~\ref{eq:gw}, which certifies a ratio at any size; single-site
-descent, and the annealing and parallel tempering of
-Section~\ref{sec:tempering}, which are the searches these instances exist
-to separate. The exact cut refuses a negative coupling, since the energy is
+descent, which is Algorithm~\ref{alg:heat-bath} at zero temperature, and the
+annealing and parallel tempering of Section~\ref{sec:tempering},
+Algorithm~\ref{alg:parallel-tempering}, which are the searches these
+instances exist to separate. The exact cut refuses a negative coupling, since the energy is
 not submodular, and the cluster moves refuse it for the reason above, so the
 instances draw the boundary between what is solved exactly and what is only
 bounded or sampled.
@@ -1450,10 +1729,40 @@ $f$ and below it at high $f$ measured rather than assumed. Whether annealing
 or tempering beats restarts is a property of the instance, stated as a
 measurement at equal sweeps (Section~\ref{sec:tempering}).
 
+\subsection{Validation}
+\label{sec:frustrated:validation}
+\begin{itemize}
+  \item \emph{Equation~\ref{eq:triangular-ground-state}}, a counting argument,
+    referees the triangular ground state at every size. It establishes the
+    minimum energy and that a search attaining it has attained the optimum; it
+    does not identify \emph{which} ground state, the optimum being massively
+    degenerate, so the residual entropy is reported for orientation and never
+    asserted at a finite size.
+  \item \emph{Enumeration over $2^{N}$ configurations} referees the same
+    energy where it reaches, and the degeneracy with it. It establishes that
+    the closed form and the code agree at the sizes both cover.
+  \item \emph{Equation~\ref{eq:planted-energy}} referees every search on the
+    glass as an \emph{inequality}: the planted energy is an upper bound on the
+    ground state, never the ground state. It establishes that a search
+    returning a higher energy has failed; it cannot establish that one
+    reaching the planted energy has succeeded, and at a large inverted
+    fraction a search is expected to go below it.
+  \item \emph{The refusals} are checked as results: the exact cut refuses a
+    negative coupling, the energy not being submodular, and the cluster moves
+    refuse it because $1 - e^{-\beta J}$ is not a probability there. They
+    establish that the boundary between exact and approximate is drawn in the
+    code and not only in the text.
+  \item \emph{An equal budget of sweeps} is what compares descent, annealing
+    and tempering here. It establishes which wins \emph{on this instance}, at
+    that budget, over shared seeds; it establishes nothing general about the
+    algorithms, which is why the comparison is reported as an experiment.
+\end{itemize}
+
 \section{Problem Statement: The Gaussian Mixture}
 \label{sec:mixture}
 
 \subsection{The model}
+\label{sec:mixture:model}
 Independent observations $y_1, \dots, y_N$, each drawn from one of $K$
 components chosen by a weight vector,
 \begin{equation}
@@ -1468,6 +1777,21 @@ model of Section~\ref{sec:hmm} with the chain removed: the Gaussian family is
 the same emission family, and the likelihood inherits its lack of a maximum
 (Section~\ref{sec:properties}) unchanged.
 
+\paragraph{Supported sizes.}
+\label{par:mixture:sizes}
+One dimension, $K$ components in single figures, $N$ observations from
+hundreds to hundreds of thousands. The simulator is checked at two components
+over 200,000 draws, where a component frequency's standard error is under
+0.0011; the budgeted comparison of methods runs five components at 1.5
+standard deviations of separation over 500 observations at the release tier.
+The exact clustering cost that referees the seeding is a dynamic programme
+over cut positions in the sorted observations, which is why the model is
+carried in one dimension: in higher dimension the same problem is NP-hard and
+Equation~\ref{eq:kmeanspp-bound} would have nothing to be checked against.
+Enumerating the $K^{N}$ labellings is out of reach at every size here, so the
+responsibilities are refereed by the hidden Markov model's own recursion
+instead.
+
 \subsection{As a factor graph}
 $N$ variables $x_i \equiv z_i$ with one unary factor each,
 $\psi_i(z_i) = w_{z_i}\, \mathcal{N}(y_i; \mu_{z_i}, \sigma_{z_i}^2)$, and no
@@ -1480,7 +1804,11 @@ normalization per variable, and the belief at $i$ is the responsibility
 \end{equation}
 the object an HMM's forward--backward pass produces with a recursion and a
 mixture produces with a division. That the M step receives the same object
-either way is what lets one emission family serve both.
+either way is what lets one emission family serve both, and
+Figure~\ref{fig:mixture:sketch} is Figure~\ref{fig:hmm:sketch} with the
+transition factors removed.
+
+\input{mixture_figure}
 
 \qacaptionread{figures/mixture_seeding_caption.txt}{\mixtureSeedingCaption}
 \begin{figure}[htbp]
@@ -1491,7 +1819,8 @@ either way is what lets one emission family serve both.
 \end{figure}
 
 \subsection{The algorithms: expectation--maximization and the gradient fit}
-Expectation--maximization alternates Equation~\ref{eq:responsibilities}
+Expectation--maximization, Algorithm~\ref{alg:baum-welch} with the chain
+removed, alternates Equation~\ref{eq:responsibilities}
 with the weighted re-estimate of each component's mean and variance and of
 the weights as the mean responsibility, and increases the likelihood at every
 iterate \citep{mackay2003}; the same objective is also fitted by the
@@ -1504,7 +1833,7 @@ by an amount a gradient polish removes, and an equal-budget comparison
 charges the polish to every method.
 
 \subsection{The initializer: k-means++}
-The first initializer here that reads the data. The first centre is an
+The first initializer here that reads the data, Algorithm~\ref{alg:kmeanspp}. The first centre is an
 observation drawn uniformly; each subsequent one is an observation $y$ drawn
 with probability proportional to its squared distance from the nearest centre
 already chosen,
@@ -1538,10 +1867,40 @@ up to the permutation of components, with the alignment part of the test. A
 component whose variance reaches the floor of Section~\ref{sec:properties}
 is a refusal, in either algorithm.
 
+\subsection{Validation}
+\label{sec:mixture:validation}
+\begin{itemize}
+  \item \emph{The hidden Markov model's M step on the same responsibilities}
+    referees the mixture's, at equality. It establishes that one emission
+    family serves both models; being two of ours it is agreement, not truth.
+  \item \emph{The gradient fit of the same likelihood} referees
+    expectation--maximization at its fixed point, and monotonicity referees
+    every iterate. The two share the model and nothing else, which is what
+    makes their agreement evidence; neither establishes that the shared
+    optimum is global, and where the components overlap the fixed point is
+    approached linearly, so an iterate stopped at a count sits above its
+    basin's optimum by an amount a polish removes.
+  \item \emph{The exact clustering cost}, a dynamic programme over the cut
+    positions of the sorted observations, referees the seeding of
+    Equation~\ref{eq:kmeanspp} and is the one oracle this section's
+    initializer has. It establishes that the mean cost over seedings satisfies
+    Equation~\ref{eq:kmeanspp-bound}; it says nothing about the likelihood,
+    and whether a seeded start reaches a better optimum than a uniform one is
+    measured over seeds and reported whichever way it falls.
+  \item \emph{Recovery up to the permutation of components} is the referee
+    for the fit itself, with the alignment part of the test. It establishes
+    calibration on data from the model.
+  \item \emph{The variance floor} is checked as a refusal in both algorithms:
+    a component collapsing onto one observation sends the likelihood to
+    infinity, so the fit refuses rather than reports it
+    (Section~\ref{sec:properties}).
+\end{itemize}
+
 \section{Problem Statement: Continuous Test Functions}
 \label{sec:testfunctions}
 
 \subsection{The functions}
+\label{sec:testfunctions:model}
 Three standard functions with minimizers known in closed form, so the
 optimizer of Section~\ref{sec:abstraction} is checked against something that
 is not a likelihood surface: on a likelihood, a fit that stops early and a
@@ -1565,6 +1924,21 @@ Himmelblau has no single answer, so ``the'' optimum is not a well-formed
 question and a method that always returns the same minimum is reading its
 start. They are not likelihoods: the Hessian at a minimum is not an observed
 information, and no interval is built from it.
+Figure~\ref{fig:testfunctions:sketch} sketches the shape of each.
+
+\input{testfunctions_figure}
+
+\paragraph{Supported sizes.}
+\label{par:testfunctions:sizes}
+The size here is the dimension $d$, and it is the only problem in this
+document whose oracle costs nothing at any size, the minimizers being closed
+forms. Rosenbrock is fitted at $d = 2$, $3$, $4$ and $5$; Rastrigin at
+$d = 2$ and $3$, where the roughly $10^{d}$ local minima already make a single
+fit's success a rate rather than an outcome; Himmelblau is two-dimensional by
+definition, its four minima published points. There is no per-tier ceiling and
+no enumeration: what grows with $d$ is not the cost of the referee but the
+number of basins a multi-start has to find, which is why the fraction of
+starts reaching the global minimum is the quantity asserted.
 
 \qacaptionread{figures/optimizer_landscapes_caption.txt}{\optimizerLandscapesCaption}
 \begin{figure}[htbp]
@@ -1585,7 +1959,7 @@ restarts of the fit and by an annealed chain with a polishing fit, and which
 wins is a property of the surface rather than of the algorithms.
 
 \subsection{The initializers}
-The three model-free strategies: the function's own start, that start tilted
+The three model-free strategies, Algorithm~\ref{alg:random-restart}: the function's own start, that start tilted
 by a fixed alternating amount for a surface whose nominal start is stationary,
 and Gaussian restarts around it from a passed-in generator, every start
 fitted and every fit reported with its spread rather than the best alone
@@ -1602,6 +1976,32 @@ reachable from its own basin; and on Equation~\ref{eq:rastrigin} a
 minimum---asserted low rather than asserted to succeed, which is the
 measurement that bounds what a single fit of any multimodal surface here may
 claim.
+
+\subsection{Validation}
+\label{sec:testfunctions:validation}
+\begin{itemize}
+  \item \emph{The analytic minimizer} referees a fit directly, to a stated
+    tolerance and in several dimensions for Equation~\ref{eq:rosenbrock}. It
+    establishes that the optimizer reaches the right point on a surface where
+    ``the right point'' is known --- which a likelihood cannot offer, and which
+    is the whole reason these functions are carried.
+  \item \emph{The hand-written closed-form gradient} referees the automatic
+    one exactly. It establishes the differentiation, separately from the
+    optimization, so a failure of one is not read as a failure of the other.
+  \item \emph{Each of Himmelblau's four minima} is required to be reachable
+    from its own basin. It establishes that the multi-start reports a spread
+    rather than one answer; a method that always returns the same minimum is
+    reading its start, and that is the failure this function exists to expose.
+  \item \emph{A rate on Equation~\ref{eq:rastrigin}} --- the fraction of
+    starts from which a converged fit is the global minimum --- is asserted
+    \emph{low} rather than asserted to succeed. It establishes the bound on
+    what a single fit of any multimodal surface here may claim; it establishes
+    nothing about a particular run.
+  \item \emph{An equal budget of objective evaluations} is what compares
+    restarts against an annealed chain with a polishing fit. It establishes
+    which wins on this surface at that budget, and, as with the frustrated
+    lattices, nothing general about either method.
+\end{itemize}
 
 \section{The Problems, and What Applies to Each}
 \label{sec:applicability}
@@ -1627,13 +2027,14 @@ Appendix~\ref{app:density-evolution} extended past the erasure channel.
 \label{sec:ldpc}
 
 \subsection{The model}
+\label{sec:ldpc:model}
 A binary linear code of length $n$ is the null space of a parity-check
-matrix $\mathbf{H} \in \{0,1\}^{m \times n}$ over $\mathrm{GF}(2)$: the
-codewords are the $c$ with $\mathbf{H} c = 0$, there are $2^k$ of them with
-$k = n - \operatorname{rank} \mathbf{H}$, and the rate is $k/n$. A
-low-density code makes $\mathbf{H}$ sparse. Gallager's regular
+matrix $\parity \in \{0,1\}^{m \times n}$ over $\mathrm{GF}(2)$: the
+codewords are the $c$ with $\parity c = 0$, there are $2^k$ of them with
+$k = n - \operatorname{rank} \parity$, and the rate is $k/n$. A
+low-density code makes $\parity$ sparse. Gallager's regular
 $(d_v, d_c)$ ensemble \citep{gallager1962} puts $d_v$ ones in every column
-and $d_c$ in every row: $\mathbf{H}$ is $d_v$ bands of $n / d_c$ rows, the
+and $d_c$ in every row: $\parity$ is $d_v$ bands of $n / d_c$ rows, the
 first band's row $i$ covering bits $i d_c$ to $(i+1) d_c - 1$ and every
 other band the first under a uniformly random permutation of the columns,
 so $n$ is a multiple of $d_c$ and $m = n d_v / d_c$. The rows of one band
@@ -1660,7 +2061,7 @@ log-likelihood ratio,
 positive when the received symbol favours zero. The posterior over the code
 is then
 \begin{equation}
-  p(c \mid y) \;\propto\; \mathbb{1}[\mathbf{H} c = 0]\, \exp(-c \cdot L),
+  p(c \mid y) \;\propto\; \mathbb{1}[\parity c = 0]\, \exp(-c \cdot L),
   \label{eq:ldpc-code}
 \end{equation}
 since $\log p(y \mid c) = \sum_i \log p(y_i \mid 0) - \sum_i c_i L_i$ and the
@@ -1672,26 +2073,43 @@ which minimizes the block error rate. They are different answers, as
 Section~\ref{sec:hmm} says of the chain, and the fixture that separates them
 is a test.
 
+\paragraph{Supported sizes.}
+\label{par:ldpc:sizes}
+Codes of length $n = 24$, $48$, $96$ and $996$ carry the refereed claims, and
+the instance the roadmap names is $(3, 6)$ at $n = 19{,}998$ with $m =
+9{,}999$ checks and 59,994 nonzeros. Three ceilings separate what is refereed
+by what. Enumerating the $2^{k}$ codewords is refused past 200,000 words, so
+the exact decoding referee reaches $k \le 17$, which at rate $1/2$ is a code
+of about 34 bits; Gauss--Jordan elimination gives a systematic encoder up to
+$n = 512$, past which the all-zero codeword is sent and the argument of
+Section~\ref{sec:ldpc} says nothing is lost; and past both, the referee is
+the density-evolution threshold of Appendix~\ref{app:density-evolution},
+which exists for the erasure channel alone. The three channels of
+Equation~\ref{eq:ldpc-llr} run at every length.
+
 \subsection{As a factor graph}
 The variables are the bits, $x_i \equiv c_i \in \{0, 1\}$. The factors are a
 unary $\psi_i(c_i) = e^{-c_i L_i}$ per bit, the channel folded in as an
 observation is everywhere in this document, and a parity factor
 $\psi_a(c_{\partial a}) = \mathbb{1}[\bigoplus_{i \in \partial a} c_i = 0]$
-per row of $\mathbf{H}$, a hard constraint of degree $d_c$ whose log table
+per row of $\parity$, a hard constraint of degree $d_c$ whose log table
 is zero on even-parity assignments and $-\infty$ elsewhere. This is the
 Tanner graph of the code; a bit sits on $d_v$ parity factors and one unary,
 so in the Forney form every bit passes through an equality node of degree
-$d_v + 1$. The graph has cycles---a random draw of the ensemble does not
+$d_v + 1$ (Figure~\ref{fig:ldpc:sketch}). The graph has cycles---a random draw of the ensemble does not
 avoid short ones---so Equation~\ref{eq:sum-product} is the Bethe
 approximation on it, and the exact quantities below come from enumerating
 the $2^k$ codewords where $2^k \le 200{,}000$ (a $(3,6)$ code at $n = 24$
 has $k \ge 14$) and from the tree schedule on a cycle-free code, where
 message passing is exact.
 
+\input{ldpc_figure}
+
 \subsection{The algorithm: sum-product in the log domain}
 A binary variable's message is one number, its log-odds, and
 Equation~\ref{eq:sum-product} on a parity factor has a closed form
-\citep{gallager1962, mackay2003, richardson2008}. From bit $i$ to check $a$,
+\citep{gallager1962, mackay2003, richardson2008}; the decoder is
+Algorithm~\ref{alg:sum-product-decode}. From bit $i$ to check $a$,
 and from check $a$ to bit $i$,
 \begin{equation}
   m_{i \to a} = L_i + \sum_{b \in \partial i \setminus a} m_{b \to i},
@@ -1723,7 +2141,7 @@ and every bit reads the check messages just written, one Jacobi sweep per
 direction over all edges at once, which is the schedule the general
 implementation runs and so the one it is compared against. The loop stops at
 the first iteration whose hard decision has every bit decided and satisfies
-$\mathbf{H} \hat c = 0$, the syndrome check, and otherwise at an iteration
+$\parity \hat c = 0$, the syndrome check, and otherwise at an iteration
 cap, which is a decoding failure and the event a block error rate counts. And
 messages are clipped at $\pm L_{\max}$ with $L_{\max} = 30$ before the check
 update, because a certain bit's ratio is infinite on the erasure channel and
@@ -1758,13 +2176,43 @@ general max-product there and returns the enumerated maximum-likelihood
 codeword, with the margin over the runner-up pinned so that no tie is being
 broken. On loopy codes the decoder and the general damped flooding are the
 same Bethe approximation and reach the same fixed point, which is agreement
-and not truth. The encoder is pinned by $\mathbf{H} c = 0$ and the offsets
+and not truth. The encoder is pinned by $\parity c = 0$ and the offsets
 layout by the dense product it stands in for. And at size, where no
 enumeration reaches, the closed form is density evolution
 (Appendix~\ref{app:density-evolution}): on the erasure channel the $(3,6)$
 ensemble has a threshold $\epsilon^\star = 0.4294$ below which the
 infinite-length decoder resolves every erasure and above which it does not,
 and the $19{,}998$-bit code is held to bracketing it.
+
+\subsection{Validation}
+\label{sec:ldpc:validation}
+\begin{itemize}
+  \item \emph{Enumeration of the $2^{k}$ codewords} referees both decodings
+    on a code short enough to enumerate: the bitwise posterior and the
+    maximum-likelihood codeword, the latter with the margin over the runner-up
+    pinned so that no tie is being broken. It establishes exactness there and
+    reaches no further than the ceiling above.
+  \item \emph{The tree schedule of the general sum-product} referees the
+    decoder on a cycle-free code, where message passing is exact. It
+    establishes that the log-domain specialization of
+    Equation~\ref{eq:tanh-rule} is the same computation as the general
+    implementation; on a loopy code the two agree because they are the same
+    Bethe approximation, which is agreement and not truth.
+  \item \emph{$\parity c = 0$ on every realization} referees the encoder, and
+    the dense matrix product referees the sparse offsets layout it stands in
+    for. Each establishes one construction and nothing about decoding.
+  \item \emph{The channel symmetry argument} is checked rather than assumed:
+    where an encoder exists, the error pattern under a non-trivial codeword is
+    compared per realization with the pattern under the zero word. It
+    establishes that the all-zero shortcut is sound at the lengths an encoder
+    reaches, which is what licenses it past them.
+  \item \emph{The erasure threshold $\epsilon^{\star} = 0.4294$} of
+    Appendix~\ref{app:density-evolution} referees the 19,998-bit code, which
+    is held to bracketing it. It establishes the asymptotic behaviour of the
+    ensemble on one channel; it establishes nothing at finite length on the
+    other two, which is the cell Section~\ref{sec:applicability} marks and the
+    extension past the erasure channel would fill.
+\end{itemize}
 
 \section{The Properties That Referee Each Method}
 \label{sec:properties}
@@ -2219,6 +2667,251 @@ $-\beta E_{\min} \le \log Z(\beta) \le N \log k - \beta E_{\min}$. Combining
 with $L \le \log Z(\beta) \le U$ and dividing by $\beta > 0$ gives the
 bracket; as $\beta$ grows the $N \log k$ term is divided away, until the
 bounds on $\log Z$ themselves loosen.
+
+\section{Algorithms Cited From the Text}
+\label{app:algorithms}
+
+The algorithms each problem statement cites, grouped by what each is for:
+initializers, which choose where a search starts; samplers, which draw from a
+distribution at a temperature; optimizers, which move toward an optimum; and
+surrogates, which stand in for an expensive evaluation. They are collected
+here rather than at the point of use because most of them apply to more than
+one problem, and a statement of an algorithm belongs where it can be cited
+from each. Four algorithms stay in the body, because there the text derives
+them as it states them: forward simulation, Algorithm~\ref{alg:simulate};
+neighbor joining, Algorithm~\ref{alg:neighbor-joining}; the Wolff move in an
+external field, Algorithm~\ref{alg:wolff-field}; and the data-sampled
+burn-in, Algorithm~\ref{alg:graph-burnin}.
+
+\subsection{Initializers}
+\label{app:algorithms:initializers}
+
+\begin{algorithm}[htbp]
+\caption{$k$-means$++$ seeding of $K$ centres, Equation~\ref{eq:kmeanspp}}
+\label{alg:kmeanspp}
+\begin{algorithmic}[1]
+\State draw $c_1$ uniformly from the observations $y_1, \dots, y_N$
+\For{$j = 1$ to $K - 1$}
+  \State $D(y) \gets \min_{j' \le j} |y - c_{j'}|$ for every observation $y$
+  \State draw $c_{j+1} = y$ with probability $D(y)^2 / \sum_{y'} D(y')^2$
+\EndFor
+\State \Return the centres $c_1, \dots, c_K$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{The closest tree of a Hadamard spectrum, Equation~\ref{eq:hadamard}}
+\label{alg:hadamard-start}
+\begin{algorithmic}[1]
+\State recode the alignment to two states and index the $2^{n-1}$ patterns by
+       the set of taxa differing from a reference taxon
+\State $s \gets$ the observed pattern frequencies;
+       $q \gets \hadamard^{-1} \log(\hadamard s)$
+\State $\mathcal{S} \gets \varnothing$
+\For{each split in decreasing order of its weight in $q$}
+  \If{the split is compatible with every split in $\mathcal{S}$}
+    \State $\mathcal{S} \gets \mathcal{S} \cup \{\text{split}\}$
+  \EndIf
+  \State \textbf{stop} once $|\mathcal{S}| = n - 3$
+\EndFor
+\State \Return the topology whose internal edges are $\mathcal{S}$, with the
+       corresponding weights as branch lengths
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Multi-start from a generator, at a declared budget}
+\label{alg:random-restart}
+\begin{algorithmic}[1]
+\State $\params_0 \gets$ the objective's own start, or that start tilted by a
+       fixed alternating amount where it is stationary
+\For{$r = 1$ to $R$}
+  \State $\params_r \gets \params_0 + \varepsilon_r$, $\varepsilon_r$ drawn
+         from the passed-in generator
+\EndFor
+\State fit from every $\params_r$, each fit charged to the shared budget of
+       objective evaluations
+\State \Return every fit with its spread, and the best of them --- never the
+       best alone
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Samplers}
+\label{app:algorithms:samplers}
+
+\begin{algorithm}[htbp]
+\caption{One heat-bath sweep at inverse temperature $\beta$,
+Equation~\ref{eq:heat-bath}}
+\label{alg:heat-bath}
+\begin{algorithmic}[1]
+\For{each node $i$ of $\graph$, in a fixed order}
+  \State $p(\sigma) \propto \exp\!\big(\beta [\sum_{j \in \partial i} J_{ij}
+         \delta(\sigma, \sigma_j) + h_i(\sigma)]\big)$ for
+         $\sigma \in \{1, \dots, q\}$
+  \State draw $\sigma_i \sim p$ \Comment{$\beta \to \infty$ is the argmax,
+         which is iterated conditional modes}
+\EndFor
+\State \Return the configuration after every node has been updated once
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{A cluster move at zero field, Edwards--Sokal bonds}
+\label{alg:cluster-move}
+\begin{algorithmic}[1]
+\State refuse the move if any $J_{ij} < 0$, where $1 - e^{-\beta J_{ij}}$ is
+       not a probability
+\For{each edge $\langle i,j \rangle$ with $\sigma_i = \sigma_j$}
+  \State place a bond with probability $1 - e^{-\beta J_{ij}}$
+\EndFor
+\State $\mathcal{C} \gets$ the bond-connected components; in Wolff, the one
+       component containing a uniformly drawn root
+\For{each component in $\mathcal{C}$}
+  \State draw a new label $\nu$ uniformly from $\{1, \dots, q\}$
+  \State recolour the component to $\nu$, accepted with
+         Equation~\ref{eq:cluster-accept} where a field is present
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Parallel tempering over $R$ replicas, Equation~\ref{eq:exchange}}
+\label{alg:parallel-tempering}
+\begin{algorithmic}[1]
+\State $T_1 < \dots < T_R$; replica $r$ draws from its own generator, spawned
+       from one parent that draws only the exchange uniforms
+\For{each sweep of the budget}
+  \For{$r = 1$ to $R$}
+    \State advance replica $r$ by one sweep at $\beta_r = 1/T_r$
+           \Comment{Algorithm~\ref{alg:heat-bath} or~\ref{alg:cluster-move}}
+  \EndFor
+  \For{each adjacent pair $(r, r+1)$}
+    \State exchange the configurations with probability
+           $\min\{1, \exp[(\beta_r - \beta_{r+1})(E_r - E_{r+1})]\}$
+  \EndFor
+  \State record the cold replica's state, and the acceptance of every pair
+\EndFor
+\State \Return the lowest energy seen, and the cold replica's recorded
+       weights, Equation~\ref{eq:tempered-weight}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{One block sweep over a chain, given the rest of the model}
+\label{alg:chain-block}
+\begin{algorithmic}[1]
+\State run the forward recursion Equation~\ref{eq:forward} over the chain,
+       keeping every $\alpha_t$
+\State draw $z_T \sim \alpha_T$, normalized
+\For{$t = T - 1$ down to $1$}
+  \State draw $z_t$ with probability
+         $\propto \alpha_t(z_t)\, \mathbf{A}_{z_t z_{t+1}}$
+\EndFor
+\State \Return the path, one exact draw from its conditional and not a
+       sequence of single-site updates
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Optimizers}
+\label{app:algorithms:optimizers}
+
+\begin{algorithm}[htbp]
+\caption{Alpha expansion, Equation~\ref{eq:alpha-expansion}}
+\label{alg:alpha-expansion}
+\begin{algorithmic}[1]
+\State $\sigma \gets$ any labelling
+\Repeat
+  \For{each label $\alpha \in \{1, \dots, q\}$}
+    \State build the two-state graph in which every site keeps $\sigma_i$ or
+           switches to $\alpha$
+    \State $\sigma' \gets$ the labelling of its minimum $s$--$t$ cut
+    \If{$\energy(\sigma') < \energy(\sigma)$} $\sigma \gets \sigma'$ \EndIf
+  \EndFor
+\Until{no expansion lowers the energy}
+\State \Return $\sigma$ \Comment{within the constant of
+       Equation~\ref{eq:alpha-expansion} of the optimum, provided each
+       expansion was solved exactly}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Hill climbing over a structural neighbourhood}
+\label{alg:hill-climbing}
+\begin{algorithmic}[1]
+\State $x \gets$ a start; $\mathrm{score}(x) \gets$ its full evaluation
+\Repeat
+  \State $\mathcal{N} \gets \neighbourhood(x)$, each candidate scored at most
+         once and charged to the budget
+  \State $x' \gets \arg\max_{y \in \mathcal{N}} \mathrm{score}(y)$
+  \If{$\mathrm{score}(x') > \mathrm{score}(x)$} $x \gets x'$ \EndIf
+\Until{no neighbour improves, or the budget is spent}
+\State \Return $x$, its score always a full evaluation and never a surrogate's
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Expectation--maximization on a chain, or without one}
+\label{alg:baum-welch}
+\begin{algorithmic}[1]
+\Repeat
+  \State \textbf{E step:} the posteriors of Equation~\ref{eq:posterior} by
+         forward--backward; on a model with no chain, the responsibilities of
+         Equation~\ref{eq:responsibilities} by a division
+  \State \textbf{M step:} re-estimate $\bpi$ and $\mathbf{A}$ in closed form
+         from the posterior counts, and the emission parameters by the
+         family's own rule --- itself an optimization where no closed form
+         exists
+  \State assert the likelihood did not decrease
+\Until{the increase falls below a tolerance, or the iteration cap is reached}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Sum-product decoding in the log domain,
+Equation~\ref{eq:tanh-rule}}
+\label{alg:sum-product-decode}
+\begin{algorithmic}[1]
+\State $m_{b \to i} \gets 0$ for every edge; $L_i$ from
+       Equation~\ref{eq:ldpc-llr}
+\For{iteration $1$ to the cap}
+  \State $m_{i \to a} \gets \mathrm{clip}(L_i + \sum_{b \in \partial i
+         \setminus a} m_{b \to i})$ for every edge, at once
+  \State $m_{a \to i} \gets 2 \operatorname{artanh} \prod_{j \in \partial a
+         \setminus i} \tanh (m_{j \to a}/2)$, or
+         Equation~\ref{eq:min-sum} for min-sum
+  \State $\tilde L_i \gets L_i + \sum_{b \in \partial i} m_{b \to i}$;
+         $\hat c_i \gets \mathbb{1}[\tilde L_i < 0]$
+  \State \textbf{stop} if every bit is decided and $\parity \hat c = 0$
+\EndFor
+\State \Return $\hat c$, and whether the syndrome check was reached --- a
+       failure here is the event a block error rate counts
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Surrogates}
+\label{app:algorithms:surrogates}
+
+\begin{algorithm}[htbp]
+\caption{Ranking a neighbourhood by a surrogate, Section~\ref{sec:surrogates}}
+\label{alg:surrogate-rank}
+\begin{algorithmic}[1]
+\State $\mathcal{N} \gets \neighbourhood(x)$
+\State $\hat s(y) \gets$ the surrogate's value at every $y \in \mathcal{N}$,
+       one cheap pass each
+\If{the surrogate is an analytic bound}
+  \State discard every $y$ whose bound cannot beat the incumbent
+         \Comment{certified: no violation is permitted on any structure an
+         oracle can score}
+\Else
+  \State shift $\hat s$ by a quantile of the held-out residuals, to the
+         coverage the predictor claims
+\EndIf
+\State evaluate in full the best $\kappa$ candidates by $\hat s$, and the
+       accepted move in full whatever its rank
+\State \Return the accepted move, with a reported score that is always a full
+       evaluation
+\end{algorithmic}
+\end{algorithm}
 
 \section{Reference Taxonomy}
 \label{app:taxonomy}

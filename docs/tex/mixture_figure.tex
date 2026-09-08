@@ -1,0 +1,39 @@
+% The mixture factor graph of Section~\ref{sec:mixture}, drawn by hand. Input
+% by textbook.tex; a sketch and not a rendered figure, so it is outside the
+% figure cache and the render cap, which govern generated output only.
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    scale=1.0,
+    label/.style={circle, draw, minimum size=0.62cm, inner sep=0.5pt, font=\small, fill=white},
+    observed/.style={circle, draw, fill=black!12, minimum size=0.55cm, inner sep=0.5pt, font=\footnotesize},
+    factor/.style={rectangle, draw, fill=black!25, minimum size=0.16cm, inner sep=0pt},
+    link/.style={draw, thick},
+    absent/.style={draw, thin, gray, dashed}
+]
+  \foreach \i in {1,...,5} {
+    \node[label] (z\i) at (1.7*\i, 1.6) {$z_{\i}$};
+    \node[factor] (e\i) at (1.7*\i, 0.8) {};
+    \node[observed] (y\i) at (1.7*\i, 0.1) {$y_{\i}$};
+    \draw[link] (z\i) -- (e\i) -- (y\i);
+  }
+  % Where the chain would be, had it not been removed.
+  \foreach \i/\next in {1/2, 2/3, 3/4, 4/5} {
+    \draw[absent] (z\i) -- (z\next);
+  }
+  \node[anchor=west, font=\footnotesize] at (9.0, 1.6)
+    {no pairwise factor};
+  \node[anchor=west, font=\footnotesize] at (9.0, 0.8)
+    {$\psi_i = w_{z_i}\,\mathcal{N}(y_i;\, \mu_{z_i}, \sigma_{z_i}^2)$};
+\end{tikzpicture}
+\caption{The Gaussian mixture as a factor graph: $N$ component labels $z_i$
+over $K$ values, one shaded unary factor each folding in one observation
+$y_i$, and no pairwise factor at all. The dashed lines mark where the
+transition factors of Figure~\ref{fig:hmm:sketch} would sit; removing them is
+exactly what turns the hidden Markov model into the mixture, and it turns
+Equation~\ref{eq:sum-product} into the per-variable normalization that is
+Equation~\ref{eq:responsibilities}. The same emission family serves both, and
+receives the same responsibilities from either. A sketch of the structure and
+not a rendering of any instance.}
+\label{fig:mixture:sketch}
+\end{figure}

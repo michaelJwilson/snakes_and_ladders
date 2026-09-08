@@ -1,0 +1,46 @@
+% The tree factor graph of Section~\ref{sec:phylo}, drawn by hand. Input by
+% textbook.tex; a sketch and not a rendered figure, so it is outside the
+% figure cache and the render cap, which govern generated output only.
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    scale=1.0,
+    latent/.style={circle, draw, minimum size=0.62cm, inner sep=0.5pt, font=\small, fill=white},
+    observed/.style={circle, draw, fill=black!12, minimum size=0.62cm, inner sep=0.5pt, font=\small},
+    factor/.style={rectangle, draw, fill=white, minimum size=0.16cm, inner sep=0pt},
+    indicator/.style={rectangle, draw, fill=black!55, minimum size=0.16cm, inner sep=0pt},
+    branch/.style={draw, thick}
+]
+  % Internal states, drawn as variables of the factor graph.
+  \node[latent] (root) at (0, 3.6) {$x_\rootnode$};
+  \node[latent] (u)    at (-1.9, 2.1) {$x_u$};
+  \node[latent] (v)    at (1.9, 2.1) {$x_v$};
+  % Leaves: the same variables, with the data folded in by an indicator.
+  \foreach \name/\pos/\label in {a/-3.0/1, b/-0.8/2, c/0.8/3, d/3.0/4} {
+    \node[observed] (\name) at (\pos, 0.5) {$x_{\label}$};
+    \node[indicator] (i\name) at (\pos, -0.25) {};
+    \draw[branch] (\name) -- (i\name);
+  }
+  % Branch factors: one per edge, carrying $\Pmat(\tau)$.
+  \foreach \parent/\child in {root/u, root/v, u/a, u/b, v/c, v/d} {
+    \draw[branch] (\parent) -- node[factor, pos=0.5] {} (\child);
+  }
+  % The root prior.
+  \node[factor] (prior) at (0, 4.35) {};
+  \draw[branch] (root) -- (prior);
+  \node[anchor=west, font=\footnotesize] at (0.25, 4.35) {$\psi_\rootnode = \bpi$};
+  \node[anchor=west, font=\footnotesize] at (0.85, 2.9) {$\psi_v = \Pmat(\tau_v)$};
+  \node[anchor=west, font=\footnotesize] at (3.35, -0.25) {$\mathbb{1}[x_4 = \data_{4}]$};
+\end{tikzpicture}
+\caption{One site of a four-taxon phylogeny as a factor graph. Open circles
+are the states of the internal nodes and shaded circles the states at the
+leaves; small squares are factors. Each branch carries the pairwise factor
+$\Pmat(\tau_v)$ of Equation~\ref{eq:jc}, the root carries the prior $\bpi$,
+and the filled square at each leaf is the indicator that folds in the
+observed character. The bipartite graph is a tree, so
+Equation~\ref{eq:sum-product} is exact and its leaf-to-root pass is
+Equation~\ref{eq:pruning}. A sketch of the structure, not a rendering of any
+instance: the drawn tree is four taxa, where the section's supported sizes
+run from five to the taxon count enumeration reaches.}
+\label{fig:phylo:sketch}
+\end{figure}
