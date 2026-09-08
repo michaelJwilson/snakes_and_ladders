@@ -114,7 +114,7 @@ Three further rules constrain what the suite may contain:
 
 # Application
 
-## One abstraction, three problem classes
+## One abstraction, four problem classes
 
 The scientific problem is a search over discrete structure where scoring any
 one candidate requires a continuous fit. In phylogenetics it is a search over
@@ -126,9 +126,10 @@ from the other: a better topology scored with badly fitted parameters looks
 worse than a poor one scored well.
 
 That shape is not unique to phylogenies. Felsenstein pruning, the HMM forward
-algorithm, and the Potts transfer matrix are the same sum-product recursion on
-different graphs — a tree, a chain, a lattice — so one discrete/continuous
-interface serves all three. The project treats that as a design constraint
+algorithm, the Potts transfer matrix and the decoder of a low-density
+parity-check code are the same sum-product recursion on different graphs — a
+tree, a chain, a lattice, a Tanner graph — so one discrete/continuous
+interface serves all four. The project treats that as a design constraint
 rather than a coincidence, and enforces it structurally: `snakes_and_ladders.opt` and
 `snakes_and_ladders.learn` may import no application module, asserted by test.
 
