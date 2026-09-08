@@ -87,6 +87,39 @@ section — is stated in `ROADMAP.md` §0.2, `DEV.md`, and `infra/CLAUDE.md`
 alike, alongside the rule that decides which documents may repeat detail
 ([#164](https://github.com/michaelJwilson/snakes_and_ladders/pull/164)).
 
+**External frameworks arrive as referees and adapters, not replacements**
+([#322](https://github.com/michaelJwilson/snakes_and_ladders/issues/322), closing
+[#242](https://github.com/michaelJwilson/snakes_and_ladders/issues/242) into it). A
+`frameworks` extra carries `gymnasium` 1.3.0, `rustworkx` 0.18.1, `torchrl`
+0.13.3 and `torch_geometric` 2.8.0, and `snakes_and_ladders.sandbox` is the
+home an implementation moves to once a framework replaces it on a hot path,
+with a guard that only tests and QA import it; nothing has moved yet, because
+nothing measured beat its reference. `search.gym.GymnasiumEnvironment` wraps
+any `learn.Environment` unchanged — the protocol stays stateless and scores a
+neighbourhood at once, which `learn.exact` rests on — and passes Farama's
+`check_env` on the Potts chain and the 5-taxon tree environment while an
+episode round-tripped through both interfaces from one seed has the same
+states, rewards, termination and candidate count. `PottsGraph` converts to and
+from a `rustworkx` multigraph exactly, doubled bonds included; the open
+lattices are `rustworkx.generators`' grid and path graphs as edge sets of the
+same integers, and `G(n, p)` agrees with `undirected_gnp_random_graph` at both
+ends of `p` and on the mean edge count of 400 draws. The installed `rustworkx`
+has a global Stoer–Wagner cut and no s–t flow, asserted so the oracle moves
+when that changes; `ising_ground_state` is pinned instead against `networkx`'s
+minimum cut at extents 8 to 16. TorchRL's `GAE` and `ClipPPOLoss` reproduce
+`learn.ppo`'s advantages, objective and gradient to 1e-10 once their float32
+buffers are handed float64, and PyTorch Geometric's `GINConv` reproduces
+`GraphSurrogate` to 1e-12 on tied first-layer weights — on general weights GIN
+sums node and neighbours before its network where ours concatenates them, so
+the two are different architectures and the test says so. Conversion cost,
+timed apart from any call on 4 cores at a 1-minute load of 0.23: `to_rustworkx`
+12.5 µs and `from_rustworkx` 46.4 µs at extent 8, 50.9 and 196.9 µs at 16,
+747.2 µs and 3.78 ms at 64, against `rx.connected_components` at 4.6, 15.7 and
+212.3 µs and the Python `ising_ground_state` at 1.40, 5.85 and 186.5 ms. The
+conversion is below the cost of the cheapest call it would front at every
+size, and no hot path moves until a measured adoption says so; `TICKETS.md`
+carries the three candidates.
+
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an

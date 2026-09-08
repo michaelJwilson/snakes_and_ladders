@@ -1,9 +1,9 @@
 """`learn.ppo`'s advantage estimate and clipped loss against TorchRL's, on one fixed rollout (issue #322).
 
 TorchRL's ``GAE`` and ``ClipPPOLoss`` are a second implementation of the
-two equations ``learn.ppo`` states, ``eq:gae`` and ``eq:ppo-clip``, written
-by people who never saw ours: the validation use issue #315 scoped, needing
-no code to move. Same rollout tensors in, same advantages and the same
+two equations ``learn.ppo`` states -- the generalized advantage and the
+clipped surrogate -- written by people who never saw ours: the validation
+use issue #315 scoped, needing no code to move. Same rollout tensors in, same advantages and the same
 objective out, to ``1e-10``.
 
 Two conventions differ and are mapped rather than hidden. TorchRL reads a

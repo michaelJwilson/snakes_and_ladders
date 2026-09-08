@@ -146,7 +146,17 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   of the module a diff touched (#237)
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#232)
-- Scope rustworkx for efficiency and scaling (#242)
+- Adopt `rustworkx` on a hot path where a measurement says so —
+  `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
+  of the bound — moving the replaced implementation to `sandbox/`; #242 is
+  closed into the frameworks ticket (#322)
+- TorchRL `TensorDict` environments and a `SyncDataCollector` over the
+  Gymnasium adapter for Milestone 2.2's batched rollout, adopted only if the
+  collector beats `learn.rollout` on the 8 → 20 taxa scaling with `float64`
+  forced throughout (#322)
+- PyTorch Geometric `Batch.from_data_list` for surrogate training at 20+
+  taxa, and `HeteroData` over `sim.factor_graph` for a learned message
+  passing beside the exact one, gated on the training-time benchmark (#322)
 - Vet `ROADMAP.md`, `STATUS.md` and `TICKETS.md` for incompleteness,
   inconsistency and error (#244)
 - Separate the technical document into infrastructure, textbook and paper

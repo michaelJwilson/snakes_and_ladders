@@ -76,8 +76,7 @@ no application module.
 - **A fixture whose answer is trivial measures nothing.** A uniform field
   makes a ferromagnetic ground state constant; a bipartite graph makes its
   maximum cut every edge. Both admit a solver broken in ways only a harder
-  instance exposes, and a benchmark built on either is measuring its own
-  fixture.
+  instance exposes; a benchmark built on either measures its own fixture.
 
 - **An approximation with a bound states the bound and measures the gap.**
   The bound is the claim that holds at every size; the realized ratio is
