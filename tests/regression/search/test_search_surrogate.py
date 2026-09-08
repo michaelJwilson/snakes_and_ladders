@@ -60,6 +60,7 @@ def _alignments(n: int) -> tuple[list[dict[str, np.ndarray]], int, np.ndarray]:
 
 
 @pytest.mark.simulated_truth
+@pytest.mark.release
 def test_learned_surrogates_rank_held_out_neighbourhoods() -> None:
     # Six alignments, every topology of each fitted (90 fits at 200 sites),
     # split by alignment: three to train, two to validate, one held out. The

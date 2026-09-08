@@ -138,6 +138,7 @@ def test_a_fitted_critic_explains_the_enumerated_state_values(
 
 
 @pytest.mark.mathematical
+@pytest.mark.release
 def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient() -> (
     None
 ):

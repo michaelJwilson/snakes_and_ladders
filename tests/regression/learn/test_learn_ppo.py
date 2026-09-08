@@ -134,6 +134,7 @@ def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() 
 
 
 @pytest.mark.oracle
+@pytest.mark.release
 def test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matched_budget() -> (
     None
 ):
