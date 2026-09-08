@@ -44,7 +44,7 @@ from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 NOMINAL = 0.95
 
 # Sizes and replicate counts, chosen so the whole figure stays inside a
-# minute of the technical-document build. The Potts fit is two orders of
+# minute of the document build. The Potts fit is two orders of
 # magnitude cheaper than the HMM's, so it gets both more sizes and more
 # replicates; the HMM's largest size is where the asymptotics are meant to
 # be visible, so it is the one that must not be dropped. The smallest HMM size

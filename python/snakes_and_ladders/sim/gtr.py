@@ -167,7 +167,7 @@ def reversible_transition_probabilities(
     With ``D = diag(sqrt(pi))``, detailed balance makes ``D Q D^-1``
     symmetric, so ``numpy.linalg.eigh`` applies -- real eigenvalues, an
     orthogonal basis, and no general-purpose matrix exponential. This is
-    equation (eigen) of the technical document, and the reason a single
+    equation (eigen) of the textbook, and the reason a single
     decomposition serves every branch length.
 
     Parameters

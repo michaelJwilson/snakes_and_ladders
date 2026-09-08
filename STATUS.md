@@ -41,7 +41,7 @@ from `.github/labels.yml` by a workflow, so the taxonomy cannot drift from the
 documents that describe it.
 
 Ten required checks gate a merge, and three of them do work no reviewer can
-do by inspection: the technical-document job rebuilds only the QA figures
+do by inspection: the documents job rebuilds only the QA figures
 the documents under `docs/tex/` cite, comparing the rest at the release gate instead
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
 request whose rebuilt `docs/paper.pdf` or `docs/textbook.pdf` differs from the committed one
@@ -1825,7 +1825,7 @@ what the roadmap bullet ultimately asks for.
 | CUDA, Metal/MPS and CPU dispatch | **CPU only**; selection logic landed ([#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112)), accelerator paths not implemented (issue #280) |
 | Declared cross-device tolerance, not bitwise | **Met**: `1e-11` relative in `float64`, `1e-6` where either side is `float32` ([#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112)) |
 
-## §1.3 The Technical Document
+## §1.3 The Documents
 
 `docs/tex/` now spans every problem class rather than the phylogenetic
 application alone: the abstract, methods and appendices state the Potts

@@ -35,7 +35,7 @@ gate), or named stems (`--only`). It also pins the clock those figures are
 rendered against, because a committed figure that does not reproduce is
 indistinguishable from one that has rotted.
 
-`infra/build_technical_doc.sh` calls `build.py` and feeds its output into the
+`infra/build_documents.sh` calls `build.py` and feeds its output into the
 LaTeX build; this package does not itself invoke `latexmk` or know where
 `docs/tex/` figures ultimately land beyond the output directory it is given.
 

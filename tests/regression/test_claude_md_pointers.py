@@ -153,7 +153,7 @@ def test_the_root_file_states_that_the_rules_reach_the_module_files() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_the_expected_reader_contract_lives_only_in_docs() -> None:
-    # It is a contract about the technical document, so the seven other module
+    # It is a contract about the documents, so the seven other module
     # files have no business restating it -- which is what issue #141 removed
     # from `docs/CLAUDE.md` in the other direction, and why only `docs/` may
     # refer to it.

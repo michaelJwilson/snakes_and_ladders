@@ -29,7 +29,7 @@
   description: "CI/CD, agentic workflow, experiment tracking."
 - name: "module:docs"
   color: "c00552"
-  description: "Documentation and the technical document."
+  description: "Documentation, the paper and the textbook."
 
 # Plan lifecycle. An issue moves (unlabelled) -> planned -> approved. `planned`
 # is set by automation once a plan is posted to the thread; it is also the guard

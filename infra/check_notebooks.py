@@ -250,7 +250,7 @@ def rewrite(path: Path) -> None:
 
     The regeneration half of this tool. A change that moves what a notebook
     prints runs this and commits the result, exactly as a change that moves a
-    figure runs ``infra/build_technical_doc.sh``.
+    figure runs ``infra/build_documents.sh``.
     """
     import nbformat
 

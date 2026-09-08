@@ -15,8 +15,8 @@ the state, a step returning the next state and a reward, and features of each
 available action.
 
 
-`policy.py` currently holds the softmax-over-scored-actions policy the technical
-document specifies.
+`policy.py` currently holds the softmax-over-scored-actions policy the paper
+specifies.
 
 `rollout.py` generates episodes under a policy and under the greedy searcher
 through the same loop: a comparison between them is only meaningful if the

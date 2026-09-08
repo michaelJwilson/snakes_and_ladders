@@ -113,19 +113,19 @@ Open `docs/_build/html/index.html`. The `-W` flag turns warnings into errors,
 matching CI, so a broken docstring or cross-reference fails locally rather
 than in review.
 
-The technical document — the scientific background, equations, and algorithms
-— is LaTeX under `docs/tex/`. The `snakes_and_ladders.qa` scripts render the figures and
-tables it includes (`snakes_and_ladders.qa.manifest` lists them), so building it
-regenerates the cited ones first rather than only running `latexmk`; the
-applicability tables the textbook inputs are written by
-`infra/problems_tables.py --write`:
+The documents — the paper and the textbook, carrying the scientific background,
+equations, and algorithms — are LaTeX under `docs/tex/`. The
+`snakes_and_ladders.qa` scripts render the figures and tables they include
+(`snakes_and_ladders.qa.manifest` lists them), so building them regenerates the
+cited ones first rather than only running `latexmk`; the applicability tables
+the textbook inputs are written by `infra/problems_tables.py --write`:
 
 ```
 sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base \
   texlive-latex-recommended texlive-fonts-recommended texlive-science \
   texlive-pictures
 uv sync --locked --extra test
-infra/build_technical_doc.sh
+infra/build_documents.sh
 ```
 
 Open `docs/paper.pdf` and `docs/textbook.pdf`. CI runs the same script on

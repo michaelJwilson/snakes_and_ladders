@@ -1,8 +1,8 @@
-"""Regenerate QA figures, selected by what the technical document cites.
+"""Regenerate QA figures, selected by what the documents cite.
 
 Per pull request, only the figures the documents under ``docs/tex/`` include need
 rebuilding: those are the ones a change could make stale in the committed
-document, and regenerating the rest cost most of the ``technical-doc`` job
+document, and regenerating the rest cost most of the ``documents`` job
 while proving nothing about it (issue #154).
 
 The figures the document does not cite are still checked, at the release gate,
@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if stale:
         log.error(
-            "stale QA figures: %s -- run infra/build_technical_doc.sh and commit the result",
+            "stale QA figures: %s -- run infra/build_documents.sh and commit the result",
             ", ".join(stale),
         )
         return 1

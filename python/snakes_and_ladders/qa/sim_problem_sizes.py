@@ -2,7 +2,7 @@
 
 Tabulates taxa count, site count, seed, and Monte Carlo tolerance for a set
 of ``simulation_params.yaml``-format fixtures, read directly from the yaml
-rather than hardcoded, so the technical document's numbers cannot drift from
+rather than hardcoded, so the documents' numbers cannot drift from
 what the regression suite actually runs (``tests/regression/test_jc_simulate.py``).
 """
 

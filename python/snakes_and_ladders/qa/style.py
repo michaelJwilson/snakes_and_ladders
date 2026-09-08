@@ -1,4 +1,4 @@
-"""Shared figure style for the technical document.
+"""Shared figure style for the documents.
 
 `docs/tex/` is written as an academic letter, and its figures follow: a serif
 face matching the body text, one-column sizing, recessive axes, and no
@@ -173,7 +173,7 @@ def notebook_style() -> Iterator[None]:
 
 @contextmanager
 def letter_style() -> Iterator[None]:
-    """Draw inside the technical document's figure style.
+    """Draw inside the documents' figure style.
 
     The rcParams are written as a literal rather than built and passed, so
     mypy checks each key against matplotlib's ``Literal`` key type -- a

@@ -1,7 +1,7 @@
 """Which QA figures exist, and what renders each one.
 
 This is the single statement of that. It used to be the sequence of thirteen
-invocations in ``infra/build_technical_doc.sh``, which nothing connected to
+invocations in ``infra/build_documents.sh``, which nothing connected to
 the document: when the document stopped citing eleven of the figures, the
 build kept regenerating all thirteen and no check noticed.
 

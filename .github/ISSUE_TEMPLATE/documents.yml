@@ -8,7 +8,7 @@ body:
       value: |
         Pull requests change `docs/tex/` and never the PDFs, so the committed
         PDFs lag the sources until this ticket's pull request rebuilds them
-        (`DEV.md`, Technical Documents). CI refuses a PDF change in any other
+        (`DEV.md`, Documents). CI refuses a PDF change in any other
         pull request. File this when the lag matters: before a release, or
         when a reader needs the rendered document.
   - type: textarea
@@ -31,7 +31,7 @@ body:
       label: Acceptance
       description: What the pull request must show.
       value: |
-        - Built with `infra/build_technical_doc.sh` on `main`, nothing edited by hand.
+        - Built with `infra/build_documents.sh` on `main`, nothing edited by hand.
         - The pull request's title contains "Rebuild the documents" and it changes only the two PDFs and `docs/tex/figures/`.
         - `latexmk`'s logs report no undefined or multiply-defined reference or citation (CI checks this on every pull request).
         - The build's wall clock and host in the pull request body.

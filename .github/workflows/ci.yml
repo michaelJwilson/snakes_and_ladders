@@ -331,8 +331,8 @@ jobs:
       # otherwise reach main and sit there until a release.
       - run: uv run python infra/check_notebooks.py
 
-  technical-doc:
-    name: Technical document (LaTeX)
+  documents:
+    name: Documents (paper and textbook)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -395,7 +395,7 @@ jobs:
       # build uses (see infra/CLAUDE.md), so CI and a contributor's machine
       # take one path.
       - name: Build the documents (QA figures + PDFs)
-        run: infra/build_technical_doc.sh
+        run: infra/build_documents.sh
       # latexmk exits 0 on unresolved references and citations, so the log is
       # checked explicitly -- the LaTeX counterpart of the docs job's -W.
       # Both logs, since a reference broken by the split would otherwise be
@@ -427,7 +427,7 @@ jobs:
           git fetch --no-tags origin "${{ github.base_ref }}" || true
           changed="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- docs/paper.pdf docs/textbook.pdf)"
           if [ -n "$changed" ] && ! printf '%s' "$TITLE" | grep -q 'Rebuild the documents'; then
-            echo "::error::this pull request changes $changed; only a 'Rebuild the documents' pull request may (DEV.md, Technical Documents)"
+            echo "::error::this pull request changes $changed; only a 'Rebuild the documents' pull request may (DEV.md, Documents)"
             exit 1
           fi
 

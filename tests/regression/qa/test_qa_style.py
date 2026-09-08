@@ -1,4 +1,4 @@
-"""Regression tests for the technical document's shared figure style.
+"""Regression tests for the documents' shared figure style.
 
 Pins the properties the style exists to guarantee -- a fixed, never-cycled
 palette; identity carried by more than colour; scoped rcParams -- rather than

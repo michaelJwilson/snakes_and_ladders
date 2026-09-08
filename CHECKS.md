@@ -241,7 +241,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_rl_reward_surface.py::test_the_two_surfaces_agree_on_the_generating_topology` | simulated_truth |  |
 | `test_qa_rl_reward_surface.py::test_the_two_surfaces_are_correlated_but_not_identical` | simulated_truth |  |
 | `test_qa_rl_reward_surface.py::test_the_answer_survives_the_choice_of_fixed_branch_length` | simulated_truth |  |
-| `test_qa_rl_reward_surface.py::test_the_comparison_holds_at_six_taxa` | simulated_truth | The size the technical document reports. |
+| `test_qa_rl_reward_surface.py::test_the_comparison_holds_at_six_taxa` | simulated_truth | The size the paper reports. |
 | `test_qa_search.py::test_the_landscape_is_every_topology_sorted_ascending` | oracle | The oracle the figure rests on: 6 taxa is 105 unrooted topologies, and the panel is meaningless if the sweep missed any. |
 | `test_qa_search.py::test_the_search_finds_the_generating_tree_and_rejects_a_worse_one` | simulated_truth |  |
 | `test_qa_sim_example.py::test_sim_example_alignment_matches_independent_simulation` | oracle |  |
