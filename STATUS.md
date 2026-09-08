@@ -700,6 +700,32 @@ change would need. So **no default moves**; k-means++ lands as a strategy a
 caller may choose, at a cost of one objective evaluation (271 us of seeding
 against 260 us per evaluation at 4000 points).
 
+**Tempering against restarts on the mixture, at equal evaluations.** The
+comparison [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284)
+and [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303)
+deferred, recorded whichever way it fell
+([#332](https://github.com/michaelJwilson/snakes_and_ladders/issues/332),
+[`docs/experiments/004`](docs/experiments/004-mixture-tempering-vs-restarts.md)).
+Five components 1.5 standard deviations apart with unequal weights, 500
+observations, built from `sim.mixture` under seed 20260908 since #262 committed
+neither of the five-component fixtures it measured. Multi-start EM, simulated
+annealing with Hamiltonian proposals and parallel tempering — the continuous
+counterpart of the Potts one, now in `opt.hmc` beside `anneal` — each spend
+3,000 likelihood evaluations per start through `opt.budget.compare`, every
+method ending with the same charged L-BFGS polish because raw EM sits 4 to 6
+nats above its basin's optimum 500 iterations in. Against the best-known optimum — 1111.596 nats, reached by 16 of 1,000
+polished restarts and 8.3 nats below the polished simulated parameters, whose
+basin is not the maximum on this sample — over 40 shared starts: **restarts
+7/40**, tempering 4/40 (McNemar p = 0.549 against restarts), annealing 1/40
+(p = 0.031); mean gaps 2.6, 4.2 and 8.0 nats. **Restarts are not beaten on
+the mixture**, at 3,000 evaluations: tempering does not separate from them
+and annealing loses to them, the opposite of the glass row above and the
+same finding as Rastrigin. The 8-start tier of the same test runs per pull
+request and pins the ordering.
+The paired test `ROADMAP.md` §2.4 asks for is now in the utility:
+`opt.budget.mcnemar` on the per-start hits, exact rather than chi-square,
+because 40 starts cannot support the approximation.
+
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
 but until now only a gradient fit could ask for one — expectation-maximization
@@ -1067,8 +1093,10 @@ by `opt.budget.compare`
 with the utility's own streams and the best any method found as the
 reference, tempering **12/12**, annealing 10/12 with a mean gap of 0.17, and
 restarts of descent 4/12 with a mean gap of 0.75, every method at or below
-the planted energy. The five-component mixture comparison waits on the
-mixture branch (#263) landing and belongs to the same utility.
+the planted energy. The five-component mixture comparison, the one problem
+class where restarts are the standard answer, is under Milestone 1.3 and in
+[`docs/experiments/004`](docs/experiments/004-mixture-tempering-vs-restarts.md)
+([#332](https://github.com/michaelJwilson/snakes_and_ladders/issues/332)).
 
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter
