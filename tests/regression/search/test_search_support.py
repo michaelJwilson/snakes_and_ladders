@@ -241,6 +241,7 @@ def test_the_neighbourhood_and_bootstrap_supports_are_calibrated_at_seven_and_ei
                         params.k,
                         np.random.default_rng(seed),
                         n_replicates=8,
+                        workers=1,
                     ).values()
                 )
             )
