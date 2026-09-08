@@ -16,6 +16,12 @@ so a fixture cannot state an oracle the applicability tables have no column
 for; and the two fixtures that restate a canonical constructor are pinned
 against it, since a file that has drifted from the instance it copies is a
 second truth (``sim/CLAUDE.md``).
+
+The baseline records of issue #401 are held to the one property that makes
+reading a cached number safe: the reader returns what the writer wrote, and
+raises where the tree has moved under it. Both directions are asserted here,
+the second against a copy of a fixture directory with one byte changed, since
+the committed fixtures must not be edited to prove it.
 """
 
 from __future__ import annotations
@@ -23,6 +29,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -35,9 +42,14 @@ from snakes_and_ladders.sim.fixtures import (
     FIXTURES_DIR,
     LOADERS,
     ORACLES,
+    StaleBaselineError,
+    baseline,
+    baseline_path,
+    baselines,
     fixture,
     fixtures,
     problems,
+    read_baseline,
     tiers,
 )
 from snakes_and_ladders.sim.spatio_sequential import canonical_spatio_sequential
@@ -45,6 +57,7 @@ from snakes_and_ladders.sim.spatio_sequential import canonical_spatio_sequential
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
+import baselines as baseline_script  # noqa: E402
 import problems_tables  # noqa: E402
 
 CATALOGUE = REPO_ROOT / "PROBLEMS.md"
@@ -165,6 +178,85 @@ def test_the_frustrated_fixture_builds_the_lattice_with_the_known_ground_state()
     assert params.lattice() == frustrated_triangular_lattice(
         params.shape, params.boundary, params.coupling
     )
+
+
+# --- the baseline records (issue #401) ---------------------------------------
+
+#: The cheapest record to recompute, so the determinism check pays 2 s rather
+#: than the 28 s the whole set costs.
+CHEAPEST = "potts_chain/ci"
+
+
+@pytest.mark.structural
+def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
+    # The round trip the readers depend on: what `infra/baselines.py --write`
+    # wrote is what `baseline()` returns, and its digest is this tree's. A
+    # record left behind by a change to the code it measures fails here, on
+    # the pull request that made the change, without recomputing a number.
+    recorded = baselines()
+    assert recorded, "no baseline record is committed"
+
+    for problem, tier in recorded:
+        record = baseline(problem, tier)
+        assert (record.problem, record.tier) == (problem, tier)
+        assert record.path == baseline_path(problem, tier)
+        assert record.measurements, f"{record.path} records no measurement"
+        for name, measurement in record.measurements.items():
+            assert measurement.algorithm, f"{record.path}: {name} names no algorithm"
+        assert read_baseline(record.path).digest == record.digest
+
+
+@pytest.mark.edge_case
+def test_a_mutated_fixture_makes_its_baseline_unreadable(tmp_path: Path) -> None:
+    # The property that makes a cached number safe to read. Against a *copy*
+    # of the fixture directory, so the committed instance is untouched: one
+    # changed seed and the record beside it is refused rather than served.
+    copied = tmp_path / "fixtures"
+    shutil.copytree(FIXTURES_DIR, copied)
+    assert baseline("tree_search", Scale.RELEASE, copied).value("greedy_rate") == 0.48
+
+    fixture_file = copied / "tree_search" / "release.yaml"
+    fixture_file.write_text(
+        fixture_file.read_text().replace("seed: 20260907", "seed: 20260908")
+    )
+
+    with pytest.raises(StaleBaselineError, match="different tree"):
+        baseline("tree_search", Scale.RELEASE, copied)
+
+
+@pytest.mark.edge_case
+def test_an_edited_budget_makes_its_baseline_unreadable(tmp_path: Path) -> None:
+    # The other half of the digest's job. The recorded value is an output and
+    # is not hashed --- the release gate recomputes it --- but the budget that
+    # says what the value means is an input, so a record whose restart count
+    # was edited to match a test is refused rather than believed.
+    copied = tmp_path / "fixtures"
+    shutil.copytree(FIXTURES_DIR, copied)
+    record = copied / "tree_search" / "release.baseline.json"
+    record.write_text(record.read_text().replace('"starts": 50', '"starts": 20'))
+
+    with pytest.raises(StaleBaselineError, match="different tree"):
+        baseline("tree_search", Scale.RELEASE, copied)
+
+
+@pytest.mark.structural
+def test_the_same_baseline_computed_twice_is_the_same_record() -> None:
+    # A reference algorithm whose answer moved between two runs of the same
+    # tree would make every committed record a snapshot rather than a fact,
+    # and the release gate would fail at random. Checked on the cheapest
+    # record; the rest are recomputed at the release gate.
+    (spec,) = baseline_script.selected([CHEAPEST])
+    first, second = baseline_script.compute(spec), baseline_script.compute(spec)
+
+    assert baseline_script.differences(first, second) == []
+    assert first.digest == second.digest
+    assert baseline_script.differences(first, read_baseline(first.path)) == []
+
+
+@pytest.mark.edge_case
+def test_the_writer_refuses_a_record_it_does_not_know() -> None:
+    with pytest.raises(ValueError, match="no baseline spec"):
+        baseline_script.selected(["tree_search/nonexistent"])
 
 
 # --- a supported instance is a fixture, never a literal ----------------------

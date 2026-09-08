@@ -17,6 +17,15 @@ sign test over training seeds. The per-pull-request test runs one seed at a
 sixth of the budget and pins its rates; the 16-seed run at the full budget is
 release-gated, and ``docs/experiments/005-tree-policy-features.md`` records
 what it found.
+
+Both of those are release-gated, so what remains per pull request is the
+sibling at the end of this module (issue #401): the same training, one seed,
+on the six-taxon fixture, against the untrained rate and the hill-climbing
+rate read from that fixture's baseline record rather than measured again. It
+pins that the training runs and lands where it is expected to; it cannot pin
+the full set *ahead* of the single feature, because at six taxa both reach
+the enumerated maximum from every start and there is no order left to see.
+That claim has no fast form and stays at the release gate.
 """
 
 from __future__ import annotations
@@ -26,6 +35,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
@@ -43,6 +53,7 @@ from snakes_and_ladders.search.topology import (
     leaf_bipartitions,
     normalized_robinson_foulds,
 )
+from snakes_and_ladders.sim.fixtures import baseline, fixture
 from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import edges
@@ -429,3 +440,66 @@ def test_the_full_set_against_the_single_feature_over_sixteen_seeds() -> None:
     ):
         assert abs(float(np.mean(rates)) - _RELEASE_MEAN[feature_set]) < 0.05
     assert (comparison.p_full_vs_single < 0.05) == (_RELEASE_P_FULL_VS_SINGLE < 0.05)
+
+
+# --- the per-pull-request sibling (issue #401) ---------------------------
+
+#: The six-taxon fixture, whose 105 topologies enumerate in 0.1 s against the
+#: hard fixture's 945 in 1.4 s, and whose episodes are shorter because the NNI
+#: neighbourhood is smaller. Small enough for the training above to run twice
+#: inside the per-pull-request cap, and still refereed by enumeration.
+SIBLING = "tree_search"
+SIBLING_TIER = Scale.STRESS
+
+# An eighth of the release budget: 80 episodes, and two rollouts per start
+# rather than sixteen. Both feature sets reach every start's maximum at this
+# budget, so a regression in either would have to survive a smaller one.
+SIBLING_ITERATIONS = 10
+SIBLING_BATCH = 8
+SIBLING_ROLLOUTS_PER_START = 2
+SIBLING_SEED = 0
+#: Realized at that budget on the six-taxon fixture, both feature sets.
+_SIBLING_RATE = 1.0
+
+
+@pytest.mark.simulated_truth
+def test_both_feature_sets_train_away_from_the_recorded_untrained_rate() -> None:
+    # The fast sibling of the two release-tier measurements above. The
+    # control and the baseline are the fixture's committed record -- the
+    # untrained policy reaches the enumerated maximum on 0.17 of episodes and
+    # hill climbing on 1.00 -- so the 6 s of uniform rollouts and the
+    # enumeration behind them are not paid again; `infra/baselines.py`
+    # recomputes both at the release gate, and a change to the environment
+    # makes this read raise rather than serve a stale number.
+    record = baseline(SIBLING, SIBLING_TIER)
+    untrained, greedy = record.value("untrained_rate"), record.value("greedy_rate")
+    assert untrained < 0.25 < greedy, (untrained, greedy)
+
+    params = fixture(SIBLING, SIBLING_TIER).params
+    rates = {}
+    for feature_set in (FeatureSet.IMPROVEMENT, FeatureSet.FULL):
+        built, _ = environment(params, feature_set)
+        policy = LinearPolicy(built.n_features())
+        reinforce(
+            built,
+            policy,
+            np.random.default_rng(SIBLING_SEED),
+            iterations=SIBLING_ITERATIONS,
+            batch=SIBLING_BATCH,
+            max_steps=HORIZON,
+        )
+        rng = np.random.default_rng(params.seed + START_SEED_OFFSET)
+        starts = [built.reset(rng) for _ in range(STARTS)]
+        rates[feature_set] = policy_rate(
+            built,
+            policy,
+            starts,
+            record.value("enumerated_maximum"),
+            np.random.default_rng(10_000 + SIBLING_SEED),
+            SIBLING_ROLLOUTS_PER_START,
+        )
+
+    for feature_set, rate in rates.items():
+        assert rate > untrained + 0.5, (feature_set, rate)
+        assert rate == pytest.approx(_SIBLING_RATE), (feature_set, rate)
+    assert rates[FeatureSet.FULL] >= greedy

@@ -46,6 +46,13 @@ run_check "documents" infra/build_documents.sh
 # snakes_and_ladders.qa.build, so this needs no environment of its own.
 run_check "QA figures (all, incl. uncited)" \
   uv run python -m snakes_and_ladders.qa.build --all --check
+# The baseline numbers beside each fixture are read per pull request and
+# recomputed here (issue #401), the same trade the figures make above: the
+# tests that used to compute an enumerated maximum or a hill-climbing rate
+# before measuring anything now read one, and the only thing that recomputes
+# it is this gate. A cached number no run ever reproduces would be a claim
+# with no referee.
+run_check "fixture baselines" uv run python infra/baselines.py
 
 echo
 if [ "${#failures[@]}" -eq 0 ]; then

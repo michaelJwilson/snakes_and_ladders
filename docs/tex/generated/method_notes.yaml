@@ -85,6 +85,18 @@
     these instances are where descent, annealing and tempering are separated
     at an equal budget of sweeps and nothing is solved exactly.
 
+"Planted spin glass, enumerable ground state":
+  samplers: >-
+    Annealing is the sampler that separates from descent here, and the reason
+    the instance is declared: single-site descent reaches the enumerated
+    ground state from 0.079 of starts, so a sampler that escapes a local
+    minimum has something to win against and an exact answer to win it
+    against.
+  optimizers: >-
+    Descent is the baseline the instance defeats. The sizes are chosen so the
+    ground state is enumerated rather than bounded, which is what lets a
+    failure be a failure rather than an unknown.
+
 "Low-density parity-check code, Gallager (3,6)":
   optimizers: >-
     Sum-product decodes to the bitwise posterior and min-sum to the most
@@ -188,6 +200,15 @@ untested pairings:
     Expectation-maximization is pinned against the gradient fit on mixtures
     built per test, where the two are given the same observations at several
     sizes; the declared instance carries the comparison at the release budget.
+  planted_glass / optimizers: >-
+    Descent is measured on the declared instance and the ground state is
+    enumerated, but the annealer and the exact cut are not: the cut refuses a
+    non-submodular energy and the annealer's own claims are pinned on the
+    lattice, at sizes chosen for the sampler rather than for this instance.
+  planted_glass / samplers: >-
+    The instance exists to defeat descent, and what it is pinned against is
+    descent. Separating a sampler from descent on it is the comparison it was
+    declared for and is not yet run.
   potts_lattice / surrogates: >-
     The relaxation is refereed against enumerated maximum cuts, which fixes
     the size at what enumeration reaches rather than at the declared one.

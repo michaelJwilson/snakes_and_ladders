@@ -14,6 +14,7 @@
     Potts chain in a field & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & -- & -- & -- & -- & -- & -- & $\checkmark$ & $\checkmark$ \\
     Potts lattice and Markov random field & $\checkmark$ & -- & $\checkmark$ & $\checkmark$ & -- & -- & -- & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & -- \\
     Frustrated Potts: triangular antiferromagnet, planted spin glass & $\checkmark$ & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+    Planted spin glass, enumerable ground state & $\checkmark$ & -- & -- & -- & -- & -- & -- & $\checkmark$ & $\checkmark$ & -- & -- & -- \\
     Low-density parity-check code, Gallager (3,6) & $\checkmark$ & -- & $\checkmark$ & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
     Hidden Markov model, six emission families & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\circ$ & -- & -- & $\checkmark^{\dagger}$ & -- & -- & $\checkmark$ & $\checkmark$ \\
     Coupled spatio-sequential model & $\checkmark$ & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\checkmark^{\dagger}$ & -- & $\checkmark$ & -- & -- & -- & -- \\
@@ -39,6 +40,7 @@
     Potts chain in a field & $\checkmark$ & -- & -- & -- & oracle & -- & oracle \\
     Potts lattice and Markov random field & $\checkmark$ & -- & $\checkmark$ & -- & oracle & -- & oracle \\
     Frustrated Potts: triangular antiferromagnet, planted spin glass & -- & $\checkmark$ & -- & $\checkmark$ & oracle & -- & oracle \\
+    Planted spin glass, enumerable ground state & $\checkmark$ & -- & -- & -- & oracle & -- & oracle \\
     Low-density parity-check code, Gallager (3,6) & $\checkmark$ & $\checkmark$ & -- & -- & oracle & -- & truth$^{\dagger}$ \\
     Hidden Markov model, six emission families & $\checkmark$ & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
     Coupled spatio-sequential model & $\checkmark$ & -- & -- & -- & oracle & -- & -- \\
@@ -64,6 +66,7 @@
     Potts chain in a field & -- & -- & -- \\
     Potts lattice and Markov random field & -- & -- & -- \\
     Frustrated Potts: triangular antiferromagnet, planted spin glass & -- & -- & -- \\
+    Planted spin glass, enumerable ground state & -- & -- & -- \\
     Low-density parity-check code, Gallager (3,6) & -- & -- & -- \\
     Hidden Markov model, six emission families & -- & -- & -- \\
     Coupled spatio-sequential model & ci & truth$^{\dagger}$ & The annealed data-sampled burn-in beats a uniform start at an equal budget on the planted lattice, where it is the start and not the move that decides the labelling; it is refereed by the planted labels alone. \\
@@ -89,6 +92,7 @@
     Potts chain in a field & -- & -- & -- \\
     Potts lattice and Markov random field & ci & oracle & Cluster moves slow by 1.9$\times$ between extent 8 and 24 where single-site sweeps slow by 3.2$\times$, a gap of 2.1$\times$ and widening (experiment 001); they refuse a negative coupling, where the single-site sweep is all there is. \\
     Frustrated Potts: triangular antiferromagnet, planted spin glass & -- & -- & No sampler of its own: the lattice's samplers apply unchanged, and the cluster moves refuse the negative couplings these instances are built from. What the row adds is the ground-state energy every search is scored against. \\
+    Planted spin glass, enumerable ground state & ci & oracle & Annealing is the sampler that separates from descent here, and the reason the instance is declared: single-site descent reaches the enumerated ground state from 0.079 of starts, so a sampler that escapes a local minimum has something to win against and an exact answer to win it against. \\
     Low-density parity-check code, Gallager (3,6) & -- & -- & -- \\
     Hidden Markov model, six emission families & ci & truth$^{\dagger}$ & The block sweep draws a whole path from its conditional in one pass, where a single-site sweep would move one position at a time against the chain; it is refereed by the simulated truth alone, an oracle being wanted. \\
     Coupled spatio-sequential model & ci & oracle & The factor-graph sweep is one algorithm over the whole coupled graph and is refereed by enumeration on the canonical instance; it is slower per sweep than the specialized Potts kernel it generalizes. \\
@@ -114,6 +118,7 @@
     Potts chain in a field & ci & oracle & The transfer matrix makes the chain's normalizer exact at every length, so the gradient fit is refereed wherever it runs; nothing here separates it from enumeration, which is also exact at these sizes. \\
     Potts lattice and Markov random field & ci & oracle & The minimum cut is exact and polynomial where the couplings are submodular; above two states only alpha expansion applies, with a factor-of-two bound rather than an optimum, and Max-Cut is bounded and never solved. \\
     Frustrated Potts: triangular antiferromagnet, planted spin glass & -- & -- & No optimizer of its own. The exact cut refuses a non-submodular energy, so these instances are where descent, annealing and tempering are separated at an equal budget of sweeps and nothing is solved exactly. \\
+    Planted spin glass, enumerable ground state & ci & oracle & Descent is the baseline the instance defeats. The sizes are chosen so the ground state is enumerated rather than bounded, which is what lets a failure be a failure rather than an unknown. \\
     Low-density parity-check code, Gallager (3,6) & ci & oracle & Sum-product decodes to the bitwise posterior and min-sum to the most probable codeword; both are exact on a cycle-free code and the Bethe approximation on a loopy one, where min-sum is the cheaper and the weaker and the gap is measured. \\
     Hidden Markov model, six emission families & ci & oracle & Expectation--maximization re-estimates in closed form for every family whose M step has one and wins on cost there; the gradient fit is the only route where it does not, and the two must reach the same optimum. Interval coverage is nominal from two standard deviations of separation upward (experiment 002). \\
     Coupled spatio-sequential model & ci & oracle & Block-coordinate ascent does not decrease the joint at any block, for every label solver; iterated conditional modes freezes into disjoint clusters where the cluster move does not, and which wins is measured at an equal budget rather than assumed. \\
@@ -139,6 +144,7 @@
     Potts chain in a field & ci & oracle & The relaxation is exact at every corner to 1e-11 and supplies a gradient the discrete objective has not; it buys nothing at a size enumeration reaches, and the learned policy beats greedy on the same landscape (experiment 003). \\
     Potts lattice and Markov random field & ci & oracle & Belief propagation is exact on a tree and the Bethe approximation otherwise, so it stands in for the normalizer at sizes enumeration cannot reach; on a loopy graph its error is reported and asserted against nothing. \\
     Frustrated Potts: triangular antiferromagnet, planted spin glass & -- & -- & -- \\
+    Planted spin glass, enumerable ground state & -- & -- & -- \\
     Low-density parity-check code, Gallager (3,6) & -- & -- & -- \\
     Hidden Markov model, six emission families & ci & oracle & The relaxation of the state path is exact at every corner and gives a gradient over paths; it says nothing at a length past which the path enumeration that referees it cannot run. \\
     Coupled spatio-sequential model & -- & -- & -- \\
