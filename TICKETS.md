@@ -102,8 +102,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-- A feature set for the tree environment, with the unidentifiable-constant
-  invariance pinned
+- The surrogate-bound columns of #308 in the tree feature set — the plug-in
+  lower and parsimony upper bounds — measured at the budget of
+  `docs/experiments/005-tree-policy-features.md`
 - A tree fixture hard enough to separate a policy from greedy (#177)
 - The factor-graph environment over #296, the #308 surrogate as a tree reward
   model, and the budget-matched harness of #281 for the RL comparisons
