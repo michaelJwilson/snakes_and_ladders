@@ -1,0 +1,111 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{rosen2019}
+\citation{mezard2009}
+\citation{mackay2003}
+\citation{nocedal2006}
+\citation{goodfellow2016,prince2023}
+\citation{suttonbarto2018}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{2}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{2}{Introduction}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Scope and Limitations}{2}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Methods}{2}{section.2}\protected@file@percent }
+\newlabel{sec:methods}{{2}{2}{Methods}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}The Continuous Optimization Abstraction}{2}{subsection.2.1}\protected@file@percent }
+\newlabel{sec:notation-abstraction}{{2.1}{2}{The Continuous Optimization Abstraction}{subsection.2.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Differentiable Likelihoods and Energy Functions}{2}{subsection.2.2}\protected@file@percent }
+\citation{amari2016}
+\bibstyle{plainnat}
+\bibdata{references}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Reinforcement Learning and Variational Search}{3}{subsection.2.3}\protected@file@percent }
+\newlabel{sec:rl}{{2.3}{3}{Reinforcement Learning and Variational Search}{subsection.2.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.1}Advanced Architectural Extensions}{3}{subsubsection.2.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Results}{3}{section.3}\protected@file@percent }
+\newlabel{sec:results}{{3}{3}{Results}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Simulation and Exact Inference Validation}{3}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:res-likelihood}{{3.1}{3}{Simulation and Exact Inference Validation}{subsection.3.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Memory Footprint at the Declared Scale}{3}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:res-footprint}{{3.2}{3}{Memory Footprint at the Declared Scale}{subsection.3.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Empirical Benchmarking [PLACEHOLDERS]}{3}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Conclusions}{3}{section.4}\protected@file@percent }
+\newlabel{sec:conclusions}{{4}{3}{Conclusions}{section.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Worked example: 4-taxon alignment simulated under the Jukes-Cantor model (seed 20260902, 200\_000 sites total), showing the topology with branch lengths -- rho the root, Greek letters its internal ancestors -- and the first 10 of 200\_000 simulated sites.}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:sim-example}{{1}{4}{\simExampleCaption }{figure.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Every pruning backend against the oracle that owes it nothing. Brute-force marginalization sums over all ancestral assignments, so it shares no code with the recursion it checks, and its cost is what keeps the fixture small. Fixture: 4-state Jukes-Cantor on the 3-child-root tree, seed 20260902. The deviation is relative because the log-likelihood is a sum over sites: an absolute bound fixed at one site count does not transfer to another, which is why the x-axis spans a factor of 30. Worst deviation across every backend and size: 3.99e-14, against a float64 epsilon of 2.22e-16.}}{4}{figure.2}\protected@file@percent }
+\newlabel{fig:backend-agreement}{{2}{4}{\backendAgreementCaption }{figure.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Memory held while simulating a Jukes-Cantor alignment and while evaluating its likelihood by pruning, at 4 states, across the declared scale. The simulator retains every node's states and pruning retains one partial likelihood per open node, so both are computed from the arrays' own shapes and are exact rather than sampled; the regression suite pins each figure against the allocator's count. The last row is the declared maximum of 1000 taxa and 11\_000 sites, which sits a factor of 20 inside the 16 GB unified-memory requirement. The topology is a caterpillar at every size, the deepest tree on its leaves and so the worst case: a balanced tree of the same taxon count costs strictly less. Timings are reported in the benchmark suite instead, because a wall clock ranks the machine rather than the code.}}{5}{table.1}\protected@file@percent }
+\newlabel{tab:likelihood-footprint}{{1}{5}{\likelihoodFootprintCaption }{table.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Learning curves of the RL proposal policy across $n \in \{10, 50, 100\}$, measured in $\Delta \ln L$ per likelihood evaluation budget.}}{5}{figure.3}\protected@file@percent }
+\newlabel{fig:rl-convergence}{{3}{5}{Learning curves of the RL proposal policy across $n \in \{10, 50, 100\}$, measured in $\Delta \ln L$ per likelihood evaluation budget}{figure.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Wall-clock convergence of the \texttt  {snakes\_and\_ladders} framework against IQ-TREE 2 and RAxML-NG on empirical benchmark datasets.}}{5}{figure.4}\protected@file@percent }
+\newlabel{fig:benchmark-iqtree}{{4}{5}{Wall-clock convergence of the \texttt {snakes\_and\_ladders} framework against IQ-TREE 2 and RAxML-NG on empirical benchmark datasets}{figure.4}{}}
+\bibcite{amari2016}{{1}{2016}{{Amari}}{{}}}
+\bibcite{blahut2003}{{2}{2003}{{Blahut}}{{}}}
+\bibcite{blandy2021}{{3}{2021}{{Blandy et~al.}}{{Blandy, Orendorff, and Tindall}}}
+\bibcite{bryant2015}{{4}{2015}{{Bryant and O'Hallaron}}{{}}}
+\bibcite{compeau2015}{{5}{2015}{{Compeau and Pevzner}}{{}}}
+\bibcite{clrs2022}{{6}{2022}{{Cormen et~al.}}{{Cormen, Leiserson, Rivest, and Stein}}}
+\bibcite{durbin1998}{{7}{1998}{{Durbin et~al.}}{{Durbin, Eddy, Krogh, and Mitchison}}}
+\bibcite{felsenstein2004}{{8}{2004}{{Felsenstein}}{{}}}
+\bibcite{frey1998}{{9}{1998}{{Frey}}{{}}}
+\bibcite{goodfellow2016}{{10}{2016}{{Goodfellow et~al.}}{{Goodfellow, Bengio, and Courville}}}
+\bibcite{pmpp2022}{{11}{2022}{{Hwu et~al.}}{{Hwu, Kirk, and El~Hajj}}}
+\bibcite{koller2009}{{12}{2009}{{Koller and Friedman}}{{}}}
+\bibcite{lapan2020}{{13}{2020}{{Lapan}}{{}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Computational throughput (nodes evaluated per second) across CPU (Rust), Apple Silicon (Metal/MPS), and NVIDIA (CUDA) backends.}}{6}{figure.5}\protected@file@percent }
+\newlabel{fig:hardware-scaling}{{5}{6}{Computational throughput (nodes evaluated per second) across CPU (Rust), Apple Silicon (Metal/MPS), and NVIDIA (CUDA) backends}{figure.5}{}}
+\bibcite{mackay2003}{{14}{2003}{{MacKay}}{{}}}
+\bibcite{martin2008}{{15}{2008}{{Martin}}{{}}}
+\bibcite{mezard2009}{{16}{2009}{{M{\'e}zard and Montanari}}{{}}}
+\bibcite{newman1999}{{17}{1999}{{Newman and Barkema}}{{}}}
+\bibcite{nielsen2010}{{18}{2010}{{Nielsen and Chuang}}{{}}}
+\bibcite{nocedal2006}{{19}{2006}{{Nocedal and Wright}}{{}}}
+\bibcite{ortega2022}{{20}{2022}{{Ortega}}{{}}}
+\bibcite{pachter2005}{{21}{2005}{{Pachter and Sturmfels}}{{}}}
+\bibcite{prince2023}{{22}{2023}{{Prince}}{{}}}
+\bibcite{raschka2024}{{23}{2024}{{Raschka}}{{}}}
+\bibcite{rosen2019}{{24}{2019}{{Rosen}}{{}}}
+\bibcite{suttonbarto2018}{{25}{2018}{{Sutton and Barto}}{{}}}
+\citation{felsenstein2004}
+\citation{raschka2024}
+\citation{mezard2009}
+\citation{koller2009}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Mathematical Foundations of the Application Domains}{7}{appendix.A}\protected@file@percent }
+\newlabel{app:background}{{A}{7}{Mathematical Foundations of the Application Domains}{appendix.A}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Phylogenetic Inference and Substitution Models}{7}{subsection.A.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Potts Models in an External Field}{7}{subsection.A.2}\protected@file@percent }
+\citation{mackay2003}
+\citation{martin2008}
+\citation{blandy2021}
+\citation{bryant2015}
+\citation{pmpp2022}
+\citation{clrs2022}
+\citation{rosen2019}
+\citation{nocedal2006}
+\citation{mackay2003}
+\citation{koller2009}
+\citation{frey1998}
+\citation{ortega2022}
+\citation{mezard2009}
+\citation{newman1999}
+\citation{amari2016}
+\citation{goodfellow2016}
+\citation{prince2023}
+\citation{suttonbarto2018}
+\citation{lapan2020}
+\citation{raschka2024}
+\citation{felsenstein2004}
+\citation{durbin1998}
+\citation{compeau2015}
+\citation{pachter2005}
+\citation{blahut2003}
+\citation{nielsen2010}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Hidden Markov Models (HMMs)}{8}{subsection.A.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B}Reference Taxonomy and Core Literature}{8}{appendix.B}\protected@file@percent }
+\newlabel{app:taxonomy}{{B}{8}{Reference Taxonomy and Core Literature}{appendix.B}{}}
+\@writefile{toc}{\contentsline {paragraph}{Infrastructure (Build, Structure, and Speed):}{8}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Optimization (Discrete and Continuous):}{8}{section*.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Application (The Science):}{8}{section*.5}\protected@file@percent }
+\gdef \@abspage@last{8}
