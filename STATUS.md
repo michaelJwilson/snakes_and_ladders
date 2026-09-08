@@ -11,6 +11,9 @@ started**, on the terms §0.4 sets.
 
 ## Summary
 
+The checks each row rests on are listed, per test, in `CHECKS.md`, generated
+from the suite; `PROBLEMS.md` names the code behind each problem class.
+
 | Roadmap item | Status | Evidence | Key PRs |
 | --- | --- | --- | --- |
 | §0 Development loop | Landed | Ten required checks; committed PDF byte-compared and every notebook re-executed on each PR | [#49](https://github.com/michaelJwilson/snakes_and_ladders/pull/49), [#57](https://github.com/michaelJwilson/snakes_and_ladders/pull/57), [#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72), [#92](https://github.com/michaelJwilson/snakes_and_ladders/pull/92), [#102](https://github.com/michaelJwilson/snakes_and_ladders/pull/102), [#151](https://github.com/michaelJwilson/snakes_and_ladders/pull/151) |
@@ -22,7 +25,7 @@ started**, on the terms §0.4 sets.
 | 2.2 Curriculum learning | Not started | — | — |
 | 2.3 Empirical validation | Not started | — | — |
 | 2.4 Tracking, ablations & leaderboard | Not started | — | — |
-| Stage 3 Research extensions | Not started | — | — |
+| Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half not started, and blocked on an oracle | Relaxation exact at every corner to 1e-11; estimator bias 0.598 to 0.036 as `tau` falls 2.0 to 0.1, standard deviation 0.165 to 3.39 over 20000 draws; deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098` | [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225) |
 
 ## §0 The Development Loop
 
@@ -700,6 +703,32 @@ change would need. So **no default moves**; k-means++ lands as a strategy a
 caller may choose, at a cost of one objective evaluation (271 us of seeding
 against 260 us per evaluation at 4000 points).
 
+**Tempering against restarts on the mixture, at equal evaluations.** The
+comparison [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284)
+and [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303)
+deferred, recorded whichever way it fell
+([#332](https://github.com/michaelJwilson/snakes_and_ladders/issues/332),
+[`docs/experiments/004`](docs/experiments/004-mixture-tempering-vs-restarts.md)).
+Five components 1.5 standard deviations apart with unequal weights, 500
+observations, built from `sim.mixture` under seed 20260908 since #262 committed
+neither of the five-component fixtures it measured. Multi-start EM, simulated
+annealing with Hamiltonian proposals and parallel tempering — the continuous
+counterpart of the Potts one, now in `opt.hmc` beside `anneal` — each spend
+3,000 likelihood evaluations per start through `opt.budget.compare`, every
+method ending with the same charged L-BFGS polish because raw EM sits 4 to 6
+nats above its basin's optimum 500 iterations in. Against the best-known optimum — 1111.596 nats, reached by 16 of 1,000
+polished restarts and 8.3 nats below the polished simulated parameters, whose
+basin is not the maximum on this sample — over 40 shared starts: **restarts
+7/40**, tempering 4/40 (McNemar p = 0.549 against restarts), annealing 1/40
+(p = 0.031); mean gaps 2.6, 4.2 and 8.0 nats. **Restarts are not beaten on
+the mixture**, at 3,000 evaluations: tempering does not separate from them
+and annealing loses to them, the opposite of the glass row above and the
+same finding as Rastrigin. The 8-start tier of the same test runs per pull
+request and pins the ordering.
+The paired test `ROADMAP.md` §2.4 asks for is now in the utility:
+`opt.budget.mcnemar` on the per-start hits, exact rather than chi-square,
+because 40 starts cannot support the approximation.
+
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
 but until now only a gradient fit could ask for one — expectation-maximization
@@ -945,15 +974,34 @@ past it — zero field gives an aligned state at `-J |E|`, zero coupling gives
 `argmax` per site; and by the max-flow min-cut theorem as a self-check, the
 flow value equalling the capacity of the cut residual reachability induces.
 
-A Rust kernel (`src/maxflow.rs`) runs **28-34x** faster than the NumPy
-reference measured on its own, and **6.6-10.6x** as a caller sees it; the
-difference is the list marshalling crossing the FFI boundary, which is the
-same gap #202 closes for the categorical sampler and is deferred to it rather
-than solved twice. The reference stays as the oracle. The port also removes a
-fragility: the
-Python blocking flow recurses to the depth of the level graph and needs
-`setrecursionlimit` raised past a few thousand nodes, while the Rust one uses
-an explicit stack.
+A Rust kernel (`src/maxflow.rs`) runs **26-32x** faster than the NumPy
+reference measured on its own, and **6.3-10.7x** as a caller sees it. #220
+attributed the difference to the Python lists crossing the FFI boundary by
+copy, the gap #202 closed for the categorical sampler, and deferred the fix;
+[#336](https://github.com/michaelJwilson/snakes_and_ladders/issues/336)
+applied it, passing `float64` and `int64` buffers through `rust-numpy` and
+returning the configuration as an array, and measured that the copy was not
+the term. Minimum of 20 or more rounds, in ms, on square lattices with a
+random per-node field:
+
+| Extent | NumPy reference | Kernel, lists (#220) | Kernel, buffers (#336) | Caller (#220) | Caller (#336) | `energy()` |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 | 4.47 | 0.142 | 0.138 | 0.733 | 0.711 | 0.575 |
+| 32 | 22.0 | 0.835 | 0.836 | 3.30 | 3.22 | 2.60 |
+| 64 | 180 | 7.15 | 6.93 | 17.3 | 16.9 | 9.94 |
+
+The boundary copy was 0.03-0.2 ms of a 0.7-17 ms call and removing it moved
+the caller-visible number by under 3%. What a caller pays for is
+`snakes_and_ladders.search.maxflow.energy`, which scores the returned
+configuration edge by edge in Python and is 59-81% of the wrapper's time; it
+is the oracle's function and is left as it is, so a caller wanting the
+kernel's speedup takes the configuration from the extension and scores it
+itself. Output is unchanged: the configuration is
+equal element by element to the reference's and to the previous binding's at
+extents 16, 32 and 64, and the energy is bitwise equal. The reference stays as
+the oracle. The port also removes a fragility: the Python blocking flow
+recurses to the depth of the level graph and needs `setrecursionlimit` raised
+past a few thousand nodes, while the Rust one uses an explicit stack.
 
 The boundary is refused rather than approximated. A negative coupling is
 NP-hard and raises; more than two states is alpha expansion (#207), which
@@ -1067,8 +1115,10 @@ by `opt.budget.compare`
 with the utility's own streams and the best any method found as the
 reference, tempering **12/12**, annealing 10/12 with a mean gap of 0.17, and
 restarts of descent 4/12 with a mean gap of 0.75, every method at or below
-the planted energy. The five-component mixture comparison waits on the
-mixture branch (#263) landing and belongs to the same utility.
+the planted energy. The five-component mixture comparison, the one problem
+class where restarts are the standard answer, is under Milestone 1.3 and in
+[`docs/experiments/004`](docs/experiments/004-mixture-tempering-vs-restarts.md)
+([#332](https://github.com/michaelJwilson/snakes_and_ladders/issues/332)).
 
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter
@@ -1166,6 +1216,36 @@ branch distinguishing them fits to zero and the tree collapses to the same
 polytomy — so a rank correlation moves by up to 0.04 under a perturbation of
 one part in 1e9 and is not a measurement.
 
+**The tree policy has now been trained, and the result is negative.** On the
+7-taxon fixture where NNI hill climbing reaches the enumerated maximum from
+only 24 of 50 starts, a trained policy reaches it on 0.485 of episodes against
+greedy's 0.480 at a matched per-episode budget — +0.005, standard deviation
+0.014 over 16 training seeds, 8 ahead, sign test p = 1.0. Two properties of
+the environment bound it, and both are measured rather than argued. An episode
+terminates when no move improves, and all 945 topologies contain 10 such
+states, so every run — 50 of 50 greedy, 800 of 800 learned — ends at one: the
+agent selects which local optimum to enter, and cannot leave one. And the
+policy ranks moves by a single feature, the improvement a move buys, which
+places hill climbing inside the policy class as a temperature. What would
+change the answer is named rather than hoped for: a richer feature set
+(`TICKETS.md` §2.1) and accepted-worsening steps (Stage 3, stochastic escape).
+
+**Escape is now built, and it moved the comparison's baseline rather than its
+result.** An episode can run past a local optimum, and an epsilon-greedy
+policy can take the worsening move that leaves one: escape from one of the 9
+non-global optima rises from 0.111 at `epsilon = 0` to 0.883 at `0.4`, and
+matched-budget success from a random start rises from 0.560 to 0.908 against
+the 0.480 a single greedy run reaches. But random-restart hill climbing
+reaches the enumerated maximum from **every** start at the same 60-decision
+budget: greedy stops after about four decisions, so 60 buys roughly fifteen
+restarts, and with the global basin covering about 48% of starting topologies
+`1 - 0.52**15` is indistinguishable from 1. The baseline Milestone 2.1 has to
+beat on this fixture is therefore 1.000, not the 0.480 the tree-policy
+comparison above was stated against, and nothing measured here beats it. The
+fixture separates a single greedy run from the optimum; it does not separate
+anything from restarts, and a fixture that does is what the next comparison
+needs.
+
 **All three problem classes are now MDPs.** `snakes_and_ladders.learn.Environment` had
 one instance, a 1-D Potts chain, which is the same position `snakes_and_ladders.opt` was in
 before four instances made its model-agnosticism a measurement rather than an
@@ -1193,7 +1273,7 @@ NNI moves, is refused). At #178's budget of 640 episodes over 50 starts and 16
 training seeds, the single feature reaches the enumerated maximum from 0.487
 of episodes against greedy's 0.480 (sign test p = 0.79) and the full set from
 0.796, ahead on 16 of 16 seeds (p = 3.05e-5;
-`docs/experiments/004-tree-policy-features.md`). The known-parameter reward
+`docs/experiments/005-tree-policy-features.md`). The known-parameter reward
 now scores GTR from a given rate matrix through the pruning recursion. Not
 measured: the full set against random-restart hill climbing, which #194 showed
 reaches every start on this fixture, and any column's individual necessity.
@@ -1214,6 +1294,90 @@ coverage against separation, and REINFORCE against greedy on the Potts chain —
 and this file now cites them. The Aim run store (#75) is part 2, behind the
 dependency's approval; until then the Results section is typed from the
 measurement and names the script that produced it.
+
+## Stage 3 — Research Extensions
+
+**Only the half with an oracle is built.** `ROADMAP.md`'s differentiable-search
+bullet names two relaxations. Potts configurations and HMM state paths are
+enumerable, so the exact optimum, the exact expected score and the exact
+gradient are all computable and "does the relaxation find what discrete search
+finds" is falsifiable. Tree topologies at any interesting size are not, so the
+tropical Grassmannian half is not started and `TICKETS.md` records that it is
+blocked on an oracle rather than on effort
+([#211](https://github.com/michaelJwilson/snakes_and_ladders/issues/211)).
+
+**The relaxation is an extension, checked at every corner.** Over every
+configuration of an enumerable instance the relaxed score equals the discrete
+one to `1e-11` relative, for both spaces. The HMM check crosses a module
+boundary — `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
+`RelaxedHmmPath.discrete` and `snakes_and_ladders.likelihood.hmm_paths.path_log_probability`
+are independent implementations — and the relaxed objective's enumerated
+optimum is the Viterbi path.
+
+**One identity carries the result, and its boundary is not what it looks
+like.** For a multilinear objective under a factorized `q`,
+`E_q[score] = score(q)` exactly: the relaxed form at the marginals *is* the
+expected discrete score. Two plausible statements of the limit are false and
+are refuted by tests — it is not that the model must be a chain, and it is not
+that terms must be pairwise. What breaks it is a term using one site twice,
+since `E[X**2] = E[X]` for an indicator; measured, 1.000 against 0.557. It
+follows that the relaxed maximum is attained at a vertex, so the relaxation
+introduces **no optimum the discrete problem lacks** — everything a relaxed
+search loses is lost to local optima of the ascent.
+
+**The estimator bias is measured, not assumed.** Against the exact gradient
+over 20000 draws, scaled by the largest exact component:
+
+| `tau` | soft bias (SEM) | soft sd | straight-through bias (SEM) | ST sd |
+| --- | --- | --- | --- | --- |
+| 2.00 | 0.5975 (0.0012) | 0.165 | 0.5620 (0.0027) | 0.382 |
+| 1.00 | 0.3373 (0.0034) | 0.487 | 0.3233 (0.0051) | 0.723 |
+| 0.50 | 0.1400 (0.0076) | 1.077 | 0.1418 (0.0090) | 1.272 |
+| 0.20 | 0.0475 (0.0157) | 2.220 | 0.0502 (0.0165) | 2.340 |
+| 0.10 | 0.0356 (0.0240) | 3.392 | 0.0380 (0.0246) | 3.472 |
+
+Bias falls by a factor of 17 while the standard deviation rises by a factor of
+21, so no temperature is good at both. Straight-through's bias matches the soft
+estimator's within error and its variance is higher at every temperature, so on
+this problem it buys nothing.
+
+**The sampling is what costs, not the relaxation.** Against single-flip hill
+climbing over 40 shared seeds, on an antiferromagnetic chain whose optimum
+needs coordinated flips:
+
+| Method | Reached the optimum | McNemar |
+| --- | --- | --- |
+| Greedy hill climbing | 5/40 | — |
+| Deterministic relaxation | 18/40 | `p = 0.00098` |
+| Soft Gumbel-softmax | 11/40 | `p = 0.18` |
+| Straight-through | 11/40 | `p = 0.18` |
+| Annealed soft, 0.5 to 0.05 | 11/40 | `p = 0.18` |
+
+The deterministic ascent — which the identity licenses, so it is not a
+shortcut — is significantly better than the baseline; adding Gumbel noise gives
+that up for a tie, and annealing does not recover it. It is also 15% cheaper
+per run: 43.6 ms against 50.1 ms for 100 gradient steps. Three of four variants
+tie, and that is reported as a tie, per the precedent
+[#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193) set.
+
+**The budgets are not the same unit and no claim is made that they are.**
+Greedy stops at a local maximum after 3.5 decisions on average at 14 discrete
+evaluations each; the relaxation takes gradient steps and evaluates no discrete
+configuration until the end. What is matched is the restart count and the
+seeds. The advantage is not bought with the larger budget: the relaxation
+already wins at 25 gradient steps (15/40, `p = 0.0064`).
+
+**The comparison fixture is not the repository's own.** `potts_params.yaml` has
+`J = 0.75 > 0`, so its optimum is `argmax(h)` repeated and every method finds
+it. That is the third time a fixture has been too easy to separate methods —
+after [#177](https://github.com/michaelJwilson/snakes_and_ladders/issues/177),
+[#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198) and #209's planted
+spin glass — and it is why the baseline is now run before any claim is made.
+
+**Not built:** the tropical Grassmannian relaxation; the relaxation on the
+Potts *lattice*, where the identity holds but nothing has been measured; and
+any joint optimization of structure alongside continuous parameters, which is
+what the roadmap bullet ultimately asks for.
 
 ## §1.2 Requirements Ledger
 
@@ -1295,14 +1459,14 @@ is 21 pages; `texlive-pictures` joins the CI TeX install for the figure.
 
 ## What Is Not Claimed
 
-- That a learned policy beats hill climbing on trees. A fixture that could
-  settle it now exists — 7 taxa, internal branches an order of magnitude
-  shorter than the pendant ones, where NNI hill climbing reaches the
-  enumerated maximum from 24 of 50 seeded starts and stops at a genuine local
-  optimum on the other 26 — but no policy has been trained on it and no
-  budget-matched comparison has been run (issue #178). The 6-taxon fixture
-  cannot support the claim in either direction, because greedy reaches the
-  enumerated optimum from every start there.
+- That a learned policy beats hill climbing on trees. It has now been
+  measured on a fixture where hill climbing demonstrably fails, and it does
+  not: 0.485 of episodes reach the enumerated maximum against greedy's 0.480,
+  a difference of +0.005 with a standard deviation of 0.014 over 16 training
+  seeds, 8 of them ahead, at an exact two-sided sign test of p = 1.0. The
+  policy does train — an untrained one reaches the maximum on 0.018 — so this
+  is a tie rather than a failure to learn. The environment is what bounds it,
+  in two ways stated in §2.1 below.
 - Any comparison against established software. IQ-TREE 2 and RAxML-NG are not
   installed, and no statement anywhere in the repository compares against them.
 - Runtime scaling. Benchmarks are not ranked on CI hardware, so timings live in

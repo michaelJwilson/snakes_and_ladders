@@ -22,6 +22,7 @@
 //! the `#[pyfunction]` is a thin wrapper, so `cargo test` exercises the
 //! algorithm without touching `PyResult`.
 
+use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -263,20 +264,48 @@ pub fn ising_ground_state_impl(
         .collect())
 }
 
+/// Node indices from an `int64` array, refusing a negative one.
+///
+/// Indices cross the boundary as `int64` because that is what `numpy` builds
+/// by default and what `potts.rs` and `sampling.rs` already take; the kernel
+/// indexes with `usize`, so the conversion is one checked pass in Rust rather
+/// than one Python integer per entry.
+fn node_indices(indices: &[i64]) -> PyResult<Vec<usize>> {
+    indices
+        .iter()
+        .map(|&index| {
+            usize::try_from(index).map_err(|_| {
+                PyValueError::new_err(format!("node indices must be non-negative, got {index}"))
+            })
+        })
+        .collect()
+}
+
 /// Maximum flow on an explicitly given network.
 ///
 /// `arcs` is `2 * n_arcs` flattened `(from, to)` pairs and `capacity` one
 /// entry per arc; back arcs are added automatically with zero capacity, so a
 /// caller wanting an undirected edge passes it twice.
+///
+/// **Arrays are borrowed, not copied.** The first binding took `Vec<usize>`
+/// and `Vec<f64>`, so PyO3 read one Python object per entry on the way in
+/// (issue #336). `rust-numpy` hands over the buffer itself, the contract
+/// `sampling::sample_rows` and `pruning::pruning_log_likelihood` already
+/// state.
 #[pyfunction]
 #[pyo3(signature = (n_nodes, arcs, capacity, source, sink))]
 pub fn max_flow(
     n_nodes: usize,
-    arcs: Vec<usize>,
-    capacity: Vec<f64>,
+    arcs: PyReadonlyArray1<'_, i64>,
+    capacity: PyReadonlyArray1<'_, f64>,
     source: usize,
     sink: usize,
 ) -> PyResult<f64> {
+    // `as_slice` succeeds only for a C-contiguous array, the same contract
+    // `sampling::sample_rows` states; the wrapper normalizes with
+    // `ascontiguousarray`, free when the array already is one.
+    let arcs = node_indices(arcs.as_slice()?)?;
+    let capacity = capacity.as_slice()?;
     if arcs.len() != 2 * capacity.len() {
         return Err(PyValueError::new_err(format!(
             "arcs has {} entries for {} capacities",
@@ -295,15 +324,25 @@ pub fn max_flow(
 }
 
 /// The exact ground state of a two-state ferromagnetic Ising model.
+///
+/// `field` is `2 * n_nodes` `float64` in row-major order, `edges` is
+/// `2 * n_edges` `int64` as flattened `(i, j)` pairs, and `coupling` one
+/// `float64` per edge. All three are borrowed (see [`max_flow`]), and the
+/// result comes back as an `int64` array rather than a list, so nothing at
+/// the boundary is built one Python object at a time.
 #[pyfunction]
 #[pyo3(signature = (n_nodes, field, edges, coupling))]
-pub fn ising_ground_state(
+pub fn ising_ground_state<'py>(
+    py: Python<'py>,
     n_nodes: usize,
-    field: Vec<f64>,
-    edges: Vec<usize>,
-    coupling: Vec<f64>,
-) -> PyResult<Vec<i64>> {
-    ising_ground_state_impl(n_nodes, &field, &edges, &coupling).map_err(PyValueError::new_err)
+    field: PyReadonlyArray1<'py, f64>,
+    edges: PyReadonlyArray1<'py, i64>,
+    coupling: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<i64>>> {
+    let edges = node_indices(edges.as_slice()?)?;
+    let states = ising_ground_state_impl(n_nodes, field.as_slice()?, &edges, coupling.as_slice()?)
+        .map_err(PyValueError::new_err)?;
+    Ok(PyArray1::from_vec(py, states))
 }
 
 #[cfg(test)]

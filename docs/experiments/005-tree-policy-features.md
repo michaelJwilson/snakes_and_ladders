@@ -1,5 +1,5 @@
 ---
-id: 004
+id: 005
 date: 2026-09-08
 commit: b71b0b17d7b93458066db513e026a75d87201698
 branch: claude/search-328-tree-features
@@ -41,7 +41,7 @@ one seed at half the budget (`test_the_full_set_is_ahead_of_the_single_feature_a
 ## Results
 
 Typed from the release run of
-`tests/regression/search/test_search_tree_policy.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds`.
+`tests/regression/search/test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds`.
 
 | method | mean rate over 16 seeds | range | ahead of the single feature | sign test |
 | --- | --- | --- | --- | --- |
