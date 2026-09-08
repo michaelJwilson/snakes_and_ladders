@@ -14,9 +14,12 @@ on:
 
 # Pushing again to a branch cancels that branch's previous run rather than
 # paying for both. `main` is excluded: its runs record the state of the
-# default branch and populate the audit caches PRs restore from.
+# default branch and populate the audit caches PRs restore from. A group
+# holds one pending run, and a newer run replaces the pending one whatever
+# `cancel-in-progress` says, so `main`'s runs get a group each: five
+# consecutive merges left five cancelled runs and no verdict (issue #369).
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}${{ github.ref == 'refs/heads/main' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Pinned runner image and a pinned uv keep CI reproducible; the Rust toolchain
@@ -242,7 +245,10 @@ jobs:
             exit 0
           fi
           base="origin/${{ github.base_ref }}"
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}" || true
+          # The base branch's full history, not one commit: a merge to the
+          # base during this run moves its tip past every commit the head
+          # has, and `...` then finds no merge base (issue #369).
+          git fetch --no-tags origin "${{ github.base_ref }}" || true
           changed="$(git diff --name-only "$base"...HEAD)"
           echo "changed files:"; echo "$changed" | sed 's/^/  /'
           echo "$changed" | python3 infra/select_tests.py >> "$GITHUB_OUTPUT"
@@ -352,9 +358,8 @@ jobs:
       - run: pip install "uv==${UV_VERSION}"
       - run: uv sync --locked --extra test
       # TeX Live from the Ubuntu archive rather than a third-party action:
-      # these packages are what the document needs (poppler-utils is for the
-      # staleness check below), and no new GitHub Action joins the supply
-      # chain.
+      # these packages are what the document needs, and no new GitHub Action
+      # joins the supply chain.
       # The .deb files, not the installed tree: apt's cache is what can be
       # restored safely, and dpkg still installs from it in a second or two.
       # `uv` and Cargo are both cached above; this was the one install left
@@ -379,8 +384,7 @@ jobs:
             texlive-latex-recommended \
             texlive-fonts-recommended \
             texlive-science \
-            texlive-pictures \
-            poppler-utils
+            texlive-pictures
       # Regenerates the QA figures/captions the documents cite, then builds
       # docs/paper.pdf and docs/textbook.pdf -- the same entry point a local
       # build uses (see infra/CLAUDE.md), so CI and a contributor's machine
@@ -403,31 +407,24 @@ jobs:
               exit 1
             fi
           done
-      # Both PDFs are committed (see DEV.md's "Technical Documents"
-      # section); catch a PR that edited docs/tex/ or a QA figure without
-      # regenerating and committing the rebuilt PDFs. SOURCE_DATE_EPOCH (set
-      # in infra/build_technical_doc.sh) makes a rebuild byte-identical to
-      # itself on one machine, but pdftex's font-subsetting order can still
-      # differ across otherwise-identical TeX Live installs (e.g. this
-      # runner vs. a contributor's machine), producing a different-but
-      # visually-equivalent PDF. Rasterizing both to PNG and comparing those
-      # bytes checks the document's actual rendered content instead of the
-      # PDF container's internal encoding.
-      - name: Check the committed PDFs are up to date
+      # The committed PDFs are rebuilt by the pull request a "Rebuild the
+      # documents" ticket asks for (.github/ISSUE_TEMPLATE/documents.yml) and
+      # by nothing else, so they lag docs/tex/ between rebuilds by design and
+      # are not compared here. Comparing them made every document pull
+      # request conflict on every merge and cost one rebuild per merge per
+      # open pull request (issue #369). A pull request that touches a PDF is
+      # the rebuild's or a mistake.
+      - name: A pull request changes the PDFs only to rebuild them
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
         run: |
-          for document in paper textbook; do
-            rm -rf /tmp/committed-pages /tmp/built-pages
-            mkdir -p /tmp/committed-pages /tmp/built-pages
-            git show "HEAD:docs/$document.pdf" > /tmp/committed.pdf
-            pdftoppm -png -r 150 /tmp/committed.pdf /tmp/committed-pages/page
-            pdftoppm -png -r 150 "docs/$document.pdf" /tmp/built-pages/page
-            committed_hash="$(cat /tmp/committed-pages/page*.png | sha256sum | cut -d' ' -f1)"
-            built_hash="$(cat /tmp/built-pages/page*.png | sha256sum | cut -d' ' -f1)"
-            if [ "$committed_hash" != "$built_hash" ]; then
-              echo "::error::docs/$document.pdf is stale -- run infra/build_technical_doc.sh and commit the result"
-              exit 1
-            fi
-          done
+          git fetch --no-tags origin "${{ github.base_ref }}" || true
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- docs/paper.pdf docs/textbook.pdf)"
+          if [ -n "$changed" ] && ! printf '%s' "$TITLE" | grep -q 'Rebuild the documents'; then
+            echo "::error::this pull request changes $changed; only a 'Rebuild the documents' pull request may (DEV.md, Technical Documents)"
+            exit 1
+          fi
 
   audit:
     name: Dependency audit (pip-audit, cargo audit)

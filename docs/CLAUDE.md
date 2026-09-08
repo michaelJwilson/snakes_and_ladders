@@ -2,9 +2,11 @@
 
 The paper and the textbook (`tex/`), the API documentation (`source/`), and
 the worked notebooks (`nb/`). All are generated artifacts whose output is
-committed, CI regenerates each of them and compares against what is committed,
-and that is what these rules are about: an artifact held to that contract has
-to come out the same on another machine, which constrains what it may say.
+committed. CI regenerates the figures and the notebooks and compares them
+against what is committed; the PDFs it builds without comparing, since a
+rebuild ticket's pull request commits those and they lag their sources in
+between (`DEV.md`). An artifact held to the comparison has to come out the
+same on another machine, which constrains what it may say.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file too — and every docstring, comment and commit message
@@ -79,9 +81,8 @@ in. It is not restated here.
 
 - **Every clock the build can read is pinned.** Creation dates and `\today`
   are separate switches and both are set, in the module that renders the
-  artifacts rather than by each caller: a comparison run without them reports
-  everything stale, which is indistinguishable from the rot the comparison
-  exists to detect.
+  artifacts rather than by each caller, so a rebuild that changed nothing is
+  an empty diff rather than a page of new dates.
 
 - **A document that states an algorithm names no code.** A formulation, a
   recursion or an invariant is true whatever implements it, and a module path
