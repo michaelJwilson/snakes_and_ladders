@@ -8,7 +8,7 @@ what each milestone claims; this is what pins it. Do not edit by hand --
 run `uv run python infra/checks_ledger.py --write`.
 
 
-## `tests/regression/` (17)
+## `tests/regression/` (20)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -20,6 +20,9 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_emissions.py::test_overdispersed_data_recovers_its_dispersion_and_does_not_flag` | simulated_truth | The paired half of the check above: a guard that flagged everything would pass that test and mean nothing. |
 | `test_emissions.py::test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform` | oracle | `BetaBinomial(n, 1, 1)` puts equal mass on every one of the n + 1 outcomes. |
 | `test_emissions.py::test_the_closed_form_count_m_steps_are_the_weighted_mean` | oracle |  |
+| `test_emissions_count_pair.py::test_each_form_sums_to_one_over_the_support` | oracle | The check a density either passes or is not one, summed over the pairs themselves rather than reduced analytically. |
+| `test_emissions_count_pair.py::test_the_m_step_recovers_the_planted_parameters_in_both_forms` | simulated_truth | 4,000 pairs split between the two states by a planted label, scored with that label as the posterior, so what is measured is the M step and not a forward-backward recursion feeding it. |
+| `test_emissions_count_pair.py::test_the_likelihood_ratio_prefers_the_form_the_data_came_from` | simulated_truth | The claim that separates the two forms. |
 | `test_fixture_registry.py::test_the_coupled_fixture_is_the_canonical_instance` | oracle | The file restates `canonical_spatio_sequential`, whose enumerable size is the reason the instance exists. |
 | `test_fixture_registry.py::test_the_frustrated_fixture_builds_the_lattice_with_the_known_ground_state` | oracle |  |
 | `test_numerics_rust.py::test_the_rust_sampler_is_bit_identical_to_the_oracle` | oracle |  |
@@ -163,10 +166,14 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_mean_field_and_spanning_tree_bounds_sandwich_log_z` | oracle |  |
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
-## `tests/regression/opt/` (53)
+## `tests/regression/opt/` (57)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
+| `test_opt_emission_mixture.py::test_the_responsibilities_are_the_enumerated_posterior` | oracle |  |
+| `test_opt_emission_mixture.py::test_the_fit_recovers_the_planted_mixture_at_the_ci_size` | simulated_truth |  |
+| `test_opt_emission_mixture.py::test_the_fit_recovers_most_of_the_planted_mixture_at_ten_components` | simulated_truth | How much of a ten-component mixture one seeded run resolves, and how much not. |
+| `test_opt_emission_mixture.py::test_the_seeded_start_is_measured_against_the_uniform_one` | simulated_truth | ``Emission_Mixture++`` against a uniform start, on shared seeds. |
 | `test_opt_fit.py::test_the_fit_beats_the_truth_on_its_own_sample` | simulated_truth | The defining property of a maximum-likelihood estimate. |
 | `test_opt_fit.py::test_potts_intervals_cover_the_truth_at_the_nominal_rate` | simulated_truth | 60 independent datasets from the same truth, one fit each, every parameter's 95% Wald interval checked. |
 | `test_opt_fit.py::test_potts_point_estimates_land_near_the_truth` | simulated_truth |  |
@@ -422,4 +429,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-379 checks.
+386 checks.

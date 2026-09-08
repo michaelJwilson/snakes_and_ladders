@@ -17,7 +17,8 @@
     Low-density parity-check code, Gallager (3,6) & $\checkmark$ & -- & $\checkmark$ & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
     Hidden Markov model, six emission families & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\circ$ & -- & -- & $\checkmark^{\dagger}$ & -- & -- & $\checkmark$ & $\checkmark$ \\
     Coupled spatio-sequential model & $\checkmark$ & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\checkmark^{\dagger}$ & -- & $\checkmark$ & -- & -- & -- & -- \\
-    Gaussian mixture & $\checkmark$ & $\circ$ & -- & $\checkmark^{\dagger}$ & $\checkmark$ & $\circ$ & -- & -- & -- & -- & -- & -- \\
+    Gaussian mixture & $\checkmark$ & $\checkmark^{\dagger}$ & -- & $\checkmark^{\dagger}$ & $\checkmark$ & $\circ$ & -- & -- & -- & -- & -- & -- \\
+    Mixture of two-channel count emissions & $\checkmark$ & $\checkmark$ & -- & -- & $\checkmark$ & $\checkmark$ & -- & -- & -- & -- & -- & -- \\
     Continuous test functions & -- & $\checkmark$ & -- & $\checkmark$ & -- & $\checkmark^{\dagger}$ & -- & $\checkmark$ & -- & -- & -- & -- \\
     \bottomrule
   \end{tabular}}
@@ -42,6 +43,7 @@
     Hidden Markov model, six emission families & $\checkmark$ & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
     Coupled spatio-sequential model & $\checkmark$ & -- & -- & -- & oracle & -- & -- \\
     Gaussian mixture & -- & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
+    Mixture of two-channel count emissions & $\checkmark$ & -- & -- & -- & oracle & -- & truth$^{\dagger}$ \\
     Continuous test functions & -- & $\checkmark$ & -- & -- & oracle & -- & truth$^{\dagger}$ \\
     \bottomrule
   \end{tabular}}
@@ -66,6 +68,7 @@
     Hidden Markov model, six emission families & -- & -- & -- \\
     Coupled spatio-sequential model & ci & truth$^{\dagger}$ & The annealed data-sampled burn-in beats a uniform start at an equal budget on the planted lattice, where it is the start and not the move that decides the labelling; it is refereed by the planted labels alone. \\
     Gaussian mixture & -- & untested & The seeding cost is within the published factor of the exact clustering cost, which is the one oracle this initializer has; whether a seeded start reaches a better likelihood optimum than a uniform one is not pinned by any test of either significant kind, so the pairing reads untested. \\
+    Mixture of two-channel count emissions & ci & oracle & A component is placed on an observed pair rather than on a coordinate, so the seeding has a distance where a squared one would compare a depth with an allele count; against a uniform start on shared seeds the two reach the same optimum at the three-component instance and differ at ten, and the comparison is reported whichever way it falls rather than asserted in a direction. \\
     Continuous test functions & ci & truth$^{\dagger}$ & Multi-start is what makes Himmelblau's four basins reachable at all; on a unimodal surface it spends the budget for nothing, and it is refereed by the analytic minimizers rather than by an oracle of its own. \\
     \bottomrule
   \end{tabular}
@@ -90,6 +93,7 @@
     Hidden Markov model, six emission families & ci & truth$^{\dagger}$ & The block sweep draws a whole path from its conditional in one pass, where a single-site sweep would move one position at a time against the chain; it is refereed by the simulated truth alone, an oracle being wanted. \\
     Coupled spatio-sequential model & ci & oracle & The factor-graph sweep is one algorithm over the whole coupled graph and is refereed by enumeration on the canonical instance; it is slower per sweep than the specialized Potts kernel it generalizes. \\
     Gaussian mixture & -- & -- & -- \\
+    Mixture of two-channel count emissions & -- & -- & -- \\
     Continuous test functions & ci & oracle & The annealed Hamiltonian chain with a polishing fit is beaten by plain restarts on the mixture at 3,000 evaluations (experiment 004); on Rastrigin it is the only method that crosses the ripple, and which wins is a property of the surface. \\
     \bottomrule
   \end{tabular}
@@ -114,6 +118,7 @@
     Hidden Markov model, six emission families & ci & oracle & Expectation--maximization re-estimates in closed form for every family whose M step has one and wins on cost there; the gradient fit is the only route where it does not, and the two must reach the same optimum. Interval coverage is nominal from two standard deviations of separation upward (experiment 002). \\
     Coupled spatio-sequential model & ci & oracle & Block-coordinate ascent does not decrease the joint at any block, for every label solver; iterated conditional modes freezes into disjoint clusters where the cluster move does not, and which wins is measured at an equal budget rather than assumed. \\
     Gaussian mixture & ci & oracle & Restarts reach the best-known optimum from 7 of 40 starts against tempering's 4 and annealing's 1 at 3,000 evaluations (experiment 004); where components overlap the fixed point is approached linearly, so an iterate stopped at a count needs a polish. \\
+    Mixture of two-channel count emissions & ci & oracle & Expectation-maximization through the family's own M step, which is a bracketed solve per component rather than a formula, so the cost and the difficulty both scale with the component count: one seeded run recovers every planted parameter at three components and seven of ten components at ten, in 121 s, which is what makes the larger instance a hard case rather than a bigger one. \\
     Continuous test functions & ci & oracle & The quasi-Newton fit reaches the analytic minimizer in every dimension tried on Rosenbrock; on Rastrigin the fraction of starts reaching the global minimum is asserted low, which bounds what one fit of a multimodal surface may claim. \\
     \bottomrule
   \end{tabular}
@@ -138,6 +143,7 @@
     Hidden Markov model, six emission families & ci & oracle & The relaxation of the state path is exact at every corner and gives a gradient over paths; it says nothing at a length past which the path enumeration that referees it cannot run. \\
     Coupled spatio-sequential model & -- & -- & -- \\
     Gaussian mixture & -- & -- & -- \\
+    Mixture of two-channel count emissions & -- & -- & -- \\
     Continuous test functions & -- & -- & -- \\
     \bottomrule
   \end{tabular}

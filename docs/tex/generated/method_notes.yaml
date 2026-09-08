@@ -135,6 +135,22 @@
     where components overlap the fixed point is approached linearly, so an
     iterate stopped at a count needs a polish.
 
+"Mixture of two-channel count emissions":
+  initializers: >-
+    A component is placed on an observed pair rather than on a coordinate, so
+    the seeding has a distance where a squared one would compare a depth with
+    an allele count; against a uniform start on shared seeds the two reach the
+    same optimum at the three-component instance and differ at ten, and the
+    comparison is reported whichever way it falls rather than asserted in a
+    direction.
+  optimizers: >-
+    Expectation-maximization through the family's own M step, which is a
+    bracketed solve per component rather than a formula, so the cost and the
+    difficulty both scale with the component count: one seeded run recovers
+    every planted parameter at three components and seven of ten components at
+    ten, in 121 s, which is what makes the larger instance a hard case rather
+    than a bigger one.
+
 "Continuous test functions":
   initializers: >-
     Multi-start is what makes Himmelblau's four basins reachable at all; on a
