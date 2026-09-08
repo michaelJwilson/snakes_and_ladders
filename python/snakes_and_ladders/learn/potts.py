@@ -37,12 +37,12 @@ episode costs microseconds rather than seconds.
 
 from __future__ import annotations
 
-import itertools
 from collections.abc import Iterator, Sequence
 
 import numpy as np
 import torch
 
+from snakes_and_ladders.enumeration import assignments, best_assignment
 from snakes_and_ladders.opt.potts import PottsParams
 
 # (site, new_state): flip one site to a state it is not already in.
@@ -339,8 +339,22 @@ def enumerate_configurations(
     ``n_states ** chain_length`` of them, so this is an oracle for small
     chains and nothing else -- the same role exhaustive topology enumeration
     plays for tree search in ``snakes_and_ladders.search.topology``.
+
+    :func:`snakes_and_ladders.enumeration.assignments` under this module's names, so
+    the chain is refused above the repository's enumeration cap rather than
+    attempted; it had no cap before issue #387.
+
+    Raises
+    ------
+    ValueError
+        Above :data:`~snakes_and_ladders.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`
+        configurations.
     """
-    return itertools.product(range(n_states), repeat=chain_length)
+    return assignments(
+        n_states,
+        chain_length,
+        what=f"{n_states}**{chain_length} chain configurations",
+    )
 
 
 def optimum(landscape: PottsLandscape) -> tuple[Configuration, float]:
@@ -355,12 +369,8 @@ def optimum(landscape: PottsLandscape) -> tuple[Configuration, float]:
         The maximizing configuration and its energy. Ties resolve to the
         lexicographically first, so the answer is deterministic.
     """
-    best_state, best_energy = None, -np.inf
-    for candidate in enumerate_configurations(
-        landscape.n_states, landscape.chain_length
-    ):
-        energy = landscape.energy(candidate)
-        if energy > best_energy:
-            best_state, best_energy = candidate, energy
-    assert best_state is not None
+    best_state, best_energy = best_assignment(
+        enumerate_configurations(landscape.n_states, landscape.chain_length),
+        landscape.energy,
+    )
     return best_state, float(best_energy)

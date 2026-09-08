@@ -17,12 +17,14 @@ the forward recursion of :mod:`snakes_and_ladders.opt.hmm`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import product
 
 import numpy as np
 import torch
 
 from snakes_and_ladders.enumeration import (
+    MAX_ENUMERABLE_CONFIGURATIONS,
+    accumulate,
+    assignment_table,
     refuse_oversized,
 )
 from snakes_and_ladders.likelihood.forward_backward import forward_backward
@@ -57,18 +59,28 @@ class ExactSpatioSequential:
     log_prior_normalizer: float
 
 
-def _labellings(params: SpatioSequentialParams) -> np.ndarray:
-    return np.array(
-        list(product(range(params.n_classes), repeat=params.graph.n_nodes)),
-        dtype=np.int64,
-    ).reshape(-1, params.graph.n_nodes)
+def _labellings(params: SpatioSequentialParams, *, limit: int | None) -> np.ndarray:
+    """Every labelling of the graph's nodes, shape ``(M ** n_nodes, n_nodes)``.
+
+    ``limit`` is ``None`` where :func:`_log_joint` has already refused on the
+    joint count, which dominates this one.
+    """
+    return assignment_table(
+        params.n_classes,
+        params.graph.n_nodes,
+        what=f"{params.n_classes}**{params.graph.n_nodes} labellings",
+        limit=limit,
+    )
 
 
-def _paths(params: SpatioSequentialParams) -> np.ndarray:
-    return np.array(
-        list(product(range(params.n_states), repeat=params.n_positions)),
-        dtype=np.int64,
-    ).reshape(-1, params.n_positions)
+def _paths(params: SpatioSequentialParams, *, limit: int | None) -> np.ndarray:
+    """Every path of one class's chain, shape ``(K ** S, S)``."""
+    return assignment_table(
+        params.n_states,
+        params.n_positions,
+        what=f"{params.n_states}**{params.n_positions} paths",
+        limit=limit,
+    )
 
 
 def log_prior(params: SpatioSequentialParams, labellings: np.ndarray) -> np.ndarray:
@@ -98,9 +110,8 @@ def _log_joint(
     Returns the labellings ``(L, n_nodes)``, the paths ``(P, S)`` and the table
     of shape ``(L, P, ..., P)`` with one path axis per class, in that order.
     """
-    labellings = _labellings(params)
-    paths = _paths(params)
-    n_labellings, n_paths = labellings.shape[0], paths.shape[0]
+    n_labellings = params.n_classes**params.graph.n_nodes
+    n_paths = params.n_states**params.n_positions
     refuse_oversized(
         n_labellings * n_paths**params.n_classes,
         what=(
@@ -109,6 +120,10 @@ def _log_joint(
             f"{params.n_classes} classes"
         ),
     )
+    # Refused first, then built: the joint count dominates either factor, so
+    # a table checked afterwards could only repeat a judgement already made.
+    labellings = _labellings(params, limit=None)
+    paths = _paths(params, limit=None)
     gated = gated_log_density(params, observations)  # (n_nodes, S, M, K)
     # emission[n, m, p]: what node n contributes if it belongs to class m and
     # class m's chain follows path p.
@@ -170,19 +185,14 @@ def enumerate_spatio_sequential(
     log_total = float(logsumexp(flat, axis=1)[0])
     weights = np.exp(table - log_total)  # posterior over (l, k_1, ..., k_M)
 
-    label_posterior = np.zeros((params.graph.n_nodes, params.n_classes))
     per_labelling = weights.reshape(labellings.shape[0], -1).sum(axis=1)
-    for index, labelling in enumerate(labellings):
-        label_posterior[np.arange(params.graph.n_nodes), labelling] += per_labelling[
-            index
-        ]
+    label_posterior = accumulate(labellings, per_labelling, params.n_classes)
 
     state_posterior = np.zeros((params.n_classes, params.n_positions, params.n_states))
     for m in range(params.n_classes):
         axes = tuple(axis for axis in range(table.ndim) if axis != m + 1)
         per_path = weights.sum(axis=axes)  # (P,)
-        for s in range(params.n_positions):
-            np.add.at(state_posterior[m, s], paths[:, s], per_path)
+        state_posterior[m] = accumulate(paths, per_path, params.n_states)
 
     return ExactSpatioSequential(
         log_evidence=log_total - log_z_prior,
@@ -202,7 +212,7 @@ def conditional_state_posterior(
     pinned to.
     """
     labels = np.asarray(labels, dtype=np.int64)
-    paths = _paths(params)
+    paths = _paths(params, limit=MAX_ENUMERABLE_CONFIGURATIONS)
     gated = gated_log_density(params, observations)
     posterior = np.zeros((params.n_classes, params.n_positions, params.n_states))
     for m in range(params.n_classes):
@@ -213,8 +223,7 @@ def conditional_state_posterior(
                 np.arange(params.n_positions), paths
             ].sum(axis=1)
         weights = np.exp(scores - logsumexp(scores[None, :], axis=1)[0])
-        for s in range(params.n_positions):
-            np.add.at(posterior[m, s], paths[:, s], weights)
+        posterior[m] = accumulate(paths, weights, params.n_states)
     return posterior
 
 
@@ -227,7 +236,7 @@ def log_evidence_by_forward(
     evidence is the forward recursion on the product of its members'
     emission scores.
     """
-    labellings = _labellings(params)
+    labellings = _labellings(params, limit=MAX_ENUMERABLE_CONFIGURATIONS)
     prior = log_prior(params, labellings)
     log_z_prior = float(logsumexp(prior[None, :], axis=1)[0])
     gated = gated_log_density(params, observations)

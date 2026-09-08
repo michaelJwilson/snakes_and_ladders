@@ -28,7 +28,6 @@ validate the other.
 
 from __future__ import annotations
 
-import itertools
 from dataclasses import dataclass
 
 import numpy as np
@@ -36,7 +35,9 @@ import torch
 
 from snakes_and_ladders.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
-    refuse_oversized,
+    accumulate,
+    assignment_table,
+    normalize,
 )
 from snakes_and_ladders.sim.hmm import HmmParams
 
@@ -171,8 +172,9 @@ def enumerate_hidden_paths(
         msg = "observations must be non-empty"
         raise ValueError(msg)
     params.emissions.validate(observations)
-    refuse_oversized(
-        params.n_states**length,
+    paths = assignment_table(
+        params.n_states,
+        length,
         what=f"{params.n_states}**{length} hidden paths",
         limit=max_paths,
     )
@@ -181,28 +183,23 @@ def enumerate_hidden_paths(
     log_transition = np.log(params.transition)
     log_density = emission_log_density(params, observations)
 
-    log_joint: list[float] = []
-    paths: list[np.ndarray] = []
-    for candidate in itertools.product(range(params.n_states), repeat=length):
-        path = np.array(candidate, dtype=np.int64)
-        paths.append(path)
-        log_joint.append(
+    joint = np.array(
+        [
             _path_log_probability(log_initial, log_transition, log_density, path)
-        )
+            for path in paths
+        ]
+    )
+    weights, _, log_likelihood = normalize(joint)
 
-    joint = np.array(log_joint)
-    shift = float(joint.max())
-    weights = np.exp(joint - shift)
-    log_likelihood = shift + float(np.log(weights.sum()))
-
-    posterior = np.zeros((length, params.n_states))
-    for path, weight in zip(paths, weights, strict=True):
-        posterior[np.arange(length), path] += weight
+    # The unnormalized weights, normalized per site afterwards, rather than
+    # the globally normalized ones: the two differ in the last ulp and this
+    # is the rounding every posterior committed here was measured under.
+    posterior = accumulate(paths, weights, params.n_states)
     posterior /= posterior.sum(axis=1, keepdims=True)
 
     best = int(joint.argmax())
     return PathEnumeration(
-        viterbi=paths[best],
+        viterbi=paths[best].copy(),
         viterbi_log_probability=float(joint[best]),
         posterior=posterior,
         posterior_path=posterior.argmax(axis=1).astype(np.int64),

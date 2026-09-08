@@ -62,7 +62,7 @@ See Jang, Gu & Poole (2017); Maddison, Mnih & Teh (2017).
 
 from __future__ import annotations
 
-import itertools
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
@@ -70,6 +70,7 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import torch
 
+from snakes_and_ladders.enumeration import assignments, best_assignment
 from snakes_and_ladders.learn.potts import Configuration, PottsLandscape
 
 #: Below this the softmax saturates in float64 and the gradient underflows, so
@@ -290,6 +291,20 @@ def gumbel_softmax(
     return hard - soft.detach() + soft
 
 
+def _configurations(objective: RelaxedObjective) -> Iterator[Configuration]:
+    """Every configuration of ``objective``, under the enumeration cap.
+
+    :func:`snakes_and_ladders.enumeration.assignments` under this module's names; the
+    three enumerations below held their own uncapped ``itertools.product``
+    before issue #387.
+    """
+    return assignments(
+        objective.n_states,
+        objective.n_sites,
+        what=f"{objective.n_states}**{objective.n_sites} configurations",
+    )
+
+
 def enumerate_optimum(objective: RelaxedObjective) -> tuple[Configuration, float]:
     """The best configuration, by trying every one.
 
@@ -298,15 +313,7 @@ def enumerate_optimum(objective: RelaxedObjective) -> tuple[Configuration, float
     :func:`snakes_and_ladders.learn.potts.optimum` plays for the chain and exhaustive
     topology enumeration plays for tree search.
     """
-    best, best_score = None, -np.inf
-    for candidate in itertools.product(
-        range(objective.n_states), repeat=objective.n_sites
-    ):
-        score = objective.discrete(candidate)
-        if score > best_score:
-            best, best_score = candidate, score
-    assert best is not None
-    return best, best_score
+    return best_assignment(_configurations(objective), objective.discrete)
 
 
 def exact_expected_score(objective: RelaxedObjective, logits: torch.Tensor) -> float:
@@ -319,9 +326,7 @@ def exact_expected_score(objective: RelaxedObjective, logits: torch.Tensor) -> f
     probabilities = torch.softmax(logits, dim=1)
     index = torch.arange(objective.n_sites)
     total = 0.0
-    for candidate in itertools.product(
-        range(objective.n_states), repeat=objective.n_sites
-    ):
+    for candidate in _configurations(objective):
         weight = float(torch.prod(probabilities[index, list(candidate)]))
         total += weight * objective.discrete(candidate)
     return total
@@ -341,9 +346,7 @@ def exact_expected_gradient(
     index = torch.arange(objective.n_sites)
 
     total = torch.zeros((), dtype=torch.float64)
-    for candidate in itertools.product(
-        range(objective.n_states), repeat=objective.n_sites
-    ):
+    for candidate in _configurations(objective):
         weight = torch.prod(probabilities[index, list(candidate)])
         total = total + weight * objective.discrete(candidate)
     total.backward()  # type: ignore[no-untyped-call]

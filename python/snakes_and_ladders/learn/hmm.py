@@ -28,6 +28,8 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 import torch
 
+from snakes_and_ladders.enumeration import assignments, best_assignment
+
 # (position, new_state): change one position to a state it is not already in.
 Revision = tuple[int, int]
 Path = tuple[int, ...]
@@ -236,8 +238,18 @@ def enumerate_paths(n_states: int, length: int) -> Iterator[Path]:
     and nothing else --- the role exhaustive topology enumeration plays for
     tree search, and the reference issue #175's Viterbi decoder is pinned
     against.
+
+    :func:`snakes_and_ladders.enumeration.assignments` under this module's names, so
+    the sequence is refused above the repository's enumeration cap rather
+    than attempted; it had no cap before issue #387.
+
+    Raises
+    ------
+    ValueError
+        Above :data:`~snakes_and_ladders.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`
+        paths.
     """
-    return itertools.product(range(n_states), repeat=length)
+    return assignments(n_states, length, what=f"{n_states}**{length} hidden paths")
 
 
 def optimum(landscape: StatePathLandscape) -> tuple[Path, float]:
@@ -249,11 +261,6 @@ def optimum(landscape: StatePathLandscape) -> tuple[Path, float]:
         The maximizing path and its joint log-probability. Ties resolve to
         the lexicographically first, so the answer is deterministic.
     """
-    best_path: Path | None = None
-    best_energy = -float("inf")
-    for path in enumerate_paths(landscape.n_states, landscape.length):
-        energy = landscape.energy(path)
-        if energy > best_energy:
-            best_path, best_energy = path, energy
-    assert best_path is not None
-    return best_path, best_energy
+    return best_assignment(
+        enumerate_paths(landscape.n_states, landscape.length), landscape.energy
+    )
