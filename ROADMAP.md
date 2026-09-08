@@ -105,11 +105,13 @@ authoritative — where it and any other document disagree, it wins.
 ### 1.1 Core Objective
 
 Develop and deploy modern solvers for mixed discrete-continuous optimization
-across three primary classes of graphical models: phylogenetic trees (the large
-parsimony problem), N-dimensional Potts models in an external field, and hidden
-Markov models (HMMs) — and the coupled spatio-sequential model that joins the
-last two, a Potts prior over class labels gating one hidden chain per class
-(#290), which every Stage 1 deliverable takes as its fourth instance. The framework integrates automatic differentiation for
+across four primary classes of graphical models: phylogenetic trees (the large
+parsimony problem), N-dimensional Potts models in an external field, hidden
+Markov models (HMMs), and low-density parity-check codes decoded on their
+Tanner graphs (#340) — and the coupled spatio-sequential model that joins the
+Potts and hidden Markov classes, a Potts prior over class labels gating one
+hidden chain per class (#290), which every Stage 1 deliverable takes as a
+further instance. The framework integrates automatic differentiation for
 continuous parameters with reinforcement learning (RL) to learn proposal
 policies that score discrete structural candidates using exact, approximate, or
 bounded likelihoods/energies.
@@ -149,9 +151,10 @@ mathematical record of the project. The application logic is strictly bound to
 this LaTeX documentation. It must contain:
 
 - Complete mathematical formulations of all substitution models, energy
-  landscapes, and transition probabilities across the three problem classes.
+  landscapes, and transition probabilities across the four problem classes.
 - Rigorous derivations of the exact inference algorithms (Felsenstein's
-  pruning, belief propagation, forward-backward).
+  pruning, belief propagation, forward-backward; Appendix A of the textbook,
+  #326).
 - Formal definitions of the Markov decision process (MDP) formulations for the
   RL agents.
 - Proofs for any proposed upper/lower bounds used for branch-and-bound pruning
@@ -163,7 +166,7 @@ this LaTeX documentation. It must contain:
 ## Stage 1: Mathematical Foundations & Baseline Infrastructure
 
 Establish the simulation, exact inference, and optimization backends for the
-three distinct problem classes. Target scales span `n ∈ [10, 1000]`
+four distinct problem classes. Target scales span `n ∈ [10, 1000]`
 nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
 
 - **Milestone 1.1: Simulation & Ground Truth Engine**
@@ -173,6 +176,9 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Potts models:* N-D lattices and Markov random fields (MRFs) with
       specified coupling constants and external fields.
     - *HMMs:* hidden state paths and emitted observation sequences.
+    - *Codes:* Gallager's regular parity-check ensemble, the binary
+      symmetric, erasure and Gaussian channels behind one log-likelihood
+      interface, and an encoder where elimination is affordable.
     - *Canonical cases:* instances whose answer is known from outside this
       repository — a closed form, a published result, or an enumeration
       sharing no code with what it tests — admitted only when more than one
@@ -187,6 +193,8 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Phylogenetics:* Felsenstein's pruning algorithm.
     - *Potts models:* belief propagation and transfer matrix methods.
     - *HMMs:* the forward-backward algorithm.
+    - *Codes:* log-domain sum-product and min-sum on the Tanner graph with a
+      syndrome stop, held to the general sum-product and to enumeration.
   - *Validation:* match brute-force marginalization on small (`n ≤ 10`) graphs
     within the specified floating-point tolerance. Ensure the API remains
     application-agnostic.
@@ -227,7 +235,8 @@ Replace fixed, hand-designed search heuristics with learned proposal policies
 parameterized by neural networks.
 
 - **Milestone 2.1: RL Agent Formulation & Deployment**
-  - *Deliverable:* define the MDPs across all three problem classes.
+  - *Deliverable:* define the MDPs across all four problem classes (the
+    code's move set is #340's later work).
     - *State:* the current discrete structure (topology, lattice
       configuration, or state path), its fitted continuous parameters, and
       observation summaries.
@@ -281,19 +290,57 @@ discrete structural search and minimizing expensive exact evaluations.
     are measured against the exact gradient rather than assumed small; and any
     claim to beat a classical baseline needs the budget-matched paired test
     §2.4 requires.
+  - *Landed:* the Gumbel-softmax half (#225); the tropical Grassmannian half
+    waits on an oracle (#211).
 - **Neural Surrogate Modeling:** train lightweight graph neural networks (GNNs)
   or transformers to directly approximate the Felsenstein likelihood, Potts
   energy, or HMM likelihood. The RL agent queries the surrogate 10,000× faster
   to filter massive proposal batches, calculating the exact, expensive
   evaluation only on the top-`K` highest-probability candidates.
+  - *Landed:* as certified analytic bounds plus learned predictors on the gap
+    above them, ranking a neighbourhood for exact re-scoring of the top-`K`
+    (#317); the filter's cost ratio at large `n` is unmeasured.
 - **Learned Compound Moves:** replace single atomic actions (e.g. one SPR move,
   one cluster flip) with temporally extended macro-actions, sampled dynamically
   via a Dirichlet process, to efficiently tunnel through local optima.
+  - *Landed:* nothing learned (#147); an exact block move over a chain-shaped
+    subset exists (#310).
 - **Transformer Policy over Canonical Encodings:** serialize discrete graphs
   (e.g. canonical Newick strings for trees, canonical adjacency sequences for
   lattices) into tokenized sequences. Train an autoregressive or policy-gradient
   transformer model directly on the structural sequence.
+  - *Landed:* the encoding half only — per-branch and per-node tokens and an
+    attention model, fitted as a surrogate rather than trained as a policy
+    (#317).
 - **Stochastic Escape Mechanisms:** implement Metropolis-Hastings
   accepted-worsening steps or ratchet-style site reweighting (e.g. simulated
   annealing) to force the RL agent out of suboptimal valleys in heavily ridged
   landscapes.
+  - *Landed:* declared schedules, annealing and parallel tempering (#267); a
+    Gibbs sampler and annealer over the factor graph and Metropolis over
+    topologies (#310); adaptive HMC and a tempering ladder from measured
+    exchange (#352). Ratchet-style reweighting is not built.
+- **Candidate list:** what would follow the five items above, each with the
+  oracle that referees it and the tier it runs at, inventoried against every
+  earlier proposal in `docs/blue_sky.md`. None is a milestone until it is a
+  ticket with a plan.
+  - *Trees:* subsplit-network variational inference as the
+    differentiable-topology route with an enumerable support at eight taxa;
+    a graph-network policy with #317's encoder and #328's features on
+    #177's fixture; Metropolis-coupled MCMC over topologies on #352's
+    ladder; the external-baseline comparison at 50 to 200 taxa, blocked on
+    #126.
+  - *Potts and MRFs:* tree-reweighted max-product as a certified MAP bound;
+    population annealing beside parallel tempering; a replication of the
+    physics-inspired GNN result against its greedy critique, expected
+    negative; boundary matrix-product contraction as the exact oracle past the
+    transfer-matrix width.
+  - *HMMs:* spectral initialization against the k-means++ start; variational
+    EM against Baum-Welch at equal evaluations.
+  - *LDPC (#340):* neural belief propagation with learned message weights,
+    refereed by maximum-likelihood decoding below 24 bits and the
+    density-evolution threshold above.
+  - *Cross-cutting:* macro-actions as options for the compound-moves item; a
+    learned dynamics model for #313's planner; CMA-ES and a genetic algorithm
+    as the population baselines the leaderboard lacks; training across a
+    distribution of fixtures as §2.2's curriculum mechanism.

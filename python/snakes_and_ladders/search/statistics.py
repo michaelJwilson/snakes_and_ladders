@@ -1,9 +1,11 @@
-"""Two statistics the Monte Carlo move sets are judged by, and no more.
+"""Three statistics the searches are judged by, and no more.
 
 A chi-square tail probability, so a sampler's realized visit frequencies can
 be tested against the exact Boltzmann distribution at a declared significance
-rather than eyeballed; and an integrated autocorrelation time, so the reason
-for having a cluster update is reported as a number rather than asserted.
+rather than eyeballed; an integrated autocorrelation time, so the reason
+for having a cluster update is reported as a number rather than asserted; and
+an exact sign test, so a paired comparison over training seeds reports a
+p-value rather than a count of seeds ahead.
 
 Both are written here because the repository carries no `scipy` and root
 ``CLAUDE.md`` requires a dependency be justified rather than reached for. The
@@ -67,6 +69,36 @@ def chi_square_p_value(
     statistic = float((((observed - expected) ** 2) / expected).sum())
     dof = len(observed) - 1 if degrees_of_freedom is None else degrees_of_freedom
     return _regularized_upper_gamma(dof / 2.0, statistic / 2.0)
+
+
+def sign_test_p_value(differences: np.ndarray) -> float:
+    """Exact two-sided sign test on paired differences, ties dropped.
+
+    Under the null that a difference is as likely positive as negative, the
+    count of positive signs is binomial with probability one half; the
+    p-value is twice the smaller tail, capped at 1. Ties carry no sign and
+    are dropped, which is the convention that keeps the test exact
+    (Conover, *Practical Nonparametric Statistics*, sec. 3.4).
+
+    Parameters
+    ----------
+    differences : np.ndarray
+        Paired differences, one per seed or start.
+
+    Returns
+    -------
+    float
+        ``1.0`` when no difference is non-zero, since there is nothing to
+        test.
+    """
+    signs = np.sign(np.asarray(differences, dtype=np.float64))
+    n = int(np.count_nonzero(signs))
+    if n == 0:
+        return 1.0
+    positive = int(np.sum(signs > 0))
+    smaller = min(positive, n - positive)
+    tail = sum(math.comb(n, i) for i in range(smaller + 1)) / 2**n
+    return float(min(1.0, 2.0 * tail))
 
 
 def integrated_autocorrelation_time(series: np.ndarray, *, window: int = 5) -> float:

@@ -76,10 +76,22 @@ def text_outputs(cell: dict[str, Any]) -> list[str]:
     list[str]
         One entry per text-bearing output.
     """
-    collected = []
+    collected: list[str] = []
+    collected_names: list[str | None] = []
     for output in cell.get("outputs", []):
         if output.get("output_type") == "stream":
-            collected.append("".join(output.get("text", [])))
+            # The kernel splits one cell's stream into chunks at times that
+            # differ from run to run, so two runs of the same cell can carry
+            # the same text as a different number of outputs. Consecutive
+            # chunks of the same stream are one entry, and only the text is
+            # compared.
+            text = "".join(output.get("text", []))
+            name = output.get("name")
+            if collected and collected_names[-1] == name:
+                collected[-1] += text
+            else:
+                collected.append(text)
+                collected_names.append(name)
             continue
         if output.get("output_type") not in {"execute_result", "display_data"}:
             continue
@@ -92,6 +104,7 @@ def text_outputs(cell: dict[str, Any]) -> list[str]:
         plain = data.get("text/plain")
         if plain is not None:
             collected.append("".join(plain) if isinstance(plain, list) else str(plain))
+            collected_names.append(None)
     return collected
 
 

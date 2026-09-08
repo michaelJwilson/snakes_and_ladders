@@ -1,10 +1,11 @@
-"""The two statistics, each against a source that is not another program.
+"""The three statistics, each against a source that is not another program.
 
-Both exist because the repository carries no `scipy`, so both need pinning
+All exist because the repository carries no `scipy`, so each needs pinning
 against something outside this codebase rather than against a second
 implementation of the same series. The chi-square tail is checked at published
 critical values; the autocorrelation time at the closed form for an AR(1)
-process, whose value is known exactly from its parameter.
+process, whose value is known exactly from its parameter; the sign test at
+binomial tail sums small enough to write out.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import pytest
 from snakes_and_ladders.search.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
+    sign_test_p_value,
 )
 
 # Published chi-square critical values: the statistic at which the upper tail
@@ -107,3 +109,33 @@ def test_a_series_that_never_moved_reports_the_floor() -> None:
 def test_a_series_too_short_to_have_an_autocorrelation_is_refused() -> None:
     with pytest.raises(ValueError, match="at least two sweeps"):
         integrated_autocorrelation_time(np.array([1.0]))
+
+
+# --- the sign test ---------------------------------------------------------
+
+# Two-sided exact p-values from the binomial(n, 1/2) tails, summed by hand:
+# 8 of 16 is the median, 10 of 10 is 2 / 2^10, 1 of 5 is 2 (1 + 5) / 32, and
+# 6 of 8 is 2 (1 + 8 + 28) / 256.
+SIGN_TEST_CASES = [
+    (16, 8, 1.0),
+    (10, 10, 2.0 / 1024.0),
+    (5, 1, 12.0 / 32.0),
+    (8, 6, 74.0 / 256.0),
+]
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(("n", "positive", "expected"), SIGN_TEST_CASES)
+def test_the_sign_test_matches_the_binomial_tail_sums(
+    n: int, positive: int, expected: float
+) -> None:
+    differences = np.array([1.0] * positive + [-1.0] * (n - positive))
+    assert sign_test_p_value(differences) == expected
+    # Symmetric: the same count of the other sign gives the same p-value.
+    assert sign_test_p_value(-differences) == expected
+
+
+@pytest.mark.edge_case
+def test_ties_carry_no_sign_and_all_ties_is_nothing_to_test() -> None:
+    assert sign_test_p_value(np.zeros(6)) == 1.0
+    assert sign_test_p_value(np.array([0.0, 0.0, 2.0, 0.5])) == 0.5

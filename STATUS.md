@@ -17,8 +17,8 @@ from the suite; `PROBLEMS.md` names the code behind each problem class.
 | Roadmap item | Status | Evidence | Key PRs |
 | --- | --- | --- | --- |
 | §0 Development loop | Landed | Ten required checks; committed PDF byte-compared and every notebook re-executed on each PR | [#49](https://github.com/michaelJwilson/snakes_and_ladders/pull/49), [#57](https://github.com/michaelJwilson/snakes_and_ladders/pull/57), [#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72), [#92](https://github.com/michaelJwilson/snakes_and_ladders/pull/92), [#102](https://github.com/michaelJwilson/snakes_and_ladders/pull/102), [#151](https://github.com/michaelJwilson/snakes_and_ladders/pull/151) |
-| 1.1 Simulation & ground truth | Trees, the HMM and Potts (1-D chain plus general N-D lattice/MRF) landed as first-class simulators | Simulated substitution frequencies against the closed-form JC probabilities; GTR reproduces JC to machine precision; HMM state and emission marginals against brute-force path enumeration; Potts single-site and pair marginals against exhaustive enumeration at 3-state 3x3 and 2-state 4x4 | [#58](https://github.com/michaelJwilson/snakes_and_ladders/pull/58), [#64](https://github.com/michaelJwilson/snakes_and_ladders/pull/64), [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#182](https://github.com/michaelJwilson/snakes_and_ladders/pull/182), [#190](https://github.com/michaelJwilson/snakes_and_ladders/pull/190) |
-| 1.2 Likelihood & energy engine | CPU landed (NumPy, PyTorch, Rust); belief propagation landed with two exact oracles; GPU dispatch not started | Worst relative deviation 4.0e-14 against brute-force marginalization across three backends and four site counts spanning a factor of 30 | [#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66), [#74](https://github.com/michaelJwilson/snakes_and_ladders/pull/74), [#81](https://github.com/michaelJwilson/snakes_and_ladders/pull/81), [#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148) |
+| 1.1 Simulation & ground truth | Trees, the HMM, Potts (1-D chain plus general N-D lattice/MRF) and the LDPC code landed as first-class simulators | Simulated substitution frequencies against the closed-form JC probabilities; GTR reproduces JC to machine precision; HMM state and emission marginals against brute-force path enumeration; Potts single-site and pair marginals against exhaustive enumeration at 3-state 3x3 and 2-state 4x4; every encoded codeword satisfies `H c = 0` at `n = 24`, `96`, `510`, and a codeword's channel ratios are the zero word's up to sign on every realization | [#58](https://github.com/michaelJwilson/snakes_and_ladders/pull/58), [#64](https://github.com/michaelJwilson/snakes_and_ladders/pull/64), [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#182](https://github.com/michaelJwilson/snakes_and_ladders/pull/182), [#190](https://github.com/michaelJwilson/snakes_and_ladders/pull/190) |
+| 1.2 Likelihood & energy engine | CPU landed (NumPy, PyTorch, Rust); belief propagation landed with two exact oracles; the LDPC decoder landed, pinned to the general sum-product and to enumeration; GPU dispatch not started | Worst relative deviation 4.0e-14 against brute-force marginalization across three backends and four site counts spanning a factor of 30; decoder posteriors within 4.6e-11 of the general flooding on six loopy codes and 1.9e-13 of enumeration on a cycle-free one; the 19,998-bit (3,6) code brackets the erasure threshold 0.4294 between 0.42 and 0.44 | [#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66), [#74](https://github.com/michaelJwilson/snakes_and_ladders/pull/74), [#81](https://github.com/michaelJwilson/snakes_and_ladders/pull/81), [#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148) |
 | 1.3 Continuous optimization | Landed for trees, the HMM, the 1-D Potts chain and the 2-D lattice; posterior sampling landed beside the curvature-based intervals | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates; the lattice fitted against an enumerated normalizer, coverage 157/160 at 100 samples and 153/160 at 400 and 1600 | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120) |
 | 1.4 Move sets & classical baselines | Trees landed; Potts cluster updates landed; the exact-baseline family landed — minimum cut, alpha expansion with its proved bound, and Max-Cut with a certificate; Viterbi not started | NNI and SPR neighbour counts exhaustively verified at `n = 5..8`; hill climbing reaches the enumerated optimum from 12 of 12 starts; the two-state ground state exact against enumeration over 36 shape-coupling-field combinations | [#82](https://github.com/michaelJwilson/snakes_and_ladders/pull/82), [#127](https://github.com/michaelJwilson/snakes_and_ladders/pull/127), [#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#212](https://github.com/michaelJwilson/snakes_and_ladders/pull/212) |
 | 2.1 RL formulation & deployment | Estimator and both environments landed; a trained tree policy not started | Enumerated gradient against finite differences at 1.5e-11 relative; learned policy 86.6% against greedy's 80.2% on the Potts landscape, 8 of 8 seeds | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139) |
@@ -368,6 +368,26 @@ prior, transitions against `t`, first states against `Pi_m`, and symbol
 counts per (class, state) against the families' tables — and the label
 posterior recovers planted labels on 42 of 48 nodes at `S = 6`.
 
+**A low-density parity-check code, the fourth problem class**
+([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
+`sim.ldpc` draws a member of Gallager's regular ensemble by column
+permutation — column weight 3, row weight 6, held as offsets into one edge
+array in both orientations, no dense matrix past the sizes an oracle reaches
+— and puts three channels behind one interface returning log-likelihood
+ratios: binary symmetric, binary erasure and binary-input Gaussian. Gallager's
+bands require `n` to be a multiple of the row weight, so the ticket's
+`10,000 x 20,000` is realized as `9,999 x 19,998` (59,994 nonzeros) and the
+per-PR mid-size code is 996 bits. A GF(2) encoder by Gauss–Jordan elimination
+runs at `n <= 512` and asserts `H c = 0` on every word it returns; past it
+the all-zero codeword is sent, on the symmetry argument the textbook states,
+and the argument is itself pinned: on the symmetric and erasure channels a
+codeword's ratios are the zero word's negated where `c_i = 1` on every
+realization, and negating the ratios at a codeword negates every decoder
+posterior exactly and moves every decided bit with it, for both check
+updates and all three channels. The channels are held to their closed forms —
+`+-log((1 - p) / p)`, zero or `+-30`, `2 y / sigma^2` with mean `2 / sigma^2`
+and variance `4 / sigma^2` — and to binomial counts at 19,998 bits.
+
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
 **Felsenstein pruning: three CPU backends, one oracle.** Vectorized NumPy is
@@ -682,6 +702,39 @@ couplings and both agreeing with central differences to 1e-6 relative; from
 them a bracket on the ground-state energy that on the same lattices at
 `beta = 3` sits 0.028 nats per node below the enumerated minimum. The
 proofs are Appendix B of the textbook.
+
+**The LDPC decoder, specialised from the general sum-product and held to it**
+([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
+`likelihood.ldpc.decode` runs the log-domain `tanh` rule or min-sum under a
+flooding schedule, vectorized over every edge with two preallocated message
+buffers, a syndrome stop that refuses to count an undecided (zero-ratio) bit
+as decided, and messages clipped at `+-30` so an erasure's certainty stays a
+number; codeword enumeration at `2 ** k <= 200,000` gives exact bit posteriors
+and the ML codeword. Pins: on a 22-bit cycle-free code the decoder equals the
+tree-schedule `sum_product` and the enumeration over 32,768 codewords to
+1.9e-13 in log-odds on the symmetric and Gaussian channels and 9.4e-14 in
+probability on the erasure channel, where the cap's bound is `exp(-30) =
+9.4e-14`; min-sum equals the tree-schedule `max_product` to 6.7e-16 and
+returns the enumerated ML codeword with a margin above 0.1 nats; on six loopy
+(3,6) codes at 12 and 18 bits the decoder and the general damped flooding
+reach the same Bethe fixed point within 4.6e-11, both run to a message
+residual of 1e-12. Density evolution on the erasure channel reproduces the
+published thresholds 0.4294, 0.3834 and 0.5176 for (3,6), (4,8) and (3,5) to
+5e-4, and at the release gate the 19,998-bit code resolves every erasure at
+`epsilon = 0.42` on three seeds and leaves 25–30% of its bits erased at
+`0.44`. Per pull request, the 996-bit code over 20 shared seeds has zero bit
+errors at `p = 0.05` on the symmetric channel and a bit error rate of 0.049
+at `p = 0.09`, either side of the (3,6) threshold `p* = 0.084`, and no
+residual erasure at `epsilon = 0.35` against 0.433 at `0.5`. One finding is
+recorded rather than pinned: min-sum on the symmetric channel, where every
+ratio has one magnitude and the leave-one-out minimum ties everywhere, is
+not monotone in `p` at 996 bits (frame error rate 0.72 at `p = 0.05`, 0.08
+at `0.06` over 50 seeds), because the cap at 30 truncates the integer
+multiples of `log((1 - p) / p)` at a different multiple for each `p`; the
+sum-product decoder shows no such effect and the Gaussian channel orders the
+two as the textbook expects. Sizes, memory, the profile that decides a Rust
+kernel, and the optimization framing against the samplers are parts 2 and 3
+of the ticket.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
@@ -1525,6 +1578,25 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
 
+**The tree policy learns once it has something to learn**
+([#328](https://github.com/michaelJwilson/snakes_and_ladders/issues/328)).
+#178 trained a policy over one feature, the improvement a move buys, and
+measured a tie with greedy hill climbing on the hard seven-taxon fixture,
+because a softmax over one column is an inverse temperature. `FeatureSet.FULL`
+gives each move seven columns without a fit — the improvement, the Fitch
+parsimony change, the pattern support of the split broken and of the split
+made, and the sizes of the two exchanged subtrees — standardized within the
+neighbourhood, each pinned to an independent computation and each shown to
+vary within a neighbourhood (a planted Robinson–Foulds column, constant across
+NNI moves, is refused). At #178's budget of 640 episodes over 50 starts and 16
+training seeds, the single feature reaches the enumerated maximum from 0.487
+of episodes against greedy's 0.480 (sign test p = 0.79) and the full set from
+0.796, ahead on 16 of 16 seeds (p = 3.05e-5;
+`docs/experiments/005-tree-policy-features.md`). The known-parameter reward
+now scores GTR from a given rate matrix through the pruning recursion. Not
+measured: the full set against random-restart hill climbing, which #194 showed
+reaches every start on this fixture, and any column's individual necessity.
+
 **A critic, an actor–critic and PPO, each pinned to enumeration before it is
 measured** ([#313](https://github.com/michaelJwilson/snakes_and_ladders/issues/313),
 part 1). `learn.exact` now returns action values and the optimal value beside
@@ -1759,6 +1831,19 @@ is planned. Four derivations the main text depends on — the Bethe fixed
 point, detailed balance for a cluster move in a field, the exchange ratio, the
 delta method — sit in an appendix cited from the point of use. The document
 is 21 pages; `texlive-pictures` joins the CI TeX install for the figure.
+
+**The three exact evaluators are derived, not stated**
+([#326](https://github.com/michaelJwilson/snakes_and_ladders/issues/326)).
+The derivations appendix carries pruning as the marginalization over internal
+states (`app:pruning`), forward–backward as the same marginalization on a
+chain, with pruning on the caterpillar tree shown to be the backward pass
+(`app:forward-backward`), and sum-product on a tree from the subtree
+factorization, with max-product as the same argument under a maximum and the
+Bethe free energy of a factor graph of any degree (`eq:bethe-factor`) as the
+loopy stationary point the existing Bethe derivation identifies
+(`app:sum-product`). Each is cited from the point of use in the main text and
+from the module that implements it, so the guard of #274 resolves them; the
+`TICKETS.md` bullet that named this work without an issue is closed by it.
 
 ## What Is Not Claimed
 

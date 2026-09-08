@@ -18,24 +18,38 @@ from numpy.testing import assert_allclose
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.likelihood.pruning_torch import branch_order
+from snakes_and_ladders.likelihood.pruning_torch import (
+    log_likelihood as log_likelihood_torch,
+)
 from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
 from snakes_and_ladders.search.rl import (
+    FEATURE_NAMES,
+    FeatureSet,
     RewardModel,
     TopologyEnvironment,
+    exchanged_subtrees,
+    standardize,
     with_uniform_branch_lengths,
 )
+from snakes_and_ladders.search.support import internal_splits, split_pattern_support
 from snakes_and_ladders.search.topology import (
     Topology,
+    branch_splits,
     enumerate_topologies,
     leaf_bipartitions,
     nni_neighbours,
 )
+from snakes_and_ladders.sim.gtr import gtr_rate_matrix
+from snakes_and_ladders.sim.jc import jc_rate_matrix
 from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
+from tests._scale import stress_only
 
 FIXTURE = FIXTURES_DIR / "simulation_params_5taxa.yaml"
 _BRANCH_LENGTH = 0.1629
@@ -57,14 +71,50 @@ def _alignment(params: SimulationParams) -> dict[str, np.ndarray]:
 
 
 def _environment(
-    reward: RewardModel = RewardModel.KNOWN, moves: MoveSet = MoveSet.NNI
+    reward: RewardModel = RewardModel.KNOWN,
+    moves: MoveSet = MoveSet.NNI,
+    features: FeatureSet = FeatureSet.IMPROVEMENT,
 ) -> tuple[TopologyEnvironment, SimulationParams, dict[str, np.ndarray]]:
     params = _params()
     alignment = _alignment(params)
     environment = TopologyEnvironment(
-        alignment, params.k, params.pi, _BRANCH_LENGTH, reward=reward, moves=moves
+        alignment,
+        params.k,
+        params.pi,
+        _BRANCH_LENGTH,
+        reward=reward,
+        moves=moves,
+        features=features,
     )
     return environment, params, alignment
+
+
+# A general-Q truth for the known reward: unequal exchangeabilities and a
+# non-uniform stationary distribution, so nothing about it reduces to
+# Jukes-Cantor by accident.
+_GTR_PI = np.array([0.1, 0.2, 0.3, 0.4])
+_GTR_EXCHANGEABILITIES = np.array([1.5, 0.5, 1.0, 0.8, 2.0, 1.0])
+
+
+# 200 sites rather than the fixture's 1200: the fitted-GTR pin below fits
+# every parameter of the model per topology, and its claim is an inequality
+# that holds at any site count.
+_GTR_SITES = 200
+
+
+def _gtr_alignment(
+    params: SimulationParams,
+) -> tuple[dict[str, np.ndarray], np.ndarray]:
+    rate_matrix = gtr_rate_matrix(_GTR_EXCHANGEABILITIES, _GTR_PI)
+    dataset = simulate_alignment(
+        tau=params.tau,
+        k=params.k,
+        pi=_GTR_PI,
+        rng=np.random.default_rng(params.seed),
+        n_sites=_GTR_SITES,
+        rate_matrix=rate_matrix,
+    )
+    return dict(dataset.alignment), rate_matrix
 
 
 def _mirrored(topology: Topology) -> Topology:
@@ -311,20 +361,239 @@ def test_reset_is_reproducible_from_its_seed() -> None:
 
 
 @pytest.mark.edge_case
-def test_the_known_reward_refuses_a_model_it_cannot_score() -> None:
-    # The closed-form scorer is the Jukes-Cantor pruning path, which is where
-    # the cheapness comes from. Refusing is better than silently scoring a
-    # general model as if it were Jukes-Cantor.
+def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
+    # A general model at known parameters is a Q and a pi, not a branch
+    # length alone. Refusing is better than silently scoring GTR as if it
+    # were Jukes-Cantor, which is what the environment did before #328.
     params = _params()
-    with pytest.raises(ValueError, match="reward is implemented for jc only"):
+    alignment = _alignment(params)
+    with pytest.raises(ValueError, match="under gtr needs a rate_matrix"):
         TopologyEnvironment(
-            _alignment(params),
+            alignment,
             params.k,
             params.pi,
             _BRANCH_LENGTH,
             model=Model.GTR,
             reward=RewardModel.KNOWN,
         )
+    with pytest.raises(ValueError, match="must have shape"):
+        TopologyEnvironment(
+            alignment,
+            params.k,
+            params.pi,
+            _BRANCH_LENGTH,
+            model=Model.GTR,
+            reward=RewardModel.KNOWN,
+            rate_matrix=np.eye(3),
+        )
+    with pytest.raises(ValueError, match="fixes its rate matrix"):
+        TopologyEnvironment(
+            alignment,
+            params.k,
+            params.pi,
+            _BRANCH_LENGTH,
+            model=Model.JC,
+            rate_matrix=jc_rate_matrix(params.k),
+        )
+
+
+# --- the general-Q known reward -----------------------------------------
+
+
+@pytest.mark.oracle
+def test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length() -> None:
+    # The environment wraps the differentiable recursion with the model's Q
+    # at one length on every branch; here the recursion is called directly
+    # at the same lengths, for every topology on the leaf set.
+    params = _params()
+    alignment, rate_matrix = _gtr_alignment(params)
+    environment = TopologyEnvironment(
+        alignment,
+        params.k,
+        _GTR_PI,
+        _BRANCH_LENGTH,
+        model=Model.GTR,
+        reward=RewardModel.KNOWN,
+        rate_matrix=rate_matrix,
+    )
+    for topology in enumerate_topologies(sorted(alignment)):
+        lengths = torch.full(
+            (len(branch_order(topology)),), _BRANCH_LENGTH, dtype=torch.float64
+        )
+        expected = float(
+            log_likelihood_torch(
+                topology,
+                params.k,
+                _GTR_PI,
+                alignment,
+                lengths,
+                rate_matrix=torch.as_tensor(rate_matrix),
+            )
+        )
+        assert_allclose(environment.score(topology), expected, rtol=1e-12)
+
+
+@pytest.mark.oracle
+def test_the_general_q_path_reduces_to_jukes_cantor_at_its_rate_matrix() -> None:
+    # The reduction `search/CLAUDE.md` asks of every general construction:
+    # with Jukes-Cantor's own Q and uniform pi, the matrix-exponential path
+    # must reproduce the closed-form path, topology by topology. The two
+    # share no transition-probability code.
+    environment, params, alignment = _environment(RewardModel.KNOWN)
+    general = TopologyEnvironment(
+        alignment,
+        params.k,
+        params.pi,
+        _BRANCH_LENGTH,
+        model=Model.GTR,
+        reward=RewardModel.KNOWN,
+        rate_matrix=jc_rate_matrix(params.k),
+    )
+    for topology in enumerate_topologies(sorted(alignment)):
+        assert_allclose(general.score(topology), environment.score(topology), rtol=1e-9)
+
+
+@pytest.mark.mathematical
+@stress_only(
+    "a GTR fit optimizes lengths, exchangeabilities and pi per topology, "
+    "and the same inequality is pinned under Jukes-Cantor in the CI tier"
+)
+def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
+    # The fitted surface optimizes what the known one fixes -- lengths, Q
+    # and pi alike -- so it cannot do worse, at the generating Q as at any.
+    params = _params()
+    alignment, rate_matrix = _gtr_alignment(params)
+    known = TopologyEnvironment(
+        alignment,
+        params.k,
+        _GTR_PI,
+        _BRANCH_LENGTH,
+        model=Model.GTR,
+        reward=RewardModel.KNOWN,
+        rate_matrix=rate_matrix,
+    )
+    fitted = TopologyEnvironment(
+        alignment,
+        params.k,
+        _GTR_PI,
+        _BRANCH_LENGTH,
+        model=Model.GTR,
+        reward=RewardModel.FITTED,
+    )
+    for topology in list(enumerate_topologies(sorted(alignment)))[:2]:
+        assert fitted.score(topology) >= known.score(topology) - 1e-6
+
+
+# --- the full feature set --------------------------------------------------
+
+
+@pytest.mark.structural
+def test_the_full_set_is_seven_standardized_columns() -> None:
+    environment, _, alignment = _environment(features=FeatureSet.FULL)
+    assert environment.feature_set is FeatureSet.FULL
+    assert environment.n_features() == len(FEATURE_NAMES[FeatureSet.FULL]) == 7
+    for state in enumerate_topologies(sorted(alignment)):
+        actions = environment.actions(state)
+        rows = environment.features(state, actions)
+        assert rows.shape == (len(actions), 7)
+        assert_allclose(rows.mean(dim=0).numpy(), np.zeros(7), atol=1e-12)
+        spread = rows.std(dim=0, unbiased=False).numpy()
+        assert np.all((np.abs(spread - 1.0) < 1e-12) | (spread == 0.0))
+        assert_allclose(
+            rows.numpy(),
+            standardize(environment.raw_features(state, actions)).numpy(),
+            atol=1e-12,
+        )
+
+
+@pytest.mark.oracle
+def test_the_parsimony_column_is_the_change_in_fitch_score() -> None:
+    environment, params, alignment = _environment(features=FeatureSet.FULL)
+    for state in enumerate_topologies(sorted(alignment)):
+        actions = environment.actions(state)
+        raw = environment.raw_features(state, actions)
+        expected = [
+            fitch_score(action, alignment, params.k)
+            - fitch_score(state, alignment, params.k)
+            for action in actions
+        ]
+        assert_allclose(raw[:, 1].numpy(), expected, atol=0.0)
+        assert_allclose(
+            raw[:, 0].numpy(),
+            [environment.step(state, action)[1] for action in actions],
+            atol=1e-12,
+        )
+
+
+@pytest.mark.oracle
+def test_the_support_columns_are_the_pattern_support_of_the_split_broken_and_made() -> (
+    None
+):
+    # An NNI move breaks exactly one internal split and makes exactly one;
+    # the columns are their pattern supports, taken here from the split sets
+    # directly rather than from the environment's cache.
+    environment, params, alignment = _environment(features=FeatureSet.FULL)
+    for state in enumerate_topologies(sorted(alignment)):
+        actions = environment.actions(state)
+        raw = environment.raw_features(state, actions)
+        for row, action in enumerate(actions):
+            (broken,) = internal_splits(state) - internal_splits(action)
+            (made,) = internal_splits(action) - internal_splits(state)
+            assert raw[row, 2] == split_pattern_support(broken, alignment, params.k)
+            assert raw[row, 3] == split_pattern_support(made, alignment, params.k)
+            assert 0.0 < raw[row, 2] <= 1.0
+            assert 0.0 < raw[row, 3] <= 1.0
+
+
+@pytest.mark.oracle
+def test_the_subtree_columns_are_the_sizes_of_the_exchanged_subtrees() -> None:
+    # Against `branch_splits`: each exchanged set is the leaf set below a
+    # branch of both topologies, the two are disjoint, and swapping them in
+    # the broken split yields the made split -- which is what "the subtrees
+    # an NNI move exchanges" means. The four blocks around the edge
+    # partition the leaves.
+    environment, _, alignment = _environment(features=FeatureSet.FULL)
+    leaves = frozenset(alignment)
+    for state in enumerate_topologies(sorted(alignment)):
+        actions = environment.actions(state)
+        raw = environment.raw_features(state, actions)
+        for row, action in enumerate(actions):
+            detached, attached = exchanged_subtrees(
+                leaf_bipartitions(state), leaf_bipartitions(action)
+            )
+            (broken,) = internal_splits(state) - internal_splits(action)
+            (made,) = internal_splits(action) - internal_splits(state)
+            for subtree in (detached, attached):
+                for topology in (state, action):
+                    sides = set(branch_splits(topology))
+                    sides |= {leaves - split for split in sides}
+                    assert subtree in sides, (subtree, topology)
+            assert detached
+            assert attached
+            assert not detached & attached
+            assert (broken - detached) | attached == made
+            shared, rest = broken & made, leaves - (broken | made)
+            assert len(detached) + len(attached) + len(shared) + len(rest) == len(
+                leaves
+            )
+            assert float(raw[row, 4]) == len(detached)
+            assert float(raw[row, 5]) == len(attached)
+            assert raw[row, 6] == abs(len(detached) - len(attached))
+
+
+@pytest.mark.edge_case
+def test_standardizing_one_row_or_a_constant_column_gives_zeros() -> None:
+    # One action, or a column every action shares: no spread to divide by,
+    # and zero is what a constant is worth to a softmax.
+    one = torch.tensor([[3.0, -2.0]], dtype=torch.float64)
+    assert_allclose(standardize(one).numpy(), np.zeros((1, 2)))
+    rows = torch.tensor([[1.0, 5.0], [3.0, 5.0], [5.0, 5.0]], dtype=torch.float64)
+    expected = np.array([[-1.0, 0.0], [0.0, 0.0], [1.0, 0.0]]) * np.array(
+        [np.sqrt(3.0 / 2.0), 1.0]
+    )
+    assert_allclose(standardize(rows).numpy(), expected, atol=1e-12)
+    same = frozenset({frozenset({"A", "B"})})
+    assert exchanged_subtrees(same, same) == (frozenset(), frozenset())
 
 
 @pytest.mark.edge_case
