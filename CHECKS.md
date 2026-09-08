@@ -27,7 +27,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_pairwise_distance.py::test_pairwise_distance_small_fixed_input` | oracle | Small, hand-checkable input. |
 | `test_scale_tiers.py::test_the_budget_script_states_both_budgets` | simulated_truth | The numbers `DEV.md` documents and the numbers the script measures against have to be the same two, or the report is against a budget nothing else knows about. |
 
-## `tests/regression/learn/` (37)
+## `tests/regression/learn/` (40)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -55,6 +55,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_potts_lattice.py::test_the_enumerated_gradient_matches_central_differences_on_a_lattice` | oracle | The oracle that makes this an instance rather than a lookalike: `snakes_and_ladders.learn.exact` carries it unchanged from the chain. |
 | `test_learn_ppo.py::test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matched_budget` | oracle |  |
 | `test_learn_ppo.py::test_an_mlp_policy_trained_by_ppo_reaches_the_optimum` | simulated_truth | Measured 97.5% of the 81 starts with mean exact return 2.55, against the linear policy's 96.3% and 2.28: the deeper scorer can represent the worsening move a chain needs, which the two linear features cannot. |
+| `test_learn_ppo_torchrl.py::test_the_advantages_are_torchrl_s_gae_at_gamma_one` | oracle |  |
+| `test_learn_ppo_torchrl.py::test_the_clipped_objective_and_its_gradient_are_torchrl_s` | oracle |  |
 | `test_learn_reinforce.py::test_the_enumerated_gradient_matches_finite_differences` | oracle | Autodiff against numerical differentiation of the same closed form. |
 | `test_learn_reinforce.py::test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient` | oracle | The claim REINFORCE rests on, checked rather than cited. |
 | `test_learn_reinforce.py::test_training_raises_the_enumerated_expected_return` | oracle | Against the enumerated J, not the sampled mean the training loop reports: that curve is a Monte Carlo estimate under a moving policy and can rise while the estimator is wrong. |
@@ -68,6 +70,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_linear_surrogate_recovers_a_linear_target_on_held_out_groups` | simulated_truth | Without the token term the target is affine in the features; the standardization and the offset are undone on the way out, so the held-out prediction is the target to the noise. |
 | `test_learn_surrogate.py::test_models_explain_the_target_on_held_out_groups` | simulated_truth | The token models see the bilinear term the MLP cannot, so their held-out R^2 clears 0.9 while the MLP, which reads only the feature vector, is held to what the features explain. |
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
+| `test_learn_surrogate_pyg.py::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights` | oracle |  |
 
 ## `tests/regression/likelihood/` (58)
 
@@ -286,7 +289,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
-## `tests/regression/sim/` (37)
+## `tests/regression/sim/` (44)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -305,6 +308,13 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_graph.py::test_open_lattice_node_and_edge_counts_match_the_closed_form` | oracle |  |
 | `test_graph.py::test_periodic_lattice_node_and_edge_counts_match_the_closed_form` | oracle |  |
 | `test_graph.py::test_every_node_appears_in_the_expected_number_of_edges` | oracle | Interior nodes of an open 3x3 grid have degree 4; corners have degree 2. |
+| `test_graph_rustworkx.py::test_the_open_square_lattice_is_rustworkx_s_grid_graph` | oracle |  |
+| `test_graph_rustworkx.py::test_the_open_chain_is_rustworkx_s_path_graph` | oracle |  |
+| `test_graph_rustworkx.py::test_the_periodic_lattice_is_the_grid_plus_its_wraparound_edges` | oracle | rustworkx has no torus generator, so the periodic case is checked as the open grid plus exactly the wraparound edges, which is what the boundary condition adds and nothing else. |
+| `test_graph_rustworkx.py::test_the_random_graph_agrees_with_rustworkx_s_at_both_ends_of_p` | oracle |  |
+| `test_graph_rustworkx.py::test_the_random_graph_draws_the_edge_count_rustworkx_s_generator_draws` | oracle | Two generators of one distribution, seeded independently: the mean edge counts of 400 draws each differ by less than four standard errors of the difference. |
+| `test_graph_rustworkx.py::test_the_ground_state_energy_matches_networkx_s_minimum_cut` | oracle | The same reduction (`ising_ground_state`'s docstring) built as a networkx flow network and cut by its preflow-push, against our Dinic: the cut values agree, so the energies do, and networkx's partition scores the same energy when evaluated by our energy function. |
+| `test_graph_rustworkx.py::test_the_networkx_cut_is_the_enumerated_minimum_where_enumeration_fits` | oracle | The referee is itself refereed once, at a size enumeration reaches, so the pin above is against something known to be right and not merely against a second library. |
 | `test_gtr.py::test_equal_rates_and_uniform_pi_reproduce_jukes_cantor` | oracle |  |
 | `test_gtr.py::test_transition_probabilities_reproduce_the_jc_closed_form` | oracle |  |
 | `test_gtr.py::test_zero_branch_length_gives_the_identity` | oracle |  |
@@ -328,4 +338,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-285 checks.
+295 checks.
