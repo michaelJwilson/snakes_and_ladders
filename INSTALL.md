@@ -77,7 +77,7 @@ Run these before pushing; all of them are required checks.
 ```
 ruff check .
 ruff format --check .
-mypy                                       # strict, over python/ and tests/
+mypy                                       # strict, over python/, tests/ and infra/
 cargo clippy --locked --all-targets -- -D warnings
 cargo fmt --check
 ```
@@ -114,9 +114,11 @@ matching CI, so a broken docstring or cross-reference fails locally rather
 than in review.
 
 The technical document — the scientific background, equations, and algorithms
-— is LaTeX under `docs/tex/`. Eleven `snakes_and_ladders.qa` scripts render the figures and
-tables it includes, so building it regenerates those first rather than only
-running `latexmk`:
+— is LaTeX under `docs/tex/`. The `snakes_and_ladders.qa` scripts render the figures and
+tables it includes (`snakes_and_ladders.qa.manifest` lists them), so building it
+regenerates the cited ones first rather than only running `latexmk`; the
+applicability tables the textbook inputs are written by
+`infra/problems_tables.py --write`:
 
 ```
 sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base \

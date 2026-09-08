@@ -5,9 +5,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Mixed discrete-continuous optimization over graph-structured models —
-phylogenetic trees, Potts models in an external field, and hidden Markov
-models. Autodiff fits the continuous half, a learned policy is intended to
-propose the discrete half, and a Rust backend (`snakes_and_ladders.oxi_snakes_and_ladders`, via
+phylogenetic trees, Potts models in an external field, hidden Markov models,
+and low-density parity-check decoding (in review, #356). Autodiff fits the
+continuous half, learned proposals, a critic, a planner and surrogates
+propose the discrete half beside the classical baselines they are measured
+against, and a Rust backend (`snakes_and_ladders.oxi_snakes_and_ladders`, via
 [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs)) carries the
 CPU-bound recursions.
 
@@ -114,7 +116,7 @@ Three further rules constrain what the suite may contain:
 
 # Application
 
-## One abstraction, three problem classes
+## One abstraction, four problem classes
 
 The scientific problem is a search over discrete structure where scoring any
 one candidate requires a continuous fit. In phylogenetics it is a search over
@@ -126,9 +128,10 @@ from the other: a better topology scored with badly fitted parameters looks
 worse than a poor one scored well.
 
 That shape is not unique to phylogenies. Felsenstein pruning, the HMM forward
-algorithm, and the Potts transfer matrix are the same sum-product recursion on
-different graphs — a tree, a chain, a lattice — so one discrete/continuous
-interface serves all three. The project treats that as a design constraint
+algorithm, the Potts transfer matrix and the parity-check decoder are the same
+sum-product recursion on different graphs — a tree, a chain, a lattice, a
+code — so one discrete/continuous interface serves all four, and the coupled
+spatio-sequential model and the Gaussian mixture derived from them. The project treats that as a design constraint
 rather than a coincidence, and enforces it structurally: `snakes_and_ladders.opt` and
 `snakes_and_ladders.learn` may import no application module, asserted by test.
 
@@ -139,9 +142,11 @@ requirements, and the milestones.
 
 **A model-agnostic optimization interface.** An `Objective` is an unconstrained
 parameter vector, a differentiable scalar, and a map back to named constrained
-parameters. Four instances run against it unchanged — a Potts chain, a discrete
-HMM, branch lengths on a fixed topology, and the GTR substitution model — and
-none required a change to `snakes_and_ladders.opt`.
+parameters. Eight likelihoods and three closed-form test functions run against
+it unchanged — the Potts chain and lattice, the HMM under six emission
+families, branch lengths on a fixed topology, the GTR substitution model, the
+Gaussian mixture, Rosenbrock, Rastrigin and Himmelblau — and none required a
+change to `snakes_and_ladders.opt`.
 
 **Fitting with intervals, not just convergence.** L-BFGS under a strong-Wolfe
 line search, with confidence intervals from the observed Fisher information
@@ -166,13 +171,17 @@ topologies as the oracle that makes "did the search find the best tree" a
 question with an answer.
 
 **Reinforcement learning pinned to a closed form.** An `Environment`
-interface, a softmax-over-scored-actions policy, REINFORCE with a baseline, and
-an exact trajectory-enumeration oracle for the expected return and its
-gradient. Claims rest on that oracle rather than on a training curve.
+interface, a softmax-over-scored-actions policy, REINFORCE with a baseline, an
+actor–critic, PPO, a PUCT planner trained by expert iteration, and an exact
+trajectory-enumeration oracle for the expected return, its gradient, the
+action values and the optimal value. Claims rest on that oracle rather than on
+a training curve.
 
 **A QA pipeline that is the evidence.** Every figure and table in the technical
 document is rendered by `snakes_and_ladders.qa` from the code it reports on, and CI rebuilds
-and compares them, so a plot cannot drift from what produced it.
+and compares them, so a plot cannot drift from what produced it; the textbook's
+tables of which algorithm and which referee applies to each problem are
+generated from `PROBLEMS.md` and the test suite by `infra/problems_tables.py`.
 
 ## What exists, measured
 
@@ -187,8 +196,9 @@ points on a 6-taxon fixture. Normalized Robinson–Foulds distance meeting the
 reaching the optimum from 86.6% of starts against greedy's 80.2%, in 8 of 8
 seeds. A gradient update costing 203 ms at `n = 100`, `L = 1000`.
 
-Not claimed: that a learned policy beats hill climbing on trees, any comparison
-against IQ-TREE 2 or RAxML-NG, GPU dispatch, or rate variation across sites.
+Not claimed: that a learned policy beats hill climbing on trees (measured as a
+tie, and the feature set that bounds it is ticketed), any comparison against
+IQ-TREE 2 or RAxML-NG, GPU dispatch, or rate variation across sites.
 
 [STATUS.md](STATUS.md) records what has landed against each milestone, the
 oracle that established it, and the pull request that carries it;

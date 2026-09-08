@@ -37,6 +37,16 @@ body:
         ticket's PR. Code duplication should be common language.
 
         Include consistency of the release template and text with respect to recent development.
+  - type: checkboxes
+    id: preconditions
+    attributes:
+      label: Preconditions
+      description: >
+        What must hold before the gate runs; each is checked, not assumed.
+      options:
+        - label: "`dev` matches `main` plus the open pull requests"
+        - label: The tag for the previous release exists
+        - label: The applicability tables in the textbook are regenerated (`infra/problems_tables.py --write`)
   - type: textarea
     id: suggested-work
     attributes:

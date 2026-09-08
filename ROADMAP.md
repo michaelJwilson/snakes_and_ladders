@@ -80,7 +80,12 @@ authoritative — where it and any other document disagree, it wins.
   Correctness comes from an independent source rather than from a second
   backend, and agreement across devices and precisions is a declared relative
   tolerance keyed on the lowest precision in the comparison, never bitwise
-  equality.
+  equality. The standard is two-way: where an oracle is affordable at a size
+  the claim is pinned to it, and where none is, recovering the simulated
+  truth — the generating parameters or structure of a seeded fixture, to a
+  stated tolerance or coverage — is sufficient, with the oracle still
+  desired and ticketed; the textbook's applicability tables mark which
+  referee each method has at each size tier.
 
 ### 0.5 The Record
 
@@ -105,11 +110,15 @@ authoritative — where it and any other document disagree, it wins.
 ### 1.1 Core Objective
 
 Develop and deploy modern solvers for mixed discrete-continuous optimization
-across three primary classes of graphical models: phylogenetic trees (the large
-parsimony problem), N-dimensional Potts models in an external field, and hidden
-Markov models (HMMs) — and the coupled spatio-sequential model that joins the
-last two, a Potts prior over class labels gating one hidden chain per class
-(#290), which every Stage 1 deliverable takes as its fourth instance. The framework integrates automatic differentiation for
+across four primary classes of graphical models: phylogenetic trees (the large
+parsimony problem), N-dimensional Potts models in an external field, hidden
+Markov models (HMMs), and low-density parity-check (LDPC) decoding (#340) —
+the error-correction instance of the same message passing, where the
+structure is a code's parity checks and the decoder is sum-product on it.
+Two derived instances sit between them and every Stage 1 deliverable takes
+them too: the coupled spatio-sequential model that joins Potts and HMM, a
+Potts prior over class labels gating one hidden chain per class (#290), and
+the Gaussian mixture, an HMM with the chain removed (#262). The framework integrates automatic differentiation for
 continuous parameters with reinforcement learning (RL) to learn proposal
 policies that score discrete structural candidates using exact, approximate, or
 bounded likelihoods/energies.
@@ -123,6 +132,9 @@ bounded likelihoods/energies.
     confidence intervals; precise state-sequence decoding.
   - *Coupled model:* recovery of planted class labels up to permutation, and
     of the emission parameters, on instances past enumeration.
+  - *Codes:* agreement with exhaustive maximum-likelihood decoding on codes
+    short enough to enumerate, and the block error rate reported against the
+    channel where they are not (#340).
   - *Performance parity:* convergence metrics (ΔlnL or ΔE) must match or exceed
     exact oracles on small `n`, and state-of-the-art classical frameworks
     (e.g. IQ-TREE 2 for trees) on large `n` under an **equal budget of
@@ -149,7 +161,10 @@ mathematical record of the project. The application logic is strictly bound to
 this LaTeX documentation. It must contain:
 
 - Complete mathematical formulations of all substitution models, energy
-  landscapes, and transition probabilities across the three problem classes.
+  landscapes, transition probabilities and parity constraints across the four
+  problem classes and the instances derived from them, with a problem
+  statement per row of `PROBLEMS.md` and generated tables of which algorithm
+  and which referee applies to each.
 - Rigorous derivations of the exact inference algorithms (Felsenstein's
   pruning, belief propagation, forward-backward).
 - Formal definitions of the Markov decision process (MDP) formulations for the
@@ -163,7 +178,7 @@ this LaTeX documentation. It must contain:
 ## Stage 1: Mathematical Foundations & Baseline Infrastructure
 
 Establish the simulation, exact inference, and optimization backends for the
-three distinct problem classes. Target scales span `n ∈ [10, 1000]`
+four distinct problem classes. Target scales span `n ∈ [10, 1000]`
 nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
 
 - **Milestone 1.1: Simulation & Ground Truth Engine**
@@ -173,6 +188,8 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Potts models:* N-D lattices and Markov random fields (MRFs) with
       specified coupling constants and external fields.
     - *HMMs:* hidden state paths and emitted observation sequences.
+    - *Codes:* Gallager ensembles, codewords, and their transmission through
+      declared channels (#340).
     - *Canonical cases:* instances whose answer is known from outside this
       repository — a closed form, a published result, or an enumeration
       sharing no code with what it tests — admitted only when more than one
@@ -187,6 +204,8 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Phylogenetics:* Felsenstein's pruning algorithm.
     - *Potts models:* belief propagation and transfer matrix methods.
     - *HMMs:* the forward-backward algorithm.
+    - *Codes:* the log-domain sum-product decoder on the code's factor graph
+      (#340).
   - *Validation:* match brute-force marginalization on small (`n ≤ 10`) graphs
     within the specified floating-point tolerance. Ensure the API remains
     application-agnostic.
@@ -227,7 +246,7 @@ Replace fixed, hand-designed search heuristics with learned proposal policies
 parameterized by neural networks.
 
 - **Milestone 2.1: RL Agent Formulation & Deployment**
-  - *Deliverable:* define the MDPs across all three problem classes.
+  - *Deliverable:* define the MDPs across all four problem classes.
     - *State:* the current discrete structure (topology, lattice
       configuration, or state path), its fitted continuous parameters, and
       observation summaries.
