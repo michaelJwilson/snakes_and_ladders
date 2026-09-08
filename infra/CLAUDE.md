@@ -28,6 +28,15 @@ commit and its budget is an anecdote; the Markdown under `docs/experiments/`
 is the ledger, a run store is its source, and the index is generated from
 the files, never edited.
 
+A framework is adopted the way a backend is: it fronts a hot path once a
+measurement says it beats the implementation there, and that implementation
+moves to `python/snakes_and_ladders/sandbox/` and referees it from there
+(`sandbox/CLAUDE.md`). Until that measurement exists a framework is a
+referee, not a replacement — a second implementation our numbers are pinned
+against, reached through an adapter that leaves the interface it wraps
+unchanged. Every such package lives in the `frameworks` extra, and every test
+that needs one skips without it, so the core install carries none of them.
+
 ## Tickets and the approval flow
 
 - **Priorities.** `high` runs immediately; `medium` runs at the next

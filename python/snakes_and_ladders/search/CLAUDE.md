@@ -15,7 +15,8 @@ Topology neighbourhoods and the searches that walk them; two-state ground
 states by minimum cut, extended to any label count by expansion moves; Max-Cut
 with a certificate; Monte Carlo moves for the Potts lattice, a Gibbs sampler
 and annealer over any factor graph, and the statistics that judge them; the
-inference loop, the coupled block ascent, and the `learn` environment instance.
+inference loop, the coupled block ascent, the `learn` environment instance and
+its Gymnasium adapter (`gym.py`), a vocabulary over the unchanged protocol.
 
 Two seams run through it and neither may be reversed. A discrete move changes
 the structure being fitted, so the loop builds a new objective rather than
@@ -79,8 +80,7 @@ no application module.
 - **A fixture whose answer is trivial measures nothing.** A uniform field
   makes a ferromagnetic ground state constant; a bipartite graph makes its
   maximum cut every edge. Both admit a solver broken in ways only a harder
-  instance exposes, and a benchmark built on either is measuring its own
-  fixture.
+  instance exposes; a benchmark built on either measures its own fixture.
 
 - **An approximation with a bound states the bound and measures the gap.**
   The bound is the claim that holds at every size; the realized ratio is
