@@ -26,8 +26,14 @@ After changing a dependency, run `uv lock` and commit the updated lockfile in
 the same PR.
 
 The extras are `dev` (ruff, mypy, pre-commit, pip-audit), `test` (pytest and
-plugins, NumPy), and `docs` (Sphinx). `--all-extras` installs all three; sync
-a single one with `uv sync --locked --extra test`.
+plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
+`docs/nb/`), and `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch
+Geometric: the external implementations the suite pins its own against, and
+the Gymnasium adapter's one import). `--all-extras` installs all five; sync a
+single one with `uv sync --locked --extra test`. Nothing in the core install
+needs `frameworks`: every test that uses one of its packages skips without
+it, and `snakes_and_ladders.search.gym` is the only module that imports one
+at module level.
 
 ## Building
 

@@ -188,7 +188,11 @@ jobs:
           restore-keys: |
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
-      - run: uv sync --locked --extra test
+      # `frameworks` as well as `test`: four modules pin our implementations
+      # against Gymnasium, rustworkx, TorchRL and PyTorch Geometric (issue
+      # #322) and skip without them, so a job without the extra would pass
+      # while pinning nothing.
+      - run: uv sync --locked --extra test --extra frameworks
       # The early gate (issue #237). `critical` marks the tests whose failure
       # invalidates what runs after them -- the import graph, the documentation
       # index, the CLAUDE.md pointers, `select_tests` itself, the compiled
@@ -283,7 +287,10 @@ jobs:
           restore-keys: |
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
-      - run: uv sync --locked --extra docs
+      # `frameworks` as well: `docs/source/index.rst` autodocuments
+      # `snakes_and_ladders.search.gym`, which imports gymnasium at module
+      # level, and `-W` turns the failed import into an error.
+      - run: uv sync --locked --extra docs --extra frameworks
       - run: uv run sphinx-build -b html docs/source docs/_build/html -W
 
   notebooks:
