@@ -71,5 +71,12 @@ def test_the_verdict_follows_the_consumer_rule() -> None:
     seam = seams_survey.Seam("x", "X", "protocol")
     lonely = seams_survey.Row(seam, ("a",), ("m.A",), ("m",), ())
     shared = seams_survey.Row(seam, ("a",), ("m.A",), ("m", "n", "o"), ())
-    assert seams_survey.under_the_rule(lonely) == "one implementer, under the rule"
+    argued = seams_survey.Row(
+        seams_survey.Seam("x", "X", "protocol", "because"), ("a",), ("m.A",), ("m",), ()
+    )
+    assert (
+        seams_survey.under_the_rule(lonely)
+        == "one implementer, under the rule, no reason stated"
+    )
     assert seams_survey.under_the_rule(shared) == "earns its place"
+    assert seams_survey.under_the_rule(argued) == "under the rule; kept: because"

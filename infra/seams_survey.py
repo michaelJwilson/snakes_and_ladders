@@ -57,31 +57,62 @@ class Seam:
     kind : str
         ``"protocol"`` for a ``typing.Protocol``; ``"contract"`` for a
         dataclass that three or more modules pass between them.
+    reason : str
+        Why a seam under the consumer rule is kept: the reason the ledger
+        prints beside the verdict. Empty for a seam the rule admits on its
+        own, and for one nobody has argued for, which the ledger reports as
+        under the rule with nothing said.
     """
 
     module: str
     name: str
     kind: str
+    reason: str = ""
 
 
 PROTOCOLS = (
     Seam("opt.objective", "Objective", "protocol"),
     Seam("emissions", "EmissionFamily", "protocol"),
-    Seam("emissions", "CountEmissionFamily", "protocol"),
+    Seam(
+        "emissions",
+        "CountEmissionFamily",
+        "protocol",
+        "the count families' shared moments; #399's two-channel emission is its next implementer",
+    ),
     Seam("opt.schedule", "Schedule", "protocol"),
     Seam("opt.initialize", "Initializer", "protocol"),
     Seam("learn.environment", "Environment", "protocol"),
-    Seam("learn.policy", "Policy", "protocol"),
+    Seam(
+        "learn.policy",
+        "Policy",
+        "protocol",
+        "what a rollout needs and no more, so an untrainable wrapper rolls out (its docstring)",
+    ),
     Seam("learn.policy", "TrainablePolicy", "protocol"),
-    Seam("learn.relaxed", "RelaxedObjective", "protocol"),
+    Seam(
+        "learn.relaxed",
+        "RelaxedObjective",
+        "protocol",
+        "the relaxation driver's argument, with two implementers in its module",
+    ),
     Seam("bound", "Surrogate", "protocol"),
-    Seam("sim.ldpc", "Channel", "protocol"),
+    Seam(
+        "sim.ldpc",
+        "Channel",
+        "protocol",
+        "the decoder's channel argument, with three implementers in its module",
+    ),
 )
 CONTRACTS = (
     Seam("sim.factor_graph", "FactorGraph", "contract"),
     Seam("sim.hmm", "HmmParams", "contract"),
     Seam("opt.potts", "PottsParams", "contract"),
-    Seam("sim.spatio_sequential", "SpatioSequentialParams", "contract"),
+    Seam(
+        "sim.spatio_sequential",
+        "SpatioSequentialParams",
+        "contract",
+        "#399's fixtures and emission add its consumers",
+    ),
 )
 SEAMS = PROTOCOLS + CONTRACTS
 
@@ -222,16 +253,19 @@ def survey() -> list[Row]:
 
 
 def under_the_rule(row: Row) -> str:
-    """The rule's verdict on one seam, as the ledger prints it."""
-    if (
-        row.seam.kind == "protocol"
-        and len(row.implementers) <= 1
-        and len(row.consumers) < CONSUMER_RULE
-    ):
-        return "one implementer, under the rule"
-    if len(row.consumers) < CONSUMER_RULE:
-        return "under the rule"
-    return "earns its place"
+    """The rule's verdict on one seam, as the ledger prints it.
+
+    The rule admits a seam with ``CONSUMER_RULE`` consuming modules. One
+    below that is kept only for a stated reason, which the verdict carries;
+    one with a single implementer and no reason is a name, not a seam.
+    """
+    if len(row.consumers) >= CONSUMER_RULE:
+        return "earns its place"
+    if row.seam.reason:
+        return f"under the rule; kept: {row.seam.reason}"
+    if row.seam.kind == "protocol" and len(row.implementers) <= 1:
+        return "one implementer, under the rule, no reason stated"
+    return "under the rule, no reason stated"
 
 
 def render(rows: list[Row]) -> str:
