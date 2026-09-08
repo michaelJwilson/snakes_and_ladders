@@ -26,7 +26,7 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 
 *Note: Each directory contains a localized `CLAUDE.md` defining specific constraints (e.g., `sim/` oracles, `search/` constraints). These append to, rather than override, the root `CLAUDE.md`.*
 
-New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are disabled via `.github/ISSUE_TEMPLATE/config.yml`.
+New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`, or through `.github/ISSUE_TEMPLATE/optimization.yml` for a repository-wide runtime-optimization audit (it asks for the modules and workloads to profile, the `CLAUDE.md` opportunities to check against every ranked loop, the oracles and the per-module targets before any port); blank issues are disabled via `.github/ISSUE_TEMPLATE/config.yml`.
 
 ## Test Layout
 

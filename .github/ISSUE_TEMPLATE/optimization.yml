@@ -1,0 +1,116 @@
+name: Runtime optimization audit
+description: Scope, plan and implement runtime optimizations across the repository, module by module.
+labels: ["priority:low", "module:infra"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A runtime-optimization ticket covers the **whole repository**, not one
+        hot path, and runs in two halves. The first half is a **scoping**
+        deliverable: every module's dominant workloads profiled at the size
+        tiers named below, on one machine, and root `CLAUDE.md`'s *Runtime
+        Optimization Opportunities* checked in its order against each ranked
+        loop, with a measurement or a recorded "not measured" per line. The
+        result is a plan comment: a table of (module, loop, opportunity,
+        expected gain, oracle). The second half **implements** what the
+        scoping licensed, one pull request per module or per licensed change,
+        each pinned to the implementation it replaces and reporting both
+        numbers. A negative result is a deliverable and is written into
+        `STATUS.md` so it is not re-scoped by the next audit. Priority
+        defaults to `low`; change the label after filing if the work should
+        run sooner.
+  - type: checkboxes
+    id: modules
+    attributes:
+      label: Modules in scope
+      description: Every module whose workloads the audit profiles. Untick only with a reason in the scope field.
+      options:
+        - label: "`sim/` — generators, the factor graph, the Rust sampler"
+        - label: "`likelihood/` — pruning backends, message passing, Bethe, parsimony, path enumeration"
+        - label: "`opt/` — fits, HMC, schedules, the budget harness"
+        - label: "`search/` — neighbourhoods, inference loop, max-flow, alpha expansion, Monte Carlo moves, Gibbs"
+        - label: "`learn/` — rollouts, policies, critics, PPO, planning, surrogates"
+        - label: "`qa/` and `infra/` — figure rendering, notebook execution, the document build, the test budget"
+        - label: "`src/` (Rust) and the FFI boundary"
+  - type: textarea
+    id: workloads
+    attributes:
+      label: Workloads and size tiers
+      description: >
+        The runs that stand for each module — a fit, a search, a sweep, a
+        training run, a build — with the fixture and size tier at which each
+        is profiled (enumerable, mid-size, the `ROADMAP.md` target), and the
+        machine the numbers come from. `DEV.md`'s No CI Profiling rule holds:
+        these run on fixed hardware, not in CI.
+      placeholder: "search.infer NNI at 8 and 20 taxa; learn.reinforce 60 × 32 episodes on the Potts chain; …"
+    validations:
+      required: true
+  - type: textarea
+    id: profile
+    attributes:
+      label: Profiling plan
+      description: >
+        How the ranking is produced: `cProfile` self time per workload
+        (`tests/benchmarks/profile_hotpaths.py` or its extension),
+        `pytest-benchmark` and `criterion` for the kernels already timed, peak
+        memory beside time. The plan comment reports the top loops per module
+        with the fraction of the run each carries; a loop under a stated
+        fraction is recorded and not ported.
+    validations:
+      required: true
+  - type: checkboxes
+    id: opportunities
+    attributes:
+      label: Opportunities to check against every ranked loop
+      description: >
+        Root `CLAUDE.md`'s list, in its order. Each line is checked against
+        each ranked loop and comes back as a measurement or "not measured";
+        the plan comment carries the table.
+      options:
+        - label: "Profile first: self-time ranking before any port; a small fraction pays for no port in any language"
+        - label: "L1/L2/L3 cache: the live set (partials, messages, the current sweep) inside cache; peak memory reported beside time"
+        - label: "Memory layout: contiguous row-major arrays in stride order; neighbour lists as offsets into one array"
+        - label: "Vectorization and SIMD: contiguous, unaliased inner loops without early exit or data-dependent reduction; confirmed by benchmark"
+        - label: "Branch misprediction: data-dependent inner-loop branches measured against their branchless form"
+        - label: "Inlining and call overhead: no Python-level call per site or node; `#[inline]` on small hot Rust helpers"
+        - label: "Allocation: preallocated buffers reused across sweeps; `out=` and in-place operators over temporaries"
+        - label: "Double buffering: which Markov chain each sweep is, stated in its docstring and pinned by the oracle before timing"
+        - label: "The FFI boundary: crossed once per call with contiguous arrays; every kernel timed alone and through its binding"
+        - label: "Compiled backends: `numba` `njit` or the Rust extension, decided per loop by the measurement, the NumPy reference kept as the oracle"
+        - label: "GPU: only where data-parallel and 10x over vectorized NumPy at realistic sizes"
+  - type: textarea
+    id: oracles
+    attributes:
+      label: Oracles and tolerances
+      description: >
+        The rule every ported loop is held to: the reference implementation it
+        is pinned against and the tolerance (bitwise where the arithmetic is
+        the same in the same order, the stated relative tolerance otherwise).
+        Name the existing oracle suites the pins reuse and any that must be
+        written first.
+    validations:
+      required: true
+  - type: textarea
+    id: targets
+    attributes:
+      label: Targets and how they are judged
+      description: >
+        Per module, the speedup or memory figure that would license a change
+        at the size tier named, and the benchmark files that report before and
+        after. The pull requests state both numbers; `STATUS.md` records the
+        realized figures and the negative results.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: >
+        What the audit deliberately leaves out (a module, a tier, GPU), and
+        which earlier audits it builds on so their negative results are not
+        re-measured.
+  - type: textarea
+    id: prior
+    attributes:
+      label: Prior audits and tickets
+      description: The earlier optimization tickets and pull requests this one continues, and what they concluded.

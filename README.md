@@ -43,7 +43,8 @@ code is right. The summary below names the stages;
 [ROADMAP.md](ROADMAP.md) §0 states each one as a deliverable and the gate that
 holds it.
 
-1. **A ticket is filed** through [`.github/ISSUE_TEMPLATE/task.yml`](.github/ISSUE_TEMPLATE/task.yml),
+1. **A ticket is filed** through [`.github/ISSUE_TEMPLATE/task.yml`](.github/ISSUE_TEMPLATE/task.yml)
+   (or [`optimization.yml`](.github/ISSUE_TEMPLATE/optimization.yml) for a repository-wide runtime-optimization audit, which asks for the profiles first),
    which asks for the outcome, the non-goals, and — the field that does the
    work — *how it will be validated*. Blank issues are disabled: a task that
    cannot say what would falsify it does not get filed.
