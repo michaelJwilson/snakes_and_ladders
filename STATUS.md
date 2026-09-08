@@ -948,15 +948,34 @@ past it — zero field gives an aligned state at `-J |E|`, zero coupling gives
 `argmax` per site; and by the max-flow min-cut theorem as a self-check, the
 flow value equalling the capacity of the cut residual reachability induces.
 
-A Rust kernel (`src/maxflow.rs`) runs **28-34x** faster than the NumPy
-reference measured on its own, and **6.6-10.6x** as a caller sees it; the
-difference is the list marshalling crossing the FFI boundary, which is the
-same gap #202 closes for the categorical sampler and is deferred to it rather
-than solved twice. The reference stays as the oracle. The port also removes a
-fragility: the
-Python blocking flow recurses to the depth of the level graph and needs
-`setrecursionlimit` raised past a few thousand nodes, while the Rust one uses
-an explicit stack.
+A Rust kernel (`src/maxflow.rs`) runs **26-32x** faster than the NumPy
+reference measured on its own, and **6.3-10.7x** as a caller sees it. #220
+attributed the difference to the Python lists crossing the FFI boundary by
+copy, the gap #202 closed for the categorical sampler, and deferred the fix;
+[#336](https://github.com/michaelJwilson/snakes_and_ladders/issues/336)
+applied it, passing `float64` and `int64` buffers through `rust-numpy` and
+returning the configuration as an array, and measured that the copy was not
+the term. Minimum of 20 or more rounds, in ms, on square lattices with a
+random per-node field:
+
+| Extent | NumPy reference | Kernel, lists (#220) | Kernel, buffers (#336) | Caller (#220) | Caller (#336) | `energy()` |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 | 4.47 | 0.142 | 0.138 | 0.733 | 0.711 | 0.575 |
+| 32 | 22.0 | 0.835 | 0.836 | 3.30 | 3.22 | 2.60 |
+| 64 | 180 | 7.15 | 6.93 | 17.3 | 16.9 | 9.94 |
+
+The boundary copy was 0.03-0.2 ms of a 0.7-17 ms call and removing it moved
+the caller-visible number by under 3%. What a caller pays for is
+`snakes_and_ladders.search.maxflow.energy`, which scores the returned
+configuration edge by edge in Python and is 59-81% of the wrapper's time; it
+is the oracle's function and is left as it is, so a caller wanting the
+kernel's speedup takes the configuration from the extension and scores it
+itself. Output is unchanged: the configuration is
+equal element by element to the reference's and to the previous binding's at
+extents 16, 32 and 64, and the energy is bitwise equal. The reference stays as
+the oracle. The port also removes a fragility: the Python blocking flow
+recurses to the depth of the level graph and needs `setrecursionlimit` raised
+past a few thousand nodes, while the Rust one uses an explicit stack.
 
 The boundary is refused rather than approximated. A negative coupling is
 NP-hard and raises; more than two states is alpha expansion (#207), which
