@@ -27,15 +27,20 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_pairwise_distance.py::test_pairwise_distance_small_fixed_input` | oracle | Small, hand-checkable input. |
 | `test_scale_tiers.py::test_the_budget_script_states_both_budgets` | simulated_truth | The numbers `DEV.md` documents and the numbers the script measures against have to be the same two, or the report is against a budget nothing else knows about. |
 
-## `tests/regression/learn/` (33)
+## `tests/regression/learn/` (40)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
+| `test_learn_critic.py::test_the_optimal_value_over_a_long_horizon_reaches_the_enumerated_optimum` | oracle | With enough decisions the best return from any start is the gap to the enumerated minimum energy, since single flips connect every pair of configurations. |
+| `test_learn_critic.py::test_a_fitted_critic_explains_the_enumerated_state_values` | oracle |  |
+| `test_learn_critic.py::test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy` | simulated_truth | 60 iterations of 32 episodes, the budget #135 trained REINFORCE on: the actor-critic reaches the enumerated optimum from 88.9% of the 81 starts against greedy's 80.2% (measured; asserted at greedy's rate). |
 | `test_learn_environment.py::test_greedy_takes_the_best_rewarded_action_at_every_step` | oracle |  |
 | `test_learn_hmm.py::test_the_local_reward_matches_re_evaluating_the_joint_probability` | oracle | The failure this class is most exposed to: an O(1) update that disagrees with a full evaluation would be invisible to any test that only checked the search improved. |
 | `test_learn_hmm.py::test_enumeration_counts_every_path` | oracle |  |
 | `test_learn_hmm.py::test_hill_climbing_reaches_the_enumerated_optimum` | oracle | 729 paths, so "did the search find the best one" has an answer. |
 | `test_learn_hmm.py::test_the_enumerated_gradient_matches_central_differences` | oracle | The oracle that makes this an *instance* rather than a second class with the same method names: `snakes_and_ladders.learn.exact` carries it unchanged from the Potts landscape, and the agreement it reaches here is the same claim at 1.5e-11 that one reports. |
+| `test_learn_planning.py::test_one_step_search_with_the_exact_leaf_value_picks_an_optimal_action` | oracle | Depth one: every backed-up value is r + V*(s'), so the most visited move is an argmax of Q*, ties allowed. |
+| `test_learn_planning.py::test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_greedys_evaluations` | simulated_truth |  |
 | `test_learn_potts.py::test_energy_matches_its_definition_term_by_term` | oracle | E(s) = J * (agreeing adjacent pairs) + sum of the field at each site, written out here independently of the implementation's loop. |
 | `test_learn_potts.py::test_the_local_reward_equals_a_full_energy_difference` | oracle | The step function updates two bonds and one site rather than re-evaluating E. |
 | `test_learn_potts.py::test_the_neighbourhood_has_one_flip_per_site_and_alternative_state` | oracle |  |
@@ -48,6 +53,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_potts_lattice.py::test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary` | oracle | Periodic wrapping gives every site the same degree and makes a 2-extent dimension list the same pair twice, as a doubled bond. |
 | `test_learn_potts_lattice.py::test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice` | oracle | 3**9 = 19,683 configurations, the same size #170's simulator validates against, so the best configuration is an enumerated fact. |
 | `test_learn_potts_lattice.py::test_the_enumerated_gradient_matches_central_differences_on_a_lattice` | oracle | The oracle that makes this an instance rather than a lookalike: `snakes_and_ladders.learn.exact` carries it unchanged from the chain. |
+| `test_learn_ppo.py::test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matched_budget` | oracle |  |
+| `test_learn_ppo.py::test_an_mlp_policy_trained_by_ppo_reaches_the_optimum` | simulated_truth | Measured 97.5% of the 81 starts with mean exact return 2.55, against the linear policy's 96.3% and 2.28: the deeper scorer can represent the worsening move a chain needs, which the two linear features cannot. |
 | `test_learn_ppo_torchrl.py::test_the_advantages_are_torchrl_s_gae_at_gamma_one` | oracle |  |
 | `test_learn_ppo_torchrl.py::test_the_clipped_objective_and_its_gradient_are_torchrl_s` | oracle |  |
 | `test_learn_reinforce.py::test_the_enumerated_gradient_matches_finite_differences` | oracle | Autodiff against numerical differentiation of the same closed form. |
@@ -140,7 +147,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_fit.py::test_the_observed_information_is_the_hessian_of_the_objective` | oracle | Pinned against a closed form: d2/dx2 (x - 2)^2 = 2, and zero elsewhere. |
 | `test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian` | oracle | Mean and covariance in closed form, so nothing here rests on a second sampler. |
 | `test_opt_hmc.py::test_the_chain_matches_grid_quadrature_on_a_real_objective` | oracle | The Potts chain's `theta` is two-dimensional at two states, so the posterior can be integrated on a grid and there is a reference that is not a sampler. |
-| `test_opt_hmc.py::test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw` | oracle | The refactor's guarantee, stated as the plan asked: annealing on a constant schedule at temperature 1 reproduces the untempered chain at the same seed *bitwise*. |
+| `test_opt_hmc.py::test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw` | oracle | The refactor's guarantee, stated as the plan asked: annealing on a constant schedule at temperature 1 reproduces the untempered chain at generators seeded alike *bitwise*. |
 | `test_opt_hmm.py::test_forward_matches_brute_force_path_enumeration` | oracle |  |
 | `test_opt_hmm.py::test_theta_round_trips_through_the_constraint_map` | oracle |  |
 | `test_opt_hmm.py::test_align_states_recovers_a_known_permutation` | oracle |  |
@@ -205,7 +212,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (71)
+## `tests/regression/search/` (72)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -258,6 +265,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_infer.py::test_lazy_ranking_places_the_fitted_best_first_for_nni` | simulated_truth | One unfitted evaluation at the parent's lengths ranks the NNI neighbourhood correctly at eight taxa: the fitted best is the lazy best on 6 of 6 neighbourhoods measured. |
 | `test_search_infer.py::test_warm_starts_do_not_move_the_search_answer` | oracle | The search's answer is the same tree at the same likelihood, warm or cold, from the same start; what differs is the cost, which is reported. |
 | `test_search_infer.py::test_lazy_nni_search_reaches_what_the_full_search_reaches` | oracle | With every candidate ranked lazily and only the top one fitted, the NNI search still ends where the full search ends on the eight-taxon fixture, from each of three starts, at fewer fits. |
+| `test_search_ppo.py::test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget` | oracle |  |
 | `test_search_rl.py::test_the_known_score_is_the_likelihood_at_a_fixed_branch_length` | oracle | Against a direct call to the pruning recursion, built independently here: the environment is a wrapper, and this is the claim that it wraps what it says it does. |
 | `test_search_rl.py::test_the_fitted_score_is_the_maximized_likelihood` | oracle |  |
 | `test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum` | oracle | The exhaustive oracle, on the surface the agent actually sees. |
@@ -330,4 +338,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-287 checks.
+295 checks.
