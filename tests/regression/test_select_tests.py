@@ -16,15 +16,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
-from select_tests import (
-    ALWAYS,
-    BENCHMARKED,
-    EVERYTHING,
-    MODULES,
-    _benchmarks_for,
-    dependents,
-    select,
-)
+from select_tests import ALWAYS, BENCHMARKED, EVERYTHING, MODULES, dependents, select
 
 
 def _modules_of(chosen: dict[str, list[str]]) -> set[str]:
@@ -70,10 +62,17 @@ def test_a_change_selects_the_modules_that_import_it() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_a_leaf_module_selects_only_itself() -> None:
-    # Nothing imports `snakes_and_ladders.qa`, so nothing else need run. This is the
-    # case the whole mechanism is worth building for. (`learn` was the leaf
-    # until `search.rl` imported it for the tree environment, #178.)
-    assert _modules_of(select(["python/snakes_and_ladders/qa/build.py"])) == {"qa"}
+    # A module nothing imports needs nothing else run, which is the case the
+    # whole mechanism is worth building for. The leaf is derived rather than
+    # named: `snakes_and_ladders.learn` was one until `snakes_and_ladders.qa.rl_tree_policy` imported it
+    # (issue #178), and a test naming a module goes stale the moment an import
+    # is added, which is the failure `select_tests` itself is built to avoid.
+    leaves = [module for module in MODULES if dependents({module}) == {module}]
+    assert leaves, "no submodule is a leaf; the selection can save nothing"
+    for leaf in leaves:
+        assert _modules_of(
+            select([f"python/snakes_and_ladders/{leaf}/__init__.py"])
+        ) == {leaf}
 
 
 @pytest.mark.critical
@@ -165,18 +164,12 @@ def test_benchmarks_run_only_for_the_modules_they_measure() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
-    # The pairing DEV.md requires, used as the selector: a change runs the
-    # benchmarks of the modules that import it and no other. A learn change
-    # reaches `search` (its tree environment) and `likelihood` (the
-    # surrogates) but never `sim` or `opt`; running every benchmark cost 40 s
-    # against the few that measure what changed.
-    chosen = _benchmarks_of(select(["python/snakes_and_ladders/learn/reinforce.py"]))
-    expected = {
-        Path(path).name for path in _benchmarks_for(sorted(dependents(["learn"])))
+    # The pairing DEV.md requires, used as the selector: a learn change runs
+    # learn's benchmark and not the other twelve. Running all of them cost
+    # 40 s against 5 s for the one that measures what changed.
+    assert _benchmarks_of(select(["python/snakes_and_ladders/learn/reinforce.py"])) == {
+        "test_learn_reinforce_bench.py"
     }
-    assert chosen == expected
-    assert "test_learn_reinforce_bench.py" in chosen
-    assert _benchmarks_of(select(["python/snakes_and_ladders/qa/build.py"])) == set()
 
 
 @pytest.mark.critical

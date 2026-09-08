@@ -20,6 +20,7 @@ from snakes_and_ladders.opt.budget import (
     Outcome,
     OverspendError,
     compare,
+    mcnemar,
     restarts,
 )
 
@@ -140,3 +141,55 @@ def test_a_budget_without_a_unit_or_a_size_is_refused() -> None:
         Budget("", 1)
     with pytest.raises(ValueError, match="at least one"):
         Budget("evaluations", 0)
+
+
+@pytest.mark.mathematical
+def test_mcnemar_is_the_two_sided_binomial_tail_on_the_discordant_pairs() -> None:
+    # Ten discordant instances split 1 against 9: the tail is
+    # (C(10,0) + C(10,1)) / 2**10 = 11 / 1024, doubled. Concordant instances
+    # carry no evidence, so adding them changes nothing.
+    first = np.array([True] * 1 + [False] * 9 + [True] * 5 + [False] * 5)
+    second = np.array([False] * 1 + [True] * 9 + [True] * 5 + [False] * 5)
+
+    assert mcnemar(first, second) == pytest.approx(2.0 * 11.0 / 1024.0, rel=1e-15)
+    assert mcnemar(second, first) == pytest.approx(2.0 * 11.0 / 1024.0, rel=1e-15)
+    assert mcnemar(first[10:], second[10:]) == 1.0  # no discordant pair
+    # Five against zero: 2 / 2**5, the smallest p-value five starts can give.
+    assert mcnemar(np.ones(5, dtype=bool), np.zeros(5, dtype=bool)) == 2.0 / 32.0
+    # An even split is the null itself, and the doubled tail is capped at 1.
+    assert mcnemar(np.array([True, False]), np.array([False, True])) == 1.0
+
+
+@pytest.mark.edge_case
+def test_mcnemar_refuses_hits_that_are_not_paired() -> None:
+    with pytest.raises(ValueError, match="not paired"):
+        mcnemar(np.ones(3, dtype=bool), np.ones(4, dtype=bool))
+
+
+@pytest.mark.mathematical
+def test_a_relative_tolerance_scales_with_the_reference_and_the_paired_p_reads_the_hits() -> (
+    None
+):
+    # Three instances at references 1000, 1000 and 0. `first` misses the
+    # first by 0.5, which an absolute 1e-9 refuses and a relative 1e-3
+    # (margin 1.0) accepts; on the third the reference is 0 so the relative
+    # margin is 0 and only an exact hit counts.
+    def first(instance: float, _budget: Budget, _rng: np.random.Generator) -> Outcome:
+        return Outcome(instance + (0.5 if instance == 1000.0 else 0.0), 1)
+
+    def second(instance: float, _budget: Budget, _rng: np.random.Generator) -> Outcome:
+        return Outcome(instance + 2.0, 1)
+
+    result = compare(
+        {"first": first, "second": second},
+        [1000.0, 1000.0, 0.0],
+        Budget("evaluations", 1),
+        seeds=(0,),
+        known=[1000.0, 1000.0, 0.0],
+    )
+
+    assert result.hits() == {"first": 1, "second": 0}
+    assert result.hits(1e-3, relative=True) == {"first": 3, "second": 0}
+    assert result.reached(1e-3, relative=True)["first"].tolist() == [True] * 3
+    assert result.paired_p("first", "second", 1e-3, relative=True) == 2.0 / 8.0
+    assert result.paired_p("first", "second") == 1.0
