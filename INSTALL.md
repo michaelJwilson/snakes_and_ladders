@@ -32,7 +32,7 @@ Geometric: the external implementations the suite pins its own against, and
 the Gymnasium adapter's one import). `--all-extras` installs all five; sync a
 single one with `uv sync --locked --extra test`. Nothing in the core install
 needs `frameworks`: every test that uses one of its packages skips without
-it, and `snakes_and_ladders.search.gym` is the only module that imports one
+it, and `sal.search.gym` is the only module that imports one
 at module level.
 
 ## Building

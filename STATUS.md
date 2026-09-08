@@ -156,7 +156,7 @@ batches, tempering replicas, `qa.build`, `check_notebooks` and `pytest-xdist`
 ([#322](https://github.com/michaelJwilson/snakes_and_ladders/issues/322), closing
 [#242](https://github.com/michaelJwilson/snakes_and_ladders/issues/242) into it). A
 `frameworks` extra carries `gymnasium` 1.3.0, `rustworkx` 0.18.1, `torchrl`
-0.13.3 and `torch_geometric` 2.8.0, and `snakes_and_ladders.sandbox` is the
+0.13.3 and `torch_geometric` 2.8.0, and `sal.sandbox` is the
 home an implementation moves to once a framework replaces it on a hot path,
 with a guard that only tests and QA import it; nothing has moved yet, because
 nothing measured beat its reference. `search.gym.GymnasiumEnvironment` wraps
