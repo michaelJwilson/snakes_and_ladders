@@ -12,8 +12,20 @@
 #                        ranking, a timing quoted anywhere.
 #   validate three slots. Correctness runs nobody times: ruff, mypy, the
 #                        critical tier, the changed-file run, review_gates.sh,
-#                        a notebook check, a document build whose output is
-#                        compared rather than timed.
+#                        a notebook check.
+#
+# A FIGURE OR DOCUMENT RENDER TAKES `measure`, not `validate`, even though
+# nobody times it. `snakes_and_ladders.qa.build` deliberately strips the three
+# thread variables from a render's environment (DEV.md: a committed figure is
+# rendered the way the manifest renders it, and a reduction split over a
+# different thread count can move its last bit), so a render is the one
+# validation that is NOT single-threaded. Measured at 22:54 on the 4-core
+# host: two concurrent `qa.opt_coverage` renders at 149% CPU each, driving
+# load average to 10.65 -- 2.7x oversubscribed -- while three agents worked.
+# Three slots sized for single-threaded jobs do not bound a job that takes
+# 1.5 cores, so a render takes the exclusive lock. The reason differs from a
+# measurement's -- footprint rather than comparability -- and the mechanism
+# is the same.
 #
 # A measurement takes BOTH -- `measure` first, then every slot of `validate` --
 # so it still runs alone and the budgets in DEV.md stay comparable across runs.
@@ -57,6 +69,7 @@
 # Usage:
 #   . infra/locks.sh
 #   with_lock validate -- uv run pytest -m critical
+#   with_lock measure  -- infra/build_technical_doc.sh          # a render
 #   with_lock measure  -- uv run pytest tests/benchmarks -q
 #   with_lock measure --wide -- cargo bench --bench parallel_sweep
 #
