@@ -84,7 +84,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Establish the external reference tools to benchmark against, and how they are
   installed (#126)
 - A classical baseline suite the three applications are scored against under
-  one budget
+  one budget — large parsimony under NNI and SPR is the tree baseline that
+  exists; the HMM and Potts baselines and the shared budget remain
 - Uncertainty for a discrete search result, where a Hessian is not defined:
   a margin, a Boltzmann weight over the enumerated neighbourhood, or bootstrap
   support, pinned against enumeration where it fits (#270)
