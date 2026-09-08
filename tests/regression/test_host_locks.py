@@ -28,6 +28,44 @@ LOCKS = REPO_ROOT / "infra" / "locks.sh"
 JOB = 1.0
 
 
+def _stamps(kinds: list[str], scratch: Path, marks: Path) -> list[tuple[float, float]]:
+    """Run the jobs at once; return each one's (start, end) from its own clock.
+
+    Wall time alone cannot tell "these overlapped" from "the host was busy":
+    on a loaded host three concurrent jobs take longer than one, and process
+    start-up costs grow. So each job stamps its own start and end, and the
+    assertions below are about the intervals rather than the total. This test
+    failed twice at load 9-11 when it asserted a total.
+    """
+    marks.mkdir(exist_ok=True)
+    jobs = " ".join(
+        f'( with_lock {kind} -- bash -c \'printf "%s " "$EPOCHREALTIME" '
+        f'>> "{marks}/$$"; sleep {JOB}; printf "%s" "$EPOCHREALTIME" '
+        f'>> "{marks}/$$"\' ) &'
+        for kind in kinds
+    )
+    command = f". {LOCKS}; {jobs} wait"
+    finished = subprocess.run(
+        ["bash", "-c", command],
+        cwd=REPO_ROOT,
+        env={
+            "SAL_SCRATCH": str(scratch),
+            "PATH": "/usr/bin:/bin",
+            "SAL_LOCK_WAIT": "60",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert finished.returncode == 0, finished.stderr
+    spans = []
+    for mark in marks.iterdir():
+        start, end = mark.read_text().split()
+        spans.append((float(start), float(end)))
+    assert len(spans) == len(kinds), f"{len(spans)} jobs stamped, expected {len(kinds)}"
+    return spans
+
+
 def _run(kinds: list[str], scratch: Path) -> float:
     """Start one job per entry in ``kinds`` at once; return the wall seconds."""
     script = " ".join(f"( with_lock {kind} -- sleep {JOB} ) &" for kind in kinds)
@@ -57,11 +95,21 @@ def scratch(tmp_path: Path) -> Path:
 
 @pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
 @pytest.mark.structural
-def test_validations_up_to_the_slot_count_overlap(scratch: Path) -> None:
-    # The point of the split: three correctness runs cost one job's wall time,
-    # not three. Under the old exclusive lock this took 3 * JOB.
-    elapsed = _run(["validate"] * 3, scratch)
-    assert elapsed < 2 * JOB, f"three validations serialized: {elapsed:.2f}s"
+def test_validations_up_to_the_slot_count_overlap(
+    scratch: Path, tmp_path: Path
+) -> None:
+    # The point of the split: three correctness runs share the host rather than
+    # queueing. Asserted as genuine overlap -- all three inside the lock at one
+    # instant -- rather than as a total, which a loaded host inflates past any
+    # fixed bound. Under the old exclusive lock the spans are disjoint and the
+    # latest start falls after the earliest end.
+    spans = _stamps(["validate"] * 3, scratch, tmp_path / "marks")
+    latest_start = max(start for start, _ in spans)
+    earliest_end = min(end for _, end in spans)
+    assert latest_start < earliest_end, (
+        f"three validations did not overlap: latest start {latest_start:.3f} "
+        f"is after earliest end {earliest_end:.3f}"
+    )
 
 
 @pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
