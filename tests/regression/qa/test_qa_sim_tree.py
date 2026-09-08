@@ -100,9 +100,12 @@ def test_main_reads_sys_argv_when_no_argv_is_given(
     assert caption_path.read_text() == build_caption(
         load_simulation_params(params_path)
     )
+    # The runner reports what it wrote through the run logger (issue #311),
+    # which writes to stderr; nothing goes to stdout.
     captured = capsys.readouterr()
-    assert str(figure_path) in captured.out
-    assert str(caption_path) in captured.out
+    written = captured.out + captured.err
+    assert str(figure_path) in written
+    assert str(caption_path) in written
 
 
 @pytest.mark.structural
