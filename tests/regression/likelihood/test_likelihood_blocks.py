@@ -426,13 +426,19 @@ def test_the_bound_is_a_surrogate_with_a_claim() -> None:
 def test_a_malformed_partition_or_alignment_is_refused() -> None:
     params, alignment, lengths = _instance("tree_search/ci.yaml", 40)
     pi = np.asarray(params.pi)
-    for kwargs, message in (
-        ({"block_size": 0, "min_count": 1}, "block_size must be at least 1"),
-        ({"block_size": 1, "min_count": 0}, "min_count must be at least 1"),
+    for block_size, min_count, message in (
+        (0, 1, "block_size must be at least 1"),
+        (1, 0, "min_count must be at least 1"),
     ):
         with pytest.raises(ValueError, match=message):
             block_frequency_interval(
-                params.tau, params.k, pi, alignment, lengths, **kwargs
+                params.tau,
+                params.k,
+                pi,
+                alignment,
+                lengths,
+                block_size=block_size,
+                min_count=min_count,
             )
     with pytest.raises(ValueError, match="no taxa"):
         block_frequency_interval(
