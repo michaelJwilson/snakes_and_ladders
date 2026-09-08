@@ -9,19 +9,24 @@ reason: a recursion checked only against itself is checked against nothing.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from itertools import permutations, product
 
 import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
 from snakes_and_ladders.opt.hmm import (
+    EmFit,
     HmmObjective,
     align_states,
     baum_welch,
+    baum_welch_family,
     forward_log_likelihood,
 )
-from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
+from snakes_and_ladders.sim.fixtures import fixture
+from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences
@@ -271,3 +276,97 @@ def test_baum_welch_stops_once_the_likelihood_stops_moving() -> None:
     *_, loose = baum_welch(*arguments, tolerance=1e-1)
     *_, tight = baum_welch(*arguments, tolerance=1e-14)
     assert loose < tight
+
+
+#: The enumerable slice of the declared instance: 3 ** 7 = 2,187 paths per
+#: sequence over 20 sequences. The instance itself is 15 positions by 600
+#: sequences and is past enumeration, so the oracle is taken on a slice of it
+#: rather than on a different model (issue #393).
+_EM_LENGTH = 7
+_EM_SEQUENCES = 20
+#: Iterates whose evidence is recomputed from the enumeration. Three is enough
+#: to see the increase; each one costs 20 path enumerations.
+_EM_ITERATES = 3
+
+
+def _enumerated_evidence(params: HmmParams, observations: np.ndarray) -> float:
+    """``sum_sequences log P(sequence)``, summed over every path of each."""
+    return float(
+        sum(
+            enumerate_hidden_paths(params, sequence).log_likelihood
+            for sequence in observations
+        )
+    )
+
+
+def _stepped(params: HmmParams, fitted: EmFit) -> HmmParams:
+    """``params`` carrying what one Baum-Welch run returned."""
+    return replace(
+        params,
+        initial=torch.exp(fitted.log_initial).numpy(),
+        transition=torch.exp(fitted.log_transition).numpy(),
+        emissions=fitted.emissions,
+    )
+
+
+@pytest.mark.oracle
+def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -> None:
+    # The E step is a forward-backward recursion and the number it reports is
+    # `sum_sequences log P(sequence)`. The path enumeration is that same sum
+    # with no recursion in it, so it referees three separate claims the fit
+    # makes about itself and cannot check on its own.
+    #
+    # Realized on this slice: the reported likelihood at the starting
+    # parameters equals the enumerated evidence exactly (0.0 relative); the
+    # enumerated evidence at three successive iterates increases every step,
+    # -179.735, -178.981, -178.497, so the monotonicity is pinned by an
+    # independent computation rather than by the fit's own number; at
+    # convergence the two agree to 8.5e-13 relative, the residue of the one M
+    # step of lag between the likelihood a Baum-Welch iteration reports and
+    # the parameters it returns; and the fitted initial distribution equals
+    # the enumerated posterior at the first site, averaged over sequences, to
+    # 2.2e-12 -- the M step's own fixed point, read off the enumeration.
+    params = replace(
+        fixture("hmm", "ci").params,
+        sequence_length=_EM_LENGTH,
+        n_sequences=_EM_SEQUENCES,
+    )
+    observations = simulate_sequences(params).observations
+    start = (
+        torch.log(torch.as_tensor(params.initial)),
+        torch.log(torch.as_tensor(params.transition)),
+        params.emissions,
+    )
+
+    first = baum_welch_family(observations, *start, max_iterations=1)
+    assert_allclose(
+        first.log_likelihood,
+        _enumerated_evidence(params, observations),
+        rtol=_RTOL_ORACLE,
+    )
+
+    walked = start
+    evidence = []
+    for _ in range(_EM_ITERATES):
+        iterate = baum_welch_family(observations, *walked, max_iterations=1)
+        walked = (iterate.log_initial, iterate.log_transition, iterate.emissions)
+        evidence.append(_enumerated_evidence(_stepped(params, iterate), observations))
+    assert evidence == sorted(evidence), evidence
+
+    fitted = baum_welch_family(observations, *start)
+    settled = _stepped(params, fitted)
+    assert_allclose(
+        _enumerated_evidence(settled, observations),
+        fitted.log_likelihood,
+        rtol=1e-11,
+    )
+    assert_allclose(
+        torch.exp(fitted.log_initial).numpy(),
+        np.stack(
+            [
+                enumerate_hidden_paths(settled, sequence).posterior[0]
+                for sequence in observations
+            ]
+        ).mean(axis=0),
+        atol=1e-10,
+    )

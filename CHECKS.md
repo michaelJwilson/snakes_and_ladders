@@ -165,7 +165,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_mean_field_and_spanning_tree_bounds_sandwich_log_z` | oracle |  |
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
-## `tests/regression/opt/` (55)
+## `tests/regression/opt/` (56)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -187,6 +187,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_hmm.py::test_forward_matches_brute_force_path_enumeration` | oracle |  |
 | `test_opt_hmm.py::test_theta_round_trips_through_the_constraint_map` | oracle |  |
 | `test_opt_hmm.py::test_align_states_recovers_a_known_permutation` | oracle |  |
+| `test_opt_hmm.py::test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point` | oracle | The E step is a forward-backward recursion and the number it reports is `sum_sequences log P(sequence)`. |
 | `test_opt_hmm_counts.py::test_the_forward_recursion_matches_enumeration_over_every_path` | oracle |  |
 | `test_opt_hmm_counts.py::test_a_known_truth_round_trips_through_the_unconstrained_coordinates` | simulated_truth |  |
 | `test_opt_hmm_counts.py::test_coverage_against_the_true_dispersion` | simulated_truth | The full sweep behind the table in `STATUS.md`. |
@@ -432,4 +433,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-389 checks.
+390 checks.
