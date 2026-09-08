@@ -52,7 +52,7 @@ class SitePatterns:
         Shape ``(n_patterns,)``, ``int64``: how many columns of the original
         alignment equal each pattern. Sums to ``n_sites``.
     n_sites : int
-        Columns in the original alignment.
+        Sites the weights sum to --- the original alignment's length.
     """
 
     names: tuple[str, ...]
@@ -114,26 +114,81 @@ def compress(alignment: Mapping[str, np.ndarray]) -> SitePatterns:
     if len(shapes) != 1 or len(next(iter(shapes))) != 1:
         msg = f"the alignment is ragged: rows have shapes {sorted(shapes)}"
         raise ValueError(msg)
-    block = np.ascontiguousarray(np.stack(rows))
+    return compress_columns(names, np.ascontiguousarray(np.stack(rows)))
+
+
+def compress_columns(
+    names: tuple[str, ...],
+    columns: np.ndarray,
+    weights: np.ndarray | None = None,
+) -> SitePatterns:
+    """Collapse identical columns of a raw block, adding the weights they carry.
+
+    :func:`compress` is this over an alignment mapping with every weight
+    one. The weighted form is what a caller holding columns that already
+    carry multiplicities needs --- the block-frequency bound's frequent
+    blocks, whose columns repeat both inside a block and across blocks
+    (:mod:`snakes_and_ladders.likelihood.blocks`).
+
+    Parameters
+    ----------
+    names : tuple[str, ...]
+        Leaf names in the row order of ``columns``.
+    columns : np.ndarray
+        Shape ``(len(names), n_columns)``, ``int64``.
+    weights : np.ndarray | None
+        One multiplicity per column, or ``None`` for one each.
+
+    Returns
+    -------
+    SitePatterns
+        The distinct columns and the summed weights, ``n_sites`` being the
+        total multiplicity rather than the number of columns passed.
+
+    Raises
+    ------
+    ValueError
+        If ``columns`` is not two-dimensional with one row per name, or
+        ``weights`` does not have one entry per column.
+    """
+    if columns.ndim != 2 or columns.shape[0] != len(names):
+        msg = (
+            f"columns has shape {columns.shape}, expected "
+            f"({len(names)}, n_columns), one row per name"
+        )
+        raise ValueError(msg)
+    multiplicity = (
+        np.ones(columns.shape[1], dtype=np.int64)
+        if weights is None
+        else np.asarray(weights, dtype=np.int64)
+    )
+    if multiplicity.shape != (columns.shape[1],):
+        msg = (
+            f"weights has shape {multiplicity.shape}, expected "
+            f"({columns.shape[1]},), one per column"
+        )
+        raise ValueError(msg)
 
     # np.unique over the columns: the transposed view is made contiguous once
     # so the row-wise uniqueness test walks memory in stride order rather
     # than gathering one taxon at a time (root CLAUDE.md, "Memory layout").
-    _, first, inverse, counts = np.unique(
-        np.ascontiguousarray(block.T),
+    _, first, inverse = np.unique(
+        np.ascontiguousarray(columns.T),
         axis=0,
         return_index=True,
         return_inverse=True,
-        return_counts=True,
+    )
+    totals = np.bincount(
+        inverse.reshape(-1), weights=multiplicity, minlength=first.shape[0]
     )
     # First-occurrence order, so a pattern table read beside the original
     # alignment lists patterns in the order the alignment introduces them.
     order = np.argsort(first)
     return SitePatterns(
         names=names,
-        columns=np.ascontiguousarray(block[:, first[order]]),
-        weights=np.ascontiguousarray(counts[order].astype(np.int64)),
-        n_sites=int(block.shape[1]),
+        columns=np.ascontiguousarray(columns[:, first[order]]),
+        weights=np.ascontiguousarray(np.rint(totals[order]).astype(np.int64)),
+        n_sites=int(multiplicity.sum()),
     )
 
 
@@ -176,4 +231,4 @@ def check_weights(weights: np.ndarray | None, n_sites: int) -> np.ndarray | None
     return array
 
 
-__all__ = ["SitePatterns", "check_weights", "compress"]
+__all__ = ["SitePatterns", "check_weights", "compress", "compress_columns"]

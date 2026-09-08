@@ -22,7 +22,7 @@ consuming modules. Do not edit by hand -- run
 | `Policy` | `learn.policy` | sample | `emissions.BetaBinomialEmission`, `emissions.BinomialEmission`, `emissions.CategoricalEmission`, `emissions.GaussianEmission`, `emissions.NegativeBinomialEmission`, `emissions.PoissonEmission`, `learn.policy.EpsilonGreedyPolicy`, `learn.policy.LinearPolicy`, `learn.policy.MLPPolicy` | 1 | 1 of 12 | under the rule; kept: what a rollout needs and no more, so an untrainable wrapper rolls out (its docstring) |
 | `TrainablePolicy` | `learn.policy` | dtype, greedy, log_probabilities, parameters, sample | `learn.policy.LinearPolicy`, `learn.policy.MLPPolicy` | 4 | 0 of 12 | earns its place |
 | `RelaxedObjective` | `learn.relaxed` | discrete, n_sites, n_states, relaxed | `learn.relaxed.RelaxedHmmPath`, `learn.relaxed.RelaxedPotts` | 0 | 2 of 12 | under the rule; kept: the relaxation driver's argument, with two implementers in its module |
-| `Surrogate` | `bound` | kind | `learn.surrogate.CalibratedBound`, `learn.surrogate.Fitted`, `likelihood.surrogate.MeanFieldLogPartition`, `likelihood.surrogate.ParsimonyUpperBound`, `likelihood.surrogate.PlugInLikelihood`, `likelihood.surrogate.SpanningTreeLogPartition`, `search.support.Support`, `search.support.TemperedSupport`, `search.surrogate.LearnedTreeSurrogate` | 3 | 3 of 12 | earns its place |
+| `Surrogate` | `bound` | kind | `learn.surrogate.CalibratedBound`, `learn.surrogate.Fitted`, `likelihood.blocks.BlockFrequencyBound`, `likelihood.surrogate.MeanFieldLogPartition`, `likelihood.surrogate.ParsimonyUpperBound`, `likelihood.surrogate.PlugInLikelihood`, `likelihood.surrogate.SpanningTreeLogPartition`, `search.support.Support`, `search.support.TemperedSupport`, `search.surrogate.LearnedTreeSurrogate` | 4 | 3 of 12 | earns its place |
 | `Channel` | `sim.ldpc` | log_likelihood_ratios | `sim.ldpc.BinaryErasureChannel`, `sim.ldpc.BinaryInputGaussianChannel`, `sim.ldpc.BinarySymmetricChannel` | 0 | 1 of 12 | under the rule; kept: the decoder's channel argument, with three implementers in its module |
 
 ## Data contracts (4)
@@ -32,4 +32,4 @@ consuming modules. Do not edit by hand -- run
 | `FactorGraph` | `sim.factor_graph` | factors, variables | 7 | 5 of 12 | earns its place |
 | `HmmParams` | `sim.hmm` | emissions, initial, n_sequences, n_states, seed, sequence_length, tolerance, transition | 6 | 4 of 12 | earns its place |
 | `PottsParams` | `opt.potts` | chain_length, coupling, field, n_chains, n_states, seed | 3 | 2 of 12 | earns its place |
-| `SpatioSequentialParams` | `sim.spatio_sequential` | beta, emissions, graph, initial, n_classes, n_positions, n_states, self_transition | 2 | 1 of 12 | under the rule; kept: #399's fixtures and emission add its consumers |
+| `SpatioSequentialParams` | `sim.spatio_sequential` | beta, emissions, graph, initial, n_classes, n_positions, n_states, self_transition | 3 | 1 of 12 | earns its place |

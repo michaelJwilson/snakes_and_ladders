@@ -101,7 +101,7 @@ def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
     return off_diagonal * (1.0 - eye) + diagonal * eye
 
 
-def _transition_probabilities(
+def transition_probabilities(
     t: torch.Tensor, k: int, rate_matrix: torch.Tensor | None
 ) -> torch.Tensor:
     """``P(t)`` for every branch length in ``t``, shape ``(*t.shape, k, k)``.
@@ -207,7 +207,7 @@ def log_likelihood(
     weight = check_weights(weights, n_sites)
     log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
     # Every branch's transition matrix at once, indexed by branch_order.
-    transitions = _transition_probabilities(branch_lengths, k, rate_matrix)
+    transitions = transition_probabilities(branch_lengths, k, rate_matrix)
 
     def _post_order(node: Node) -> torch.Tensor:
         nonlocal log_scale
@@ -331,7 +331,7 @@ def log_likelihood_cached(
     lengths = branch_lengths.detach()
     with torch.no_grad():
         pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-        transitions = _transition_probabilities(lengths, k, rate_matrix)
+        transitions = transition_probabilities(lengths, k, rate_matrix)
         leaves = [node for node in preorder(tau) if node.is_leaf]
         n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
 
