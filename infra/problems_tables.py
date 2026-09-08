@@ -382,9 +382,12 @@ def _table(
     header = " & ".join(
         rf"\rotatebox{{90}}{{\footnotesize {column}}}" for column in columns
     )
+    # Scaled to the text width: twelve rotated columns beside a full problem
+    # name overflow an A4 column at the body size.
     lines = [
         r"\begin{table}[htbp]",
         r"  \centering",
+        r"  \resizebox{\textwidth}{!}{%",
         r"  \begin{tabular}{l" + "c" * len(columns) + "}",
         r"    \toprule",
         f"    & {header} \\\\",
@@ -394,7 +397,7 @@ def _table(
         lines.append(f"    {_tex_text(problem)} & {' & '.join(cells)} \\\\")
     lines += [
         r"    \bottomrule",
-        r"  \end{tabular}",
+        r"  \end{tabular}}",
         f"  \\caption{{{caption}}}",
         f"  \\label{{{label}}}",
         r"\end{table}",

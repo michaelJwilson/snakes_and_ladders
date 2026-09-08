@@ -203,8 +203,11 @@ def build_figure(results: dict[str, MultiStartResult]) -> tuple[Figure, str]:
             axis.set_xlabel("x")
             axis.set_aspect("equal")
         axes[0].set_ylabel("y")
-        axes[2].legend(loc="lower center", frameon=False, fontsize="x-small")
-        fig.tight_layout()
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(
+            handles, labels, loc="lower center", ncol=2, frameon=False, fontsize="small"
+        )
+        fig.tight_layout(rect=(0.0, 0.1, 1.0, 1.0))
 
     caption = (
         f"The three continuous test functions in two dimensions, with the "

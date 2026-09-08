@@ -3,6 +3,7 @@
 % with its --write flag.
 \begin{table}[htbp]
   \centering
+  \resizebox{\textwidth}{!}{%
   \begin{tabular}{lcccccccccccc}
     \toprule
     & \rotatebox{90}{\footnotesize simulation} & \rotatebox{90}{\footnotesize exact evaluation} & \rotatebox{90}{\footnotesize message passing} & \rotatebox{90}{\footnotesize gradient fit} & \rotatebox{90}{\footnotesize expectation--maximization} & \rotatebox{90}{\footnotesize initializer} & \rotatebox{90}{\footnotesize hill climbing} & \rotatebox{90}{\footnotesize sampling and tempering} & \rotatebox{90}{\footnotesize descent and expansion} & \rotatebox{90}{\footnotesize exact ground state} & \rotatebox{90}{\footnotesize relaxation} & \rotatebox{90}{\footnotesize policy learning} \\
@@ -19,13 +20,14 @@
     Gaussian mixture & $\checkmark$ & $\circ$ & -- & $\checkmark^{\dagger}$ & $\checkmark$ & $\circ$ & -- & -- & -- & -- & -- & -- \\
     Continuous test functions & -- & $\checkmark$ & -- & $\checkmark$ & -- & $\checkmark^{\dagger}$ & -- & $\checkmark$ & -- & -- & -- & -- \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
   \caption{The algorithms that apply to each problem, read from the problem catalogue, and what referees each: $\checkmark$ a test pinned to an oracle, $\checkmark^{\dagger}$ a test pinned to the simulated truth only, $\circ$ neither kind of test, and -- not applicable or not built. A dagger or a circle is a cell where an oracle is wanted and absent.}
   \label{tab:algorithms-problems}
 \end{table}
 
 \begin{table}[htbp]
   \centering
+  \resizebox{\textwidth}{!}{%
   \begin{tabular}{lccccccc}
     \toprule
     & \rotatebox{90}{\footnotesize enumeration or brute force} & \rotatebox{90}{\footnotesize closed form or published value} & \rotatebox{90}{\footnotesize independent algorithm} & \rotatebox{90}{\footnotesize planted truth} & \rotatebox{90}{\footnotesize referee, ci tier} & \rotatebox{90}{\footnotesize referee, stress tier} & \rotatebox{90}{\footnotesize referee, release tier} \\
@@ -42,7 +44,7 @@
     Gaussian mixture & -- & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
     Continuous test functions & -- & $\checkmark$ & -- & -- & oracle & -- & truth$^{\dagger}$ \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
   \caption{The oracle each problem's evaluators and searches are pinned to, and, per size tier, what referees the tests that pin them: an oracle, the simulated truth only (dagger: an oracle is wanted), or no test of either kind at that tier (--). A planted truth is an upper bound on the optimum rather than the optimum.}
   \label{tab:oracles-problems}
 \end{table}
