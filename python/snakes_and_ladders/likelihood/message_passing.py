@@ -1,12 +1,16 @@
 """Sum-product and max-product on a factor graph, exact on a tree.
 
-One algorithm for the three evaluators this package already has. On a tree it
-is exact in one leaf-to-root and one root-to-leaf pass: pruning is this on the
+One algorithm for the three evaluators this package already has:
+``eq:sum-product`` of ``docs/tex/textbook.tex``. On a tree it
+is exact in one leaf-to-root and one root-to-leaf pass (``app:sum-product``
+derives both passes and their exactness): pruning is this on the
 tree's factor graph (``eq:pruning``), the forward recursion is this on a chain
 (``eq:forward``), and both are pinned here against the implementations that
 predate it. On a loopy graph it is the Bethe approximation
 :mod:`snakes_and_ladders.likelihood.belief_propagation` computes for the pairwise Potts
-case, and it is pinned against that too: same messages, same free energy.
+case, and it is pinned against that too: same messages, same free energy
+(``eq:bethe-factor``, whose stationary point ``app:bethe`` identifies with the
+fixed point).
 Which regime a caller is in is a property of the graph, so :func:`sum_product`
 refuses a tree schedule on a loopy graph rather than returning a number that
 looks exact.

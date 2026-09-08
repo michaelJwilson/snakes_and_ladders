@@ -8,7 +8,8 @@ supplies the model it will be run on).
 
 The forward recursion here and Felsenstein pruning are the same sum-product
 computation on different graphs: a caterpillar tree carrying one observed
-leaf per internal node *is* an HMM (Durbin et al., ch. 3; Koller & Friedman
+leaf per internal node *is* an HMM (``eq:forward`` of ``docs/tex/textbook.tex``,
+derived in ``app:forward-backward``; Durbin et al., ch. 3; Koller & Friedman
 for the general framing). The abstraction is expected to hold because the
 three instances are one marginalization over three structures, not three
 unrelated models sharing an optimizer.
