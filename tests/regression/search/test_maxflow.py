@@ -85,7 +85,12 @@ def test_the_uniform_field_energy_is_the_negated_model_log_weight() -> None:
 
     realized = energy(graph, FIELD, configurations)
 
-    np.testing.assert_array_equal(realized, -log_weights(graph, FIELD, configurations))
+    # Relative rather than exact: `energy` sums its edge terms in one ``dot``
+    # (issue #341) where `log_weights` adds them left to right in edge order,
+    # so the two differ by rounding and not by model.
+    np.testing.assert_allclose(
+        realized, -log_weights(graph, FIELD, configurations), rtol=1e-12, atol=0.0
+    )
 
 
 @pytest.mark.oracle

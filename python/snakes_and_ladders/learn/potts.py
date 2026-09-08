@@ -83,7 +83,25 @@ class PottsLandscape:
         self._field = field
         self._chain_length = chain_length
         self._n_states = int(field.shape[0])
-        self._neighbours = _chain_neighbours(chain_length)
+        self._set_neighbours(_chain_neighbours(chain_length))
+
+    def _set_neighbours(self, neighbours: tuple[tuple[int, ...], ...]) -> None:
+        """Hold the adjacency, and the padded table `features` gathers from.
+
+        ``_neighbour_table[i, :]`` is site ``i``'s neighbours padded with
+        ``0`` to the largest degree, and ``_neighbour_mask`` says which
+        columns are real. One gather over every action is then one NumPy
+        pass with no loop over sites (issue #341).
+        """
+        self._neighbours = neighbours
+        width = max((len(row) for row in neighbours), default=0)
+        table = np.zeros((len(neighbours), width), dtype=np.int64)
+        mask = np.zeros((len(neighbours), width), dtype=bool)
+        for site, row in enumerate(neighbours):
+            table[site, : len(row)] = row
+            mask[site, : len(row)] = True
+        self._neighbour_table = table
+        self._neighbour_mask = mask
 
     @classmethod
     def on_graph(
@@ -139,7 +157,7 @@ class PottsLandscape:
         for first, second in edges:
             neighbours[first].append(second)
             neighbours[second].append(first)
-        landscape._neighbours = tuple(tuple(row) for row in neighbours)
+        landscape._set_neighbours(tuple(tuple(row) for row in neighbours))
         return landscape
 
     @classmethod
@@ -240,8 +258,11 @@ class PottsLandscape:
         """
         # One NumPy pass over every action rather than a Python-level
         # `_deltas` per action: the REINFORCE profile behind #264 charged
-        # 126,000 `_deltas` calls to 50 gradient updates, a fifth of the run.
-        # `_deltas` stays as the scalar oracle a test pins this against.
+        # 126,000 `_deltas` calls to 50 gradient updates, a fifth of the run;
+        # #341 then found the pass's loop over sites at 23.5% of a run on
+        # the length-8 chain and replaced it with one gather from the padded
+        # neighbour table. `_deltas` stays as the scalar oracle a test pins
+        # this against, exactly: the counts are integers.
         if not actions:
             return torch.empty((0, 2), dtype=torch.float64)
         sites = np.fromiter(
@@ -251,19 +272,14 @@ class PottsLandscape:
             (value for _, value in actions), dtype=np.int64, count=len(actions)
         )
         current = np.asarray(state, dtype=np.int64)
-        agreement = np.zeros(len(actions))
-        for site, row in enumerate(self._neighbours):
-            if not row:
-                continue
-            picks = sites == site
-            if not picks.any():
-                continue
-            neighbour_states = current[list(row)]
-            agreement[picks] = (values[picks, None] == neighbour_states).sum(axis=1) - (
-                current[site] == neighbour_states
-            ).sum()
-        field = self._field[values] - self._field[current[sites]]
-        return torch.from_numpy(np.stack([agreement, field], axis=1))
+        neighbour_states = current[self._neighbour_table[sites]]
+        mask = self._neighbour_mask[sites]
+        before = current[sites]
+        agreement = ((values[:, None] == neighbour_states) & mask).sum(axis=1) - (
+            (before[:, None] == neighbour_states) & mask
+        ).sum(axis=1)
+        field = self._field[values] - self._field[before]
+        return torch.from_numpy(np.stack([agreement.astype(np.float64), field], axis=1))
 
     def n_features(self) -> int:
         """Two: the agreement change and the field change."""
@@ -279,12 +295,11 @@ class PottsLandscape:
         off a local maximum -- the same stopping rule the greedy baseline
         obeys, which is what makes the two comparable at all.
         """
-        return not any(
-            self._coupling * agreement + field > 0.0
-            for agreement, field in (
-                self._deltas(state, action) for action in self.actions(state)
-            )
-        )
+        # The reward of every move in one `features` pass rather than a
+        # `_deltas` call per action; the same products and sums, so the same
+        # comparison (#341).
+        features = self.features(state, self.actions(state)).numpy()
+        return not bool((self._coupling * features[:, 0] + features[:, 1] > 0.0).any())
 
     def greedy_weights(self) -> torch.Tensor:
         """The weight vector whose policy is greedy, up to temperature.

@@ -164,6 +164,11 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#232)
 - Scope rustworkx for efficiency and scaling (#242)
+- The targets the runtime-optimization audit left unmet: the tree schedule
+  within 2x of the forward recursion on a chain, the reassociated
+  transfer-matrix product in the Potts chain objective, `maxflow_rust` as
+  alpha expansion's inner solver, and a compiled sweep for the factor-graph
+  Gibbs sampler (#341)
 - Vet `ROADMAP.md`, `STATUS.md` and `TICKETS.md` for incompleteness,
   inconsistency and error (#244)
 - Separate the technical document into infrastructure, textbook and paper
