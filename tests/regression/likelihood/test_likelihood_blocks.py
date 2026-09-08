@@ -16,6 +16,8 @@ not only for a column the generating model is likely to produce.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 import pytest
 import torch
@@ -318,60 +320,91 @@ def test_neither_end_ranks_and_the_frequent_half_does() -> None:
     print(f"\nfitted best {best}; ranked by the interval's ends at cutoff 8: {ends}")
 
 
-@pytest.mark.oracle
-def test_a_ranked_search_reaches_what_the_exact_search_reaches() -> None:
-    # The search the ranking is for: `infer`'s lazy seam, fitting one
-    # candidate per neighbourhood instead of all of them, against the search
-    # that fits every candidate. Same optimum from every start under both
-    # move sets, and the fits and forward passes it saves are what a
-    # budget-matched comparison counts (issue #289).
-    #
-    # The cutoff is 4 because it is a *count*, so what it means depends on
-    # the alignment's length: at this fixture's 1200 sites a cutoff of 8
-    # keeps 6 of 12 starts and loses the other 6, while at 2000 sites it
-    # keeps all 12. Stated as a fraction of the sites it retains, 4 here and
-    # 8 at 2000 sites are the same setting.
-    params, alignment, _ = _instance("tree_search/ci.yaml", 1200)
+def _ranked_against_exact(
+    moves_and_seeds: Sequence[tuple[MoveSet, int]],
+    fixture: str = "tree_search/ci.yaml",
+    n_sites: int = 1200,
+) -> list[tuple[MoveSet, int, int, int, int, int]]:
+    """One row per start: the exact search's cost and the ranked search's.
+
+    The search the ranking is for --- `infer`'s lazy seam, fitting one
+    candidate per neighbourhood instead of all of them --- against the
+    search that fits every candidate. Each row asserts the same topology and
+    the same fitted log-likelihood, and records the fits and forward passes
+    a budget-matched comparison counts (issue #289).
+
+    The cutoff is 4 because it is a *count*, so what it means depends on the
+    alignment's length: at 1200 sites a cutoff of 8 keeps 6 of 12 starts and
+    loses the other 6, while at 2000 sites it keeps all 12. Stated as a
+    fraction of the sites it retains, 4 at 1200 and 8 at 2000 are the same
+    setting.
+    """
+    params, alignment, _ = _instance(fixture, n_sites)
     pi = np.asarray(params.pi)
     surrogate = BlockFrequencyBound(
         params.k, pi, block_size=1, min_count=4, claim=Bound.POINT
     )
     rows = []
-    for moves in (MoveSet.NNI, MoveSet.SPR):
-        for seed in range(3):
-            full = infer(
-                alignment, params.k, rng=np.random.default_rng(seed), moves=moves
+    print(f"\n{fixture}, {n_sites} sites, cutoff 4:")
+    for moves, seed in moves_and_seeds:
+        full = infer(alignment, params.k, rng=np.random.default_rng(seed), moves=moves)
+        ranked = infer(
+            alignment,
+            params.k,
+            rng=np.random.default_rng(seed),
+            moves=moves,
+            lazy_top=1,
+            surrogate=surrogate,
+        )
+        assert leaf_bipartitions(ranked.topology) == leaf_bipartitions(full.topology)
+        assert ranked.log_likelihood == pytest.approx(full.log_likelihood, rel=1e-8)
+        assert ranked.fits < full.fits
+        assert ranked.likelihood_evaluations < full.likelihood_evaluations
+        rows.append(
+            (
+                moves,
+                seed,
+                full.fits,
+                ranked.fits,
+                full.likelihood_evaluations,
+                ranked.likelihood_evaluations,
             )
-            ranked = infer(
-                alignment,
-                params.k,
-                rng=np.random.default_rng(seed),
-                moves=moves,
-                lazy_top=1,
-                surrogate=surrogate,
-            )
-            assert leaf_bipartitions(ranked.topology) == leaf_bipartitions(
-                full.topology
-            )
-            assert ranked.log_likelihood == pytest.approx(full.log_likelihood, rel=1e-8)
-            assert ranked.fits < full.fits
-            assert ranked.likelihood_evaluations < full.likelihood_evaluations
-            rows.append(
-                (
-                    moves,
-                    seed,
-                    full.fits,
-                    ranked.fits,
-                    full.likelihood_evaluations,
-                    ranked.likelihood_evaluations,
-                )
-            )
-    print("\nexact search against block-ranked (fits, forward passes):")
+        )
     for moves, seed, fits, ranked_fits, passes, ranked_passes in rows:
         print(
             f"  {moves} seed {seed}: {ranked_fits} fits against {fits}, "
             f"{ranked_passes} passes against {passes}"
         )
+    return rows
+
+
+@pytest.mark.oracle
+def test_a_ranked_search_reaches_what_the_exact_search_reaches() -> None:
+    # One start under each move set, inside the per-pull-request tier. The
+    # same claim over every start and at six taxa is the `release` test
+    # below; this is the fast sibling DEV.md's duration rule asks a
+    # re-tiered claim to keep.
+    rows = _ranked_against_exact([(MoveSet.NNI, 0), (MoveSet.SPR, 0)])
+
+    assert len(rows) == 2
+
+
+@pytest.mark.oracle
+@pytest.mark.release
+def test_the_ranked_search_holds_over_starts_move_sets_and_taxa() -> None:
+    # Six starts rather than two, and the six-taxon fixture as well as the
+    # five: an agreement that holds from one start is an agreement about
+    # that start, and one that holds at one size is an agreement about that
+    # size. Over the 10 s cap, so `release` per DEV.md's duration rule
+    # rather than waited for per pull request.
+    rows = _ranked_against_exact(
+        [(moves, seed) for moves in (MoveSet.NNI, MoveSet.SPR) for seed in range(3)]
+    )
+    rows += _ranked_against_exact(
+        [(MoveSet.NNI, 0), (MoveSet.SPR, 0)], "tree_search/stress.yaml", 1500
+    )
+
+    assert len(rows) == 8
 
 
 @pytest.mark.structural
@@ -412,6 +445,19 @@ def test_a_malformed_partition_or_alignment_is_refused() -> None:
         block_frequency_interval(
             params.tau, params.k, pi, ragged, lengths, block_size=1, min_count=1
         )
+    # A cutoff that empties the exact half leaves the point claim with a
+    # zero to scale, which is above every log-likelihood and orders nothing;
+    # it must refuse rather than rank by it. Block size 5 at 40 sites and a
+    # cutoff of 2 is that case: no block of 5 columns repeats.
+    empty = block_frequency_interval(
+        params.tau, params.k, pi, alignment, lengths, block_size=5, min_count=2
+    )
+    assert empty.exact_sites == 0
+    assert empty.contains(
+        float(log_likelihood(params.tau, params.k, pi, alignment, lengths))
+    )
+    with pytest.raises(ValueError, match="no block of the .* reached the cutoff"):
+        _ = empty.extrapolated
     with pytest.raises(ValueError, match="claim must be a Bound"):
         BlockFrequencyBound(params.k, pi, block_size=1, min_count=1, claim="middle")  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="a topology and an alignment"):

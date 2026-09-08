@@ -106,9 +106,23 @@ class Interval:
         is one subsample scored the same way each time, and it orders
         topologies where the interval's ends -- dominated by a tail term
         that varies with the tree and measures nothing about fit -- do not.
+
+        Raises
+        ------
+        ValueError
+            If no block was frequent enough to evaluate. The exact half is
+            then zero for every topology, which is above every
+            log-likelihood and orders nothing; refusing beats returning it
+            (``likelihood/CLAUDE.md``, "Refuse rather than return an
+            unconverged number"). Lower the cutoff or the block size.
         """
         if self.exact_sites == 0:
-            return self.exact
+            msg = (
+                f"no block of the {self.n_blocks} reached the cutoff, so the "
+                "exact half is empty and cannot be scaled to the alignment; "
+                "lower min_count or block_size"
+            )
+            raise ValueError(msg)
         return self.exact * (self.exact_sites + self.bounded_sites) / self.exact_sites
 
     @property
@@ -399,10 +413,14 @@ class BlockFrequencyBound:
     ``(bounded sites) x (per-site extreme)``, the extreme varies with the
     tree, and at any cutoff above one it is larger than the differences
     between neighbouring topologies -- so an ordering by either end is an
-    ordering by the tail's looseness. Ranked by the lower end at cutoff 2,
-    the five-taxon fixture's fitted best falls out of the top three. The
-    ``POINT`` claim exists for that: it drops the tail entirely and orders
-    by the frequent blocks alone, the same sites for every candidate.
+    ordering by the tail's looseness. Over the 15 five-taxon topologies at
+    2000 sites and cutoff 8, the lower end's best is topology 2 against the
+    fitted best 13; the upper end's happens to coincide, which is a fact
+    about that instance and not a property of the end. The ``POINT`` claim
+    exists for this: it drops the tail entirely and orders by the frequent
+    blocks alone, the same sites for every candidate. It refuses where the
+    cutoff leaves no frequent block, since it would otherwise rank every
+    topology by the same zero.
 
     Parameters
     ----------
