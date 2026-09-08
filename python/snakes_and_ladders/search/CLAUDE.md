@@ -22,10 +22,9 @@ because `learn/` may import no application module. but an envs/ module will be c
 
 ## Local rules
 
-- **Discrete tests run where an exact oracle reaches.** Exhaustive
-  enumeration is the reference, so the sizes are chosen to keep it available;
-  a move test past that size proves nothing extra and costs the budget
-  `DEV.md` sets.
+- **Discrete tests run where an exact oracle reaches.** Exhaustive enumeration
+  is the reference, so the sizes are chosen to keep it available; a move test
+  past that size proves nothing extra and costs the budget `DEV.md` sets.
 
 - **Neighbourhood generators are verified against counts.** Where a closed
   form for the neighbour count exists the test uses it, and otherwise
@@ -46,8 +45,9 @@ because `learn/` may import no application module. but an envs/ module will be c
 
 - **A structure is scored at most once per search**, keyed on a canonical form
   independent of how it was spelled, because overlapping neighbourhoods pay
-  the dominant cost twice otherwise. A returned structure states its support
-  and names which it is: neighbourhood, enumerated, or bootstrap (`support.py`).
+  the dominant cost twice otherwise. A returned structure states its support and
+  names which of `support.py`'s four it is — neighbourhood, enumerated, tempered,
+  or bootstrap; a tempered weight is a posterior only beside its mixing diagnostics.
 
 - **Truth is a terminal penalty, never a training signal.** An agent that can
   see the answer during training learns to look it up.

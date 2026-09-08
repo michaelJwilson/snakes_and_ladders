@@ -9,28 +9,28 @@
 \contentsline {paragraph}{What follows for inference.}{5}{section*.6}%
 \contentsline {subsection}{\numberline {2.3}The Discrete Search as a Decision Process}{5}{subsection.2.3}%
 \contentsline {paragraph}{What pins it.}{5}{section*.7}%
-\contentsline {subsection}{\numberline {2.4}Surrogates and Bounds}{6}{subsection.2.4}%
+\contentsline {subsection}{\numberline {2.4}Surrogates and Bounds}{5}{subsection.2.4}%
 \contentsline {section}{\numberline {3}Problem Statement: Phylogenetic Inference}{6}{section.3}%
 \contentsline {subsection}{\numberline {3.1}The model}{6}{subsection.3.1}%
 \contentsline {subsection}{\numberline {3.2}As a factor graph}{7}{subsection.3.2}%
 \contentsline {subsection}{\numberline {3.3}The algorithm: simulation}{7}{subsection.3.3}%
-\contentsline {subsection}{\numberline {3.4}The algorithm: pruning}{9}{subsection.3.4}%
+\contentsline {subsection}{\numberline {3.4}The algorithm: pruning}{8}{subsection.3.4}%
 \contentsline {paragraph}{Regime.}{9}{section*.8}%
 \contentsline {paragraph}{What pins it.}{9}{section*.9}%
 \contentsline {subsection}{\numberline {3.5}The algorithm: discrete search}{9}{subsection.3.5}%
-\contentsline {paragraph}{What pins it.}{10}{section*.10}%
-\contentsline {section}{\numberline {4}Problem Statement: Potts Models in an External Field}{10}{section.4}%
-\contentsline {subsection}{\numberline {4.1}The model}{10}{subsection.4.1}%
+\contentsline {paragraph}{What pins it.}{9}{section*.10}%
+\contentsline {section}{\numberline {4}Problem Statement: Potts Models in an External Field}{9}{section.4}%
+\contentsline {subsection}{\numberline {4.1}The model}{9}{subsection.4.1}%
 \contentsline {subsection}{\numberline {4.2}As a factor graph}{10}{subsection.4.2}%
 \contentsline {subsection}{\numberline {4.3}Why an odd cycle is the whole story}{10}{subsection.4.3}%
 \contentsline {subsection}{\numberline {4.4}The algorithm: belief propagation}{10}{subsection.4.4}%
-\contentsline {paragraph}{Regime.}{11}{section*.11}%
-\contentsline {paragraph}{What pins it.}{11}{section*.12}%
+\contentsline {paragraph}{Regime.}{10}{section*.11}%
+\contentsline {paragraph}{What pins it.}{10}{section*.12}%
 \contentsline {subsection}{\numberline {4.5}The algorithm: ground states as cuts}{11}{subsection.4.5}%
 \contentsline {paragraph}{Regime.}{11}{section*.13}%
 \contentsline {paragraph}{What pins it.}{11}{section*.14}%
-\contentsline {subsection}{\numberline {4.6}The algorithm: alpha expansion}{12}{subsection.4.6}%
-\contentsline {paragraph}{What pins it.}{12}{section*.15}%
+\contentsline {subsection}{\numberline {4.6}The algorithm: alpha expansion}{11}{subsection.4.6}%
+\contentsline {paragraph}{What pins it.}{11}{section*.15}%
 \contentsline {subsection}{\numberline {4.7}The algorithm: sampling}{12}{subsection.4.7}%
 \contentsline {paragraph}{Regime.}{12}{section*.16}%
 \contentsline {paragraph}{What pins it.}{12}{section*.17}%
@@ -41,7 +41,7 @@
 \contentsline {subsection}{\numberline {5.2}As a factor graph}{13}{subsection.5.2}%
 \contentsline {paragraph}{The emission family is the only part that knows what an observation is.}{13}{section*.19}%
 \contentsline {paragraph}{A density is not a probability.}{13}{section*.20}%
-\contentsline {subsection}{\numberline {5.3}The algorithm: forward--backward}{14}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.3}The algorithm: forward--backward}{13}{subsection.5.3}%
 \contentsline {paragraph}{Regime.}{14}{section*.21}%
 \contentsline {paragraph}{What pins it.}{14}{section*.22}%
 \contentsline {subsection}{\numberline {5.4}The algorithm: expectation-maximization}{14}{subsection.5.4}%
@@ -61,18 +61,18 @@
 \contentsline {subsection}{\numberline {7.4}Where the likelihood has no maximum, or no curvature}{19}{subsection.7.4}%
 \contentsline {subsection}{\numberline {7.5}Agreement across implementations is a tolerance}{19}{subsection.7.5}%
 \contentsline {subsection}{\numberline {7.6}Published constants, and asymptotic results}{19}{subsection.7.6}%
-\contentsline {section}{\numberline {8}Relevance to the Roadmap}{20}{section.8}%
+\contentsline {section}{\numberline {8}Relevance to the Roadmap}{19}{section.8}%
 \contentsline {section}{\numberline {A}Derivations Cited From the Text}{22}{appendix.A}%
 \contentsline {subsection}{\numberline {A.1}The Bethe free energy is stationary at a sum-product fixed point}{22}{subsection.A.1}%
 \contentsline {subsection}{\numberline {A.2}Detailed balance for a cluster move in a field}{22}{subsection.A.2}%
-\contentsline {subsection}{\numberline {A.3}The exchange ratio in parallel tempering}{23}{subsection.A.3}%
+\contentsline {subsection}{\numberline {A.3}The exchange ratio in parallel tempering}{22}{subsection.A.3}%
 \contentsline {subsection}{\numberline {A.4}The delta method for an interval at a fit}{23}{subsection.A.4}%
 \contentsline {section}{\numberline {B}Derivations of the Bounds}{23}{appendix.B}%
 \contentsline {paragraph}{The plug-in bound, \eqref {eq:plugin-bound}.}{23}{section*.27}%
 \contentsline {paragraph}{The parsimony bound, \eqref {eq:parsimony-bound}.}{23}{section*.28}%
 \contentsline {paragraph}{The mean-field bound, \eqref {eq:mean-field-bound}.}{23}{section*.29}%
 \contentsline {paragraph}{The spanning-tree bound, \eqref {eq:spanning-tree-bound}.}{23}{section*.30}%
-\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{24}{section*.31}%
+\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{23}{section*.31}%
 \contentsline {section}{\numberline {C}Reference Taxonomy}{24}{appendix.C}%
 \contentsline {paragraph}{Infrastructure (build, structure, and speed).}{24}{section*.32}%
 \contentsline {paragraph}{Optimization (discrete and continuous).}{24}{section*.33}%
