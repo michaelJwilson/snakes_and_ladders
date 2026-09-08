@@ -1,0 +1,48 @@
+{
+  "digest": "d1ae9506ec565111e46c124922c1dcec42b79c52856eeefda027525084e6c46e",
+  "libraries": [
+    "numpy==2.5.2",
+    "scipy==1.18.1",
+    "torch==2.13.0",
+    "python==3.12"
+  ],
+  "measurements": {
+    "enumerated_optimum": {
+      "algorithm": "exhaustive enumeration of every configuration of the chain",
+      "budget": {
+        "chain_length": 4,
+        "states": 81
+      },
+      "seed": null,
+      "value": -0.723680148569239
+    },
+    "untrained_expected_return": {
+      "algorithm": "the exact expected return of a LinearPolicy at its initial weights, averaged over every configuration as a start",
+      "budget": {
+        "chain_length": 4,
+        "horizon": 3,
+        "states": 81
+      },
+      "seed": null,
+      "value": 0.14322916666666674
+    },
+    "untrained_reached": {
+      "algorithm": "the fraction of configurations from which that policy's rollout ends at the enumerated optimum",
+      "budget": {
+        "chain_length": 4,
+        "horizon": 6,
+        "states": 81
+      },
+      "seed": 1,
+      "value": 0.12345679012345678
+    }
+  },
+  "modules": [
+    "snakes_and_ladders.learn.exact",
+    "snakes_and_ladders.learn.policy",
+    "snakes_and_ladders.learn.potts",
+    "snakes_and_ladders.learn.rollout"
+  ],
+  "problem": "potts_chain",
+  "tier": "ci"
+}

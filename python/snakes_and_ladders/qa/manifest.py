@@ -23,7 +23,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from snakes_and_ladders.qa.inputs import digest, library_versions, module_closure
+from snakes_and_ladders.inputs import digest, library_versions, module_closure
 
 FIXTURES = "tests/regression/fixtures"
 

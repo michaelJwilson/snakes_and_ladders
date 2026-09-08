@@ -1,0 +1,50 @@
+{
+  "digest": "2fbed1e21d118828e5b2bbe310c8c02ba43c0b7c34ba0b9bd9ac27059e013c42",
+  "libraries": [
+    "numpy==2.5.2",
+    "scipy==1.18.1",
+    "torch==2.13.0",
+    "python==3.12"
+  ],
+  "measurements": {
+    "enumerated_maximum": {
+      "algorithm": "exhaustive enumeration of the 105 unrooted topologies, scored at RewardModel.KNOWN",
+      "budget": {
+        "reward": "known",
+        "taxa": 6
+      },
+      "seed": null,
+      "value": -8976.30625076864
+    },
+    "greedy_rate": {
+      "algorithm": "NNI hill climbing from each seeded start, to a local optimum",
+      "budget": {
+        "horizon": 30,
+        "start_seed_offset": 1000,
+        "starts": 50
+      },
+      "seed": 20260905,
+      "value": 1.0
+    },
+    "untrained_rate": {
+      "algorithm": "a LinearPolicy at its initial weights, uniform over the same moves, averaged over rollouts per start",
+      "budget": {
+        "horizon": 30,
+        "rollouts_per_start": 4,
+        "start_seed_offset": 1000,
+        "starts": 50
+      },
+      "seed": 99,
+      "value": 0.17
+    }
+  },
+  "modules": [
+    "snakes_and_ladders.learn.policy",
+    "snakes_and_ladders.learn.rollout",
+    "snakes_and_ladders.search.rl",
+    "snakes_and_ladders.search.topology",
+    "snakes_and_ladders.sim.simulate"
+  ],
+  "problem": "tree_search",
+  "tier": "stress"
+}

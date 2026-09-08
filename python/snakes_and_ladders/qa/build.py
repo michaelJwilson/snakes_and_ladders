@@ -17,7 +17,7 @@ meant to detect.
 A figure is rendered only when its inputs changed (issue #372). Each committed
 figure has a stamp beside it, ``<stem>.inputs``, recording the digest of the
 renderer's source, its import closure, the fixtures it reads and the drawing
-libraries (``snakes_and_ladders.qa.inputs``) at the render that produced it.
+libraries (``snakes_and_ladders.inputs``) at the render that produced it.
 A cited figure whose stamp equals the digest of the current tree is skipped;
 ``--all`` ignores the stamps, so the release gate still renders everything.
 A pull request that changed only ``docs/tex/`` therefore renders nothing and
@@ -36,8 +36,8 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
+from snakes_and_ladders.inputs import read_stamp, write_stamp
 from snakes_and_ladders.log import get_logger, phase
-from snakes_and_ladders.qa.inputs import read_stamp, write_stamp
 from snakes_and_ladders.qa.manifest import (
     FIGURES,
     FigureSpec,

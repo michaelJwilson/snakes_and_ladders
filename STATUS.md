@@ -569,6 +569,47 @@ does supply is a **known-energy reference past the size enumeration reaches**,
 which nothing else in the repository has. The search for an instance no
 baseline solves stays open, and `TICKETS.md` now says so.
 
+**A problem no baseline solves, and the bar it is read against**
+([#406](https://github.com/michaelJwilson/snakes_and_ladders/issues/406)). A baseline **solves** an
+instance when it reaches the optimum from **0.4 or more** of starts; a
+candidate qualifies below that, with the optimum from enumeration and not
+from the search under test. Twenty-seven candidates were measured at 50
+seeded starts over 16 seeds, each with its 95% interval. Fourteen came in
+under the bar; the lowest is declared as `planted_glass/ci`, a planted
+Viana-Bray glass at 18 sites and mean degree 4 with frustration 0.30, where
+single-site descent reaches the enumerated ground state of -14.0 on
+**0.079** of starts, interval (0.056, 0.101). Its planted state scores -7.0,
+so the oracle is the enumeration of all 262,144 configurations and not the
+planted bound. `tests/regression/search/test_search_hard_glass.py` pins it
+and `infra/baselines.py` recomputes it at the release gate.
+
+What was rejected, and why:
+
+| candidate | baseline | rate over 16 seeds | verdict |
+| --- | --- | --- | --- |
+| `tree_search/ci` (5 taxa), `tree_search/stress` (6 taxa) | NNI hill climbing | 1.000 | solved |
+| `tree_search/release` (7 taxa, #177) | NNI hill climbing | 0.476 (0.438, 0.515) | over the bar |
+| 7-taxon Felsenstein-zone caterpillar, pendant 0.5/0.02, internal 0.02 | NNI hill climbing | **0.096 (0.076, 0.117)** | qualifies; not the lowest |
+| the same at internal 0.05, and at pendant 0.75 and 1.0 | NNI hill climbing | 0.415 to 1.000 | over the bar |
+| `frustrated_lattice/ci`, 3x3 triangular | single-site descent | 1.000 | solved |
+| 4x4 triangular torus | single-site descent | 0.423 (0.379, 0.466) | over the bar |
+| planted glass, 18 sites, frustration 0.10 and 0.20 | single-site descent | 0.853, 0.669 | over the bar |
+| planted glass, 16 to 20 sites, frustration 0.30 to 0.50, two graph seeds | single-site descent | 0.079 to 0.661 | 13 of 18 qualify; **0.079** is the lowest |
+
+Three things the table does not say on its own. The instance matters more
+than the knobs: at 18 sites and frustration 0.30 one graph seed gives 0.079
+and the other 0.539, so a fixture is a *declared instance* and never a
+recipe. The headroom a policy could demonstrate is 1 - 0.079 = 0.921, and at
+the per-seed standard deviation of 0.014 the tree comparison measured, an
+exact two-sided sign test needs **6 paired seeds** to call a difference that
+size --- which is the floor at which such a test can reach p <= 0.05 at all,
+so the fixture is not what would limit the comparison. And random-restart
+descent reaches the ground state on **every** seed at the declared 50
+restarts, exactly as #198 found on the tree: the headroom is against a single
+run, and the restart baseline stays unbeaten. The Felsenstein-zone tree is
+the only candidate measured where restarts also fail (0.938 of seeds), which
+is why it is recorded here rather than discarded.
+
 **Viterbi and posterior decoding can now be told apart.** Neither decoder is
 implemented, but the fixture that separates them is: on `ambiguous_hmm` the
 Viterbi path is `(0,0,0,0,0)` — unique, 0.3033 nats clear of the runner-up —
@@ -1998,6 +2039,15 @@ from the module that implements it, so the guard of #274 resolves them; the
   set of #328 the policy reaches the maximum from 0.796 of episodes, ahead of
   greedy on 16 of 16 seeds, and is not yet measured against random-restart
   hill climbing, which reaches 1.000 on this fixture.
+- That a learned policy beats any baseline on the instance
+  [#406](https://github.com/michaelJwilson/snakes_and_ladders/issues/406) declared. `planted_glass/ci` is a
+  problem a baseline does not solve — the first the repository carries — and
+  no policy has been run on it. `snakes_and_ladders.learn.potts.PottsLandscape.on_graph`
+  takes one scalar coupling across every edge, deliberately, so that the
+  greedy searcher stays inside the policy class; the instance's difficulty is
+  its per-edge signs, which that constructor cannot express. Until an
+  environment exists that can, the fixture states a gap rather than closes
+  one.
 - Any comparison against established software. IQ-TREE 2 and RAxML-NG are not
   installed, and no statement anywhere in the repository compares against them.
   This is a stance rather than an omission: `CLAUDE.md` admits no external

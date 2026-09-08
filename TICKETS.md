@@ -71,10 +71,16 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   the Gibbs sampler, the annealer and single-site descent at matched
   evaluations on enumerable codes, the ML codeword as referee (#340)
 - Iterated conditional modes over HMM state paths (#176)
-- A discrete instance no baseline solves within budget (#406). #177's tree is
-  solved by random-restart greedy at 1.000 (#198), and #209 measured
-  single-site descent matching or beating the planted Viana-Bray state at
-  every frustration and connectivity tried
+- A learning environment over a per-edge coupling, so a policy can be run on
+  the instance no baseline solves. `planted_glass/ci` landed under #406 —
+  single-site descent reaches its enumerated ground state from 0.079 of
+  starts — and `learn.potts.PottsLandscape.on_graph` takes one scalar
+  coupling across every edge, so nothing in `learn` can express it
+- Beat random-restart descent, not one descent. Restarts reach
+  `planted_glass/ci`'s ground state on every seed at 50 restarts, as they
+  reach #177's tree at 1.000 (#198); the 7-taxon Felsenstein-zone tree #406
+  measured is the only candidate where restarts also fail (0.938), and is
+  undeclared
 - Make the rooted/unrooted distinction explicit and give topologies a canonical
   key (#114)
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
