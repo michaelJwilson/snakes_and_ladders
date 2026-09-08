@@ -105,11 +105,13 @@ authoritative — where it and any other document disagree, it wins.
 ### 1.1 Core Objective
 
 Develop and deploy modern solvers for mixed discrete-continuous optimization
-across three primary classes of graphical models: phylogenetic trees (the large
-parsimony problem), N-dimensional Potts models in an external field, and hidden
-Markov models (HMMs) — and the coupled spatio-sequential model that joins the
-last two, a Potts prior over class labels gating one hidden chain per class
-(#290), which every Stage 1 deliverable takes as its fourth instance. The framework integrates automatic differentiation for
+across four primary classes of graphical models: phylogenetic trees (the large
+parsimony problem), N-dimensional Potts models in an external field, hidden
+Markov models (HMMs), and low-density parity-check codes decoded on their
+Tanner graphs (#340) — and the coupled spatio-sequential model that joins the
+Potts and hidden Markov classes, a Potts prior over class labels gating one
+hidden chain per class (#290), which every Stage 1 deliverable takes as a
+further instance. The framework integrates automatic differentiation for
 continuous parameters with reinforcement learning (RL) to learn proposal
 policies that score discrete structural candidates using exact, approximate, or
 bounded likelihoods/energies.
@@ -149,7 +151,7 @@ mathematical record of the project. The application logic is strictly bound to
 this LaTeX documentation. It must contain:
 
 - Complete mathematical formulations of all substitution models, energy
-  landscapes, and transition probabilities across the three problem classes.
+  landscapes, and transition probabilities across the four problem classes.
 - Rigorous derivations of the exact inference algorithms (Felsenstein's
   pruning, belief propagation, forward-backward; Appendix A of the textbook,
   #326).
@@ -164,7 +166,7 @@ this LaTeX documentation. It must contain:
 ## Stage 1: Mathematical Foundations & Baseline Infrastructure
 
 Establish the simulation, exact inference, and optimization backends for the
-three distinct problem classes. Target scales span `n ∈ [10, 1000]`
+four distinct problem classes. Target scales span `n ∈ [10, 1000]`
 nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
 
 - **Milestone 1.1: Simulation & Ground Truth Engine**
@@ -174,6 +176,9 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Potts models:* N-D lattices and Markov random fields (MRFs) with
       specified coupling constants and external fields.
     - *HMMs:* hidden state paths and emitted observation sequences.
+    - *Codes:* Gallager's regular parity-check ensemble, the binary
+      symmetric, erasure and Gaussian channels behind one log-likelihood
+      interface, and an encoder where elimination is affordable.
     - *Canonical cases:* instances whose answer is known from outside this
       repository — a closed form, a published result, or an enumeration
       sharing no code with what it tests — admitted only when more than one
@@ -188,6 +193,8 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Phylogenetics:* Felsenstein's pruning algorithm.
     - *Potts models:* belief propagation and transfer matrix methods.
     - *HMMs:* the forward-backward algorithm.
+    - *Codes:* log-domain sum-product and min-sum on the Tanner graph with a
+      syndrome stop, held to the general sum-product and to enumeration.
   - *Validation:* match brute-force marginalization on small (`n ≤ 10`) graphs
     within the specified floating-point tolerance. Ensure the API remains
     application-agnostic.
@@ -228,7 +235,8 @@ Replace fixed, hand-designed search heuristics with learned proposal policies
 parameterized by neural networks.
 
 - **Milestone 2.1: RL Agent Formulation & Deployment**
-  - *Deliverable:* define the MDPs across all three problem classes.
+  - *Deliverable:* define the MDPs across all four problem classes (the
+    code's move set is #340's later work).
     - *State:* the current discrete structure (topology, lattice
       configuration, or state path), its fitted continuous parameters, and
       observation summaries.

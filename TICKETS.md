@@ -21,6 +21,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   closed form (#229)
 - Support the different lattice types (#231)
 - A turbo code problem, fixture and belief-propagation example (#233)
+- A linear-time LDPC encoder at full size, so a non-trivial codeword can be
+  sent through the 19,998-bit code rather than the zero word (#340)
 - Define one fixture API across trees, lattices and chains (#132)
 - Convert the sixteen signatures that still take a seed where the rule says a
   generator (#240)
@@ -38,6 +40,10 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Belief propagation converges in two sweeps at zero field, so every
   zero-field benchmark measures the fixture (#245)
+- LDPC decoding at size: bit and block error rates against `p`, `epsilon`
+  and `sigma` at 19,998 bits over shared seeds, iterations to convergence,
+  wall clock and peak memory against the 16 GB requirement, and the profile
+  that decides whether a Rust kernel over the same offsets follows (#340)
 - Coloured iterated conditional modes on CUDA and Metal through torch,
   measured against the 10× rule before any Triton kernel (#227)
 - Expose forward-backward as an evaluator, not as Baum-Welch's internals (#173)
@@ -69,6 +75,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Iterated conditional modes as a first-class solver across every lattice
   model (#226)
+- MAP decoding of an LDPC code as energy minimization: sum-product against
+  the Gibbs sampler, the annealer and single-site descent at matched
+  evaluations on enumerable codes, the ML codeword as referee (#340)
 - Port the single-site Gibbs sweep to Rust, beside the oracle rather than
   replacing it (#246)
 - Viterbi decoding, pinned against brute-force path enumeration and against

@@ -2,7 +2,8 @@
 
 One notebook per problem class, each a single pass from a seeded fixture to a
 learned search policy (the coupled model's ends at fitted labels, its policy
-being #290's later work), checking every claim against an oracle that shares no
+being #290's later work; the code's at a decoded word, its optimization
+framing being #340's), checking every claim against an oracle that shares no
 code with what it checks.
 
 | Notebook | Problem | Oracles it rests on |
@@ -10,6 +11,7 @@ code with what it checks.
 | [`potts_chain.ipynb`](potts_chain.ipynb) | Potts chain in an external field | Exhaustive enumeration of the partition function; enumeration of all 81 configurations |
 | [`phylo_tree.ipynb`](phylo_tree.ipynb) | Phylogenetic trees, 6 taxa | Brute-force marginalization over ancestral states; all 105 unrooted topologies enumerated |
 | [`hmm.ipynb`](hmm.ipynb) | Discrete hidden Markov model | Enumeration over all `3**8` hidden paths; the retained hidden path; Baum-Welch as an independent algorithm |
+| [`ldpc.ipynb`](ldpc.ipynb) | Low-density parity-check code, Gallager's (3,6) ensemble | The general sum-product on the parity-check factor graph; enumeration of all 32,768 codewords of a cycle-free code; the density-evolution threshold 0.4294 |
 | [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the canonical instance; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
 
 Each ends with a **Further Work** section naming what it could not demonstrate

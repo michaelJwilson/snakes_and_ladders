@@ -29,6 +29,8 @@ run `uv run python infra/checks_ledger.py --write`.
 
 ## `tests/regression/learn/` (40)
 
+## `tests/regression/learn/` (30)
+
 | Test | Kind | Claim |
 | --- | --- | --- |
 | `test_learn_critic.py::test_the_optimal_value_over_a_long_horizon_reaches_the_enumerated_optimum` | oracle | With enough decisions the best return from any start is the gap to the enumerated minimum energy, since single flips connect every pair of configurations. |
@@ -74,6 +76,8 @@ run `uv run python infra/checks_ledger.py --write`.
 
 ## `tests/regression/likelihood/` (66)
 
+## `tests/regression/likelihood/` (65)
+
 | Test | Kind | Claim |
 | --- | --- | --- |
 | `test_belief_propagation.py::test_the_bethe_free_energy_is_exact_on_a_tree` | oracle |  |
@@ -85,6 +89,13 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_hmm_paths.py::test_a_marginal_is_the_summed_joint_over_paths_through_that_state` | oracle | The definition, computed a second way: `P(state_t = s \| y)` is the total weight of paths passing through `s` at `t`, normalized. |
 | `test_hmm_paths.py::test_the_viterbi_path_is_the_maximum_of_the_enumerated_joints` | oracle |  |
 | `test_hmm_paths.py::test_a_single_observation_is_decoded_by_the_prior_and_the_emission` | oracle | Length 1 has no transition, so both decoders reduce to `argmax_s pi[s] B[s, y]` and the answer is arithmetic rather than a recursion. |
+| `test_ldpc.py::test_sum_product_is_exact_on_a_cycle_free_code` | oracle | On a 22-bit caterpillar code the decoder equals the tree schedule and the enumeration over 32,768 codewords: 1e-12 in log-odds on the symmetric and Gaussian channels, 2e-13 in probability on the erasure channel, whose certain bits sit at the message cap. |
+| `test_ldpc.py::test_min_sum_is_max_product_and_the_ml_codeword_on_a_cycle_free_code` | oracle | On the caterpillar code min-sum's max-marginals equal the tree-schedule max-product's and its decision is the enumerated ML codeword, whose margin over the runner-up is pinned above 0.1 nats so no tie is being broken. |
+| `test_ldpc.py::test_the_enumeration_oracle_on_a_single_parity_check_by_hand` | oracle | On `H = [1 1 1]` the four codewords give posteriors a reader can write down. |
+| `test_ldpc.py::test_flooding_reaches_the_general_fixed_point_on_a_loopy_code` | oracle | On six loopy (3,6) codes the decoder's posteriors equal the general damped flooding's to 1e-9 -- the same Bethe fixed point from two codes. |
+| `test_ldpc.py::test_the_996_bit_code_corrects_the_bsc_below_its_threshold_and_not_above` | simulated_truth | Over 20 shared seeds the 996-bit (3,6) code has zero bit errors at `p = 0.05` and a bit error rate above 0.02 at `p = 0.09`, either side of the (3,6) BSC threshold `p* = 0.084`; realized 0 and 0.049. |
+| `test_ldpc.py::test_the_996_bit_code_on_the_erasure_channel_either_side_of_the_threshold` | simulated_truth | Over 20 seeds no erasure survives at `epsilon = 0.35` and more than half of them survive at `epsilon = 0.5`; realized 0 and 0.433 of 0.5. |
+| `test_ldpc.py::test_the_20000_bit_code_brackets_the_erasure_threshold` | simulated_truth | At `n = 19,998` (the multiple of six nearest the ticket's 20,000) the flooding decoder resolves every erasure at `epsilon = 0.42` and leaves more than a fifth of the bits erased at `0.44`, bracketing the density evolution threshold 0.4294 on three seeds each; realized 0 and 0.25-0.30. |
 | `test_likelihood_objective.py::test_expansion_reproduces_the_tree_s_own_branch_lengths` | oracle | The merge must be lossless in the direction that matters: a tree's lengths, encoded and expanded, must score identically. |
 | `test_likelihood_objective.py::test_the_fit_beats_the_generating_branch_lengths` | simulated_truth | The optimizer never sees the truth, so an early stop fails this while its own loss still went down. |
 | `test_likelihood_objective.py::test_every_branch_length_is_recovered_to_within_four_standard_errors` | simulated_truth |  |
@@ -144,6 +155,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
 ## `tests/regression/opt/` (51)
+
+## `tests/regression/opt/` (46)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -227,6 +240,8 @@ run `uv run python infra/checks_ledger.py --write`.
 
 ## `tests/regression/search/` (95)
 
+## `tests/regression/search/` (71)
+
 | Test | Kind | Claim |
 | --- | --- | --- |
 | `test_alpha_expansion.py::test_two_labels_reproduce_the_exact_minimum_cut` | oracle |  |
@@ -284,6 +299,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_parsimony.py::test_the_unit_step_matrix_walks_the_same_path_as_fitch` | oracle | The reduction at the level of the search: the same start, the same accepted moves, the same trace, so a weighted search differs from the unit one only through the matrix it is given. |
 | `test_search_parsimony.py::test_large_parsimony_returns_the_wrong_tree_in_the_felsenstein_zone` | simulated_truth |  |
 | `test_search_ppo.py::test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget` | oracle |  |
+
 | `test_search_rl.py::test_the_known_score_is_the_likelihood_at_a_fixed_branch_length` | oracle | Against a direct call to the pruning recursion, built independently here: the environment is a wrapper, and this is the claim that it wraps what it says it does. |
 | `test_search_rl.py::test_the_fitted_score_is_the_maximized_likelihood` | oracle |  |
 | `test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum` | oracle | The exhaustive oracle, on the surface the agent actually sees. |
@@ -312,6 +328,10 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
 | `test_search_tempered.py::test_the_tempered_weight_of_the_four_taxon_topologies_is_the_enumerated_one` | oracle |  |
 | `test_search_tempered.py::test_the_tempered_weight_of_a_labelling_is_the_enumerated_one` | oracle |  |
+
+| `test_search_surrogate.py::test_learned_surrogates_rank_held_out_neighbourhoods` | simulated_truth | Six alignments, every topology of each fitted (90 fits at 200 sites), split by alignment: three to train, two to validate, one held out. |
+| `test_search_surrogate.py::test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments` | oracle | Against a full fit of every topology on three alignments: the plug-in bound and the parsimony bound each put the fitted best first, at a hundredth (2.4 ms against 250 ms) and a thousandth of the cost. |
+| `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
 | `test_search_topology.py::test_enumeration_matches_count_topologies` | oracle |  |
 | `test_search_topology.py::test_nni_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_spr_neighbour_count_and_validity` | oracle |  |
@@ -321,11 +341,14 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_tree_features.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle |  |
 | `test_search_tree_features.py::test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget` | simulated_truth |  |
 | `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
+
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
 ## `tests/regression/sim/` (44)
+
+## `tests/regression/sim/` (43)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -363,6 +386,12 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_hmm_simulate.py::test_realized_path_posterior_matches_brute_force_enumeration` | oracle | The exact posterior p(state_t = s \| observations) for one realized observation sequence, computed by brute-force enumeration over every hidden path consistent with the model (no forward-backward recursion involved). |
 | `test_jc_simulate.py::test_jc_transition_probabilities_at_zero_is_identity` | oracle |  |
 | `test_jc_simulate.py::test_simulated_substitution_frequencies_match_analytic_jc` | oracle, simulated_truth |  |
+| `test_ldpc.py::test_the_offsets_layout_is_the_dense_matrix` | oracle | The syndrome through the offsets equals `H c mod 2` by the dense product. |
+| `test_ldpc.py::test_the_enumerated_code_has_dimension_n_minus_rank` | oracle | A (3,6) code at `n = 12` has `2 ** k` codewords, every one with zero syndrome. |
+| `test_ldpc.py::test_the_flip_count_matches_the_flip_probability` | simulated_truth | Flips on 20,000 bits fall within four binomial standard deviations of `n p`. |
+| `test_ldpc.py::test_the_erasure_channel_is_zero_or_certain` | simulated_truth | An erased bit is exactly zero; a delivered one is `+-LLR_CAP` with the bit's sign, and the erasure count sits inside four standard deviations of `n epsilon`. |
+| `test_ldpc.py::test_the_gaussian_ratio_has_the_closed_form_moments` | simulated_truth | `L = 2 y / sigma^2` on the zero word has mean `2 / sigma^2` and variance `4 / sigma^2`. |
+| `test_ldpc.py::test_the_parity_check_factor_graph_scores_the_definition` | oracle | `log_density` is `-c . |
 | `test_mixture_simulate.py::test_truth_ships_with_the_data` | simulated_truth |  |
 | `test_newick.py::test_count_topologies_matches_brute_force_enumeration` | oracle |  |
 | `test_newick.py::test_count_topologies_matches_known_values` | oracle |  |
@@ -375,3 +404,5 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
 331 checks.
+
+290 checks.
