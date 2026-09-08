@@ -29,6 +29,14 @@ which is what lazy scoring -- rank every neighbour cheaply, fit only the top
 few, always fit the accepted move in full -- rests on. Warm starts are on by
 default because they change where a fit *starts* and not where it ends;
 lazy scoring is opt-in because it changes which candidates are fitted.
+
+**The same climb over a parsimony score.** :func:`parsimony_search` walks
+the same neighbourhoods with :func:`~snakes_and_ladders.likelihood.parsimony.fitch_score`
+or :func:`~snakes_and_ladders.likelihood.parsimony.sankoff_score` in place of
+the fitted likelihood --- large parsimony (issue #335). There is nothing
+continuous to fit, so a candidate costs one pass and no warm start or lazy
+rank applies; what is kept is the accounting, a budget in candidates scored
+and each topology scored at most once, and the oracle, which is enumeration.
 """
 
 from __future__ import annotations
@@ -46,6 +54,7 @@ from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
+from snakes_and_ladders.likelihood.parsimony import fitch_score, sankoff_score
 from snakes_and_ladders.likelihood.pruning_torch import (
     PartialCache,
     log_likelihood_cached,
@@ -167,6 +176,23 @@ def _objective(
     if model is Model.JC:
         return BranchLengthObjective(topology, k, np.full(k, 1.0 / k), alignment)
     return SubstitutionModelObjective(topology, k, alignment)
+
+
+def _start(
+    alignment: Mapping[str, np.ndarray],
+    topology: Topology | None,
+    rng: np.random.Generator | None,
+) -> Topology:
+    """The topology a search begins from, drawn from ``rng`` when none is given."""
+    if len(alignment) < 4:
+        msg = f"need at least 4 taxa to search, got {len(alignment)}"
+        raise ValueError(msg)
+    if topology is not None:
+        return topology
+    if rng is None:
+        msg = "searching for a topology needs an rng to draw the start from"
+        raise ValueError(msg)
+    return random_topology(sorted(alignment), rng)
 
 
 def _warm_lengths(topology: Topology, warm: _Fitted) -> torch.Tensor:
@@ -312,9 +338,6 @@ def infer(
         topology has a neighbour to move to, ``lazy_top`` is not positive,
         or a surrogate is given without ``lazy_top`` to apply it to.
     """
-    if len(alignment) < 4:
-        msg = f"need at least 4 taxa to search, got {len(alignment)}"
-        raise ValueError(msg)
     if lazy_top is not None and lazy_top < 1:
         msg = f"lazy_top must be at least 1 when given, got {lazy_top}"
         raise ValueError(msg)
@@ -322,13 +345,7 @@ def infer(
         msg = "a surrogate ranks the candidates lazy_top selects; give both"
         raise ValueError(msg)
 
-    if topology is not None:
-        current = topology
-    elif rng is None:
-        msg = "searching for a topology needs an rng to draw the start from"
-        raise ValueError(msg)
-    else:
-        current = random_topology(sorted(alignment), rng)
+    current = _start(alignment, topology, rng)
     best = _score(model, current, k, alignment)
     trace = [best.value]
     seen = {leaf_bipartitions(current)}
@@ -434,3 +451,171 @@ def score_topology(
         The maximized log-likelihood.
     """
     return _score(model, topology, k, alignment).value
+
+
+@dataclass(frozen=True)
+class ParsimonyInference:
+    """The outcome of a large-parsimony search.
+
+    Parameters
+    ----------
+    topology : Topology
+        The most parsimonious topology found.
+    score : float
+        Its parsimony score: an integer-valued float under the unit step
+        matrix, where it is the Fitch score.
+    evaluations : int
+        Candidates scored, which is what the budget counts. Each is one
+        post-order pass; there is no fit to count beside it.
+    trace : tuple[float, ...]
+        Score after each accepted move, starting with the initial
+        topology's, non-increasing by construction.
+    converged : bool
+        Whether the search stopped because no neighbour improved rather than
+        because the budget ran out, on the same terms as :class:`Inference`.
+    """
+
+    topology: Topology
+    score: float
+    evaluations: int
+    trace: tuple[float, ...]
+    converged: bool
+
+
+def _metric_step_matrix(step_matrix: np.ndarray, k: int) -> np.ndarray:
+    """``step_matrix`` if the unrooted score is well defined under it, else raise.
+
+    A search walks unrooted topologies and keys them on their bipartitions,
+    so every rooting of a candidate must score the same. That holds when the
+    matrix is a metric: symmetric with a zero diagonal, so an edge costs the
+    same read either way, and satisfying the triangle inequality, so a
+    degree-2 root cannot be labelled with an intermediate state cheaper than
+    the direct change on the edge it splits.
+    """
+    step = np.asarray(step_matrix, dtype=np.float64)
+    if step.shape != (k, k):
+        msg = f"step_matrix must have shape {(k, k)}, got {step.shape}"
+        raise ValueError(msg)
+    if not np.array_equal(step, step.T) or bool(np.any(np.diag(step) != 0.0)):
+        msg = (
+            "step_matrix must be symmetric with a zero diagonal: an unrooted "
+            "topology has no direction to read an asymmetric cost along"
+        )
+        raise ValueError(msg)
+    via = np.min(step[:, :, None] + step[None, :, :], axis=1)
+    if bool(np.any(step > via + 1e-12)):
+        msg = (
+            "step_matrix must satisfy the triangle inequality, or a rooting "
+            "changes the score of the same unrooted topology"
+        )
+        raise ValueError(msg)
+    return step
+
+
+def parsimony_search(
+    alignment: Mapping[str, np.ndarray],
+    k: int,
+    *,
+    step_matrix: np.ndarray | None = None,
+    topology: Topology | None = None,
+    moves: MoveSet = MoveSet.NNI,
+    max_evaluations: int = 200,
+    rng: np.random.Generator | None = None,
+) -> ParsimonyInference:
+    """Hill-climb over topologies on the parsimony score: large parsimony.
+
+    The loop of :func:`infer` with the fit replaced by one parsimony pass, and
+    the same accounting: a budget in candidates scored, each topology scored
+    at most once, keyed on its bipartitions, and a converged flag that means
+    no neighbour improved. Below eight taxa
+    :func:`~snakes_and_ladders.search.topology.enumerate_topologies` referees it,
+    which is how the regression suite pins it.
+
+    Parameters
+    ----------
+    alignment : Mapping[str, np.ndarray]
+        Observed states per taxon, each of shape ``(n_sites,)``.
+    k : int
+        Number of states.
+    step_matrix : np.ndarray | None
+        ``None`` scores by :func:`~snakes_and_ladders.likelihood.parsimony.fitch_score`.
+        A ``(k, k)`` matrix scores by
+        :func:`~snakes_and_ladders.likelihood.parsimony.sankoff_score`, and must
+        be a metric --- symmetric, zero on the diagonal, and satisfying the
+        triangle inequality --- because an unrooted topology has one score
+        only when every rooting of it scores the same.
+    topology : Topology | None
+        Where to start. ``None`` draws a random topology from ``rng``.
+    moves : MoveSet
+        Neighbourhood the search proposes from.
+    max_evaluations : int
+        Maximum candidates scored. The initial topology's own score is not
+        counted against it.
+    rng : np.random.Generator | None
+        Source of the starting topology, required when ``topology`` is
+        ``None`` and unused otherwise, on the terms :func:`infer` states.
+
+    Returns
+    -------
+    ParsimonyInference
+        The most parsimonious topology found and its score.
+
+    Raises
+    ------
+    ValueError
+        If the alignment has fewer than 4 taxa, if ``topology`` is ``None``
+        and no ``rng`` is given, or if ``step_matrix`` is not a metric of
+        shape ``(k, k)``.
+    """
+    if step_matrix is None:
+
+        def score(candidate: Topology) -> float:
+            return float(fitch_score(candidate, alignment, k))
+
+    else:
+        step = _metric_step_matrix(step_matrix, k)
+
+        def score(candidate: Topology) -> float:
+            return sankoff_score(candidate, alignment, step)
+
+    current = _start(alignment, topology, rng)
+    best = score(current)
+    trace = [best]
+    seen = {leaf_bipartitions(current)}
+    neighbourhood = nni_neighbours if moves is MoveSet.NNI else spr_neighbours
+
+    evaluations = 0
+    converged = max_evaluations == 0
+    while evaluations < max_evaluations:
+        candidate: Topology | None = None
+        candidate_score = best
+        for neighbour in neighbourhood(current):
+            key = leaf_bipartitions(neighbour)
+            if key in seen:
+                continue
+            if evaluations >= max_evaluations:
+                break
+            seen.add(key)
+            evaluations += 1
+            value = score(neighbour)
+            if value < candidate_score:
+                candidate, candidate_score = neighbour, value
+        if candidate is None:
+            converged = True
+            break
+        current, best = candidate, candidate_score
+        trace.append(best)
+        _log.debug(
+            "accepted move %d: parsimony score %g after %d evaluations",
+            len(trace) - 1,
+            best,
+            evaluations,
+        )
+
+    return ParsimonyInference(
+        topology=current,
+        score=best,
+        evaluations=evaluations,
+        trace=tuple(trace),
+        converged=converged,
+    )

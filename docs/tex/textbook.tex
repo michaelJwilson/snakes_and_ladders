@@ -197,6 +197,94 @@ through $\constrained$ by the delta method: $\mathrm{Var}(\constrained(\params))
 Section~\ref{sec:properties} makes realized interval coverage a measurement
 rather than an assumption.
 
+\subsection{Sampling the Posterior, and Adapting the Sampler}
+\label{sec:hmc}
+
+Where the delta-method interval is an approximation, the posterior can be
+sampled instead and an interval read as a quantile. Hamiltonian Monte Carlo
+\citep{neal2011} reads $\objective$ as a negative log density, adds a momentum
+$p \sim \mathcal{N}(0, M)$, and proposes by integrating the Hamiltonian
+$H(\params, p) = \objective(\params) + \tfrac{1}{2} p^{\top} M^{-1} p$ with a
+symplectic integrator for $L$ steps of size $\varepsilon$, accepting with
+probability $\alpha = \min\{1, \exp(-\Delta H)\}$. The integrator is
+reversible and volume-preserving, so $\Delta H$ is the whole of the acceptance
+ratio; it is exact on the flow it conserves, so $\Delta H$ is small and bounded
+rather than growing with $L$. A temperature enters as the momentum's variance,
+and a diagonal mass $M = \mathrm{diag}(1/\sigma_i^2)$ enters as a change of
+coordinates, $\phi_i = \params_i / \sigma_i$: the unit-mass dynamics on
+$\objective(\sigma \odot \phi)$ are the mass-$M$ dynamics on $\params$ term for
+term, so one integrator serves every metric and every temperature.
+
+\paragraph{Adaptation, as a warm-up.}
+The step $\varepsilon$ that is right for one posterior is wrong for the next,
+and the coordinates' scales $\sigma_i$ are the posterior's. Both are set in a
+warm-up whose draws are discarded, after which the chain runs at fixed values
+and is a Markov chain with the target as its stationary distribution; a chain
+that kept adapting would not be. The scales are the sample standard deviations
+of a warm-up window. The step is driven to a target acceptance $\delta$ by dual
+averaging \citep[Sec.~3.2]{hoffman2014}: after proposal $m$ with acceptance
+probability $\alpha_m$,
+\begin{equation}
+  \bar h_m = \Big(1 - \frac{1}{m + t_0}\Big)\bar h_{m-1}
+             + \frac{\delta - \alpha_m}{m + t_0}, \qquad
+  \log \varepsilon_m = \mu - \frac{\sqrt{m}}{\gamma}\,\bar h_m, \qquad
+  \log \bar\varepsilon_m = m^{-\kappa}\log \varepsilon_m
+             + (1 - m^{-\kappa})\log \bar\varepsilon_{m-1},
+  \label{eq:dual-averaging}
+\end{equation}
+with $\mu = \log(10\,\varepsilon_0)$ and the constants $\gamma$, $t_0$,
+$\kappa$ setting the rate; the iterates $\varepsilon_m$ do not converge, the
+averaged $\bar\varepsilon_m$ does, and the chain runs at the last of those.
+The same iteration is run twice, once at unit mass to estimate the scales and
+once on the metric they define, because a metric that has rescaled the
+coordinates has changed the step that is right for them.
+
+\paragraph{Regime.}
+On a target that is locally quadratic the leapfrog energy error is bounded
+and oscillatory, so $\alpha(\varepsilon)$ stays near one up to the stability
+limit $\varepsilon\,\omega_{\max} < 2$ on the stiffest direction and falls to
+zero past it: a target of $\delta = 0.65$ lies \emph{on} that cliff, and an
+iteration driven by a single Metropolis probability per proposal, whose
+standard deviation is a sizeable fraction of one, oscillates across it and
+averages to a step whose acceptance is not $\delta$. Two remedies, both
+measured rather than assumed: each proposal's step is drawn uniformly from
+$\bar\varepsilon\,(1 \pm j)$ \citep[Sec.~5.4.2.2]{neal2011}, which averages
+$\alpha$ over the band and turns the cliff into a slope with one root; and
+$\gamma$ is set larger than the value published for a trajectory-averaged
+statistic, since the iterates' spread in $\log\varepsilon$ scales as
+$1/(\gamma\sqrt{m})$. The chain after warm-up keeps the jitter, since that is
+the step its acceptance was adapted for, and every draw is still from a kernel
+with the right stationary distribution.
+
+\paragraph{A ladder from what it measures.}
+The same principle sets a tempering ladder for Section~\ref{sec:tempering}. What
+makes a ladder right is the exchange acceptance of Equation~\ref{eq:exchange}
+between each neighbouring pair---near zero the replicas are independent chains,
+near one a rung is redundant---so a warm-up measures it on a candidate ladder
+and revises: a pair below a stated band is bisected at the geometric mean, a
+rung both of whose pairs are above the band is removed, and a pair above the
+band beside one inside it has their shared rung moved geometrically halfway
+toward the far end of the pair inside. Geometric, because the exchange ratio
+depends on the temperatures through $\beta_i - \beta_j$, so for an energy whose
+spread is set by the temperature the acceptance is a function of the ratio of
+neighbours. The endpoints are the caller's and are never moved; the warm-up's
+cost in sweeps is charged to any comparison against a ladder set by hand.
+
+\paragraph{What pins it.}
+Equation~\ref{eq:dual-averaging} is arithmetic and is stepped by hand against
+the implementation; the mass matrix is a change of coordinates and is held to
+a mass-matrix leapfrog written out, to round-off. What a draw costs is the
+effective sample size per gradient evaluation, with the size estimated by the
+initial positive sequence \citep{geyer1992} and that estimator held to an
+autoregressive chain whose integrated autocorrelation time is a closed form.
+The statistics are then three: the adapted chain's acceptance lands within a
+stated distance of $\delta$ over independent seeds; its posterior means and
+spreads agree with a fixed-parameter chain's within Monte Carlo error, on the
+analytic Gaussian and on a four-taxon tree; and the adapted ladder's
+exchanges lie inside the band on the frustrated lattice, with its ground-state
+hit rate at equal sweeps reported beside the hand ladder's. The
+fixed-parameter samplers are unchanged and remain the oracles.
+
 \subsection{The Discrete Search as a Decision Process}
 \label{sec:policy-gradient}
 
@@ -506,6 +594,35 @@ of ancestral states; in the limit of short branches its cost counts
 substitutions, which is Fitch parsimony \citep{felsenstein2004}, the second
 criterion the search is scored against.
 
+Both parsimony scores are the same post-order pass with no branch lengths.
+Fitch's recursion \citep{fitch1971} carries at each node $v$ the set $S_v$
+of states reachable at the minimum cost so far, and a count $F$ of changes:
+\begin{equation}
+  S_v = \begin{cases}
+    S_a \cap S_b & S_a \cap S_b \neq \emptyset, \\
+    S_a \cup S_b \quad\text{and}\quad F \leftarrow F + 1 & \text{otherwise},
+  \end{cases}
+  \label{eq:fitch}
+\end{equation}
+for the children $a, b$ of $v$, folded pairwise at a trifurcation, a leaf's
+set being its observed state. Sankoff's recursion \citep{sankoff1975}
+replaces the set by a cost vector under a step matrix $W \in
+\mathbb{R}_{\ge 0}^{k \times k}$, $W_{ij}$ the cost of a change from a
+parent in state $i$ to a child in state $j$:
+\begin{equation}
+  S_v(i) = \sum_{c \in \mathrm{ch}(v)} \min_j \big[\, W_{ij} + S_c(j) \,\big],
+  \qquad
+  S_{\mathrm{leaf}}(i) = \begin{cases} 0 & i = x_{\mathrm{leaf}}, \\
+    \infty & \text{otherwise}, \end{cases}
+  \label{eq:sankoff}
+\end{equation}
+and a site's score is $\min_i S_{\mathrm{root}}(i)$. It is
+Equation~\ref{eq:pruning} in the min-plus semiring, and under the unit matrix
+$W = \mathbf{J} - \mathbf{I}$ it returns Fitch's count exactly. The score is
+that of a rooted tree: an asymmetric $W$ scores each rooting of one unrooted
+topology differently, and a search over unrooted topologies is well defined
+only when $W$ is a metric, where every rooting agrees.
+
 \paragraph{Regime.}
 Exact on every input, because a tree has no cycle. The one failure mode is
 numerical---underflow of a product of $n$ factors each below one---and it is
@@ -535,7 +652,10 @@ dominates NNI.
 
 Hill climbing over either neighbourhood fits the continuous parameters of
 every candidate and moves to the best; its budget is counted in candidates
-scored, never in seconds, so a run reproduces from its seed. A candidate
+scored, never in seconds, so a run reproduces from its seed. The same climb
+with Equation~\ref{eq:fitch} or~\ref{eq:sankoff} in place of the fit is
+\emph{large parsimony} \citep{felsenstein2004}: nothing continuous is fitted,
+a candidate costs one pass, and the budget and the oracle are the same. A candidate
 that shares all but a few branches with its parent may start its fit from the
 parent's lengths, a branch being identified by the leaf bipartition below it
 rather than by a node's name; and a neighbourhood may be \emph{ranked} by one
@@ -549,7 +669,11 @@ Enumeration of the $(2n-5)!!$ topologies referees the search below eight taxa:
 the climb must reach the enumerated maximum, and the neighbourhood counts
 above are asserted exactly over every topology. A warm start is pinned by
 reaching the cold fit's optimum; a cached partial likelihood by equalling the
-recomputed one bitwise, since it is the same arithmetic in the same order.
+recomputed one bitwise, since it is the same arithmetic in the same order. Large parsimony is held to the same enumeration from every
+start, and on the Felsenstein-zone fixture its enumerated optimum is
+asserted to be the wrong tree while the likelihood optimum is the right one,
+because there the criterion's failure is the theorem of
+Section~\ref{sec:properties} and not a defect of the search.
 
 \section{Problem Statement: Potts Models in an External Field}
 \label{sec:potts}

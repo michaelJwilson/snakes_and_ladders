@@ -13,8 +13,8 @@ produces them, and the module docstrings say which.
 ## What lives here
 
 The pruning recursion and its backends, an exact and an approximate evaluator
-for the Potts MRF, Fitch parsimony as a second criterion over the same
-topology, path enumeration for the HMM, one sum-product over any factor graph
+for the Potts MRF, Fitch and Sankoff parsimony as a second criterion over the
+same topology, path enumeration for the HMM, one sum-product over any factor graph
 that is pinned to each of those where they overlap, the enumeration oracle for
 the coupled model with its E step and field, forward–backward as an
 evaluator, a parity-check decoder specialised from that sum-product and

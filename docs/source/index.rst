@@ -114,6 +114,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.message_passing
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.message_passing_reference
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.spatio_sequential
    :members:
 

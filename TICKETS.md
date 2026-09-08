@@ -64,6 +64,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Realize the tolerance helper rather than assume it is applied by hand (#91)
 - Profile a gradient fit in memory and time across the declared `n × L × k`
   range (#232)
+- Trajectory-length adaptation (NUTS), only if a posterior the #268
+  comparison reaches is one the fixed trajectory length of #333 samples badly
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
@@ -92,7 +94,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Establish the external reference tools to benchmark against, and how they are
   installed (#126)
 - A classical baseline suite the three applications are scored against under
-  one budget
+  one budget — large parsimony under NNI and SPR is the tree baseline that
+  exists; the HMM and Potts baselines and the shared budget remain
 - Uncertainty for a discrete search result, where a Hessian is not defined:
   a margin, a Boltzmann weight over the enumerated neighbourhood, or bootstrap
   support, pinned against enumeration where it fits (#270)
@@ -160,6 +163,13 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   budget (#344)
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#232)
+- Scope rustworkx for efficiency and scaling (#242)
+- The targets the runtime-optimization audit left unmet: the tree schedule
+  within 2x of the forward recursion on a chain, the reassociated
+  transfer-matrix product in the Potts chain objective, `maxflow_rust` as
+  alpha expansion's inner solver, and a compiled sweep for the factor-graph
+  Gibbs sampler (#341)
+
 - Adopt `rustworkx` on a hot path where a measurement says so —
   `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
   of the bound — moving the replaced implementation to `sandbox/`; #242 is

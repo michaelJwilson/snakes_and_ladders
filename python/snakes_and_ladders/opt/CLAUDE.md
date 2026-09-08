@@ -58,11 +58,11 @@ Apple Silicon path the memory requirement in `ROADMAP.md` assumes.
   a point that is no maximum: an unconverged fit, a parameter at a bound and a
   test function's curvature are refused — issue #122's general form.
 
-- **An acceptance rate is not a diagnostic on its own.** An integrator step
-  too large biases a posterior's *spread* downward while leaving its mean
-  right and its acceptance rate healthy, because divergent trajectories are
-  rejected preferentially in the tails. The energy error tracks that and the
-  acceptance rate does not, so a sampler here reports both.
+- **An acceptance rate is not a diagnostic, and adaptation is a warm-up.** A
+  step too large biases a posterior's *spread* downward while its mean and
+  acceptance look right, so a sampler reports the energy error too. A step or
+  mass adapted toward a target is set in a discarded warm-up, opted into and
+  reported on the result; the draws are a fixed-parameter chain.
 
 - **A negative log-likelihood is not a log posterior.** Reading a bare
   likelihood as a density is a posterior under an improper flat prior, which
