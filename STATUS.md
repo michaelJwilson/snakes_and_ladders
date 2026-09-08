@@ -1180,6 +1180,22 @@ places hill climbing inside the policy class as a temperature. What would
 change the answer is named rather than hoped for: a richer feature set
 (`TICKETS.md` §2.1) and accepted-worsening steps (Stage 3, stochastic escape).
 
+**Escape is now built, and it moved the comparison's baseline rather than its
+result.** An episode can run past a local optimum, and an epsilon-greedy
+policy can take the worsening move that leaves one: escape from one of the 9
+non-global optima rises from 0.111 at `epsilon = 0` to 0.883 at `0.4`, and
+matched-budget success from a random start rises from 0.560 to 0.908 against
+the 0.480 a single greedy run reaches. But random-restart hill climbing
+reaches the enumerated maximum from **every** start at the same 60-decision
+budget: greedy stops after about four decisions, so 60 buys roughly fifteen
+restarts, and with the global basin covering about 48% of starting topologies
+`1 - 0.52**15` is indistinguishable from 1. The baseline Milestone 2.1 has to
+beat on this fixture is therefore 1.000, not the 0.480 the tree-policy
+comparison above was stated against, and nothing measured here beats it. The
+fixture separates a single greedy run from the optimum; it does not separate
+anything from restarts, and a fixture that does is what the next comparison
+needs.
+
 **All three problem classes are now MDPs.** `snakes_and_ladders.learn.Environment` had
 one instance, a 1-D Potts chain, which is the same position `snakes_and_ladders.opt` was in
 before four instances made its model-agnosticism a measurement rather than an
