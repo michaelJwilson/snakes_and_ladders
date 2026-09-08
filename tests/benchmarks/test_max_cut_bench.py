@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.search.max_cut import enumerate_max_cut, goemans_williamson
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -39,7 +40,7 @@ def test_goemans_williamson_benchmark(
     # number with a certificate attached.
     graph = _random_graph(n_nodes, 0.3, n_nodes)
 
-    result = benchmark(goemans_williamson, graph, 1)
+    result = benchmark(goemans_williamson, graph, torch.Generator().manual_seed(1))
 
     assert result.value >= 0.0
 

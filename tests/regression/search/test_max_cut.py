@@ -26,6 +26,7 @@ import itertools
 
 import numpy as np
 import pytest
+import torch
 from snakes_and_ladders.search.alpha_expansion import energy
 from snakes_and_ladders.search.max_cut import (
     GOEMANS_WILLIAMSON_RATIO,
@@ -64,7 +65,7 @@ def test_a_complete_bipartite_graph_has_every_edge_in_its_maximum_cut(
     # separating them cuts all of them and nothing can do better.
     graph = complete_bipartite(first, second)
 
-    result = goemans_williamson(graph, seed=1)
+    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(1))
 
     assert result.value == pytest.approx(float(len(graph.edges)))
 
@@ -79,7 +80,7 @@ def test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice(
     # than to distinguish a good one -- the random graphs below do that.
     graph = lattice_graph(shape, BoundaryCondition.OPEN, 1.0)
 
-    result = goemans_williamson(graph, seed=3)
+    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(3))
     _, optimum = enumerate_max_cut(graph)
 
     assert result.value == pytest.approx(optimum)
@@ -98,7 +99,7 @@ def test_the_realized_ratio_beats_the_bound_on_a_graph_with_triangles(
     # guarantee of 0.87856 -- the bound is not tight and is not meant to be.
     graph = _random_graph(n_nodes, density, seed)
 
-    result = goemans_williamson(graph, seed=5)
+    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(5))
     _, optimum = enumerate_max_cut(graph)
 
     assert result.value / optimum >= GOEMANS_WILLIAMSON_RATIO
@@ -117,7 +118,7 @@ def test_the_certificate_holds_where_the_optimum_is_unknown(
     # reach. Measured on these instances: 0.95 to 0.98.
     graph = _random_graph(n_nodes, density, seed)
 
-    result = goemans_williamson(graph, seed=5)
+    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(5))
 
     assert result.ratio >= GOEMANS_WILLIAMSON_RATIO
 
@@ -135,7 +136,7 @@ def test_the_relaxation_is_solved_approximately_and_says_so() -> None:
     # against the relaxation's optimum.
     graph = complete_bipartite(8, 6)
 
-    result = goemans_williamson(graph, seed=1)
+    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(1))
 
     assert result.value == pytest.approx(float(len(graph.edges)))
     assert result.ratio > 1.0 - 1e-6
@@ -224,7 +225,7 @@ def test_enumeration_fixes_one_side_without_losing_the_optimum() -> None:
 def test_a_graph_with_no_edges_has_an_empty_cut() -> None:
     graph = PottsGraph(n_nodes=4, edges=(), coupling=())
 
-    result = goemans_williamson(graph, seed=1)
+    result = goemans_williamson(graph, generator=torch.Generator().manual_seed(1))
 
     assert result.value == pytest.approx(0.0)
     assert result.ratio == pytest.approx(1.0)

@@ -121,7 +121,7 @@ def enumerate_max_cut(
 
 def goemans_williamson(
     graph: PottsGraph,
-    seed: int,
+    generator: torch.Generator,
     *,
     rank: int | None = None,
     iterations: int = 600,
@@ -142,8 +142,10 @@ def goemans_williamson(
         Edge weights are ``abs(coupling)``, so a graph written with the
         antiferromagnetic sign this problem corresponds to and one written
         with positive weights give the same cut.
-    seed : int
-        Seeds both the initial vectors and the rounding hyperplanes.
+    generator : torch.Generator
+        Draws both the initial vectors and the rounding hyperplanes; passed in
+        rather than seeded here (`sim/CLAUDE.md`), so a run reproduces from
+        ``torch.Generator().manual_seed(seed)`` at the call site.
     rank : int | None
         Dimension of the vectors. ``None`` uses ``ceil(sqrt(2 n))``, the rank
         at which the factorization provably admits the relaxation's optimum.
@@ -161,7 +163,6 @@ def goemans_williamson(
         weights[second, first] += abs(coupling)
 
     dimension = rank if rank is not None else int(np.ceil(np.sqrt(2 * graph.n_nodes)))
-    generator = torch.Generator().manual_seed(seed)
     vectors = torch.randn(
         (graph.n_nodes, dimension), generator=generator, dtype=torch.float64
     )

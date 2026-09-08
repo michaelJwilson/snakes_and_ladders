@@ -31,7 +31,13 @@ def test_hmc_sample_benchmark(
     objective = Rosenbrock(dimension=dimension)
 
     chain = benchmark(
-        sample, objective, 1, 200, step_size=0.01, n_steps=n_steps, burn_in=20
+        sample,
+        objective,
+        torch.Generator().manual_seed(1),
+        200,
+        step_size=0.01,
+        n_steps=n_steps,
+        burn_in=20,
     )
 
     assert torch.isfinite(chain.theta).all()
