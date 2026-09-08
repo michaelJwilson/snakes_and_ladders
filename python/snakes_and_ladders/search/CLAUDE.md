@@ -11,12 +11,11 @@ produces them or in `STATUS.md`, and the module docstrings say which.
 
 ## What lives here
 
-Topology neighbourhoods and the searches that walk them; a two-state ground
-state by minimum cut, extended to any label count by expansion moves; Max-Cut,
-the same model from its NP-hard side, with a relaxation and a certificate;
-Monte Carlo move sets for the Potts lattice, a Gibbs sampler and annealer
-over any factor graph, and the statistics that judge them; the inference loop
-and the coupled model's block ascent; and the `learn` environment instance.
+Topology neighbourhoods and the searches that walk them; two-state ground
+states by minimum cut, extended to any label count by expansion moves; Max-Cut
+with a certificate; Monte Carlo moves for the Potts lattice, a Gibbs sampler
+and annealer over any factor graph, and the statistics that judge them; the
+inference loop, the coupled block ascent, and the `learn` environment instance.
 
 Two seams run through it and neither may be reversed. A discrete move changes
 the structure being fitted, so the loop builds a new objective rather than
