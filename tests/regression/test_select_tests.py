@@ -62,11 +62,17 @@ def test_a_change_selects_the_modules_that_import_it() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_a_leaf_module_selects_only_itself() -> None:
-    # Nothing imports `snakes_and_ladders.learn`, so nothing else need run. This is the
-    # case the whole mechanism is worth building for.
-    assert _modules_of(select(["python/snakes_and_ladders/learn/reinforce.py"])) == {
-        "learn"
-    }
+    # A module nothing imports needs nothing else run, which is the case the
+    # whole mechanism is worth building for. The leaf is derived rather than
+    # named: `snakes_and_ladders.learn` was one until `snakes_and_ladders.qa.rl_tree_policy` imported it
+    # (issue #178), and a test naming a module goes stale the moment an import
+    # is added, which is the failure `select_tests` itself is built to avoid.
+    leaves = [module for module in MODULES if dependents({module}) == {module}]
+    assert leaves, "no submodule is a leaf; the selection can save nothing"
+    for leaf in leaves:
+        assert _modules_of(
+            select([f"python/snakes_and_ladders/{leaf}/__init__.py"])
+        ) == {leaf}
 
 
 @pytest.mark.critical
