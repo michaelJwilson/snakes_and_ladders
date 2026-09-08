@@ -193,7 +193,7 @@ Every entry point — a QA script, `sal.qa.build`,
 
 ### Running With Workers
 
-`snakes_and_ladders.parallel.map_tasks` is the one seam for CPU parallelism over
+`sal.parallel.map_tasks` is the one seam for CPU parallelism over
 independent tasks (issue #344); no module keeps a pool of its own. Three sites
 go through it — `opt.fit.fit_from` (starts), `opt.budget.compare` (cells of
 method × instance × seed) and `search.support.bootstrap_support` (replicates) —

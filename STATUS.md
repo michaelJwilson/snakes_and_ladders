@@ -96,7 +96,7 @@ alike, alongside the rule that decides which documents may repeat detail
 **CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
 three negative results
 ([#344](https://github.com/michaelJwilson/snakes_and_ladders/issues/344)).**
-`snakes_and_ladders.parallel.map_tasks` runs a loop of independent tasks on a
+`sal.parallel.map_tasks` runs a loop of independent tasks on a
 thread or process pool with results in input order and one generator per
 task, spawned in item order, so a run at four workers is bitwise the run at
 one; `opt.fit.fit_from`, `opt.budget.compare` and
@@ -1208,7 +1208,7 @@ random per-node field:
 
 The boundary copy was 0.03-0.2 ms of a 0.7-17 ms call and removing it moved
 the caller-visible number by under 3%. What a caller pays for is
-`snakes_and_ladders.search.maxflow.energy`, which scores the returned
+`sal.search.maxflow.energy`, which scores the returned
 configuration edge by edge in Python and is 59-81% of the wrapper's time; it
 is the oracle's function and is left as it is, so a caller wanting the
 kernel's speedup takes the configuration from the extension and scores it
