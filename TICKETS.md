@@ -16,6 +16,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 - Support the different lattice types (#231)
+- Declare a Potts lattice at the transition as a fixture, so the one
+  instance where the cluster moves earn their name is not built by hand in
+  the test and the notebook alike (#413)
 - A turbo code problem, fixture and belief-propagation example (#233)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code rather than the zero word (#340)
@@ -77,7 +80,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
   it costs per step (#329)
 - Establish the external reference tools to benchmark against, and how they are
-  installed (#126)
+  installed (#126) — deferred while `CLAUDE.md` admits no external solver;
+  `docs/external_tools.md` is the survey a future adoption starts from
 - A classical baseline suite the applications are scored against under one
   budget — large parsimony under NNI and SPR is the tree baseline that exists
   and `opt.budget.compare` the budget; the HMM and Potts baseline suites remain
@@ -110,16 +114,20 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Weight transfer across problem sizes for a policy, and the schedule from
   `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
-  and from 3×3 to 4×6 lattices, and a policy does not yet
+  and from 3×3 to 4×6 lattices, and a policy does not yet — the lattice
+  half is filed (#414)
 - Batched episode rollout, so a budget at `n = 200` is affordable
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed
 
 ## Milestone 2.3 — Empirical Validation & Benchmarking
 
-- Ingest empirical alignments, with their provenance recorded
-- Benchmark harness: budget-matched runs against IQ-TREE 2 and RAxML-NG on
-  shared seeds, once #126 installs them
+- Validation past enumeration on simulated fixtures at the sizes this milestone
+  targets, refereed by the parameters that generated them; ingesting an
+  empirical alignment waits on the external-solver decision (#126)
+- Benchmark harness: budget-matched runs on shared seeds against the classical
+  baselines this repository implements; runs against IQ-TREE 2 and RAxML-NG
+  wait on the same decision (#126)
 - Report RF and ΔlnL against known truth up to `n = 1000`
 - A fixed-hardware benchmark runner, since CI hardware cannot rank performance
 - GPU scaling for the site-parallel recursion, once a device exists to

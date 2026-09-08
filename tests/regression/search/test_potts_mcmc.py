@@ -58,6 +58,7 @@ from snakes_and_ladders.sim.canonical import (
     minimum_frustrated_edges,
     planted_spin_glass,
 )
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 from tests._scale import at_scale
@@ -224,6 +225,36 @@ def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
 
     assert swendsen_wang < single
     assert wolff < single
+
+
+@pytest.mark.mathematical
+def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
+    # The other half of the claim above, and the reason the comparison is run
+    # at the transition rather than wherever a fixture happens to sit. The
+    # registry's lattice is 9 sites at J = 0.6, well below J_c = 1.005: the
+    # correlation length is shorter than the lattice, there is no critical
+    # slowing to remove, and the cluster moves buy nothing for the bonds they
+    # cost. Pinned as the measurement `docs/nb/potts_chain.ipynb` reports, so
+    # the notebook states nothing the suite does not.
+    instance = fixture("potts_lattice", "ci").params
+    graph = lattice_graph(instance.shape, instance.boundary, instance.coupling)
+    field = instance.field - math.log(float(np.exp(instance.field).sum()))
+    sweeps = 4_000
+
+    times: dict[PottsMove, float] = {}
+    for move in PottsMove:
+        chain = sample_potts(
+            graph, field, move, np.random.default_rng(7), sweeps, burn_in=sweeps // 5
+        )
+        tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
+        times[move] = tau * chain.mean_cluster_size / graph.n_nodes
+
+    assert times[PottsMove.SINGLE_SITE] == pytest.approx(1.00, rel=0.1)
+    assert times[PottsMove.SWENDSEN_WANG] == pytest.approx(1.71, rel=0.1)
+    assert times[PottsMove.WOLFF] == pytest.approx(1.59, rel=0.1)
+    assert times[PottsMove.SINGLE_SITE] < min(
+        times[PottsMove.SWENDSEN_WANG], times[PottsMove.WOLFF]
+    )
 
 
 @pytest.mark.mathematical
