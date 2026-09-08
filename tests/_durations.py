@@ -3,13 +3,20 @@
 `DEV.md` budgets the CI tier at 300 s and forbids asserting wall clock in the
 suite, since a timing assertion fails for the machine rather than for the
 change. What can be asserted is the tier: a test that took longer than the
-cap on the reference host, and carries neither ``release`` nor ``stress``,
-is in the wrong tier, and the pull request that added it would have added its
+cap on the reference host, and carries none of the out-of-tier markers, is in
+the wrong tier, and the pull request that added it would have added its
 minute to every run unnoticed (issue #372). ``tests/conftest.py`` records
 each test's call duration and, when ``SAL_DURATION_CAP`` is set -- as
 ``infra/validate.sh`` sets it on the reference host and CI does not -- fails
 the session naming the offenders. Imported rather than collected, per the
 fixture rule in `DEV.md`.
+
+**The key tier is exempt from that cap and held to its own** (issue #399).
+The key fixture is the largest declared instance of a problem whose full test
+--- simulate, fit, assert --- fits a budget a per-pull-request test cannot:
+120 s, ``SAL_KEY_DURATION_CAP``. Exempting it without a second cap would make
+``key`` the marker any slow test acquires, so the exemption comes with a
+ceiling, and a key test over *that* fails the session the same way.
 """
 
 from __future__ import annotations
@@ -17,7 +24,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 #: The markers that say a test runs outside the per-pull-request tier.
-OUTSIDE_THE_TIER = frozenset({"release", "stress"})
+OUTSIDE_THE_TIER = frozenset({"release", "stress", "key"})
+
+#: The marker that says a test is a key fixture's, and so is held to
+#: :envvar:`SAL_KEY_DURATION_CAP` rather than exempt from every cap.
+KEY = "key"
 
 
 def over_cap(
@@ -47,5 +58,40 @@ def over_cap(
     ]
     return [
         f"{node_id}: {seconds:.1f} s over the {cap:.0f} s cap; mark it release or stress"
+        for seconds, node_id in sorted(offenders, reverse=True)
+    ]
+
+
+def key_over_cap(
+    durations: Iterable[tuple[str, float, frozenset[str]]], cap: float
+) -> list[str]:
+    """Name the ``key`` tests over ``cap`` seconds.
+
+    The key tier's own guard. A key fixture is *defined* as the largest
+    declared instance whose full test fits this budget, so a key test over it
+    is not a slow test to wait for: it is a fixture whose key instance is the
+    wrong one, and the fix is to mark a coarser instance key.
+
+    Parameters
+    ----------
+    durations : Iterable[tuple[str, float, frozenset[str]]]
+        Per test: its node id, its call duration in seconds, and the names of
+        the markers on it.
+    cap : float
+        The longest a key test may run, in seconds.
+
+    Returns
+    -------
+    list[str]
+        One line per offender, slowest first; empty when every key test fits.
+    """
+    offenders = [
+        (seconds, node_id)
+        for node_id, seconds, markers in durations
+        if seconds > cap and KEY in markers
+    ]
+    return [
+        f"{node_id}: {seconds:.1f} s over the {cap:.0f} s key cap; "
+        f"the key instance is the largest that fits it"
         for seconds, node_id in sorted(offenders, reverse=True)
     ]

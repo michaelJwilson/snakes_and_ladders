@@ -22,6 +22,14 @@ paragraph of the textbook cannot break a likelihood, but it can break a label
 or a citation, and `tests/regression/test_document_labels.py` is what checks
 that; the planning files, the `CLAUDE.md` files, the experiment ledger and the
 notebooks each have their guard. Those run, and nothing else does.
+
+A selection is a set of paths *and* a set of tiers, and the second is what
+keeps the `key` tier affordable (issue #399). A key test is a two-minute test,
+so it cannot run on every pull request; it is also the only test that runs the
+declared instance end to end, so it must run on the pull requests that could
+move its result. :data:`KEY_TRIGGERS` names those --- the coupled model, the
+emissions, the fixtures and the Rust crate --- and every other change
+deselects the tier.
 """
 
 from __future__ import annotations
@@ -72,6 +80,26 @@ EVERYTHING = (
     "python/snakes_and_ladders/oxi_snakes_and_ladders.pyi",
     "python/snakes_and_ladders/scripts/",
 )
+
+# What could move a key fixture's own result, and so selects the `key` tier.
+# Everything else deselects it: the tier costs two minutes a test and runs
+# only where it can fail (issue #399).
+KEY_TRIGGERS = (
+    "src/",
+    "Cargo.toml",
+    "Cargo.lock",
+    "tests/regression/fixtures/",
+    "python/snakes_and_ladders/emissions.py",
+    "python/snakes_and_ladders/sim/count_pairs.py",
+    "python/snakes_and_ladders/sim/spatio_sequential.py",
+    "python/snakes_and_ladders/likelihood/spatio_sequential.py",
+    "python/snakes_and_ladders/likelihood/spatio_sequential_rust.py",
+    "python/snakes_and_ladders/search/spatio_sequential.py",
+)
+
+#: The tiers a per-pull-request selection never runs. `key` joins them unless
+#: the change is one of :data:`KEY_TRIGGERS`.
+ALWAYS_DESELECTED = ("release", "stress")
 
 # Nothing here can change what a test does, so no test needs to run.
 NO_TESTS_SUFFIXES = (".md", ".tex", ".bib", ".pdf", ".txt", ".rst")
@@ -230,8 +258,22 @@ def guards_for(changed: Iterable[str]) -> list[str]:
     return sorted(selected)
 
 
+def deselected(changed: Iterable[str]) -> list[str]:
+    """The tier markers this change does not run.
+
+    Returns
+    -------
+    list[str]
+        ``release`` and ``stress`` always; ``key`` unless the change touches
+        one of :data:`KEY_TRIGGERS`.
+    """
+    if any(_touches(path, KEY_TRIGGERS) for path in changed):
+        return list(ALWAYS_DESELECTED)
+    return [*ALWAYS_DESELECTED, "key"]
+
+
 def select(changed: Iterable[str]) -> dict[str, list[str]]:
-    """Choose test paths and coverage targets for a set of changed files.
+    """Choose test paths, coverage targets and deselected tiers for a change.
 
     Parameters
     ----------
@@ -241,14 +283,16 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     Returns
     -------
     dict[str, list[str]]
-        ``paths`` to hand pytest and ``cov`` targets to measure, both empty
-        when nothing needs running. ``paths`` is ``["tests"]`` when the whole
-        suite is selected, and the guards alone, with no coverage target,
-        when nothing but prose changed.
+        ``paths`` to hand pytest, ``cov`` targets to measure --- both empty
+        when nothing needs running --- and ``deselect``, the tier markers the
+        run excludes. ``paths`` is ``["tests"]`` when the whole suite is
+        selected, and the guards alone, with no coverage target, when nothing
+        but prose changed.
     """
     changed = list(changed)
+    skip = deselected(changed)
     if not changed:
-        return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
+        return {"paths": ["tests"], "cov": ["snakes_and_ladders"], "deselect": skip}
 
     relevant = [
         path
@@ -258,10 +302,10 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     ]
     guards = guards_for(path for path in changed if path not in relevant)
     if not relevant:
-        return {"paths": guards, "cov": []}
+        return {"paths": guards, "cov": [], "deselect": skip}
 
     if any(_touches(path, EVERYTHING) for path in relevant):
-        return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
+        return {"paths": ["tests"], "cov": ["snakes_and_ladders"], "deselect": skip}
 
     touched: set[str] = set()
     for path in relevant:
@@ -272,7 +316,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
                 touched.add(module)
     if not touched:
         # Recognised as code, but not attributable to a module: run everything.
-        return {"paths": ["tests"], "cov": ["snakes_and_ladders"]}
+        return {"paths": ["tests"], "cov": ["snakes_and_ladders"], "deselect": skip}
 
     selected = dependents(touched)
     paths = [f"tests/regression/{module}" for module in sorted(selected)]
@@ -283,6 +327,7 @@ def select(changed: Iterable[str]) -> dict[str, list[str]]:
     return {
         "paths": paths,
         "cov": [f"snakes_and_ladders.{module}" for module in sorted(selected)],
+        "deselect": skip,
     }
 
 
@@ -307,6 +352,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(f"paths={' '.join(chosen['paths'])}")
         print(f"cov={' '.join('--cov=' + target for target in chosen['cov'])}")
+        print(
+            "markers=" + " and ".join(f"not {marker}" for marker in chosen["deselect"])
+        )
     return 0
 
 

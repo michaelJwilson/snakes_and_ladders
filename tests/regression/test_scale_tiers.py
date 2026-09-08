@@ -6,10 +6,10 @@ therefore fail for the machine rather than for the change, so the budgets are
 kept by *size* and this module checks the things that are true regardless of
 how fast the machine is:
 
-* the stress tier is non-empty and reachable, because a tier nothing selects
-  is a tier that rots --- the failure mode `release` avoids only because
-  ``infra/release.sh`` runs it;
-* every ``stress`` marker is registered, so a typo deselects nothing silently;
+* the stress and key tiers are non-empty and reachable, because a tier
+  nothing selects is a tier that rots --- the failure mode `release` avoids
+  only because ``infra/release.sh`` runs it;
+* every scheduling marker is registered, so a typo deselects nothing silently;
 * ``at_scale`` produces exactly one CI case and one stress case, since a
   parameterization that marked both or neither would move a test between
   tiers without anyone editing it.
@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 from snakes_and_ladders.sim.fixtures import Fixture
 
+from tests._durations import key_over_cap, over_cap
 from tests._scale import at_fixture, at_scale
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -67,15 +68,26 @@ def test_the_stress_tier_is_reachable_and_not_empty() -> None:
     assert _collected("stress") > 0
 
 
-@pytest.mark.mathematical
-def test_the_ci_tier_excludes_the_stress_tier() -> None:
-    # The two selections must partition, or the CI tier silently carries the
-    # sizes the budget exists to keep out of it.
-    ci = _collected("not release and not stress")
-    stress = _collected("stress")
-    both = _collected("not release")
+@pytest.mark.edge_case
+def test_the_key_tier_is_reachable_and_not_empty() -> None:
+    # The tier added by issue #399: exempt from `SAL_DURATION_CAP` and held to
+    # `SAL_KEY_DURATION_CAP` instead. An exemption nothing selects is an
+    # exemption nobody checks.
+    assert _collected("key") > 0
 
-    assert ci + stress == both
+
+@pytest.mark.mathematical
+def test_the_ci_tier_excludes_the_stress_and_key_tiers() -> None:
+    # The selections must partition, or the CI tier silently carries the sizes
+    # the budget exists to keep out of it. Three tiers now: `key` is not
+    # `stress`, so a selection written before it existed would have run a
+    # two-minute test on every pull request.
+    ci = _collected("not release and not stress and not key")
+    stress = _collected("stress and not key")
+    key = _collected("key")
+    all_three = _collected("not release")
+
+    assert ci + stress + key == all_three
 
 
 @pytest.mark.mathematical
@@ -130,6 +142,7 @@ def test_an_unregistered_marker_is_an_error_not_a_silent_deselection() -> None:
 
     assert "--strict-markers" in config
     assert "stress:" in config
+    assert "key:" in config
 
 
 @pytest.mark.mathematical
@@ -138,6 +151,20 @@ def test_at_scale_runs_its_body_at_both_sizes(size: int) -> None:
     # The decorator exercised end to end: this test is collected twice, and
     # only the second is deselected by `-m "not stress"`.
     assert size in (1, 2)
+
+
+@pytest.mark.edge_case
+def test_a_key_test_over_its_own_cap_is_named() -> None:
+    # The key tier's exemption is not an exemption from measurement: a key
+    # fixture is by definition the largest declared instance that fits 120 s,
+    # so one that does not is a fixture whose key instance is the wrong one.
+    over = key_over_cap([("t::key", 130.0, frozenset({"key"}))], 120.0)
+    under = key_over_cap([("t::key", 110.0, frozenset({"key"}))], 120.0)
+
+    assert len(over) == 1
+    assert "the key instance is the largest that fits it" in over[0]
+    assert under == []
+    assert over_cap([("t::key", 130.0, frozenset({"key"}))], 10.0) == []
 
 
 @pytest.mark.simulated_truth
