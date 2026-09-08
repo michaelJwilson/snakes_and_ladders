@@ -56,8 +56,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-- Define an initialization abstraction and the initializers each supported
-  optimization needs (#251)
 - Fit HMM transition and emission matrices to nominal interval coverage
 - Refuse an unidentifiable fit rather than returning a meaningless interval
   (#122)

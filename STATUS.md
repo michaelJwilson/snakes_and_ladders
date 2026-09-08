@@ -905,6 +905,47 @@ change would need. So **no default moves**; k-means++ lands as a strategy a
 caller may choose, at a cost of one objective evaluation (271 us of seeding
 against 260 us per evaluation at 4000 points).
 
+**The tree's data-driven start, and what it buys at equal evaluations.** The
+HMM's spectral method is a method of moments with a consistency guarantee;
+Mossel and Roch carry the argument to a phylogeny, and what it becomes in
+practice is a distance per pair and a tree from the distances
+([#364](https://github.com/michaelJwilson/snakes_and_ladders/issues/364)).
+`likelihood.distance` inverts the Jukes–Cantor closed form and reads Steel's
+log-det distance, each with its delta-method variance, pinned to the
+transition probabilities they invert and to interval coverage of **0.940**
+and **0.9425** at a nominal 0.95 over 400 seeds; `search.neighbor_joining`
+returns every fixture and random trees at 20 and 50 taxa from their path
+lengths with every branch to `1e-12`, and on the six-taxon fixture recovers the
+topology on every replicate inside Atteson's radius of 0.030 — recovery
+**0.72, 0.96, 1.00 and 1.00** over 50 seeds at 100, 300, 1,500 and 10,000 sites, with
+**0, 0, 2 and 46** replicates inside the radius. `likelihood.hadamard` is the
+two-state Hadamard conjugation at up to 12 taxa, exact to `1e-12` against the
+pruning likelihood evaluated on every pattern, with the four-state alignment
+reduced to it at `2/3` of every branch; the Kimura three-parameter conjugation
+is not built. `FromDistances` and `FromHadamard` in `search.initialize` are the
+fourth and fifth `Initializer`, in `search/` and not `opt/` because
+`opt/` may import no application module, and each also names the topology a
+search begins from.
+
+Measured through `opt.budget.compare` over 20, 10 and 5 datasets at five, six and twenty taxa
+([`docs/experiments/005`](docs/experiments/005-tree-initializers-at-equal-evaluations.md)).
+On the branch-length fit every start reaches the one optimum; the
+neighbor-joining start does so in **22.3** evaluations against the
+objective's own **23.0** at five taxa, **23.5** against **24.4** at six and
+**25.2** against **34.0** at twenty, the Hadamard start **21.8** at five: no
+start separates on the fit below twenty taxa, because the stop is the gradient
+relative to the objective and the curvature pairs cost the same from anywhere
+in the basin. On the NNI search against the
+enumerated optimum the neighbor-joining start reaches it from **20 of 20**
+datasets at five taxa and **10 of 10** at six, scoring **4.0** and **6.0**
+candidates — one neighbourhood, the start already being the optimum —
+against the random start's 20 of 20 and 10 of 10 at **7.3** and **16.3**
+(McNemar p = 1.000, no discordant dataset); at twenty taxa, against the best
+found in 60 candidates, **5 of 5** against **0 of 5** (p = 0.062, the smallest
+five pairs can give), the random climb still 3,510 nats short on the first
+dataset. **The estimator buys the topology, not the fit.** No default changes: every number above was
+produced from the objective's own start and still is.
+
 **Tempering against restarts on the mixture, at equal evaluations.** The
 comparison [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284)
 and [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303)
