@@ -47,6 +47,7 @@ from pathlib import Path
 
 import numpy as np
 from snakes_and_ladders.fixtures import Scale
+from snakes_and_ladders.inputs import library_versions
 from snakes_and_ladders.learn.exact import exact_expected_return
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
@@ -56,7 +57,6 @@ from snakes_and_ladders.learn.potts import (
 )
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 from snakes_and_ladders.log import get_logger, phase
-from snakes_and_ladders.qa.inputs import library_versions
 from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.rl import FeatureSet, RewardModel, TopologyEnvironment
 from snakes_and_ladders.search.surrogate import maximized_target

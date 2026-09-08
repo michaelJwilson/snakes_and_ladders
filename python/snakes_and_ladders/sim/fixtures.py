@@ -30,10 +30,10 @@ a diff can tell which of the two moved. :func:`baseline` reads one and
 refuses a stale one, which is what stops a cached number outliving the code
 that produced it.
 
-The digest machinery is ``snakes_and_ladders.qa.inputs``, imported here for
-the same reason :mod:`snakes_and_ladders.numerics` is imported downward: it
-names no model and imports nothing from this package, so taking it does not
-invert the layering.
+The digest machinery is :mod:`snakes_and_ladders.inputs`, which is top level
+rather than inside ``qa`` for exactly this: it names no model and imports
+nothing from this package, so taking it here inverts no layering, where a
+digest living beside the figures would have made ``sim`` depend on ``qa``.
 """
 
 from __future__ import annotations
@@ -47,9 +47,9 @@ from typing import Any
 import yaml
 
 from snakes_and_ladders.fixtures import Scale
+from snakes_and_ladders.inputs import digest, library_versions, module_closure
 from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.opt.testfunctions import load_test_function_params
-from snakes_and_ladders.qa.inputs import digest, library_versions, module_closure
 from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
 from snakes_and_ladders.sim.hmm import load_hmm_params
 from snakes_and_ladders.sim.ldpc import load_ldpc_params
@@ -282,7 +282,7 @@ def declared(
 # --- baseline records (issue #401) ------------------------------------------
 
 #: The libraries whose version enters a baseline's digest. Narrower than
-#: ``qa.inputs.LIBRARIES``, which a *figure* is hashed against: a search rate
+#: ``inputs.LIBRARIES``, which a *figure* is hashed against: a search rate
 #: is a number, not a rendering, so the drawing libraries do not change it
 #: and a matplotlib release must not invalidate every record.
 BASELINE_LIBRARIES: tuple[str, ...] = ("numpy", "scipy", "torch")

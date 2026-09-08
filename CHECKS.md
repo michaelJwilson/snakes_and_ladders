@@ -30,7 +30,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_scale_tiers.py::test_at_fixture_hands_the_body_a_loaded_instance` | simulated_truth | Exercised end to end: the CI case runs on every pull request, and the other two are deselected there by their markers. |
 | `test_scale_tiers.py::test_the_budget_script_states_both_budgets` | simulated_truth | The numbers `DEV.md` documents and the numbers the script measures against have to be the same two, or the report is against a budget nothing else knows about. |
 
-## `tests/regression/learn/` (41)
+## `tests/regression/learn/` (42)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -58,6 +58,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_potts_lattice.py::test_the_enumerated_gradient_matches_central_differences_on_a_lattice` | oracle | The oracle that makes this an instance rather than a lookalike: `snakes_and_ladders.learn.exact` carries it unchanged from the chain. |
 | `test_learn_ppo.py::test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matched_budget` | oracle |  |
 | `test_learn_ppo.py::test_an_mlp_policy_trained_by_ppo_reaches_the_optimum` | simulated_truth | Measured 97.5% of the 81 starts with mean exact return 2.55, against the linear policy's 96.3% and 2.28: the deeper scorer can represent the worsening move a chain needs, which the two linear features cannot. |
+| `test_learn_ppo.py::test_ppo_raises_the_recorded_expected_return_and_stays_ahead_of_reinforce` | oracle | The fast sibling of the 1,920-episode comparison above. |
 | `test_learn_ppo_torchrl.py::test_the_advantages_are_torchrl_s_gae_at_gamma_one` | oracle |  |
 | `test_learn_ppo_torchrl.py::test_the_clipped_objective_and_its_gradient_are_torchrl_s` | oracle |  |
 | `test_learn_reinforce.py::test_the_enumerated_gradient_matches_finite_differences` | oracle | Autodiff against numerical differentiation of the same closed form. |
@@ -259,7 +260,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (103)
+## `tests/regression/search/` (105)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -347,6 +348,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_support.py::test_the_four_taxon_support_is_one_minus_the_frequency_of_the_two_conflicting_patterns` | oracle |  |
 | `test_search_support.py::test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_returns_it_always` | simulated_truth |  |
 | `test_search_surrogate.py::test_learned_surrogates_rank_held_out_neighbourhoods` | simulated_truth | Six alignments, every topology of each fitted (90 fits at 200 sites), split by alignment: three to train, two to validate, one held out. |
+| `test_search_surrogate.py::test_learned_surrogates_rank_a_held_out_alignment_from_the_recorded_fits` | simulated_truth | The per-pull-request sibling of the six-alignment run above (issue #401). |
 | `test_search_surrogate.py::test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments` | oracle | Against a full fit of every topology on three alignments: the plug-in bound and the parsimony bound each put the fitted best first, at a hundredth (2.4 ms against 250 ms) and a thousandth of the cost. |
 | `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
 | `test_search_tempered.py::test_the_tempered_weight_of_the_four_taxon_topologies_is_the_enumerated_one` | oracle |  |
@@ -363,6 +365,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_tree_features.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle |  |
 | `test_search_tree_features.py::test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget` | simulated_truth |  |
 | `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
+| `test_search_tree_features.py::test_both_feature_sets_train_away_from_the_recorded_untrained_rate` | simulated_truth | The fast sibling of the two release-tier measurements above. |
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
@@ -422,4 +425,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-379 checks.
+382 checks.

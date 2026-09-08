@@ -51,13 +51,14 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
   can reach and re-rendered when nothing about it changed. The instance is a
   fixture (`sim/CLAUDE.md`), the manifest names the file, and a test refuses a
   script that builds one for itself.
-- **A figure is rendered only when its inputs changed.** `inputs.py` digests
+- **A figure is rendered only when its inputs changed.**
+  `snakes_and_ladders.inputs` digests
   what a figure is a function of and a stamp beside the figure records it;
   a matching stamp is a render skipped, a cited figure over the render cap
   is refused unless waived with a ticket. `DEV.md` states the cap and the
   stamps' rules.
 - **A digest says a cached thing is stale, never that it is right.**
-  `inputs.py` is what stamps a figure, a notebook and a fixture's baseline
+  `snakes_and_ladders.inputs` stamps a figure, a notebook and a baseline
   numbers alike, and all it can refuse is a value produced by a tree that has
   since changed. Whether the value is correct is settled by recomputing it,
   which is the release gate's job in every one of the three cases; a pull
