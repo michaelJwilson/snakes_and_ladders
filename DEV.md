@@ -282,6 +282,9 @@ and each takes `workers=` explicitly.
 
 1. **Request:** Explicitly request permission before adding dependencies/tools.
 2. **Validate:** Must use OSI-approved licenses. Flag items with $<1000$ GitHub stars.
+   `docs/external_tools.md` surveys the external phylogenetic tools against both,
+   so a proposal to adopt one starts from the licence and the metric rather than
+   from a search.
 3. **Lock:** Run `uv lock` or update `Cargo.lock` and commit in the same PR.
 4. **Justify:** Explain the inclusion in the PR description.
 
