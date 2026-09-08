@@ -1,4 +1,4 @@
-\begin{thebibliography}{40}
+\begin{thebibliography}{42}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -69,6 +69,12 @@ Robert~G. Edwards and Alan~D. Sokal.
 Joseph Felsenstein.
 \newblock \emph{Inferring Phylogenies}.
 \newblock Sinauer Associates, Sunderland, Massachusetts, 2004.
+
+\bibitem[Fitch(1971)]{fitch1971}
+Walter~M. Fitch.
+\newblock Toward defining the course of evolution: Minimum change for a
+  specific tree topology.
+\newblock \emph{Systematic Zoology}, 20\penalty0 (4):\penalty0 406--416, 1971.
 
 \bibitem[Forney(2001)]{forney2001}
 G.~David Forney.
@@ -191,6 +197,12 @@ Sebastian Raschka.
 Kenneth~H. Rosen.
 \newblock \emph{Discrete Mathematics and Its Applications}.
 \newblock McGraw-Hill, 8th edition, 2019.
+
+\bibitem[Sankoff(1975)]{sankoff1975}
+David Sankoff.
+\newblock Minimal mutation trees of sequences.
+\newblock \emph{SIAM Journal on Applied Mathematics}, 28\penalty0 (1):\penalty0
+  35--42, 1975.
 
 \bibitem[Sutton and Barto(2018)]{suttonbarto2018}
 Richard~S. Sutton and Andrew~G. Barto.
