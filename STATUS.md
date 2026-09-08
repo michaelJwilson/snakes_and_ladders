@@ -1862,12 +1862,16 @@ in `14d32d6` from the academic-letter structure of
 eight-page specification, and has since grown back toward the shape §1.3 asks
 for section by section, as recorded below.
 
-Nineteen QA scripts render the figures, each committing a figure with a caption
+Twenty-one QA scripts render the figures, each committing a figure with a caption
 naming the seed, the sizes and the model that produced it, and `docs/CLAUDE.md`
 states the rules that keep a CI-regenerated artifact true
 ([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The two
-documents cite seventeen of them — the textbook the simulated tree, the
-Jukes–Cantor curves and the four problem-statement figures of #358, the paper
+documents cite nineteen of them — the textbook the simulated tree, the
+Jukes–Cantor curves, the four problem-statement figures of #358 and the two
+rendered instances of
+[#394](https://github.com/michaelJwilson/snakes_and_ladders/issues/394) (the
+Tanner graph of the enumerable (3, 6) code, 2.7 s, and the coupled model's
+planted and recovered labelling, 3.0 s), the paper
 the worked simulation, the backend agreement, both parameter-recovery figures,
 interval coverage, the model recovery, the trajectory and the topology search,
 the reward surface, the tree policy and the footprint table — and the

@@ -282,6 +282,21 @@ FIGURES: tuple[FigureSpec, ...] = (
         ("--params", f"{FIXTURES}/test_functions/ci.yaml"),
         seconds=6.6,
     ),
+    # The two rendered instances of issue #394, drawn beside the textbook's
+    # hand-drawn sketches of the same two problems. Both are a drawing of one
+    # fixture rather than a study over many, so both are cheap.
+    FigureSpec(
+        "tanner_graph",
+        "snakes_and_ladders.qa.tanner_graph",
+        ("--params", f"{FIXTURES}/ldpc/ci.yaml"),
+        seconds=2.7,
+    ),
+    FigureSpec(
+        "coupled_labelling",
+        "snakes_and_ladders.qa.coupled_labelling",
+        ("--params", f"{FIXTURES}/spatio_sequential/stress.yaml"),
+        seconds=3.0,
+    ),
 )
 
 # Any reference to `figures/<stem>` in the document, whichever way it is
