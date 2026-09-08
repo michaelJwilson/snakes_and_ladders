@@ -260,7 +260,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (105)
+## `tests/regression/search/` (107)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -306,6 +306,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_hard_fixture.py::test_the_generating_topology_is_the_enumerated_maximum` | oracle |  |
 | `test_search_hard_fixture.py::test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts` | simulated_truth |  |
 | `test_search_hard_fixture.py::test_spr_reaches_the_optimum_where_nni_does_not` | oracle |  |
+| `test_search_hard_glass.py::test_single_site_descent_does_not_solve_the_declared_glass` | oracle |  |
+| `test_search_hard_glass.py::test_the_ground_state_is_enumerated_and_the_planted_state_is_not_it` | oracle |  |
 | `test_search_infer.py::test_random_topology_reaches_every_topology_and_only_those` | oracle | The generator must be able to start anywhere, or a search seeded from it is quietly restricted to part of the space. |
 | `test_search_infer.py::test_a_fixed_topology_with_no_budget_is_exactly_the_continuous_fit` | oracle | The API's two cases are one code path, not two: with the topology given and no budget, `infer` must agree with calling the objective and the optimizer directly. |
 | `test_search_infer.py::test_score_topology_agrees_with_a_zero_budget_search` | oracle |  |
@@ -425,4 +427,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-382 checks.
+384 checks.
