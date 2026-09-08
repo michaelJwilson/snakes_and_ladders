@@ -20,11 +20,15 @@ from select_tests import (
     ALWAYS,
     BENCHMARKED,
     EVERYTHING,
+    GUARDS,
     MODULES,
     _benchmarks_for,
     dependents,
+    guards_for,
     select,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _modules_of(chosen: dict[str, list[str]]) -> set[str]:
@@ -44,15 +48,85 @@ def _modules_of(chosen: dict[str, list[str]]) -> set[str]:
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_a_documentation_only_change_selects_nothing() -> None:
+def test_a_documentation_only_change_selects_the_guards_and_measures_nothing() -> None:
     # The case this exists for: the suite would run the same code over the
-    # same tests as the last run on main, so coverage cannot have moved.
+    # same tests as the last run on main, so coverage cannot have moved and
+    # no module's tests run. What runs is the guards that read the changed
+    # prose -- a paragraph of the textbook can break a label (issue #372).
     chosen = select(
         ["docs/tex/paper.tex", "README.md", "changelog.d/161.changed.md", "DEV.md"]
     )
 
-    assert chosen["paths"] == []
     assert chosen["cov"] == []
+    assert chosen["paths"]
+    assert all(path.startswith("tests/regression/") for path in chosen["paths"])
+    assert not any(
+        path.endswith(("/opt", "/search", "/qa")) for path in chosen["paths"]
+    )
+    assert "tests/regression/test_document_labels.py" in chosen["paths"]
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_a_changelog_fragment_alone_selects_nothing() -> None:
+    # `towncrier check` in the lint job is its guard; the suite has none.
+    assert select(["changelog.d/372.changed.md"]) == {"paths": [], "cov": []}
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+@pytest.mark.parametrize(
+    ("path", "guard"),
+    [
+        ("docs/tex/textbook.tex", "tests/regression/test_document_labels.py"),
+        ("docs/experiments/006-x.md", "tests/regression/test_experiments.py"),
+        ("ROADMAP.md", "tests/regression/test_planning_documents_agree.py"),
+        ("STATUS.md", "tests/regression/test_planning_documents_agree.py"),
+        ("TICKETS.md", "tests/regression/test_planning_documents_agree.py"),
+        ("CLAUDE.md", "tests/regression/test_claude_md_pointers.py"),
+        (
+            "python/snakes_and_ladders/opt/CLAUDE.md",
+            "tests/regression/test_claude_md_pointers.py",
+        ),
+        ("docs/nb/hmm.ipynb", "tests/regression/test_check_notebooks.py"),
+        (
+            "docs/source/index.rst",
+            "tests/regression/docs/test_docs_index_covers_every_module.py",
+        ),
+        ("PROBLEMS.md", "tests/regression/test_problems_catalogue.py"),
+        ("DEV.md", "tests/regression/test_scale_tiers.py"),
+    ],
+)
+def test_each_class_of_prose_selects_its_guard(path: str, guard: str) -> None:
+    # One case per class: the guard that reads the file runs, no module's
+    # tests do, and nothing is measured.
+    chosen = select([path])
+
+    assert guard in chosen["paths"]
+    assert chosen["cov"] == []
+    assert _modules_of(chosen) == set()
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_every_guard_the_selection_names_exists() -> None:
+    # A guard renamed on one side only would select a path pytest cannot
+    # collect, which fails the run for the wrong reason.
+    for _, tests in GUARDS:
+        for test in tests:
+            assert (REPO_ROOT / test).is_file(), test
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_a_code_change_beside_prose_runs_both() -> None:
+    # The guards join the module's tests rather than replacing them.
+    chosen = select(
+        ["python/snakes_and_ladders/learn/reinforce.py", "docs/tex/textbook.tex"]
+    )
+
+    assert "learn" in _modules_of(chosen)
+    assert set(guards_for(["docs/tex/textbook.tex"])) <= set(chosen["paths"])
 
 
 @pytest.mark.critical

@@ -2,11 +2,11 @@
 
 The paper and the textbook (`tex/`), the API documentation (`source/`), and
 the worked notebooks (`nb/`). All are generated artifacts whose output is
-committed. CI regenerates the figures and the notebooks and compares them
-against what is committed; the PDFs it builds without comparing, since a
-rebuild ticket's pull request commits those and they lag their sources in
-between (`DEV.md`). An artifact held to the comparison has to come out the
-same on another machine, which constrains what it may say.
+committed. CI regenerates the figures and notebooks whose inputs changed (a
+stamp beside each says) and compares them against what is committed; the
+PDFs it builds without comparing, since a rebuild ticket's pull request
+commits those and they lag their sources between (`DEV.md`). An artifact held
+to the comparison must come out the same on another machine, which constrains what it may say.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file too — and every docstring, comment and commit message

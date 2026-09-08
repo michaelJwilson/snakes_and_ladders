@@ -25,6 +25,16 @@ source .venv/bin/activate
 After changing a dependency, run `uv lock` and commit the updated lockfile in
 the same PR.
 
+Sync once per worktree, then set `UV_NO_SYNC=1` in the shell: every `uv run`
+otherwise re-resolves the environment, and in a fresh worktree recompiles the
+Rust extension, one to two minutes of a core per command (issues #369, #372).
+The repository's scripts export it themselves.
+
+Before pushing, run `infra/validate.sh`: lint, types, the critical gate, the
+tests the diff selects, and whichever of the Sphinx, notebook and document
+checks the diff calls for, each timed, under the 300 s budget `DEV.md`
+states.
+
 The extras are `dev` (ruff, mypy, pre-commit, pip-audit), `test` (pytest and
 plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
 `docs/nb/`), and `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch

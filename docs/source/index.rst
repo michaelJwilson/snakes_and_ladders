@@ -306,6 +306,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.qa.build
    :members:
 
+.. automodule:: snakes_and_ladders.qa.inputs
+   :members:
+
 .. automodule:: snakes_and_ladders.qa.sim_tree
    :members:
 

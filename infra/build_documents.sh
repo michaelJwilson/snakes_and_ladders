@@ -18,9 +18,12 @@ cd "$repo_root"
 # One home for the constant: snakes_and_ladders.qa.build pins it for the figures, and this
 # reads it back so latexmk stamps the PDF with the same clock.
 #
-# `--no-sync`: the environment is synced once (`uv sync --locked`), and a
-# build must not re-resolve it. Without the flag every build rebuilt the Rust
-# extension, one to two minutes of a core per worktree (issue #369).
+# `UV_NO_SYNC`: the environment is synced once (`uv sync --locked`), and a
+# build must not re-resolve it. Without it every build rebuilt the Rust
+# extension, one to two minutes of a core per worktree (issue #369); the
+# variable rather than a flag per command so a script this one calls inherits
+# it (issue #372).
+export UV_NO_SYNC=1
 SOURCE_DATE_EPOCH="$(uv run --no-sync python -c \
   'from snakes_and_ladders.qa.build import SOURCE_DATE_EPOCH; print(SOURCE_DATE_EPOCH)')"
 export SOURCE_DATE_EPOCH
@@ -41,6 +44,9 @@ export FORCE_SOURCE_DATE=1
 # Every document is passed, and that is load-bearing rather than tidy: the
 # selection is the *union* of what they cite, so leaving one out would stop
 # regenerating its figures and fail nothing (issue #249).
+#
+# Of the cited figures, only those whose inputs changed since their stamp
+# are rendered (issue #372); a change confined to docs/tex/ renders nothing.
 uv run --no-sync python -m snakes_and_ladders.qa.build \
   --document docs/tex/paper.tex \
   --document docs/tex/textbook.tex \

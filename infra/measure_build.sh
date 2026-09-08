@@ -16,6 +16,7 @@ cd "$repo_root"
 # figure timed without it is not the figure the build produces.
 export SOURCE_DATE_EPOCH=1735689600
 export FORCE_SOURCE_DATE=1
+export UV_NO_SYNC=1
 
 figures_only=0
 [ "${1:-}" = "--figures-only" ] && figures_only=1
