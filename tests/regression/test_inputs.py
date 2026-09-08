@@ -13,14 +13,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from snakes_and_ladders.qa import build
-from snakes_and_ladders.qa.inputs import (
+from snakes_and_ladders.inputs import (
     digest,
     imported_names,
     module_closure,
     read_stamp,
     write_stamp,
 )
+from snakes_and_ladders.qa import build
 from snakes_and_ladders.qa.manifest import (
     CAP_WAIVERS,
     CITED_RENDER_CAP,

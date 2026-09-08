@@ -23,7 +23,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from snakes_and_ladders.qa.inputs import digest, library_versions, module_closure
+from snakes_and_ladders.inputs import digest, library_versions, module_closure
 
 FIXTURES = "tests/regression/fixtures"
 
@@ -281,6 +281,21 @@ FIGURES: tuple[FigureSpec, ...] = (
         "snakes_and_ladders.qa.optimizer_landscapes",
         ("--params", f"{FIXTURES}/test_functions/ci.yaml"),
         seconds=6.6,
+    ),
+    # The two rendered instances of issue #394, drawn beside the textbook's
+    # hand-drawn sketches of the same two problems. Both are a drawing of one
+    # fixture rather than a study over many, so both are cheap.
+    FigureSpec(
+        "tanner_graph",
+        "snakes_and_ladders.qa.tanner_graph",
+        ("--params", f"{FIXTURES}/ldpc/ci.yaml"),
+        seconds=2.7,
+    ),
+    FigureSpec(
+        "coupled_labelling",
+        "snakes_and_ladders.qa.coupled_labelling",
+        ("--params", f"{FIXTURES}/spatio_sequential/stress.yaml"),
+        seconds=3.0,
     ),
 )
 
