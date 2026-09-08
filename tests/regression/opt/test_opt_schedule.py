@@ -11,6 +11,7 @@ rather than asserted (issue #267).
 
 from __future__ import annotations
 
+import itertools
 import math
 
 import numpy as np
@@ -23,6 +24,7 @@ from snakes_and_ladders.opt.schedule import (
     Exponential,
     Linear,
     Schedule,
+    adapt_ladder,
     temperatures,
 )
 
@@ -215,3 +217,102 @@ def test_cosine_mirrors_torch_cosine_annealing_lr() -> None:
     assert_allclose(realized, expected, rtol=1e-10)
     assert realized[0] == start
     assert realized[-1] == end
+
+
+# --- a ladder from what it measures (#333) ----------------------------------
+
+
+def _ratio_acceptance(ladder: tuple[float, ...]) -> list[float]:
+    """A synthetic exchange acceptance: the ratio of neighbouring temperatures, inverted.
+
+    ``a = min(T) / max(T)`` per pair, so a factor of 2 between neighbours
+    accepts at 0.5 and the ladder the band asks for is geometric --- which
+    is what makes the outcome checkable in closed form.
+    """
+    return [min(a, b) / max(a, b) for a, b in itertools.pairwise(ladder)]
+
+
+BAND = (0.4, 0.7)
+
+
+@pytest.mark.oracle
+def test_a_gap_below_the_band_is_bisected_until_the_ladder_is_geometric() -> None:
+    # From two endpoints a factor of 16 apart, two rounds of geometric
+    # bisection reach ratios of 2, acceptance 0.5, and the third measurement
+    # finds every pair inside the band; the ladder is then the geometric one
+    # in closed form, and nothing was inserted past what the band asked for.
+    result = adapt_ladder(_ratio_acceptance, (8.0, 0.5), BAND, 10, 16)
+
+    assert result.within_band
+    assert result.rounds == 3
+    assert result.replicas_measured == 2 + 3 + 5
+    assert_allclose(result.temperatures, [8.0 / 2**k for k in range(5)], rtol=1e-12)
+    assert_allclose(result.acceptance, [0.5] * 4)
+
+
+@pytest.mark.mathematical
+def test_a_temperature_between_two_gaps_above_the_band_is_removed() -> None:
+    # A ladder twice as dense as the band needs loses every other interior
+    # temperature, never two adjacent ones in one round, until the pairs
+    # exchange inside the band.
+    dense = tuple(8.0 / math.sqrt(2) ** k for k in range(9))  # ratios of sqrt(2)
+
+    result = adapt_ladder(_ratio_acceptance, dense, BAND, 10, 16)
+
+    assert result.within_band
+    assert_allclose(result.temperatures, [8.0 / 2**k for k in range(5)], rtol=1e-12)
+
+
+@pytest.mark.mathematical
+def test_a_gap_above_the_band_beside_one_inside_it_moves_their_shared_temperature() -> (
+    None
+):
+    # Neither insertion nor removal applies: the high pair has no gap to
+    # bisect and its shared temperature is needed by the pair inside the
+    # band. Moving it halfway toward the far end widens the one and narrows
+    # the other, and both land inside; the ladder keeps its three rungs.
+    result = adapt_ladder(_ratio_acceptance, (4.0, 3.5, 1.5), BAND, 10, 16)
+
+    assert result.within_band
+    assert len(result.temperatures) == 3
+    assert result.temperatures[0] == 4.0
+    assert result.temperatures[2] == 1.5
+    assert result.temperatures[1] == pytest.approx(math.sqrt(3.5 * 1.5))
+
+
+@pytest.mark.edge_case
+def test_two_endpoints_above_the_band_are_reported_not_changed() -> None:
+    # The endpoints are the caller's, so a pair of them that exchanges above
+    # the band has nothing the warm-up may do; it says so in one round.
+    result = adapt_ladder(_ratio_acceptance, (1.0, 0.9), BAND, 10, 16)
+
+    assert not result.within_band
+    assert result.rounds == 1
+    assert result.temperatures == (1.0, 0.9)
+
+
+@pytest.mark.edge_case
+def test_the_replica_budget_caps_insertion_and_is_reported() -> None:
+    result = adapt_ladder(_ratio_acceptance, (8.0, 0.5), BAND, 10, 3)
+
+    assert not result.within_band
+    assert result.temperatures == (8.0, 2.0, 0.5)
+    assert result.rounds == 2
+
+
+@pytest.mark.edge_case
+def test_a_ladder_or_band_the_warm_up_cannot_use_is_refused() -> None:
+    with pytest.raises(ValueError, match="at least two temperatures"):
+        adapt_ladder(_ratio_acceptance, (1.0,), BAND, 1, 4)
+    with pytest.raises(ValueError, match="strictly monotone"):
+        adapt_ladder(_ratio_acceptance, (1.0, 3.0, 2.0), BAND, 1, 4)
+    with pytest.raises(ValueError, match="positive temperature"):
+        adapt_ladder(_ratio_acceptance, (1.0, 0.0), BAND, 1, 4)
+    with pytest.raises(ValueError, match="0 < low < high < 1"):
+        adapt_ladder(_ratio_acceptance, (2.0, 1.0), (0.7, 0.4), 1, 4)
+    with pytest.raises(ValueError, match="max_rounds"):
+        adapt_ladder(_ratio_acceptance, (2.0, 1.0), BAND, 0, 4)
+    with pytest.raises(ValueError, match="already has"):
+        adapt_ladder(_ratio_acceptance, (2.0, 1.0, 0.5), BAND, 1, 2)
+    with pytest.raises(ValueError, match="one per neighbouring pair"):
+        adapt_ladder(lambda _ladder: [0.5], (2.0, 1.0, 0.5), BAND, 1, 4)
