@@ -12,8 +12,12 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 from itertools import product
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:  # pragma: no cover
+    import rustworkx
 
 
 class BoundaryCondition(StrEnum):
@@ -138,6 +142,64 @@ class PottsGraph:
             couplings[cursor[second]] = coupling
             cursor[second] += 1
         return offsets, neighbours, couplings
+
+    def to_rustworkx(self) -> rustworkx.PyGraph:
+        """This graph as a ``rustworkx.PyGraph``: one node per site, the coupling as edge data.
+
+        A multigraph, so a doubled bond stays two edges and the round trip
+        through :meth:`from_rustworkx` is exact; node ``i`` carries ``i`` as
+        its payload and edge ``e`` carries ``coupling[e]``, in the graph's edge
+        order. ``shape`` and ``boundary`` are not carried, since a ``PyGraph``
+        has no slot for them and a lattice read back is a graph.
+
+        ``rustworkx`` is imported here rather than at module level because it
+        is the ``frameworks`` extra (issue #322), and the core install must
+        not need it to build a lattice.
+        """
+        import rustworkx
+
+        graph: rustworkx.PyGraph = rustworkx.PyGraph(multigraph=True)
+        graph.add_nodes_from(range(self.n_nodes))
+        graph.add_edges_from(
+            [
+                (first, second, coupling)
+                for (first, second), coupling in self.weighted_edges()
+            ]
+        )
+        return graph
+
+    @classmethod
+    def from_rustworkx(cls, graph: rustworkx.PyGraph) -> PottsGraph:
+        """A :class:`PottsGraph` from a ``PyGraph`` whose edge data are couplings.
+
+        Edges arrive in the ``PyGraph``'s edge-index order, so a graph built
+        by :meth:`to_rustworkx` reads back with its edges and couplings in the
+        order it was built.
+
+        Raises
+        ------
+        ValueError
+            If the node indices are not ``0`` to ``n - 1`` -- a ``PyGraph``
+            keeps holes where nodes were removed, and a site index with a hole
+            in it is not a site -- or an edge carries data that is not a
+            number.
+        """
+        indices = list(graph.node_indices())
+        if indices != list(range(len(indices))):
+            msg = (
+                f"node indices must be 0..{len(indices) - 1} without holes, "
+                f"got {indices[:8]}{'...' if len(indices) > 8 else ''}"
+            )
+            raise ValueError(msg)
+        edges: list[tuple[int, int]] = []
+        coupling: list[float] = []
+        for _, (first, second, data) in sorted(graph.edge_index_map().items()):
+            if isinstance(data, bool) or not isinstance(data, int | float):
+                msg = f"edge ({first}, {second}) carries {data!r}, not a coupling"
+                raise ValueError(msg)
+            edges.append((int(first), int(second)))
+            coupling.append(float(data))
+        return cls(n_nodes=len(indices), edges=tuple(edges), coupling=tuple(coupling))
 
     def is_open_chain(self) -> bool:
         """Whether this graph is a 1-D lattice with an open boundary.
