@@ -156,6 +156,11 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Impose a test grouping, so a class of check can be selected independently
   of the module a diff touched (#237)
+- CPU parallelism past the first three sites: the candidate fits of
+  `search.infer`, `learn.rollout` batches, tempering replicas (a `rayon`
+  loop is the alternative, a dependency decision), `qa.build` and
+  `check_notebooks` through the seam, and `pytest-xdist` against the test
+  budget (#344)
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#232)
 - Scope rustworkx for efficiency and scaling (#242)

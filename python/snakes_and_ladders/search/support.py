@@ -62,6 +62,7 @@ from snakes_and_ladders.enumeration import (
     refuse_oversized,
 )
 from snakes_and_ladders.numerics import logsumexp
+from snakes_and_ladders.parallel import Backend, map_tasks
 from snakes_and_ladders.search.infer import Model, MoveSet, infer, score_topology
 from snakes_and_ladders.search.statistics import integrated_autocorrelation_time
 from snakes_and_ladders.search.tempered import TemperedEnsemble
@@ -73,6 +74,15 @@ from snakes_and_ladders.search.topology import (
     spr_neighbours,
 )
 from snakes_and_ladders.sim.factor_graph import FactorGraph
+
+# How bootstrap replicates run beside each other: processes, because a
+# replicate is a whole search -- Python control flow around small torch fits.
+# The intra-op thread count is left at the process default in workers and
+# serial alike, so the two runs reduce in the same order on one machine. No
+# pool reached 2x at 4 workers at the mid-size tier; STATUS.md carries the
+# measurement (issue #344).
+_BOOTSTRAP_BACKEND: Backend = "processes"
+_BOOTSTRAP_INTRA_OP_THREADS: int | None = None
 
 
 class SupportKind(StrEnum):
@@ -395,6 +405,32 @@ def internal_splits(topology: Topology) -> frozenset[frozenset[str]]:
     return frozenset(split for split in splits if 2 <= len(split) <= n_leaves - 2)
 
 
+def _replicate(
+    task: tuple[Mapping[str, np.ndarray], int, Model, MoveSet, int],
+    rng: np.random.Generator,
+) -> frozenset[frozenset[str]]:
+    """One bootstrap replicate, importable so a process pool can run it.
+
+    Resamples the sites with replacement from ``rng`` and searches the
+    resample from a random start drawn from the same ``rng``, returning the
+    internal splits of the topology the search returns.
+    """
+    alignment, k, model, moves, max_evaluations = task
+    n_sites = next(iter(alignment.values())).shape[0]
+    columns = rng.integers(0, n_sites, size=n_sites)
+    resampled = {name: states[columns] for name, states in alignment.items()}
+    found = infer(
+        resampled,
+        k,
+        topology=None,
+        model=model,
+        moves=moves,
+        max_evaluations=max_evaluations,
+        rng=rng,
+    ).topology
+    return internal_splits(found)
+
+
 def bootstrap_support(
     topology: Topology,
     alignment: Mapping[str, np.ndarray],
@@ -402,41 +438,45 @@ def bootstrap_support(
     rng: np.random.Generator,
     n_replicates: int,
     *,
+    workers: int,
     moves: MoveSet = MoveSet.NNI,
     model: Model = Model.JC,
     max_evaluations: int = 200,
 ) -> dict[frozenset[str], float]:
     """Felsenstein's bootstrap: per internal split of ``topology``, the fraction of replicates whose search returns it.
 
-    Each replicate resamples the sites with replacement from ``rng``, then
-    searches from ``topology`` under ``moves`` within ``max_evaluations``
-    candidates, the search's own budget unit. The support of a split is a
-    frequency over replicates and nothing more; whether it tracks the
-    flat-prior weight is measured, not assumed.
+    Each replicate draws its own generator, spawned from ``rng`` in
+    replicate order (:func:`snakes_and_ladders.parallel.map_tasks`), resamples
+    the sites with replacement from it, then searches under ``moves`` within
+    ``max_evaluations`` candidates, the search's own budget unit. The support
+    of a split is a frequency over replicates and nothing more; whether it
+    tracks the flat-prior weight is measured, not assumed.
+
+    ``workers`` is how many replicates run at once on a process pool; ``1``
+    is the serial loop, and every count returns the same frequencies because
+    replicate ``i`` draws the same stream under each. Measured under 2x at 4
+    workers at the mid-size tier (``STATUS.md`` §0), so callers pass ``1``
+    until a measurement on their hardware says otherwise.
 
     Raises
     ------
     ValueError
-        If ``n_replicates`` is not positive.
+        If ``n_replicates`` or ``workers`` is not positive.
     """
     if n_replicates < 1:
         msg = f"a bootstrap needs at least one replicate, got {n_replicates}"
         raise ValueError(msg)
-    n_sites = next(iter(alignment.values())).shape[0]
     counts: dict[frozenset[str], int] = dict.fromkeys(internal_splits(topology), 0)
-    for _ in range(n_replicates):
-        columns = rng.integers(0, n_sites, size=n_sites)
-        resampled = {name: states[columns] for name, states in alignment.items()}
-        found = infer(
-            resampled,
-            k,
-            topology=None,
-            model=model,
-            moves=moves,
-            max_evaluations=max_evaluations,
-            rng=rng,
-        ).topology
-        for split in internal_splits(found):
+    found = map_tasks(
+        _replicate,
+        [(alignment, k, model, moves, max_evaluations)] * n_replicates,
+        workers=workers,
+        backend=_BOOTSTRAP_BACKEND,
+        intra_op_threads=_BOOTSTRAP_INTRA_OP_THREADS,
+        generator=rng,
+    )
+    for splits in found:
+        for split in splits:
             if split in counts:
                 counts[split] += 1
     return {split: count / n_replicates for split, count in counts.items()}
