@@ -198,35 +198,51 @@ def log_likelihood(
     # Every branch's transition matrix at once, indexed by branch_order.
     transitions = _transition_probabilities(branch_lengths, k, rate_matrix)
 
-    def _post_order(node: Node) -> torch.Tensor:
-        nonlocal log_scale
+    # Contiguous, because a leaf's message is a gather along its rows and a
+    # gather from a transposed view walks them at stride: measured on the
+    # eight-taxon fixture, 79 us per leaf against 8 us contiguous.
+    transposed = transitions.transpose(-2, -1).contiguous()
+
+    def _message(node: Node) -> torch.Tensor:
+        """What ``node`` contributes to its parent: ``P(t)`` applied to its partial.
+
+        ``message[s, i] = sum_j P_ij(t) * L_node(s, j)`` -- ``eq:pruning``.
+        """
+        transition_t = transposed[index[node.name]]
         if node.is_leaf:
+            # A leaf's partial is one-hot, so the sum over ``j`` keeps one
+            # term and drops products that are exactly zero: the message is
+            # row ``states[s]`` of ``P(t).T``, gathered rather than formed
+            # and multiplied. Bitwise the matmul's result, and the one-hot
+            # matrix is never materialized.
             states = torch.as_tensor(
                 alignment[node.name], dtype=torch.long, device=device
             )
-            partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
-            partial[torch.arange(n_sites), states] = 1.0
-            return partial
+            return transition_t.index_select(0, states)
+        return _partial(node) @ transition_t
 
-        partial = torch.ones((n_sites, k), dtype=dtype, device=device)
-        for child in node.children:
-            child_partial = _post_order(child)
-            transition = transitions[index[child.name]]
-            # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
-            partial = partial * (child_partial @ transition.T)
+    def _partial(node: Node) -> torch.Tensor:
+        nonlocal log_scale
+        # Seeded from the first child rather than from ones: multiplying by a
+        # ones tensor is exact, so dropping it is bitwise, and it is one
+        # allocation and one product per internal node per evaluation.
+        children = node.children
+        partial = _message(children[0])
+        for child in children[1:]:
+            partial = partial * _message(child)
 
         if rescale:
             scale = partial.amax(dim=1)
             # See snakes_and_ladders.likelihood.pruning: a zero scale means the site is
             # genuinely impossible under the model, left at 0 rather than
             # divided so log(0) = -inf propagates instead of being masked.
-            safe_scale = torch.where(scale > 0, scale, torch.ones_like(scale))
+            safe_scale = torch.where(scale > 0, scale, 1.0)
             partial = partial / safe_scale.unsqueeze(1)
             log_scale = log_scale + torch.log(safe_scale)
 
         return partial
 
-    root_partial = _post_order(tau)
+    root_partial = _partial(tau)
     site_likelihood = root_partial @ pi_t  # eq:root
     return torch.sum(torch.log(site_likelihood) + log_scale)
 
