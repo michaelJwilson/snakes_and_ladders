@@ -828,7 +828,7 @@ def parallel_tempering(
 
     for round_index in range(n_rounds):
         for replica in range(n_replicas):
-            positions[replica], _, was_accepted = _transition(
+            positions[replica], _, was_accepted, _ = _transition(
                 objective,
                 positions[replica],
                 temperatures[replica],
