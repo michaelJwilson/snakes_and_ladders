@@ -311,6 +311,7 @@ def test_a_multi_start_interval_belongs_beside_the_spread_that_qualifies_it() ->
     result = fit_from(
         objective,
         RandomRestart(3, scale=0.2, rng=np.random.default_rng(4)),
+        workers=1,
         include_intervals=True,
     )
 
