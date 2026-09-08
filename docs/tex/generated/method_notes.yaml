@@ -150,3 +150,54 @@
     tried on Rosenbrock; on Rastrigin the fraction of starts reaching the
     global minimum is asserted low, which bounds what one fit of a multimodal
     surface may claim.
+
+# Why a pairing the catalogue carries is not run on that problem's declared
+# instance (issue #382). `infra/problems_tables.py --check` lists the pairs and
+# `tests/regression/docs/test_problems_tables.py` holds this block to that
+# list, so a pairing loses its reason only by gaining a test.
+untested pairings:
+  hmm / samplers: >-
+    The block sampler is refereed against enumerated path posteriors, and the
+    declared instance is 15 positions by 600 sequences --- past that
+    enumeration. The tests build the chains they can enumerate.
+  ldpc / optimizers: >-
+    The decoder's claim is about the (3,6) ensemble, so the tests draw codes
+    at several block lengths and seeds rather than decoding one member. The
+    declared members are what the notebook decodes.
+  mixture / initializers: >-
+    Seeding is refereed against the exact optimal k-means cost over a range of
+    sample sizes; the declared instance is the one the seeding figure and
+    experiment 004 measure.
+  mixture / optimizers: >-
+    Expectation-maximization is pinned against the gradient fit on mixtures
+    built per test, where the two are given the same observations at several
+    sizes; the declared instance carries the comparison at the release budget.
+  potts_lattice / samplers: >-
+    The samplers are pinned to enumeration at sizes small enough for it and
+    measured for mixing at sizes past it, so each test states its own extent;
+    the declared 3x3 instance is the simulator's validation case.
+  potts_lattice / optimizers: >-
+    The ground-state solvers and the message passing are refereed on the
+    geometries each result needs --- a strip, a grid, a frustrated lattice ---
+    rather than on one declared extent.
+  potts_lattice / surrogates: >-
+    The relaxation is refereed against enumerated maximum cuts, which fixes
+    the size at what enumeration reaches rather than at the declared one.
+  test_functions / initializers: >-
+    Random restarts are measured on functions constructed at the dimensions
+    and starts each property needs, including ones chosen to be hard; the
+    declared instances are the two-dimensional ones the landscape figure draws.
+  test_functions / samplers: >-
+    Annealing is refereed against the closed-form minimizers on the surfaces
+    where a basin is unambiguous, which the tests construct.
+  test_functions / optimizers: >-
+    The fit is pinned to the analytic minimizers and to an independently
+    written L-BFGS, both on functions the tests construct.
+  tree_jc / initializers: >-
+    The distance and spectral starts are exercised on the search fixtures,
+    where a topology can be enumerated; these alignments referee the simulator
+    and the likelihood.
+  tree_jc / optimizers: >-
+    The model fit and the parsimony search run on the search fixtures for the
+    same reason; what these alignments referee is the simulator and the
+    evaluators.

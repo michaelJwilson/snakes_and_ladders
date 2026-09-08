@@ -45,6 +45,12 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
   the suite runs it.** The suite pins one thread per process; a render strips
   that pin, because the committed bytes were produced under the renderer's
   own threading and a reduction split differently can move a last bit.
+- **Every script takes its instance as a parameters file.** A figure whose
+  instance is declared in the module is a figure the manifest cannot name and
+  the input stamp cannot see, so it is rendered from something no other caller
+  can reach and re-rendered when nothing about it changed. The instance is a
+  fixture (`sim/CLAUDE.md`), the manifest names the file, and a test refuses a
+  script that builds one for itself.
 - **A figure is rendered only when its inputs changed.** `inputs.py` digests
   what a figure is a function of and a stamp beside the figure records it;
   a matching stamp is a render skipped, a cited figure over the render cap

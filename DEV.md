@@ -108,11 +108,19 @@ Branch protection names each required check by the job's `name:`, not by its id,
 * **No CI Profiling:** Do not rank performance on GitHub runners due to hardware variance. Benchmark on fixed hardware.
 * **Three tiers, two budgets.** A test's tier is decided by *what its size is for*, never by how slow it happens to be: a size chosen so an exact oracle stays available is a CI size even when it is slow, and a size chosen to show behaviour at scale is a stress size even when it is fast.
 
-  | tier | marker | budget | contents |
-  | --- | --- | --- | --- |
-  | CI | none (the default) | **5 minutes**, worst case | correctness at the smallest size that exercises the claim |
-  | developer / stress | `stress` | **10 minutes** | the same claims at a size the CI budget cannot hold |
-  | release | `release` | unbounded | long-running scientific validity, run by `infra/release.sh` |
+  | tier | marker | fixture | budget | contents |
+  | --- | --- | --- | --- | --- |
+  | CI | none (the default) | `<problem>/ci.yaml` | **5 minutes**, worst case | correctness at the smallest size that exercises the claim |
+  | developer / stress | `stress` | `<problem>/stress.yaml` | **10 minutes** | the same claims at a size the CI budget cannot hold |
+  | release | `release` | `<problem>/release.yaml` | unbounded | long-running scientific validity, run by `infra/release.sh` |
+
+  * **The tiers are the fixture files' names.** A supported problem declares
+    its instance per tier under `tests/regression/fixtures/<problem>/`, and
+    `snakes_and_ladders.sim.fixtures` loads it (`PROBLEMS.md`); a problem
+    declares a tier only where it has an instance for it. `tests/_scale.py`'s
+    `at_fixture` parameterizes one test over every tier a problem declares,
+    marking each case for its own tier, so a fixture added at a tier reaches
+    every such test without one of them being edited.
 
   * **Use `pytest -m "not release and not stress"` while developing.** That is the CI tier, and the gate a pull request is judged against.
   * **The 5 minutes is the worst case, not the average.** `infra/select_tests.py` usually selects less, but it answers "everything" for any change it cannot attribute to one module — a lockfile, a shared fixture, `infra/` — so the full CI tier is the number that has to fit.
