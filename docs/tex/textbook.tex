@@ -685,6 +685,101 @@ asserted to be the wrong tree while the likelihood optimum is the right one,
 because there the criterion's failure is the theorem of
 Section~\ref{sec:properties} and not a defect of the search.
 
+\subsection{The initializer: distances, neighbor joining and the Hadamard spectrum}
+\label{sec:spectral-start}
+Spectral learning of a hidden Markov model \citep{hsu2012} is a method of
+moments: the observable moments of short windows are inverted to the
+parameters, with a consistency guarantee and no likelihood surface to climb.
+\citet{mossel2006} carry the same argument to a phylogeny---the same
+inversion of pairwise moments learns a nonsingular tree---and what it becomes
+in practice is a distance per pair of taxa and a tree from the distances.
+The pair co-occurrence matrix $F$ of two taxa, $F_{ij}$ the fraction of sites
+at which the first is in state $i$ and the second in $j$, is the moment;
+under Equation~\ref{eq:jc} its off-diagonal mass is $\tfrac{k-1}{k}(1 -
+e^{-kt/(k-1)})$ for $t$ the path length between the two, which inverts in
+closed form on the fraction $p$ of differing sites,
+\begin{equation}
+  \hat d = -\frac{k-1}{k}\,\log\!\Big(1 - \frac{k}{k-1}\,p\Big),
+  \qquad
+  \operatorname{Var}(\hat d) = \frac{p\,(1-p)}{L\,(1 - \tfrac{k}{k-1}p)^2},
+  \label{eq:jc-distance}
+\end{equation}
+the variance by the delta method over the multinomial site counts. Under
+a general Markov process on the branches the log-det distance
+\citep{steel1994}
+\begin{equation}
+  \hat d = -\frac{1}{k}\Big[\log\det F
+    - \tfrac12\big(\log\det \Pi_x + \log\det \Pi_y\big)\Big],
+  \label{eq:logdet}
+\end{equation}
+$\Pi_x, \Pi_y$ the diagonal matrices of $F$'s row and column sums, is
+additive along the tree whatever the process; it equals $t$ when $\Q$ has
+trace $-k$, which Equation~\ref{eq:normalization} gives the Jukes--Cantor
+model, and $-\operatorname{tr}(\Q)\,t/k$ under a general reversible $\Q$,
+a constant that leaves the tree unchanged.
+
+Neighbor joining \citep{saitou1987} is the tree from the distances,
+Algorithm~\ref{alg:neighbor-joining}: $n-3$ agglomerations of the pair
+minimizing $(n-2)\,d_{ij} - r_i - r_j$, $r$ the row sums, each placing the
+new node by the three-point formula and reducing the matrix by one. On an
+additive matrix---one whose entries are the path lengths of some tree---it
+returns that tree with every branch length exact, and whether a matrix is
+additive is the four-point condition: of the three sums $d_{ij}+d_{kl}$,
+$d_{ik}+d_{jl}$, $d_{il}+d_{jk}$ over any four taxa, the two largest are
+equal \citep{felsenstein2004}. On an estimated matrix \citet{atteson1999}
+gives the guarantee: the topology is the true one whenever every entry's
+error is below half the shortest branch, and Equation~\ref{eq:jc-distance}'s
+variance is what lets a run state whether it sits inside that radius.
+
+\begin{algorithm}[htbp]
+\caption{Neighbor joining on a distance matrix $D$ over $n$ taxa}
+\label{alg:neighbor-joining}
+\begin{algorithmic}[1]
+\While{more than three nodes remain}
+  \State $r_i \gets \sum_j D_{ij}$ for every remaining node $i$
+  \State $(i, j) \gets \arg\min_{i \neq j}\, (n-2)\,D_{ij} - r_i - r_j$
+  \State join $i$ and $j$ at a new node $u$ with
+    $D_{iu} = \tfrac12 D_{ij} + \tfrac{r_i - r_j}{2(n-2)}$,\;
+    $D_{ju} = D_{ij} - D_{iu}$
+  \State $D_{ku} \gets \tfrac12 (D_{ik} + D_{jk} - D_{ij})$ for every other $k$;
+    remove $i$ and $j$; $n \gets n - 1$
+\EndWhile
+\State join the last three at the root by the three-point formula
+\end{algorithmic}
+\end{algorithm}
+
+For the symmetric two-state model the inversion is exact rather than
+pairwise. \citet{hendy1993} index the $2^{n-1}$ site patterns by the set of
+taxa differing from a reference taxon, and the same subsets index the splits
+of the leaf set; with $s$ the pattern frequencies and $q$ the branch length on
+each split, zero where the tree has no such branch, the two are conjugate
+under the Sylvester--Hadamard matrix $H$ of that order,
+\begin{equation}
+  s = H^{-1} \exp(H q), \qquad q = H^{-1} \log(H s),
+  \label{eq:hadamard}
+\end{equation}
+so the exact spectrum returns the tree's own lengths on its splits and zero
+elsewhere. The \emph{closest tree} takes the $n-3$ largest mutually
+compatible weights of an estimated $q$. A four-state Jukes--Cantor alignment
+reduces to the two-state model exactly by grouping the states in pairs, at
+$\tfrac{2}{3}$ of every branch length; the four-state conjugation proper is
+over the Klein four-group and is not implemented. Both estimators are a
+start and not an estimate: the fit and the search begin from them, and every
+reported number is the optimum they reach.
+
+\paragraph{What pins it.}
+Equation~\ref{eq:jc-distance} against Equation~\ref{eq:jc} at the exact pair
+frequencies; Equation~\ref{eq:logdet} against $t$ under Jukes--Cantor and
+against $-\operatorname{tr}(\Q)\,t/k$ under a general reversible $\Q$; the
+stated variance by the coverage of its interval over seeds. Neighbor joining
+against the path lengths of every fixture and of random trees at 20 and 50
+taxa, every branch to $10^{-12}$; on simulated alignments, recovery on every
+replicate inside Atteson's radius, with no exception. The Hadamard
+conjugation against the pruning likelihood of Section~\ref{sec:phylo}
+evaluated on every pattern, which shares nothing with the transform. And the
+starts against the objective's own, at equal evaluations, through the
+budgeted comparison of Section~\ref{sec:properties}.
+
 \section{Problem Statement: Potts Models in an External Field}
 \label{sec:potts}
 
@@ -1849,7 +1944,10 @@ Phylogenetics: \citet{felsenstein2004}, \citet{durbin1998},
 \citet{compeau2015}, \citet{pachter2005}, \citet{yang2014}; the papers
 \citet{whidden2015}, \citet{azouri2021}, \citet{zhang2018}, \citet{zhang2019},
 \citet{speyer2004}, \citet{altekar2004}, and the external baselines
-\citet{minh2020} and \citet{kozlov2019}. Information and coding:
+\citet{minh2020} and \citet{kozlov2019}; distance and spectral methods:
+\citet{saitou1987}, \citet{atteson1999}, \citet{steel1994},
+\citet{hendy1993}, \citet{mossel2006}, with \citet{hsu2012} as the bridge.
+Information and coding:
 \citet{blahut2003}, \citet{richardson2008}, with \citet{nielsen2010} as
 background only; the papers
 \citet{gallager1962} and \citet{nachmani2018}.
