@@ -15,22 +15,20 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
-- An HMM with Gaussian emissions, and the unbounded likelihood that comes
-  with it (#228)
-- An HMM with negative binomial emissions, the family whose M-step has no
-  closed form (#229)
 - Support the different lattice types (#231)
 - A turbo code problem, fixture and belief-propagation example (#233)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code rather than the zero word (#340)
-- Define one fixture API across trees, lattices and chains (#132)
+- Bicycle codes and quantum LDPC codes as a second code family (#362)
 - Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of keeping
   its own copy of the exact open-chain recursion (#186)
 - Additional evolutionary models (#107)
-- Rate variation across sites, in the simulator and every backend
+- Rate variation across sites, in the simulator and every backend (#323)
+- Emission-family extensions: multivariate and tied Gaussian, zero-inflated
+  counts, the Dirichlet-multinomial (#330)
 - Simulate at the declared scale — `n` to 1000, `L` to 11000 — and report the
-  memory footprint against the 16 GB / 24 GB requirement
+  memory footprint of the simulator alone beside the evaluator's
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
@@ -42,28 +40,29 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   that decides whether a Rust kernel over the same offsets follows (#340)
 - Coloured iterated conditional modes on CUDA and Metal through torch,
   measured against the 10× rule before any Triton kernel (#227)
-- Expose forward-backward as an evaluator, not as Baum-Welch's internals (#173)
-- One energy/likelihood evaluator API across the three problem classes,
+- One energy/likelihood evaluator API across the problem classes,
   asserted by an import-graph test (#238)
-- CUDA dispatch for the pruning recursion, pinned against the NumPy oracle
-- Metal/MPS dispatch, and the `float32` tolerance it forces
+- Device dispatch for the pruning backend, CUDA and Metal/MPS, held to the
+  cross-device tolerance and its `float32` bound (#280)
 - Evaluate a Triton or JAX kernel for the site-parallel recursion against the
   10× rule before porting
 - Branch-and-bound over topologies with the certified bounds of #308, and a
   bound for a non-Jukes–Cantor model, whose transition matrix is not affine
-  in one variable per branch
+  in one variable per branch (#329)
+- Derive pruning, forward–backward and sum-product in the textbook appendix,
+  cited from the code (#326)
 - Put `stubtest` in CI — the type stub has already drifted (#37)
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-- Define an initialization abstraction and the initializers each supported
-  optimization needs (#251)
 - Fit HMM transition and emission matrices to nominal interval coverage
 - Refuse an unidentifiable fit rather than returning a meaningless interval
   (#122)
 - Realize the tolerance helper rather than assume it is applied by hand (#91)
 - Profile a gradient fit in memory and time across the declared `n × L × k`
   range (#232)
+- A spectral initialization for trees, on the footing the HMM's moment
+  estimators give (#364)
 - Trajectory-length adaptation (NUTS), only if a posterior the #268
   comparison reaches is one the fixed trajectory length of #333 samples badly
 
@@ -74,12 +73,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - MAP decoding of an LDPC code as energy minimization: sum-product against
   the Gibbs sampler, the annealer and single-site descent at matched
   evaluations on enumerable codes, the ML codeword as referee (#340)
-- Port the single-site Gibbs sweep to Rust, beside the oracle rather than
-  replacing it (#246)
-- Viterbi decoding, pinned against brute-force path enumeration and against
-  the fixture where it disagrees with posterior decoding (#175, #209)
-- Posterior decoding, reported as the per-site marginal maximum it is and
-  never as the most likely path
 - Iterated conditional modes over HMM state paths (#176)
 - A discrete instance no baseline solves within budget — still open. #177's
   tree is solved by random-restart greedy at 1.000 (#198), and #209 measured
@@ -88,34 +81,40 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Make the rooted/unrooted distinction explicit and give topologies a canonical
   key (#114)
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
-  it costs per step
-- Temperature schedules, annealing and parallel tempering, and the
-  likelihood-versus-temperature curves that judge exploration (#267)
+  it costs per step (#329)
 - Establish the external reference tools to benchmark against, and how they are
   installed (#126)
-- A classical baseline suite the three applications are scored against under
-  one budget — large parsimony under NNI and SPR is the tree baseline that
-  exists; the HMM and Potts baselines and the shared budget remain
-- Uncertainty for a discrete search result, where a Hessian is not defined:
-  a margin, a Boltzmann weight over the enumerated neighbourhood, or bootstrap
-  support, pinned against enumeration where it fits (#270)
+- A classical baseline suite the applications are scored against under one
+  budget — large parsimony under NNI and SPR is the tree baseline that exists
+  and `opt.budget.compare` the budget; the HMM and Potts baseline suites remain
+- One Potts model in code: one adjacency, one energy, one heat-bath sweep
+  (#277)
+- Max-Cut: the gradient norm at termination, and a certified SDP upper bound
+  behind an approved dependency (#334)
+- One annealing driver and one exchange step behind the eight annealing and
+  tempering entry points, and one weighted enumeration behind the eight
+  enumerators, each merge pinned to the oracle `STATUS.md`'s consistency
+  audit names
+- Transcribe the seven- and eight-taxon calibration table of #331 from a
+  release-gate run into `STATUS.md`, where #350 left a placeholder
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-- A feature set for the tree environment, with the unidentifiable-constant
-  invariance pinned
-- A tree fixture hard enough to separate a policy from greedy (#177)
-- The factor-graph environment over #296, the #308 surrogate as a tree reward
-  model, and the budget-matched harness of #281 for the RL comparisons
-  (#313, what `dev` could not yet carry)
+- A feature set for the tree environment beyond the improvement a move buys,
+  with the unidentifiable-constant invariance pinned, and the comparison it
+  changes (#328)
+- The factor-graph environment over the Gibbs moves of #309, and the
+  surrogates of #308 as a tree reward model — the parts of #313 that waited
+  on #296 and #308 and have no ticket since it closed
 - Truth as a terminal penalty, never a training signal
-- Train a phylogenetic policy and report its learning curve against the
-  enumerated expected return (#178)
+- A move set for the code, so decoding is an environment like the other
+  three (#340)
 
 ## Milestone 2.2 — Curriculum Learning
 
-- Weight transfer across problem sizes, and the schedule from `n = 10` to
-  `n = 1000`
+- Weight transfer across problem sizes for a policy, and the schedule from
+  `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
+  and from 3×3 to 4×6 lattices, and a policy does not yet
 - Batched episode rollout, so a budget at `n = 200` is affordable
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed
@@ -124,17 +123,22 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Ingest empirical alignments, with their provenance recorded
 - Benchmark harness: budget-matched runs against IQ-TREE 2 and RAxML-NG on
-  shared seeds
+  shared seeds, once #126 installs them
 - Report RF and ΔlnL against known truth up to `n = 1000`
 - A fixed-hardware benchmark runner, since CI hardware cannot rank performance
+- GPU scaling for the site-parallel recursion, once a device exists to
+  measure on (#280)
 
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
 - Create a ledger of benchmarked and validated runs with Aim (#75)
 - Reproduce a run from a single manifest, and assert it
-- Budget-matched ablation leaderboard across shared seeds
+- Budget-matched ablation leaderboard across shared seeds — the experiment
+  ledger's index is the leaderboard; the matrix of problems × tiers × method
+  families is four cells filled
 - Paired significance test required before a variant is adopted as
-  state-of-the-art
+  state-of-the-art — `opt.budget.mcnemar` exists; the adoption rule is not
+  yet a gate
 
 ## Stage 3 — Research Extensions
 
@@ -145,17 +149,12 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   the Potts lattice and to graphs with cycles — #211 established the identity
   holds for any objective with one factor per site per term, and measured the
   method only on chains
-- Neural surrogate for the likelihood and energy, with exact re-scoring of the
-  top-`K` candidates
 - Learned compound moves (#147)
 - Transformer policy over canonical encodings
-- Stochastic escape: Metropolis-Hastings worsening steps and ratchet-style
-  reweighting (#194)
+- References and blue-sky directions (#360)
 
 ## Cross-Cutting Infrastructure
 
-- Impose a test grouping, so a class of check can be selected independently
-  of the module a diff touched (#237)
 - CPU parallelism past the first three sites: the candidate fits of
   `search.infer`, `learn.rollout` batches, tempering replicas (a `rayon`
   loop is the alternative, a dependency decision), `qa.build` and
@@ -163,37 +162,38 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   budget (#344)
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#232)
-- Scope rustworkx for efficiency and scaling (#242)
 - The targets the runtime-optimization audit left unmet: the tree schedule
   within 2x of the forward recursion on a chain, the reassociated
   transfer-matrix product in the Potts chain objective, `maxflow_rust` as
   alpha expansion's inner solver, and a compiled sweep for the factor-graph
   Gibbs sampler (#341)
-
 - Adopt `rustworkx` on a hot path where a measurement says so —
   `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
-  of the bound — moving the replaced implementation to `sandbox/`; #242 is
-  closed into the frameworks ticket (#322)
+  of the bound — moving the replaced implementation to `sandbox/`
 - TorchRL `TensorDict` environments and a `SyncDataCollector` over the
   Gymnasium adapter for Milestone 2.2's batched rollout, adopted only if the
   collector beats `learn.rollout` on the 8 → 20 taxa scaling with `float64`
-  forced throughout (#322)
+  forced throughout
 - PyTorch Geometric `Batch.from_data_list` for surrogate training at 20+
   taxa, and `HeteroData` over `sim.factor_graph` for a learned message
-  passing beside the exact one, gated on the training-time benchmark (#322)
-- Vet `ROADMAP.md`, `STATUS.md` and `TICKETS.md` for incompleteness,
-  inconsistency and error (#244)
-- Separate the technical document into infrastructure, textbook and paper
-  (#249)
-- Release 0.4.0 (#236)
-- Fix the root-detection assertion blocking `infra/release.sh`'s full-suite
-  check (#168)
+  passing beside the exact one, gated on the training-time benchmark
+- RL frameworks for validation and extension (#315)
+- Audit `ROADMAP.md`, `STATUS.md` and `TICKETS.md` (#283) — done at 0.4.0 by
+  #358, to be closed with #275 and #276 once it merges
+- Release 0.4.0 (#358); #236 is the earlier filing of the same release
+- Release-readiness check: the changelog section, the `Cargo.toml` version
+  and the tags agree (#327)
+- Run the required checks on every pull request, not only those against
+  `main` (#273)
+- Labels say what the pull requests say (#279)
 - Re-key the milestone references in code and `docs/tex/` to the roadmap's
-  `N.M` numbering
+  `N.M` numbering (#324)
+- Cite or retire the two QA figures the documents still do not cite,
+  `sim_problem_sizes` and `topology_accuracy` (#325)
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
-- Make the public-facing reference to the work consistent (#250)
-- Re-include the eleven committed QA figures the technical document no longer
-  cites, so CI rebuilds nothing the document does not rest on
-- The textbook carries every equation and algorithm the code cites, and a
-  guard resolves each citation (#274)
+- Abbreviate the package as `sal` (#301)
+- Test hygiene: remove the QA tests that duplicate their figures'
+  computations, and give the entry points one shape (#338)
+- Adopt `qa.layout` in the surrogate joint-distribution and coupled-model
+  field figures (#339)
