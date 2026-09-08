@@ -547,7 +547,10 @@ def _method_table(cells: list[tuple[str, str, str, str, str]]) -> list[str]:
         lines += [
             r"\begin{table}[htbp]",
             r"  \centering",
-            r"  \footnotesize",
+            # \scriptsize, not \footnotesize: the optimizers part carries a
+            # sentence for every problem and overflows a page at the larger
+            # size, and LaTeX reports that as a warning rather than an error.
+            r"  \scriptsize",
             r"  \begin{tabular}{@{}p{0.21\textwidth}llp{0.44\textwidth}@{}}",
             r"    \toprule",
             r"    Problem & Tier & Referee & When it wins, and when it does not \\",

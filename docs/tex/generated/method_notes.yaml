@@ -44,9 +44,8 @@
 "Phylogenetic tree, parsimony":
   optimizers: >-
     One post-order pass per candidate rather than one optimization, so an
-    equal budget of candidates reaches a neighbourhood an order of magnitude
-    larger; it climbs the wrong criterion in the Felsenstein zone, where the
-    error rate rises with the alignment.
+    equal budget reaches a neighbourhood an order of magnitude larger; it
+    climbs the wrong criterion in the Felsenstein zone.
 
 "Potts chain in a field":
   optimizers: >-
@@ -101,9 +100,9 @@
   optimizers: >-
     Expectation--maximization re-estimates in closed form for every family
     whose M step has one and wins on cost there; the gradient fit is the only
-    route where it does not, and the two are required to reach the same
-    optimum. Coverage at the fit reaches nominal from two standard deviations
-    of separation upward (experiment 002).
+    route where it does not, and the two must reach the same optimum. Interval
+    coverage is nominal from two standard deviations of separation upward
+    (experiment 002).
   surrogates: >-
     The relaxation of the state path is exact at every corner and gives a
     gradient over paths; it says nothing at a length past which the path
@@ -131,11 +130,10 @@
     reaches a better likelihood optimum than a uniform one is not pinned by
     any test of either significant kind, so the pairing reads untested.
   optimizers: >-
-    Restarts of the fit reach the best-known optimum from 7 of 40 starts
-    against tempering's 4 and annealing's 1 at 3,000 evaluations
-    (experiment 004); expectation--maximization approaches a fixed point
-    linearly where components overlap, so an iterate stopped at a count needs
-    the polish an equal budget charges to every method.
+    Restarts reach the best-known optimum from 7 of 40 starts against
+    tempering's 4 and annealing's 1 at 3,000 evaluations (experiment 004);
+    where components overlap the fixed point is approached linearly, so an
+    iterate stopped at a count needs a polish.
 
 "Continuous test functions":
   initializers: >-
@@ -148,7 +146,7 @@
     Rastrigin it is the only method that crosses the ripple, and which wins is
     a property of the surface.
   optimizers: >-
-    The quasi-Newton fit reaches the analytic minimizer to a stated tolerance
-    in every dimension tried on Rosenbrock; on Rastrigin the fraction of
-    starts reaching the global minimum is asserted low, which is the bound on
-    what one fit of any multimodal surface may claim.
+    The quasi-Newton fit reaches the analytic minimizer in every dimension
+    tried on Rosenbrock; on Rastrigin the fraction of starts reaching the
+    global minimum is asserted low, which bounds what one fit of a multimodal
+    surface may claim.

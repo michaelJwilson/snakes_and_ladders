@@ -51,7 +51,7 @@
 
 \begin{table}[htbp]
   \centering
-  \footnotesize
+  \scriptsize
   \begin{tabular}{@{}p{0.21\textwidth}llp{0.44\textwidth}@{}}
     \toprule
     Problem & Tier & Referee & When it wins, and when it does not \\
@@ -75,7 +75,7 @@
 
 \begin{table}[htbp]
   \centering
-  \footnotesize
+  \scriptsize
   \begin{tabular}{@{}p{0.21\textwidth}llp{0.44\textwidth}@{}}
     \toprule
     Problem & Tier & Referee & When it wins, and when it does not \\
@@ -99,22 +99,22 @@
 
 \begin{table}[htbp]
   \centering
-  \footnotesize
+  \scriptsize
   \begin{tabular}{@{}p{0.21\textwidth}llp{0.44\textwidth}@{}}
     \toprule
     Problem & Tier & Referee & When it wins, and when it does not \\
     \midrule
     Phylogenetic tree, Jukes--Cantor & ci & oracle & Hill climbing reaches the enumerated optimum from 12 of 12 starts at six taxa; the learned policy ties it over one feature and wins over seven (experiment 005), while random restarts reach 1.000 at the same budget. \\
     Phylogenetic tree, general time-reversible & ci & oracle & The same quasi-Newton fit over a longer parameter vector, refereed by the same brute-force marginalization; it recovers the rate matrix where the alignment identifies it and refuses an interval where it does not. \\
-    Phylogenetic tree, parsimony & ci & oracle & One post-order pass per candidate rather than one optimization, so an equal budget of candidates reaches a neighbourhood an order of magnitude larger; it climbs the wrong criterion in the Felsenstein zone, where the error rate rises with the alignment. \\
+    Phylogenetic tree, parsimony & ci & oracle & One post-order pass per candidate rather than one optimization, so an equal budget reaches a neighbourhood an order of magnitude larger; it climbs the wrong criterion in the Felsenstein zone. \\
     Potts chain in a field & ci & oracle & The transfer matrix makes the chain's normalizer exact at every length, so the gradient fit is refereed wherever it runs; nothing here separates it from enumeration, which is also exact at these sizes. \\
     Potts lattice and Markov random field & ci & oracle & The minimum cut is exact and polynomial where the couplings are submodular; above two states only alpha expansion applies, with a factor-of-two bound rather than an optimum, and Max-Cut is bounded and never solved. \\
     Frustrated Potts: triangular antiferromagnet, planted spin glass & -- & -- & No optimizer of its own. The exact cut refuses a non-submodular energy, so these instances are where descent, annealing and tempering are separated at an equal budget of sweeps and nothing is solved exactly. \\
     Low-density parity-check code, Gallager (3,6) & ci & oracle & Sum-product decodes to the bitwise posterior and min-sum to the most probable codeword; both are exact on a cycle-free code and the Bethe approximation on a loopy one, where min-sum is the cheaper and the weaker and the gap is measured. \\
-    Hidden Markov model, six emission families & ci & oracle & Expectation--maximization re-estimates in closed form for every family whose M step has one and wins on cost there; the gradient fit is the only route where it does not, and the two are required to reach the same optimum. Coverage at the fit reaches nominal from two standard deviations of separation upward (experiment 002). \\
+    Hidden Markov model, six emission families & ci & oracle & Expectation--maximization re-estimates in closed form for every family whose M step has one and wins on cost there; the gradient fit is the only route where it does not, and the two must reach the same optimum. Interval coverage is nominal from two standard deviations of separation upward (experiment 002). \\
     Coupled spatio-sequential model & ci & oracle & Block-coordinate ascent does not decrease the joint at any block, for every label solver; iterated conditional modes freezes into disjoint clusters where the cluster move does not, and which wins is measured at an equal budget rather than assumed. \\
-    Gaussian mixture & ci & oracle & Restarts of the fit reach the best-known optimum from 7 of 40 starts against tempering's 4 and annealing's 1 at 3,000 evaluations (experiment 004); expectation--maximization approaches a fixed point linearly where components overlap, so an iterate stopped at a count needs the polish an equal budget charges to every method. \\
-    Continuous test functions & ci & oracle & The quasi-Newton fit reaches the analytic minimizer to a stated tolerance in every dimension tried on Rosenbrock; on Rastrigin the fraction of starts reaching the global minimum is asserted low, which is the bound on what one fit of any multimodal surface may claim. \\
+    Gaussian mixture & ci & oracle & Restarts reach the best-known optimum from 7 of 40 starts against tempering's 4 and annealing's 1 at 3,000 evaluations (experiment 004); where components overlap the fixed point is approached linearly, so an iterate stopped at a count needs a polish. \\
+    Continuous test functions & ci & oracle & The quasi-Newton fit reaches the analytic minimizer in every dimension tried on Rosenbrock; on Rastrigin the fraction of starts reaching the global minimum is asserted low, which bounds what one fit of a multimodal surface may claim. \\
     \bottomrule
   \end{tabular}
   \caption{The optimizers each problem carries: the size tier at which the pairing is validated, the kind of referee that validates it, and what the pairing is worth. Tier and referee are read from the suite, as in the two tables above --- \emph{oracle} a test pinned to an independent exact answer, truth$^{\dagger}$ a test pinned to the simulated truth only, \emph{untested} a family the problem carries that no test of either kind names, and -- a family it carries no method of. The last column is the one hand-written part of these tables, and names the experiment that measured the comparison where one did.}
@@ -123,7 +123,7 @@
 
 \begin{table}[htbp]
   \centering
-  \footnotesize
+  \scriptsize
   \begin{tabular}{@{}p{0.21\textwidth}llp{0.44\textwidth}@{}}
     \toprule
     Problem & Tier & Referee & When it wins, and when it does not \\
