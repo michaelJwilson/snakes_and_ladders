@@ -114,7 +114,7 @@ def test_main_writes_a_figure_and_caption(
     # The sweep is cut down deliberately (issue #154). At its committed size
     # this test ran 6 site counts x 8 replicates = 48 searches, 27.7 s, 23% of
     # the whole per-PR suite, to assert four things about a caption. The
-    # figure at full size is rendered once, by the technical-document build,
+    # figure at full size is rendered once, by the document build,
     # and the scientific claim it makes is the release-gated test below. What
     # is left here is what only this test checks: that the pipeline runs end
     # to end and the caption reports the sweep it was handed.

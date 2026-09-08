@@ -1,7 +1,7 @@
 """Regression test for snakes_and_ladders.qa.opt_coverage.
 
 The figure's claim is that the intervals converge on their nominal rate as
-the sample grows. Refitting at every size is what the technical-document
+the sample grows. Refitting at every size is what the document
 build is for, not what a per-PR test should pay for, so this pins the two
 things that can be wrong cheaply: the counting, at one small size, and the
 caption, which must report the numbers it was handed rather than numbers
@@ -109,7 +109,7 @@ def test_main_writes_a_figure_and_caption(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The real sweep refits both models dozens of times and belongs to the
-    # technical-document build, not to a per-PR test; the sizes are patched
+    # document build, not to a per-PR test; the sizes are patched
     # down so the wiring is still exercised.
     monkeypatch.setattr(opt_coverage, "POTTS_SIZES", ((50, 2), (100, 2)))
     monkeypatch.setattr(opt_coverage, "HMM_SIZES", ((600, 1), (900, 1)))

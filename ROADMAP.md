@@ -59,7 +59,7 @@ authoritative — where it and any other document disagree, it wins.
 - **Gate:** ten required checks, enumerated in `DEV.md`, which is where a
   contributor works through them and therefore where they are stated in full.
   They span a title naming the base branch, lint and types in both languages,
-  both test suites, the documentation and technical-document builds, the
+  both test suites, the documentation and document builds, the
   notebook re-execution, and the dependency audits. Documentation Sync is part of the diff, not a follow-up:
   a change that makes `README.md`, `DEV.md`, `INSTALL.md`, a `CLAUDE.md`,
   `STATUS.md`, `ROADMAP.md` or `docs/tex/` untrue corrects it in the same pull
@@ -89,7 +89,7 @@ authoritative — where it and any other document disagree, it wins.
 
 ### 0.5 The Record
 
-- **Deliverable:** the technical document (`docs/tex/`, contents specified in
+- **Deliverable:** the paper and the textbook (`docs/tex/`, contents specified in
   §1.3) is the record a validated claim is written into. Every figure and
   table in it is rendered by `snakes_and_ladders.qa` from the code it reports on, carries a
   caption naming the seed, the sizes and the model that produced it, and is
@@ -153,7 +153,7 @@ bounded likelihoods/energies.
     required for recursive stability (e.g. partition functions, pruning),
     falling back to `float32` for Metal compatibility.
 
-### 1.3 The Technical Document
+### 1.3 The Documents
 
 The `docs/tex/` directory serves as the authoritative, version-controlled
 mathematical record of the project. The application logic is strictly bound to

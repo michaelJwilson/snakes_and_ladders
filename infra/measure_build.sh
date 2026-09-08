@@ -12,7 +12,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# Matches build_technical_doc.sh: matplotlib embeds SOURCE_DATE_EPOCH, so a
+# Matches build_documents.sh: matplotlib embeds SOURCE_DATE_EPOCH, so a
 # figure timed without it is not the figure the build produces.
 export SOURCE_DATE_EPOCH=1735689600
 export FORCE_SOURCE_DATE=1

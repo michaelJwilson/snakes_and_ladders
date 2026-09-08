@@ -1,7 +1,7 @@
 """Regression tests for the two search QA figures.
 
 The sweeps behind these figures are 105 candidate fits apiece, which belongs
-in the technical-document build rather than the per-PR suite. What runs per
+in the document build rather than the per-PR suite. What runs per
 PR is what can be wrong cheaply: the caption, which must report the numbers
 it was handed rather than numbers somebody typed, and the shape of what the
 generating functions return. The end-to-end renders are release-gated.

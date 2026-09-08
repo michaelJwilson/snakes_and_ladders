@@ -7,7 +7,7 @@ import no application module, so the direction of the dependency has to run
 application to infrastructure. An agent developed inside ``learn/`` would be
 an agent shaped by trees, which is the thing that module exists to prevent.
 
-The MDP is the one the technical document specifies. A **state** is a
+The MDP is the one the paper specifies. A **state** is a
 topology; an **action** is a neighbour of it under NNI or SPR; the **reward**
 is the improvement in log-likelihood; an **episode** ends on a step budget or
 at a topology no move improves.

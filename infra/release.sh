@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The local release gate: every check CI runs per PR, plus the
 # release-gated scientific tests CI skips (DEV.md's "Release-Gated" budget)
-# and the technical-document build. Run before tagging a release; CI's
+# and the document build. Run before tagging a release; CI's
 # per-PR jobs are a subset of this, not a replacement (rust-tests' `cargo
 # bench` and the `build`/`audit` jobs are covered by the equivalent checks
 # below or are PR-only smoke tests, so are not repeated here).
@@ -37,7 +37,7 @@ run_check "cargo test" cargo test --locked
 # the full suite -- see this PR's DEV.md fix.
 run_check "pytest (full suite)" uv run pytest --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
 run_check "sphinx-build -W" uv run sphinx-build -b html docs/source docs/_build/html -W
-run_check "technical doc" infra/build_technical_doc.sh
+run_check "documents" infra/build_documents.sh
 # The per-PR build regenerates only what the document cites (issue #154), so
 # the figures it does not cite are checked here instead -- the check moves to
 # the release gate rather than disappearing. `--check` compares a rebuild

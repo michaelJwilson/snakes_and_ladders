@@ -2,7 +2,7 @@
 
 Renders the Newick string and a compact table of simulated aligned
 sequences for a small-taxa ``simulation_params.yaml``-format fixture, so the
-technical document shows an actual generated example rather than a
+paper shows an actual generated example rather than a
 schematic. Per ``sim/CLAUDE.md``'s "k-state, e.g. 4" convention, states are
 shown nucleotide-coded (A/C/G/T) for ``k == 4``.
 """

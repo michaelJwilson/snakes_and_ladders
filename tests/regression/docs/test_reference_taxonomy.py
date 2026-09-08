@@ -34,7 +34,7 @@ CLAUDE_MD = REPO_ROOT / "CLAUDE.md"
 TEXTBOOK = REPO_ROOT / "docs" / "tex" / "textbook.tex"
 BIBLIOGRAPHY = REPO_ROOT / "docs" / "tex" / "references.bib"
 
-TABLE_HEADING = "## Technical Document & Reference Sources"
+TABLE_HEADING = "## Documents & Reference Sources"
 APPENDIX_HEADING = r"\section{Reference Taxonomy}"
 
 #: One bibliography entry: its key and the text up to the next entry.

@@ -1,4 +1,4 @@
-"""Code cites a label in the technical document, and every label it cites exists.
+"""Code cites a label in the documents, and every label it cites exists.
 
 `ROADMAP.md` §1.3 binds the application logic to `docs/tex/`. A citation is
 that binding made checkable --- and only if it names something the build

@@ -185,7 +185,7 @@ def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
 @pytest.mark.simulated_truth
 @pytest.mark.release
 def test_the_comparison_holds_at_six_taxa() -> None:
-    # The size the technical document reports. Release-gated because the
+    # The size the paper reports. Release-gated because the
     # fitted surface is one optimization per topology and there are 105.
     known, fitted, truth, _, _, agreements = reward_surfaces(
         load_simulation_params(SIX_TAXA)

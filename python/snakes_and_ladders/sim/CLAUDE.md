@@ -30,7 +30,7 @@ known from outside this repository.
   mistake has been made here, so the signature is what prevents it.
 
 - **Validate against the analytic result, never against our own likelihood.**
-  Where a model has a closed form the technical document states it, and the
+  Where a model has a closed form the textbook states it, and the
   simulator is checked against that. A validation test states its tolerance
   and runs across a range of sizes, because the tolerance is a Monte Carlo
   bound and a single size does not exercise it.

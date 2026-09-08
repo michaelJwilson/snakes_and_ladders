@@ -21,7 +21,7 @@ python/snakes_and_ladders/*.dylib
 # Sphinx build output
 docs/_build/
 
-# LaTeX build output (the technical PDF is built, not committed)
+# LaTeX build output (the PDFs are built into docs/, not left here)
 docs/tex/*.aux
 docs/tex/*.bbl
 docs/tex/*.blg
@@ -33,12 +33,12 @@ docs/tex/*.pdf
 docs/tex/*.toc
 
 # QA figures/captions under docs/tex/figures/ are committed, not ignored:
-# they are the technical document's evidence, and a reviewer should see a
-# changed plot in the diff rather than have to build the document to find
-# out. infra/build_technical_doc.sh regenerates them, and CI rebuilds and
+# they are the documents' evidence, and a reviewer should see a
+# changed plot in the diff rather than have to build a document to find
+# out. infra/build_documents.sh regenerates them, and CI rebuilds and
 # compares the rendered document, so a stale figure still fails.
 
-# infra/build_technical_doc.sh's LaTeX build output. The PDFs themselves
+# infra/build_documents.sh's LaTeX build output. The PDFs themselves
 # are committed (see DEV.md); everything latexmk leaves beside them is not.
 docs/*.aux
 docs/*.bbl
