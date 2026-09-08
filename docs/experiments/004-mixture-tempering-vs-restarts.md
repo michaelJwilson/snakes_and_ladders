@@ -1,7 +1,7 @@
 ---
 id: 004
 date: 2026-09-08
-commit: COMMIT_PLACEHOLDER
+commit: 42ce20690fc6a1db9cb610a792d33e08e0a247ce
 branch: claude/opt-332-mixture-budget
 pr: 0
 tickets: [332, 284, 303]
