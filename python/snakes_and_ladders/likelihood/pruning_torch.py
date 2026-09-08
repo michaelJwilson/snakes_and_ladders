@@ -28,6 +28,7 @@ from collections.abc import Mapping
 import numpy as np
 import torch
 
+from snakes_and_ladders.likelihood.patterns import check_weights
 from snakes_and_ladders.sim.tree import Node, edges, preorder
 
 
@@ -125,6 +126,7 @@ def log_likelihood(
     alignment: Mapping[str, np.ndarray | torch.Tensor],
     branch_lengths: torch.Tensor,
     *,
+    weights: np.ndarray | None = None,
     rate_matrix: torch.Tensor | None = None,
     rescale: bool = True,
 ) -> torch.Tensor:
@@ -145,6 +147,14 @@ def log_likelihood(
     branch_lengths : torch.Tensor
         Shape ``(len(branch_order(tau)),)``, in ``dtype`` on ``device``. The
         tensor autograd differentiates through; kept separate from ``tau``.
+    weights : np.ndarray | None
+        One weight per column, or ``None`` for one occurrence each. The
+        compressed alignment of
+        ``snakes_and_ladders.likelihood.patterns.compress`` with its weights
+        gives the same value over the distinct columns alone. The weights
+        are constants of the data, so they enter the graph as a constant and
+        the gradient in ``branch_lengths`` is the weighted sum of the site
+        gradients.
     rate_matrix : torch.Tensor | None
         If given, shape ``(k, k)``: a general rate matrix ``Q``, and
         transition probabilities use ``torch.linalg.matrix_exp(Q * t)``
@@ -163,8 +173,8 @@ def log_likelihood(
     ------
     ValueError
         If ``pi`` does not have shape ``(k,)``, ``branch_lengths`` does not
-        have shape ``(len(branch_order(tau)),)``, or ``alignment`` is
-        missing a leaf of ``tau``.
+        have shape ``(len(branch_order(tau)),)``, ``alignment`` is missing a
+        leaf of ``tau``, or ``weights`` does not have one entry per column.
     """
     # dtype and device follow branch_lengths, so a caller moves the whole
     # recursion by moving one tensor -- and float64 stays the default
@@ -194,6 +204,7 @@ def log_likelihood(
         raise ValueError(msg)
 
     n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
+    weight = check_weights(weights, n_sites)
     log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
     # Every branch's transition matrix at once, indexed by branch_order.
     transitions = _transition_probabilities(branch_lengths, k, rate_matrix)
@@ -228,7 +239,12 @@ def log_likelihood(
 
     root_partial = _post_order(tau)
     site_likelihood = root_partial @ pi_t  # eq:root
-    return torch.sum(torch.log(site_likelihood) + log_scale)
+    site_log_likelihood = torch.log(site_likelihood) + log_scale
+    if weight is None:
+        return torch.sum(site_log_likelihood)
+    return torch.dot(
+        torch.as_tensor(weight, dtype=dtype, device=device), site_log_likelihood
+    )
 
 
 class PartialCache:

@@ -96,6 +96,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.hadamard
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.patterns
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.pruning
    :members:
 
