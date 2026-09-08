@@ -49,18 +49,14 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Branch-and-bound over topologies with the certified bounds of #308, and a
   bound for a non-Jukes–Cantor model, whose transition matrix is not affine
   in one variable per branch (#329)
-- Derive pruning, forward–backward and sum-product in the textbook appendix,
-  cited from the code (#326)
 - Put `stubtest` in CI — the type stub has already drifted (#37)
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 - Fit HMM transition and emission matrices to nominal interval coverage
-- Refuse an unidentifiable fit rather than returning a meaningless interval
-  (#122)
 - Realize the tolerance helper rather than assume it is applied by hand (#91)
 - Profile a gradient fit in memory and time across the declared `n × L × k`
-  range (#232)
+  range (#405)
 - Trajectory-length adaptation (NUTS), only if a posterior the #268
   comparison reaches is one the fixed trajectory length of #333 samples badly
 
@@ -72,8 +68,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   the Gibbs sampler, the annealer and single-site descent at matched
   evaluations on enumerable codes, the ML codeword as referee (#340)
 - Iterated conditional modes over HMM state paths (#176)
-- A discrete instance no baseline solves within budget — still open. #177's
-  tree is solved by random-restart greedy at 1.000 (#198), and #209 measured
+- A discrete instance no baseline solves within budget (#406). #177's tree is
+  solved by random-restart greedy at 1.000 (#198), and #209 measured
   single-site descent matching or beating the planted Viana-Bray state at
   every frustration and connectivity tried
 - Make the rooted/unrooted distinction explicit and give topologies a canonical
@@ -81,7 +77,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
   it costs per step (#329)
 - Establish the external reference tools to benchmark against, and how they are
-  installed (#126)
+  installed (#126) — deferred while `CLAUDE.md` admits no external solver;
+  `docs/external_tools.md` is the survey a future adoption starts from
 - A classical baseline suite the applications are scored against under one
   budget — large parsimony under NNI and SPR is the tree baseline that exists
   and `opt.budget.compare` the budget; the HMM and Potts baseline suites remain
@@ -121,9 +118,12 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.3 — Empirical Validation & Benchmarking
 
-- Ingest empirical alignments, with their provenance recorded
-- Benchmark harness: budget-matched runs against IQ-TREE 2 and RAxML-NG on
-  shared seeds, once #126 installs them
+- Validation past enumeration on simulated fixtures at the sizes this milestone
+  targets, refereed by the parameters that generated them; ingesting an
+  empirical alignment waits on the external-solver decision (#126)
+- Benchmark harness: budget-matched runs on shared seeds against the classical
+  baselines this repository implements; runs against IQ-TREE 2 and RAxML-NG
+  wait on the same decision (#126)
 - Report RF and ΔlnL against known truth up to `n = 1000`
 - A fixed-hardware benchmark runner, since CI hardware cannot rank performance
 - GPU scaling for the site-parallel recursion, once a device exists to
@@ -151,7 +151,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   method only on chains
 - Learned compound moves (#147)
 - Transformer policy over canonical encodings
-- References and blue-sky directions (#360)
 
 ## Cross-Cutting Infrastructure
 
@@ -159,14 +158,14 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   `search.infer`, `learn.rollout` batches, tempering replicas (a `rayon`
   loop is the alternative, a dependency decision), `qa.build` and
   `check_notebooks` through the seam, and `pytest-xdist` against the test
-  budget (#344)
+  budget (#405)
 - Assess the computational efficiency of the key algorithms for scaling
-  fixtures through simulation, optimization and learning (#232)
+  fixtures through simulation, optimization and learning (#405)
 - The targets the runtime-optimization audit left unmet: the tree schedule
   within 2x of the forward recursion on a chain, the reassociated
   transfer-matrix product in the Potts chain objective, `maxflow_rust` as
   alpha expansion's inner solver, and a compiled sweep for the factor-graph
-  Gibbs sampler (#341)
+  Gibbs sampler (#405)
 - Adopt `rustworkx` on a hot path where a measurement says so —
   `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
   of the bound — moving the replaced implementation to `sandbox/`
@@ -183,9 +182,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Release 0.4.0 (#358); #236 is the earlier filing of the same release. The
   cut is deferred and no tag exists, so #376's 0.5.0 audit runs from #358's
   merged pull request rather than from a tag
-- Release 0.5.0 (#376)
-- Declare `scipy` as a dependency, or keep the three referee modules skipping
-  without it — the open question #376 leaves standing
 - Merge the eight annealing entry points onto one driver, and the eight
   enumerators onto one weighted enumeration, each against the oracle #375
   recorded for it
@@ -201,8 +197,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   and `RecordEpisodeStatistics` wrappers, measured first
 - Release-readiness check: the changelog section, the `Cargo.toml` version
   and the tags agree (#327)
-- Run the required checks on every pull request, not only those against
-  `main` (#273)
 - Labels say what the pull requests say (#279)
 - Re-key the milestone references in code and `docs/tex/` to the roadmap's
   `N.M` numbering (#324)
