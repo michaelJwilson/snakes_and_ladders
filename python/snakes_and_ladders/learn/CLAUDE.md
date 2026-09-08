@@ -78,6 +78,21 @@ demonstrated rather than asserted.
   decisions are the unit at which they are comparable — the same reasoning
   that makes `snakes_and_ladders.search.infer` count candidate fits.
 
+- **An episode that may leave a local optimum is scored on its best state,
+  not its last.** `rollout(..., stop_at_local_optimum=False)` runs to its
+  budget, so its final state is wherever the walk happened to stop, and a
+  real search keeps the best thing it saw. Scoring the last state instead
+  would make a better searcher look worse the longer it ran.
+
+- **A comparison against a wandering searcher is against *restarts*.** Once
+  an episode is no longer bounded by reaching a local optimum, a single
+  greedy run is not a budget-matched baseline: greedy stops after a few
+  decisions and leaves the rest of the budget unspent. Restarting it until
+  the budget is gone is the honest comparison, and on the issue #177 fixture
+  it reaches the enumerated maximum from every start at 60 decisions, where
+  no epsilon measured does (issue #194; `STATUS.md` has the numbers). A
+  result stated against single-run greedy alone overstates itself.
+
 ## Framework
 
 **PyTorch**, per root `CLAUDE.md`, and `float64` throughout: the exact
@@ -92,6 +107,25 @@ model, so this one carries an energy landscape, a decoding problem, and — in
 takes an application type. The caller unpacks a model into index and
 log-probability arrays, because the no-application-imports rule admits no
 exception for convenience.
+
+## Relaxations
+
+A relaxation of a discrete objective must reduce to it exactly at the corners
+of the simplex, checked over every configuration of an enumerable instance
+rather than spot-checked. One that disagrees at a one-hot is a different
+model, and nothing measured against it transfers.
+
+Under a factorized distribution the expected discrete score equals the relaxed
+score at the marginals, for any objective carrying at most one factor per site
+per term. That multilinearity is the boundary, not the shape of the graph: a
+term reusing one site breaks it, which is what a doubled bond does. It follows
+that the maximum sits at a vertex, so a relaxation adds no optimum the
+discrete problem lacks, and what a relaxed search loses it loses to the ascent.
+
+A gradient estimator's bias is measured against the exact gradient, never
+assumed small, because enumeration supplies that gradient at these sizes.
+Averaging more samples cuts variance and leaves bias untouched, so the two are
+reported apart.
 
 ## What is not here yet
 
