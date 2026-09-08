@@ -1,4 +1,4 @@
-\begin{thebibliography}{44}
+\begin{thebibliography}{47}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -94,6 +94,11 @@ Charles~J. Geyer.
 \newblock In \emph{Computing Science and Statistics: Proceedings of the 23rd
   Symposium on the Interface}, pages 156--163, 1991.
 
+\bibitem[Geyer(1992)]{geyer1992}
+Charles~J. Geyer.
+\newblock Practical {M}arkov chain {M}onte {C}arlo.
+\newblock \emph{Statistical Science}, 7\penalty0 (4):\penalty0 473--483, 1992.
+
 \bibitem[Goemans and Williamson(1995)]{goemans1995}
 Michel~X. Goemans and David~P. Williamson.
 \newblock Improved approximation algorithms for maximum cut and satisfiability
@@ -112,6 +117,13 @@ D.~M. Greig, B.~T. Porteous, and A.~H. Seheult.
 \newblock Exact maximum a posteriori estimation for binary images.
 \newblock \emph{Journal of the Royal Statistical Society: Series B},
   51\penalty0 (2):\penalty0 271--279, 1989.
+
+\bibitem[Hoffman and Gelman(2014)]{hoffman2014}
+Matthew~D. Hoffman and Andrew Gelman.
+\newblock The {N}o-{U}-{T}urn sampler: Adaptively setting path lengths in
+  {H}amiltonian {M}onte {C}arlo.
+\newblock \emph{Journal of Machine Learning Research}, 15:\penalty0 1593--1623,
+  2014.
 
 \bibitem[Hwu et~al.(2022)Hwu, Kirk, and El~Hajj]{pmpp2022}
 Wen-mei~W. Hwu, David~B. Kirk, and Izzat El~Hajj.
@@ -156,6 +168,13 @@ Robert~C. Martin.
 Marc M{\'e}zard and Andrea Montanari.
 \newblock \emph{Information, Physics, and Computation}.
 \newblock Oxford University Press, Oxford, 2009.
+
+\bibitem[Neal(2011)]{neal2011}
+Radford~M. Neal.
+\newblock {MCMC} using {H}amiltonian dynamics.
+\newblock In Steve Brooks, Andrew Gelman, Galin~L. Jones, and Xiao-Li Meng,
+  editors, \emph{Handbook of Markov Chain Monte Carlo}, pages 113--162. Chapman
+  and Hall/CRC, 2011.
 
 \bibitem[Newman and Barkema(1999)]{newman1999}
 M.~E.~J. Newman and G.~T. Barkema.

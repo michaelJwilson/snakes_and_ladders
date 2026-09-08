@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.9.5)  1 JAN 2025 00:00
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.9.5)  8 SEP 2026 12:58
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -816,15 +816,6 @@ cmm/m/it/10.95 A[]\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.95 k[]; k[]\OT1/cmr/m/n/
  []
 
 [4]
-
-Package natbib Warning: Citation `neal2011' on page 5 undefined on input line 1
-95.
-
-
-Package natbib Warning: Citation `hoffman2014' on page 5 undefined on input lin
-e 215.
-
-
 Overfull \hbox (50.26427pt too wide) detected at line 224
 [][][][] \OT1/cmr/m/n/10.95 = []1 \OMS/cmsy/m/n/10.95 ^^@ [][][] \OT1/cmr/m/n/1
 0.95 + []\OML/cmm/m/it/10.95 ;  [] "[] \OT1/cmr/m/n/10.95 = \OML/cmm/m/it/10.95
@@ -833,24 +824,66 @@ Overfull \hbox (50.26427pt too wide) detected at line 224
  ^^@ \OML/cmm/m/it/10.95 m[]\OT1/cmr/m/n/10.95 ) [] []\OML/cmm/m/it/10.95 ;
  []
 
-
-Package natbib Warning: Citation `neal2011' on page 5 undefined on input line 2
-41.
-
-[5
-! pdfTeX error (font expansion): auto expansion is only possible with scalable 
-fonts.
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.262 
-       
+[5] [6] [7] [8]
+<figures/sim_tree.pdf, id=404, 469.755pt x 289.08pt>
+File: figures/sim_tree.pdf Graphic file (type pdf)
+<use figures/sim_tree.pdf>
+Package pdftex.def Info: figures/sim_tree.pdf  used on input line 522.
+(pdftex.def)             Requested size: 317.07614pt x 195.12498pt.
+<figures/jc_transition.pdf, id=405, 390.25798pt x 245.718pt>
+File: figures/jc_transition.pdf Graphic file (type pdf)
+<use figures/jc_transition.pdf>
+Package pdftex.def Info: figures/jc_transition.pdf  used on input line 530.
+(pdftex.def)             Requested size: 317.07614pt x 199.64162pt.
+Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
+put line 545.
+ [9] [10 <./figures/sim_tree.pdf> <./figures/jc_transition.pdf>] [11] [12] [13]
+ [14] [15] [16] (./coupled_figure.tex) [17] [18] [19] [20]
+[21] (/home/user/wt-333/docs/textbook.bbl [22] [23]) [24] [25] [26] [27]
+(/home/user/wt-333/docs/textbook.aux)
+ ***********
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-01-22>
+ ***********
+Package rerunfilecheck Info: File `textbook.out' has not changed.
+(rerunfilecheck)             Checksum: 5E19D150B64A21F77A917937A3F5DE50;11854.
+ ) 
 Here is how much of TeX's memory you used:
- 24333 strings out of 476106
- 442415 string characters out of 5793934
- 1942975 words of memory out of 5000000
- 45746 multiletter control sequences out of 15000+600000
- 573518 words of font info for 143 fonts, out of 8000000 for 9000
+ 25122 strings out of 476106
+ 457133 string characters out of 5793934
+ 2025975 words of memory out of 5000000
+ 46268 multiletter control sequences out of 15000+600000
+ 579506 words of font info for 207 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
- 89i,12n,96p,1005b,520s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 89i,12n,96p,1005b,1182s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ </root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk></u
+sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/sha
+re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/share/tex
+live/texmf-dist/fonts/type1/public/amsfonts/cm/cmcsc10.pfb></usr/share/texlive/
+texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texlive/texmf-
+dist/fonts/type1/public/amsfonts/cmextra/cmex8.pfb></usr/share/texlive/texmf-di
+st/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-dist/fon
+ts/type1/public/amsfonts/cm/cmmi5.pfb></usr/share/texlive/texmf-dist/fonts/type
+1/public/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
+c/amsfonts/cm/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
+nts/cm/cmmib10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/c
+mextra/cmmib8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
+/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.
+pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></u
+sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb></usr/share
+/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/texlive
+/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texlive/texmf-d
+ist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/texlive/texmf-dist/font
+s/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type
+1/public/amsfonts/cm/cmsy6.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
+c/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
+nts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/sy
+mbols/msbm10.pfb>
+Output written on /home/user/wt-333/docs/textbook.pdf (27 pages, 472449 bytes).
 
-!  ==> Fatal error occurred, no output PDF file produced!
+PDF statistics:
+ 882 PDF objects out of 1000 (max. 8388607)
+ 782 compressed objects within 8 object streams
+ 210 named destinations out of 1000 (max. 500000)
+ 41391 words of extra memory for PDF output out of 42996 (max. 10000000)
+
