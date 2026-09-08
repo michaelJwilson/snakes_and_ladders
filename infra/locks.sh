@@ -69,7 +69,7 @@
 # Usage:
 #   . infra/locks.sh
 #   with_lock validate -- uv run pytest -m critical
-#   with_lock measure  -- infra/build_technical_doc.sh          # a render
+#   with_lock measure  -- infra/build_documents.sh          # a render
 #   with_lock measure  -- uv run pytest tests/benchmarks -q
 #   with_lock measure --wide -- cargo bench --bench parallel_sweep
 #
