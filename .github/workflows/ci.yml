@@ -89,6 +89,9 @@ jobs:
       # Fails a PR that changes user-visible behavior without a matching
       # changelog.d/ fragment; no-ops on push to main (no diff against itself).
       - run: uv run towncrier check --compare-with origin/main
+      # CHECKS.md is written from the tests' markers; a committed copy that a
+      # regeneration does not reproduce is stale, like a figure or a notebook.
+      - run: uv run python infra/checks_ledger.py --check
 
   rust-lint:
     name: Rust lint & format (clippy, fmt)
