@@ -158,6 +158,23 @@ def test_the_digest_does_not_depend_on_where_the_checkout_lives(
     )
 
 
+@pytest.mark.mathematical
+def test_a_directory_input_hashes_the_files_under_it(tmp_path: Path) -> None:
+    # A fixture named as a problem rather than as one tier is a directory
+    # (issue #382). Hashing it as a unit is what makes a tier added to it a
+    # change the stamp sees; the alternative silently skipped the render.
+    problem = tmp_path / "fixtures" / "potts_lattice"
+    problem.mkdir(parents=True)
+    (problem / "ci.yaml").write_text("seed: 1\n")
+    before = digest([problem], tmp_path)
+
+    assert before == digest([problem / "ci.yaml"], tmp_path)
+
+    (problem / "stress.yaml").write_text("seed: 2\n")
+
+    assert digest([problem], tmp_path) != before
+
+
 @pytest.mark.critical
 @pytest.mark.structural
 def test_relative_and_from_imports_resolve_to_absolute_names() -> None:

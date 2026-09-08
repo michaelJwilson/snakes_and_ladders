@@ -28,7 +28,7 @@ from snakes_and_ladders.opt.potts import load_potts_params
 from tests._fixtures import FIXTURES_DIR
 
 FIELD = np.array([0.4, -0.1, -0.3])
-FIXTURE = FIXTURES_DIR / "potts_params.yaml"
+FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 
 
 def _landscape(chain_length: int = 4) -> PottsLandscape:

@@ -1,3 +1,6 @@
+model: jukes-cantor
+oracle: enumeration
+
 # Ground truth for the k=4 Jukes-Cantor regression test
 # (tests/regression/test_jc_simulate.py). Every field is required -- see
 # python/snakes_and_ladders/sim/params.py and python/snakes_and_ladders/sim/CLAUDE.md.

@@ -20,10 +20,10 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     log_evidence_by_forward,
     log_joint_at,
 )
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.spatio_sequential import (
     SimulatedSpatioSequential,
     SpatioSequentialParams,
-    canonical_spatio_sequential,
     coupled_factor_graph,
     simulate_spatio_sequential,
 )
@@ -32,7 +32,7 @@ from snakes_and_ladders.sim.spatio_sequential import (
 def _dataset(
     seed: int,
 ) -> tuple[SpatioSequentialParams, SimulatedSpatioSequential]:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     return params, simulate_spatio_sequential(params, np.random.default_rng(seed))
 
 
@@ -87,7 +87,7 @@ def test_every_posterior_is_a_distribution() -> None:
 def test_the_conditional_posterior_at_the_only_labelling_is_the_marginal_one() -> None:
     # With one class every node belongs to it, the labelling is unique, and
     # p(k | x) is Q(k | l, x): the two enumerations must agree exactly.
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     one_class = replace(
         params,
         n_classes=1,
@@ -106,7 +106,7 @@ def test_the_conditional_posterior_at_the_only_labelling_is_the_marginal_one() -
 def test_the_label_posterior_recovers_planted_labels_on_most_nodes() -> None:
     # 42 of 48 when measured; asserted at three quarters. The misses are the
     # nodes whose six observations happen to fit the other class.
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     planted = np.array([0, 0, 1, 1])
     hits, total = 0, 0
     for seed in range(12):
@@ -122,7 +122,7 @@ def test_the_label_posterior_recovers_planted_labels_on_most_nodes() -> None:
 
 @pytest.mark.edge_case
 def test_an_instance_past_the_enumeration_limit_is_refused() -> None:
-    params = replace(canonical_spatio_sequential(), n_positions=20)
+    params = replace(fixture("spatio_sequential", "ci").params, n_positions=20)
     data = simulate_spatio_sequential(params, np.random.default_rng(0))
     with pytest.raises(ValueError, match="paths per class"):
         enumerate_spatio_sequential(params, data.observations)

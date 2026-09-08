@@ -1,11 +1,13 @@
-"""Shared access to the `simulation_params.yaml` fixtures.
+"""Shared access to the tree fixtures of the problem registry.
 
 `DEV.md`'s Test Layout says a fixture shared across modules lives in a
 top-level underscore-prefixed module, imported rather than collected. Every
 regression and benchmark module that needs a simulation fixture went through
 its own copy of the path instead -- under two different names, and with the
 benchmark copies reaching back up through ``parent.parent``. One spelling of
-the location lives here, so moving the fixtures is a one-line change.
+the location lives here; the directory itself is the registry's
+(:mod:`snakes_and_ladders.sim.fixtures`), so the suite and the figures cannot
+disagree about where a fixture is.
 
 The Felsenstein- and Farris-zone trees (issue #209) live here for the same
 reason: the small-parsimony tests and the large-parsimony search are scored
@@ -18,18 +20,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from snakes_and_ladders.search.topology import leaf_bipartitions
+from snakes_and_ladders.sim import fixtures as registry
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.tree import Node
+
+#: Where the fixtures live, re-exported from the registry so the suite and the
+#: figures cannot disagree about it.
+FIXTURES_DIR = registry.FIXTURES_DIR
 
 if TYPE_CHECKING:
     from snakes_and_ladders.sim.params import SimulationParams
 
-FIXTURES_DIR = Path(__file__).parent / "regression" / "fixtures"
-
 # The fixtures every backend is exercised against, smallest first.
-SMALL_SITES = "simulation_params_small_sites.yaml"
-FOUR_TAXA = "simulation_params.yaml"
-EIGHT_TAXA = "simulation_params_8taxa.yaml"
+SMALL_SITES = "tree_jc/ci.yaml"
+FOUR_TAXA = "tree_jc/stress.yaml"
+EIGHT_TAXA = "tree_jc/release.yaml"
 
 
 def fixture_path(name: str) -> Path:
@@ -38,7 +43,9 @@ def fixture_path(name: str) -> Path:
     Parameters
     ----------
     name : str
-        File name of the fixture, e.g. ``"simulation_params.yaml"``.
+        Path of the fixture under the fixtures directory, e.g.
+        ``"tree_jc/stress.yaml"`` --- a problem and a tier, per
+        :mod:`snakes_and_ladders.sim.fixtures`.
 
     Returns
     -------
@@ -53,7 +60,9 @@ def fixture_path(name: str) -> Path:
     """
     path = FIXTURES_DIR / name
     if not path.is_file():
-        available = sorted(p.name for p in FIXTURES_DIR.glob("*.yaml"))
+        available = sorted(
+            str(p.relative_to(FIXTURES_DIR)) for p in FIXTURES_DIR.rglob("*.yaml")
+        )
         msg = f"no fixture {name!r} in {FIXTURES_DIR}; available: {available}"
         raise FileNotFoundError(msg)
     return path
@@ -65,7 +74,7 @@ def load_fixture(name: str) -> SimulationParams:
     Parameters
     ----------
     name : str
-        File name of the fixture.
+        Path of the fixture under the fixtures directory.
 
     Returns
     -------

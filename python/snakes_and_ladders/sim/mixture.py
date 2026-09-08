@@ -22,10 +22,12 @@ type from here but draws no data itself.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
 from snakes_and_ladders.emissions import GaussianEmission
+from snakes_and_ladders.fixtures import load_declared
 
 
 @dataclass(frozen=True)
@@ -138,4 +140,47 @@ def simulate_mixture(
         weights=params.weights,
         components=params.components,
         seed=params.seed,
+    )
+
+
+_REQUIRED_FIELDS = frozenset(
+    {"seed", "n_samples", "tolerance", "weights", "means", "scales", "variance_floor"}
+)
+
+
+def load_mixture_params(path: Path) -> MixtureParams:
+    """Load and validate a Gaussian-mixture fixture yaml.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the yaml file.
+
+    Returns
+    -------
+    MixtureParams
+        The parsed, validated truth. The weight and component checks are
+        :class:`MixtureParams`'s own, so a file and an instance built in code
+        are refused on the same terms.
+
+    Raises
+    ------
+    ValueError
+        If a required field is missing, or ``means`` and ``scales`` differ in
+        length.
+    """
+    raw = load_declared(path, _REQUIRED_FIELDS)
+
+    means = np.asarray(raw["means"], dtype=np.float64)
+    scales = np.asarray(raw["scales"], dtype=np.float64)
+    if means.shape != scales.shape:
+        msg = f"{path}: means have shape {means.shape}, scales {scales.shape}"
+        raise ValueError(msg)
+
+    return MixtureParams(
+        weights=np.asarray(raw["weights"], dtype=np.float64),
+        components=GaussianEmission(means, scales, float(raw["variance_floor"])),
+        n_samples=int(raw["n_samples"]),
+        seed=int(raw["seed"]),
+        tolerance=float(raw["tolerance"]),
     )

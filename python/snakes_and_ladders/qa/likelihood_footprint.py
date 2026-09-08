@@ -35,9 +35,10 @@ import numpy as np
 
 from snakes_and_ladders.likelihood import pruning
 from snakes_and_ladders.qa.figure import QATable, latex_integer
-from snakes_and_ladders.qa.runner import table_main
+from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, table_main
 from snakes_and_ladders.search.rl import with_uniform_branch_lengths
 from snakes_and_ladders.search.topology import Topology
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
@@ -51,9 +52,6 @@ DECLARED_MAXIMUM: tuple[int, int] = (1_000, 11_000)
 #: The tighter of the two hardware bounds in ``ROADMAP.md`` §1.2 (16 GB unified
 #: memory against 24 GB VRAM), so the headroom reported is the one that binds.
 MEMORY_BUDGET_BYTES: int = 16 * 1024**3
-
-#: States in the alphabet every figure here is computed at.
-N_STATES: int = 4
 
 #: Bytes per entry. Both arrays are ``int64``/``float64``; a backend that moved
 #: to ``float32`` would halve the second term and is a different table.
@@ -100,7 +98,7 @@ def simulation_bytes(n_taxa: int, n_sites: int) -> int:
     return (2 * n_taxa - 1) * n_sites * BYTES_PER_ENTRY
 
 
-def evaluation_bytes(n_taxa: int, n_sites: int, n_states: int = N_STATES) -> int:
+def evaluation_bytes(n_taxa: int, n_sites: int, n_states: int) -> int:
     """What pruning holds on a caterpillar: one ``(n_sites, k)`` partial per node.
 
     Every node but the root is open at once at the deepest point of a
@@ -114,7 +112,7 @@ def evaluation_bytes(n_taxa: int, n_sites: int, n_states: int = N_STATES) -> int
     return (2 * n_taxa - 2) * n_sites * n_states * BYTES_PER_ENTRY
 
 
-def measure(n_taxa: int, n_sites: int) -> tuple[float, float]:
+def measure(n_taxa: int, n_sites: int, n_states: int) -> tuple[float, float]:
     """Peak bytes the allocator counts, simulating and then evaluating.
 
     Not published: this is what `simulation_bytes` and `evaluation_bytes` are
@@ -128,22 +126,27 @@ def measure(n_taxa: int, n_sites: int) -> tuple[float, float]:
         Peak simulation bytes and peak evaluation bytes.
     """
     tau = with_uniform_branch_lengths(caterpillar(n_taxa), 0.1)
-    pi = np.full(N_STATES, 1.0 / N_STATES)
+    pi = np.full(n_states, 1.0 / n_states)
 
     tracemalloc.start()
     dataset = simulate_alignment(
-        tau=tau, k=N_STATES, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
+        tau=tau, k=n_states, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
     )
     _, simulate_peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     alignment = dict(dataset.alignment)
     tracemalloc.start()
-    pruning.log_likelihood(tau, N_STATES, pi, alignment)
+    pruning.log_likelihood(tau, n_states, pi, alignment)
     _, evaluate_peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     return float(simulate_peak), float(evaluate_peak)
+
+
+#: The alphabet the warm-up measures at. The warm-up discards its result, so
+#: it needs a size and not the fixture's.
+WARM_UP_STATES: int = 4
 
 
 def warm_up() -> None:
@@ -154,7 +157,7 @@ def warm_up() -> None:
     what it reads warm. Only the regression tests call this, since only they
     measure.
     """
-    measure(*MEASURED_SIZES[0])
+    measure(*MEASURED_SIZES[0], WARM_UP_STATES)
 
 
 def _megabytes(value: int) -> str:
@@ -162,7 +165,7 @@ def _megabytes(value: int) -> str:
     return f"{float(f'{value / 1e6:.3g}'):g}"
 
 
-def render_footprint() -> str:
+def render_footprint(n_states: int) -> str:
     """Build the LaTeX ``tabular``: the measured sizes, then the declared maximum.
 
     Returns
@@ -176,10 +179,10 @@ def render_footprint() -> str:
                 latex_integer(n_taxa),
                 latex_integer(n_sites),
                 _megabytes(simulation_bytes(n_taxa, n_sites)),
-                _megabytes(evaluation_bytes(n_taxa, n_sites)),
+                _megabytes(evaluation_bytes(n_taxa, n_sites, n_states)),
                 _megabytes(
                     simulation_bytes(n_taxa, n_sites)
-                    + evaluation_bytes(n_taxa, n_sites)
+                    + evaluation_bytes(n_taxa, n_sites, n_states)
                 ),
             ]
         )
@@ -201,7 +204,7 @@ def render_footprint() -> str:
     )
 
 
-def build_caption() -> str:
+def build_caption(n_states: int) -> str:
     """Caption text for the footprint table.
 
     Returns
@@ -210,11 +213,11 @@ def build_caption() -> str:
         Plain-text caption, safe to ``\\input`` into LaTeX verbatim.
     """
     taxa, sites = DECLARED_MAXIMUM
-    total = simulation_bytes(taxa, sites) + evaluation_bytes(taxa, sites)
+    total = simulation_bytes(taxa, sites) + evaluation_bytes(taxa, sites, n_states)
     headroom = f"{float(f'{MEMORY_BUDGET_BYTES / total:.2g}'):g}"
     return (
         "Memory held while simulating a Jukes-Cantor alignment and while "
-        f"evaluating its likelihood by pruning, at {N_STATES} states, across "
+        f"evaluating its likelihood by pruning, at {n_states} states, across "
         "the declared scale. The simulator retains every node's states and "
         "pruning retains one partial likelihood per open node, so both are "
         "computed from the arrays' own shapes and are exact rather than "
@@ -230,15 +233,23 @@ def build_caption() -> str:
     )
 
 
-def build_table() -> tuple[str, str]:
+def build_table(params: SimulationParams) -> tuple[str, str]:
     """Assemble the ``tabular`` body and its caption.
+
+    Parameters
+    ----------
+    params : SimulationParams
+        The tree fixture whose alphabet the footprint is computed at. The
+        sizes are the declared scale's rather than this instance's --- the
+        table reports what `ROADMAP.md` requires, not what one fixture is ---
+        but the alphabet is the application's and is read from it.
 
     Returns
     -------
     tuple[str, str]
         The ``tabular`` body and the caption.
     """
-    return render_footprint(), build_caption()
+    return render_footprint(params.k), build_caption(params.k)
 
 
 def main(argv: list[str] | None = None) -> QATable:
@@ -257,7 +268,7 @@ def main(argv: list[str] | None = None) -> QATable:
     return table_main(
         stem="likelihood_footprint",
         description=__doc__,
-        params=(),
+        params=(SIMULATION_PARAMS,),
         build=build_table,
         argv=argv,
     )

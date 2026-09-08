@@ -1,4 +1,7 @@
-# Same topology as simulation_params.yaml, at a smaller site count -- one
+model: jukes-cantor
+oracle: enumeration
+
+# Same topology as tree_jc/stress.yaml, at a smaller site count -- one
 # point in the "variety of site/taxa sizes" sim/CLAUDE.md asks validation
 # tests to cover. tolerance is widened to keep pace with the larger Monte
 # Carlo standard error at this n_sites (~0.003 for p in [0, 1]).

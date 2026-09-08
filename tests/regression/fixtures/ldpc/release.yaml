@@ -1,0 +1,19 @@
+model: ldpc
+oracle: closed-form
+
+# The (3,6) Gallager code at the block length the thresholds are visible at.
+# Every field is required -- see python/snakes_and_ladders/sim/ldpc.py.
+#
+# 996 bits is long enough that the measured erasure and error curves turn at
+# the density-evolution thresholds -- 0.4294 on the erasure channel
+# (`likelihood.ldpc.erasure_threshold`) and 0.084 on the symmetric channel --
+# which is the closed form this tier is refereed against. The thresholds are
+# limits as the length grows, so they are reported for orientation at a
+# single size and asserted only as the turn, per sim/CLAUDE.md.
+seed: 3
+n_bits: 996
+column_weight: 3
+row_weight: 6
+flip_probability: 0.05
+erasure_probability: 0.4
+noise_scale: 0.8

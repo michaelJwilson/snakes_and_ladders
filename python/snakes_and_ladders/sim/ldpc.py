@@ -30,9 +30,12 @@ non-trivial codewords too.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
+
+from snakes_and_ladders.fixtures import load_declared
 
 #: The magnitude that stands for certainty. ``tanh(LLR_CAP / 2)`` is below
 #: one in ``float64`` by ``1.9e-13``, so the decoder's ``tanh`` rule never
@@ -428,3 +431,102 @@ def encode(code: ParityCheck, message: np.ndarray) -> np.ndarray:
         msg = "the encoder produced a word outside the code"
         raise RuntimeError(msg)
     return codeword
+
+
+_REQUIRED_FIELDS = frozenset(
+    {
+        "seed",
+        "n_bits",
+        "column_weight",
+        "row_weight",
+        "flip_probability",
+        "erasure_probability",
+        "noise_scale",
+    }
+)
+
+
+@dataclass(frozen=True)
+class LdpcParams:
+    """Fully-specified truth for a Gallager-ensemble fixture.
+
+    The ensemble member is the seed's, not the file's: an ensemble is
+    reproduced by drawing it again rather than by writing ``H`` out, which at
+    the sizes the decoder is run on would be a file no reader could check.
+
+    Parameters
+    ----------
+    n_bits : int
+        Block length ``n``.
+    column_weight, row_weight : int
+        The regular degrees ``(j, k)`` of the ensemble.
+    seed : int
+        Seed the ensemble member is drawn under.
+    flip_probability : float
+        Crossover of the binary symmetric channel this instance is decoded on.
+    erasure_probability : float
+        Erasure rate of the binary erasure channel.
+    noise_scale : float
+        Standard deviation of the binary-input Gaussian channel.
+    """
+
+    n_bits: int
+    column_weight: int
+    row_weight: int
+    seed: int
+    flip_probability: float
+    erasure_probability: float
+    noise_scale: float
+
+    def code(self) -> ParityCheck:
+        """Draw the ensemble member this fixture declares.
+
+        Returns
+        -------
+        ParityCheck
+            :func:`gallager_code` under this fixture's seed.
+        """
+        return gallager_code(
+            self.n_bits,
+            self.column_weight,
+            self.row_weight,
+            np.random.default_rng(self.seed),
+        )
+
+    def symmetric_channel(self) -> BinarySymmetricChannel:
+        """The declared binary symmetric channel."""
+        return BinarySymmetricChannel(self.flip_probability)
+
+    def erasure_channel(self) -> BinaryErasureChannel:
+        """The declared binary erasure channel."""
+        return BinaryErasureChannel(self.erasure_probability)
+
+    def gaussian_channel(self) -> BinaryInputGaussianChannel:
+        """The declared binary-input Gaussian channel."""
+        return BinaryInputGaussianChannel(self.noise_scale)
+
+
+def load_ldpc_params(path: Path) -> LdpcParams:
+    """Load and validate an LDPC fixture yaml.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the yaml file.
+
+    Returns
+    -------
+    LdpcParams
+        The parsed truth. The degree checks are :func:`gallager_code`'s, run
+        when the code is drawn, so one statement of them serves both callers.
+    """
+    raw = load_declared(path, _REQUIRED_FIELDS)
+    return LdpcParams(
+        n_bits=int(raw["n_bits"]),
+        column_weight=int(raw["column_weight"]),
+        row_weight=int(raw["row_weight"]),
+        seed=int(raw["seed"]),
+        flip_probability=float(raw["flip_probability"]),
+        erasure_probability=float(raw["erasure_probability"]),
+        noise_scale=float(raw["noise_scale"]),
+    )

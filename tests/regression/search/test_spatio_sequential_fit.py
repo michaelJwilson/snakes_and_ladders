@@ -28,31 +28,24 @@ from snakes_and_ladders.search.spatio_sequential import (
     label_accuracy,
     seed_emissions,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.spatio_sequential import (
     SpatioSequentialParams,
-    canonical_spatio_sequential,
     simulate_spatio_sequential,
 )
 
 WOLFF = Exponential(2.0, 0.2, 12)
 
 
-def _planted_lattice(side: int) -> tuple[SpatioSequentialParams, np.ndarray]:
-    """A lattice past enumeration with weak emissions, so the prior matters."""
-    params = SpatioSequentialParams(
-        graph=lattice_graph((side, side), BoundaryCondition.OPEN, 1.0),
-        n_classes=2,
-        n_states=2,
-        n_positions=4,
-        beta=1.0,
-        self_transition=0.7,
-        initial=np.array([[0.6, 0.4], [0.3, 0.7]]),
-        emissions=(
-            CategoricalEmission(np.array([[0.6, 0.2, 0.2], [0.2, 0.6, 0.2]])),
-            CategoricalEmission(np.array([[0.2, 0.2, 0.6], [0.4, 0.4, 0.2]])),
-        ),
-    )
+def _planted_lattice() -> tuple[SpatioSequentialParams, np.ndarray]:
+    """The stress fixture --- past enumeration, weak emissions --- and a planting.
+
+    The instance is the declared one rather than one built here, so the
+    notebook that compares the same solvers on it is comparing them on the
+    same problem.
+    """
+    params = fixture("spatio_sequential", "stress").params
+    side = params.graph.shape[0]
     planted = (np.arange(side * side) % side < side // 2).astype(np.int64)
     return params, planted
 
@@ -67,7 +60,7 @@ def test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels(
     # enumerated MAP on 5 of 6 draws for every solver (the sixth is a draw
     # whose planted labelling sits in another basin), and from a uniform
     # start on 3 of 6. Asserted at the margin, four of six.
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     hits = 0
     for seed in range(6):
         data = simulate_spatio_sequential(params, np.random.default_rng(10 + seed))
@@ -92,7 +85,7 @@ def test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels(
 @pytest.mark.mathematical
 @pytest.mark.parametrize("solver", list(LabelSolver))
 def test_the_labelled_joint_never_decreases_across_blocks(solver: LabelSolver) -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(3))
 
     fit = fit_spatio_sequential(
@@ -122,7 +115,7 @@ def test_the_labelled_joint_never_decreases_across_blocks(solver: LabelSolver) -
 def test_the_label_step_recovers_planted_labels_when_the_parameters_are_known() -> None:
     # The label problem alone is easy: with theta at the truth, the field
     # separates the classes on 98 to 99 percent of nodes over six draws.
-    params, planted = _planted_lattice(10)
+    params, planted = _planted_lattice()
     accuracies = []
     for seed in range(6):
         data = simulate_spatio_sequential(
@@ -153,7 +146,7 @@ def test_the_annealed_start_beats_every_cold_solver_at_equal_blocks() -> None:
     # anneals the prior while the emissions are fitted to what the data
     # supports, reaches 0.97. Asserted at the margins: the annealed start
     # above every cold solver, and every cold solver below 0.9.
-    params, planted = _planted_lattice(10)
+    params, planted = _planted_lattice()
     accuracy: dict[str, list[float]] = {solver.value: [] for solver in LabelSolver}
     accuracy["burn_in"] = []
     for seed in range(6):
@@ -211,7 +204,7 @@ def test_emission_mixture_plus_plus_is_kmeans_plus_plus_under_a_squared_distance
 
 @pytest.mark.structural
 def test_seeding_replaces_every_categorical_row_with_a_seeded_one() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(1))
 
     seeded = seed_emissions(params, data.observations, np.random.default_rng(2))
@@ -232,7 +225,7 @@ def test_label_accuracy_is_taken_over_permutations() -> None:
 
 @pytest.mark.edge_case
 def test_the_wolff_solver_needs_a_schedule_and_a_block_count_is_positive() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(1))
     with pytest.raises(ValueError, match="needs a schedule"):
         fit_spatio_sequential(

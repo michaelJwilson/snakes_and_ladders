@@ -15,7 +15,7 @@ produces them or in `STATUS.md`.
 One script per figure or table, each taking a declarative parameters file and
 producing a rendered figure plus a caption that states the seed, sizes, and
 model used to generate it. The format is that model's own — the
-phylogenetic figures take `simulation_params.yaml`, the optimization figures
+phylogenetic figures take a tree fixture, the optimization figures
 take the Potts and HMM fixtures `snakes_and_ladders.opt` defines — because the
 ground-truth-retention rule is about the caption matching what actually ran,
 not about one file layout. `figure.py` holds the shared
@@ -45,6 +45,12 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
   the suite runs it.** The suite pins one thread per process; a render strips
   that pin, because the committed bytes were produced under the renderer's
   own threading and a reduction split differently can move a last bit.
+- **Every script takes its instance as a parameters file.** A figure whose
+  instance is declared in the module is a figure the manifest cannot name and
+  the input stamp cannot see, so it is rendered from something no other caller
+  can reach and re-rendered when nothing about it changed. The instance is a
+  fixture (`sim/CLAUDE.md`), the manifest names the file, and a test refuses a
+  script that builds one for itself.
 - **A figure is rendered only when its inputs changed.** `inputs.py` digests
   what a figure is a function of and a stamp beside the figure records it;
   a matching stamp is a render skipped, a cited figure over the render cap
@@ -71,7 +77,7 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
   reporting on.
 - **A figure ships with its caption, and the caption ships with its
   generating parameters.** Seed, sizes, and model name are read from the same
-  `simulation_params.yaml`-format input the figure was rendered from, per
+  fixture the figure was rendered from, per
   `sim/CLAUDE.md`'s ground-truth-retention rule — never hand-written
   separately from what actually ran.
 - **A caption file is plain text, not LaTeX.** The document pulls it in

@@ -1,3 +1,6 @@
+model: potts-chain
+oracle: transfer-matrix
+
 # Ground truth for the 1-D Potts chain reference instance
 # (tests/regression/test_opt_potts.py). Every field is required -- see
 # python/snakes_and_ladders/opt/potts.py and python/snakes_and_ladders/opt/CLAUDE.md.

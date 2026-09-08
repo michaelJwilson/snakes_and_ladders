@@ -12,7 +12,7 @@ code with what it checks.
 | [`phylo_tree.ipynb`](phylo_tree.ipynb) | Phylogenetic trees, 6 taxa | Brute-force marginalization over ancestral states; all 105 unrooted topologies enumerated |
 | [`hmm.ipynb`](hmm.ipynb) | Discrete hidden Markov model | Enumeration over all `3**8` hidden paths; the retained hidden path; Baum-Welch as an independent algorithm |
 | [`ldpc.ipynb`](ldpc.ipynb) | Low-density parity-check code, Gallager's (3,6) ensemble | The general sum-product on the parity-check factor graph; enumeration of all 32,768 codewords of a cycle-free code; the density-evolution threshold 0.4294 |
-| [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the canonical instance; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
+| [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the CI fixture; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
 
 Each ends with a **Further Work** section naming what it could not demonstrate
 and the issue that carries it. Those sections are the point as much as the
@@ -25,10 +25,14 @@ one did (issue #278).
 
 ## Running them
 
-The notebooks import `snakes_and_ladders` and read fixtures from
-`tests/regression/fixtures/`, resolving the repository root from wherever they
-are opened. Install the package first (`INSTALL.md`), then open them with any
-Jupyter front end.
+The notebooks import `snakes_and_ladders` and take their instance from the
+fixture registry --- `snakes_and_ladders.sim.fixtures.fixture(problem, tier)`,
+one file per problem and tier under `tests/regression/fixtures/` --- which
+resolves the repository root from wherever they are opened. A notebook builds
+no instance of its own, and a guard refuses one that does (`PROBLEMS.md`,
+issue #382): a notebook demonstrating a different instance from the suite's
+would be demonstrating a different problem. Install the package first
+(`INSTALL.md`), then open them with any Jupyter front end.
 
 Continuous integration re-executes every notebook here and fails a pull
 request whose re-executed output disagrees with the committed one
@@ -38,8 +42,8 @@ byte-compares the rebuilt PDF.
 
 **A notebook is re-executed only when its inputs changed.** Beside each
 notebook is `<name>.inputs`, a digest of its code cells, every
-`snakes_and_ladders` module they reach by import, the fixtures they name and
-the library versions, written by `infra/check_notebooks.py --write` at the
+`snakes_and_ladders` module they reach by import, the fixtures they name ---
+by path or as a registry problem and tier --- and the library versions, written by `infra/check_notebooks.py --write` at the
 execution that produced the committed outputs (issue #372). The checker skips
 a notebook whose stamp matches the current tree and executes the rest;
 `--all` executes every one. A notebook whose module changed is executed and

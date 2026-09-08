@@ -20,7 +20,7 @@ from snakes_and_ladders.opt.potts import (
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "potts_params.yaml"
+FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 
 
 def test_potts_objective_benchmark(benchmark: BenchmarkFixture) -> None:

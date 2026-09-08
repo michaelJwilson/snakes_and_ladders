@@ -6,7 +6,7 @@ branch: claude/opt-364-spectral-init
 pr: 0
 tickets: [364, 251, 281]
 problem: tree
-fixture: tests/regression/fixtures/simulation_params_5taxa.yaml, tests/regression/fixtures/simulation_params_6taxa.yaml, and a random 20-taxon tree (lengths uniform on [0.02, 0.15], seed [364, 20]) at 1,000 sites
+fixture: tests/regression/fixtures/tree_search/ci.yaml, tests/regression/fixtures/tree_search/stress.yaml, and a random 20-taxon tree (lengths uniform on [0.02, 0.15], seed [364, 20]) at 1,000 sites
 size: release
 methods: [FromObjective, Perturbed, RandomRestart, FromDistances, FromHadamard]
 budget: 2000

@@ -24,7 +24,9 @@ from pathlib import Path
 
 import yaml
 
-EXPERIMENTS_DIR = Path(__file__).resolve().parents[1] / "docs" / "experiments"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+EXPERIMENTS_DIR = REPO_ROOT / "docs" / "experiments"
+FIXTURES_DIR = REPO_ROOT / "tests" / "regression" / "fixtures"
 TEMPLATE = "TEMPLATE.md"
 INDEX = "README.md"
 
@@ -55,6 +57,13 @@ SECTIONS = (
     "Finding",
     "Conclusion and actions",
     "What is not claimed",
+)
+#: What a ``fixture`` field must name: a fixture file, or the problem
+#: directory holding one where the experiment swept sizes around it rather
+#: than running the declared instance (issue #382). Prose may follow; the
+#: reference is what is checked.
+_FIXTURE_REFERENCE = re.compile(
+    r"tests/regression/fixtures/[a-z0-9_]+(?:/[a-z]+\.yaml)?"
 )
 _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _TICKET = re.compile(r"#\d+")
@@ -105,6 +114,7 @@ def problems(experiment: Experiment) -> list[str]:
         found.append(f"commit {commit!r} is not a 40-character lowercase hex SHA")
     if fields.get("problem") not in PROBLEMS:
         found.append(f"problem {fields.get('problem')!r} is not one of {PROBLEMS}")
+    found += _fixture_problems(fields.get("fixture", ""))
     if fields.get("size") not in SIZES:
         found.append(f"size {fields.get('size')!r} is not one of {SIZES}")
     if fields.get("status") not in STATUSES:
@@ -136,6 +146,27 @@ def problems(experiment: Experiment) -> list[str]:
             f"id {fields.get('id')!r} does not match the file name's {stem[:3]}"
         )
     return found
+
+
+def _fixture_problems(field: object) -> list[str]:
+    """What the ``fixture`` field gets wrong, as one line each.
+
+    An experiment is a measurement on an instance, and an instance that is
+    only described in prose is one nothing else can be run on. The field
+    therefore names a registry fixture --- a file, or the problem directory
+    when the experiment swept sizes around the declared instance.
+    """
+    references = _FIXTURE_REFERENCE.findall(str(field))
+    if not references:
+        return [
+            "fixture must name a fixture under tests/regression/fixtures/, "
+            "a file or the problem directory (issue #382)"
+        ]
+    return [
+        f"fixture names {reference!r}, which does not exist"
+        for reference in references
+        if not (REPO_ROOT / reference).exists()
+    ]
 
 
 def experiments(directory: Path = EXPERIMENTS_DIR) -> list[Experiment]:

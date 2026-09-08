@@ -24,13 +24,13 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "simulation_params_5taxa.yaml"
+FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 _BRANCH_LENGTH = 0.1629
 
 # The fixture issue #177 added, at 7 taxa and 2000 sites against 5 and 500.
 # Measured here because issue #178 counts its training budget in candidate
 # scorings, and a budget is only affordable relative to what one costs.
-HARD_FIXTURE = FIXTURES_DIR / "simulation_params_hard.yaml"
+HARD_FIXTURE = FIXTURES_DIR / "tree_search/release.yaml"
 _HARD_BRANCH_LENGTH = 0.2451
 
 

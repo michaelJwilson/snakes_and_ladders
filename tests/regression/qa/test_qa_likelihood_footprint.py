@@ -32,6 +32,7 @@ from snakes_and_ladders.qa.likelihood_footprint import (
     warm_up,
 )
 from snakes_and_ladders.search.rl import with_uniform_branch_lengths
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
@@ -43,6 +44,10 @@ TOLERANCE = 0.05
 
 FIXED_TAXA = 16
 FIXED_SITES = 2_000
+
+#: The alphabet the table is computed at, read from the tree fixture the
+#: figure is rendered from rather than restated here.
+N_STATES = fixture("tree_jc", "ci").params.k
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -87,7 +92,7 @@ def test_the_published_simulation_figure_matches_the_allocator(
     tests compare against. A simulator that kept only the leaves would come in
     at half this and fail here rather than quietly making the table wrong.
     """
-    measured, _ = measure(*size)
+    measured, _ = measure(*size, N_STATES)
     assert measured / simulation_bytes(*size) == pytest.approx(1.0, rel=TOLERANCE)
 
 
@@ -104,8 +109,10 @@ def test_the_published_evaluation_figure_matches_the_allocator(
     root is open at the deepest point of the post-order, which is the claim
     that makes this the worst case and the table a bound.
     """
-    _, measured = measure(*size)
-    assert measured / evaluation_bytes(*size) == pytest.approx(1.0, rel=TOLERANCE)
+    _, measured = measure(*size, N_STATES)
+    assert measured / evaluation_bytes(*size, N_STATES) == pytest.approx(
+        1.0, rel=TOLERANCE
+    )
 
 
 @pytest.mark.mathematical
@@ -145,7 +152,7 @@ def test_the_declared_maximum_sits_inside_the_memory_requirement() -> None:
     breaks the requirement.
     """
     taxa, sites = DECLARED_MAXIMUM
-    total = simulation_bytes(taxa, sites) + evaluation_bytes(taxa, sites)
+    total = simulation_bytes(taxa, sites) + evaluation_bytes(taxa, sites, N_STATES)
     assert total < MEMORY_BUDGET_BYTES / 10
 
 
@@ -162,4 +169,4 @@ def test_the_check_would_fail_on_a_model_missing_a_term() -> None:
     without_states = (2 * taxa - 2) * sites * 8
 
     assert leaves_only / simulation_bytes(taxa, sites) < 1.0 - TOLERANCE
-    assert without_states / evaluation_bytes(taxa, sites) < 1.0 - TOLERANCE
+    assert without_states / evaluation_bytes(taxa, sites, N_STATES) < 1.0 - TOLERANCE

@@ -35,9 +35,9 @@ from tests._fixtures import FIXTURES_DIR
 @pytest.mark.parametrize(
     "fixture_name",
     [
-        "simulation_params.yaml",  # 4 taxa, 200_000 sites
-        "simulation_params_small_sites.yaml",  # 4 taxa, 20_000 sites
-        "simulation_params_8taxa.yaml",  # 8 taxa, 200_000 sites
+        "tree_jc/stress.yaml",  # 4 taxa, 200_000 sites
+        "tree_jc/ci.yaml",  # 4 taxa, 20_000 sites
+        "tree_jc/release.yaml",  # 8 taxa, 200_000 sites
     ],
 )
 def test_rust_log_likelihood_benchmark(
@@ -64,7 +64,7 @@ def test_rust_log_likelihood_benchmark(
 
 def test_numpy_vs_rust_forward_pass(benchmark: BenchmarkFixture) -> None:
     """Rust forward pass against the NumPy reference at a fixed size (report both)."""
-    params = load_simulation_params(FIXTURES_DIR / "simulation_params_small_sites.yaml")
+    params = load_simulation_params(FIXTURES_DIR / "tree_jc/ci.yaml")
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

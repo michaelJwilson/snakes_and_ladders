@@ -32,7 +32,7 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import load_fixture
 
-FIVE_TAXA = "simulation_params_5taxa.yaml"
+FIVE_TAXA = "tree_search/ci.yaml"
 FIELD = np.array([0.3, -0.2, 0.1])
 
 

@@ -25,7 +25,7 @@ from snakes_and_ladders.learn.rollout import greedy_rollout
 
 # Deliberately asymmetric: a near-uniform transition or emission makes the
 # hidden states nearly exchangeable, and a search on an almost-flat landscape
-# measures the fixture rather than the method (`hmm_params.yaml` says the same
+# measures the fixture rather than the method (`hmm/ci.yaml` says the same
 # of the fitting fixture).
 INITIAL = np.log(np.array([0.5, 0.3, 0.2]))
 TRANSITION = np.log(np.array([[0.7, 0.2, 0.1], [0.15, 0.75, 0.1], [0.2, 0.2, 0.6]]))

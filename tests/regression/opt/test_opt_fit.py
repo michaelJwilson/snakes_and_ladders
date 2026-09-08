@@ -38,8 +38,8 @@ from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 
-POTTS_FIXTURE = FIXTURES_DIR / "potts_params.yaml"
-HMM_FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
+POTTS_FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
+HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 # The first-order condition, relative to the objective's magnitude: both the
 # objective and its gradient scale with the data, so an absolute bound would

@@ -28,7 +28,7 @@ from snakes_and_ladders.opt.potts import (
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences
 
-FIXTURE = FIXTURES_DIR / "potts_params.yaml"
+FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 
 # Tolerances are relative throughout, per `DEV.md`: the log-likelihood is a
 # sum over chains and sites, so an absolute bound fixed at one fixture size

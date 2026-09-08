@@ -1,0 +1,27 @@
+model: frustrated-lattice
+oracle: closed-form
+
+# The two frustrated instances whose answer comes from outside this suite
+# (`snakes_and_ladders.qa.frustrated_lattices`). Every field is required --
+# see python/snakes_and_ladders/sim/canonical.py and sim/CLAUDE.md.
+#
+# 3x3 is the smallest periodic triangular lattice the counting argument
+# covers: at extent 2 the +1 and -1 neighbours coincide and the wrap doubles
+# a bond. The ground-state energy is then known at every size -- one edge in
+# three agrees -- rather than only where enumeration reaches, which is why
+# the stated oracle is the closed form and not an enumeration.
+seed: 20260908
+shape: [3, 3]
+boundary: periodic
+coupling: -1.0
+
+# The planted Viana-Bray scan: 60 sites at mean degree 4 is sparse enough to
+# be locally tree-like and large enough that descent does not solve it, and
+# frustration is the knob that makes it hard. At frustration 0 the instance
+# is a gauge transform of the ferromagnet and any local search solves it; it
+# is included as the trivial end of the scan, never as a hard case.
+glass_nodes: 60
+glass_mean_degree: 4.0
+glass_magnitude: 1.0
+glass_frustrations: [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35]
+glass_restarts: 20

@@ -25,9 +25,9 @@ from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, load_fixture
 
-FIVE_TAXA = "simulation_params_5taxa.yaml"
-SIX_TAXA = "simulation_params_6taxa.yaml"
-HARD = "simulation_params_hard.yaml"
+FIVE_TAXA = "tree_search/ci.yaml"
+SIX_TAXA = "tree_search/stress.yaml"
+HARD = "tree_search/release.yaml"
 FIXTURES = (FOUR_TAXA, FIVE_TAXA, SIX_TAXA, HARD, EIGHT_TAXA)
 
 #: Every branch length is recovered to this on an additive matrix.

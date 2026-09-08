@@ -1,4 +1,4 @@
-"""Typed loader for ``simulation_params.yaml`` files.
+"""Typed loader for the tree fixture files.
 
 Per ``sim/CLAUDE.md``, a simulated dataset's truth is fully defined in a
 yaml: topology and branch lengths (tau), the alphabet size (k), the root
@@ -54,7 +54,7 @@ class SimulationParams:
 
 
 def load_simulation_params(path: Path) -> SimulationParams:
-    """Load and validate a ``simulation_params.yaml`` file.
+    """Load and validate a tree fixture yaml.
 
     Parameters
     ----------

@@ -1,5 +1,8 @@
+model: jukes-cantor
+oracle: enumeration
+
 # An 8-taxon balanced tree, at the same n_sites/tolerance as
-# simulation_params.yaml -- the taxa-count point in the "variety of
+# tree_jc/stress.yaml -- the taxa-count point in the "variety of
 # site/taxa sizes" sim/CLAUDE.md asks validation tests to cover.
 seed: 20260904
 n_sites: 200000

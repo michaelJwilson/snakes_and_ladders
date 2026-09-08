@@ -1,0 +1,30 @@
+model: gaussian-mixture
+oracle: enumeration
+
+# The five-component Gaussian mixture of the seeding and tempering studies
+# (`snakes_and_ladders.qa.mixture_seeding`, experiment 004). Every field is
+# required -- see python/snakes_and_ladders/sim/mixture.py and sim/CLAUDE.md.
+#
+# Adjacent means are 1.5 standard deviations apart: far enough that the
+# components are identifiable from 500 observations, close enough that the
+# likelihood has the local optima the comparison is about. The weights are
+# deliberately unequal, so a method that recovers the components by symmetry
+# rather than from the data is caught.
+#
+# The oracle at this size is the exact optimal 1-D k-means cost
+# (`opt.mixture.optimal_clustering_cost`), a dynamic program over cuts of the
+# sorted observations rather than a search shared with the fit.
+seed: 20260908
+n_samples: 500
+weights: [0.30, 0.10, 0.25, 0.15, 0.20]
+means: [-3.0, -1.5, 0.0, 1.5, 3.0]
+scales: [1.0, 1.0, 1.0, 1.0, 1.0]
+
+# The variance floor the fitting suite declares for this fixture: a Gaussian
+# likelihood has no maximum, so a fit that reaches the floor is a refusal
+# rather than a converged answer.
+variance_floor: 1.0e-12
+
+# Absolute tolerance a validation test checks simulated frequencies against
+# their analytic counterpart within, at 500 draws.
+tolerance: 0.05

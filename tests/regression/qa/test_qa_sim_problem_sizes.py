@@ -20,9 +20,9 @@ from snakes_and_ladders.sim.tree import preorder
 from tests._fixtures import FIXTURES_DIR
 
 FIXTURE_NAMES = (
-    "simulation_params.yaml",
-    "simulation_params_small_sites.yaml",
-    "simulation_params_8taxa.yaml",
+    "tree_jc/stress.yaml",
+    "tree_jc/ci.yaml",
+    "tree_jc/release.yaml",
 )
 FIXTURE_PATHS = [FIXTURES_DIR / name for name in FIXTURE_NAMES]
 
@@ -82,11 +82,11 @@ def test_site_counts_are_separated_and_seeds_are_not(tmp_path: Path) -> None:
 
 @pytest.mark.structural
 def test_underscores_in_fixture_names_are_escaped(tmp_path: Path) -> None:
-    # An unescaped underscore in a filename is a LaTeX error, and these
-    # filenames all contain them.
+    # An unescaped underscore in a fixture's name is a LaTeX error, and
+    # every problem name here contains one.
     body = main(_argv(tmp_path)).table_path.read_text()
 
-    assert r"simulation\_params\_8taxa.yaml" in body
+    assert r"tree\_jc/release.yaml" in body
     for line in body.splitlines():
         stripped = line.replace(r"\_", "")
         assert "_" not in stripped, line
@@ -100,21 +100,21 @@ def test_problem_sizes_values_match_each_fixture_independently() -> None:
 
         # Cross-check against direct knowledge of the fixtures rather than
         # re-deriving through the module under test.
-        if path.name == "simulation_params.yaml":
+        if path.parts[-2:] == ("tree_jc", "stress.yaml"):
             assert (n_taxa, params.n_sites, params.seed, params.tolerance) == (
                 4,
                 200000,
                 20260902,
                 0.01,
             )
-        elif path.name == "simulation_params_small_sites.yaml":
+        elif path.parts[-2:] == ("tree_jc", "ci.yaml"):
             assert (n_taxa, params.n_sites, params.seed, params.tolerance) == (
                 4,
                 20000,
                 20260903,
                 0.03,
             )
-        elif path.name == "simulation_params_8taxa.yaml":
+        elif path.parts[-2:] == ("tree_jc", "release.yaml"):
             assert (n_taxa, params.n_sites, params.seed, params.tolerance) == (
                 8,
                 200000,

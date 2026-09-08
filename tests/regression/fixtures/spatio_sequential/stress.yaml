@@ -1,0 +1,33 @@
+model: spatio-sequential
+oracle: none
+
+# The coupled model at the size the label solvers are compared on
+# (docs/nb/spatio_sequential.ipynb). Every field is required -- see
+# python/snakes_and_ladders/sim/spatio_sequential.py.
+#
+# A 10x10 open lattice is 100 nodes: past enumeration by a wide margin, which
+# is the point of the tier. What referees a result here is the planted
+# labelling the draw is conditioned on, not an exact evidence, so the stated
+# oracle is none.
+#
+# beta = 1.0 rather than the CI instance's 0.6: the spatial prior has to be
+# strong enough that a labelling is worth solving for at this size, and the
+# emissions overlap more, so the classes are not separable position by
+# position.
+seed: 20260908
+shape: [10, 10]
+boundary: open
+coupling: 1.0
+n_classes: 2
+n_states: 2
+n_positions: 4
+beta: 1.0
+self_transition: 0.7
+initial:
+  - [0.6, 0.4]
+  - [0.3, 0.7]
+emissions:
+  - - [0.6, 0.2, 0.2]
+    - [0.2, 0.6, 0.2]
+  - - [0.2, 0.2, 0.6]
+    - [0.4, 0.4, 0.2]

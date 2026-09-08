@@ -27,7 +27,7 @@ import numpy as np
 from matplotlib.figure import Figure
 
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import figure_main
+from snakes_and_ladders.qa.runner import FRUSTRATED_LATTICE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK,
     INK_MUTED,
@@ -39,22 +39,10 @@ from snakes_and_ladders.qa.style import (
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.max_cut import enumerate_max_cut
 from snakes_and_ladders.sim.canonical import (
-    frustrated_triangular_lattice,
+    FrustratedLatticeParams,
     minimum_frustrated_edges,
-    planted_spin_glass,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
-
-#: The smallest periodic triangular lattice the closed form covers.
-LATTICE_SHAPE: tuple[int, int] = (3, 3)
-
-#: The glass scan: sites, target mean degree, the frustration fractions
-#: tried, descents per instance, and the seed every draw descends from.
-GLASS_NODES = 60
-GLASS_DEGREE = 4.0
-FRUSTRATIONS: tuple[float, ...] = (0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35)
-RESTARTS = 20
-SEED = 20260908
 
 #: The lattice's three bond directions on the unit cell, as the graph lays
 #: them out: along a row, down a column, and the diagonal.
@@ -146,20 +134,23 @@ class GlassScan:
     Parameters
     ----------
     planted : np.ndarray
-        ``E`` of the planted state, one per entry of `FRUSTRATIONS`.
+        ``E`` of the planted state, one per frustration the fixture declares.
     descended : np.ndarray
-        The lowest energy `RESTARTS` single-site descents reached.
+        The lowest energy the declared number of single-site descents
+        reached.
     """
 
     planted: np.ndarray
     descended: np.ndarray
 
 
-def glass_scan(rng: np.random.Generator) -> GlassScan:
-    """Build one instance per frustration and descend on each from restarts.
+def glass_scan(params: FrustratedLatticeParams, rng: np.random.Generator) -> GlassScan:
+    """Build one instance per declared frustration and descend on each.
 
     Parameters
     ----------
+    params : FrustratedLatticeParams
+        The declared scan: sites, mean degree, frustrations and restarts.
     rng : np.random.Generator
         Every draw, the instances and the starts, comes from it; passed in
         rather than seeded here (``sim/CLAUDE.md``).
@@ -169,20 +160,24 @@ def glass_scan(rng: np.random.Generator) -> GlassScan:
     GlassScan
     """
     field = np.zeros(2)
-    planted = np.zeros(len(FRUSTRATIONS))
-    descended = np.zeros(len(FRUSTRATIONS))
-    for index, frustration in enumerate(FRUSTRATIONS):
-        instance = planted_spin_glass(GLASS_NODES, GLASS_DEGREE, frustration, rng)
+    planted = np.zeros(len(params.glass_frustrations))
+    descended = np.zeros(len(params.glass_frustrations))
+    for index, frustration in enumerate(params.glass_frustrations):
+        instance = params.glass(frustration, rng)
         planted[index] = instance.planted_energy
         descended[index] = min(
             iterated_conditional_modes(instance.graph, field, 2, rng)[1]
-            for _ in range(RESTARTS)
+            for _ in range(params.glass_restarts)
         )
     return GlassScan(planted=planted, descended=descended)
 
 
 def build_figure(
-    graph: PottsGraph, labelling: np.ndarray, agreeing: int, scan: GlassScan
+    params: FrustratedLatticeParams,
+    graph: PottsGraph,
+    labelling: np.ndarray,
+    agreeing: int,
+    scan: GlassScan,
 ) -> tuple[Figure, str]:
     """Assemble the two panels and the caption.
 
@@ -229,7 +224,7 @@ def build_figure(
         ):
             style = series_style(index)
             axes[1].plot(
-                FRUSTRATIONS,
+                params.glass_frustrations,
                 values,
                 marker=style["marker"],
                 linestyle=style["linestyle"],
@@ -242,7 +237,7 @@ def build_figure(
         axes[1].legend(loc="upper left", frameon=False, fontsize="small")
         fig.tight_layout()
 
-    rows, columns = LATTICE_SHAPE
+    rows, columns = params.shape
     matched = int(np.sum(scan.descended >= scan.planted - 1e-9))
     below = int(np.sum(scan.descended < scan.planted - 1e-9))
     caption = (
@@ -253,12 +248,12 @@ def build_figure(
         f"bonds join agreeing spins: {agreeing} of {len(graph.edges)}, one in "
         f"three, which the double count over triangles fixes as the minimum "
         f"at every size, so the ground-state energy is {agreeing} exactly. "
-        f"(b) A planted Viana-Bray spin glass on {GLASS_NODES} sites at mean "
-        f"degree {GLASS_DEGREE:g}, couplings of magnitude 1, one instance per "
-        f"frustration from seed {SEED}: the energy of the planted state "
-        f"against the lowest energy reached by {RESTARTS} single-site "
+        f"(b) A planted Viana-Bray spin glass on {params.glass_nodes} sites at mean "
+        f"degree {params.glass_mean_degree:g}, couplings of magnitude 1, one instance per "
+        f"frustration from seed {params.seed}: the energy of the planted state "
+        f"against the lowest energy reached by {params.glass_restarts} single-site "
         f"descents from random starts. Descent lands on the planted energy at "
-        f"{matched} of {len(FRUSTRATIONS)} frustrations and goes below it at "
+        f"{matched} of {len(params.glass_frustrations)} frustrations and goes below it at "
         f"{below}, where the planted state is an upper bound on the ground "
         f"state and not the ground state."
     )
@@ -279,18 +274,22 @@ def main(argv: list[str] | None = None) -> QAFigure:
         Paths written, and the caption.
     """
 
-    def build() -> tuple[Figure, str]:
-        graph = frustrated_triangular_lattice(LATTICE_SHAPE)
+    def build(params: FrustratedLatticeParams) -> tuple[Figure, str]:
+        graph = params.lattice()
         labelling, agreeing = ground_state(graph)
         assert agreeing == minimum_frustrated_edges(graph)
         return build_figure(
-            graph, labelling, agreeing, glass_scan(np.random.default_rng(SEED))
+            params,
+            graph,
+            labelling,
+            agreeing,
+            glass_scan(params, np.random.default_rng(params.seed)),
         )
 
     return figure_main(
         stem="frustrated_lattices",
         description=__doc__,
-        params=(),
+        params=(FRUSTRATED_LATTICE_PARAMS,),
         build=build,
         argv=argv,
     )

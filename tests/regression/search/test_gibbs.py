@@ -44,7 +44,6 @@ from snakes_and_ladders.search.topology import (
     random_topology,
 )
 from snakes_and_ladders.sim.canonical import (
-    frustrated_triangular_lattice,
     minimum_frustrated_edges,
 )
 from snakes_and_ladders.sim.factor_graph import (
@@ -55,12 +54,12 @@ from snakes_and_ladders.sim.factor_graph import (
     from_potts,
     from_tree,
 )
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.spatio_sequential import (
-    canonical_spatio_sequential,
     coupled_factor_graph,
     simulate_spatio_sequential,
 )
@@ -203,7 +202,7 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
 
 @pytest.mark.simulated_truth
 def test_the_generic_sweep_samples_the_coupled_model_s_label_posterior() -> None:
-    params = canonical_spatio_sequential()
+    params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(1))
     graph = coupled_factor_graph(params, data.observations)
     exact = enumerate_spatio_sequential(params, data.observations)
@@ -228,7 +227,7 @@ def test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_do
     # The triangular antiferromagnet's ground state has exactly N agreeing
     # edges, so the minimum energy is known at every size. Six seeds, 200
     # sweeps each: the generic annealer and anneal_potts both reach it on 6.
-    graph = frustrated_triangular_lattice((3, 3))
+    graph = fixture("frustrated_lattice", "ci").params.lattice()
     target = float(minimum_frustrated_edges(graph))
     factor_graph = from_potts(graph, np.zeros(2))
     schedule = Exponential(2.0, 0.05, 200)
@@ -272,7 +271,7 @@ def test_the_temperature_scales_every_table_so_a_hot_chain_is_nearly_uniform() -
 
 
 def _five_taxa(n_sites: int) -> tuple[dict[str, np.ndarray], int]:
-    params = load_simulation_params(fixture_path("simulation_params_5taxa.yaml"))
+    params = load_simulation_params(fixture_path("tree_search/ci.yaml"))
     dataset = simulate_alignment(
         params.tau, params.k, params.pi, np.random.default_rng(2), n_sites
     )

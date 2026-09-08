@@ -36,7 +36,7 @@ from snakes_and_ladders.opt.mixture import (
     uniform_seeds,
 )
 from snakes_and_ladders.qa.figure import QAFigure
-from snakes_and_ladders.qa.runner import figure_main
+from snakes_and_ladders.qa.runner import MIXTURE_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
     INK_MUTED,
     ONE_COLUMN_WIDE,
@@ -46,40 +46,13 @@ from snakes_and_ladders.qa.style import (
 )
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 
-#: The five-component fixture of the tempering-against-restarts comparison:
-#: adjacent means 1.5 standard deviations apart, unequal weights.
-MEANS: tuple[float, ...] = (-3.0, -1.5, 0.0, 1.5, 3.0)
-SCALES: tuple[float, ...] = (1.0, 1.0, 1.0, 1.0, 1.0)
-WEIGHTS: tuple[float, ...] = (0.30, 0.10, 0.25, 0.15, 0.20)
-N_SAMPLES = 500
-SEED = 20260908
-
 #: Independent seedings of the same observations, per strategy.
 SEEDINGS = 200
-
-#: The variance floor the fitting suite declares for this fixture.
-VARIANCE_FLOOR = 1e-12
 
 #: The EM cap. Components 1.5 standard deviations apart converge linearly,
 #: and the equal-budget comparison measured raw EM still moving at this
 #: count; the caption says whether the cap was reached.
 EM_ITERATIONS = 500
-
-
-def fixture() -> MixtureParams:
-    """The generating truth, declared once.
-
-    Returns
-    -------
-    MixtureParams
-    """
-    return MixtureParams(
-        weights=np.array(WEIGHTS),
-        components=GaussianEmission(MEANS, SCALES, VARIANCE_FLOOR),
-        n_samples=N_SAMPLES,
-        seed=SEED,
-        tolerance=0.05,
-    )
 
 
 @dataclass(frozen=True)
@@ -101,13 +74,17 @@ class SeedingRatios:
     optimal: float
 
 
-def seeding_ratios(observations: np.ndarray, rng: np.random.Generator) -> SeedingRatios:
+def seeding_ratios(
+    observations: np.ndarray, n_centres: int, rng: np.random.Generator
+) -> SeedingRatios:
     """Seed the observations `SEEDINGS` times each way and cost every seeding.
 
     Parameters
     ----------
     observations : np.ndarray
         The fixture's draws.
+    n_centres : int
+        Components the fixture declares.
     rng : np.random.Generator
         Every seeding draws from it, in order; passed in rather than seeded
         here (``sim/CLAUDE.md``).
@@ -116,7 +93,6 @@ def seeding_ratios(observations: np.ndarray, rng: np.random.Generator) -> Seedin
     -------
     SeedingRatios
     """
-    n_centres = len(MEANS)
     optimal = optimal_clustering_cost(observations, n_centres)
     plus_plus = np.array(
         [
@@ -137,14 +113,16 @@ def seeding_ratios(observations: np.ndarray, rng: np.random.Generator) -> Seedin
     return SeedingRatios(kmeans_plus_plus=plus_plus, uniform=uniform, optimal=optimal)
 
 
-def fitted(observations: np.ndarray, rng: np.random.Generator) -> MixtureFit:
+def fitted(
+    observations: np.ndarray, n_centres: int, rng: np.random.Generator
+) -> MixtureFit:
     """Expectation--maximization from one k-means++ start drawn from ``rng``.
 
     Returns
     -------
     MixtureFit
     """
-    objective = GaussianMixtureObjective(observations, len(MEANS))
+    objective = GaussianMixtureObjective(observations, n_centres)
     start = KMeansPlusPlus(1, rng).starts(objective)[0]
     named = objective.constrain(start)
     return expectation_maximization(
@@ -175,7 +153,10 @@ def density(
 
 
 def build_figure(
-    observations: np.ndarray, fit: MixtureFit, ratios: SeedingRatios
+    truth: MixtureParams,
+    observations: np.ndarray,
+    fit: MixtureFit,
+    ratios: SeedingRatios,
 ) -> tuple[Figure, str]:
     """Assemble the two panels and the caption.
 
@@ -183,11 +164,12 @@ def build_figure(
     -------
     tuple[matplotlib.figure.Figure, str]
     """
-    truth = fixture()
     grid = np.linspace(observations.min() - 1.0, observations.max() + 1.0, 400)
     generating = density(grid, truth.weights, truth.components)
     reached = density(grid, fit.weights.numpy(), fit.components)
-    bound = seeding_guarantee(len(MEANS))
+    means = truth.components.mean.numpy()
+    weights = np.asarray(truth.weights)
+    bound = seeding_guarantee(truth.n_components)
     with letter_style():
         fig, axes = plt.subplots(1, 2, figsize=ONE_COLUMN_WIDE)
         axes[0].hist(
@@ -248,10 +230,10 @@ def build_figure(
         else f"in {fit.iterations} iterations"
     )
     caption = (
-        f"A Gaussian mixture of {len(MEANS)} components with means "
-        f"{', '.join(f'{mean:g}' for mean in MEANS)}, unit scales and weights "
-        f"{', '.join(f'{weight:g}' for weight in WEIGHTS)}: {N_SAMPLES} "
-        f"observations at seed {SEED}. (a) The observations, the generating "
+        f"A Gaussian mixture of {truth.n_components} components with means "
+        f"{', '.join(f'{mean:g}' for mean in means)}, unit scales and weights "
+        f"{', '.join(f'{weight:g}' for weight in weights)}: {truth.n_samples} "
+        f"observations at seed {truth.seed}. (a) The observations, the generating "
         f"density, and the density expectation-maximization reaches from one "
         f"k-means++ start {stopped}, at log-likelihood "
         f"{fit.log_likelihood:.1f}. (b) The k-means cost of a seeding divided "
@@ -282,19 +264,20 @@ def main(argv: list[str] | None = None) -> QAFigure:
         Paths written, and the caption.
     """
 
-    def build() -> tuple[Figure, str]:
-        observations = simulate_mixture(fixture()).observations
-        fit_rng, seeding_rng = np.random.default_rng(SEED).spawn(2)
+    def build(truth: MixtureParams) -> tuple[Figure, str]:
+        observations = simulate_mixture(truth).observations
+        fit_rng, seeding_rng = np.random.default_rng(truth.seed).spawn(2)
         return build_figure(
+            truth,
             observations,
-            fitted(observations, fit_rng),
-            seeding_ratios(observations, seeding_rng),
+            fitted(observations, truth.n_components, fit_rng),
+            seeding_ratios(observations, truth.n_components, seeding_rng),
         )
 
     return figure_main(
         stem="mixture_seeding",
         description=__doc__,
-        params=(),
+        params=(MIXTURE_PARAMS,),
         build=build,
         argv=argv,
     )

@@ -34,8 +34,8 @@ Surfaces = tuple[
     np.ndarray, np.ndarray, int, float, dict[float, float], dict[float, bool]
 ]
 
-FIVE_TAXA = FIXTURES_DIR / "simulation_params_5taxa.yaml"
-SIX_TAXA = FIXTURES_DIR / "simulation_params_6taxa.yaml"
+FIVE_TAXA = FIXTURES_DIR / "tree_search/ci.yaml"
+SIX_TAXA = FIXTURES_DIR / "tree_search/stress.yaml"
 
 
 @pytest.fixture(scope="module")
