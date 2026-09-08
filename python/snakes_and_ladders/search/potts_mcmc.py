@@ -48,7 +48,7 @@ from enum import StrEnum
 import numpy as np
 
 from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.opt.schedule import AdaptedLadder, Schedule, adapt_ladder
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import PottsGraph
 
@@ -456,6 +456,53 @@ def parallel_tempering(
         best_energy=best_energy,
         n_sweeps=n_sweeps,
     )
+
+
+def adapt_ladder_potts(
+    graph: PottsGraph,
+    field: np.ndarray,
+    ladder: tuple[float, ...],
+    rng: np.random.Generator,
+    n_sweeps: int,
+    band: tuple[float, float],
+    max_rounds: int,
+    max_replicas: int,
+    *,
+    backend: Backend = Backend.PYTHON,
+) -> AdaptedLadder:
+    """A ladder for :func:`parallel_tempering`, from its own exchange acceptances.
+
+    :func:`snakes_and_ladders.opt.schedule.adapt_ladder` with the measurement
+    being a :func:`parallel_tempering` run of ``n_sweeps`` per replica on the
+    candidate ladder, drawn from ``rng`` in sequence so one seed reproduces
+    the warm-up. The result's ``replicas_measured * n_sweeps`` is what the
+    warm-up cost in sweeps, and a comparison against a hand ladder at equal
+    budget charges it (issue #333).
+
+    Parameters
+    ----------
+    graph, field, rng, backend
+        As :func:`parallel_tempering`.
+    ladder : tuple[float, ...]
+        The starting ladder; its endpoints are kept.
+    n_sweeps : int
+        Sweeps per replica per measurement. Each acceptance is a fraction of
+        ``n_sweeps`` proposals, so this sets what the band can resolve.
+    band, max_rounds, max_replicas
+        As :func:`snakes_and_ladders.opt.schedule.adapt_ladder`.
+
+    Returns
+    -------
+    AdaptedLadder
+    """
+
+    def measure(candidate: tuple[float, ...]) -> list[float]:
+        run = parallel_tempering(
+            graph, field, candidate, rng, n_sweeps, backend=backend
+        )
+        return [float(value) for value in run.swap_acceptance]
+
+    return adapt_ladder(measure, ladder, band, max_rounds, max_replicas)
 
 
 def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:

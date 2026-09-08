@@ -238,10 +238,17 @@ def energy(
     """
     values = site_field(graph, field_values)
     total = values[np.arange(graph.n_nodes), configurations].sum(axis=-1)
-    for (first, second), coupling in graph.weighted_edges():
-        total = total + coupling * (
-            configurations[..., first] == configurations[..., second]
-        )
+    if graph.edges:
+        # One gather over every edge rather than a Python-level term per edge:
+        # issue #341 measured the loop at 92% of this function's self time,
+        # and #336 found it the term left in the Rust ground state's wall clock.
+        # The edge terms are then summed by ``dot`` rather than left to right
+        # in edge order as `likelihood.potts.log_weights` sums them, so the
+        # two agree to rounding -- 1e-12 relative in the test -- and no
+        # longer bitwise.
+        ends = np.asarray(graph.edges, dtype=np.int64)
+        agree = configurations[..., ends[:, 0]] == configurations[..., ends[:, 1]]
+        total = total + agree.astype(float) @ np.asarray(graph.coupling, dtype=float)
     return -np.asarray(total)
 
 
