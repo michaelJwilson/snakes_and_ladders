@@ -36,6 +36,15 @@ request whose re-executed output disagrees with the committed one
 standard the figures in `docs/tex/` are — CI regenerates those and
 byte-compares the rebuilt PDF.
 
+**A notebook is re-executed only when its inputs changed.** Beside each
+notebook is `<name>.inputs`, a digest of its code cells, every
+`snakes_and_ladders` module they reach by import, the fixtures they name and
+the library versions, written by `infra/check_notebooks.py --write` at the
+execution that produced the committed outputs (issue #372). The checker skips
+a notebook whose stamp matches the current tree and executes the rest;
+`--all` executes every one. A notebook whose module changed is executed and
+compared whether or not its author re-ran it.
+
 **Text is compared; images are not.** Every number a notebook prints is
 determined by its seeds, so a re-executed stream output must match exactly.
 Rendered figures embed metadata that is not stable across matplotlib builds,
