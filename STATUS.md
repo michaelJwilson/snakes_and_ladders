@@ -709,6 +709,32 @@ change would need. So **no default moves**; k-means++ lands as a strategy a
 caller may choose, at a cost of one objective evaluation (271 us of seeding
 against 260 us per evaluation at 4000 points).
 
+**Tempering against restarts on the mixture, at equal evaluations.** The
+comparison [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284)
+and [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303)
+deferred, recorded whichever way it fell
+([#332](https://github.com/michaelJwilson/snakes_and_ladders/issues/332),
+[`docs/experiments/004`](docs/experiments/004-mixture-tempering-vs-restarts.md)).
+Five components 1.5 standard deviations apart with unequal weights, 500
+observations, built from `sim.mixture` under seed 20260908 since #262 committed
+neither of the five-component fixtures it measured. Multi-start EM, simulated
+annealing with Hamiltonian proposals and parallel tempering — the continuous
+counterpart of the Potts one, now in `opt.hmc` beside `anneal` — each spend
+3,000 likelihood evaluations per start through `opt.budget.compare`, every
+method ending with the same charged L-BFGS polish because raw EM sits 4 to 6
+nats above its basin's optimum 500 iterations in. Against the best-known optimum — 1111.596 nats, reached by 16 of 1,000
+polished restarts and 8.3 nats below the polished simulated parameters, whose
+basin is not the maximum on this sample — over 40 shared starts: **restarts
+7/40**, tempering 4/40 (McNemar p = 0.549 against restarts), annealing 1/40
+(p = 0.031); mean gaps 2.6, 4.2 and 8.0 nats. **Restarts are not beaten on
+the mixture**, at 3,000 evaluations: tempering does not separate from them
+and annealing loses to them, the opposite of the glass row above and the
+same finding as Rastrigin. The 8-start tier of the same test runs per pull
+request and pins the ordering.
+The paired test `ROADMAP.md` §2.4 asks for is now in the utility:
+`opt.budget.mcnemar` on the per-start hits, exact rather than chi-square,
+because 40 starts cannot support the approximation.
+
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
 but until now only a gradient fit could ask for one — expectation-maximization
@@ -997,15 +1023,34 @@ past it — zero field gives an aligned state at `-J |E|`, zero coupling gives
 `argmax` per site; and by the max-flow min-cut theorem as a self-check, the
 flow value equalling the capacity of the cut residual reachability induces.
 
-A Rust kernel (`src/maxflow.rs`) runs **28-34x** faster than the NumPy
-reference measured on its own, and **6.6-10.6x** as a caller sees it; the
-difference is the list marshalling crossing the FFI boundary, which is the
-same gap #202 closes for the categorical sampler and is deferred to it rather
-than solved twice. The reference stays as the oracle. The port also removes a
-fragility: the
-Python blocking flow recurses to the depth of the level graph and needs
-`setrecursionlimit` raised past a few thousand nodes, while the Rust one uses
-an explicit stack.
+A Rust kernel (`src/maxflow.rs`) runs **26-32x** faster than the NumPy
+reference measured on its own, and **6.3-10.7x** as a caller sees it. #220
+attributed the difference to the Python lists crossing the FFI boundary by
+copy, the gap #202 closed for the categorical sampler, and deferred the fix;
+[#336](https://github.com/michaelJwilson/snakes_and_ladders/issues/336)
+applied it, passing `float64` and `int64` buffers through `rust-numpy` and
+returning the configuration as an array, and measured that the copy was not
+the term. Minimum of 20 or more rounds, in ms, on square lattices with a
+random per-node field:
+
+| Extent | NumPy reference | Kernel, lists (#220) | Kernel, buffers (#336) | Caller (#220) | Caller (#336) | `energy()` |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 | 4.47 | 0.142 | 0.138 | 0.733 | 0.711 | 0.575 |
+| 32 | 22.0 | 0.835 | 0.836 | 3.30 | 3.22 | 2.60 |
+| 64 | 180 | 7.15 | 6.93 | 17.3 | 16.9 | 9.94 |
+
+The boundary copy was 0.03-0.2 ms of a 0.7-17 ms call and removing it moved
+the caller-visible number by under 3%. What a caller pays for is
+`snakes_and_ladders.search.maxflow.energy`, which scores the returned
+configuration edge by edge in Python and is 59-81% of the wrapper's time; it
+is the oracle's function and is left as it is, so a caller wanting the
+kernel's speedup takes the configuration from the extension and scores it
+itself. Output is unchanged: the configuration is
+equal element by element to the reference's and to the previous binding's at
+extents 16, 32 and 64, and the energy is bitwise equal. The reference stays as
+the oracle. The port also removes a fragility: the Python blocking flow
+recurses to the depth of the level graph and needs `setrecursionlimit` raised
+past a few thousand nodes, while the Rust one uses an explicit stack.
 
 The boundary is refused rather than approximated. A negative coupling is
 NP-hard and raises; more than two states is alpha expansion (#207), which
@@ -1119,8 +1164,10 @@ by `opt.budget.compare`
 with the utility's own streams and the best any method found as the
 reference, tempering **12/12**, annealing 10/12 with a mean gap of 0.17, and
 restarts of descent 4/12 with a mean gap of 0.75, every method at or below
-the planted energy. The five-component mixture comparison waits on the
-mixture branch (#263) landing and belongs to the same utility.
+the planted energy. The five-component mixture comparison, the one problem
+class where restarts are the standard answer, is under Milestone 1.3 and in
+[`docs/experiments/004`](docs/experiments/004-mixture-tempering-vs-restarts.md)
+([#332](https://github.com/michaelJwilson/snakes_and_ladders/issues/332)).
 
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter

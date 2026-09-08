@@ -186,9 +186,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.exact
    :members:
 
-.. automodule:: snakes_and_ladders.learn.surrogate
-   :members:
-
 .. automodule:: snakes_and_ladders.learn.critic
    :members:
 
@@ -199,6 +196,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.learn.planning
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.surrogate
    :members:
 
 .. automodule:: snakes_and_ladders.search

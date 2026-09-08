@@ -1227,6 +1227,56 @@ a singular or ill-conditioned information is a parameter the data does not
 identify, and the interval is refused rather than reported
 (Section~\ref{sec:properties}).
 
+\section{Derivations for the Actor--Critic}
+\label{app:rl}
+
+\paragraph{Any state-dependent baseline leaves the estimator unbiased.}
+For a function $b$ of the state alone,
+$\mathbb{E}_{a \sim \pi(\cdot \mid s)}[\nabla \log \pi(a \mid s)\, b(s)]
+= b(s) \sum_a \nabla \pi(a \mid s) = b(s)\, \nabla \sum_a \pi(a \mid s) = 0$,
+so subtracting $b(s_t)$ from $G_t$ in \eqref{eq:reinforce} changes no
+expectation. The variance of the per-step term $\nabla \log \pi \cdot (G_t - b)$
+is minimized over constant $b$ by a weighted mean of $G_t$, and over
+state-dependent $b$ the value $V^\pi(s_t)$ is the choice that removes the part
+of $G_t$ predictable from the state; a fitted critic approximates it, and its
+error costs variance, never bias, as long as the fit does not read the action
+sampled at that step \citep{suttonbarto2018}.
+
+\paragraph{The generalized advantage telescopes to its two limits.}
+With $\delta_t = R_t + V(s_{t+1}) - V(s_t)$ and $V(s_T) = 0$,
+$\sum_{l=0}^{T-t-1} \delta_{t+l} = \sum_{u \ge t} R_u - V(s_t) = G_t - V(s_t)$,
+which is \eqref{eq:gae} at $\lambda = 1$; at $\lambda = 0$ only $\delta_t$
+survives. The exponential weights interpolate the two, and the bias of
+$A_t^{(\lambda)}$ as an estimate of the true advantage is
+$O(\lambda^{k})$ in the critic's error at $k$ steps ahead
+\citep{schulman2016}.
+
+\paragraph{PUCT as policy improvement.}
+With exact leaf values and one decision of depth, every backed-up value in
+\eqref{eq:puct} is $Q^*(s, a)$ exactly, and as $N(s) \to \infty$ the bonus
+of every action vanishes relative to the gap between the best mean and the
+rest, so the most visited action is an argmax of $Q^*$. At depth the means
+are of returns under the search's own descents, which concentrate on the
+children it rates highest; the normalized visit counts are then a
+distribution whose one-step expected value under $Q^\pi$ is at least the
+prior's, which is the policy-improvement step of policy iteration with the
+prior as $\pi$ and the visit distribution as the improved policy
+\citep{suttonbarto2018, silver2017}. The regression suite checks both on
+the Potts chain: the argmax exactly at depth one, and the improvement on 13
+of 14 sampled states at depth three, the exception being a state whose prior
+already puts most of its mass on an optimal move.
+
+\paragraph{The clipped objective at the collecting policy.}
+With $\pi = \pi_{\mathrm{old}}$, $\rho_t = 1$ for every decision, so both
+arguments of the minimum in \eqref{eq:ppo-clip} equal $A_t$ and
+$\nabla \rho_t = \nabla \log \pi(a_t \mid s_t)$; the gradient of
+\eqref{eq:ppo-clip} is $\sum_t \nabla \log \pi(a_t \mid s_t)\, A_t$, the
+actor--critic's estimator. Away from the collecting policy the minimum
+removes the gradient wherever the ratio has left $[1-\epsilon, 1+\epsilon]$
+in the direction the advantage would push it, which is the pessimistic
+bound on the surrogate improvement that licenses the reuse of a batch
+\citep{schulman2017}.
+
 \section{Derivations of the Bounds}
 \label{app:bounds}
 
@@ -1293,56 +1343,6 @@ $-\beta E_{\min} \le \log Z(\beta) \le N \log k - \beta E_{\min}$. Combining
 with $L \le \log Z(\beta) \le U$ and dividing by $\beta > 0$ gives the
 bracket; as $\beta$ grows the $N \log k$ term is divided away, until the
 bounds on $\log Z$ themselves loosen.
-
-\section{Derivations for the Actor--Critic}
-\label{app:rl}
-
-\paragraph{Any state-dependent baseline leaves the estimator unbiased.}
-For a function $b$ of the state alone,
-$\mathbb{E}_{a \sim \pi(\cdot \mid s)}[\nabla \log \pi(a \mid s)\, b(s)]
-= b(s) \sum_a \nabla \pi(a \mid s) = b(s)\, \nabla \sum_a \pi(a \mid s) = 0$,
-so subtracting $b(s_t)$ from $G_t$ in \eqref{eq:reinforce} changes no
-expectation. The variance of the per-step term $\nabla \log \pi \cdot (G_t - b)$
-is minimized over constant $b$ by a weighted mean of $G_t$, and over
-state-dependent $b$ the value $V^\pi(s_t)$ is the choice that removes the part
-of $G_t$ predictable from the state; a fitted critic approximates it, and its
-error costs variance, never bias, as long as the fit does not read the action
-sampled at that step \citep{suttonbarto2018}.
-
-\paragraph{The generalized advantage telescopes to its two limits.}
-With $\delta_t = R_t + V(s_{t+1}) - V(s_t)$ and $V(s_T) = 0$,
-$\sum_{l=0}^{T-t-1} \delta_{t+l} = \sum_{u \ge t} R_u - V(s_t) = G_t - V(s_t)$,
-which is \eqref{eq:gae} at $\lambda = 1$; at $\lambda = 0$ only $\delta_t$
-survives. The exponential weights interpolate the two, and the bias of
-$A_t^{(\lambda)}$ as an estimate of the true advantage is
-$O(\lambda^{k})$ in the critic's error at $k$ steps ahead
-\citep{schulman2016}.
-
-\paragraph{PUCT as policy improvement.}
-With exact leaf values and one decision of depth, every backed-up value in
-\eqref{eq:puct} is $Q^*(s, a)$ exactly, and as $N(s) \to \infty$ the bonus
-of every action vanishes relative to the gap between the best mean and the
-rest, so the most visited action is an argmax of $Q^*$. At depth the means
-are of returns under the search's own descents, which concentrate on the
-children it rates highest; the normalized visit counts are then a
-distribution whose one-step expected value under $Q^\pi$ is at least the
-prior's, which is the policy-improvement step of policy iteration with the
-prior as $\pi$ and the visit distribution as the improved policy
-\citep{suttonbarto2018, silver2017}. The regression suite checks both on
-the Potts chain: the argmax exactly at depth one, and the improvement on 13
-of 14 sampled states at depth three, the exception being a state whose prior
-already puts most of its mass on an optimal move.
-
-\paragraph{The clipped objective at the collecting policy.}
-With $\pi = \pi_{\mathrm{old}}$, $\rho_t = 1$ for every decision, so both
-arguments of the minimum in \eqref{eq:ppo-clip} equal $A_t$ and
-$\nabla \rho_t = \nabla \log \pi(a_t \mid s_t)$; the gradient of
-\eqref{eq:ppo-clip} is $\sum_t \nabla \log \pi(a_t \mid s_t)\, A_t$, the
-actor--critic's estimator. Away from the collecting policy the minimum
-removes the gradient wherever the ratio has left $[1-\epsilon, 1+\epsilon]$
-in the direction the advantage would push it, which is the pessimistic
-bound on the surrogate improvement that licenses the reuse of a batch
-\citep{schulman2017}.
 
 \section{Reference Taxonomy}
 \label{app:taxonomy}

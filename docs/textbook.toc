@@ -69,17 +69,17 @@
 \contentsline {subsection}{\numberline {A.2}Detailed balance for a cluster move in a field}{24}{subsection.A.2}%
 \contentsline {subsection}{\numberline {A.3}The exchange ratio in parallel tempering}{24}{subsection.A.3}%
 \contentsline {subsection}{\numberline {A.4}The delta method for an interval at a fit}{24}{subsection.A.4}%
-\contentsline {section}{\numberline {B}Derivations of the Bounds}{24}{appendix.B}%
-\contentsline {paragraph}{The plug-in bound, \eqref {eq:plugin-bound}.}{24}{section*.27}%
-\contentsline {paragraph}{The parsimony bound, \eqref {eq:parsimony-bound}.}{24}{section*.28}%
-\contentsline {paragraph}{The mean-field bound, \eqref {eq:mean-field-bound}.}{25}{section*.29}%
-\contentsline {paragraph}{The spanning-tree bound, \eqref {eq:spanning-tree-bound}.}{25}{section*.30}%
-\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{25}{section*.31}%
-\contentsline {section}{\numberline {C}Derivations for the Actor--Critic}{25}{appendix.C}%
-\contentsline {paragraph}{Any state-dependent baseline leaves the estimator unbiased.}{25}{section*.32}%
-\contentsline {paragraph}{The generalized advantage telescopes to its two limits.}{25}{section*.33}%
-\contentsline {paragraph}{PUCT as policy improvement.}{25}{section*.34}%
-\contentsline {paragraph}{The clipped objective at the collecting policy.}{26}{section*.35}%
+\contentsline {section}{\numberline {B}Derivations for the Actor--Critic}{24}{appendix.B}%
+\contentsline {paragraph}{Any state-dependent baseline leaves the estimator unbiased.}{24}{section*.27}%
+\contentsline {paragraph}{The generalized advantage telescopes to its two limits.}{24}{section*.28}%
+\contentsline {paragraph}{PUCT as policy improvement.}{25}{section*.29}%
+\contentsline {paragraph}{The clipped objective at the collecting policy.}{25}{section*.30}%
+\contentsline {section}{\numberline {C}Derivations of the Bounds}{25}{appendix.C}%
+\contentsline {paragraph}{The plug-in bound, \eqref {eq:plugin-bound}.}{25}{section*.31}%
+\contentsline {paragraph}{The parsimony bound, \eqref {eq:parsimony-bound}.}{25}{section*.32}%
+\contentsline {paragraph}{The mean-field bound, \eqref {eq:mean-field-bound}.}{25}{section*.33}%
+\contentsline {paragraph}{The spanning-tree bound, \eqref {eq:spanning-tree-bound}.}{26}{section*.34}%
+\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{26}{section*.35}%
 \contentsline {section}{\numberline {D}Reference Taxonomy}{26}{appendix.D}%
 \contentsline {paragraph}{Infrastructure (build, structure, and speed).}{26}{section*.36}%
 \contentsline {paragraph}{Optimization (discrete and continuous).}{26}{section*.37}%
