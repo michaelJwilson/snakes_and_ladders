@@ -131,7 +131,9 @@ def measure(n_taxa: int, n_sites: int) -> tuple[float, float]:
     pi = np.full(N_STATES, 1.0 / N_STATES)
 
     tracemalloc.start()
-    dataset = simulate_alignment(tau=tau, k=N_STATES, pi=pi, seed=1, n_sites=n_sites)
+    dataset = simulate_alignment(
+        tau=tau, k=N_STATES, pi=pi, rng=np.random.default_rng(1), n_sites=n_sites
+    )
     _, simulate_peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
