@@ -104,7 +104,7 @@ def assignments(
     n_sites: int,
     *,
     what: str,
-    limit: int = MAX_ENUMERABLE_CONFIGURATIONS,
+    limit: int | None = MAX_ENUMERABLE_CONFIGURATIONS,
 ) -> Iterator[tuple[int, ...]]:
     """Every assignment of ``n_sites`` sites to ``n_states`` states, lexicographically.
 
@@ -116,7 +116,9 @@ def assignments(
     Consumers: :func:`snakes_and_ladders.learn.potts.enumerate_configurations`,
     :func:`snakes_and_ladders.learn.hmm.enumerate_paths` and the three enumerations in
     :mod:`snakes_and_ladders.learn.relaxed`, each of which held its own uncapped
-    ``itertools.product`` before issue #387.
+    ``itertools.product`` before issue #387; and the ancestral-state loops of
+    :func:`snakes_and_ladders.likelihood.brute_force.brute_force_log_likelihood` and
+    :func:`snakes_and_ladders.likelihood.parsimony.exhaustive_small_parsimony`.
 
     Parameters
     ----------
@@ -125,8 +127,12 @@ def assignments(
     what : str
         What is being enumerated, for the refusal message; see
         :func:`refuse_oversized`.
-    limit : int
-        Refuse above this many assignments.
+    limit : int | None
+        Refuse above this many assignments. ``None`` where the caller has
+        already refused this same count under its own name --- the
+        brute-force likelihood refuses once and then enumerates per site ---
+        so the check is not repeated once per site in a differently worded
+        message.
 
     Returns
     -------
@@ -138,7 +144,8 @@ def assignments(
     ValueError
         If the enumeration exceeds ``limit``.
     """
-    refuse_oversized(n_states**n_sites, what=what, limit=limit)
+    if limit is not None:
+        refuse_oversized(n_states**n_sites, what=what, limit=limit)
     return itertools.product(range(n_states), repeat=n_sites)
 
 
@@ -173,6 +180,15 @@ def assignment_table(
         factor, and checking a factor afterwards could only repeat a
         judgement already made under a less informative name.
 
+    Built as the base-``n_states`` digits of each assignment's index rather
+    than by materializing :func:`itertools.product`, which is the same array
+    without the Python-level loop: identical for every case measured
+    (``3**4``, ``3**8``, ``2**16``, ``4**8``, ``2**17``), and 2.8x to 6.6x
+    faster over that range --- 50.4 ms against 11.9 ms at ``2**16``. That is
+    the vectorization pull request #420 needed for its own enumeration to
+    fit under the 10 s per-test cap, and it is here rather than there so the
+    ninth enumerator lands on the seam instead of beside it.
+
     Returns
     -------
     np.ndarray
@@ -186,9 +202,8 @@ def assignment_table(
     """
     if limit is not None:
         refuse_oversized(n_states**n_sites, what=what, limit=limit)
-    return np.array(
-        list(itertools.product(range(n_states), repeat=n_sites)), dtype=np.int64
-    ).reshape(-1, n_sites)
+    place = n_states ** np.arange(n_sites - 1, -1, -1, dtype=np.int64)
+    return (np.arange(n_states**n_sites, dtype=np.int64)[:, None] // place) % n_states
 
 
 def normalize(log_weight: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
@@ -228,7 +243,12 @@ def accumulate(table: np.ndarray, weight: np.ndarray, n_states: int) -> np.ndarr
     ``out[site, state]`` is the total weight of the assignments that put
     ``site`` in ``state``. The sum runs in assignment order for every site,
     so a caller that replaces its own loop with this one gets the same
-    floating-point result rather than a re-associated one.
+    floating-point result rather than a re-associated one. ``np.bincount``
+    accumulates in the same order and was measured bitwise identical to this
+    at ``3**4``, ``3**8``, ``2**16`` and ``4**8``, within 25% either way on
+    wall time; the two forms are therefore interchangeable, which is what
+    lets pull request #420's enumeration --- written on ``bincount`` ---
+    become a consumer here without any of its numbers moving.
 
     Consumers: :func:`snakes_and_ladders.likelihood.potts.enumerate_potts` (single-site
     marginals), :func:`snakes_and_ladders.likelihood.hmm_paths.enumerate_hidden_paths`

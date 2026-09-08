@@ -20,12 +20,11 @@ breaking rather than as a stated limit.
 
 from __future__ import annotations
 
-import itertools
 import math
 
 import numpy as np
 
-from snakes_and_ladders.enumeration import refuse_oversized
+from snakes_and_ladders.enumeration import assignments, refuse_oversized
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.tree import Node, edges, preorder
 
@@ -94,7 +93,14 @@ def brute_force_log_likelihood(
     total_log_likelihood = 0.0
     for site in range(n_sites):
         site_likelihood = 0.0
-        for assignment in itertools.product(range(k), repeat=len(internal)):
+        # `limit=None`: the same count was refused once above, under the
+        # name this function's `Raises` section gives it.
+        for assignment in assignments(
+            k,
+            len(internal),
+            what=f"{k}**{len(internal)} ancestral-state assignments",
+            limit=None,
+        ):
             state: dict[str, int] = {
                 node.name: value
                 for node, value in zip(internal, assignment, strict=True)

@@ -8,7 +8,7 @@ what each milestone claims; this is what pins it. Do not edit by hand --
 run `uv run python infra/checks_ledger.py --write`.
 
 
-## `tests/regression/` (17)
+## `tests/regression/` (24)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -20,6 +20,13 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_emissions.py::test_overdispersed_data_recovers_its_dispersion_and_does_not_flag` | simulated_truth | The paired half of the check above: a guard that flagged everything would pass that test and mean nothing. |
 | `test_emissions.py::test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform` | oracle | `BetaBinomial(n, 1, 1)` puts equal mass on every one of the n + 1 outcomes. |
 | `test_emissions.py::test_the_closed_form_count_m_steps_are_the_weighted_mean` | oracle |  |
+| `test_enumeration.py::test_the_vectorized_table_is_the_itertools_product_bitwise` | oracle |  |
+| `test_enumeration.py::test_the_iterator_is_the_itertools_product_sequence` | oracle |  |
+| `test_enumeration.py::test_accumulate_is_bitwise_the_three_loops_it_replaced` | oracle |  |
+| `test_enumeration.py::test_accumulate_agrees_bitwise_with_bincount` | oracle | The form `likelihood.mixture_assignments` was written on (pull request #420). |
+| `test_enumeration.py::test_normalize_is_bitwise_the_two_shifts_it_replaced` | oracle | `likelihood.potts` divided by the sum and reported `log(total) + peak`; `likelihood.hmm_paths` kept the unnormalized weights and reported `shift + log(sum)`. |
+| `test_enumeration.py::test_best_assignment_is_the_three_argmax_loops_it_replaced` | oracle | `learn.potts.optimum`, `learn.hmm.optimum` and `learn.relaxed.enumerate_optimum` each ran this loop. |
+| `test_enumeration.py::test_the_two_optimum_adapters_return_what_their_loops_returned` | oracle | The adapters end to end, not the helper: `optimum` in two modules, against the loop each carried before #387, on the fixture shape the committed baselines use. |
 | `test_fixture_registry.py::test_the_coupled_fixture_is_the_canonical_instance` | oracle | The file restates `canonical_spatio_sequential`, whose enumerable size is the reason the instance exists. |
 | `test_fixture_registry.py::test_the_frustrated_fixture_builds_the_lattice_with_the_known_ground_state` | oracle |  |
 | `test_numerics_rust.py::test_the_rust_sampler_is_bit_identical_to_the_oracle` | oracle |  |
@@ -429,4 +436,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-386 checks.
+393 checks.

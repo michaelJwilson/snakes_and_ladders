@@ -236,15 +236,16 @@ def brute_force_parsimony_score(
     int
         The minimum number of changes, summed over sites.
     """
-    import itertools
-
+    from snakes_and_ladders.enumeration import assignments
     from snakes_and_ladders.sim.tree import edges, preorder
 
     internal = [node.name for node in preorder(tau) if not node.is_leaf]
     position = {name: index for index, name in enumerate(internal)}
     edge_list = [(parent.name, child.name) for parent, child in edges(tau)]
     n_sites = int(next(iter(alignment.values())).shape[0])
-    labellings = list(itertools.product(range(k), repeat=len(internal)))
+    labellings = list(
+        assignments(k, len(internal), what=f"{k}**{len(internal)} internal labellings")
+    )
 
     total = 0
     for site in range(n_sites):

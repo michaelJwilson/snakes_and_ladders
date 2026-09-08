@@ -1,4 +1,4 @@
-"""The three duplications issue #230 closed, asserted rather than remembered.
+"""The duplications issues #230 and #387 closed, asserted rather than remembered.
 
 A consolidation that nothing enforces is a consolidation with a half-life.
 Each of the three below was written between four and twelve times before it
@@ -29,6 +29,7 @@ ENUMERATION_OWNER = "enumeration.py"
 PRIVATE_LOGSUMEXP = re.compile(r"^def _logsumexp\(", re.MULTILINE)
 OPEN_CODED_EDGES = re.compile(r"zip\(\s*\w+\.edges,\s*\w+\.coupling")
 CAP_LITERAL = re.compile(r"^\s*MAX_ENUMERABLE\w* = \d", re.MULTILINE)
+OPEN_CODED_PRODUCT = re.compile(r"product\(\s*range\([^)]*\),\s*repeat=")
 
 
 def _offenders(pattern: re.Pattern[str], owner: str) -> list[str]:
@@ -72,6 +73,22 @@ def test_the_enumeration_cap_is_defined_once() -> None:
 
 @pytest.mark.critical
 @pytest.mark.structural
+def test_the_product_enumeration_is_written_once() -> None:
+    # Eleven sites ran `itertools.product(range(k), repeat=n)` over their own
+    # states and sites (issue #387): two in `learn` with no cap at all, three
+    # weighted enumerations in `likelihood`, three argmax loops, and the
+    # torch, parsimony and brute-force tables. The order is lexicographic and
+    # three callers' tie rules depend on it, so a second copy is a second
+    # ordering nobody would notice until an optimum moved.
+    #
+    # The ragged product of `search.support` and the coordinate product of
+    # `sim.graph` are not this pattern: neither enumerates one alphabet over
+    # a repeat count, and neither is matched.
+    assert _offenders(OPEN_CODED_PRODUCT, ENUMERATION_OWNER) == []
+
+
+@pytest.mark.critical
+@pytest.mark.structural
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -80,11 +97,13 @@ def test_each_guard_fails_on_violating_source() -> None:
         PRIVATE_LOGSUMEXP: "def _logsumexp(values, axis):\n    return values\n",
         OPEN_CODED_EDGES: "for e, c in zip(graph.edges, graph.coupling, strict=True):\n",
         CAP_LITERAL: "MAX_ENUMERABLE_THINGS = 200_000\n",
+        OPEN_CODED_PRODUCT: "for c in itertools.product(range(k), repeat=n):\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
         OPEN_CODED_EDGES: "for edge, coupling in graph.weighted_edges():\n",
         CAP_LITERAL: "from snakes_and_ladders.enumeration import refuse_oversized\n",
+        OPEN_CODED_PRODUCT: "for c in assignments(k, n, what=\"states\"):\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []

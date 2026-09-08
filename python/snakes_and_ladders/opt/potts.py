@@ -35,7 +35,6 @@ of ``snakes_and_ladders.opt`` the way issue #171 moved ``snakes_and_ladders.opt.
 
 from __future__ import annotations
 
-import itertools
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,6 +42,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from snakes_and_ladders.enumeration import assignment_table
 from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.numerics_rust import sample_rows
@@ -232,8 +232,11 @@ def graph_statistics(
         Agreeing-edge count per configuration, shape ``(q ** n_nodes,)``, and
         state counts per configuration, shape ``(q ** n_nodes, q)``.
     """
-    configurations = torch.tensor(
-        list(itertools.product(range(n_states), repeat=n_nodes)), dtype=torch.long
+    configurations = torch.as_tensor(
+        assignment_table(
+            n_states, n_nodes, what=f"{n_states}**{n_nodes} spin configurations"
+        ),
+        dtype=torch.long,
     )
     agreements = torch.zeros(configurations.shape[0], dtype=torch.float64)
     for first, second in edges:
