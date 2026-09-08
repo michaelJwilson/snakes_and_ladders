@@ -6,6 +6,14 @@ objective at the collecting policy, with no clipping, has the actor-critic's
 gradient exactly; and the enumerated expected return -- exact on the Potts
 chain -- rises over training and ends above REINFORCE's at the same number
 of episodes.
+
+The last of those is release-gated at its 1,920-episode budget, so the
+sibling at the end of this module carries it per pull request (issue #401):
+a quarter of the budget on the *declared* chain, with the untrained policy's
+exact expected return read from the ``potts_chain/ci`` baseline record
+instead of computed a second time. The exact return is a sum over all 81
+configurations and costs 1.9 s whoever asks for it, so measuring the policy
+before and after training is most of a test that only needs the after.
 """
 
 from __future__ import annotations
@@ -33,6 +41,7 @@ from snakes_and_ladders.learn.ppo import (
 )
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.sim.fixtures import baseline, fixture
 
 FIELD = np.array([0.4, -0.1, -0.3])
 
@@ -245,3 +254,77 @@ def test_ppo_refuses_a_non_positive_budget() -> None:
             batch=1,
             max_steps=1,
         )
+
+
+# --- the per-pull-request sibling (issue #401) ---------------------------
+
+#: The chain the registry declares, which is the one `opt` fits. The RL
+#: environment is that model at the length exhaustive enumeration reaches;
+#: the length is read from the record rather than repeated here, so the
+#: environment measured and the environment trained on cannot drift apart.
+DECLARED = ("potts_chain", "ci")
+
+# A quarter of the release budget: 480 episodes. Measured at it, PPO reaches
+# the enumerated optimum from 0.877 of the 81 starts with mean exact return
+# 2.155, against REINFORCE's 0.321 and 1.204 -- the separation the release
+# test asserts at the full budget, at the budget that fits the tier.
+SIBLING_ITERATIONS = 15
+SIBLING_BATCH = 32
+
+
+def _declared_landscape() -> PottsLandscape:
+    """The declared chain as a single-flip search at the enumerable length."""
+    record = baseline(*DECLARED)
+    params = fixture(*DECLARED).params
+    return PottsLandscape(
+        coupling=params.coupling,
+        field=params.field,
+        chain_length=int(
+            record.measurement("enumerated_optimum").budget["chain_length"]
+        ),
+    )
+
+
+@pytest.mark.oracle
+def test_ppo_raises_the_recorded_expected_return_and_stays_ahead_of_reinforce() -> None:
+    # The fast sibling of the 1,920-episode comparison above. The untrained
+    # policy's exact expected return and its optimum-reaching rate are the
+    # fixture's committed baseline, so the 1.9 s enumeration behind the
+    # "before" is not paid here; `infra/baselines.py` recomputes it at the
+    # release gate. What is measured is the training: the return must rise
+    # above the recorded one and PPO must still be ahead of REINFORCE at a
+    # matched budget, which is the claim, not the exact number.
+    record = baseline(*DECLARED)
+    landscape = _declared_landscape()
+    before = record.value("untrained_expected_return")
+    assert record.value("untrained_reached") < 0.2
+
+    policy = LinearPolicy(2)
+    critic = Critic(
+        n_state_features(landscape),
+        hidden=None,
+        generator=torch.Generator().manual_seed(0),
+    )
+    training = ppo(
+        landscape,
+        policy,
+        critic,
+        np.random.default_rng(0),
+        iterations=SIBLING_ITERATIONS,
+        batch=SIBLING_BATCH,
+        max_steps=6,
+    )
+    assert training.episodes == SIBLING_ITERATIONS * SIBLING_BATCH
+
+    baselined = LinearPolicy(2)
+    reinforce(
+        landscape,
+        baselined,
+        np.random.default_rng(0),
+        iterations=SIBLING_ITERATIONS,
+        batch=SIBLING_BATCH,
+        max_steps=6,
+    )
+    assert _mean_return(landscape, policy) > before + 1.0
+    assert _reached(landscape, policy) > _reached(landscape, baselined) + 0.3
+    assert _reached(landscape, policy) > record.value("untrained_reached") + 0.5
