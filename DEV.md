@@ -23,7 +23,7 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 | `python/snakes_and_ladders/qa/` | QA figures/tables for the documents; renders, doesn't recompute. |
 | `src/lib.rs` | Rust extension (`oxi_snakes_and_ladders`), exposed through PyO3. |
 | `docs/tex/` | LaTeX source for the paper and the textbook, with the notation and preamble both share. |
-| `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/paper.pdf` and `docs/textbook.pdf` (both committed). |
+| `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/paper.pdf` and `docs/textbook.pdf` (both committed; the `.aux`, `.bbl`, `.log` and other files `latexmk` leaves beside them are ignored, never committed). |
 
 *Note: Each directory contains a localized `CLAUDE.md` defining specific constraints (e.g., `sim/` oracles, `search/` constraints). These append to, rather than override, the root `CLAUDE.md`.*
 
