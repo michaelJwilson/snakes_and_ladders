@@ -28,8 +28,8 @@ from snakes_and_ladders.sim.params import load_simulation_params
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "simulation_params_6taxa.yaml"
-FIVE_TAXA = FIXTURES_DIR / "simulation_params_5taxa.yaml"
+FIXTURE = FIXTURES_DIR / "tree_search/stress.yaml"
+FIVE_TAXA = FIXTURES_DIR / "tree_search/ci.yaml"
 
 
 # --- the distance ---------------------------------------------------------

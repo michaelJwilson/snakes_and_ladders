@@ -1,7 +1,7 @@
 """QA table: problem-size parameters across the simulation fixtures.
 
 Tabulates taxa count, site count, seed, and Monte Carlo tolerance for a set
-of ``simulation_params.yaml``-format fixtures, read directly from the yaml
+of tree fixtures, read directly from the yaml
 rather than hardcoded, so the documents' numbers cannot drift from
 what the regression suite actually runs (``tests/regression/test_jc_simulate.py``).
 """
@@ -99,15 +99,15 @@ def build_caption(fixture_names: list[str]) -> str:
 def _load_named(path: Path) -> tuple[str, SimulationParams]:
     """Load one fixture, keeping the filename the caption reports.
 
-    The caption names every fixture it tabulates, so the filename is part of
+    The caption names every fixture it tabulates, so the name is part of
     what this table reports and cannot be recovered from the loaded params.
 
     Returns
     -------
     tuple[str, SimulationParams]
-        The fixture's filename and its loaded contents.
+        The fixture's problem and tier, and its loaded contents.
     """
-    return path.name, load_simulation_params(path)
+    return f"{path.parent.name}/{path.name}", load_simulation_params(path)
 
 
 # Repeated, because the table is one row per fixture and the row order is the

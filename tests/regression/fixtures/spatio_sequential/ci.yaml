@@ -1,0 +1,30 @@
+model: spatio-sequential
+oracle: enumeration
+
+# The coupled spatio-sequential instance small enough to enumerate: a 2x2
+# open lattice, M = K = 2, S = 6. Every field is required -- see
+# python/snakes_and_ladders/sim/spatio_sequential.py and sim/CLAUDE.md.
+#
+# 2**4 labellings times 2**12 joint chain paths is 65,536 states, inside the
+# enumeration limit, so `likelihood.spatio_sequential.enumerate_spatio_sequential`
+# is an exact reference for the evidence and the class posteriors at this
+# size. The two emission families are separated so that a draw at S = 6
+# identifies the classes; near-equal families would make the classes
+# exchangeable and a recovery test would measure the fixture.
+seed: 20260908
+shape: [2, 2]
+boundary: open
+coupling: 1.0
+n_classes: 2
+n_states: 2
+n_positions: 6
+beta: 0.6
+self_transition: 0.7
+initial:
+  - [0.6, 0.4]
+  - [0.3, 0.7]
+emissions:
+  - - [0.8, 0.1, 0.1]
+    - [0.1, 0.8, 0.1]
+  - - [0.1, 0.1, 0.8]
+    - [0.45, 0.45, 0.1]

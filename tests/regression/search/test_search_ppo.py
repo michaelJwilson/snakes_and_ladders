@@ -28,7 +28,7 @@ from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import edges
 
-FIXTURE = Path("tests/regression/fixtures/simulation_params_hard.yaml")
+FIXTURE = Path("tests/regression/fixtures/tree_search/release.yaml")
 ROLLOUTS_PER_START = 4
 
 

@@ -51,7 +51,7 @@ from snakes_and_ladders.sim.tree import Node, preorder
 from tests._fixtures import FIXTURES_DIR
 from tests._scale import stress_only
 
-FIXTURE = FIXTURES_DIR / "simulation_params_5taxa.yaml"
+FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 _BRANCH_LENGTH = 0.1629
 
 

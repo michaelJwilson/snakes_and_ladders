@@ -6,7 +6,7 @@ branch: main
 pr: 135
 tickets: [131]
 problem: potts-lattice
-fixture: tests/regression/fixtures/potts_params.yaml, the three-state chain of length four
+fixture: tests/regression/fixtures/potts_chain/ci.yaml, the three-state chain of length four
 size: ci
 methods: [greedy, reinforce]
 budget: 1920

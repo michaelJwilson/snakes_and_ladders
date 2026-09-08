@@ -26,7 +26,7 @@ from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences
 
-FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
+FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 # Relative throughout: the log-likelihood is a sum over sequences and sites
 # (`DEV.md`, issue #111).

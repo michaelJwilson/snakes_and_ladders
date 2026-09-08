@@ -278,7 +278,7 @@ NB_MEAN = np.array([6.0, 25.0])
 #: measured over 20 replicates of each fixture: 0.149 at ``(r, mu) = (1.5, 6)``
 #: and 0.197 at ``(10, 25)``. The bound below is four of the larger, so the
 #: tolerance comes from the sampling noise rather than from what happened to
-#: pass -- the discipline ``hmm_params.yaml`` documents for the categorical
+#: pass -- the discipline ``hmm/ci.yaml`` documents for the categorical
 #: fixture.
 NB_VARIANCE_TOLERANCE = 0.8
 NB_DRAWS = 200_000

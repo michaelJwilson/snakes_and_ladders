@@ -18,6 +18,7 @@ from typing import Any, TypeVar
 
 import pytest
 from snakes_and_ladders.fixtures import Scale
+from snakes_and_ladders.sim.fixtures import Fixture, fixture, tiers  # noqa: F401
 
 T = TypeVar("T")
 
@@ -35,7 +36,8 @@ def at_scale(argument: str, ci: T, stress: T) -> pytest.MarkDecorator:
         Name of the test argument receiving the size.
     ci : T
         The size at which an exact oracle is still available and the test
-        fits the per-pull-request budget.
+        fits the per-pull-request budget. A size that *is* a problem
+        instance belongs in the registry instead: see :func:`at_fixture`.
     stress : T
         The size that shows the same property where the CI size cannot ---
         more replicates, a longer chain, a larger structure.
@@ -56,6 +58,57 @@ def at_scale(argument: str, ci: T, stress: T) -> pytest.MarkDecorator:
         [
             pytest.param(ci, id=str(Scale.CI)),
             pytest.param(stress, id=str(Scale.STRESS), marks=pytest.mark.stress),
+        ],
+    )
+
+
+#: The scheduling marker each tier carries. The CI tier carries none: it is
+#: what runs when nothing is deselected.
+_MARKS: dict[Scale, tuple[pytest.MarkDecorator, ...]] = {
+    Scale.CI: (),
+    Scale.STRESS: (pytest.mark.stress,),
+    Scale.RELEASE: (pytest.mark.release,),
+}
+
+
+def at_fixture(argument: str, problem: str) -> pytest.MarkDecorator:
+    """Parameterize one test over every instance a problem declares.
+
+    The registry-driven form of :func:`at_scale`: the sizes are the fixture
+    files' (`snakes_and_ladders.sim.fixtures`) rather than literals in the
+    test, so a problem that gains a tier gains a case in every test written
+    this way, and the tier a case runs at is the fixture's own.
+
+    Parameters
+    ----------
+    argument : str
+        Name of the test argument receiving the
+        :class:`~snakes_and_ladders.sim.fixtures.Fixture`.
+    problem : str
+        The registry problem, which is the fixture directory's name.
+
+    Returns
+    -------
+    pytest.MarkDecorator
+        A ``parametrize`` decorator with one case per declared tier, each
+        identified as ``<problem>-<tier>`` and carrying that tier's
+        scheduling marker.
+
+    Examples
+    --------
+    >>> @at_fixture("instance", "potts_lattice")
+    ... def test_marginals_match_enumeration(instance: Fixture) -> None:
+    ...     assert instance.oracle == "enumeration"
+    """
+    return pytest.mark.parametrize(
+        argument,
+        [
+            pytest.param(
+                fixture(problem, tier),
+                id=f"{problem}-{tier}",
+                marks=_MARKS[tier],
+            )
+            for tier in tiers(problem)
         ],
     )
 

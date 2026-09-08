@@ -1,3 +1,6 @@
+model: jukes-cantor
+oracle: enumeration
+
 # Ground truth for the exhaustive search study
 # (tests/regression/test_search_exhaustive.py). Every field is required --
 # see python/snakes_and_ladders/sim/params.py and python/snakes_and_ladders/sim/CLAUDE.md.

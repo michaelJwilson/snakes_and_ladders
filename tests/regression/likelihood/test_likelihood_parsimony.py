@@ -44,7 +44,7 @@ from tests._fixtures import (
     load_fixture,
 )
 
-FIVE_TAXA = "simulation_params_5taxa.yaml"
+FIVE_TAXA = "tree_search/ci.yaml"
 UNIFORM = np.full(4, 0.25)
 
 # Transitions (within {0, 1} and within {2, 3}) cost 1, transversions 2: a

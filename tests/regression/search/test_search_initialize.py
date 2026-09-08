@@ -55,8 +55,8 @@ from tests._fixtures import EIGHT_TAXA, load_fixture
 from tests._objective_checks import Counted
 from tests.regression.search.test_neighbor_joining import random_tree
 
-FIVE_TAXA = "simulation_params_5taxa.yaml"
-SIX_TAXA = "simulation_params_6taxa.yaml"
+FIVE_TAXA = "tree_search/ci.yaml"
+SIX_TAXA = "tree_search/stress.yaml"
 
 #: Likelihood evaluations one branch-length fit may spend; every start
 #: converges well inside it, and a fit that did not would be refused by the

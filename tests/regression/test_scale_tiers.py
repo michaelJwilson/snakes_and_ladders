@@ -25,7 +25,8 @@ from pathlib import Path
 
 import pytest
 
-from tests._scale import at_scale
+from snakes_and_ladders.sim.fixtures import Fixture
+from tests._scale import at_fixture, at_scale
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -89,6 +90,33 @@ def test_at_scale_produces_one_case_per_tier() -> None:
     assert [parameter.values[0] for parameter in parameters] == [2, 200]
     assert parameters[0].marks == ()
     assert [mark.name for mark in parameters[1].marks] == ["stress"]
+
+
+@pytest.mark.mathematical
+def test_at_fixture_runs_one_case_per_declared_tier() -> None:
+    # The registry-driven parameterization: the cases are the fixture files
+    # a problem declares, and each carries its own tier's marker, so a
+    # fixture added at a tier reaches every test written this way without
+    # one of them being edited.
+    parameters = at_fixture("instance", "tree_search").args[1]
+
+    assert [parameter.id for parameter in parameters] == [
+        "tree_search-ci",
+        "tree_search-stress",
+        "tree_search-release",
+    ]
+    assert [
+        [mark.name for mark in parameter.marks] for parameter in parameters
+    ] == [[], ["stress"], ["release"]]
+
+
+@pytest.mark.simulated_truth
+@at_fixture("instance", "tree_search")
+def test_at_fixture_hands_the_body_a_loaded_instance(instance: Fixture) -> None:
+    # Exercised end to end: the CI case runs on every pull request, and the
+    # other two are deselected there by their markers.
+    assert instance.params.k == 4
+    assert instance.oracle == "enumeration"
 
 
 @pytest.mark.edge_case

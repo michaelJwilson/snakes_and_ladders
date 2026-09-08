@@ -272,7 +272,7 @@ def test_the_temperature_scales_every_table_so_a_hot_chain_is_nearly_uniform() -
 
 
 def _five_taxa(n_sites: int) -> tuple[dict[str, np.ndarray], int]:
-    params = load_simulation_params(fixture_path("simulation_params_5taxa.yaml"))
+    params = load_simulation_params(fixture_path("tree_search/ci.yaml"))
     dataset = simulate_alignment(
         params.tau, params.k, params.pi, np.random.default_rng(2), n_sites
     )

@@ -211,7 +211,7 @@ batches, tempering replicas, `qa.build`, `check_notebooks` and `pytest-xdist`
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed
-`simulation_params.yaml`, retaining the parameters that produced them
+tree fixture, retaining the parameters that produced them
 ([#58](https://github.com/michaelJwilson/snakes_and_ladders/pull/58)). Simulated
 substitution frequencies are validated against the closed-form JC transition
 probabilities within a yaml-declared Monte Carlo tolerance across several site
@@ -1824,7 +1824,7 @@ configuration until the end. What is matched is the restart count and the
 seeds. The advantage is not bought with the larger budget: the relaxation
 already wins at 25 gradient steps (15/40, `p = 0.0064`).
 
-**The comparison fixture is not the repository's own.** `potts_params.yaml` has
+**The comparison fixture is not the repository's own.** `potts_chain/ci.yaml` has
 `J = 0.75 > 0`, so its optimum is `argmax(h)` repeated and every method finds
 it. That is the third time a fixture has been too easy to separate methods —
 after [#177](https://github.com/michaelJwilson/snakes_and_ladders/issues/177),

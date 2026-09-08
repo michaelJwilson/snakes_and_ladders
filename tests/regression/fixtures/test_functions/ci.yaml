@@ -1,0 +1,49 @@
+model: test-functions
+oracle: closed-form
+
+# The three continuous test functions, as declared instances: where each
+# starts, how many restarts a multi-start fit draws, the region a surface of
+# it is drawn over, and the published minimizers that referee it. Every field
+# is required -- see python/snakes_and_ladders/opt/testfunctions.py.
+#
+# The minimizers are the oracle and are quoted, never computed here:
+# Rosenbrock's (a, a) and Rastrigin's origin are exact, and Himmelblau's
+# other three are the standard published values at the precision they are
+# usually given to.
+#
+# Restarts differ per function because the surfaces do: Rastrigin has
+# roughly 10**n local minima and needs enough starts for a success rate to
+# mean something, Rosenbrock is unimodal in the relevant region and needs
+# few, and Himmelblau's four equal minima need enough starts to reach more
+# than one basin.
+seed: 20260908
+grid: 81
+at_minimum: 1.0e-4
+functions:
+  - name: Rosenbrock
+    dimension: 2
+    start: -1.2
+    restarts: 4
+    scale: 1.0
+    domain: [-2.0, 2.0, -1.0, 3.0]
+    minimizers: [[1.0, 1.0]]
+  - name: Rastrigin
+    dimension: 2
+    # The origin, so a restart is drawn around the start rather than around
+    # the answer: the question is which cell of the ripple a start falls in.
+    start: 0.0
+    restarts: 16
+    scale: 2.0
+    domain: [-5.12, 5.12, -5.12, 5.12]
+    minimizers: [[0.0, 0.0]]
+  - name: Himmelblau
+    dimension: 2
+    start: 0.0
+    restarts: 8
+    scale: 3.0
+    domain: [-5.0, 5.0, -5.0, 5.0]
+    minimizers:
+      - [3.0, 2.0]
+      - [-2.805118, 3.131312]
+      - [-3.779310, -3.283186]
+      - [3.584428, -1.848126]

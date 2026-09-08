@@ -1,3 +1,6 @@
+model: jukes-cantor
+oracle: enumeration
+
 # Ground truth for the reward-surface comparison at a size the per-PR suite
 # can afford (tests/regression/test_qa_rl_reward_surface.py). Every field is
 # required -- see python/snakes_and_ladders/sim/params.py and python/snakes_and_ladders/sim/CLAUDE.md.
@@ -9,7 +12,7 @@
 # paying for.
 #
 # The branch lengths are deliberately uneven, for the reason
-# simulation_params_6taxa.yaml gives: a tree with equal branches has
+# tree_search/stress.yaml gives: a tree with equal branches has
 # near-degenerate alternatives, and a comparison of two scoring surfaces run
 # on one would measure the fixture's symmetry rather than the surfaces.
 seed: 20260906

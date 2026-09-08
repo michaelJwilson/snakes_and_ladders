@@ -1,3 +1,6 @@
+model: jukes-cantor
+oracle: enumeration
+
 # A tree fixture NNI hill climbing does not already solve (issue #177).
 #
 # The 6-taxon fixture cannot separate a learned policy from greedy, because

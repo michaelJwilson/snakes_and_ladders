@@ -24,8 +24,8 @@ from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 
-POTTS_FIXTURE = FIXTURES_DIR / "potts_params.yaml"
-HMM_FIXTURE = FIXTURES_DIR / "hmm_params.yaml"
+POTTS_FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
+HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
 def test_potts_fit_benchmark(benchmark: BenchmarkFixture) -> None:

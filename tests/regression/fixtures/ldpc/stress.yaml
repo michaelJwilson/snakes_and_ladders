@@ -1,0 +1,22 @@
+model: ldpc
+oracle: none
+
+# The (3,6) Gallager code at the block length the encoder reaches: dense
+# Gaussian elimination is cubic and refuses past 512 bits, so 96 is where
+# encoding a message and decoding the received word is still a round trip
+# that can be checked. Every field is required -- see
+# python/snakes_and_ladders/sim/ldpc.py.
+#
+# No oracle at this size: 2**48 codewords cannot be enumerated, and what is
+# checked here is a symmetry (the posterior of the encoded word is the
+# all-zero word's up to sign) rather than an independent answer.
+seed: 3
+n_bits: 96
+column_weight: 3
+row_weight: 6
+
+# 0.05 is below the (3,6) threshold, so the decoder is expected to correct
+# the block rather than to fail on it.
+flip_probability: 0.05
+erasure_probability: 0.4
+noise_scale: 1.0

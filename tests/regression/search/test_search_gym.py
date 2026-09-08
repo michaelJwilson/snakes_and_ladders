@@ -37,7 +37,7 @@ from gymnasium.utils.env_checker import check_env  # noqa: E402
 from snakes_and_ladders.search.gym import GymnasiumEnvironment  # noqa: E402
 
 FIELD = np.array([0.4, -0.1, -0.3])
-FIXTURE = FIXTURES_DIR / "simulation_params_5taxa.yaml"
+FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 BRANCH_LENGTH = 0.1629
 
 

@@ -23,7 +23,7 @@ from snakes_and_ladders.sim.params import load_simulation_params
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "simulation_params.yaml"
+FIXTURE = FIXTURES_DIR / "tree_jc/stress.yaml"
 
 # The backends compute in float64 and sum over sites, so the deviation is
 # bounded by accumulated rounding rather than by machine epsilon. Measured

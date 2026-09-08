@@ -138,19 +138,19 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         "sim_tree",
         "snakes_and_ladders.qa.sim_tree",
-        ("--params", f"{FIXTURES}/simulation_params_8taxa.yaml"),
+        ("--params", f"{FIXTURES}/tree_jc/release.yaml"),
         seconds=2.7,
     ),
     FigureSpec(
         "sim_example",
         "snakes_and_ladders.qa.sim_example",
-        ("--params", f"{FIXTURES}/simulation_params.yaml"),
+        ("--params", f"{FIXTURES}/tree_jc/stress.yaml"),
         seconds=2.7,
     ),
     FigureSpec(
         "jc_transition",
         "snakes_and_ladders.qa.jc_transition",
-        ("--params", f"{FIXTURES}/simulation_params.yaml"),
+        ("--params", f"{FIXTURES}/tree_jc/stress.yaml"),
         seconds=2.7,
     ),
     # Brute-force marginalization costs k**m for m internal nodes, so this
@@ -158,7 +158,7 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         "backend_agreement",
         "snakes_and_ladders.qa.backend_agreement",
-        ("--params", f"{FIXTURES}/simulation_params.yaml"),
+        ("--params", f"{FIXTURES}/tree_jc/stress.yaml"),
         seconds=3.1,
     ),
     FigureSpec(
@@ -172,11 +172,11 @@ FIGURES: tuple[FigureSpec, ...] = (
         "snakes_and_ladders.qa.sim_problem_sizes",
         (
             "--params",
-            f"{FIXTURES}/simulation_params.yaml",
+            f"{FIXTURES}/tree_jc/stress.yaml",
             "--params",
-            f"{FIXTURES}/simulation_params_small_sites.yaml",
+            f"{FIXTURES}/tree_jc/ci.yaml",
             "--params",
-            f"{FIXTURES}/simulation_params_8taxa.yaml",
+            f"{FIXTURES}/tree_jc/release.yaml",
         ),
         seconds=2.5,
     ),
@@ -186,9 +186,9 @@ FIGURES: tuple[FigureSpec, ...] = (
         "snakes_and_ladders.qa.opt_recovery",
         (
             "--potts-params",
-            f"{FIXTURES}/potts_params.yaml",
+            f"{FIXTURES}/potts_chain/ci.yaml",
             "--hmm-params",
-            f"{FIXTURES}/hmm_params.yaml",
+            f"{FIXTURES}/hmm/ci.yaml",
         ),
         seconds=5.0,
     ),
@@ -197,9 +197,9 @@ FIGURES: tuple[FigureSpec, ...] = (
         "snakes_and_ladders.qa.opt_coverage",
         (
             "--potts-params",
-            f"{FIXTURES}/potts_params.yaml",
+            f"{FIXTURES}/potts_chain/ci.yaml",
             "--hmm-params",
-            f"{FIXTURES}/hmm_params.yaml",
+            f"{FIXTURES}/hmm/ci.yaml",
         ),
         seconds=27.3,
     ),
@@ -208,16 +208,16 @@ FIGURES: tuple[FigureSpec, ...] = (
         "snakes_and_ladders.qa.opt_branch_recovery",
         (
             "--unrooted-params",
-            f"{FIXTURES}/simulation_params_small_sites.yaml",
+            f"{FIXTURES}/tree_jc/ci.yaml",
             "--rooted-params",
-            f"{FIXTURES}/simulation_params_8taxa.yaml",
+            f"{FIXTURES}/tree_jc/release.yaml",
         ),
         seconds=5.0,
     ),
     FigureSpec(
         "opt_model_recovery",
         "snakes_and_ladders.qa.opt_model_recovery",
-        ("--params", f"{FIXTURES}/simulation_params_8taxa.yaml"),
+        ("--params", f"{FIXTURES}/tree_jc/release.yaml"),
         seconds=7.5,
     ),
     # The search figures each sweep all 105 unrooted topologies on the
@@ -225,19 +225,19 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         "search_trajectory",
         "snakes_and_ladders.qa.search_trajectory",
-        ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
+        ("--params", f"{FIXTURES}/tree_search/stress.yaml"),
         seconds=39.6,
     ),
     FigureSpec(
         "search_topologies",
         "snakes_and_ladders.qa.search_topologies",
-        ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
+        ("--params", f"{FIXTURES}/tree_search/stress.yaml"),
         seconds=29.6,
     ),
     FigureSpec(
         "rl_reward_surface",
         "snakes_and_ladders.qa.rl_reward_surface",
-        ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
+        ("--params", f"{FIXTURES}/tree_search/stress.yaml"),
         seconds=28.4,
     ),
     # Trains eight policies, so it is the most expensive entry here; the
@@ -245,13 +245,13 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         "rl_tree_policy",
         "snakes_and_ladders.qa.rl_tree_policy",
-        ("--params", f"{FIXTURES}/simulation_params_hard.yaml"),
+        ("--params", f"{FIXTURES}/tree_search/release.yaml"),
         seconds=101.4,
     ),
     FigureSpec(
         "topology_accuracy",
         "snakes_and_ladders.qa.topology_accuracy",
-        ("--params", f"{FIXTURES}/simulation_params_6taxa.yaml"),
+        ("--params", f"{FIXTURES}/tree_search/stress.yaml"),
         seconds=124.0,
     ),
     # The textbook's problem-statement figures (issue #358). The parsimony
@@ -261,7 +261,7 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         "parsimony_zones",
         "snakes_and_ladders.qa.parsimony_zones",
-        ("--params", f"{FIXTURES}/simulation_params_8taxa.yaml"),
+        ("--params", f"{FIXTURES}/tree_jc/release.yaml"),
         seconds=4.6,
     ),
     FigureSpec(

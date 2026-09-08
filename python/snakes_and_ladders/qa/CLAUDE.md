@@ -15,7 +15,7 @@ produces them or in `STATUS.md`.
 One script per figure or table, each taking a declarative parameters file and
 producing a rendered figure plus a caption that states the seed, sizes, and
 model used to generate it. The format is that model's own — the
-phylogenetic figures take `simulation_params.yaml`, the optimization figures
+phylogenetic figures take a tree fixture, the optimization figures
 take the Potts and HMM fixtures `snakes_and_ladders.opt` defines — because the
 ground-truth-retention rule is about the caption matching what actually ran,
 not about one file layout. `figure.py` holds the shared
@@ -71,7 +71,7 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
   reporting on.
 - **A figure ships with its caption, and the caption ships with its
   generating parameters.** Seed, sizes, and model name are read from the same
-  `simulation_params.yaml`-format input the figure was rendered from, per
+  fixture the figure was rendered from, per
   `sim/CLAUDE.md`'s ground-truth-retention rule — never hand-written
   separately from what actually ran.
 - **A caption file is plain text, not LaTeX.** The document pulls it in

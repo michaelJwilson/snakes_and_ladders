@@ -1,6 +1,6 @@
 """Minimal tree representation for the simulator.
 
-Topology is an input to simulation (drawn from ``simulation_params.yaml``),
+Topology is an input to simulation (drawn from a tree fixture),
 never inferred. Newick serialization, parsing, and validation live in
 ``snakes_and_ladders.sim.newick``, the package's single source of Newick functionality.
 """

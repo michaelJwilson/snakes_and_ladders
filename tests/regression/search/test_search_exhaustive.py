@@ -36,7 +36,7 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "simulation_params_6taxa.yaml"
+FIXTURE = FIXTURES_DIR / "tree_search/stress.yaml"
 
 # Agreement between a search's optimum and the enumerated maximum. Both are
 # the same objective fitted by the same optimizer, so they agree to the

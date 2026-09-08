@@ -28,7 +28,7 @@ from snakes_and_ladders.sim.params import SimulationParams, load_simulation_para
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import edges
 
-FIXTURE = Path("tests/regression/fixtures/simulation_params_hard.yaml")
+FIXTURE = Path("tests/regression/fixtures/tree_search/release.yaml")
 
 # 50 starts at seed + 1000, 30 steps each. Both numbers are part of the
 # measurement: a different start set or a shorter horizon is a different
