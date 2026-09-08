@@ -1,17 +1,19 @@
-"""The changed tests carry a kind marker, and name the ones to time.
+"""The tests a branch touched carry a kind marker, and which files they are in.
 
-`infra/review_gates.sh` calls this. Two of the six rows a reviewer reads by
-hand are about the tests a branch touches: that each says what it is checked
-against (root `CLAUDE.md`, Every Test Says What It Is Checked Against) and that
-none has quietly added its minute to the per-pull-request tier (`DEV.md`, the
-duration cap). The first is a fact about the source and is decided here; the
-second needs the tests run, so this prints the files and the gate runs them
-under ``SAL_DURATION_CAP``.
+`infra/review_gates.sh` calls this. One of the rows a reviewer read by hand is
+that each test the branch adds or rewrites says what it is checked against
+(root `CLAUDE.md`, Every Test Says What It Is Checked Against), which is a fact
+about the source and is decided here.
 
 Only the functions the diff adds or rewrites are judged. The repository-wide
 guard in ``tests/regression/test_test_kinds.py`` covers the rest and runs in
 the critical tier; what this adds is the verdict *before* that tier, named
 against the diff, so a reviewer reads a line rather than a traceback.
+
+``--files`` prints the changed test files instead, for running them under
+``SAL_DURATION_CAP``. The gate does not: on the branch that added it those
+files took 20 s of a 30 s budget, and `infra/validate.sh` had already run them
+under the cap on the reference host.
 
 Usage::
 

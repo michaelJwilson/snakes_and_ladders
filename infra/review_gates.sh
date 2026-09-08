@@ -5,8 +5,8 @@
 # about the branch that CI does not assert or asserts late: the head carries
 # the base; the two committed PDFs are the base's unless this is a rebuild;
 # a changelog fragment exists; every cited figure's stamp matches the tree;
-# the critical tier passes; the tests the branch touched say what checks them
-# and run inside the duration cap; a protocol it adds names the consumers the
+# the critical tier passes, under the duration cap; the tests the branch
+# touched say what checks them; a protocol it adds names the consumers the
 # seam rule wants; and the generated ledgers are a regeneration of the tree
 # rather than a recollection. Reading covers what a script cannot: whether the
 # change is the plan on the ticket, and whether the tests pin what they
@@ -105,19 +105,19 @@ critical_tier_passes() {
   uv run pytest -m critical -q -p no:cacheprovider >"$log" 2>&1 || { tail -n 15 "$log" >&2; return 1; }
 }
 
-changed_tests_are_marked_and_inside_the_cap() {
-  # Two facts about the tests the diff touched: each says what refereed it,
-  # and none quietly added its minute to the per-pull-request tier. The kind
-  # is read from the source; the cap needs the tests run, so the ones the
-  # critical row above did not already run are run here -- which is what the
-  # marginal cost of this gate is, and it is bounded by the cap itself.
-  uv run python infra/gate_changed_tests.py --base "$base" || return 1
-  local files
-  files="$(uv run python infra/gate_changed_tests.py --base "$base" --files)"
-  [ -n "$files" ] || return 0
-  # shellcheck disable=SC2086
-  uv run pytest $files -m "not critical" -q -p no:cacheprovider --durations=5 \
-    >"$log" 2>&1 || { tail -n 20 "$log" >&2; return 1; }
+changed_tests_say_what_checks_them() {
+  # Every test the diff adds or rewrites carries a kind: what refereed it,
+  # not when it runs (root CLAUDE.md). Read from the source, so it costs
+  # nothing and reports against the diff rather than as a traceback out of
+  # the repository-wide guard in the critical tier.
+  #
+  # The duration half of this row is not here, and the reason is a
+  # measurement: running the branch's changed test files took 20 s of a 30 s
+  # budget on the branch that added this gate, and they had already been run
+  # once by `infra/validate.sh`, which is where SAL_DURATION_CAP is asserted
+  # on the reference host. What the gate does get for free is the cap over
+  # the critical tier above, which runs under it.
+  uv run python infra/gate_changed_tests.py --base "$base"
 }
 
 new_seams_name_their_consumers() {
@@ -146,7 +146,7 @@ gate "PDFs are the base's (or a rebuild)"    pdfs_are_the_base_s
 gate "changelog fragment exists"             fragment_exists
 gate "cited figure stamps match the tree"    stamps_match_the_tree
 gate "critical tier passes"                  critical_tier_passes
-gate "changed tests marked, inside the cap"  changed_tests_are_marked_and_inside_the_cap
+gate "changed tests say what checks them"    changed_tests_say_what_checks_them
 gate "a new seam names its consumers"        new_seams_name_their_consumers
 gate "generated ledgers are current"         generated_ledgers_are_current
 
