@@ -9,9 +9,9 @@
 \contentsline {paragraph}{What follows for inference.}{5}{section*.6}%
 \contentsline {subsection}{\numberline {2.3}The Discrete Search as a Decision Process}{5}{subsection.2.3}%
 \contentsline {paragraph}{What pins it.}{5}{section*.7}%
-\contentsline {subsection}{\numberline {2.4}Actor--Critic and Proximal Policy Optimization}{5}{subsection.2.4}%
+\contentsline {subsection}{\numberline {2.4}Actor--Critic and Proximal Policy Optimization}{6}{subsection.2.4}%
 \contentsline {subsection}{\numberline {2.5}Planning with a Learned Prior and Value}{6}{subsection.2.5}%
-\contentsline {subsection}{\numberline {2.6}Surrogates and Bounds}{6}{subsection.2.6}%
+\contentsline {subsection}{\numberline {2.6}Surrogates and Bounds}{7}{subsection.2.6}%
 \contentsline {section}{\numberline {3}Problem Statement: Phylogenetic Inference}{7}{section.3}%
 \contentsline {subsection}{\numberline {3.1}The model}{7}{subsection.3.1}%
 \contentsline {subsection}{\numberline {3.2}As a factor graph}{8}{subsection.3.2}%

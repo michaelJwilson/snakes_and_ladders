@@ -19,7 +19,6 @@
 \newlabel{sec:abstraction}{{2.2}{4}{The Continuous Optimization Abstraction}{subsection.2.2}{}}
 \@writefile{toc}{\contentsline {paragraph}{Why the map and not a projection.}{4}{section*.4}\protected@file@percent }
 \citation{suttonbarto2018}
-\citation{schulman2016}
 \@writefile{toc}{\contentsline {paragraph}{Why the map must be injective.}{5}{section*.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{What follows for inference.}{5}{section*.6}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.3}The Discrete Search as a Decision Process}{5}{subsection.2.3}\protected@file@percent }
@@ -27,21 +26,21 @@
 \newlabel{eq:return}{{4}{5}{The Discrete Search as a Decision Process}{equation.2.4}{}}
 \newlabel{eq:reinforce}{{5}{5}{The Discrete Search as a Decision Process}{equation.2.5}{}}
 \@writefile{toc}{\contentsline {paragraph}{What pins it.}{5}{section*.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Actor--Critic and Proximal Policy Optimization}{5}{subsection.2.4}\protected@file@percent }
-\newlabel{sec:actor-critic}{{2.4}{5}{Actor--Critic and Proximal Policy Optimization}{subsection.2.4}{}}
+\citation{schulman2016}
 \citation{schulman2017}
 \citation{silver2017}
 \citation{anthony2017}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Actor--Critic and Proximal Policy Optimization}{6}{subsection.2.4}\protected@file@percent }
+\newlabel{sec:actor-critic}{{2.4}{6}{Actor--Critic and Proximal Policy Optimization}{subsection.2.4}{}}
 \newlabel{eq:gae}{{6}{6}{Actor--Critic and Proximal Policy Optimization}{equation.2.6}{}}
 \newlabel{eq:ppo-clip}{{7}{6}{Actor--Critic and Proximal Policy Optimization}{equation.2.7}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Planning with a Learned Prior and Value}{6}{subsection.2.5}\protected@file@percent }
 \newlabel{sec:planning}{{2.5}{6}{Planning with a Learned Prior and Value}{subsection.2.5}{}}
 \newlabel{eq:puct}{{8}{6}{Planning with a Learned Prior and Value}{equation.2.8}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.6}Surrogates and Bounds}{6}{subsection.2.6}\protected@file@percent }
-\newlabel{sec:surrogates}{{2.6}{6}{Surrogates and Bounds}{subsection.2.6}{}}
 \citation{wainwright2005}
 \citation{felsenstein2004}
-\citation{felsenstein2004,durbin1998}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.6}Surrogates and Bounds}{7}{subsection.2.6}\protected@file@percent }
+\newlabel{sec:surrogates}{{2.6}{7}{Surrogates and Bounds}{subsection.2.6}{}}
 \newlabel{eq:plugin-bound}{{9}{7}{Surrogates and Bounds}{equation.2.9}{}}
 \newlabel{eq:parsimony-bound}{{10}{7}{Surrogates and Bounds}{equation.2.10}{}}
 \newlabel{eq:mean-field-bound}{{11}{7}{Surrogates and Bounds}{equation.2.11}{}}
@@ -50,17 +49,18 @@
 \@writefile{toc}{\contentsline {section}{\numberline {3}Problem Statement: Phylogenetic Inference}{7}{section.3}\protected@file@percent }
 \newlabel{sec:phylo}{{3}{7}{Problem Statement: Phylogenetic Inference}{section.3}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.1}The model}{7}{subsection.3.1}\protected@file@percent }
-\newlabel{eq:normalization}{{14}{7}{The model}{equation.3.14}{}}
-\newlabel{eq:jc}{{15}{7}{The model}{equation.3.15}{}}
+\citation{felsenstein2004,durbin1998}
+\newlabel{eq:normalization}{{14}{8}{The model}{equation.3.14}{}}
+\newlabel{eq:jc}{{15}{8}{The model}{equation.3.15}{}}
 \newlabel{eq:site-independence}{{16}{8}{The model}{equation.3.16}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.2}As a factor graph}{8}{subsection.3.2}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Simulated topology for 8 taxa under the Jukes-Cantor model (seed 20260904), branch lengths labelled in expected substitutions per site. The first 14 simulated sites are shown beside each leaf, in tree order, so the alignment the likelihood consumes can be read off against the topology that generated it.}}{8}{figure.1}\protected@file@percent }
-\newlabel{fig:sim-tree}{{1}{8}{\simTreeCaption }{figure.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}The algorithm: simulation}{8}{subsection.3.3}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Forward simulation of one site under $(\mathcal  {T}, \boldsymbol  {\tau }, \mathbf  {Q})$}}{8}{algorithm.1}\protected@file@percent }
+\newlabel{alg:simulate}{{1}{8}{The algorithm: simulation}{algorithm.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Simulated topology for 8 taxa under the Jukes-Cantor model (seed 20260904), branch lengths labelled in expected substitutions per site. The first 14 simulated sites are shown beside each leaf, in tree order, so the alignment the likelihood consumes can be read off against the topology that generated it.}}{9}{figure.1}\protected@file@percent }
+\newlabel{fig:sim-tree}{{1}{9}{\simTreeCaption }{figure.1}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Closed-form Jukes-Cantor transition probabilities for k = 4 (curves) against the frequencies the simulator produced (markers), one pair per branch of the 5-branch fixture tree. Simulated at seed 20260902 over 200000 sites. Largest deviation 1.07e-03, within the fixture's declared Monte Carlo tolerance of 1e-02. The simulator is validated against this analytic form, never against the likelihood code it feeds.}}{9}{figure.2}\protected@file@percent }
 \newlabel{fig:jc-transition}{{2}{9}{\jcTransitionCaption }{figure.2}{}}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Forward simulation of one site under $(\mathcal  {T}, \boldsymbol  {\tau }, \mathbf  {Q})$}}{9}{algorithm.1}\protected@file@percent }
-\newlabel{alg:simulate}{{1}{9}{The algorithm: simulation}{algorithm.1}{}}
 \citation{felsenstein2004,durbin1998}
 \citation{felsenstein2004}
 \citation{rosen2019}
