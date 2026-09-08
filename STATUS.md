@@ -820,8 +820,13 @@ redrawn: the label block returns the planted labelling **exactly** at bin
 factors 10 and 5 --- 0.734 to 1.000 up to a permutation of the ten class
 names --- in one round, 22.8 s and 27.2 s of which the alpha-expansion is
 about 20. The full test, simulate through assertion, is **59 s at factor 10
-and 62 s at factor 5**, so factor 5 is the key fixture: the largest of the
-three inside the 120 s key budget. Factor 1 stays `release`. Two measurements
+and 62 s at factor 5**, so factor 5 is the key fixture and factor 1 stays
+`release` as the plan assigns it. The plan expected factor 1 to be out of
+reach; it is not. It recovers the labelling exactly in **98 s**, inside the
+same 120 s budget, because the port took one E sweep there from 278.5 s to
+4.89 s. That the whole declared instance now fits a per-test budget is the
+finding, and moving the key fixture onto it is the maintainer's call rather
+than this ticket's. Two further measurements
 are recorded because they are findings rather than passing numbers. From a
 *uniform* start at `M = 10` the first E step's class densities are ten
 mixtures of the same data and the field is at chance, so the ascent does not
