@@ -180,14 +180,6 @@ untested pairings:
     Expectation-maximization is pinned against the gradient fit on mixtures
     built per test, where the two are given the same observations at several
     sizes; the declared instance carries the comparison at the release budget.
-  potts_lattice / samplers: >-
-    The samplers are pinned to enumeration at sizes small enough for it and
-    measured for mixing at sizes past it, so each test states its own extent;
-    the declared 3x3 instance is the simulator's validation case.
-  potts_lattice / optimizers: >-
-    The ground-state solvers and the message passing are refereed on the
-    geometries each result needs --- a strip, a grid, a frustrated lattice ---
-    rather than on one declared extent.
   potts_lattice / surrogates: >-
     The relaxation is refereed against enumerated maximum cuts, which fixes
     the size at what enumeration reaches rather than at the declared one.

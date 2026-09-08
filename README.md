@@ -222,6 +222,7 @@ oracle that established it, and the pull request that carries it;
 | [`docs/tex/figures/`](docs/tex/figures) | The QA figures the documents rest on, committed so a changed plot is visible in review |
 | [`docs/nb/`](docs/nb) | One worked notebook per problem class: simulate, fit, search, learn, and what is not built yet |
 | [`docs/blue_sky.md`](docs/blue_sky.md) | Stage 3 candidates: every earlier proposal with its state, and each new one with the oracle that referees it |
+| [`docs/external_tools.md`](docs/external_tools.md) | External phylogenetic software: what exists, its licence, and what it could referee if one were adopted |
 
 Every figure in the document is rendered from the code it reports on and ships
 with a caption naming the seed, the sizes, and the model that produced it. A

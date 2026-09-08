@@ -165,6 +165,10 @@ jobs:
   python-tests:
     name: Python tests (pytest)
     runs-on: ubuntu-24.04
+    # The merge gate is bounded (issue #409), so an overrun is a defect in the
+    # bound rather than a job to wait out. The push to main below is unbounded
+    # and takes the whole hour it needs.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 15 || 90 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -251,8 +255,15 @@ jobs:
           git fetch --no-tags origin "${{ github.base_ref }}" || true
           changed="$(git diff --name-only "$base"...HEAD)"
           echo "changed files:"; echo "$changed" | sed 's/^/  /'
-          echo "$changed" | python3 infra/select_tests.py >> "$GITHUB_OUTPUT"
-          echo "$changed" | python3 infra/select_tests.py | sed 's/^/::notice::/'
+          # `--budget` bounds the fallback, and only the fallback: a change
+          # this cannot attribute to a module selects what it can plus what
+          # always runs, rather than the whole suite, which took 23 to 36
+          # minutes against 156 seconds for the nine other jobs together
+          # (issue #409). The whole suite still runs, on the push to main
+          # below, where nobody waits for it. A change touching a likelihood
+          # kernel, the Rust sources or a lockfile refuses the bound.
+          echo "$changed" | python3 infra/select_tests.py --budget >> "$GITHUB_OUTPUT"
+          echo "$changed" | python3 infra/select_tests.py --budget | sed 's/^/::notice::/'
       - name: Run the selected tests
         run: |
           paths="${{ steps.selection.outputs.paths }}"

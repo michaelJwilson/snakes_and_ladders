@@ -1917,7 +1917,7 @@ what the roadmap bullet ultimately asks for.
 | Coupled model: planted labels and emission parameters past enumeration | **Met** for the labels — 0.97 accuracy up to permutation on a planted 10x10 lattice after the annealed start, against 0.66–0.78 from a cold start ([#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307)); recovery of the emission parameters past enumeration is not measured |
 | Codes: exhaustive maximum-likelihood decoding where it reaches, the block error rate against the channel where it does not | **Met** at the enumerable size — the decoder equals enumeration to 1.9e-13 on a cycle-free 22-bit code and min-sum returns the enumerated ML codeword ([#356](https://github.com/michaelJwilson/snakes_and_ladders/pull/356)); at 19,998 bits the code brackets the erasure threshold 0.4294 between 0.42 and 0.44, and the error rates against `p`, `epsilon` and `sigma` are #340 part 2 |
 | Parity with exact oracles on small `n` | **Met** for tree search against exhaustive enumeration ([#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128)), and for large parsimony from every start at five and six taxa ([#335](https://github.com/michaelJwilson/snakes_and_ladders/issues/335)) |
-| Parity with IQ-TREE 2 / RAxML-NG on large `n` | **Not started**; the tools are not in the environment (issue #126) |
+| Parity with IQ-TREE 2 / RAxML-NG on large `n` | **Deferred**, not withdrawn: `CLAUDE.md` admits no external solver today, so the comparison is not attempted and what referees large `n` in the meantime is this repository's own exact oracles where they reach and the simulated truth past them. The requirement returns if a tool is adopted; `docs/external_tools.md` surveys the candidates (issue [#126](https://github.com/michaelJwilson/snakes_and_ladders/issues/126)) |
 | `O(n×L×k)` memory inside 16 GB / 24 GB | **Met**: 87.2 MB at 100 taxa by 11,000 sites on the worst-case (caterpillar) topology, 879 MB at the declared maximum — a factor of 20 inside 16 GB, with each figure pinned against the allocator to within 2.5% |
 | CUDA, Metal/MPS and CPU dispatch | **CPU only**; selection logic landed ([#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112)), accelerator paths not implemented (issue #280) |
 | Declared cross-device tolerance, not bitwise | **Met**: `1e-11` relative in `float64`, `1e-6` where either side is `float32` ([#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112)) |
@@ -2067,6 +2067,9 @@ from the module that implements it, so the guard of #274 resolves them; the
   hill climbing, which reaches 1.000 on this fixture.
 - Any comparison against established software. IQ-TREE 2 and RAxML-NG are not
   installed, and no statement anywhere in the repository compares against them.
+  This is a stance rather than an omission: `CLAUDE.md` admits no external
+  solver today, and `docs/external_tools.md` records what adopting one would
+  start from.
 - Runtime scaling. Benchmarks are not ranked on CI hardware, so timings live in
   the benchmark suite on fixed hardware rather than in a committed figure.
 - Rate variation across sites, and GPU dispatch. Neither is built; both are
