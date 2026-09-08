@@ -559,7 +559,9 @@ recursion on a 200-step, four-state chain (73 ms against 7 ms) and 57x
 `belief_propagation` on an 8x8 lattice (1.04 s against 18 ms), a table per
 factor and a dictionary per message against a recursion that knows its shape.
 The specialised evaluators therefore stay; the factor graph is the structure
-for the model none of them can express.
+for the model none of them can express. The audit of
+[#341](https://github.com/michaelJwilson/snakes_and_ladders/issues/341) below
+brought those ratios to 1.8x and 4.7x with the arithmetic unchanged.
 
 **Forward–backward is an evaluator** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
 closing #173). `likelihood.forward_backward` returns the evidence, the
@@ -601,6 +603,47 @@ transition matrices leave the JC log-likelihood bitwise unchanged while the
 gradient moves by 1.5e-11 absolute, autograd summing the same terms in a
 different order; the finite-difference check that pins the gradient is
 unaffected.
+
+**The repository was audited a second time, module by module, and three of
+the ranked loops moved**
+([#341](https://github.com/michaelJwilson/snakes_and_ladders/issues/341)).
+`tests/benchmarks/profile_hotpaths.py` now covers one workload per module at
+the enumerable tier the suite pins and the mid-size tier this file reports,
+and prints the top five functions by `cProfile` self time with the fraction
+of the run each carries. Measured on one development machine, 4 cores shared
+with one other process, 1-minute load 0.2–1.9 throughout; the fractions do
+not depend on load, and the wall clocks below were taken under 1.0. Loops
+#287 ranked were not re-measured. The `ROADMAP.md` tier (1,000 taxa by
+10,000 sites) and the `qa`/`infra` row (document build, notebook execution,
+the test budget) were not run on this host and stay recorded as not measured.
+
+| module | loop (mid tier; enumerable where it differs) | fraction | opportunity | expected gain | oracle |
+| --- | --- | --- | --- | --- | --- |
+| `likelihood` | `message_passing` flooding, 8x8: `logsumexp` per message 17.6%, ufunc reduce 14.7%, `graph.neighbours` scan 9.3%, `_run` 9.3%, `_normalize` 7.6% (3x3: 19.1 / 15.8 / 10.2%) | 58% Python per message | layout, allocation, vectorization | to within 3x of `belief_propagation` | the dictionary implementation, bitwise |
+| `likelihood` | `message_passing` tree schedule, chain 200: `graph.neighbours` scan 15.7%, `graph.degree` scan 10.6% (400,000 calls), `logsumexp` 9.7% | 36% | layout, call overhead (two quadratic scans) | to within 2x of the forward recursion | the same, bitwise |
+| `learn` | `PottsLandscape.features`, 60 x 32 episodes on the length-8 chain: 23.5%, with 520,968 ufunc reductions from its loop over sites; `policy.sample` 4.0% | 23.5% | vectorization | under 20% of the run | `_deltas`, exact |
+| `search` | `maxflow.energy`, 32x32 x 64 configurations: the per-edge Python loop 91.6% (16x16: 93.0%) | 92% | vectorization | 5–10x on one configuration | `potts.log_weights`, 1e-12 relative |
+| `search` | `spr_neighbours` at 20 taxa: 128.7 ms for 1,122 candidates, `build` and its generator 44%, `visit` 28% | 10% of one `infer` step (1.28 s); 67% of one candidate fit (193 ms) | allocation (a `Node` tree per new key) | at most 2x on the neighbourhood, under 5% of a step | not ported: under the 10% rule per step |
+| `search` | `gibbs.sample_factor_graph`, 32x32: `conditional` 42.0%, `gibbs_sweep` 17.0%, `log_density` 9.7% (16x16: 40.8 / 18.6 / 9.2%) | 69% | compiled backend over the #341 edge layout | ~10x, from the Potts `numba` sweep's 7x | draw for draw on the same uniforms; not acted on |
+| `search` | `alpha_expansion`, 32x32: Python Dinic `_augment` 28.8%, `_levels` 18.8%, `expand` 24.0% | 72% | FFI: `maxflow_rust` as the inner solver | 3x or more on the expansion | its energies, exact; not acted on |
+| `search` | `potts_mcmc` single-site, 32x32: `_single_site_sweep` 45.8% | 46% | none: the Rust backend exists and is opt-in (#287) | — | not changed by default |
+| `opt` | `hmc.sample`, 1,000 draws on the length-64 chain: `torch.logsumexp` 32.0% (512,000 calls, one per position per evaluation), `log_partition` 9.6%; the fit at length 64: 26.6% | 42% | call overhead: reassociate the homogeneous transfer-matrix product by repeated squaring, 6 products for 64 positions | 1.5–2x on the run | the sequential recursion at 1e-12 relative and central differences for the gradient; not acted on |
+| `opt` | `fit` on the tree, 20 taxa x 500 sites: `run_backward` 45.2%, `_post_order` 22.9%; no Python-level call per site | — | none: the objective is one torch pass over sites | — | met by construction |
+| `sim`, `likelihood` pruning, Fitch, `budget.compare`, `fit_surrogate`, Rust/FFI | every remaining loop under 10% of a run that is itself milliseconds: `sample_rows` kernel 74.4% of a 0.4 ms call with 19% in its wrapper, `pruning_rust` kernel 86.5%, `FactorGraph.__init__` 22.4% of 31 ms building the 32x32 graph | — | none | — | recorded, not ported |
+
+Three loops moved, each pinned before it was timed and none changing what it
+computes:
+
+| loop | pin | before | after |
+| --- | --- | --- | --- |
+| `message_passing` flooding on the 8x8 lattice: messages as rows of two preallocated `(n_edges, width)` arrays, factors grouped by table shape and axis with their tables stacked once, one vectorized pass per group per sweep | bitwise against `message_passing_reference` (the dictionary implementation, kept) on every marginal and every schedule, 51 iterations both; `log Z` to 1e-12 relative | 514.6 ms, **75x** `belief_propagation` (6.88 ms) | **12.38 ms, 1.8x** |
+| `message_passing` tree schedule on the 200-step chain: the same kernels grouped by height and depth, breadth-first, so a 2,000-step chain no longer exceeds the recursion limit | bitwise as above; the 2,000-step chain against the forward recursion to 1e-12 | 29.75 ms, **9.5x** the forward recursion (3.14 ms) | **14.77 ms, 4.7x** — the 2x target is not met: 800 levels at 10–15 µs of NumPy dispatch each is the floor of this layout |
+| `maxflow.energy`: one gather over the edges and a `dot` | `log_weights` to 1e-12 relative (realized 7.7e-14; no longer bitwise, the edge terms sum in a different order) | 0.59 / 2.36 / 8.37 ms on one configuration at extents 16 / 32 / 64; 2.70 ms on 64 configurations at 32x32 | **0.08 / 0.28 / 1.00 ms (7.7–8.6x)**, below the Rust cut kernel at every extent; **1.14 ms (2.4x)** |
+| `PottsLandscape.features`: one gather from a padded neighbour table, and `is_terminal` reading it instead of `_deltas` per action | `array_equal` to `_deltas`, unchanged | REINFORCE 60 x 32 episodes on the length-8 chain 2.43 s; one gradient update on the length-4 chain 27.31 ms | **1.85 s (1.32x)**; **23.99 ms**; `features` 23.5% of the run to 11.5%, `policy.sample` 5.4% — Python per action sits at the 20% line rather than under it |
+
+No `numba` or Rust port was reached: on every loop acted on the vectorized
+pass carried the gain, and the profile of what remains is dispatch per level
+(the chain) rather than a call-bound inner loop.
 
 **Bounds with proofs, certified rather than trusted**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A

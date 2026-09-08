@@ -2,8 +2,9 @@
 
 See tests/regression/likelihood/test_message_passing.py for correctness. Each
 cell is paired with the specialised evaluator it generalises, so the cost of
-the generality -- a table per factor and a dictionary per message, against a
-recursion that knows its shape -- is a measured ratio and not a guess.
+the generality is a measured ratio and not a guess, and with the
+dictionary-per-message reference the edge-array layout replaced under issue
+#341, so the before and after of that change sit in the same table.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import math
 import numpy as np
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood import message_passing_reference as reference
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
 from snakes_and_ladders.likelihood.message_passing import MessageSchedule, sum_product
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
@@ -43,6 +45,17 @@ def test_sum_product_on_a_chain_benchmark(benchmark: BenchmarkFixture) -> None:
     assert math.isfinite(result.log_partition)
 
 
+def test_dictionary_sum_product_on_the_same_chain_benchmark(
+    benchmark: BenchmarkFixture,
+) -> None:
+    """The reference the edge-array layout replaced: the before number."""
+    graph = from_hmm(*_chain())
+
+    result = benchmark(reference.sum_product, graph)
+
+    assert math.isfinite(result.log_partition)
+
+
 def test_forward_recursion_on_the_same_chain_benchmark(
     benchmark: BenchmarkFixture,
 ) -> None:
@@ -64,6 +77,17 @@ def test_flooding_on_a_lattice_benchmark(benchmark: BenchmarkFixture) -> None:
     graph = from_potts(LATTICE, FIELD)
 
     result = benchmark(sum_product, graph, schedule=MessageSchedule.FLOODING)
+
+    assert math.isfinite(result.log_partition)
+
+
+def test_dictionary_flooding_on_the_same_lattice_benchmark(
+    benchmark: BenchmarkFixture,
+) -> None:
+    """The reference the edge-array layout replaced: the before number."""
+    graph = from_potts(LATTICE, FIELD)
+
+    result = benchmark(reference.sum_product, graph, schedule=MessageSchedule.FLOODING)
 
     assert math.isfinite(result.log_partition)
 
