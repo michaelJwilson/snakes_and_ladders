@@ -22,8 +22,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Support the different lattice types (#231)
 - A turbo code problem, fixture and belief-propagation example (#233)
 - Define one fixture API across trees, lattices and chains (#132)
-- Convert the sixteen signatures that still take a seed where the rule says a
-  generator (#240)
 - Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of keeping
   its own copy of the exact open-chain recursion (#186)
@@ -38,6 +36,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   zero-field benchmark measures the fixture (#245)
 - Coloured iterated conditional modes on CUDA and Metal through torch,
   measured against the 10× rule before any Triton kernel (#227)
+- Expose forward-backward as an evaluator, not as Baum-Welch's internals (#173)
 - One energy/likelihood evaluator API across the three problem classes,
   asserted by an import-graph test (#238)
 - CUDA dispatch for the pruning recursion, pinned against the NumPy oracle
@@ -93,8 +92,13 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - A feature set for the tree environment, with the unidentifiable-constant
   invariance pinned
-- PPO and a learned state-value critic
+- A tree fixture hard enough to separate a policy from greedy (#177)
+- The factor-graph environment over #296, the #308 surrogate as a tree reward
+  model, and the budget-matched harness of #281 for the RL comparisons
+  (#313, what `dev` could not yet carry)
 - Truth as a terminal penalty, never a training signal
+- Train a phylogenetic policy and report its learning curve against the
+  enumerated expected return (#178)
 
 ## Milestone 2.2 — Curriculum Learning
 
@@ -114,13 +118,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
-- Create a ledger of benchmarked and validated runs with Aim (#75), revived
-  from the closed draft as the run store behind the experiment files (#314,
-  part 2; the `tracking` extra needs the dependency's yes)
+- Create a ledger of benchmarked and validated runs with Aim (#75)
 - Reproduce a run from a single manifest, and assert it
-- Budget-matched ablation leaderboard across shared seeds: the experiment
-  ledger and its generated index landed (#314); the cells that remain are the
-  stress and release tiers, on the fixed-hardware runner
+- Budget-matched ablation leaderboard across shared seeds
 - Paired significance test required before a variant is adopted as
   state-of-the-art
 
@@ -144,6 +144,11 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Impose a test grouping, so a class of check can be selected independently
   of the module a diff touched (#237)
+- CPU parallelism past the first three sites: the candidate fits of
+  `search.infer`, `learn.rollout` batches, tempering replicas (a `rayon`
+  loop is the alternative, a dependency decision), `qa.build` and
+  `check_notebooks` through the seam, and `pytest-xdist` against the test
+  budget (#344)
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#232)
 - Scope rustworkx for efficiency and scaling (#242)
@@ -152,6 +157,18 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   transfer-matrix product in the Potts chain objective, `maxflow_rust` as
   alpha expansion's inner solver, and a compiled sweep for the factor-graph
   Gibbs sampler (#341)
+
+- Adopt `rustworkx` on a hot path where a measurement says so —
+  `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
+  of the bound — moving the replaced implementation to `sandbox/`; #242 is
+  closed into the frameworks ticket (#322)
+- TorchRL `TensorDict` environments and a `SyncDataCollector` over the
+  Gymnasium adapter for Milestone 2.2's batched rollout, adopted only if the
+  collector beats `learn.rollout` on the 8 → 20 taxa scaling with `float64`
+  forced throughout (#322)
+- PyTorch Geometric `Batch.from_data_list` for surrogate training at 20+
+  taxa, and `HeteroData` over `sim.factor_graph` for a learned message
+  passing beside the exact one, gated on the training-time benchmark (#322)
 - Vet `ROADMAP.md`, `STATUS.md` and `TICKETS.md` for incompleteness,
   inconsistency and error (#244)
 - Separate the technical document into infrastructure, textbook and paper
@@ -164,8 +181,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
 - Make the public-facing reference to the work consistent (#250)
-- Derive the belief-propagation and forward-backward sections of `docs/tex/`, so
-  all three problem classes are documented to the same standard
 - Re-include the eleven committed QA figures the technical document no longer
   cites, so CI rebuilds nothing the document does not rest on
 - The textbook carries every equation and algorithm the code cites, and a

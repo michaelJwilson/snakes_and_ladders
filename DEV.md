@@ -21,9 +21,10 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 | `python/snakes_and_ladders/learn/` | Model-agnostic reinforcement learning: the `Environment` interface, the policy, REINFORCE, an exact trajectory-enumeration oracle, and a Potts-landscape reference instance. Imports nothing from `sim/`, `likelihood/` or `search/`, asserted by test. |
 | `python/snakes_and_ladders/search/` | Move sets, temperature schedules, and the hill-climbing search (`infer.py`) that joins them to `opt/`. The phylogenetic RL environment (`rl.py`) lives here too, for the reason the phylogenetic `Objective` lives in `likelihood/`: `learn/` may import no application module. |
 | `python/snakes_and_ladders/qa/` | QA figures/tables for the documents; renders, doesn't recompute. |
+| `python/snakes_and_ladders/sandbox/` | The oracle home: a hand-rolled implementation a framework replaced on a hot path, kept to referee it. Imported by `tests/` and `qa/` only, asserted by test; empty until an adoption is measured (issue #322). |
 | `src/lib.rs` | Rust extension (`oxi_snakes_and_ladders`), exposed through PyO3. |
 | `docs/tex/` | LaTeX source for the paper and the textbook, with the notation and preamble both share. |
-| `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/paper.pdf` and `docs/textbook.pdf` (both committed). |
+| `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/paper.pdf` and `docs/textbook.pdf` (both committed; the `.aux`, `.bbl`, `.log` and other files `latexmk` leaves beside them are ignored, never committed). |
 
 *Note: Each directory contains a localized `CLAUDE.md` defining specific constraints (e.g., `sim/` oracles, `search/` constraints). These append to, rather than override, the root `CLAUDE.md`.*
 
@@ -59,9 +60,10 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
   | `opt/` | 174.0 s | **163.7 s** | learn, likelihood, opt, qa, search |
   | lockfile, shared fixture, `src/` | 174.0 s | 174.0 s | everything |
 
-  The saving is uneven by design, and the reason is the import graph rather than the machinery. Attributed by `--durations=0` over one run: `qa` is 33.6% of the suite's time, benchmarks 29.6%, `search` 20.9%, and the rest under 6% each. `snakes_and_ladders.qa` imports four of the other five modules, so most changes reach the most expensive component; a change to `opt`, which everything depends on, saves almost nothing. `snakes_and_ladders.learn` is imported by nothing, so a change there saves 90%.
+  The saving is uneven by design, and the reason is the import graph rather than the machinery. Attributed by `--durations=0` over one run: `qa` is 33.6% of the suite's time, benchmarks 29.6%, `search` 20.9%, and the rest under 6% each. `snakes_and_ladders.qa` imports four of the other five modules, so most changes reach the most expensive component; a change to `opt`, which everything depends on, saves almost nothing. `snakes_and_ladders.learn` was imported by nothing when this was measured, so a change there saved 90%; since `snakes_and_ladders.search.gym` adapted its protocol (issue #322) a `learn` change selects `search`, and through `likelihood.features` → `search.topology` also `likelihood` and `qa`, so it costs what the `opt/` row does less `opt` itself.
 
 * **Coverage is measured against what was selected.** Where the whole suite runs, that is the package, as before. Where a subset runs, the claim narrows to *every module this pull request touched is at least 90% covered by that module's own tests* — stricter in one direction, since a module stops counting coverage it gets only incidentally from another module's tests, and weaker in another, since an untouched module is not re-checked. Measured on `main`: sim 100%, likelihood 100%, learn 100%, opt 99%, qa 99%, search 98%, so the gate holds without a new test. The package-wide gate still runs on every push to `main` and in `infra/release.sh`, which is what stops an unselected module rotting.
+* **The `frameworks` extra is optional for the suite and required for its pins.** It installs `gymnasium`, `rustworkx`, `torchrl` and `torch_geometric` (issue #322), and enables `snakes_and_ladders.search.gym` (the Gymnasium adapter over `learn.Environment`), `PottsGraph.to_rustworkx` / `from_rustworkx`, and four test modules that `importorskip` one package each and pin our implementation against it: `tests/regression/search/test_search_gym.py` (Farama's `check_env`, and an episode round-tripped through both interfaces), `tests/regression/sim/test_graph_rustworkx.py` (the generators against `rustworkx.generators`, the cut against `networkx`), `tests/regression/learn/test_learn_ppo_torchrl.py` (GAE and the clipped loss against TorchRL's) and `tests/regression/learn/test_learn_surrogate_pyg.py` (the graph surrogate against `GINConv`). `python-tests` syncs the extra so they run per pull request; without it they skip, and nothing else in the suite changes. A framework that *replaces* an implementation on a hot path is a different step, gated on a measurement, and the replaced implementation then moves to `python/snakes_and_ladders/sandbox/` as its referee (`sandbox/CLAUDE.md`).
 * **Fixtures follow their blast radius.** Used by one module: keep it in that module, or in a local `conftest.py`. Shared across modules: a top-level underscore-prefixed module such as `tests/_example_hotpath.py`, which is imported rather than collected.
 
 ---
@@ -180,6 +182,55 @@ Every entry point — a QA script, `snakes_and_ladders.qa.build`,
 5. Pin the port against the NumPy oracle within its tolerance before reporting the speedup.
 
 `cProfile` cannot see inside a NumPy call or a Rust kernel; `pytest-benchmark` reports wall clock and nothing about cache, branches or vector width; Criterion times a kernel with its inputs already in Rust. Each ranks or times, none explains — the explanation is a change and its measured effect.
+
+### Running With Workers
+
+`snakes_and_ladders.parallel.map_tasks` is the one seam for CPU parallelism over
+independent tasks (issue #344); no module keeps a pool of its own. Three sites
+go through it — `opt.fit.fit_from` (starts), `opt.budget.compare` (cells of
+method × instance × seed) and `search.support.bootstrap_support` (replicates) —
+and each takes `workers=` explicitly.
+
+* **`workers` is an argument, never a default or an environment variable.**
+  `workers=1` is the serial loop; the QA runner and a test pass `1`; a run on
+  a bigger machine passes its core count and gets the same numbers faster. A
+  default read from the machine would change a run nobody edited.
+* **A parallel run is bitwise the serial run.** Randomness is one generator
+  per task, spawned in item order from the caller's with
+  `numpy.random.Generator.spawn`, so task `i` draws the same stream at every
+  worker count; results return in input order; and every worker runs at the
+  intra-op thread count the site names, as the serial path does, so the same
+  kernels reduce in the same order. Each site pins `workers=1` against
+  `workers=4` with `==` or `torch.equal`, never `allclose`.
+* **The thread rule.** `torch` and BLAS multithread inside a kernel, so a
+  pool of workers each at the default thread count oversubscribes the cores;
+  where a pool pays, pin `intra_op_threads` to cores divided by workers.
+  `map_tasks` sets it per worker from that argument (`None` leaves the
+  process's setting alone) and restores the caller's afterwards. The three
+  sites pass `None`, by measurement: pinning one thread slowed the serial
+  multi-start fit 2.9× (1.40 s against 0.49 s at 8 taxa × 1000 sites),
+  because torch's intra-op parallelism over the sites is the parallelism that
+  pays there, and no pool reached 2×. Serial and workers then run at the
+  same count on one machine, which is what keeps the two bitwise equal. A
+  site whose task body is a `torch` op above the parallel grain, or a Rust
+  kernel under `allow_threads`, is the case for `backend="threads"`; a Python
+  loop that holds the GIL is the case for `"processes"`, at the cost of
+  pickling the task and result and of spawning the pool (the `spawn` start
+  method, the one that works with `torch` and on Apple Silicon: workers
+  import the package afresh, 1.81 s for 4 workers on the 4-core host, a
+  fixed cost per call that `STATUS.md` reports beside each speedup).
+* **The hardware.** Speedups are measured on fixed hardware per **No CI
+  Profiling** above, with the core count and the 1-minute load stated beside
+  every number; `STATUS.md` §0 carries the inventory of loops and the
+  speedup matrix at 1, 2 and 4 workers with intra-op threads at 1 and at the
+  default. A site under 2× at 4 workers is recorded there as a negative result
+  and left serial — all three sites are, on the 4-core host, so a caller
+  passes `workers=1` until a measurement on its own hardware says otherwise.
+  Time only on an uncontended machine: a shared host at load above its core
+  count reports the contention, not the code.
+* **Not yet through the seam** (`TICKETS.md`, #344): the candidate fits of
+  `search.infer`, `learn.rollout` batches, tempering replicas, `qa.build` and
+  `infra/check_notebooks.py`, and `pytest-xdist` for the suite.
 
 ### Core Development Standards
 

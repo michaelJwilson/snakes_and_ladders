@@ -40,20 +40,13 @@ docs/tex/*.toc
 
 # infra/build_technical_doc.sh's LaTeX build output. The PDFs themselves
 # are committed (see DEV.md); everything latexmk leaves beside them is not.
-docs/paper.aux
-docs/paper.bbl
-docs/paper.blg
-docs/paper.fdb_latexmk
-docs/paper.fls
-docs/paper.log
-docs/paper.out
-docs/paper.toc
-docs/textbook.aux
-docs/textbook.bbl
-docs/textbook.blg
-docs/textbook.fdb_latexmk
-docs/textbook.fls
-docs/textbook.log
-docs/textbook.out
-docs/textbook.toc
+docs/*.aux
+docs/*.bbl
+docs/*.blg
+docs/*.fdb_latexmk
+docs/*.fls
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.synctex.gz
 

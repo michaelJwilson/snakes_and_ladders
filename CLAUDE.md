@@ -41,7 +41,7 @@ This file is authoritative. Each of the remainder has a defined task:
 | `docs/tex/` | Two documents: a paper reporting results, and a textbook of the problem statements, algorithms, and the properties that referee them |
 | `docs/nb/` | One worked notebook per problem class, from a fixture to a learned policy |
 
-`python/snakes_and_ladders/sim/`, `likelihood/`, `opt/`, `learn/`, `search/`, `qa/`, `infra/`, and `docs/` each carry their own `CLAUDE.md`. Those add what applies only inside one module; they never override this file except for the vital **writing style rules, which bind every one of them**. A rule that binds the whole repository belongs here, not in one of them.
+`python/snakes_and_ladders/sim/`, `likelihood/`, `opt/`, `learn/`, `search/`, `qa/`, `sandbox/`, `infra/`, and `docs/` each carry their own `CLAUDE.md`. Those add what applies only inside one module; they never override this file except for the vital **writing style rules, which bind every one of them**. A rule that binds the whole repository belongs here, not in one of them.
 
 **Altitude, and what may repeat.** `ROADMAP.md`, `STATUS.md` and `TICKETS.md` plan and track — what the project is doing, how far it has got, what remains — at a level a reader holds in their head. `DEV.md` and `INSTALL.md` are followed step by step, so they carry their detail in full rather than as pointers: someone working through one of them should not have to assemble the answer from three. Detail may therefore repeat between them, and where it repeats it must agree — a copy that has drifted is a defect, and this file settles which reading is right.
 
@@ -81,6 +81,7 @@ Checked in this order when a hot path is proposed; `DEV.md` carries the procedur
 *   **Allocation.** Preallocate and reuse buffers across sweeps; NumPy `out=` and in-place operators over temporaries (Gorelick & Ozsvald ch. 6).
 *   **Double buffering.** Reading and writing one array in a sweep is a *different Markov chain* from reading the previous buffer; the docstring says which and the oracle pins it before either is timed.
 *   **The FFI boundary.** Cross it once per call with contiguous arrays; time a kernel alone *and* through its binding, since the marshalling has been the dominant term here (Gorelick & Ozsvald ch. 7; Antão).
+*   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — runs through `snakes_and_ladders.parallel`, one seam and no pool of its own; `workers` is explicit and `1` is serial. A parallel run is bitwise the serial run or it is not a parallel run: one generator per task, spawned in item order, and one intra-op thread per worker, since a pool of multithreaded kernels oversubscribes the machine. A site under 2× at 4 workers stays serial and `STATUS.md` records why.
 *   **Compiled backends.** Two, each for a reason: Rust carries the sampling sweep, whose agreement with its oracle is distributional, so it stays opt-in; `numba`'s `njit` carries deterministic kernels whose pin against the oracle is bitwise, so it may be the default. Every backend is one more implementation held to the NumPy oracle, and a third joins only against a measurement on an existing hot path (Gorelick & Ozsvald ch. 7).
 
 ## Testing & Quality Assurance
