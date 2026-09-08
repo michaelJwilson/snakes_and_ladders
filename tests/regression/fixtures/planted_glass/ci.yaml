@@ -1,0 +1,46 @@
+model: frustrated-lattice
+oracle: enumeration
+
+# A discrete instance single-site descent does not solve, whose optimum is
+# still enumerated (issue #406). Every field is required -- see
+# python/snakes_and_ladders/sim/canonical.py and sim/CLAUDE.md.
+#
+# `frustrated_lattice/ci.yaml` declares the same model for a different job:
+# a 60-node glass scanned across frustration, past the size enumeration
+# reaches, where the planted energy is the only reference. This one is
+# declared so the optimum is a fact rather than a bound.
+#
+# 18 sites, so all 2**18 = 262,144 configurations enumerate in 0.2 s and
+# "the ground state" is an enumerated fact. Mean degree 4 keeps the
+# Erdos-Renyi skeleton locally tree-like; frustration 0.30 is where the
+# instance stops being a gauge transform of the ferromagnet.
+#
+# Measured on the committed values over 16 seeds of 50 seeded restarts of
+# `search.alpha_expansion.iterated_conditional_modes`: descent reaches the
+# enumerated ground state from 0.079 of starts, 95% interval (0.056, 0.101).
+# The bar `STATUS.md` states is 0.4, so this instance is unsolved by a
+# factor of five. Chosen by sweeping 18 candidates over size (16, 18, 20),
+# frustration (0.30, 0.40, 0.50) and graph seed; this is the lowest rate of
+# the ten that came in under the bar. See
+# tests/regression/search/test_search_hard_glass.py for the pinned values
+# and tests/regression/fixtures/planted_glass/ci.baseline.json for the
+# record the per-pull-request tests read.
+#
+# The planted state is NOT the ground state here: it scores -7.0 against
+# the enumerated -14.0, which is the case `sim.canonical.planted_spin_glass`
+# warns of and the reason this fixture states `enumeration` as its oracle
+# rather than the planted energy.
+#
+# shape, boundary and coupling declare the triangular antiferromagnet the
+# model carries beside the glass; they are the same 3x3 periodic instance
+# `frustrated_lattice/ci.yaml` declares, and are unused by the search study.
+seed: 20260908
+shape: [3, 3]
+boundary: periodic
+coupling: -1.0
+
+glass_nodes: 18
+glass_mean_degree: 4.0
+glass_magnitude: 1.0
+glass_frustrations: [0.30]
+glass_restarts: 50

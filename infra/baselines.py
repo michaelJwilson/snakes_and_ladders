@@ -39,6 +39,7 @@ Run::
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 import time
 from collections.abc import Callable, Sequence
@@ -56,7 +57,9 @@ from snakes_and_ladders.learn.potts import (
     optimum,
 )
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.log import get_logger, phase
+from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.rl import FeatureSet, RewardModel, TopologyEnvironment
 from snakes_and_ladders.search.surrogate import maximized_target
@@ -73,6 +76,7 @@ from snakes_and_ladders.sim.fixtures import (
     read_baseline,
     write_baseline,
 )
+from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import edges
@@ -108,6 +112,17 @@ SURROGATE_SEED_OFFSET = 1000
 RL_CHAIN_LENGTH = 4
 RL_RETURN_HORIZON = 3
 RL_ROLLOUT_HORIZON = 6
+
+# The spin-glass measurement's budget (issue #406): 50 seeded restarts of
+# single-site descent per seed, over 16 seeds, which is the interval §2.4
+# asks for. The seeds are consecutive from the fixture's own.
+GLASS_RESTART_SEEDS = 16
+#: Zero field: the instance's difficulty is in the couplings.
+GLASS_FIELD = np.zeros(2)
+#: Configurations hashed per pass of the ground-state enumeration, so a
+#: 2**18-state instance is one contiguous array at a time rather than 18
+#: columns of a million rows.
+GLASS_CHUNK = 1 << 16
 
 
 def _tree_environment(
@@ -331,6 +346,103 @@ def potts_landscape_baseline(loaded: Fixture) -> dict[str, Measurement]:
     }
 
 
+def glass_ground_energy(graph: PottsGraph) -> float:
+    """The minimum energy over every configuration, by exhaustive enumeration.
+
+    The oracle the whole fixture rests on: a descent that falls short has
+    demonstrably fallen short, rather than possibly having found the answer.
+    Walked in chunks so the configuration table is bounded whatever the size.
+
+    Returns
+    -------
+    float
+    """
+    nodes = graph.n_nodes
+    columns = np.arange(nodes)
+    best = math.inf
+    for start in range(0, 1 << nodes, GLASS_CHUNK):
+        index = np.arange(start, min(start + GLASS_CHUNK, 1 << nodes), dtype=np.int64)
+        configurations = ((index[:, None] >> columns[None, :]) & 1).astype(np.int64)
+        best = min(
+            best, float((-log_weights(graph, GLASS_FIELD, configurations)).min())
+        )
+    return best
+
+
+def planted_glass_baseline(loaded: Fixture) -> dict[str, Measurement]:
+    """The ground state of the declared glass, and how often descent reaches it.
+
+    The instance is hard *and* refereed, which is the conjunction issue #406
+    needs: the energy comes from enumeration and the rate from the baseline
+    the instance is meant to defeat.
+    """
+    params = loaded.params
+    (frustration,) = params.glass_frustrations
+    glass = params.glass(frustration, np.random.default_rng(params.seed))
+    best = glass_ground_energy(glass.graph)
+    budget = {
+        "restarts": params.glass_restarts,
+        "seeds": GLASS_RESTART_SEEDS,
+        "nodes": params.glass_nodes,
+        "frustration": frustration,
+    }
+    rates, restarts = [], []
+    for offset in range(GLASS_RESTART_SEEDS):
+        generator = np.random.default_rng(params.seed + offset)
+        found = [
+            iterated_conditional_modes(glass.graph, GLASS_FIELD, 2, generator)[1]
+            for _ in range(params.glass_restarts)
+        ]
+        hits = [abs(energy - best) < 1e-9 for energy in found]
+        rates.append(float(np.mean(hits)))
+        restarts.append(float(any(hits)))
+    return {
+        "enumerated_ground_energy": Measurement(
+            algorithm=(
+                f"exhaustive enumeration of all 2**{params.glass_nodes} "
+                f"configurations at zero field"
+            ),
+            value=best,
+            seed=None,
+            budget={"nodes": params.glass_nodes, "states": 2},
+        ),
+        "planted_energy": Measurement(
+            algorithm=(
+                "the energy of the state the couplings were built around, an "
+                "upper bound on the ground state and not the ground state here"
+            ),
+            value=float(glass.planted_energy),
+            seed=int(params.seed),
+            budget={"nodes": params.glass_nodes, "frustration": frustration},
+        ),
+        "descent_rate": Measurement(
+            algorithm=(
+                "single-site descent from each seeded random start, to a "
+                "local minimum, averaged over restarts and over seeds"
+            ),
+            value=float(np.mean(rates)),
+            seed=int(params.seed),
+            budget=budget,
+        ),
+        "descent_rate_half_width": Measurement(
+            algorithm="half the 95% normal interval of the per-seed rates",
+            value=float(1.96 * np.std(rates, ddof=1) / math.sqrt(GLASS_RESTART_SEEDS)),
+            seed=int(params.seed),
+            budget=budget,
+        ),
+        "restart_success": Measurement(
+            algorithm=(
+                "the fraction of seeds where at least one of the restarts "
+                "reached the ground state --- random-restart descent, which "
+                "is the baseline a policy has actually to beat"
+            ),
+            value=float(np.mean(restarts)),
+            seed=int(params.seed),
+            budget=budget,
+        ),
+    }
+
+
 @dataclass(frozen=True)
 class BaselineSpec:
     """One record: which instance, which modules computed it, and how.
@@ -385,6 +497,16 @@ SPECS: tuple[BaselineSpec, ...] = (
             "snakes_and_ladders.sim.simulate",
         ),
         compute=tree_surrogate_baseline,
+    ),
+    BaselineSpec(
+        problem="planted_glass",
+        tier=Scale.CI,
+        modules=(
+            "snakes_and_ladders.likelihood.potts",
+            "snakes_and_ladders.search.alpha_expansion",
+            "snakes_and_ladders.sim.canonical",
+        ),
+        compute=planted_glass_baseline,
     ),
     BaselineSpec(
         problem="potts_chain",
