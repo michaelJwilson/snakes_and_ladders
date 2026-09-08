@@ -159,6 +159,12 @@ module = "numba.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# scipy ships no py.typed marker; `scipy-stubs` is a separate package and one
+# import does not justify a fifth development dependency.
+module = "scipy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # `nbformat` ships type information but leaves `read` and `write` untyped, so
 # --strict rejects a correct call site. Narrowed to the one module that reads
 # notebooks rather than relaxed globally.
@@ -250,6 +256,7 @@ markers = [
     "structural: checked against an invariant this repository chose -- the import graph, a protocol, a documented contract, or a guard's own trigger",
     "critical: gates early; fast, and its failure invalidates what runs after it",
     "stress: same claim at a size the 5-minute CI budget cannot hold; run with `-m stress` inside the 10-minute developer budget (DEV.md CI & Performance Budget)",
+    "key: the key fixture's full test -- the largest declared instance whose simulate-fit-assert run fits SAL_KEY_DURATION_CAP, 120 s; run in CI's full tier and selected locally only when its inputs change (DEV.md CI & Performance Budget)",
 ]
 
 [tool.coverage.run]

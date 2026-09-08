@@ -18,6 +18,12 @@ oracle: transfer-matrix
 # S small enough that no moment could be measured on it, which is the trade
 # this file settles in favour of the moments.
 seed: 20260908
+
+# What the counts hash to, so a changed simulator fails here rather than in a
+# recovery number three tests later. Written by
+# `sim.count_pairs.counts_digest` over the draw
+# `sim.count_pairs_rust.simulate_count_pairs` makes of this file.
+counts_digest: 24feb2c7dddff658
 shape: [8, 8]
 boundary: open
 coupling: 1.0

@@ -14,6 +14,9 @@
 //! and `--baseline`.
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use oxi_snakes_and_ladders::coupled::{
+    class_posteriors_into, external_field_into, CoupledShape, EmissionTables,
+};
 use oxi_snakes_and_ladders::double;
 use oxi_snakes_and_ladders::pruning::{pruning_log_likelihood_impl, LeafObservations};
 use oxi_snakes_and_ladders::sampling::sample_rows_impl;
@@ -175,10 +178,81 @@ fn bench_sample_rows(c: &mut Criterion) {
     }
 }
 
+/// The coupled E step and its field, at the shape of the declared
+/// 5,041-vertex instance's coarsest bin factor scaled down to fit a
+/// benchmark's budget: 200 positions rather than 2,000, at the instance's own
+/// `M = K = 10` and 5,041 vertices. The `pytest-benchmark` suite in
+/// `tests/benchmarks/test_spatio_sequential_rust_bench.py` carries the
+/// declared sizes and the NumPy numbers beside them; this measures the kernel
+/// alone, without the tables' construction or the boundary, which is the
+/// other half of the pair `likelihood/CLAUDE.md` requires.
+fn bench_class_posteriors(c: &mut Criterion) {
+    let (n_positions, n_nodes, n_classes, n_states) = (200usize, 5041usize, 10usize, 10usize);
+    let shape = CoupledShape {
+        n_positions,
+        n_nodes,
+        n_classes,
+        n_states,
+    };
+    let block = n_classes * n_states;
+    let extent = 512usize;
+    // A table with the arithmetic of a log-density and none of its meaning:
+    // what is timed is the reads, and their addresses are the counts'.
+    let total: Vec<f64> = (0..extent * block)
+        .map(|index| -((index % 97) as f64) / 13.0)
+        .collect();
+    let success: Vec<f64> = (0..extent * block)
+        .map(|index| -((index % 89) as f64) / 11.0)
+        .collect();
+    let tables = EmissionTables {
+        total: &total,
+        success: &success,
+    };
+    let totals: Vec<u16> = (0..n_positions * n_nodes)
+        .map(|index| (index % extent) as u16)
+        .collect();
+    let successes: Vec<u16> = (0..n_positions * n_nodes)
+        .map(|index| ((index * 7) % extent) as u16)
+        .collect();
+    let labels: Vec<i64> = (0..n_nodes).map(|v| (v % n_classes) as i64).collect();
+    let log_initial = vec![-(n_states as f64).ln(); n_classes * n_states];
+    let log_transition = vec![-(n_states as f64).ln(); n_classes * n_states * n_states];
+    let mut posterior = vec![0.0; n_classes * n_positions * n_states];
+    let mut pairwise = vec![0.0; n_classes * (n_positions - 1) * n_states * n_states];
+    let mut evidence = vec![0.0; n_classes];
+
+    c.bench_function("class_posteriors 200x5041 M=K=10", |b| {
+        b.iter(|| {
+            class_posteriors_into(
+                shape,
+                &tables,
+                &totals,
+                &successes,
+                &labels,
+                &log_initial,
+                &log_transition,
+                &mut posterior,
+                &mut pairwise,
+                &mut evidence,
+            )
+            .unwrap();
+        });
+    });
+
+    let weights = vec![1.0 / (block as f64); n_positions * block];
+    let mut field = vec![0.0; n_nodes * n_classes];
+    c.bench_function("external_field 200x5041 M=K=10", |b| {
+        b.iter(|| {
+            external_field_into(shape, &tables, &totals, &successes, &weights, &mut field).unwrap();
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_double,
     bench_pruning_log_likelihood,
-    bench_sample_rows
+    bench_sample_rows,
+    bench_class_posteriors
 );
 criterion_main!(benches);

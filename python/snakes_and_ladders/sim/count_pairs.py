@@ -34,7 +34,6 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -425,7 +424,7 @@ def planted_labels(params: SpatioSequentialParams, n_classes: int) -> np.ndarray
     return np.asarray(np.minimum(row_of * n_classes // rows, n_classes - 1))
 
 
-def _chain_states(
+def chain_states(
     params: SpatioSequentialParams, rng: np.random.Generator
 ) -> np.ndarray:
     """Every class's hidden path, shape ``(M, S)``, as a walk on ``Z_K``.
@@ -486,26 +485,28 @@ def simulate_count_pairs(
     Raises
     ------
     ValueError
-        If a drawn count does not fit ``int16``. The counts are held in the
+        If a drawn count does not fit ``uint16``. The counts are held in the
         narrow type because the fine instance is ``S x V`` of them and the
         wide one doubles a fixture that already runs to hundreds of
-        megabytes; a draw that overflows it is a fixture whose parameters
-        moved, not a type to widen silently.
+        megabytes; it is also the type the Rust kernels index their emission
+        tables by, so the range the table covers and the range the dtype
+        holds are one statement. A draw that overflows it is a fixture whose
+        parameters moved, not a type to widen silently.
     """
     params = declared.model
     n_nodes = params.graph.n_nodes
     labels = planted_labels(params, params.n_classes)
-    states = _chain_states(params, np.random.default_rng([declared.seed, n_nodes]))
+    states = chain_states(params, np.random.default_rng([declared.seed, n_nodes]))
 
-    observations = np.empty((params.n_positions, n_nodes, 2), dtype=np.int16)
+    observations = np.empty((params.n_positions, n_nodes, 2), dtype=np.uint16)
     for node in range(n_nodes):
         family = params.emissions[int(labels[node])]
         drawn = family.sample(
             states[int(labels[node])], np.random.default_rng([declared.seed, node])
         )
-        if drawn.max() > np.iinfo(np.int16).max:
+        if drawn.max() > np.iinfo(np.uint16).max:
             msg = (
-                f"vertex {node} drew {drawn.max()}, past int16; the declared "
+                f"vertex {node} drew {drawn.max()}, past uint16; the declared "
                 f"emission parameters have outgrown the fixture's dtype"
             )
             raise ValueError(msg)
@@ -723,39 +724,3 @@ def load_spatio_sequential_counts_params(path: Path) -> SpatioSequentialCountsPa
         ),
         counts_digest=None if digest is None else str(digest),
     )
-
-
-@lru_cache(maxsize=2)
-def fine_instance(path: Path) -> CountPairInstance:
-    """The fine instance a fixture file declares, drawn once and held.
-
-    Cached on the file, so the ``S x V`` draw --- hundreds of megabytes at
-    the 5K size --- is paid once per session however many tests read it, and
-    the coarse instances every one of them bins are bins of the same draw.
-    Nothing is written to disk: the file is the seed and the parameters, and
-    the counts are what they imply.
-
-    Parameters
-    ----------
-    path : Path
-        The fixture file, as
-        :attr:`snakes_and_ladders.sim.fixtures.Fixture.path` gives it.
-
-    Returns
-    -------
-    CountPairInstance
-        ``factor = 1``.
-    """
-    return simulate_count_pairs(load_spatio_sequential_counts_params(path))
-
-
-@lru_cache(maxsize=4)
-def binned_instance(path: Path, factor: int) -> CountPairInstance:
-    """The instance a fixture file declares at one bin factor.
-
-    Returns
-    -------
-    CountPairInstance
-        :func:`coarsen` of :func:`fine_instance`, cached on both arguments.
-    """
-    return coarsen(fine_instance(path), factor)

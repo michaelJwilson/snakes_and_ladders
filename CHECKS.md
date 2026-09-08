@@ -76,7 +76,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 | `test_learn_surrogate_pyg.py::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights` | oracle |  |
 
-## `tests/regression/likelihood/` (82)
+## `tests/regression/likelihood/` (84)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -157,6 +157,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential_fit.py::test_the_labelled_joint_is_the_enumeration_s_per_labelling_term` | oracle |  |
 | `test_spatio_sequential_fit.py::test_the_m_step_identity_holds_through_autograd` | oracle | the M-step identity: the gradient of log p(x \| l, theta) equals the posterior-weighted gradient of the emission terms. |
 | `test_spatio_sequential_fit.py::test_the_backward_sampler_draws_paths_from_the_posterior` | simulated_truth |  |
+| `test_spatio_sequential_rust.py::test_the_rust_e_step_and_field_match_the_numpy_oracle` | oracle | At the declared ci instance, where the oracle is the transfer matrix: given the labelling the classes decouple and each chain's evidence and state posterior are the exact forward recursion, which the NumPy path runs and this kernel does not share. |
+| `test_spatio_sequential_rust.py::test_the_rust_e_step_matches_the_oracle_on_a_slice_of_the_5k_instance` | oracle | The same comparison at the declared size's counts, class count and state count, on 64 of its 5,041 vertices --- spread across the planted bands, so every class has members --- because the oracle's cost at all 5,041 is minutes per sweep and the kernel's advantage is exactly that. |
 | `test_surrogate.py::test_plug_in_bound_is_below_every_fitted_likelihood` | oracle | One pruning evaluation at least-squares lengths against a full fit, on all 15 topologies: never above, within 8 nats at 200 sites (6.7 was the worst gap measured at 1,200), and ranking the fitted best first. |
 | `test_surrogate.py::test_parsimony_bound_is_above_every_fitted_likelihood` | oracle |  |
 | `test_surrogate.py::test_site_fitch_scores_sum_to_the_fitch_score` | oracle |  |
@@ -259,7 +261,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (103)
+## `tests/regression/search/` (105)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -363,11 +365,13 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_tree_features.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle |  |
 | `test_search_tree_features.py::test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget` | simulated_truth |  |
 | `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
+| `test_spatio_sequential_counts_recovery.py::test_the_planted_labelling_is_recovered_at_every_bin_factor` | simulated_truth | The full test of one declared instance: simulate, bin, fit, assert. |
+| `test_spatio_sequential_counts_recovery.py::test_the_negative_binomial_channel_aggregates_on_the_declared_instance` | simulated_truth | The exactness `aggregate` claims, on the 5K instance's own counts rather than on the ci instance's: over the bins whose positions share a hidden state --- two states are two values of p, and only within one state are the summands identically distributed --- the binned totals have the aggregated family's mean and variance. |
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
-## `tests/regression/sim/` (55)
+## `tests/regression/sim/` (57)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -385,6 +389,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_count_pairs.py::test_the_negative_binomial_channel_aggregates_exactly` | oracle | A sum of f independent NB(r, p) counts is NB(f r, p): both the mean and the dispersion scale by f. |
 | `test_count_pairs.py::test_the_binned_counts_follow_the_aggregated_negative_binomial` | simulated_truth | The claim above, on the data rather than on the family: over the bins whose positions share a hidden state --- two states are two values of p, and only within one state are the summands identically distributed --- the binned totals' mean and variance are the aggregated family's. |
 | `test_count_pairs.py::test_the_beta_binomial_channel_is_misspecified_under_aggregation` | oracle | A sum of f beta-binomials is not beta-binomial. |
+| `test_count_pairs_rust.py::test_the_rust_simulator_draws_what_the_numpy_one_draws` | oracle | Both channels, per (class, state), at the ci instance. |
+| `test_count_pairs_rust.py::test_the_rust_draw_has_the_families_own_moments` | simulated_truth | The comparison above is against a second sample; this one is against the closed forms the families state, which is what `sim/CLAUDE.md` requires of a simulator and what stops both simulators being wrong together. |
 | `test_erdos_renyi.py::test_belief_propagation_is_exact_on_every_acyclic_draw` | oracle | The strong claim, and far broader than one hand-built tree supports: the ensemble supplies isolated vertices, several components, and varying degree, and BP must be exact on all of them. |
 | `test_erdos_renyi.py::test_the_expected_edge_count_matches_the_closed_form` | oracle | A property of the generator, checked against `p n (n - 1) / 2` rather than against a run. |
 | `test_generator_signatures.py::test_two_draws_from_one_generator_differ` | simulated_truth | The property the rule exists for, per converted function. |
@@ -427,4 +433,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-384 checks.
+390 checks.

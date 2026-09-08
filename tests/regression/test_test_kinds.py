@@ -37,8 +37,9 @@ KINDS = (
 )
 
 #: The second axis. Not a kind: it says when a test runs, not what it checks.
-#: `stress` (#232) is the same axis as `release`: a size, not a claim.
-SCHEDULING = ("critical", "release", "stress")
+#: `stress` (#232) is the same axis as `release`: a size, not a claim, and so
+#: is `key` (#399), which names one declared instance's own budget.
+SCHEDULING = ("critical", "release", "stress", "key")
 
 #: Benchmarks measure rather than assert, so they carry no kind. Excluded here
 #: rather than exempted case by case, because the exclusion is a property of the

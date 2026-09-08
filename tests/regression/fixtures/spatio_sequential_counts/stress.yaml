@@ -8,11 +8,12 @@ oracle: none
 #
 # 1.008e8 count pairs. The fine instance is simulated once from the seed below
 # when a caller first asks for it and held in memory as one
-# (S, n_nodes, 2) int16 array: 403,280,000 bytes, 384.6 MiB. Peak resident
-# memory of the draw itself is 897 MiB, measured on the 4-core reference host.
-# Nothing is committed and nothing is streamed; the file is the seed and the
-# parameters, and the counts are what they imply. The coarse instances are
-# 153.8 MiB at factor 5 and 76.9 MiB at factor 10.
+# (S, n_nodes, 2) uint16 array: 403,280,000 bytes, 384.6 MiB. The draw takes
+# 32.9 s and peaks at 1,278 MiB resident on the 4-core reference host, the
+# largest count 891 in the first channel and 56 in the second. Nothing is
+# committed and nothing is streamed; the file is the seed and the parameters,
+# and the counts are what they imply. The coarse instances are 153.8 MiB at
+# factor 5 and 76.9 MiB at factor 10.
 #
 # The stated oracle is none: at 5,041 vertices there is no exact evidence to
 # compare against. What referees a result here is the planted labelling the
@@ -25,6 +26,10 @@ oracle: none
 # ferromagnetic prior agrees with -- a prior fighting the truth would make a
 # recovery test measure that fight.
 seed: 20260908
+
+# What the counts hash to, so a changed simulator fails here rather than in a
+# recovery number three tests later.
+counts_digest: 31f9784abda96c03
 shape: [71, 71]
 boundary: open
 coupling: 1.0

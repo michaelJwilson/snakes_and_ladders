@@ -25,12 +25,11 @@ from snakes_and_ladders.sim.count_pairs import (
     IndependentCountPair,
     SpatioSequentialCountsParams,
     aggregate,
-    binned_instance,
     coarsen,
-    fine_instance,
     load_spatio_sequential_counts_params,
     planted_labels,
 )
+from snakes_and_ladders.sim.count_pairs_rust import binned_instance, fine_instance
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.spatio_sequential import circulant_transition
 
