@@ -17,8 +17,8 @@ for the Potts MRF, Fitch parsimony as a second criterion over the same
 topology, path enumeration for the HMM, one sum-product over any factor graph
 that is pinned to each of those where they overlap, the enumeration oracle for
 the coupled model with its E step and field, forward–backward as an
-evaluator, and the adapter that
-presents any of them to `snakes_and_ladders.opt`'s fitting interface. That adapter lives here and not in
+evaluator, a parity-check decoder specialised from that sum-product and
+held to it, and the adapter that presents any of them to `snakes_and_ladders.opt`'s fitting interface. That adapter lives here and not in
 `opt/`, because `opt/` may import no application module — the dependency runs
 application to infrastructure, never back.
 
