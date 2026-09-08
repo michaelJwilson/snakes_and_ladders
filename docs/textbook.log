@@ -674,7 +674,7 @@ File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count325
 \l__pdf_internal_box=\box67
 )
-(/home/user/wt-326/docs/textbook.aux)
+(/home/user/wt-193/docs/textbook.aux)
 \openout1 = `textbook.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 10.
@@ -775,7 +775,7 @@ File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman
 )
 Package hyperref Info: Link coloring OFF on input line 10.
 
-(/home/user/wt-326/docs/textbook.out) (/home/user/wt-326/docs/textbook.out)
+(/home/user/wt-193/docs/textbook.out) (/home/user/wt-193/docs/textbook.out)
 \@outlinefile=\write4
 \openout4 = `textbook.out'.
 
@@ -797,7 +797,7 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 (/usr/share/texlive/texmf-dist/tex/latex/microtype/mt-msb.cfg
 File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
 )
-(/home/user/wt-326/docs/textbook.toc [1
+(/home/user/wt-193/docs/textbook.toc [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}])
 \tf@toc=\write5
@@ -816,12 +816,12 @@ cmm/m/it/10.95 A[]\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.95 k[]; k[]\OT1/cmr/m/n/
  []
 
 [4] [5] [6]
-<figures/sim_tree.pdf, id=361, 469.755pt x 289.08pt>
+<figures/sim_tree.pdf, id=345, 469.755pt x 289.08pt>
 File: figures/sim_tree.pdf Graphic file (type pdf)
 <use figures/sim_tree.pdf>
 Package pdftex.def Info: figures/sim_tree.pdf  used on input line 369.
 (pdftex.def)             Requested size: 317.07614pt x 195.12498pt.
-<figures/jc_transition.pdf, id=362, 390.25798pt x 245.718pt>
+<figures/jc_transition.pdf, id=346, 390.25798pt x 245.718pt>
 File: figures/jc_transition.pdf Graphic file (type pdf)
 <use figures/jc_transition.pdf>
 Package pdftex.def Info: figures/jc_transition.pdf  used on input line 377.
@@ -831,21 +831,21 @@ Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
 put line 392.
  [8 <./figures/jc_transition.pdf>]
 [9] [10] [11] [12] [13] [14] (./coupled_figure.tex) [15] [16] [17] [18]
-(/home/user/wt-326/docs/textbook.bbl [19] [20]) [21] [22] [23] [24] [25]
-(/home/user/wt-326/docs/textbook.aux)
+(/home/user/wt-193/docs/textbook.bbl [19] [20]) [21] [22] [23]
+(/home/user/wt-193/docs/textbook.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
  ***********
 Package rerunfilecheck Info: File `textbook.out' has not changed.
-(rerunfilecheck)             Checksum: D2DD918969DB7ACAF822FFABDDB771D4;11790.
+(rerunfilecheck)             Checksum: 37A26A009935A550EBA3FE39DA66C183;10752.
  ) 
 Here is how much of TeX's memory you used:
- 25087 strings out of 476106
- 456676 string characters out of 5793934
+ 25054 strings out of 476106
+ 456192 string characters out of 5793934
  2029975 words of memory out of 5000000
- 46250 multiletter control sequences out of 15000+600000
- 579460 words of font info for 208 fonts, out of 8000000 for 9000
+ 46235 multiletter control sequences out of 15000+600000
+ 579170 words of font info for 203 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
  89i,12n,96p,1005b,1182s stack positions out of 10000i,1000n,20000p,200000b,200000s
  </root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk></u
@@ -871,11 +871,11 @@ s/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type
 c/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
 nts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/sy
 mbols/msbm10.pfb>
-Output written on /home/user/wt-326/docs/textbook.pdf (25 pages, 462362 bytes).
+Output written on /home/user/wt-193/docs/textbook.pdf (23 pages, 448600 bytes).
 
 PDF statistics:
- 859 PDF objects out of 1000 (max. 8388607)
- 761 compressed objects within 8 object streams
- 191 named destinations out of 1000 (max. 500000)
- 41383 words of extra memory for PDF output out of 42996 (max. 10000000)
+ 797 PDF objects out of 1000 (max. 8388607)
+ 701 compressed objects within 8 object streams
+ 183 named destinations out of 1000 (max. 500000)
+ 41359 words of extra memory for PDF output out of 42996 (max. 10000000)
 

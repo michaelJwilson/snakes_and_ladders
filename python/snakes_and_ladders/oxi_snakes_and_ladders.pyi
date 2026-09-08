@@ -29,17 +29,17 @@ def sample_rows(
 ) -> None: ...
 def max_flow(
     n_nodes: int,
-    arcs: list[int],
-    capacity: list[float],
+    arcs: np.ndarray,
+    capacity: np.ndarray,
     source: int,
     sink: int,
 ) -> float: ...
 def ising_ground_state(
     n_nodes: int,
-    field: list[float],
-    edges: list[int],
-    coupling: list[float],
-) -> list[int]: ...
+    field: np.ndarray,
+    edges: np.ndarray,
+    coupling: np.ndarray,
+) -> np.ndarray: ...
 def single_site_sweeps(
     state: np.ndarray,
     field: np.ndarray,

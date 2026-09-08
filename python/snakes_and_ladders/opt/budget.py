@@ -7,7 +7,9 @@ of the restart count (issue #281). This module is the one loop. A
 takes an instance, the budget and a generator and reports what it spent in
 that unit; :func:`compare` runs every method on every instance over the
 seeds and reports hits against the best value any method found, or against
-a known optimum where the instance carries one.
+a known optimum where the instance carries one; :func:`mcnemar` is the
+paired test on two methods' per-instance hits, so "beats restarts" carries a
+p-value from the same run rather than a second study.
 
 Two refusals carry the discipline. A method that spends more than its budget
 is refused, not rounded, because "wins by running longer" is the error the
@@ -23,6 +25,7 @@ The methods that do live beside the models they compare, in the tests.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TypeVar
@@ -143,12 +146,42 @@ class Comparison:
     spent: np.ndarray
     reference: np.ndarray
 
-    def hits(self, tolerance: float = 1e-9) -> dict[str, int]:
-        """Instances on which each method reached the reference, within ``tolerance``."""
+    def reached(
+        self, tolerance: float = 1e-9, *, relative: bool = False
+    ) -> dict[str, np.ndarray]:
+        """Per method, which instances it reached the reference on, shape ``(n_instances,)``.
+
+        ``relative`` scales the tolerance by ``|reference|`` per instance ---
+        the form a summed log-likelihood needs, since an absolute bound fixed
+        at one data size does not transfer to another (``DEV.md``, issue
+        #111) --- and leaves it absolute for an energy scored against zero.
+        """
+        margin = tolerance * np.abs(self.reference) if relative else tolerance
         return {
-            name: int((self.best[row] <= self.reference + tolerance).sum())
+            name: self.best[row] <= self.reference + margin
             for row, name in enumerate(self.methods)
         }
+
+    def hits(
+        self, tolerance: float = 1e-9, *, relative: bool = False
+    ) -> dict[str, int]:
+        """Instances on which each method reached the reference, within ``tolerance``."""
+        return {
+            name: int(hit.sum())
+            for name, hit in self.reached(tolerance, relative=relative).items()
+        }
+
+    def paired_p(
+        self,
+        first: str,
+        second: str,
+        tolerance: float = 1e-9,
+        *,
+        relative: bool = False,
+    ) -> float:
+        """:func:`mcnemar` on ``first``'s and ``second``'s hits, instance by instance."""
+        reached = self.reached(tolerance, relative=relative)
+        return mcnemar(reached[first], reached[second])
 
     def mean_gap(self) -> dict[str, float]:
         """Mean of ``best - reference`` per method, zero when every instance is a hit."""
@@ -241,3 +274,46 @@ def compare(
         np.asarray(known, dtype=float) if known is not None else best.min(axis=0)
     )
     return Comparison(budget, names, best, spent, reference)
+
+
+def mcnemar(first: np.ndarray, second: np.ndarray) -> float:
+    """Exact two-sided McNemar p-value for two methods' hits on the same instances.
+
+    The paired test ``ROADMAP.md`` §2.4 requires before a method displaces a
+    baseline. Only the discordant instances carry evidence --- those one
+    method reached and the other did not --- and under the null they split
+    evenly, so the p-value is the two-sided binomial tail on the smaller
+    count (McNemar, 1947, in its exact form rather than the chi-square
+    approximation, which is what a run of 40 starts can support). No
+    discordant instance means no evidence either way, and the p-value is 1.
+
+    Parameters
+    ----------
+    first, second : np.ndarray
+        Boolean hit per instance, one entry per instance, the same length.
+
+    Returns
+    -------
+    float
+        The p-value, in ``(0, 1]``.
+
+    Raises
+    ------
+    ValueError
+        If the two do not cover the same instances.
+    """
+    hits_first = np.asarray(first, dtype=bool).reshape(-1)
+    hits_second = np.asarray(second, dtype=bool).reshape(-1)
+    if hits_first.shape != hits_second.shape:
+        msg = (
+            f"{hits_first.shape[0]} and {hits_second.shape[0]} instances are not paired"
+        )
+        raise ValueError(msg)
+    only_first = int((hits_first & ~hits_second).sum())
+    only_second = int((~hits_first & hits_second).sum())
+    discordant = only_first + only_second
+    if discordant == 0:
+        return 1.0
+    smaller = min(only_first, only_second)
+    tail = sum(math.comb(discordant, k) for k in range(smaller + 1)) / 2.0**discordant
+    return min(1.0, 2.0 * tail)

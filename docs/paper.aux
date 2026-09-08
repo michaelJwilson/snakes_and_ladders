@@ -29,9 +29,6 @@
 \newlabel{sec:res-likelihood}{{3.2}{3}{Exact inference across backends}{subsection.3.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Parameter recovery and interval coverage}{3}{subsection.3.3}\protected@file@percent }
 \newlabel{sec:res-recovery}{{3.3}{3}{Parameter recovery and interval coverage}{subsection.3.3}{}}
-\bibstyle{plainnat}
-\bibdata{references}
-\bibcite{amari2016}{{1}{2016}{{Amari}}{{}}}
 \@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Every pruning backend against the oracle that owes it nothing. Brute-force marginalization sums over all ancestral assignments, so it shares no code with the recursion it checks, and its cost is what keeps the fixture small. Fixture: 4-state Jukes-Cantor on the 3-child-root tree, seed 20260902. The deviation is relative because the log-likelihood is a sum over sites: an absolute bound fixed at one site count does not transfer to another, which is why the x-axis spans a factor of 30. Worst deviation across every backend and size: 3.99e-14, against a float64 epsilon of 2.22e-16.}}{4}{figure.2}\protected@file@percent }
 \newlabel{fig:backend-agreement}{{2}{4}{\backendAgreementCaption }{figure.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Discrete search against exhaustive enumeration}{4}{subsection.3.4}\protected@file@percent }
@@ -39,8 +36,6 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Memory footprint at the declared scale}{4}{subsection.3.5}\protected@file@percent }
 \newlabel{sec:res-footprint}{{3.5}{4}{Memory footprint at the declared scale}{subsection.3.5}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Empirical benchmarking [PLACEHOLDERS]}{4}{subsection.3.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4}Conclusions}{4}{section.4}\protected@file@percent }
-\newlabel{sec:conclusions}{{4}{4}{Conclusions}{section.4}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Parameter recovery for the two reference instances of the optimization interface, fitted by the same model-agnostic optimizer. Bars are 95 percent Wald intervals from the observed information, propagated to the reported parameters by the delta method; the dotted line is y = x. (a) A 3-state Potts chain, 400 chains of length 12, seed 20260902: coupling and gauge-fixed field, 4 of 4 intervals covering (1.00). (b) A 3-state, 4-symbol hidden Markov model, 600 sequences of length 15, seed 20260903: initial, transition and emission probabilities after aligning the hidden-state permutation the likelihood is invariant to, 23 of 24 intervals covering (0.96). Coverage on a single dataset is a draw, not a rate: the nominal 0.95 is checked over independent replicates by the fitting regression suite, and against sample size in the companion coverage figure.}}{5}{figure.3}\protected@file@percent }
 \newlabel{fig:opt-recovery}{{3}{5}{\optRecoveryCaption }{figure.3}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Memory held while simulating a Jukes-Cantor alignment and while evaluating its likelihood by pruning, at 4 states, across the declared scale. The simulator retains every node's states and pruning retains one partial likelihood per open node, so both are computed from the arrays' own shapes and are exact rather than sampled; the regression suite pins each figure against the allocator's count. The last row is the declared maximum of 1000 taxa and 11\_000 sites, which sits a factor of 20 inside the 16 GB unified-memory requirement. The topology is a caterpillar at every size, the deepest tree on its leaves and so the worst case: a balanced tree of the same taxon count costs strictly less. Timings are reported in the benchmark suite instead, because a wall clock ranks the machine rather than the code.}}{5}{table.1}\protected@file@percent }
@@ -49,12 +44,15 @@
 \newlabel{fig:opt-coverage}{{4}{6}{\optCoverageCaption }{figure.4}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces The topology hill climbing selected, beside the highest-scoring one it rejected, each with its own branch lengths fitted. Fixture: 4-state Jukes-Cantor over 1500 sites, seed 20260905. (a) scores -8775.5 and is the generating topology; (b) scores -8817.1, a difference of 41.6 log units. They differ by one split: C D are a group in one and not in the other. On this fixture the search recovers the generating tree, so a drawing of found against true would show the same tree twice; the runner-up is what the likelihood actually had to discriminate against. Note its shortest internal branch, fitted at 0.000: a wrong grouping is generally only supportable by collapsing the edge that would create it.}}{7}{figure.5}\protected@file@percent }
 \newlabel{fig:search-topologies}{{5}{7}{\searchTopologiesCaption }{figure.5}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Learning curves of the reinforcement-learning proposal policy across $n \in \{10, 50, 100\}$, measured in improvement per objective-evaluation budget.}}{7}{figure.6}\protected@file@percent }
-\newlabel{fig:rl-convergence}{{6}{7}{Learning curves of the reinforcement-learning proposal policy across $n \in \{10, 50, 100\}$, measured in improvement per objective-evaluation budget}{figure.6}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Wall-clock convergence against IQ-TREE~2 and RAxML-NG on empirical benchmark datasets.}}{8}{figure.7}\protected@file@percent }
-\newlabel{fig:benchmark-iqtree}{{7}{8}{Wall-clock convergence against IQ-TREE~2 and RAxML-NG on empirical benchmark datasets}{figure.7}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Throughput in nodes evaluated per second across CPU, Apple Silicon, and CUDA backends.}}{8}{figure.8}\protected@file@percent }
-\newlabel{fig:hardware-scaling}{{8}{8}{Throughput in nodes evaluated per second across CPU, Apple Silicon, and CUDA backends}{figure.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces A learned policy against hill climbing on a landscape where hill climbing fails, and why the answer is a null result. Fixture: 945 unrooted topologies on 7 taxa, 2000 sites, 4-state Jukes-Cantor, seed 20\_260\_907, scored at the generating tree's mean branch length. (a) Every topology, ranked, with a rule at each of the 10 states no single NNI move improves. The best of them is the generating topology; the rest are traps. (b) The fraction of episodes reaching that maximum, from 50 shared starting topologies at 30 moves each -- greedy once per start, the policy 16 times per start so its rate is an average and not a best-of, which makes the budgets comparable. Over 8 independent training runs of 640 episodes each, the policy reaches the maximum on 0.487 of episodes against greedy's 0.480: a difference of +0.0069 with a standard deviation of 0.0186 across seeds, and 4 of 8 seeds ahead. That is not a difference. It is not that nothing was learned: an untrained policy, uniform over the same moves, reaches the maximum on 0.018 of episodes, so training moves the policy across most of the distance from chance to the baseline and then stops there. Panel (a) says why it stops there: an episode ends when no move improves, so every run terminates at one of those rules and the task is which trap to enter rather than how to leave it, while a policy scoring moves by this environment's single feature -- the improvement a move buys -- is hill climbing up to a temperature.}}{8}{figure.6}\protected@file@percent }
+\newlabel{fig:rl-convergence}{{6}{8}{\rlTreePolicyCaption }{figure.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Wall-clock convergence against IQ-TREE~2 and RAxML-NG on empirical benchmark datasets.}}{9}{figure.7}\protected@file@percent }
+\newlabel{fig:benchmark-iqtree}{{7}{9}{Wall-clock convergence against IQ-TREE~2 and RAxML-NG on empirical benchmark datasets}{figure.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Throughput in nodes evaluated per second across CPU, Apple Silicon, and CUDA backends.}}{9}{figure.8}\protected@file@percent }
+\newlabel{fig:hardware-scaling}{{8}{9}{Throughput in nodes evaluated per second across CPU, Apple Silicon, and CUDA backends}{figure.8}{}}
+\bibstyle{plainnat}
+\bibdata{references}
+\bibcite{amari2016}{{1}{2016}{{Amari}}{{}}}
 \bibcite{goodfellow2016}{{2}{2016}{{Goodfellow et~al.}}{{Goodfellow, Bengio, and Courville}}}
 \bibcite{mackay2003}{{3}{2003}{{MacKay}}{{}}}
 \bibcite{mezard2009}{{4}{2009}{{M{\'e}zard and Montanari}}{{}}}
@@ -62,4 +60,6 @@
 \bibcite{prince2023}{{6}{2023}{{Prince}}{{}}}
 \bibcite{rosen2019}{{7}{2019}{{Rosen}}{{}}}
 \bibcite{suttonbarto2018}{{8}{2018}{{Sutton and Barto}}{{}}}
-\gdef \@abspage@last{9}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Conclusions}{10}{section.4}\protected@file@percent }
+\newlabel{sec:conclusions}{{4}{10}{Conclusions}{section.4}{}}
+\gdef \@abspage@last{10}
