@@ -318,9 +318,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.qa.rl_reward_surface
    :members:
 
-.. automodule:: snakes_and_ladders.qa.topology_accuracy
-   :members:
-
 .. automodule:: snakes_and_ladders.scripts
    :members:
 
