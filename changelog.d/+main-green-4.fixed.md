@@ -1,0 +1,1 @@
+Made `main` green after #346 merged: `CHECKS.md` regenerated for the tests #346, #352 and #354 added, and the reference kernel's Raises section names `message_passing.ConvergenceError` in full so Sphinx no longer finds two targets.
