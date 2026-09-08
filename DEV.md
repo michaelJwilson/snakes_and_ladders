@@ -111,7 +111,7 @@ Branch protection names each required check by the job's `name:`, not by its id,
   | tier | marker | fixture | budget | contents |
   | --- | --- | --- | --- | --- |
   | CI | none (the default) | `<problem>/ci.yaml` | **5 minutes**, worst case | correctness at the smallest size that exercises the claim |
-  | key | `key` | the instance a file marks `key`, reached as `fixture(problem, "key")` | **120 s per test** (`SAL_KEY_DURATION_CAP`) | one problem's declared instance run end to end — simulate, fit, assert |
+  | key | `key` | the instance a file marks `key`, reached as `fixture(problem, "key")` | **120 s per test** (`SAL_KEY_DURATION_CAP`) | one problem's declared instance run end to end — simulate, fit, assert. The one that exists: the coupled model at 5,041 vertices, bin factor 5, measured at **62 s** against 59 s at factor 10 and `release` at factor 1 |
   | developer / stress | `stress` | `<problem>/stress.yaml` | **10 minutes** | the same claims at a size the CI budget cannot hold |
   | release | `release` | `<problem>/release.yaml` | unbounded | long-running scientific validity, run by `infra/release.sh` |
 

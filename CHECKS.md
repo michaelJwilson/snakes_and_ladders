@@ -261,7 +261,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (105)
+## `tests/regression/search/` (106)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -366,6 +366,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_tree_features.py::test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget` | simulated_truth |  |
 | `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
 | `test_spatio_sequential_counts_recovery.py::test_the_planted_labelling_is_recovered_at_every_bin_factor` | simulated_truth | The full test of one declared instance: simulate, bin, fit, assert. |
+| `test_spatio_sequential_counts_recovery.py::test_the_field_alone_names_every_vertex_class` | simulated_truth | The same recovery without the spatial prior or the label solver: the class of lowest external field at the planted labelling is the planted class, at every vertex. |
 | `test_spatio_sequential_counts_recovery.py::test_the_negative_binomial_channel_aggregates_on_the_declared_instance` | simulated_truth | The exactness `aggregate` claims, on the 5K instance's own counts rather than on the ci instance's: over the bins whose positions share a hidden state --- two states are two values of p, and only within one state are the summands identically distributed --- the binned totals have the aggregated family's mean and variance. |
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
@@ -433,4 +434,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-390 checks.
+391 checks.

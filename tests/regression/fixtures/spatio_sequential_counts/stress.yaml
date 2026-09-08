@@ -29,7 +29,7 @@ seed: 20260908
 
 # What the counts hash to, so a changed simulator fails here rather than in a
 # recovery number three tests later.
-counts_digest: 31f9784abda96c03
+counts_digest: 050f7b967982eca4
 shape: [71, 71]
 boundary: open
 coupling: 1.0
@@ -74,7 +74,11 @@ emissions:
   form: independent
   mean: [20.0, 40.0, 60.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0, 200.0]
   dispersion: [4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0]
-  trials: [20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 44.0, 48.0, 52.0, 56.0]
+  # Constant across the states: the beta-binomial's support is {0, ..., n},
+  # so a ladder that varied would put a count drawn in one state outside
+  # another's support, where the log-density is NaN and not small. The
+  # classes are separated in this channel by class_rate_shift.
+  trials: [40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0]
   rate: [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65]
   concentration: [12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0]
   class_mean_scale: [0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.40, 1.50]

@@ -613,10 +613,38 @@ _REQUIRED_LADDERS = ("mean", "dispersion", "trials", "rate", "concentration")
 
 
 def _ladder(declared: Mapping[str, object], name: str, n_states: int) -> np.ndarray:
-    """One per-state ladder from the file, checked for length."""
+    """One per-state ladder from the file, checked for length.
+
+    ``trials`` is checked for more than that: it must be the same in every
+    state. The beta-binomial's *support* is ``{0, ..., n}``, so a ladder that
+    varies makes a count drawn in one state impossible in another --- and the
+    log-density there is not a small number but a ``lgamma`` of a negative
+    argument, which is ``NaN``. The gated model evaluates every vertex under
+    every state, so one such count takes a whole class's evidence to ``NaN``
+    and the recovery it feeds to chance. Measured on the 5K instance before
+    this check existed: two of ten classes lost their evidence and the field
+    argmin fell to 0.113, the fraction of vertices in the first class.
+
+    The number of trials is a property of the observation rather than of the
+    hidden state, so declaring one value per state was the error; the classes
+    are separated in this channel by ``class_rate_shift`` instead.
+
+    Raises
+    ------
+    ValueError
+        If the ladder is the wrong length, or --- for ``trials`` --- if it is
+        not constant across the states.
+    """
     values = np.asarray(declared[name], dtype=np.float64)
     if values.shape != (n_states,):
         msg = f"emissions.{name} has {values.shape} entries, expected ({n_states},)"
+        raise ValueError(msg)
+    if name == "trials" and not bool((values == values[0]).all()):
+        msg = (
+            f"emissions.trials must be the same in every state, got "
+            f"{values.tolist()}: a count drawn under one state is outside "
+            f"another's support, where the log-density is NaN rather than small"
+        )
         raise ValueError(msg)
     return values
 
