@@ -88,6 +88,7 @@ def test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_suppor
 
 
 @pytest.mark.mathematical
+@pytest.mark.release
 def test_the_neighbourhood_weight_bounds_the_enumerated_one_and_the_best_tree_has_a_positive_margin() -> (
     None
 ):
@@ -112,6 +113,7 @@ def test_the_neighbourhood_weight_bounds_the_enumerated_one_and_the_best_tree_ha
 
 
 @pytest.mark.structural
+@pytest.mark.release
 def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_splits() -> (
     None
 ):
@@ -144,6 +146,7 @@ def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_
 
 
 @pytest.mark.simulated_truth
+@pytest.mark.release
 def test_the_generating_splits_have_full_bootstrap_support_at_many_sites() -> None:
     params = load_simulation_params(fixture_path(FIVE_TAXA))
     alignment = _alignment(params, 5, 1000)
@@ -163,6 +166,7 @@ def test_the_generating_splits_have_full_bootstrap_support_at_many_sites() -> No
 
 
 @pytest.mark.simulated_truth
+@pytest.mark.release
 def test_the_enumerated_support_is_calibrated_on_simulated_data() -> None:
     # The test the ticket names: bin the returned trees by the support they
     # report and the fraction that equal the generating topology must not
@@ -510,6 +514,7 @@ def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None
 
 
 @pytest.mark.structural
+@pytest.mark.release
 def test_four_workers_report_the_bootstrap_one_worker_reports() -> None:
     """Replicate ``i`` draws the stream spawned for it, whichever worker runs it (issue #344).
 

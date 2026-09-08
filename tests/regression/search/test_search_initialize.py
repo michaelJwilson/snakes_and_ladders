@@ -355,6 +355,7 @@ def test_every_start_reaches_the_fit_optimum_and_none_reaches_it_cheaper() -> No
 
 
 @pytest.mark.simulated_truth
+@pytest.mark.release
 def test_the_estimator_starts_reach_the_enumerated_optimum_at_five_taxa() -> None:
     """Five-taxon fixture, three datasets: the climb from either estimator reaches the enumerated optimum.
 
