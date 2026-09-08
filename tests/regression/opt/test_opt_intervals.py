@@ -388,7 +388,12 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
     assert_allclose(laplace.standard_errors["x"].numpy(), exact.numpy(), rtol=1e-8)
 
     chain = sample(
-        target, seed=3, n_samples=4000, step_size=0.2, n_steps=10, burn_in=200
+        target,
+        generator=torch.Generator().manual_seed(3),
+        n_samples=4000,
+        step_size=0.2,
+        n_steps=10,
+        burn_in=200,
     )
     assert_allclose(chain.theta.std(0).numpy(), exact.numpy(), rtol=0.05)
 
@@ -418,7 +423,7 @@ def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
     laplace = standard_errors_at(objective, objective.constrain(fit(objective).theta))
     chain = sample(
         WithGaussianPrior(objective, scale=2.0),
-        seed=11,
+        generator=torch.Generator().manual_seed(11),
         n_samples=2000,
         step_size=0.05,
         n_steps=20,
