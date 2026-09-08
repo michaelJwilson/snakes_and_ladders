@@ -165,7 +165,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_mean_field_and_spanning_tree_bounds_sandwich_log_z` | oracle |  |
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
-## `tests/regression/opt/` (53)
+## `tests/regression/opt/` (55)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -204,6 +204,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_mixture.py::test_the_component_m_step_is_the_emission_family_s_own` | oracle | Asserted rather than assumed: the mixture's EM and a direct call into `GaussianEmission.reestimate` on the same responsibilities must produce the same numbers, because they *are* the same call. |
 | `test_opt_mixture.py::test_the_optimal_clustering_is_exact_where_it_can_be_checked_by_hand` | oracle | Two obvious clusters of three points each: the optimum splits them, and the cost is the within-run sum of squares, 2 * (1 + 0 + 1) / ... |
 | `test_opt_mixture.py::test_a_known_truth_round_trips_through_the_unconstrained_coordinates` | simulated_truth |  |
+| `test_opt_mixture.py::test_the_evidence_and_the_e_step_match_the_enumerated_assignments` | oracle | The mixture's evidence and its responsibilities have a one-line factorized form because the observations are independent, and that form is what this module computes. |
+| `test_opt_mixture.py::test_the_seeded_start_lands_in_the_enumerated_maximum_posterior_assignment` | oracle |  |
 | `test_opt_mixture_budget.py::test_at_eight_starts_restarts_reach_the_optimum_from_the_most_starts` | simulated_truth | The per-pull-request tier of the release measurement below: the same code on its first 8 starts, pinning the direction and the referee's consistency. |
 | `test_opt_mixture_budget.py::test_at_forty_starts_restarts_reach_the_optimum_from_the_most_starts` | simulated_truth | The measurement `docs/experiments/004` reports. |
 | `test_opt_potts.py::test_transfer_matrix_matches_brute_force_enumeration` | oracle |  |
@@ -430,4 +432,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-387 checks.
+389 checks.

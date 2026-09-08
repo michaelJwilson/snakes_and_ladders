@@ -19,6 +19,9 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.emissions import GaussianEmission
+from snakes_and_ladders.likelihood.mixture_assignments import (
+    enumerate_mixture_assignments,
+)
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import align_by_key
@@ -398,3 +401,133 @@ def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> No
     assert_allclose(torch.exp(estimate["log_weight"]).numpy(), WEIGHTS, rtol=1e-13)
     assert_allclose(estimate["mean"].numpy(), MEAN, rtol=1e-13)
     assert_allclose(estimate["scale"].numpy(), SCALE, rtol=1e-13)
+
+
+#: The enumerable instance: two components at three standard deviations,
+#: sixteen observations, so ``2 ** 16 = 65,536`` assignments fit inside
+#: :data:`snakes_and_ladders.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`. The
+#: declared fixture is 500 observations over five components and is
+#: ``5 ** 500`` assignments past enumeration, so the oracle instance is built
+#: here rather than read from the registry (issue #393).
+ENUMERABLE_SAMPLES = 16
+ENUMERABLE_WEIGHTS = np.array([0.4, 0.6])
+ENUMERABLE_MEAN = np.array([-3.0, 3.0])
+ENUMERABLE_SCALE = np.array([1.0, 1.0])
+
+
+def _enumerable_mixture() -> tuple[np.ndarray, GaussianEmission]:
+    """The enumerable instance's observations and its generating components."""
+    components = GaussianEmission(ENUMERABLE_MEAN, ENUMERABLE_SCALE, 1e-12)
+    return (
+        _dataset(
+            mean=ENUMERABLE_MEAN,
+            scale=ENUMERABLE_SCALE,
+            weights=ENUMERABLE_WEIGHTS,
+            n_samples=ENUMERABLE_SAMPLES,
+            seed=20260908,
+        ),
+        components,
+    )
+
+
+@pytest.mark.oracle
+def test_the_evidence_and_the_e_step_match_the_enumerated_assignments() -> None:
+    # The mixture's evidence and its responsibilities have a one-line
+    # factorized form because the observations are independent, and that form
+    # is what this module computes. Summing 65,536 whole assignments term by
+    # term uses none of it, so agreement is evidence rather than a
+    # restatement: it catches a normalization over the wrong axis, a weight
+    # broadcast against the components rather than along them, and a
+    # log-sum-exp shift shared where it may not be. Realized on this
+    # instance: evidence to 1.2e-16 relative, responsibilities to 4.4e-16
+    # absolute, at the generating parameters and at the EM fixed point alike.
+    observations, components = _enumerable_mixture()
+    values = torch.as_tensor(observations, dtype=torch.float64)
+    objective = GaussianMixtureObjective(observations, 2)
+    fitted = expectation_maximization(
+        observations, torch.as_tensor(ENUMERABLE_WEIGHTS), components
+    )
+
+    for weights, family in (
+        (torch.as_tensor(ENUMERABLE_WEIGHTS), components),
+        (fitted.weights, fitted.components),
+    ):
+        exact = enumerate_mixture_assignments(weights.numpy(), family, observations)
+        log_weight = torch.log(weights)
+
+        assert_allclose(
+            float(mixture_log_likelihood(values, log_weight, family)),
+            exact.log_evidence,
+            rtol=1e-12,
+        )
+        assert_allclose(
+            responsibilities(values, log_weight, family).numpy(),
+            exact.responsibilities,
+            atol=1e-12,
+        )
+
+    # The objective the gradient fit descends is the same number negated, so
+    # the enumeration referees it at whatever point it is asked about.
+    theta = objective.theta_from_truth(
+        ENUMERABLE_WEIGHTS, ENUMERABLE_MEAN, ENUMERABLE_SCALE
+    )
+    truth = enumerate_mixture_assignments(ENUMERABLE_WEIGHTS, components, observations)
+    assert_allclose(float(objective(theta)), -truth.log_evidence, rtol=1e-12)
+    # A density, not a probability: the sign is not an accident to assert past.
+    assert truth.log_evidence < 0.0
+    assert abs(truth.responsibilities.sum(axis=1) - 1.0).max() < 1e-12
+
+
+@pytest.mark.oracle
+def test_the_seeded_start_lands_in_the_enumerated_maximum_posterior_assignment() -> (
+    None
+):
+    # What a data-reading start is for is the basin, and over 65,536
+    # assignments the basin is an exact object rather than a comparison: the
+    # single assignment of highest posterior probability under the parameters
+    # the start encodes. k-means++ reaches the fitted mixture's enumerated
+    # maximum-posterior assignment on 20 of 20 seeds; uniform seeding, the
+    # control that already lives beside it, reaches it on 10 of 20. The
+    # responsibilities at each seeded start agree with the enumeration to
+    # 6.8e-15, so it is the same posterior being maximized in both.
+    observations, components = _enumerable_mixture()
+    objective = GaussianMixtureObjective(observations, 2)
+    fitted = expectation_maximization(
+        observations, torch.as_tensor(ENUMERABLE_WEIGHTS), components
+    )
+    target = enumerate_mixture_assignments(
+        fitted.weights.numpy(), fitted.components, observations
+    ).assignment
+
+    def enumerated_at(theta: torch.Tensor) -> tuple[np.ndarray, float]:
+        named = objective.constrain(theta)
+        family = objective.components(theta)
+        exact = enumerate_mixture_assignments(
+            torch.exp(named["log_weight"]).numpy(), family, observations
+        )
+        drift = np.abs(
+            responsibilities(
+                torch.as_tensor(observations, dtype=torch.float64),
+                named["log_weight"],
+                family,
+            ).numpy()
+            - exact.responsibilities
+        ).max()
+        return exact.assignment, float(drift)
+
+    seeded = uniform = 0
+    for seed in range(20):
+        start = KMeansPlusPlus(1, np.random.default_rng(seed)).starts(objective)[0]
+        assignment, drift = enumerated_at(start)
+        assert drift < 1e-12, drift
+        seeded += int(np.array_equal(assignment, target))
+
+        cold = objective.theta_from_centres(
+            torch.as_tensor(
+                np.sort(uniform_seeds(observations, 2, np.random.default_rng(seed)))
+            )
+        )
+        uniform += int(np.array_equal(enumerated_at(cold)[0], target))
+
+    assert seeded == 20, seeded
+    assert uniform <= 15, uniform

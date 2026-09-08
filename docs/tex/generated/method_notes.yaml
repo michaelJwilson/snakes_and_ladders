@@ -140,9 +140,11 @@
 "Gaussian mixture":
   initializers: >-
     The seeding cost is within the published factor of the exact clustering
-    cost, which is the one oracle this initializer has; whether a seeded start
-    reaches a better likelihood optimum than a uniform one is not pinned by
-    any test of either significant kind, so the pairing reads untested.
+    cost, and on the enumerable instance the seeded start lands in the
+    maximum-posterior assignment over all 65,536 on 20 of 20 seeds where
+    uniform seeding lands in it on 10; what it buys past the basin is
+    nothing, since expectation--maximization reaches the same optimum from
+    either start.
   optimizers: >-
     Restarts reach the best-known optimum from 7 of 40 starts against
     tempering's 4 and annealing's 1 at 3,000 evaluations (experiment 004);

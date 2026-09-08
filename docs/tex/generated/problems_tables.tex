@@ -18,7 +18,7 @@
     Low-density parity-check code, Gallager (3,6) & $\checkmark$ & -- & $\checkmark$ & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
     Hidden Markov model, six emission families & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\circ$ & -- & -- & $\checkmark$ & -- & -- & $\checkmark$ & $\checkmark$ \\
     Coupled spatio-sequential model & $\checkmark$ & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & -- & -- & -- & -- \\
-    Gaussian mixture & $\checkmark$ & $\circ$ & -- & $\checkmark^{\dagger}$ & $\checkmark$ & $\circ$ & -- & -- & -- & -- & -- & -- \\
+    Gaussian mixture & $\checkmark$ & $\checkmark$ & -- & $\checkmark$ & $\checkmark$ & $\checkmark$ & -- & -- & -- & -- & -- & -- \\
     Continuous test functions & -- & $\checkmark$ & -- & $\checkmark$ & -- & $\checkmark^{\dagger}$ & -- & $\checkmark$ & -- & -- & -- & -- \\
     \bottomrule
   \end{tabular}}
@@ -43,7 +43,7 @@
     Low-density parity-check code, Gallager (3,6) & $\checkmark$ & $\checkmark$ & -- & -- & oracle & -- & truth$^{\dagger}$ \\
     Hidden Markov model, six emission families & $\checkmark$ & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
     Coupled spatio-sequential model & $\checkmark$ & -- & -- & -- & oracle & -- & -- \\
-    Gaussian mixture & -- & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
+    Gaussian mixture & $\checkmark$ & -- & $\checkmark$ & -- & oracle & -- & truth$^{\dagger}$ \\
     Continuous test functions & -- & $\checkmark$ & -- & -- & oracle & -- & truth$^{\dagger}$ \\
     \bottomrule
   \end{tabular}}
@@ -68,7 +68,7 @@
     Low-density parity-check code, Gallager (3,6) & -- & -- & -- \\
     Hidden Markov model, six emission families & -- & -- & -- \\
     Coupled spatio-sequential model & ci & oracle & The annealed data-sampled burn-in beats a uniform start at an equal budget on the planted lattice, where it is the start and not the move that decides the labelling; it returns the enumerated maximum-posterior labelling on 9 of 12 instances and is within 1.05 nats on the rest. \\
-    Gaussian mixture & -- & untested & The seeding cost is within the published factor of the exact clustering cost, which is the one oracle this initializer has; whether a seeded start reaches a better likelihood optimum than a uniform one is not pinned by any test of either significant kind, so the pairing reads untested. \\
+    Gaussian mixture & ci & oracle & The seeding cost is within the published factor of the exact clustering cost, and on the enumerable instance the seeded start lands in the maximum-posterior assignment over all 65,536 on 20 of 20 seeds where uniform seeding lands in it on 10; what it buys past the basin is nothing, since expectation--maximization reaches the same optimum from either start. \\
     Continuous test functions & ci & truth$^{\dagger}$ & Multi-start is what makes Himmelblau's four basins reachable at all; on a unimodal surface it spends the budget for nothing, and it is refereed by the analytic minimizers rather than by an oracle of its own. \\
     \bottomrule
   \end{tabular}
