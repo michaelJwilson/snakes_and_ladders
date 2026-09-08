@@ -782,8 +782,45 @@ calibrated: over 24 NNI searches on the five-taxon fixture at 30 to 300
 sites, the fraction of returned trees equal to the generating one does not
 fall from one support bin to the next. Each weight is over *maximized*
 likelihoods under a flat prior over topologies and is named so, not called a
-posterior; a tempered ensemble over topologies, which would give a marginal
-one, does not exist.
+posterior.
+
+**The same weights serve labellings and decodings, and a tempered ensemble
+gives a marginal one**
+([#331](https://github.com/michaelJwilson/snakes_and_ladders/issues/331)).
+`neighbourhood_labelling_support` and `enumerated_labelling_support` take any
+factor graph, the neighbourhood every single-site change, so a Potts
+configuration and a hidden path are one case: the enumerated weight equals
+`enumerate_potts`'s Boltzmann weight at `beta = 1` on every one of the 729
+labellings of a three-state 3 x 2 lattice to 1e-12, and the path posterior of
+the ambiguous chain's decodings, where the Viterbi path's margin is the
+fixture's 0.3033 nats and the posterior-decoded path's is -0.6066. The
+single-site neighbourhood is the whole space only where one site is free — on
+a two-site chain it reaches 5 of 9 labellings — and there the two weights
+agree to 1e-12. The bootstrap stays a tree quantity: it resamples sites, which
+a chain's ordered sites do not license and a labelling does not have.
+`search.tempered` runs replica exchange from the moves of #309 on the ladder
+of #267 with `parallel_tempering`'s exchange ratio, over labellings and over
+topologies; the fraction of the temperature-one replica's sweeps at a
+structure is its tempered weight (`eq:tempered-weight`), held to enumeration
+over 20 seeds on the ladder (1, 2, 4) at 1,000 sweeps after 100 of burn-in.
+The largest single-seed deviation is 0.039 on the four-taxon fixture's three
+topologies (30 sites, weights 0.66, 0.17, 0.17), 0.024 on the 2 x 2 lattice's
+ground state and one-flip excitation (0.68, 0.05) and 0.031 on the ambiguous
+chain's two decodings (0.14, 0.08); the mean over seeds is within 0.004 on
+every instance; asserted at 0.06 per seed and 0.01 on the mean. It is named a
+posterior weight only beside its diagnostics, which are asserted too:
+exchange acceptance per adjacent pair 0.82-0.93 on the topologies, 0.53-0.82
+on the lattice and 0.71-0.85 on the chain, and no indicator's autocorrelation
+time above 0.74 recorded sweeps. Over topologies the tempered weight is a
+marginal over topologies of the *fitted* likelihood, not over branch lengths.
+Calibration is re-measured at seven and eight taxa behind the release gate,
+for the quantities a search there can afford — the NNI neighbourhood weight
+and the bootstrap's smallest split support, 8 replicates — over 16 NNI
+searches per taxon count at 50 to 400 sites (the hard seven-taxon fixture and
+the balanced eight-taxon one); the fraction of returned trees equal to the
+generating one per support bin `(0, 0.5]`, `(0.5, 0.9]`, `(0.9, 1]`:
+
+CALIBRATION_TABLE
 
 **The coupled model is fitted, and the finding is about the start, not the
 move** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
@@ -1261,7 +1298,8 @@ citation, a regime and a pin: ground states as cuts (`eq:cut-energy`,
 `eq:gw`), alpha expansion and its bound (`eq:alpha-expansion`), the heat bath
 and the cluster moves with the field accept step (`eq:heat-bath`,
 `eq:cluster-accept`), and temperature, annealing and tempering with the
-exchange ratio (`eq:exchange`). The hidden Markov section states the backward
+exchange ratio and the tempered weight it licenses (`eq:exchange`,
+`eq:tempered-weight`). The hidden Markov section states the backward
 pass, the posterior and Viterbi as max-product (`eq:posterior`,
 `eq:viterbi`). The coupled spatio-sequential model of #290 has its own section
 (`sec:coupled`): the ticket's Forney-style figure, the spatial and chain

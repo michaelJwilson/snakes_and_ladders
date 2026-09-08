@@ -35,7 +35,7 @@ can express.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -382,26 +382,17 @@ def anneal_topology(
     ``scores`` caches fitted log-likelihoods by leaf bipartitions across
     calls, since the fit is the whole cost.
     """
-    neighbours = nni_neighbours if moves is MoveSet.NNI else spr_neighbours
     cache = {} if scores is None else scores
-
-    def score(topology: Topology) -> float:
-        key = leaf_bipartitions(topology)
-        if key not in cache:
-            cache[key] = score_topology(topology, alignment, k, model)
-        return cache[key]
-
+    score = cached_topology_score(alignment, k, cache, model=model)
     current, value = start, score(start)
     best, best_value = current, value
     trajectory = [value]
     accepted = 0
     for step in range(schedule.n_steps):
-        options = list(neighbours(current))
-        proposal = options[int(rng.integers(len(options)))]
-        proposed = score(proposal)
-        difference = (proposed - value) / schedule(step)
-        if difference >= 0.0 or rng.random() < np.exp(difference):
-            current, value = proposal, proposed
+        current, value, moved = topology_step(
+            current, value, schedule(step), rng, score, moves=moves
+        )
+        if moved:
             accepted += 1
             if value > best_value:
                 best, best_value = current, value
@@ -409,3 +400,59 @@ def anneal_topology(
     return AnnealedTopology(
         best, best_value, np.array(trajectory), accepted / schedule.n_steps, cache
     )
+
+
+def cached_topology_score(
+    alignment: Mapping[str, np.ndarray],
+    k: int,
+    cache: dict[frozenset[frozenset[str]], float],
+    *,
+    model: Model = Model.JC,
+) -> Callable[[Topology], float]:
+    """A scorer that fits a topology once per leaf bipartitions and reads ``cache`` after.
+
+    The fit is the whole cost of a walk over topologies, so every walk
+    shares this: :func:`anneal_topology` and the tempered ensemble of
+    :mod:`snakes_and_ladders.search.tempered` alike.
+    """
+
+    def score(topology: Topology) -> float:
+        key = leaf_bipartitions(topology)
+        if key not in cache:
+            cache[key] = score_topology(topology, alignment, k, model)
+        return cache[key]
+
+    return score
+
+
+def topology_step(
+    current: Topology,
+    value: float,
+    temperature: float,
+    rng: np.random.Generator,
+    score: Callable[[Topology], float],
+    *,
+    moves: MoveSet = MoveSet.NNI,
+) -> tuple[Topology, float, bool]:
+    """One Metropolis step over topologies at ``temperature``.
+
+    A uniform neighbour under ``moves`` is proposed and accepted with
+    ``min(1, exp((l' - l) / T))``, drawing one integer and, where the
+    proposal is worse, one uniform from ``rng`` -- the step
+    :func:`anneal_topology` takes, so a run there and a replica of the
+    tempered ensemble are the same chain draw for draw.
+
+    Returns
+    -------
+    tuple[Topology, float, bool]
+        The topology and fitted log-likelihood after the step, and whether
+        the proposal was accepted.
+    """
+    neighbours = nni_neighbours if moves is MoveSet.NNI else spr_neighbours
+    options = list(neighbours(current))
+    proposal = options[int(rng.integers(len(options)))]
+    proposed = score(proposal)
+    difference = (proposed - value) / temperature
+    if difference >= 0.0 or rng.random() < np.exp(difference):
+        return proposal, proposed, True
+    return current, value, False
