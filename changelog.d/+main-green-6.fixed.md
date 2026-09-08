@@ -1,0 +1,1 @@
+Made `main` green, part six: the relaxed-optimization benchmark passes a `torch.Generator` rather than a seed, and the `technical-doc` job checks out full history so its PDF rule can find the base branch's merge base.

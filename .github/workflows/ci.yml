@@ -336,6 +336,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The PDF rule below diffs against the base branch, and a shallow
+          # checkout has no merge base with it (issue #369's step failed on
+          # every pull request with `no merge base`).
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
