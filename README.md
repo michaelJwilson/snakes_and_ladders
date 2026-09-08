@@ -6,7 +6,7 @@
 
 Mixed discrete-continuous optimization over graph-structured models —
 phylogenetic trees, Potts models in an external field, hidden Markov models,
-and low-density parity-check decoding (in review, #356). Autodiff fits the
+and low-density parity-check decoding. Autodiff fits the
 continuous half, learned proposals, a critic, a planner and surrogates
 propose the discrete half beside the classical baselines they are measured
 against, and a Rust backend (`snakes_and_ladders.oxi_snakes_and_ladders`, via
@@ -128,10 +128,11 @@ from the other: a better topology scored with badly fitted parameters looks
 worse than a poor one scored well.
 
 That shape is not unique to phylogenies. Felsenstein pruning, the HMM forward
-algorithm, the Potts transfer matrix and the parity-check decoder are the same
-sum-product recursion on different graphs — a tree, a chain, a lattice, a
-code — so one discrete/continuous interface serves all four, and the coupled
-spatio-sequential model and the Gaussian mixture derived from them. The project treats that as a design constraint
+algorithm, the Potts transfer matrix and the decoder of a low-density
+parity-check code are the same sum-product recursion on different graphs — a
+tree, a chain, a lattice, a Tanner graph — so one discrete/continuous
+interface serves all four, and the coupled spatio-sequential model and the
+Gaussian mixture derived from them. The project treats that as a design constraint
 rather than a coincidence, and enforces it structurally: `snakes_and_ladders.opt` and
 `snakes_and_ladders.learn` may import no application module, asserted by test.
 

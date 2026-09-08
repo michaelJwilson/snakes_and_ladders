@@ -112,13 +112,12 @@ authoritative — where it and any other document disagree, it wins.
 Develop and deploy modern solvers for mixed discrete-continuous optimization
 across four primary classes of graphical models: phylogenetic trees (the large
 parsimony problem), N-dimensional Potts models in an external field, hidden
-Markov models (HMMs), and low-density parity-check (LDPC) decoding (#340) —
-the error-correction instance of the same message passing, where the
-structure is a code's parity checks and the decoder is sum-product on it.
-Two derived instances sit between them and every Stage 1 deliverable takes
-them too: the coupled spatio-sequential model that joins Potts and HMM, a
-Potts prior over class labels gating one hidden chain per class (#290), and
-the Gaussian mixture, an HMM with the chain removed (#262). The framework integrates automatic differentiation for
+Markov models (HMMs), and low-density parity-check codes decoded on their
+Tanner graphs (#340). Two derived instances sit between them and every
+Stage 1 deliverable takes them too: the coupled spatio-sequential model that
+joins the Potts and hidden Markov classes, a Potts prior over class labels
+gating one hidden chain per class (#290), and the Gaussian mixture, an HMM
+with the chain removed (#262). The framework integrates automatic differentiation for
 continuous parameters with reinforcement learning (RL) to learn proposal
 policies that score discrete structural candidates using exact, approximate, or
 bounded likelihoods/energies.
@@ -188,8 +187,9 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Potts models:* N-D lattices and Markov random fields (MRFs) with
       specified coupling constants and external fields.
     - *HMMs:* hidden state paths and emitted observation sequences.
-    - *Codes:* Gallager ensembles, codewords, and their transmission through
-      declared channels (#340).
+    - *Codes:* Gallager's regular parity-check ensemble, the binary
+      symmetric, erasure and Gaussian channels behind one log-likelihood
+      interface, and an encoder where elimination is affordable.
     - *Canonical cases:* instances whose answer is known from outside this
       repository — a closed form, a published result, or an enumeration
       sharing no code with what it tests — admitted only when more than one
@@ -204,8 +204,8 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Phylogenetics:* Felsenstein's pruning algorithm.
     - *Potts models:* belief propagation and transfer matrix methods.
     - *HMMs:* the forward-backward algorithm.
-    - *Codes:* the log-domain sum-product decoder on the code's factor graph
-      (#340).
+    - *Codes:* log-domain sum-product and min-sum on the Tanner graph with a
+      syndrome stop, held to the general sum-product and to enumeration.
   - *Validation:* match brute-force marginalization on small (`n ≤ 10`) graphs
     within the specified floating-point tolerance. Ensure the API remains
     application-agnostic.
@@ -246,7 +246,8 @@ Replace fixed, hand-designed search heuristics with learned proposal policies
 parameterized by neural networks.
 
 - **Milestone 2.1: RL Agent Formulation & Deployment**
-  - *Deliverable:* define the MDPs across all four problem classes.
+  - *Deliverable:* define the MDPs across all four problem classes (the
+    code's move set is #340's later work).
     - *State:* the current discrete structure (topology, lattice
       configuration, or state path), its fitted continuous parameters, and
       observation summaries.
