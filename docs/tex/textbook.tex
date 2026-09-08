@@ -1809,27 +1809,49 @@ bounds on $\log Z$ themselves loosen.
 \label{app:taxonomy}
 
 Grouped as the repository groups them, so one routing table serves the code and
-the documents alike.
+the documents alike. Within a group, books come first, then reviews, then the
+papers an algorithm implements or a proposal needs as its oracle.
 
 \paragraph{Infrastructure (build, structure, and speed).}
-Software craft: \citet{martin2008}, \citet{blandy2021}. Systems and hardware,
-including memory hierarchies and parallel kernels: \citet{bryant2015},
-\citet{pmpp2022}.
+Software craft: \citet{martin2008}, \citet{blandy2021}, \citet{ramalho2022}.
+Systems and hardware, including memory hierarchies and parallel kernels:
+\citet{bryant2015}, \citet{pmpp2022}. Python performance:
+\citet{gorelick2020}, \citet{antao2023}.
 
 \paragraph{Optimization (discrete and continuous).}
-Algorithms and discrete mathematics: \citet{clrs2022}, \citet{rosen2019}.
-Numerical optimization: \citet{nocedal2006}. Probabilistic inference and
-message passing: \citet{mackay2003}, \citet{koller2009}, \citet{frey1998},
-\citet{ortega2022}. Statistical physics and Monte Carlo:
-\citet{mezard2009}, \citet{newman1999}. Information geometry:
-\citet{amari2016}. Learning and reinforcement learning:
-\citet{goodfellow2016}, \citet{prince2023}, \citet{suttonbarto2018},
-\citet{lapan2020}, \citet{raschka2024}.
+Algorithms and discrete mathematics: \citet{clrs2022}, \citet{rosen2019},
+\citet{papadimitriou1998}; the papers behind the cut-based solvers,
+\citet{kolmogorov2004} on which energies a cut minimizes and
+\citet{boykov2004} on the max-flow they run. Numerical optimization:
+\citet{nocedal2006}, \citet{boyd2004} for the semidefinite certificate;
+\citet{hansen2001} for the covariance-adapting evolution strategy proposed as
+a population baseline. Probabilistic inference and message passing:
+\citet{mackay2003}, \citet{koller2009}, \citet{frey1998}, \citet{ortega2022},
+\citet{bishop2006}, \citet{murphy2023}; the review \citet{wainwright2008};
+the papers \citet{wainwright2005} and \citet{wainwright2005map} for the
+tree-reweighted bounds, and \citet{hsu2012} for spectral initialization of a
+hidden Markov model. Statistical physics and Monte Carlo: \citet{mezard2009},
+\citet{newman1999}, \citet{krauth2006}, \citet{landau2014}; the reviews
+\citet{betancourt2017} and \citet{schollwoeck2011}; the paper
+\citet{machta2010} for population annealing. Information theory and
+geometry: \citet{amari2016}, \citet{cover2006}. Learning and reinforcement
+learning: \citet{goodfellow2016}, \citet{prince2023}, \citet{suttonbarto2018},
+\citet{lapan2020}, \citet{raschka2024}; the papers \citet{sutton1999} and
+\citet{bacon2017} for options, and \citet{schrittwieser2020} for planning
+with a learned model. Learning for combinatorial optimization: the reviews
+\citet{bengio2021} and \citet{mazyavkina2021}; the papers \citet{khalil2017},
+\citet{kool2019}, \citet{paulus2020}, \citet{henderson2018},
+\citet{agarwal2021}, and the pair \citet{schuetz2022} and
+\citet{angelini2023}.
 
 \paragraph{Application (the science).}
 Phylogenetics: \citet{felsenstein2004}, \citet{durbin1998},
-\citet{compeau2015}, \citet{pachter2005}. Information and coding:
-\citet{blahut2003}, \citet{gallager1962}, \citet{richardson2008}, with
-\citet{nielsen2010} as background only.
+\citet{compeau2015}, \citet{pachter2005}, \citet{yang2014}; the papers
+\citet{whidden2015}, \citet{azouri2021}, \citet{zhang2018}, \citet{zhang2019},
+\citet{speyer2004}, \citet{altekar2004}, and the external baselines
+\citet{minh2020} and \citet{kozlov2019}. Information and coding:
+\citet{blahut2003}, \citet{richardson2008}, with \citet{nielsen2010} as
+background only; the papers
+\citet{gallager1962} and \citet{nachmani2018}.
 
 \end{document}
