@@ -27,7 +27,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_pairwise_distance.py::test_pairwise_distance_small_fixed_input` | oracle | Small, hand-checkable input. |
 | `test_scale_tiers.py::test_the_budget_script_states_both_budgets` | simulated_truth | The numbers `DEV.md` documents and the numbers the script measures against have to be the same two, or the report is against a budget nothing else knows about. |
 
-## `tests/regression/learn/` (40)
+## `tests/regression/learn/` (41)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -61,6 +61,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_reinforce.py::test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient` | oracle | The claim REINFORCE rests on, checked rather than cited. |
 | `test_learn_reinforce.py::test_training_raises_the_enumerated_expected_return` | oracle | Against the enumerated J, not the sampled mean the training loop reports: that curve is a Monte Carlo estimate under a moving policy and can rise while the estimator is wrong. |
 | `test_learn_reinforce.py::test_the_learned_policy_is_at_least_as_good_as_hill_climbing` | simulated_truth | Milestone 8's criterion, at a size where the answer is enumerable. |
+| `test_learn_reinforce_torchrl.py::test_the_surrogate_loss_and_its_gradient_are_torchrl_s_reinforce_loss` | oracle |  |
 | `test_learn_relaxed.py::test_the_potts_relaxation_is_exact_at_every_corner` | oracle | The first thing that must be true. |
 | `test_learn_relaxed.py::test_the_hmm_relaxation_is_exact_at_every_corner` | oracle | The same check across a module boundary, which makes it stronger than the one above: `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely independent implementations of `log P(path, observations)`. |
 | `test_learn_relaxed.py::test_the_relaxed_optimum_of_the_hmm_is_the_viterbi_path` | oracle | The relaxed objective's discrete optimum must be the answer another module computes for the same question, or the relaxation is optimizing something else. |
@@ -72,7 +73,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 | `test_learn_surrogate_pyg.py::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights` | oracle |  |
 
-## `tests/regression/likelihood/` (79)
+## `tests/regression/likelihood/` (82)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -98,6 +99,9 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_likelihood_hadamard.py::test_the_four_state_recoding_returns_two_thirds_of_every_branch` | oracle | The recoded four-state spectrum conjugates to ``2 t / 3`` on every split. |
 | `test_likelihood_hadamard.py::test_the_split_weights_converge_with_the_site_count` | simulated_truth | On simulated two-state data the weight error falls as ``1/sqrt(L)``. |
 | `test_likelihood_hadamard.py::test_the_closest_tree_of_the_fixture_alignment_is_the_generating_topology` | simulated_truth | The four-state fixtures, recoded, give the generating topology at their declared sites. |
+| `test_likelihood_hadamard_scipy.py::test_the_fast_transform_is_the_dense_product_with_scipy_s_matrix` | oracle |  |
+| `test_likelihood_hadamard_scipy.py::test_scipy_s_matrix_is_the_sign_convention_our_indexing_assumes` | oracle |  |
+| `test_likelihood_hadamard_scipy.py::test_both_directions_of_the_conjugation_invert_through_scipy_s_matrix` | oracle | `eq:hadamard` is s = H^-1 exp(H q) and q = H^-1 log(H s), with H^-1 = H / N. |
 | `test_likelihood_objective.py::test_expansion_reproduces_the_tree_s_own_branch_lengths` | oracle | The merge must be lossless in the direction that matters: a tree's lengths, encoded and expanded, must score identically. |
 | `test_likelihood_objective.py::test_the_fit_beats_the_generating_branch_lengths` | simulated_truth | The optimizer never sees the truth, so an early stop fails this while its own loss still went down. |
 | `test_likelihood_objective.py::test_every_branch_length_is_recovered_to_within_four_standard_errors` | simulated_truth |  |
@@ -156,7 +160,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_mean_field_and_spanning_tree_bounds_sandwich_log_z` | oracle |  |
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
-## `tests/regression/opt/` (51)
+## `tests/regression/opt/` (53)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -166,6 +170,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_fit.py::test_hmm_interval_coverage_approaches_nominal_with_sample_size` | simulated_truth | Release-gated: 15 fits at four times the fixture size is ~30 s. |
 | `test_opt_fit.py::test_the_gradient_fit_agrees_with_baum_welch` | oracle | Baum-Welch shares only the model: no optimizer, no unconstrained coordinates, no constraint map. |
 | `test_opt_fit.py::test_the_observed_information_is_the_hessian_of_the_objective` | oracle | Pinned against a closed form: d2/dx2 (x - 2)^2 = 2, and zero elsewhere. |
+| `test_opt_fit_scipy.py::test_the_fit_reaches_the_minimizer_scipy_reaches_from_the_same_start` | oracle |  |
+| `test_opt_fit_scipy.py::test_both_optimizers_reach_rosenbrock_s_analytic_minimizer` | oracle |  |
 | `test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian` | oracle | Mean and covariance in closed form, so nothing here rests on a second sampler. |
 | `test_opt_hmc.py::test_the_chain_matches_grid_quadrature_on_a_real_objective` | oracle | The Potts chain's `theta` is two-dimensional at two states, so the posterior can be integrated on a grid and there is a reference that is not a sampler. |
 | `test_opt_hmc.py::test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw` | oracle | The refactor's guarantee, stated as the plan asked: annealing on a constant schedule at temperature 1 reproduces the untempered chain at generators seeded alike *bitwise*. |
@@ -250,7 +256,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (99)
+## `tests/regression/search/` (103)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -307,6 +313,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_initialize.py::test_every_start_reaches_the_fit_optimum_and_none_reaches_it_cheaper` | simulated_truth | Five-taxon fixture, three datasets: all five starts converge to one optimum at one cost. |
 | `test_search_initialize.py::test_the_estimator_starts_reach_the_enumerated_optimum_at_five_taxa` | simulated_truth | Five-taxon fixture, three datasets: the climb from either estimator reaches the enumerated optimum. |
 | `test_search_initialize.py::test_initializers_at_equal_evaluations` | simulated_truth | The measurement `docs/experiments/005` reports; ``pytest -s`` prints its tables. |
+| `test_search_neighbor_joining_scipy.py::test_the_two_return_the_same_tree_on_an_ultrametric_matrix` | oracle |  |
 | `test_search_parsimony.py::test_every_start_reaches_the_enumerated_minimum_at_five_taxa` | oracle |  |
 | `test_search_parsimony.py::test_every_start_reaches_the_enumerated_minimum_at_six_taxa` | oracle |  |
 | `test_search_parsimony.py::test_spr_escapes_the_local_minima_nni_stops_in_at_eight_taxa` | oracle | The first size at which the two neighbourhoods separate. |
@@ -347,6 +354,9 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_topology.py::test_nni_and_spr_exhaustive_at_n8` | oracle | The same properties as the per-PR sweep, at the next size up. |
 | `test_search_topology.py::test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology` | oracle | `_split_key` is what `spr_neighbours` deduplicates on since #264; this asserts it names the same set of splits `leaf_bipartitions` does, on every one of the 105 six-leaf topologies, with the anchor convention (the smallest leaf's side is the complement) applied identically. |
 | `test_search_topology.py::test_spr_neighbours_are_the_definition_in_the_definition_order` | oracle | Order matters as well as membership: a hill climb takes the first of equally good neighbours, so a faster generator that permuted them would change which tree a search lands on while every count test passed. |
+| `test_search_topology_rustworkx.py::test_two_topologies_our_code_calls_equal_are_isomorphic` | oracle | Every topology against a re-rooted, re-ordered copy of itself: the enumeration builds each by a different insertion order, so pairs with equal bipartitions and different node names occur without contriving them. |
+| `test_search_topology_rustworkx.py::test_a_topology_is_isomorphic_to_itself_however_it_was_built` | oracle | The positive half at a size the enumeration above does not reach: a topology drawn twice from the same seed, and every NNI neighbour of it against itself, each rebuilt through `_from_adjacency` and therefore carrying different synthetic internal names. |
+| `test_search_topology_rustworkx.py::test_every_nni_neighbour_differs_from_its_parent_and_is_not_isomorphic` | oracle | The negative half. |
 | `test_search_tree_features.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle |  |
 | `test_search_tree_features.py::test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget` | simulated_truth |  |
 | `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
@@ -409,4 +419,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-366 checks.
+376 checks.
