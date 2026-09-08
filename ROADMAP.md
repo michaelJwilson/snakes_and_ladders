@@ -163,7 +163,11 @@ this LaTeX documentation. It must contain:
   landscapes, transition probabilities and parity constraints across the four
   problem classes and the instances derived from them, with a problem
   statement per row of `PROBLEMS.md` and generated tables of which algorithm
-  and which referee applies to each.
+  and which referee applies to each. A problem statement is complete when it
+  carries the model, the sizes it is supported at, the model as a factor graph
+  with a sketch of that structure, the algorithms it uses, and the validation
+  naming each referee with what it does and does not establish; a guard checks
+  that shape rather than a reviewer.
 - Rigorous derivations of the exact inference algorithms (Felsenstein's
   pruning, belief propagation, forward-backward; Appendix A of the textbook,
   #326).
@@ -219,10 +223,19 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
   - *Deliverable:* posterior sampling over the same interface, so an interval
     can be a quantile of the posterior rather than the curvature at the mode,
     and the two can be compared.
+  - *Deliverable:* starts read from the data rather than from the objective,
+    where a method of moments supplies one — pairwise distances and a joining
+    for a tree, a spectral inversion where the model admits it, a seeding for
+    a mixture — each carrying the guarantee it comes with rather than a claim
+    about the optimum it leads to.
   - *Validation:* validate autodiff gradients against central finite
     differences. Validate a sampler where it is exact before where it is
     statistical — integrator reversibility and its order of accuracy — then
-    against a target whose normalizer is known by quadrature.
+    against a target whose normalizer is known by quadrature. A start is
+    validated against the structure it claims to recover exactly — the path
+    lengths of a known tree, the cost of a known clustering — and then against
+    the objective's own start at an equal budget of evaluations, reported
+    whichever way it falls.
 - **Milestone 1.4: Discrete Move Sets & Classical Baselines**
   - *Deliverable:* implement strict structural neighborhoods for classical
     sampling.

@@ -2001,6 +2001,81 @@ from the module that implements it, so the guard of #274 resolves them; the
 - Rate variation across sites, and GPU dispatch. Neither is built; both are
   ticketed (#323, #280).
 
+## Consistency audit at 0.5.0
+
+What the release audit ([#376](https://github.com/michaelJwilson/snakes_and_ladders/issues/376)) found stale, contradictory or
+duplicated between the planning documents, the two documents, the templates
+and the code, and fixed in the same pull request. Its baseline is
+[#375](https://github.com/michaelJwilson/snakes_and_ladders/pull/375) as merged; what that audit fixed is not repeated here.
+
+- **The version this file is read at.** The header said `0.4.0`, "the release
+  #358 cuts". No tag exists --- the repository has never carried one --- and
+  `Cargo.toml` still reads `0.3.0`, the version the last built `CHANGELOG.md`
+  section carries. The header now states the deferred cut, and the release
+  template's tag precondition says what an audit does when it does not hold.
+- **Counts the summary had left behind.** Four experiments were recorded
+  where six exist, and five budget-matched comparisons where six do; the
+  Milestone 1.3 row named neither the tree's data-driven starts nor
+  [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373), which landed them for #364 between the two audits.
+  `TICKETS.md` still listed that work as open.
+- **`DEV.md`'s restated counts.** `tests/benchmarks/` was said to hold 36 flat
+  modules and holds 39; the frameworks bullet named four test modules that
+  `importorskip` a package and there are six, beside three more that
+  `importorskip` `scipy`; and the critical tier's **88 tests in 12.6 s** had
+  been overtaken by #372's and this release's guards, at **149 in 13.0 s**.
+  All three are re-measured on this host and dated. Its branch-protection note
+  still spoke of #377's job rename as unmerged; it merged as #379, and
+  confirming the replacement is now a release precondition.
+- **`docs/CLAUDE.md`'s build rule.** It said the script regenerates the
+  figures the documents cite. Since [#380](https://github.com/michaelJwilson/snakes_and_ladders/pull/380) it regenerates the
+  cited figures whose input stamp differs, which is `DEV.md`'s to state in
+  full; the local rule now carries the principle --- a partial rebuild moves a
+  check and never removes one --- and points there.
+- **`scipy` is not imported anywhere.** The audit's own plan recorded it as
+  imported by `opt.fit` and `search.statistics`. Both modules say the opposite
+  in their first paragraph and write out the constants they would need,
+  precisely so that no dependency is taken for them. The three referee tests
+  this release adds `importorskip` it and skip everywhere until it is
+  declared, which `DEV.md` and `INSTALL.md` now say and which stands as the
+  open question.
+- **The textbook's problem statements were not one shape.** One of the nine
+  carried all five parts; the rest carried two to four, and nothing said so,
+  because a section missing its sizes or its validation reads as complete.
+  Eight sketches, twelve algorithm environments and nine validation
+  subsections close it, and a guard now fails the shape rather than a reviewer
+  noticing. The plan recorded eight algorithm environments as existing; four
+  did.
+- **Two symbols were one letter.** The parity-check matrix and the
+  Sylvester--Hadamard matrix were both `H`, distinguished only by weight and
+  by context. `notation.tex` now defines both, which is where the rule says a
+  symbol lives; and the coupled model's figure was labelled outside the
+  convention the other eight now follow, so it is renamed.
+- **`ROADMAP.md` did not describe two milestones it had reached.** Milestone
+  1.3 named no deliverable for a start read from the data, which #364
+  supplies, and §1.3 did not say what makes a problem statement complete. Both
+  are stated in the document's existing register, and nothing else in it
+  changed.
+- **The release template.** Its version was `0.4.0`; it carried no per-problem
+  completeness checklist and no frameworks table, both of which the last two
+  audits needed and wrote by hand; and its tag precondition had no instruction
+  for the case both audits actually met. All four are fixed, and the two
+  ledger regenerations the audits ran are preconditions rather than folklore.
+
+**Duplicated machinery.** The two seams the 0.4.0 audit recorded --- one
+annealing driver behind eight entry points, one weighted enumeration behind
+eight enumerators --- are unchanged and are not refactored here. Each is a
+ticket, with the oracle that would pin a merge stated in that audit's tables
+above; folding either into a release audit would put an untested rewrite of
+the sampler and the enumerator inside the pull request that is meant to check
+everything else.
+
+**What the audit checked and found true.** The ten required checks are the ten
+jobs `ci.yml` defines; the manifest holds nineteen figures and the documents
+cite seventeen, as `DEV.md` says; `PROBLEMS.md` resolves every symbol it
+names; `CHECKS.md` is a regeneration; the experiment index is a regeneration
+and every experiment validates against the template; and no document links to
+a path that does not exist.
+
 ## Consistency audit at 0.4.0
 
 What the release audit ([#358](https://github.com/michaelJwilson/snakes_and_ladders/issues/358))
