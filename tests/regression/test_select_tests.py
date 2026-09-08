@@ -16,7 +16,15 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
-from select_tests import ALWAYS, BENCHMARKED, EVERYTHING, MODULES, dependents, select
+from select_tests import (
+    ALWAYS,
+    BENCHMARKED,
+    EVERYTHING,
+    MODULES,
+    _benchmarks_for,
+    dependents,
+    select,
+)
 
 
 def _modules_of(chosen: dict[str, list[str]]) -> set[str]:
@@ -164,12 +172,18 @@ def test_benchmarks_run_only_for_the_modules_they_measure() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
-    # The pairing DEV.md requires, used as the selector: a learn change runs
-    # learn's benchmark and not the other twelve. Running all of them cost
-    # 40 s against 5 s for the one that measures what changed.
-    assert _benchmarks_of(select(["python/snakes_and_ladders/learn/reinforce.py"])) == {
-        "test_learn_reinforce_bench.py"
+    # The pairing DEV.md requires, used as the selector: a change runs the
+    # benchmarks of the modules that import it and no other. A learn change
+    # reaches `search` (its tree environment) and `likelihood` (the
+    # surrogates) but never `sim` or `opt`; running every benchmark cost 40 s
+    # against the few that measure what changed.
+    chosen = _benchmarks_of(select(["python/snakes_and_ladders/learn/reinforce.py"]))
+    expected = {
+        Path(path).name for path in _benchmarks_for(sorted(dependents(["learn"])))
     }
+    assert chosen == expected
+    assert "test_learn_reinforce_bench.py" in chosen
+    assert _benchmarks_of(select(["python/snakes_and_ladders/qa/build.py"])) == set()
 
 
 @pytest.mark.critical
