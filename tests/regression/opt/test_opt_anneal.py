@@ -45,10 +45,23 @@ from snakes_and_ladders.opt.hmc import (
 from snakes_and_ladders.opt.schedule import Constant, Exponential, Linear
 from snakes_and_ladders.search.gibbs import anneal_factor_graph
 from snakes_and_ladders.search.potts_mcmc import anneal_potts, parallel_tempering
+from snakes_and_ladders.search.topology import leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.simulate import simulate_alignment
 
+from tests._fixtures import FOUR_TAXA, load_fixture
 from tests._objective_checks import AnalyticGaussian
+
+
+def _four_taxa() -> tuple[dict[str, np.ndarray], int]:
+    """The alignment `search.tempered`'s own tests fit, at their seed and size."""
+    params = load_fixture(FOUR_TAXA)
+    dataset = simulate_alignment(
+        params.tau, params.k, params.pi, np.random.default_rng(1), 30
+    )
+    return dict(dataset.alignment), params.k
+
 
 SHAPE = (3, 3)
 COUPLING = 0.7
@@ -388,8 +401,9 @@ def test_the_relaxation_schedule_is_the_exponential_schedule(
 ) -> None:
     # `learn.relaxed.anneal` was `opt.schedule.Exponential` written in a
     # different algebra: `start * (end / start) ** f` against
-    # `start ** (1 - f) * end ** f`. The bound is what the two roundings
-    # differ by, and it is asserted rather than described.
+    # `start ** (1 - f) * end ** f`. Realized worst relative deviation over
+    # six schedules spanning four decades of temperature and 2 to 400 steps:
+    # 4.2e-16, one ulp, with both endpoints exact. Asserted at 1e-15.
     schedule = Exponential(start=start, end=end, n_steps=steps)
     realized = [relaxed_anneal(start, end, steps, step) for step in range(steps)]
     reference = [
@@ -413,3 +427,107 @@ def test_the_relaxation_schedule_clamps_a_step_past_the_end() -> None:
     assert relaxed_anneal(2.0, 0.1, 5, 9) == relaxed_anneal(2.0, 0.1, 5, 4)
     with pytest.raises(ValueError, match="outside a schedule"):
         Exponential(start=2.0, end=0.1, n_steps=5)(9)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_anneal_topology_is_the_loop_it_replaced_draw_for_draw(seed: int) -> None:
+    # The topology annealer, whose pre-seam loop nested its best-state test
+    # inside `if moved`. That gate was never live --- a rejected step returns
+    # the value it was given, and `best_value` is an upper bound on every
+    # value seen --- so the reference below keeps it and the seam drops it,
+    # and the assertion is that the two agree on the tree, the value, the
+    # trajectory and the acceptance rate.
+    from snakes_and_ladders.search.gibbs import (
+        anneal_topology,
+        cached_topology_score,
+        topology_step,
+    )
+    from snakes_and_ladders.search.topology import enumerate_topologies
+
+    alignment, k = _four_taxa()
+    start = next(enumerate_topologies(sorted(alignment)))
+    schedule = Exponential(start=1.0, end=0.05, n_steps=40)
+
+    cache: dict[frozenset[frozenset[str]], float] = {}
+    score = cached_topology_score(alignment, k, cache)
+    rng = np.random.default_rng(seed)
+    current, value = start, score(start)
+    best, best_value = current, value
+    trajectory = [value]
+    accepted = 0
+    for step in range(schedule.n_steps):
+        current, value, moved = topology_step(
+            current, value, schedule(step), rng, score
+        )
+        if moved:
+            accepted += 1
+            if value > best_value:
+                best, best_value = current, value
+        trajectory.append(value)
+
+    run = anneal_topology(
+        alignment, k, schedule, np.random.default_rng(seed), start, scores=dict(cache)
+    )
+    assert leaf_bipartitions(run.topology) == leaf_bipartitions(best)
+    assert run.log_likelihood == best_value
+    assert np.array_equal(run.trajectory, np.array(trajectory))
+    assert run.acceptance == accepted / schedule.n_steps
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_the_tempered_ensemble_is_the_loop_it_replaced_draw_for_draw(
+    seed: int,
+) -> None:
+    # `search.tempered` held the third copy of the exchange ratio, imported
+    # privately across a module line and called on a negated log-density.
+    # The reference is its pre-seam pair loop; the assertion is on the
+    # recorded keys, so a swap applied to the wrong replica is visible rather
+    # than averaged into an acceptance rate.
+    from snakes_and_ladders.search.gibbs import _Indexed, gibbs_sweep
+    from snakes_and_ladders.search.tempered import tempered_factor_graph
+
+    graph = from_potts(
+        lattice_graph((2, 2), BoundaryCondition.OPEN, 0.8), np.array([0.6, -0.4])
+    )
+    ladder = (1.0, 2.0, 4.0)
+    n_sweeps, burn_in = 60, 10
+
+    rng = np.random.default_rng(seed)
+    indexed = _Indexed(graph)
+    n_replicas = len(ladder)
+    betas = [1.0 / temperature for temperature in ladder]
+    children = rng.spawn(n_replicas)
+    states = [indexed.start(child, None) for child in children]
+    values = [indexed.log_density(state) for state in states]
+    proposed = np.zeros(n_replicas - 1)
+    accepted = np.zeros(n_replicas - 1)
+    recorded: list[list[tuple[int, ...]]] = [[] for _ in range(n_replicas)]
+    densities: list[list[float]] = []
+    for sweep_index in range(burn_in + n_sweeps):
+        for replica in range(n_replicas):
+            gibbs_sweep(
+                indexed, states[replica], children[replica], beta=betas[replica]
+            )
+            values[replica] = indexed.log_density(states[replica])
+        for pair in range(n_replicas - 1):
+            log_ratio = (betas[pair] - betas[pair + 1]) * (
+                -values[pair] + values[pair + 1]
+            )
+            proposed[pair] += 1
+            if log_ratio >= 0.0 or rng.random() < np.exp(log_ratio):
+                accepted[pair] += 1
+                states[pair], states[pair + 1] = states[pair + 1], states[pair]
+                values[pair], values[pair + 1] = values[pair + 1], values[pair]
+        if sweep_index >= burn_in:
+            for replica in range(n_replicas):
+                recorded[replica].append(tuple(int(value) for value in states[replica]))
+            densities.append(list(values))
+
+    ensemble = tempered_factor_graph(
+        graph, ladder, np.random.default_rng(seed), n_sweeps, burn_in
+    )
+    assert ensemble.keys == tuple(tuple(names) for names in recorded)
+    assert np.array_equal(ensemble.log_densities, np.array(densities))
+    assert np.array_equal(ensemble.swap_acceptance, accepted / proposed)

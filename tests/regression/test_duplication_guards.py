@@ -103,7 +103,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
         OPEN_CODED_EDGES: "for edge, coupling in graph.weighted_edges():\n",
         CAP_LITERAL: "from snakes_and_ladders.enumeration import refuse_oversized\n",
-        OPEN_CODED_PRODUCT: "for c in assignments(k, n, what=\"states\"):\n",
+        OPEN_CODED_PRODUCT: 'for c in assignments(k, n, what="states"):\n',
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []

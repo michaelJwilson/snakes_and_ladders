@@ -401,7 +401,10 @@ def anneal(start: float, end: float, steps: int, step: int) -> float:
     The two arithmetics are not the same expression: this returned
     ``start * (end / start) ** fraction`` and the schedule returns
     ``start ** (1 - fraction) * end ** fraction``. Agreement is measured
-    rather than assumed, and the pin states the realized bound.
+    rather than assumed --- worst relative deviation 4.2e-16 over six
+    schedules spanning four decades of temperature and 2 to 400 steps, with
+    both endpoints exact --- and
+    ``tests/regression/opt/test_opt_anneal.py`` holds it there.
 
     Raises
     ------
