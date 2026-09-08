@@ -19,6 +19,20 @@
 # so it still runs alone and the budgets in DEV.md stay comparable across runs.
 # `with_lock measure` does that for you; do not hand-roll it.
 #
+# THREADS. Holding the machine is not the same as using it. A measurement runs
+# at one thread by default even though it owns all four cores, and that is
+# deliberate: every baseline in STATUS.md and DEV.md was taken at one thread,
+# so a number taken at four is not comparable with any of them. Exclusivity
+# buys a quiet machine, not a wide one.
+#
+# The exception is measuring something that is itself parallel -- rayon in the
+# Rust backend, a torch intra-op reduction, the CPU parallelism of #344 --
+# where one thread measures the wrong thing. `--wide` raises the three thread
+# variables to the core count for that command, and is legal only under
+# `measure`, which is the only kind that owns the machine. A number taken
+# under `--wide` MUST state its thread count wherever it is quoted, or it is
+# indistinguishable from a one-thread number and silently wrong.
+#
 # Three validate slots and not four: every job is single-threaded already
 # (OMP_NUM_THREADS=1), the reference host has four cores, and one is left for
 # the orchestrating session. The measured problem this solves: one agent under
@@ -30,6 +44,7 @@
 #   . infra/locks.sh
 #   with_lock validate -- uv run pytest -m critical
 #   with_lock measure  -- uv run pytest tests/benchmarks -q
+#   with_lock measure --wide -- cargo bench --bench parallel_sweep
 #
 # Waits in the foreground, as the agent rules require: no sleep, no polling.
 # SAL_LOCK_WAIT (default 1800) bounds the wait; exceeding it fails rather than
@@ -50,11 +65,29 @@ _lock_dir() {
 }
 
 with_lock() {
-  # with_lock <measure|validate> -- <command...>
+  # with_lock <measure|validate> [--wide] -- <command...>
   local kind="${1:?with_lock needs a kind: measure or validate}"
   shift
+  local wide=0
+  if [ "${1:-}" = "--wide" ]; then
+    wide=1
+    shift
+  fi
   [ "${1:-}" = "--" ] && shift
   [ $# -gt 0 ] || { echo "with_lock: no command given" >&2; return 2; }
+
+  if [ "$wide" = 1 ]; then
+    if [ "$kind" != "measure" ]; then
+      # A validation shares the host with two others, so it may not take the
+      # cores they are using. Refusing beats quietly oversubscribing.
+      echo "with_lock: --wide needs 'measure'; '$kind' does not own the host" >&2
+      return 2
+    fi
+    local cores
+    cores="$(nproc)"
+    set -- env "OMP_NUM_THREADS=$cores" "OPENBLAS_NUM_THREADS=$cores" \
+      "MKL_NUM_THREADS=$cores" "RAYON_NUM_THREADS=$cores" "SAL_MEASURE_THREADS=$cores" "$@"
+  fi
 
   local dir
   dir="$(_lock_dir)"
@@ -72,44 +105,61 @@ with_lock() {
 }
 
 _with_validate_slot() {
-  # Takes whichever of the numbered slots frees first. `flock` releases a slot
-  # when its file descriptor closes, so a killed job never leaks one.
+  # Takes whichever slot frees first. The acquisition must be atomic: an
+  # earlier version probed a slot with `flock -n ... true`, which releases it
+  # again before the command starts, so three jobs launched together all saw
+  # slot 1 free and then queued on it -- the split bought nothing, and the
+  # overlap test caught it. Holding a file descriptor across the `flock` makes
+  # taking the slot and keeping it one step. The descriptor closes when this
+  # shell exits, so a killed job never leaks a slot.
   local dir="$1"
   shift
-  local slot
+  local slot fd status
   for slot in $(seq 1 "$SAL_VALIDATE_SLOTS"); do
-    if flock -n "$dir/validate.$slot.lock" true 2>/dev/null; then
-      flock -w "$SAL_LOCK_WAIT" "$dir/validate.$slot.lock" -c "$(_quote "$@")"
-      return $?
+    exec {fd}>"$dir/validate.$slot.lock"
+    if flock -n "$fd"; then
+      "$@"
+      status=$?
+      exec {fd}>&-
+      return $status
     fi
+    exec {fd}>&-
   done
   # Every slot busy: block on the first rather than spinning over all three.
-  flock -w "$SAL_LOCK_WAIT" "$dir/validate.1.lock" -c "$(_quote "$@")"
-}
-
-_quote() {
-  # `flock -c` takes one shell string, so the command is requoted rather than
-  # interpolated: a path with a space would otherwise split into two arguments.
-  local out=""
-  local arg
-  for arg in "$@"; do
-    out+="$(printf '%q ' "$arg")"
-  done
-  printf '%s' "$out"
+  exec {fd}>"$dir/validate.1.lock"
+  if ! flock -w "$SAL_LOCK_WAIT" "$fd"; then
+    exec {fd}>&-
+    echo "with_lock: timed out waiting for a validate slot" >&2
+    return 1
+  fi
+  "$@"
+  status=$?
+  exec {fd}>&-
+  return $status
 }
 
 _hold_all_validate_slots() {
-  # Recurses through this file so each slot is held by a nested `flock`, then
-  # runs the command with all three held.
+  # A measurement runs alone, so it holds every validation slot as well as the
+  # measure lock. Each slot gets its own descriptor, taken in order; all are
+  # released when this shell exits.
   local dir="$1"
   shift
-  local slot="${SAL_HELD_SLOT:-1}"
-  if [ "$slot" -gt "$SAL_VALIDATE_SLOTS" ]; then
-    "$@"
-    return $?
-  fi
-  SAL_HELD_SLOT=$((slot + 1)) flock -w "$SAL_LOCK_WAIT" "$dir/validate.$slot.lock" \
-    "${BASH_SOURCE[0]}" --hold-all-validate-slots "$dir" "$@"
+  local slot fd status
+  local -a held=()
+  for slot in $(seq 1 "$SAL_VALIDATE_SLOTS"); do
+    exec {fd}>"$dir/validate.$slot.lock"
+    if ! flock -w "$SAL_LOCK_WAIT" "$fd"; then
+      echo "with_lock: timed out taking validate slot $slot" >&2
+      return 1
+    fi
+    held+=("$fd")
+  done
+  "$@"
+  status=$?
+  for fd in "${held[@]}"; do
+    exec {fd}>&-
+  done
+  return $status
 }
 
 if [ "${1:-}" = "--hold-all-validate-slots" ]; then

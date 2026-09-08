@@ -110,3 +110,90 @@ def test_an_unknown_kind_is_refused(scratch: Path) -> None:
     )
     assert finished.returncode != 0
     assert "unknown kind" in finished.stderr
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
+@pytest.mark.structural
+def test_a_measurement_is_one_thread_unless_it_asks_otherwise(scratch: Path) -> None:
+    # Holding the machine is not using it. The default stays at whatever the
+    # caller set -- one thread, per tests/conftest.py -- because every baseline
+    # in STATUS.md and DEV.md was taken that way and a four-thread number is
+    # not comparable with any of them.
+    finished = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'. {LOCKS}; with_lock measure -- bash -c "echo \\$OMP_NUM_THREADS"',
+        ],
+        cwd=REPO_ROOT,
+        env={
+            "SAL_SCRATCH": str(scratch),
+            "PATH": "/usr/bin:/bin",
+            "OMP_NUM_THREADS": "1",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert finished.returncode == 0, finished.stderr
+    assert finished.stdout.strip() == "1"
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
+@pytest.mark.structural
+def test_wide_raises_the_thread_count_to_the_cores_it_owns(scratch: Path) -> None:
+    # The exception, for measuring something that is itself parallel: rayon in
+    # the Rust backend, a torch intra-op reduction, the CPU parallelism of
+    # #344. One thread would measure the wrong thing there.
+    cores = subprocess.run(
+        ["nproc"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    finished = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f". {LOCKS}; with_lock measure --wide -- bash -c "
+            f'"echo \\$OMP_NUM_THREADS \\$RAYON_NUM_THREADS \\$SAL_MEASURE_THREADS"',
+        ],
+        cwd=REPO_ROOT,
+        env={
+            "SAL_SCRATCH": str(scratch),
+            "PATH": "/usr/bin:/bin",
+            "OMP_NUM_THREADS": "1",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert finished.returncode == 0, finished.stderr
+    assert finished.stdout.split() == [cores, cores, cores]
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
+@pytest.mark.structural
+def test_a_validation_may_not_take_the_whole_host(scratch: Path) -> None:
+    # A validation shares the host with two siblings, so it may not claim the
+    # cores they are using. Refusing beats quietly oversubscribing, which would
+    # slow all three and show up as nothing but noise in a later measurement.
+    finished = subprocess.run(
+        ["bash", "-c", f". {LOCKS}; with_lock validate --wide -- true"],
+        cwd=REPO_ROOT,
+        env={"SAL_SCRATCH": str(scratch), "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert finished.returncode != 0
+    assert "does not own the host" in finished.stderr
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
+@pytest.mark.critical
+@pytest.mark.structural
+def test_wide_does_not_forfeit_exclusivity(scratch: Path) -> None:
+    # The obvious way to get --wide wrong is to treat it as a separate, weaker
+    # path. A wide measurement still takes every lock.
+    elapsed = _run(["validate", "measure --wide"], scratch)
+    assert elapsed >= 1.5 * JOB, (
+        f"a wide measurement ran beside a validation: {elapsed:.2f}s"
+    )
