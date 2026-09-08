@@ -566,6 +566,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
         instances,
         budget,
         seeds=(0,),
+        workers=1,
     )
     hits = result.hits()
 

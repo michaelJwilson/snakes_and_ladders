@@ -674,7 +674,7 @@ File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count325
 \l__pdf_internal_box=\box67
 )
-(/home/user/wt-333/docs/textbook.aux)
+(/home/user/wt-313-rl/docs/textbook.aux)
 \openout1 = `textbook.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 10.
@@ -775,7 +775,8 @@ File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman
 )
 Package hyperref Info: Link coloring OFF on input line 10.
 
-(/home/user/wt-333/docs/textbook.out) (/home/user/wt-333/docs/textbook.out)
+(/home/user/wt-313-rl/docs/textbook.out)
+(/home/user/wt-313-rl/docs/textbook.out)
 \@outlinefile=\write4
 \openout4 = `textbook.out'.
 
@@ -797,7 +798,7 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 (/usr/share/texlive/texmf-dist/tex/latex/microtype/mt-msb.cfg
 File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
 )
-(/home/user/wt-333/docs/textbook.toc [1
+(/home/user/wt-313-rl/docs/textbook.toc [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}])
 \tf@toc=\write5
@@ -815,42 +816,66 @@ cmm/m/it/10.95 A[]\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.95 k[]; k[]\OT1/cmr/m/n/
  \OMS/cmsy/m/n/10.95 ^^@ [] \OML/cmm/m/it/10.95 Z[];
  []
 
-[4]
-
-Package natbib Warning: Citation `neal2011' on page 5 undefined on input line 1
-95.
-
-
-Package natbib Warning: Citation `hoffman2014' on page 5 undefined on input lin
-e 215.
-
-
-Overfull \hbox (50.26427pt too wide) detected at line 224
-[][][][] \OT1/cmr/m/n/10.95 = []1 \OMS/cmsy/m/n/10.95 ^^@ [][][] \OT1/cmr/m/n/1
-0.95 + []\OML/cmm/m/it/10.95 ;  [] "[] \OT1/cmr/m/n/10.95 = \OML/cmm/m/it/10.95
- ^^V \OMS/cmsy/m/n/10.95 ^^@ [] []\OML/cmm/m/it/10.95 ;  [] [] \OT1/cmr/m/n/10.
-95 = \OML/cmm/m/it/10.95 m[] [] "[] \OT1/cmr/m/n/10.95 + (1 \OMS/cmsy/m/n/10.95
- ^^@ \OML/cmm/m/it/10.95 m[]\OT1/cmr/m/n/10.95 ) [] []\OML/cmm/m/it/10.95 ;
- []
-
-
-Package natbib Warning: Citation `neal2011' on page 5 undefined on input line 2
-41.
-
-[5
-! pdfTeX error (font expansion): auto expansion is only possible with scalable 
-fonts.
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.262 
-       
+[4] [5] [6] [7]
+<figures/sim_tree.pdf, id=382, 469.755pt x 289.08pt>
+File: figures/sim_tree.pdf Graphic file (type pdf)
+<use figures/sim_tree.pdf>
+Package pdftex.def Info: figures/sim_tree.pdf  used on input line 434.
+(pdftex.def)             Requested size: 317.07614pt x 195.12498pt.
+<figures/jc_transition.pdf, id=383, 390.25798pt x 245.718pt>
+File: figures/jc_transition.pdf Graphic file (type pdf)
+<use figures/jc_transition.pdf>
+Package pdftex.def Info: figures/jc_transition.pdf  used on input line 442.
+(pdftex.def)             Requested size: 317.07614pt x 199.64162pt.
+Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
+put line 457.
+ [8 <./figures/sim_tree.pdf>] [9 <./figures/jc_transition.pdf>]
+[10] [11] [12] [13] [14] [15] (./coupled_figure.tex) [16] [17] [18] [19]
+[20] (/home/user/wt-313-rl/docs/textbook.bbl [21] [22]) [23] [24] [25] [26]
+(/home/user/wt-313-rl/docs/textbook.aux)
+ ***********
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-01-22>
+ ***********
+Package rerunfilecheck Info: File `textbook.out' has not changed.
+(rerunfilecheck)             Checksum: 5E6B14CD604A5D1D838B942DB93B904A;11538.
+ ) 
 Here is how much of TeX's memory you used:
- 24317 strings out of 476106
- 442210 string characters out of 5793934
- 1942975 words of memory out of 5000000
- 45733 multiletter control sequences out of 15000+600000
- 573518 words of font info for 143 fonts, out of 8000000 for 9000
+ 25094 strings out of 476106
+ 456805 string characters out of 5793934
+ 2025975 words of memory out of 5000000
+ 46256 multiletter control sequences out of 15000+600000
+ 579278 words of font info for 204 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
- 89i,12n,96p,1005b,520s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 89i,12n,96p,1005b,1182s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ </root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk></u
+sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/sha
+re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/share/tex
+live/texmf-dist/fonts/type1/public/amsfonts/cm/cmcsc10.pfb></usr/share/texlive/
+texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texlive/texmf-
+dist/fonts/type1/public/amsfonts/cmextra/cmex8.pfb></usr/share/texlive/texmf-di
+st/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-dist/fon
+ts/type1/public/amsfonts/cm/cmmi5.pfb></usr/share/texlive/texmf-dist/fonts/type
+1/public/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
+c/amsfonts/cm/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
+nts/cm/cmmib10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/c
+mextra/cmmib8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
+/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.
+pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></u
+sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb></usr/share
+/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/texlive
+/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texlive/texmf-d
+ist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/texlive/texmf-dist/font
+s/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type
+1/public/amsfonts/cm/cmsy6.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
+c/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
+nts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/sy
+mbols/msbm10.pfb>
+Output written on /home/user/wt-313-rl/docs/textbook.pdf (26 pages, 462655 byte
+s).
+PDF statistics:
+ 857 PDF objects out of 1000 (max. 8388607)
+ 758 compressed objects within 8 object streams
+ 200 named destinations out of 1000 (max. 500000)
+ 41383 words of extra memory for PDF output out of 42996 (max. 10000000)
 
-!  ==> Fatal error occurred, no output PDF file produced!
