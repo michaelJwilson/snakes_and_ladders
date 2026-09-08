@@ -139,6 +139,13 @@ ALGORITHMS: dict[str, str] = {
     "opt.mixture.KMeansPlusPlus": "initializer",
     "search.spatio_sequential.graph_burn_in": "initializer",
     "opt.initialize.RandomRestart": "initializer",
+    # #364's tree starts: a distance or a spectral estimate, then a joining.
+    "search.initialize.FromDistances": "initializer",
+    "search.initialize.FromHadamard": "initializer",
+    "search.neighbor_joining.neighbor_joining": "initializer",
+    "likelihood.distance.distance_matrix": "initializer",
+    "likelihood.distance.log_det_distance": "initializer",
+    "likelihood.hadamard.hadamard_conjugation": "initializer",
     "search.infer.infer": "hill climbing",
     "search.infer.Model": "hill climbing",
     "search.infer.parsimony_search": "hill climbing",
