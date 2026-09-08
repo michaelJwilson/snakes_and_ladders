@@ -45,6 +45,11 @@ needs `frameworks`: every test that uses one of its packages skips without
 it, and `snakes_and_ladders.search.gym` is the only module that imports one
 at module level.
 
+`scipy` is a core dependency since the 0.5.0 audit (issue #376): three
+regression modules referee our neighbor joining, our Hadamard transform and
+our fit against it, and `search.maxflow`'s replacement (#388) will front its
+maximum flow.
+
 ## Building
 
 `maturin` is the PEP 517 build backend, so a normal install compiles the Rust

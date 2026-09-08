@@ -61,8 +61,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Realize the tolerance helper rather than assume it is applied by hand (#91)
 - Profile a gradient fit in memory and time across the declared `n × L × k`
   range (#232)
-- A spectral initialization for trees, on the footing the HMM's moment
-  estimators give (#364)
 - Trajectory-length adaptation (NUTS), only if a posterior the #268
   comparison reaches is one the fixed trajectory length of #333 samples badly
 
@@ -181,8 +179,26 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   passing beside the exact one, gated on the training-time benchmark
 - RL frameworks for validation and extension (#315)
 - Audit `ROADMAP.md`, `STATUS.md` and `TICKETS.md` (#283) — done at 0.4.0 by
-  #358, to be closed with #275 and #276 once it merges
-- Release 0.4.0 (#358); #236 is the earlier filing of the same release
+  #358 and again at 0.5.0 by #376, to be closed with #275 and #276
+- Release 0.4.0 (#358); #236 is the earlier filing of the same release. The
+  cut is deferred and no tag exists, so #376's 0.5.0 audit runs from #358's
+  merged pull request rather than from a tag
+- Release 0.5.0 (#376)
+- Declare `scipy` as a dependency, or keep the three referee modules skipping
+  without it — the open question #376 leaves standing
+- Merge the eight annealing entry points onto one driver, and the eight
+  enumerators onto one weighted enumeration, each against the oracle #375
+  recorded for it
+- Replace `search.maxflow`'s Dinic solver with `scipy.sparse.csgraph`'s
+  maximum flow on the ground-state hot path, measured first
+- Replace `search.potts_mcmc`'s union-find cluster labelling with
+  `rustworkx.connected_components` on the bond graph, measured first
+- Replace `learn.surrogate.GraphSurrogate` with PyTorch Geometric's
+  `GINConv` and `global_add_pool`, measured first
+- Replace `learn.ppo`'s advantage and clipped loss with TorchRL's `GAE` and
+  `ClipPPOLoss`, measured first
+- Replace `learn.rollout`'s budget bookkeeping with Gymnasium's `TimeLimit`
+  and `RecordEpisodeStatistics` wrappers, measured first
 - Release-readiness check: the changelog section, the `Cargo.toml` version
   and the tags agree (#327)
 - Run the required checks on every pull request, not only those against

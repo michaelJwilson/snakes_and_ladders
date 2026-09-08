@@ -1,6 +1,6 @@
 name: Release
 description: Consolidate the repository and cut a release.
-title: "Release 0.4.0"
+title: "Release 0.5.0"
 labels: ["priority:high", "module:infra"]
 body:
   - type: input
@@ -10,7 +10,7 @@ body:
       description: >
         The `Cargo.toml` `[package].version` this release cuts, e.g. `0.1.0`
         (CLAUDE.md's Single Version Source).
-      value: "0.4.0"
+      value: "0.5.0"
     validations:
       required: true
   - type: textarea
@@ -37,16 +37,73 @@ body:
         ticket's PR. Code duplication should be common language.
 
         Include consistency of the release template and text with respect to recent development.
+
+        The counts a worked-in document restates — the test tiers, the flat
+        module counts, the figure counts — are re-measured on the audit host
+        and dated, or the audit records why they were not.
   - type: checkboxes
     id: preconditions
     attributes:
       label: Preconditions
       description: >
-        What must hold before the gate runs; each is checked, not assumed.
+        What must hold before the gate runs; each is checked, not assumed. A
+        precondition that does not hold is recorded as not met, with what
+        follows from that, rather than waited for.
       options:
         - label: "`dev` matches `main` plus the open pull requests"
-        - label: The tag for the previous release exists
+        - label: >
+            The tag for the previous release exists. The repository carried no
+            tag at all through 0.3.0 and 0.4.0, so an audit that finds none
+            says so and names the release its baseline is instead.
+        - label: Every required check reports under the name branch protection lists, after any job rename
         - label: The applicability tables in the textbook are regenerated (`infra/problems_tables.py --write`)
+        - label: The checks ledger and the experiment index are regenerated (`infra/checks_ledger.py --write`, `infra/experiments.py`)
+  - type: checkboxes
+    id: problem-statements
+    attributes:
+      label: Every problem statement is complete
+      description: >
+        One box per problem in `docs/tex/textbook.tex`. A statement is
+        complete when it carries the five labelled parts `docs/CLAUDE.md`
+        states — the model, the supported sizes, the factor graph with its
+        sketch, an algorithm cited from the appendix, and the validation
+        naming each referee with what it does and does not establish.
+        `tests/regression/test_problem_statements_complete.py` checks the
+        shape; these boxes are for whether the content is true.
+      options:
+        - label: Phylogenetic inference
+        - label: Potts models in an external field
+        - label: Hidden Markov models
+        - label: The coupled spatio-sequential model
+        - label: Large parsimony
+        - label: Frustrated lattices
+        - label: The Gaussian mixture
+        - label: Continuous test functions
+        - label: LDPC decoding
+        - label: A problem class added since the last release has a statement of its own
+  - type: textarea
+    id: frameworks
+    attributes:
+      label: "Frameworks: validation, extension, replacement"
+      description: >
+        For each approved framework, tabulate every hand-rolled
+        implementation with an equivalent and classify it. The rule is
+        `infra/CLAUDE.md`'s: a framework is a referee until a measurement says
+        it beats what it fronts.
+      value: |
+        | ours | framework | role | action |
+        | --- | --- | --- | --- |
+        |  |  |  |  |
+
+        **Validation** — a referee test in this release's pull request; no code moves.
+
+        **Extension** — a capability we do not have; its own ticket.
+
+        **Replacement** — its own pull request, carrying both numbers and the
+        tolerance realized against the sandboxed oracle. The hand-rolled
+        implementation moves to `python/snakes_and_ladders/sandbox/` with its
+        regression tests and stays the oracle the adapter is pinned against.
+        Nothing is deleted, and no replacement is folded into this ticket.
   - type: textarea
     id: suggested-work
     attributes:
