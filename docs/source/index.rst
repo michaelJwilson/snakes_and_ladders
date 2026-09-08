@@ -168,6 +168,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.policy
    :members:
 
+.. automodule:: snakes_and_ladders.learn.relaxed
+   :members:
+
 .. automodule:: snakes_and_ladders.learn.potts
    :members:
 

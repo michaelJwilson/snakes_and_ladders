@@ -22,7 +22,7 @@ started**, on the terms §0.4 sets.
 | 2.2 Curriculum learning | Not started | — | — |
 | 2.3 Empirical validation | Not started | — | — |
 | 2.4 Tracking, ablations & leaderboard | Not started | — | — |
-| Stage 3 Research extensions | Not started | — | — |
+| Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half not started, and blocked on an oracle | Relaxation exact at every corner to 1e-11; estimator bias 0.598 to 0.036 as `tau` falls 2.0 to 0.1, standard deviation 0.165 to 3.39 over 20000 draws; deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098` | [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225) |
 
 ## §0 The Development Loop
 
@@ -1225,6 +1225,90 @@ coverage against separation, and REINFORCE against greedy on the Potts chain —
 and this file now cites them. The Aim run store (#75) is part 2, behind the
 dependency's approval; until then the Results section is typed from the
 measurement and names the script that produced it.
+
+## Stage 3 — Research Extensions
+
+**Only the half with an oracle is built.** `ROADMAP.md`'s differentiable-search
+bullet names two relaxations. Potts configurations and HMM state paths are
+enumerable, so the exact optimum, the exact expected score and the exact
+gradient are all computable and "does the relaxation find what discrete search
+finds" is falsifiable. Tree topologies at any interesting size are not, so the
+tropical Grassmannian half is not started and `TICKETS.md` records that it is
+blocked on an oracle rather than on effort
+([#211](https://github.com/michaelJwilson/snakes_and_ladders/issues/211)).
+
+**The relaxation is an extension, checked at every corner.** Over every
+configuration of an enumerable instance the relaxed score equals the discrete
+one to `1e-11` relative, for both spaces. The HMM check crosses a module
+boundary — `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
+`RelaxedHmmPath.discrete` and `snakes_and_ladders.likelihood.hmm_paths.path_log_probability`
+are independent implementations — and the relaxed objective's enumerated
+optimum is the Viterbi path.
+
+**One identity carries the result, and its boundary is not what it looks
+like.** For a multilinear objective under a factorized `q`,
+`E_q[score] = score(q)` exactly: the relaxed form at the marginals *is* the
+expected discrete score. Two plausible statements of the limit are false and
+are refuted by tests — it is not that the model must be a chain, and it is not
+that terms must be pairwise. What breaks it is a term using one site twice,
+since `E[X**2] = E[X]` for an indicator; measured, 1.000 against 0.557. It
+follows that the relaxed maximum is attained at a vertex, so the relaxation
+introduces **no optimum the discrete problem lacks** — everything a relaxed
+search loses is lost to local optima of the ascent.
+
+**The estimator bias is measured, not assumed.** Against the exact gradient
+over 20000 draws, scaled by the largest exact component:
+
+| `tau` | soft bias (SEM) | soft sd | straight-through bias (SEM) | ST sd |
+| --- | --- | --- | --- | --- |
+| 2.00 | 0.5975 (0.0012) | 0.165 | 0.5620 (0.0027) | 0.382 |
+| 1.00 | 0.3373 (0.0034) | 0.487 | 0.3233 (0.0051) | 0.723 |
+| 0.50 | 0.1400 (0.0076) | 1.077 | 0.1418 (0.0090) | 1.272 |
+| 0.20 | 0.0475 (0.0157) | 2.220 | 0.0502 (0.0165) | 2.340 |
+| 0.10 | 0.0356 (0.0240) | 3.392 | 0.0380 (0.0246) | 3.472 |
+
+Bias falls by a factor of 17 while the standard deviation rises by a factor of
+21, so no temperature is good at both. Straight-through's bias matches the soft
+estimator's within error and its variance is higher at every temperature, so on
+this problem it buys nothing.
+
+**The sampling is what costs, not the relaxation.** Against single-flip hill
+climbing over 40 shared seeds, on an antiferromagnetic chain whose optimum
+needs coordinated flips:
+
+| Method | Reached the optimum | McNemar |
+| --- | --- | --- |
+| Greedy hill climbing | 5/40 | — |
+| Deterministic relaxation | 18/40 | `p = 0.00098` |
+| Soft Gumbel-softmax | 11/40 | `p = 0.18` |
+| Straight-through | 11/40 | `p = 0.18` |
+| Annealed soft, 0.5 to 0.05 | 11/40 | `p = 0.18` |
+
+The deterministic ascent — which the identity licenses, so it is not a
+shortcut — is significantly better than the baseline; adding Gumbel noise gives
+that up for a tie, and annealing does not recover it. It is also 15% cheaper
+per run: 43.6 ms against 50.1 ms for 100 gradient steps. Three of four variants
+tie, and that is reported as a tie, per the precedent
+[#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193) set.
+
+**The budgets are not the same unit and no claim is made that they are.**
+Greedy stops at a local maximum after 3.5 decisions on average at 14 discrete
+evaluations each; the relaxation takes gradient steps and evaluates no discrete
+configuration until the end. What is matched is the restart count and the
+seeds. The advantage is not bought with the larger budget: the relaxation
+already wins at 25 gradient steps (15/40, `p = 0.0064`).
+
+**The comparison fixture is not the repository's own.** `potts_params.yaml` has
+`J = 0.75 > 0`, so its optimum is `argmax(h)` repeated and every method finds
+it. That is the third time a fixture has been too easy to separate methods —
+after [#177](https://github.com/michaelJwilson/snakes_and_ladders/issues/177),
+[#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198) and #209's planted
+spin glass — and it is why the baseline is now run before any claim is made.
+
+**Not built:** the tropical Grassmannian relaxation; the relaxation on the
+Potts *lattice*, where the identity holds but nothing has been measured; and
+any joint optimization of structure alongside continuous parameters, which is
+what the roadmap bullet ultimately asks for.
 
 ## §1.2 Requirements Ledger
 
