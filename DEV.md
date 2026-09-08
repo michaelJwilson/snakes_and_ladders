@@ -311,6 +311,15 @@ it drives the repository-consolidation audit (roadmap progress, doc/code
 consistency, duplicated machinery, suggested follow-up tickets) and gates on
 `infra/release.sh` passing before a maintainer adds the `release` label.
 
+0. **Check the ledgers name open work.** Every `TICKETS.md` bullet names the
+   issue that carries it, and a release audit checks each is still open: a
+   bullet whose carrier has closed either describes work that landed, and is
+   removed, or work that remains with nothing behind it, and is re-pointed to
+   a ticket filed then. The same reading covers the notebooks' Further Work
+   sections, which name an issue per line. Twelve such bullets and nine such
+   lines were found at the 0.5.0 audit (issue #400); the check is a reading
+   rather than a script, because it needs the issue tracker and a judgement on
+   whether the work landed.
 1. **Run the gate.** `infra/release.sh` runs every per-PR CI check
    (`ruff check`, `ruff format --check`, `mypy --strict`, `cargo clippy -D
    warnings`, `cargo fmt --check`, `cargo test --locked`) plus what CI skips
