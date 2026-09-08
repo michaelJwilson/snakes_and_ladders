@@ -140,8 +140,8 @@ algorithm, the Potts transfer matrix and the decoder of a low-density
 parity-check code are the same sum-product recursion on different graphs — a
 tree, a chain, a lattice, a Tanner graph — so one discrete/continuous
 interface serves all four. The project treats that as a design constraint
-rather than a coincidence, and enforces it structurally: `snakes_and_ladders.opt` and
-`snakes_and_ladders.learn` may import no application module, asserted by test.
+rather than a coincidence, and enforces it structurally: `sal.opt` and
+`sal.learn` may import no application module, asserted by test.
 
 [ROADMAP.md](ROADMAP.md) states the goal, the accuracy and hardware
 requirements, and the milestones.

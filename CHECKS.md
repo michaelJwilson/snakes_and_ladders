@@ -29,8 +29,6 @@ run `uv run python infra/checks_ledger.py --write`.
 
 ## `tests/regression/learn/` (40)
 
-## `tests/regression/learn/` (30)
-
 | Test | Kind | Claim |
 | --- | --- | --- |
 | `test_learn_critic.py::test_the_optimal_value_over_a_long_horizon_reaches_the_enumerated_optimum` | oracle | With enough decisions the best return from any start is the gap to the enumerated minimum energy, since single flips connect every pair of configurations. |
@@ -74,9 +72,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 | `test_learn_surrogate_pyg.py::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights` | oracle |  |
 
-## `tests/regression/likelihood/` (66)
-
-## `tests/regression/likelihood/` (65)
+## `tests/regression/likelihood/` (73)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -155,8 +151,6 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
 ## `tests/regression/opt/` (51)
-
-## `tests/regression/opt/` (46)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -240,8 +234,6 @@ run `uv run python infra/checks_ledger.py --write`.
 
 ## `tests/regression/search/` (95)
 
-## `tests/regression/search/` (71)
-
 | Test | Kind | Claim |
 | --- | --- | --- |
 | `test_alpha_expansion.py::test_two_labels_reproduce_the_exact_minimum_cut` | oracle |  |
@@ -299,7 +291,6 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_parsimony.py::test_the_unit_step_matrix_walks_the_same_path_as_fitch` | oracle | The reduction at the level of the search: the same start, the same accepted moves, the same trace, so a weighted search differs from the unit one only through the matrix it is given. |
 | `test_search_parsimony.py::test_large_parsimony_returns_the_wrong_tree_in_the_felsenstein_zone` | simulated_truth |  |
 | `test_search_ppo.py::test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget` | oracle |  |
-
 | `test_search_rl.py::test_the_known_score_is_the_likelihood_at_a_fixed_branch_length` | oracle | Against a direct call to the pruning recursion, built independently here: the environment is a wrapper, and this is the claim that it wraps what it says it does. |
 | `test_search_rl.py::test_the_fitted_score_is_the_maximized_likelihood` | oracle |  |
 | `test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum` | oracle | The exhaustive oracle, on the surface the agent actually sees. |
@@ -328,10 +319,6 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
 | `test_search_tempered.py::test_the_tempered_weight_of_the_four_taxon_topologies_is_the_enumerated_one` | oracle |  |
 | `test_search_tempered.py::test_the_tempered_weight_of_a_labelling_is_the_enumerated_one` | oracle |  |
-
-| `test_search_surrogate.py::test_learned_surrogates_rank_held_out_neighbourhoods` | simulated_truth | Six alignments, every topology of each fitted (90 fits at 200 sites), split by alignment: three to train, two to validate, one held out. |
-| `test_search_surrogate.py::test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments` | oracle | Against a full fit of every topology on three alignments: the plug-in bound and the parsimony bound each put the fitted best first, at a hundredth (2.4 ms against 250 ms) and a thousandth of the cost. |
-| `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
 | `test_search_topology.py::test_enumeration_matches_count_topologies` | oracle |  |
 | `test_search_topology.py::test_nni_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_spr_neighbour_count_and_validity` | oracle |  |
@@ -341,14 +328,11 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_tree_features.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle |  |
 | `test_search_tree_features.py::test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget` | simulated_truth |  |
 | `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
-
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
-## `tests/regression/sim/` (44)
-
-## `tests/regression/sim/` (43)
+## `tests/regression/sim/` (50)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -403,6 +387,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-331 checks.
-
-290 checks.
+344 checks.
