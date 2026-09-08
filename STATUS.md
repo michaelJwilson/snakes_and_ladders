@@ -87,6 +87,65 @@ section — is stated in `ROADMAP.md` §0.2, `DEV.md`, and `infra/CLAUDE.md`
 alike, alongside the rule that decides which documents may repeat detail
 ([#164](https://github.com/michaelJwilson/snakes_and_ladders/pull/164)).
 
+**CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
+three negative results
+([#344](https://github.com/michaelJwilson/snakes_and_ladders/issues/344)).**
+`snakes_and_ladders.parallel.map_tasks` runs a loop of independent tasks on a
+thread or process pool with results in input order and one generator per
+task, spawned in item order, so a run at four workers is bitwise the run at
+one; `opt.fit.fit_from`, `opt.budget.compare` and
+`search.support.bootstrap_support` go through it with an explicit `workers=`,
+and each pins `workers=1` against `workers=4` with `==` or `torch.equal`. The
+inventory below is the serial baseline each site was measured from, the
+matrix the result at 1, 2 and 4 process workers with the intra-op thread
+count at 1 and at the default (4). Measured once per cell on the 4-core
+development host at a 1-minute load of 2.2 rising to 3.8 during the run —
+shared with other jobs, so the wall clocks carry contention and the ratios
+are what is read. The pool's spawn and import cost 1.81 s for 4 workers with
+trivial tasks, more than the multi-start fit or the comparison does in total
+and a third of the bootstrap; no site reaches the 2× at 4 workers the plan
+set, so all three stay serial by recommendation (callers pass `1`) and keep
+the argument, which is the contract a bigger tier or a bigger machine is
+measured against. The one positive number is inside a task, not across
+them: the serial multi-start fit at the default thread count is 2.87× the
+fit at one thread, because torch's intra-op parallelism over 1000 sites
+already uses the cores, which is why the sites leave the count at the
+default rather than pinning one thread per worker as the plan assumed.
+
+| site | per-task (s) | count | serial wall (s) | loop fraction | Amdahl bound at 4 |
+| --- | --- | --- | --- | --- | --- |
+| `opt.fit.fit_from` (8 taxa, 1000 sites, 8 starts) | 0.17 | 8 | 1.40 | 0.999 | 3.99× |
+| `opt.budget.compare` (Rastrigin, 4 instances × 4 seeds, 4 fits each) | 0.03 | 16 | 0.53 | 1.000 | 4.00× |
+| `search.support.bootstrap_support` (5 taxa, 300 sites, 8 replicates, NNI) | 0.66 | 8 | 5.81 | 0.910 | 3.15× |
+
+| site | intra-op threads | workers | wall (s) | speedup | equal to serial |
+| --- | --- | --- | --- | --- | --- |
+| `opt.fit.fit_from` | 1 | 1 | 1.40 | 1.00× | yes |
+| `opt.fit.fit_from` | 1 | 2 | 3.24 | 0.43× | yes |
+| `opt.fit.fit_from` | 1 | 4 | 3.05 | 0.46× | yes |
+| `opt.fit.fit_from` | default | 1 | 0.49 | 2.87× | yes |
+| `opt.fit.fit_from` | default | 2 | 3.14 | 0.44× | yes |
+| `opt.fit.fit_from` | default | 4 | 3.21 | 0.44× | yes |
+| `opt.budget.compare` | 1 | 1 | 0.53 | 1.00× | yes |
+| `opt.budget.compare` | 1 | 2 | 3.19 | 0.17× | yes |
+| `opt.budget.compare` | 1 | 4 | 2.95 | 0.18× | yes |
+| `opt.budget.compare` | default | 1 | 0.49 | 1.09× | yes |
+| `opt.budget.compare` | default | 2 | 3.13 | 0.17× | yes |
+| `opt.budget.compare` | default | 4 | 3.13 | 0.17× | yes |
+| `search.support.bootstrap_support` | 1 | 1 | 5.28 | 1.00× | yes |
+| `search.support.bootstrap_support` | 1 | 2 | 5.41 | 0.98× | yes |
+| `search.support.bootstrap_support` | 1 | 4 | 4.79 | 1.10× | yes |
+| `search.support.bootstrap_support` | default | 1 | 4.89 | 1.08× | yes |
+| `search.support.bootstrap_support` | default | 2 | 4.70 | 1.12× | yes |
+| `search.support.bootstrap_support` | default | 4 | 5.65 | 0.93× | yes |
+
+Speedup is against the site's serial run at one intra-op thread; the serial
+wall clock in the inventory includes the setup the loop does not carry (the
+alignment and the starting search for the bootstrap). The sites the plan
+lists after these — the candidate fits of `search.infer`, `learn.rollout`
+batches, tempering replicas, `qa.build`, `check_notebooks` and `pytest-xdist`
+— are measured on the same matrix before any is switched on (`TICKETS.md`).
+
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an

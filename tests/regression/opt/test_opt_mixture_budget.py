@@ -304,6 +304,7 @@ def measure(n_starts: int, reference: float) -> Measurement:
         [fixture] * n_starts,
         BUDGET,
         seeds=(0,),
+        workers=1,
         known=[reference] * n_starts,
     )
     return Measurement(comparison, reference, seconds)
