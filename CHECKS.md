@@ -232,7 +232,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (93)
+## `tests/regression/search/` (95)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -317,6 +317,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_surrogate.py::test_learned_surrogates_rank_held_out_neighbourhoods` | simulated_truth | Six alignments, every topology of each fitted (90 fits at 200 sites), split by alignment: three to train, two to validate, one held out. |
 | `test_search_surrogate.py::test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments` | oracle | Against a full fit of every topology on three alignments: the plug-in bound and the parsimony bound each put the fitted best first, at a hundredth (2.4 ms against 250 ms) and a thousandth of the cost. |
 | `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
+| `test_search_tempered.py::test_the_tempered_weight_of_the_four_taxon_topologies_is_the_enumerated_one` | oracle |  |
+| `test_search_tempered.py::test_the_tempered_weight_of_a_labelling_is_the_enumerated_one` | oracle |  |
 | `test_search_topology.py::test_enumeration_matches_count_topologies` | oracle |  |
 | `test_search_topology.py::test_nni_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_spr_neighbour_count_and_validity` | oracle |  |
@@ -385,4 +387,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-342 checks.
+344 checks.
