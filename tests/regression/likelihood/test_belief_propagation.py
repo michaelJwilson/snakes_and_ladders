@@ -27,6 +27,7 @@ from snakes_and_ladders.likelihood.belief_propagation import (
     belief_propagation,
 )
 from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_partition
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 RELATIVE_TOLERANCE = 1e-11
@@ -143,6 +144,36 @@ def test_the_bethe_deviation_is_the_measured_size(
     # the count is a threshold crossing on a float residual, so a machine
     # summing the messages in a different order can land a sweep either side.
     assert result.iterations == pytest.approx(sweeps, rel=0.2)
+
+
+@pytest.mark.oracle
+def test_the_bethe_deviation_on_the_registry_lattice_is_the_measured_size() -> None:
+    # The instance the registry declares, refereed by enumeration rather than
+    # by the strip transfer matrix: 3x3 at 3 states is 19,683 configurations,
+    # so `log Z` and every marginal are summed exactly. This is the deviation
+    # `docs/nb/potts_chain.ipynb` reports, pinned here so the notebook states
+    # nothing the suite does not.
+    instance = fixture("potts_lattice", "ci").params
+    graph = lattice_graph(instance.shape, instance.boundary, instance.coupling)
+    # The gauge the chain loader canonicalizes to and the lattice loader does
+    # not. `log Z` shifts with the gauge and the relative deviation with it,
+    # so the notebook and this test must fix it the same way.
+    field = instance.field - math.log(float(np.exp(instance.field).sum()))
+    exact = enumerate_potts(graph, field)
+
+    result = belief_propagation(graph, field)
+
+    # Pinned to the order of magnitude, as the curve above is: what the
+    # section reports is how far the approximation sits from exact on a graph
+    # with four independent cycles, not a digit of it.
+    absolute = abs(result.bethe_log_partition - exact.log_partition)
+    assert absolute == pytest.approx(1.47e-2, rel=0.1)
+    assert _relative(result.bethe_log_partition, exact.log_partition) == pytest.approx(
+        4.67e-3, rel=0.1
+    )
+    assert np.abs(result.single_site - exact.single_site).max() == pytest.approx(
+        4.25e-3, rel=0.1
+    )
 
 
 @pytest.mark.mathematical
