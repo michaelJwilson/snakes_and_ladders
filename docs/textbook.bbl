@@ -1,4 +1,4 @@
-\begin{thebibliography}{42}
+\begin{thebibliography}{44}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -9,6 +9,12 @@
 Shun-ichi Amari.
 \newblock \emph{Information Geometry and Its Applications}.
 \newblock Springer, Tokyo, 2016.
+
+\bibitem[Anthony et~al.(2017)Anthony, Tian, and Barber]{anthony2017}
+Thomas Anthony, Zheng Tian, and David Barber.
+\newblock Thinking fast and slow with deep learning and tree search.
+\newblock In \emph{Advances in Neural Information Processing Systems},
+  volume~30, 2017.
 
 \bibitem[Arthur and Vassilvitskii(2007)]{arthur2007}
 David Arthur and Sergei Vassilvitskii.
@@ -81,12 +87,6 @@ Brendan~J. Frey.
 \newblock \emph{Graphical Models for Machine Learning and Digital
   Communication}.
 \newblock MIT Press, Cambridge, Massachusetts, 1998.
-
-\bibitem[Gallager(1962)]{gallager1962}
-Robert~G. Gallager.
-\newblock Low-density parity-check codes.
-\newblock \emph{IRE Transactions on Information Theory}, 8\penalty0
-  (1):\penalty0 21--28, 1962.
 
 \bibitem[Geyer(1991)]{geyer1991}
 Charles~J. Geyer.
@@ -193,15 +193,34 @@ Sebastian Raschka.
 \newblock \emph{Build a Large Language Model (From Scratch)}.
 \newblock Manning Publications, 2024.
 
-\bibitem[Richardson and Urbanke(2008)]{richardson2008}
-Tom Richardson and R{\"u}diger Urbanke.
-\newblock \emph{Modern Coding Theory}.
-\newblock Cambridge University Press, Cambridge, 2008.
-
 \bibitem[Rosen(2019)]{rosen2019}
 Kenneth~H. Rosen.
 \newblock \emph{Discrete Mathematics and Its Applications}.
 \newblock McGraw-Hill, 8th edition, 2019.
+
+\bibitem[Schulman et~al.(2016)Schulman, Moritz, Levine, Jordan, and
+  Abbeel]{schulman2016}
+John Schulman, Philipp Moritz, Sergey Levine, Michael~I. Jordan, and Pieter
+  Abbeel.
+\newblock High-dimensional continuous control using generalized advantage
+  estimation.
+\newblock In \emph{International Conference on Learning Representations}, 2016.
+
+\bibitem[Schulman et~al.(2017)Schulman, Wolski, Dhariwal, Radford, and
+  Klimov]{schulman2017}
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov.
+\newblock Proximal policy optimization algorithms.
+\newblock \emph{arXiv preprint arXiv:1707.06347}, 2017.
+
+\bibitem[Silver et~al.(2017)Silver, Schrittwieser, Simonyan, Antonoglou, Huang,
+  Guez, Hubert, Baker, Lai, Bolton, Chen, Lillicrap, Hui, Sifre, van~den
+  Driessche, Graepel, and Hassabis]{silver2017}
+David Silver, Julian Schrittwieser, Karen Simonyan, Ioannis Antonoglou, Aja
+  Huang, Arthur Guez, Thomas Hubert, Lucas Baker, Matthew Lai, Adrian Bolton,
+  Yutian Chen, Timothy Lillicrap, Fan Hui, Laurent Sifre, George van~den
+  Driessche, Thore Graepel, and Demis Hassabis.
+\newblock Mastering the game of go without human knowledge.
+\newblock \emph{Nature}, 550:\penalty0 354--359, 2017.
 
 \bibitem[Sutton and Barto(2018)]{suttonbarto2018}
 Richard~S. Sutton and Andrew~G. Barto.

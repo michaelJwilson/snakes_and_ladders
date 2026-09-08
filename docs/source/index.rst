@@ -30,6 +30,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.fixtures
    :members:
 
+.. automodule:: snakes_and_ladders.parallel
+   :members:
+
 .. automodule:: snakes_and_ladders.numerics_rust
    :members:
 
@@ -192,6 +195,18 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.exact
    :members:
 
+.. automodule:: snakes_and_ladders.learn.critic
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.actor_critic
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.ppo
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.planning
+   :members:
+
 .. automodule:: snakes_and_ladders.learn.surrogate
    :members:
 
@@ -310,9 +325,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.rl_reward_surface
-   :members:
-
-.. automodule:: snakes_and_ladders.qa.topology_accuracy
    :members:
 
 .. automodule:: snakes_and_ladders.scripts

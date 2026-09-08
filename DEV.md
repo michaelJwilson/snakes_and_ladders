@@ -181,6 +181,55 @@ Every entry point — a QA script, `snakes_and_ladders.qa.build`,
 
 `cProfile` cannot see inside a NumPy call or a Rust kernel; `pytest-benchmark` reports wall clock and nothing about cache, branches or vector width; Criterion times a kernel with its inputs already in Rust. Each ranks or times, none explains — the explanation is a change and its measured effect.
 
+### Running With Workers
+
+`snakes_and_ladders.parallel.map_tasks` is the one seam for CPU parallelism over
+independent tasks (issue #344); no module keeps a pool of its own. Three sites
+go through it — `opt.fit.fit_from` (starts), `opt.budget.compare` (cells of
+method × instance × seed) and `search.support.bootstrap_support` (replicates) —
+and each takes `workers=` explicitly.
+
+* **`workers` is an argument, never a default or an environment variable.**
+  `workers=1` is the serial loop; the QA runner and a test pass `1`; a run on
+  a bigger machine passes its core count and gets the same numbers faster. A
+  default read from the machine would change a run nobody edited.
+* **A parallel run is bitwise the serial run.** Randomness is one generator
+  per task, spawned in item order from the caller's with
+  `numpy.random.Generator.spawn`, so task `i` draws the same stream at every
+  worker count; results return in input order; and every worker runs at the
+  intra-op thread count the site names, as the serial path does, so the same
+  kernels reduce in the same order. Each site pins `workers=1` against
+  `workers=4` with `==` or `torch.equal`, never `allclose`.
+* **The thread rule.** `torch` and BLAS multithread inside a kernel, so a
+  pool of workers each at the default thread count oversubscribes the cores;
+  where a pool pays, pin `intra_op_threads` to cores divided by workers.
+  `map_tasks` sets it per worker from that argument (`None` leaves the
+  process's setting alone) and restores the caller's afterwards. The three
+  sites pass `None`, by measurement: pinning one thread slowed the serial
+  multi-start fit 2.9× (1.40 s against 0.49 s at 8 taxa × 1000 sites),
+  because torch's intra-op parallelism over the sites is the parallelism that
+  pays there, and no pool reached 2×. Serial and workers then run at the
+  same count on one machine, which is what keeps the two bitwise equal. A
+  site whose task body is a `torch` op above the parallel grain, or a Rust
+  kernel under `allow_threads`, is the case for `backend="threads"`; a Python
+  loop that holds the GIL is the case for `"processes"`, at the cost of
+  pickling the task and result and of spawning the pool (the `spawn` start
+  method, the one that works with `torch` and on Apple Silicon: workers
+  import the package afresh, 1.81 s for 4 workers on the 4-core host, a
+  fixed cost per call that `STATUS.md` reports beside each speedup).
+* **The hardware.** Speedups are measured on fixed hardware per **No CI
+  Profiling** above, with the core count and the 1-minute load stated beside
+  every number; `STATUS.md` §0 carries the inventory of loops and the
+  speedup matrix at 1, 2 and 4 workers with intra-op threads at 1 and at the
+  default. A site under 2× at 4 workers is recorded there as a negative result
+  and left serial — all three sites are, on the 4-core host, so a caller
+  passes `workers=1` until a measurement on its own hardware says otherwise.
+  Time only on an uncontended machine: a shared host at load above its core
+  count reports the contention, not the code.
+* **Not yet through the seam** (`TICKETS.md`, #344): the candidate fits of
+  `search.infer`, `learn.rollout` batches, tempering replicas, `qa.build` and
+  `infra/check_notebooks.py`, and `pytest-xdist` for the suite.
+
 ### Core Development Standards
 
 * **Reproducibility:** Pin the environment. Use `--locked` for CI installs, pin runner images (`ubuntu-24.04`), and seed every generator through `np.random.default_rng(seed)`.

@@ -300,7 +300,7 @@ def hamiltonian(
 
 def sample(
     objective: Objective,
-    seed: int,
+    generator: torch.Generator,
     n_samples: int,
     *,
     step_size: float,
@@ -316,8 +316,11 @@ def sample(
     ----------
     objective : Objective
         Read as an unnormalized negative log density.
-    seed : int
-        Seed for ``torch.Generator``, so a chain is reproducible from it.
+    generator : torch.Generator
+        The stream every momentum and acceptance draw comes from, passed in
+        rather than seeded here (`sim/CLAUDE.md`): a chain is reproducible
+        from ``torch.Generator().manual_seed(seed)`` at the call site, and two
+        chains drawn from one generator are two chains.
     n_samples : int
         Draws recorded after burn-in.
     step_size : float
@@ -361,7 +364,6 @@ def sample(
         msg = f"temperature must be positive, got {temperature}"
         raise ValueError(msg)
 
-    generator = torch.Generator().manual_seed(seed)
     position = _start(objective, theta0)
 
     draws = torch.empty((n_samples, position.shape[0]), dtype=torch.float64)
@@ -416,7 +418,7 @@ class Annealed:
 def anneal(
     objective: Objective,
     schedule: Schedule,
-    seed: int,
+    generator: torch.Generator,
     *,
     step_size: float,
     n_steps: int = DEFAULT_STEPS,
@@ -428,9 +430,9 @@ def anneal(
     One proposal per schedule step at that step's temperature, tracking the
     lowest objective seen. The transition at each step is exactly the one
     :func:`sample` runs at a constant temperature, so a constant schedule
-    reproduces a chain draw for draw at the same seed; what annealing adds is
-    that the temperature falls, and what it buys is measured against the
-    alternatives at equal force evaluations and never assumed.
+    reproduces a chain draw for draw from generators seeded alike; what
+    annealing adds is that the temperature falls, and what it buys is measured
+    against the alternatives at equal force evaluations and never assumed.
 
     Parameters
     ----------
@@ -441,8 +443,8 @@ def anneal(
     schedule : Schedule
         Temperature per proposal. Its length is the budget in proposals;
         ``force_evaluations`` on the result is the budget in gradients.
-    seed : int
-        Seed for ``torch.Generator``.
+    generator : torch.Generator
+        As :func:`sample`.
     step_size, n_steps, theta0, integrator
         As :func:`sample`. The step needs no rescaling with temperature ---
         see the module note --- but a step that is stable at the hot end can
@@ -453,7 +455,6 @@ def anneal(
     Annealed
     """
     _check_trajectory(step_size, n_steps)
-    generator = torch.Generator().manual_seed(seed)
     position = _start(objective, theta0)
 
     best, best_value = position.clone(), float(objective(position))
@@ -536,7 +537,7 @@ def _swap_log_ratio(
 def parallel_tempering(
     objective: Objective,
     temperatures: tuple[float, ...],
-    seed: int,
+    generator: torch.Generator,
     n_rounds: int,
     *,
     step_size: float,
@@ -555,9 +556,9 @@ def parallel_tempering(
     which ``opt`` cannot import and which moves spins rather than a vector.
 
     **The replicas must not share a stream and must be reproducible from one
-    seed.** One generator seeded from ``seed`` draws a seed per replica and
-    then only the exchange uniforms, so the replicas are independent streams
-    and one seed reproduces the run. Sharing one stream would correlate the
+    generator.** The caller's ``generator`` draws a seed per replica and then
+    only the exchange uniforms, so the replicas are independent streams and
+    one generator state reproduces the run. Sharing one stream would correlate the
     replicas, which is the whole point lost while every diagnostic looks
     healthy.
 
@@ -570,8 +571,9 @@ def parallel_tempering(
     temperatures : tuple[float, ...]
         The ladder, coldest first; at least two, all positive, strictly
         increasing so that adjacent pairs are the ones that exchange.
-    seed : int
-        Seed for the parent ``torch.Generator``.
+    generator : torch.Generator
+        The parent stream, seeded by the caller (issue #337); it draws the
+        replicas' seeds and the exchange uniforms.
     n_rounds : int
         Transitions per replica, at least one. The budget in proposals is
         ``n_rounds * len(temperatures)``; ``force_evaluations`` on the result
@@ -608,7 +610,7 @@ def parallel_tempering(
         msg = f"n_rounds must be at least 1, got {n_rounds}"
         raise ValueError(msg)
 
-    parent = torch.Generator().manual_seed(seed)
+    parent = generator
     n_replicas = len(temperatures)
     children = [
         torch.Generator().manual_seed(int(child))
