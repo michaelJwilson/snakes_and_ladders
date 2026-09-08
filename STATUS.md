@@ -444,6 +444,20 @@ implementation that were simply broken would fail both zones, and one result
 alone cannot tell the two apart. This is the repository's first fixture where
 a named method's failure is a theorem rather than a defect.
 
+**Sankoff's weighted step matrix, of which Fitch is the unit case**
+([#335](https://github.com/michaelJwilson/snakes_and_ladders/issues/335)).
+`sankoff_score` runs the same post-order pass with a `(k, n_sites)` cost
+array in place of a bitmask — the pruning recursion in the min-plus
+semiring — and is pinned twice: under the unit matrix it equals `fitch_score`
+exactly on all 15 topologies of the five-taxon fixture at 1,200 sites, and
+under a planted asymmetric matrix it equals a brute force over the 64
+internal labellings of the four-taxon tree, reading every edge parent to
+child. On the eight-taxon fixture it costs 0.66 ms at 2,000 sites and 11.5 ms
+at 20,000 against Fitch's 0.09 ms and 0.87 ms — 7 to 13 times, the price of
+a `(k, k, n_sites)` temporary per child. The score is a rooted tree's, so an
+asymmetric matrix scores each rooting differently; that is the definition,
+and the search is what refuses it.
+
 **Belief propagation is now measured over an ensemble, not three fixtures.**
 `snakes_and_ladders.sim.graph.erdos_renyi_graph` draws `G(n, p)` beside `lattice_graph`,
 and BP is checked per draw against enumeration. Over 60 sparse draws, 106
@@ -1336,6 +1350,29 @@ paths (`snakes_and_ladders.search.alpha_expansion` carries a lattice ICM as its 
 which is a different object). Single-flip local search over the Potts chain exists as an RL
 environment, not as a classical baseline suite.
 
+**Large parsimony: the same climb, one pass per candidate, and it finds the
+wrong tree where it should**
+([#335](https://github.com/michaelJwilson/snakes_and_ladders/issues/335)).
+`parsimony_search` walks NNI or SPR on the Fitch score or a metric step
+matrix, with `infer`'s accounting — a budget in candidates scored, each
+topology scored once — and enumeration as its oracle. From every one of the
+15 starts at five taxa and the 105 at six, under both neighbourhoods and both
+scores, it reaches the enumerated minimum, which is unique and the
+generating tree at both sizes (1163 changes at five taxa and 1,200 sites;
+1792 at six taxa and 1,500 sites, 37 ahead of the runner-up); a median
+search scores 17 candidates under NNI and 61 under SPR at six taxa, the
+whole 105-start study running in 0.2 to 3.4 s where the likelihood study on
+the same fixture is release-gated at 50 s. Eight taxa is where the
+neighbourhoods separate: over its 10,395 enumerated topologies at 1,000 sites
+NNI reached the minimum from 9 of 12 random starts and SPR from 12 of 12, at
+medians of 60 and 289 candidates. On the Felsenstein-zone fixture at 2,000
+sites the search returns, from every start, the tree that groups the two
+long branches at 1869 changes, where the generating tree scores 1982; maximum
+likelihood on the same alignment puts the generating tree first by 12.99 log
+units, and transition/transversion weighting does not move parsimony's
+answer (3013 against 3273). The search is right and the criterion is wrong,
+which is what the fixture is for.
+
 **A surrogate ranks the SPR neighbourhood the lazy score could not**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). The
 one-evaluation lazy score of #289 put the fitted best at rank one in 1 of 6
@@ -1633,7 +1670,7 @@ what the roadmap bullet ultimately asks for.
 | Phylogenetic RF ≤0.05 against simulated truth | **Met**, from 125 sites upward ([#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148)) |
 | Potts/HMM parameter recovery within 95% intervals | **Met** for the 1-D chain, the discrete HMM ([#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116)) and the 2-D lattice — realized 0.981 at 100 samples and 0.956 at 400 and 1600, over 40 replicates each |
 | Precise state-sequence decoding | **Not started** — no Viterbi decoder (issue #175) |
-| Parity with exact oracles on small `n` | **Met** for tree search against exhaustive enumeration ([#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128)) |
+| Parity with exact oracles on small `n` | **Met** for tree search against exhaustive enumeration ([#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128)), and for large parsimony from every start at five and six taxa ([#335](https://github.com/michaelJwilson/snakes_and_ladders/issues/335)) |
 | Parity with IQ-TREE 2 / RAxML-NG on large `n` | **Not started**; the tools are not in the environment (issue #126) |
 | `O(n×L×k)` memory inside 16 GB / 24 GB | **Met**: 87.2 MB at 100 taxa by 11,000 sites on the worst-case (caterpillar) topology, 879 MB at the declared maximum — a factor of 20 inside 16 GB, with each figure pinned against the allocator to within 2.5% |
 | CUDA, Metal/MPS and CPU dispatch | **CPU only**; selection logic landed ([#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112)), accelerator paths not implemented |
