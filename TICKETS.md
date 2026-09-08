@@ -24,11 +24,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code rather than the zero word (#340)
 - Define one fixture API across trees, lattices and chains (#132)
-- Convert the sixteen signatures that still take a seed where the rule says a
-  generator (#240)
-- Move `PottsParams`/`load_potts_params` out of `sal.opt.potts`, so
-
-- Move `PottsParams`/`load_potts_params` out of `sal.opt.potts`, so
+- Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of keeping
   its own copy of the exact open-chain recursion (#186)
 - Additional evolutionary models (#107)
@@ -106,9 +102,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-- A feature set for the tree environment, with the unidentifiable-constant
-  invariance pinned
-
 - The surrogate-bound columns of #308 in the tree feature set — the plug-in
   lower and parsimony upper bounds — measured at the budget of
   `docs/experiments/005-tree-policy-features.md`
@@ -116,12 +109,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - The factor-graph environment over #296, the #308 surrogate as a tree reward
   model, and the budget-matched harness of #281 for the RL comparisons
   (#313, what `dev` could not yet carry)
-
-- The surrogate-bound columns of #308 in the tree feature set — the plug-in
-  lower and parsimony upper bounds — measured at the budget of
-  `docs/experiments/005-tree-policy-features.md`
-- PPO and a learned state-value critic
-
 - Truth as a terminal penalty, never a training signal
 - Train a phylogenetic policy and report its learning curve against the
   enumerated expected return (#178)

@@ -26,11 +26,11 @@ its own exact open-chain sampler is the general-per-edge-coupling form of the
 one here. The two are not consolidated into one: ``opt/CLAUDE.md``'s "no
 application imports" rule (enforced by
 ``tests/regression/opt/test_opt_objective.py``) forbids this module
-importing anything under ``sal.sim``, so ``simulate_chains`` keeps its own
+importing anything under ``snakes_and_ladders.sim``, so ``simulate_chains`` keeps its own
 copy rather than delegating to it. Issue #186 tracks resolving the
 duplication, by moving ``PottsParams``/``load_potts_params`` out
-of ``sal.opt`` the way issue #171 moved ``sal.opt.hmm``'s truth type into
-``sal.sim.hmm``.
+of ``snakes_and_ladders.opt`` the way issue #171 moved ``snakes_and_ladders.opt.hmm``'s truth type into
+``snakes_and_ladders.sim.hmm``.
 """
 
 from __future__ import annotations
@@ -222,7 +222,7 @@ def graph_statistics(
     edges : Sequence[tuple[int, int]]
         Undirected edges as ``(i, j)`` node indices. Passed rather than taken
         from a `PottsGraph`: ``opt/CLAUDE.md`` forbids importing
-        ``sal.sim``, so a caller unpacks the graph.
+        ``snakes_and_ladders.sim``, so a caller unpacks the graph.
     n_nodes : int
         Sites in the graph.
 
@@ -281,7 +281,7 @@ class PottsLatticeObjective:
 
     The lattice counterpart of :class:`PottsObjective`, and deliberately the
     same shape: an unconstrained vector, a differentiable scalar, and a map
-    back to named parameters. Nothing in ``sal.opt.fit`` changes to carry
+    back to named parameters. Nothing in ``snakes_and_ladders.opt.fit`` changes to carry
     it, which is the claim `opt/CLAUDE.md` makes for the interface and the
     reason a fourth instance is worth having.
 

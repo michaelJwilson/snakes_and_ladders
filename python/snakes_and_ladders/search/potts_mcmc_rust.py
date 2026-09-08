@@ -25,7 +25,7 @@ sampler, and the only comparison that means anything between two
 implementations of a stochastic process.
 
 **The uniforms are drawn here and passed down.** The Rust module holds no
-generator: ``sal.sim``'s reproducibility contract is that a
+generator: ``snakes_and_ladders.sim``'s reproducibility contract is that a
 seeded generator determines the result, and a second stream inside Rust would
 break it silently.
 """

@@ -5,7 +5,7 @@ loopy 3x3 lattice, exhaustive enumeration over every ``k ** n_nodes``
 configuration gives the exact partition function and the exact single-site
 and pairwise marginals -- a computation that shares no code with the Gibbs
 sampler under test. On the open chain, the exact sampler is checked by
-reduction: it must reproduce ``sal.opt.potts.log_partition``'s
+reduction: it must reproduce ``snakes_and_ladders.opt.potts.log_partition``'s
 transfer-matrix ``log Z`` to machine precision, since both claim to describe
 the same distribution by different routes.
 """

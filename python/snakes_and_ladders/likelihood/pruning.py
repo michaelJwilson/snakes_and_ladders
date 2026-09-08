@@ -4,7 +4,7 @@ Implements the pruning recursion, ``eq:pruning``, and the root marginalization,
 ``eq:root``, of ``docs/tex/textbook.tex``, which ``app:pruning`` derives as the
 marginalization over internal states: the site log-likelihood
 is computed post-order over ``(site, state)`` NumPy arrays, reusing
-``sal.sim.jc.jc_transition_probabilities`` for P(t). Partial likelihoods
+``snakes_and_ladders.sim.jc.jc_transition_probabilities`` for P(t). Partial likelihoods
 underflow for realistic (site, taxa) counts, so they are rescaled per node
 with the log of the scale factor accumulated separately -- a transformation
 of the same computation, not a different algorithm (``likelihood/CLAUDE.md``,
@@ -46,7 +46,7 @@ def log_likelihood(
     alignment : dict[str, np.ndarray]
         Leaf name to its observed states, each of shape (n_sites,) with
         entries in ``[0, k)`` -- the shape
-        ``sal.sim.simulate.SimulatedDataset.alignment`` produces.
+        ``snakes_and_ladders.sim.simulate.SimulatedDataset.alignment`` produces.
     rescale : bool
         Whether to rescale partial likelihoods per node, accumulating the log
         of the scale factor separately (``docs/tex/textbook.tex``, ``eq:pruning``).

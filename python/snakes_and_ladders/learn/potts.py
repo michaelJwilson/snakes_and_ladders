@@ -1,24 +1,24 @@
 """A Potts landscape searched by single-site flips: reference environment.
 
-Not phylogenetics, and that is its job -- the same job ``sal.opt.potts``
+Not phylogenetics, and that is its job -- the same job ``snakes_and_ladders.opt.potts``
 does for :class:`~snakes_and_ladders.opt.objective.Objective`. An interface justified by
 one application is shaped by it, so the environment the RL machinery is
 developed against is deliberately not a tree.
 
 Reusing *this* model rather than inventing a gridworld makes the parallel
-structural instead of rhetorical: the same Potts chain is ``sal.opt``'s
-reference **objective**, fitted continuously, and ``sal.learn``'s
+structural instead of rhetorical: the same Potts chain is ``snakes_and_ladders.opt``'s
+reference **objective**, fitted continuously, and ``snakes_and_ladders.learn``'s
 reference **environment**, searched discretely. One model, both halves of
 the problem this repository is about. Local search over an Ising or Potts
 landscape is classical (Newman & Barkema, ch. 3).
 
-The model is the one ``sal.opt.potts`` documents, read as an energy to be
+The model is the one ``snakes_and_ladders.opt.potts`` documents, read as an energy to be
 maximized over configurations at *known* parameters::
 
     E(s) = J * sum_i delta(s_i, s_{i+1}) + sum_i h[s_i]
 
 **Known parameters, no inner solve.** ``E`` is evaluated at the fixture's
-true ``J`` and ``h``. Nothing here calls ``sal.opt.fit``. That is issue
+true ``J`` and ``h``. Nothing here calls ``snakes_and_ladders.opt.fit``. That is issue
 #131's simplification stated in the reference instance, and the reason an
 episode costs microseconds rather than seconds.
 
@@ -27,7 +27,7 @@ episode costs microseconds rather than seconds.
 * Adding a constant ``c`` to every entry of ``h`` shifts ``E`` by ``L * c``
   for every configuration alike, so it leaves every *reward* unchanged --
   a reward is a difference. The landscape is therefore insensitive to the
-  gauge ``sal.opt.potts`` has to fix, and a test pins that.
+  gauge ``snakes_and_ladders.opt.potts`` has to fix, and a test pins that.
 * ``delta_energy = J * agreement_delta + field_delta`` exactly, so the two
   features below span the reward. A greedy searcher is the weight vector
   proportional to ``(J, 1)``, which puts the classical baseline *inside*
@@ -117,8 +117,8 @@ class PottsLandscape:
         second constructor and not a second class: the energy, the move set,
         the features and the reward are shared, and only the adjacency
         differs. `snakes_and_ladders.sim.graph.lattice_graph` builds the N-D lattices this
-        is for, and an adapter in ``sal.search`` supplies its edges ---
-        ``sal.learn`` may not import ``sal.sim`` (``learn/CLAUDE.md``),
+        is for, and an adapter in ``snakes_and_ladders.search`` supplies its edges ---
+        ``snakes_and_ladders.learn`` may not import ``snakes_and_ladders.sim`` (``learn/CLAUDE.md``),
         so the graph arrives as plain indices.
 
         Parameters
@@ -164,7 +164,7 @@ class PottsLandscape:
     def from_params(cls, params: PottsParams) -> PottsLandscape:
         """Build the landscape a Potts fixture describes.
 
-        The same yaml that supplies ``sal.opt``'s reference objective, read
+        The same yaml that supplies ``snakes_and_ladders.opt``'s reference objective, read
         as a search problem instead of a fitting problem.
         """
         return cls(params.coupling, params.field, params.chain_length)
@@ -338,7 +338,7 @@ def enumerate_configurations(
 
     ``n_states ** chain_length`` of them, so this is an oracle for small
     chains and nothing else -- the same role exhaustive topology enumeration
-    plays for tree search in ``sal.search.topology``.
+    plays for tree search in ``snakes_and_ladders.search.topology``.
     """
     return itertools.product(range(n_states), repeat=chain_length)
 

@@ -40,13 +40,7 @@ tolerance table, and the deferred-work section
 from `.github/labels.yml` by a workflow, so the taxonomy cannot drift from the
 documents that describe it.
 
-The package is imported as `sal` and every document names it so
-([#301](https://github.com/michaelJwilson/snakes_and_ladders/issues/301)): a
-module `__getattr__` on the package and each subpackage imports a submodule
-on first attribute access, so the top-level import loads nothing else, and
-`infra/abbreviate_package.py --check` fails a document that spells the long
-form in prose while every Sphinx role keeps it. Ten required checks gate a
-merge, and three of them do work no reviewer can
+Ten required checks gate a merge, and three of them do work no reviewer can
 do by inspection: the technical-document job rebuilds only the QA figures
 the documents under `docs/tex/` cite, comparing the rest at the release gate instead
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
@@ -77,10 +71,10 @@ development loop and the three problem classes, and `STATUS.md` and
 `TICKETS.md` now are
 ([#152](https://github.com/michaelJwilson/snakes_and_ladders/pull/152),
 [#153](https://github.com/michaelJwilson/snakes_and_ladders/pull/153)). The thirteen QA
-scripts were routed through one `sal.qa.runner` rather than each carrying
+scripts were routed through one `snakes_and_ladders.qa.runner` rather than each carrying
 its own argument parsing and figure-closing boilerplate
 ([#156](https://github.com/michaelJwilson/snakes_and_ladders/pull/156)), and
-`sal.qa.manifest` now states which figure renders each output so a build can
+`snakes_and_ladders.qa.manifest` now states which figure renders each output so a build can
 select a subset rather than regenerate all thirteen
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)). The regression
 suite was split by submodule and its documented budget corrected after being
@@ -93,12 +87,11 @@ section — is stated in `ROADMAP.md` §0.2, `DEV.md`, and `infra/CLAUDE.md`
 alike, alongside the rule that decides which documents may repeat detail
 ([#164](https://github.com/michaelJwilson/snakes_and_ladders/pull/164)).
 
-
 **External frameworks arrive as referees and adapters, not replacements**
 ([#322](https://github.com/michaelJwilson/snakes_and_ladders/issues/322), closing
 [#242](https://github.com/michaelJwilson/snakes_and_ladders/issues/242) into it). A
 `frameworks` extra carries `gymnasium` 1.3.0, `rustworkx` 0.18.1, `torchrl`
-0.13.3 and `torch_geometric` 2.8.0, and `sal.sandbox` is the
+0.13.3 and `torch_geometric` 2.8.0, and `snakes_and_ladders.sandbox` is the
 home an implementation moves to once a framework replaces it on a hot path,
 with a guard that only tests and QA import it; nothing has moved yet, because
 nothing measured beat its reference. `search.gym.GymnasiumEnvironment` wraps
@@ -130,7 +123,7 @@ carries the three candidates.
 **CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
 three negative results
 ([#344](https://github.com/michaelJwilson/snakes_and_ladders/issues/344)).**
-`sal.parallel.map_tasks` runs a loop of independent tasks on a
+`snakes_and_ladders.parallel.map_tasks` runs a loop of independent tasks on a
 thread or process pool with results in input order and one generator per
 task, spawned in item order, so a run at four workers is bitwise the run at
 one; `opt.fit.fit_from`, `opt.budget.compare` and
@@ -186,40 +179,6 @@ lists after these — the candidate fits of `search.infer`, `learn.rollout`
 batches, tempering replicas, `qa.build`, `check_notebooks` and `pytest-xdist`
 — are measured on the same matrix before any is switched on (`TICKETS.md`).
 
-**External frameworks arrive as referees and adapters, not replacements**
-([#322](https://github.com/michaelJwilson/snakes_and_ladders/issues/322), closing
-[#242](https://github.com/michaelJwilson/snakes_and_ladders/issues/242) into it). A
-`frameworks` extra carries `gymnasium` 1.3.0, `rustworkx` 0.18.1, `torchrl`
-0.13.3 and `torch_geometric` 2.8.0, and `sal.sandbox` is the
-home an implementation moves to once a framework replaces it on a hot path,
-with a guard that only tests and QA import it; nothing has moved yet, because
-nothing measured beat its reference. `search.gym.GymnasiumEnvironment` wraps
-any `learn.Environment` unchanged — the protocol stays stateless and scores a
-neighbourhood at once, which `learn.exact` rests on — and passes Farama's
-`check_env` on the Potts chain and the 5-taxon tree environment while an
-episode round-tripped through both interfaces from one seed has the same
-states, rewards, termination and candidate count. `PottsGraph` converts to and
-from a `rustworkx` multigraph exactly, doubled bonds included; the open
-lattices are `rustworkx.generators`' grid and path graphs as edge sets of the
-same integers, and `G(n, p)` agrees with `undirected_gnp_random_graph` at both
-ends of `p` and on the mean edge count of 400 draws. The installed `rustworkx`
-has a global Stoer–Wagner cut and no s–t flow, asserted so the oracle moves
-when that changes; `ising_ground_state` is pinned instead against `networkx`'s
-minimum cut at extents 8 to 16. TorchRL's `GAE` and `ClipPPOLoss` reproduce
-`learn.ppo`'s advantages, objective and gradient to 1e-10 once their float32
-buffers are handed float64, and PyTorch Geometric's `GINConv` reproduces
-`GraphSurrogate` to 1e-12 on tied first-layer weights — on general weights GIN
-sums node and neighbours before its network where ours concatenates them, so
-the two are different architectures and the test says so. Conversion cost,
-timed apart from any call on 4 cores at a 1-minute load of 0.23: `to_rustworkx`
-12.5 µs and `from_rustworkx` 46.4 µs at extent 8, 50.9 and 196.9 µs at 16,
-747.2 µs and 3.78 ms at 64, against `rx.connected_components` at 4.6, 15.7 and
-212.3 µs and the Python `ising_ground_state` at 1.40, 5.85 and 186.5 ms. The
-conversion is below the cost of the cheapest call it would front at every
-size, and no hot path moves until a measured adoption says so; `TICKETS.md`
-carries the three candidates.
-
-
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
@@ -242,28 +201,28 @@ machine precision.
 **Potts: 1-D chain plus a general N-D lattice/MRF simulator.** The 1-D chain
 in an external field still exists as an `opt` reference instance with an
 exact transfer-matrix oracle ([#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115)),
-and appears again as a `learn` environment. `sal.sim.graph.PottsGraph`
+and appears again as a `learn` environment. `snakes_and_ladders.sim.graph.PottsGraph`
 now generalizes it to an arbitrary undirected graph with a per-edge
-coupling, and `sal.sim.potts.simulate_potts` samples on it — exactly, by
+coupling, and `snakes_and_ladders.sim.potts.simulate_potts` samples on it — exactly, by
 the same backward-message recursion, when the graph is a 1-D open chain, and
 by single-site Gibbs (heat-bath) MCMC otherwise — with an N-D lattice a
 constructed case of the general graph rather than a second code path
 ([#190](https://github.com/michaelJwilson/snakes_and_ladders/pull/190), closing #170,
 superseding the
-sampling half of #149). `sal.opt.potts.simulate_chains` cannot import
-`sal.sim` under `opt/CLAUDE.md`'s "no application imports" rule, so it
+sampling half of #149). `snakes_and_ladders.opt.potts.simulate_chains` cannot import
+`snakes_and_ladders.sim` under `opt/CLAUDE.md`'s "no application imports" rule, so it
 keeps its own copy of the exact recursion rather than delegating to the new
 one — a duplication [#186](https://github.com/michaelJwilson/snakes_and_ladders/issues/186)
-tracks resolving, by moving `PottsParams` into `sal.sim.potts` the way
+tracks resolving, by moving `PottsParams` into `snakes_and_ladders.sim.potts` the way
 #171 moved the HMM's truth type. No fitting, cluster updates, or evaluator
 on the general graph yet (issues #172, #174).
 
-**HMMs: a first-class simulator.** `sal.sim.hmm` draws a hidden state path
+**HMMs: a first-class simulator.** `snakes_and_ladders.sim.hmm` draws a hidden state path
 and an observation sequence jointly from a declared `(pi, A, B)`, retaining
 the path alongside the data on the footing the tree simulator already has
 ([#182](https://github.com/michaelJwilson/snakes_and_ladders/pull/182), closing
 [#171](https://github.com/michaelJwilson/snakes_and_ladders/issues/171)). The generator
-embedded in `sal.opt.hmm` — which validated only against brute-force path
+embedded in `snakes_and_ladders.opt.hmm` — which validated only against brute-force path
 enumeration for the fitting objective's own use
 ([#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115)) — is deleted; `opt`
 now imports the truth type from `sim` and draws no data itself. Validated
@@ -273,7 +232,7 @@ posterior for one realized observation, and the transition matrix's own
 stationary distribution for long-run occupancy.
 
 **Emission families: what a state emits, separated from how it is fitted.**
-`sal.emissions` holds the interface — draw, score, re-estimate —
+`snakes_and_ladders.emissions` holds the interface — draw, score, re-estimate —
 with the categorical matrix one implementation of it and a univariate Gaussian
 the second; the simulator, the forward recursion, Baum-Welch, path enumeration
 and the state aligner all go through it
@@ -376,9 +335,9 @@ Gaussian case showed and is why both were measured rather than one assumed
 from the other.
 
 **A Gaussian mixture: the emission seam with the Markov chain removed.**
-`sal.sim.mixture` draws component labels and observations
+`snakes_and_ladders.sim.mixture` draws component labels and observations
 jointly, retaining the label so a clustering has something to be checked
-against; `sal.opt.mixture` fits
+against; `snakes_and_ladders.opt.mixture` fits
 ([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)). Its
 component M step **is** `GaussianEmission.reestimate`, called with
 responsibilities where an HMM passes state posteriors, and a test asserts the
@@ -520,7 +479,7 @@ asymmetric matrix scores each rooting differently; that is the definition,
 and the search is what refuses it.
 
 **Belief propagation is now measured over an ensemble, not three fixtures.**
-`sal.sim.graph.erdos_renyi_graph` draws `G(n, p)` beside `lattice_graph`,
+`snakes_and_ladders.sim.graph.erdos_renyi_graph` draws `G(n, p)` beside `lattice_graph`,
 and BP is checked per draw against enumeration. Over 60 sparse draws, 106
 across two ensembles were acyclic and BP was exact on every one — worst
 relative deviation 3.7e-15 in `log Z` and 4.9e-13 in the marginals, inside
@@ -539,7 +498,7 @@ argument is asymptotic. The deviation is reported; nothing claims BP is more
 accurate on a random graph than on a lattice at these sizes.
 
 **Three canonical fixtures, each consumed by more than one module.**
-`sal.sim.canonical` holds instances whose answer comes from outside this
+`snakes_and_ladders.sim.canonical` holds instances whose answer comes from outside this
 repository, admitted on two clauses stated in `sim/CLAUDE.md`: the answer must
 be independently known, and more than one module must consume it
 ([#209](https://github.com/michaelJwilson/snakes_and_ladders/issues/209)).
@@ -785,8 +744,8 @@ and a map back to named constrained parameters
 ([#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115)). Four instances now
 run against it unchanged — the Potts chain, the HMM, branch lengths on a fixed
 topology, and the GTR substitution model — and none required a change to
-`sal.opt`. A test asserts the module imports nothing from `sal.sim`,
-`sal.likelihood` or `sal.search`, so the separation cannot decay by
+`snakes_and_ladders.opt`. A test asserts the module imports nothing from `snakes_and_ladders.sim`,
+`snakes_and_ladders.likelihood` or `snakes_and_ladders.search`, so the separation cannot decay by
 convenience import.
 
 **The optimizer is now pinned to minimizers known in closed form, not only to
@@ -811,7 +770,7 @@ result resting on a single fit of a multimodal surface has to say so.
 enumerated over all 19,683 configurations of a 3-state 3x3 lattice rather than
 approximated, so the fitted optimum is checked against a brute-force scan of
 the likelihood instead of against the optimizer's own convergence, and the
-enumerated normalizer reduces to `sal.opt.potts.log_partition`'s transfer
+enumerated normalizer reduces to `snakes_and_ladders.opt.potts.log_partition`'s transfer
 matrix on a chain to machine precision. Interval coverage over 40 replicates
 is 157/160 at 100 samples, 153/160 at 400 and 153/160 at 1600 — approaching
 the nominal rate from above and settling, as the Potts chain does.
@@ -873,7 +832,7 @@ default does not move.
 **Where a fit starts is now the caller's to choose, and multi-start is
 measured rather than assumed.** `Objective.initial()` was already the seam;
 what went through it was one fixed constant per objective.
-`sal.opt.initialize` adds the objective's own start, a
+`snakes_and_ladders.opt.initialize` adds the objective's own start, a
 deterministic perturbation, and random restarts from a passed-in generator, and
 `fit_from` reports every fit and their spread rather than only the best --
 returning one answer for a surface with four basins is the failure the
@@ -1111,88 +1070,8 @@ calibrated: over 24 NNI searches on the five-taxon fixture at 30 to 300
 sites, the fraction of returned trees equal to the generating one does not
 fall from one support bin to the next. Each weight is over *maximized*
 likelihoods under a flat prior over topologies and is named so, not called a
-posterior.
-
-**The same weights serve labellings and decodings, and a tempered ensemble
-gives a marginal one**
-([#331](https://github.com/michaelJwilson/snakes_and_ladders/issues/331)).
-`neighbourhood_labelling_support` and `enumerated_labelling_support` take any
-factor graph, the neighbourhood every single-site change, so a Potts
-configuration and a hidden path are one case: the enumerated weight equals
-`enumerate_potts`'s Boltzmann weight at `beta = 1` on every one of the 729
-labellings of a three-state 3 x 2 lattice to 1e-12, and the path posterior of
-the ambiguous chain's decodings, where the Viterbi path's margin is the
-fixture's 0.3033 nats and the posterior-decoded path's is -0.6066. The
-single-site neighbourhood is the whole space only where one site is free — on
-a two-site chain it reaches 5 of 9 labellings — and there the two weights
-agree to 1e-12. The bootstrap stays a tree quantity: it resamples sites, which
-a chain's ordered sites do not license and a labelling does not have.
-`search.tempered` runs replica exchange from the moves of #309 on the ladder
-of #267 with `parallel_tempering`'s exchange ratio, over labellings and over
-topologies; the fraction of the temperature-one replica's sweeps at a
-structure is its tempered weight (`eq:tempered-weight`), held to enumeration
-over 20 seeds on the ladder (1, 2, 4) at 1,000 sweeps after 100 of burn-in.
-The largest single-seed deviation is 0.039 on the four-taxon fixture's three
-topologies (30 sites, weights 0.66, 0.17, 0.17), 0.024 on the 2 x 2 lattice's
-ground state and one-flip excitation (0.68, 0.05) and 0.031 on the ambiguous
-chain's two decodings (0.14, 0.08); the mean over seeds is within 0.004 on
-every instance; asserted at 0.06 per seed and 0.01 on the mean. It is named a
-posterior weight only beside its diagnostics, which are asserted too:
-exchange acceptance per adjacent pair 0.82-0.93 on the topologies, 0.53-0.82
-on the lattice and 0.71-0.85 on the chain, and no indicator's autocorrelation
-time above 0.74 recorded sweeps. Over topologies the tempered weight is a
-marginal over topologies of the *fitted* likelihood, not over branch lengths.
-Calibration is re-measured at seven and eight taxa behind the release gate,
-for the quantities a search there can afford — the NNI neighbourhood weight
-and the bootstrap's smallest split support, 8 replicates — over 16 NNI
-searches per taxon count at 50 to 400 sites (the hard seven-taxon fixture and
-the balanced eight-taxon one); the fraction of returned trees equal to the
-generating one per support bin `(0, 0.5]`, `(0.5, 0.9]`, `(0.9, 1]`:
-
-CALIBRATION_TABLE
-
-**What carries between neighbours, and what does not.** A branch is now
-identified by the leaf split it induces rather than by a node name, so a
-neighbour that shares all but a few branches with its parent starts its fit
-from the parent's lengths
-([#289](https://github.com/michaelJwilson/snakes_and_ladders/issues/289)). The
-warm fit reaches the cold optimum — worst relative gap 5.3e-12 in
-log-likelihood over the 90 SPR neighbours of an eight-taxon tree — and the
-search's answer does not move. What it saves is smaller than the ticket
-hoped, and in one measurement negative: over those 90 neighbours the warm
-fits spent 6,053 likelihood evaluations against 5,145 cold, a single
-neighbour fit costs the same 49 either way, and only a refit of the *same*
-topology from its own lengths drops to 14 — L-BFGS spends its evaluations on
-the branches the move changed, not on the ones it kept. The larger saving is
-lazy scoring: one cached likelihood evaluation at the warm lengths ranks a
-neighbourhood and only the top `K` candidates are fitted, the accepted move
-always in full. Subtree partials are cached keyed on the subtree's structure
-and lengths, and a cached partial equals a recomputed one bitwise, so the
-ranking evaluation is the same arithmetic in the same order. Over four
-random starts on the eight-taxon fixture at 2,000 sites, budget 400 candidates,
-counted in what the search reports:
-
-| move set | run | same optimum as cold | fits | likelihood evaluations |
-| --- | --- | --- | --- | --- |
-| NNI | cold | 4/4 | 68.8 | 5,061 |
-| NNI | warm | 4/4 | 68.8 | 3,660 |
-| NNI | warm, `lazy_top=3` | 4/4 | 26.5 | 1,354 |
-| NNI | warm, `lazy_top=1` | 4/4 | 9.5 | 493 |
-| SPR | cold | 4/4 | 336.8 | 24,423 |
-| SPR | warm | 4/4 | 339.5 | 22,677 |
-| SPR | warm, `lazy_top=3` | 4/4 | 13.8 | 1,032 |
-| SPR | warm, `lazy_top=1` | **2/4** | 5.2 | 579 |
-
-Warm starts alone are worth 28% on NNI and 7% on SPR. Lazy scoring at
-`K = 3` reaches the cold optimum on every start at 3.7x fewer evaluations on
-NNI and 24x fewer on SPR; at `K = 1` it holds on NNI and loses half the SPR
-starts, because the cheap surface ranks an SPR neighbourhood poorly — the
-fitted best sits at lazy rank one in 6 of 6 NNI neighbourhoods and 1 of 6 SPR
-neighbourhoods. So warm starts are the default, `lazy_top` is opt-in with
-`K` chosen per move set from this table, the budget stays in candidates
-scored, and `Inference` reports fits and likelihood evaluations beside it.
-RAxML's three-branch local optimization is not built; its gap to the full
-optimum is the measurement that would license it.
+posterior; a tempered ensemble over topologies, which would give a marginal
+one, does not exist.
 
 **The coupled model is fitted, and the finding is about the start, not the
 move** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
@@ -1372,7 +1251,7 @@ random per-node field:
 
 The boundary copy was 0.03-0.2 ms of a 0.7-17 ms call and removing it moved
 the caller-visible number by under 3%. What a caller pays for is
-`sal.search.maxflow.energy`, which scores the returned
+`snakes_and_ladders.search.maxflow.energy`, which scores the returned
 configuration edge by edge in Python and is 59-81% of the wrapper's time; it
 is the oracle's function and is left as it is, so a caller wanting the
 kernel's speedup takes the configuration from the extension and scores it
@@ -1436,7 +1315,7 @@ comes out slightly **above 1** — impossible for an exact solve, and the
 measurable evidence of what the certificate does and does not cover.
 
 **Temperature is one object, and it lives where all three consumers can reach
-it.** `sal.opt.schedule` carries the schedules — constant, linear,
+it.** `snakes_and_ladders.opt.schedule` carries the schedules — constant, linear,
 geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
 and checked against it to 1e-12 (1e-10 for the cosine, whose torch form is a
 recursion) — with both endpoints reached *exactly* at the declared steps, and
@@ -1520,7 +1399,7 @@ chain drawn under no field is rejected against the with-field truth, which is
 what says the test has the power it claims.
 
 **Not built:** Viterbi decoding, and iterated conditional modes over HMM state
-paths (`sal.search.alpha_expansion` carries a lattice ICM as its baseline,
+paths (`snakes_and_ladders.search.alpha_expansion` carries a lattice ICM as its baseline,
 which is a different object). Single-flip local search over the Potts chain exists as an RL
 environment, not as a classical baseline suite.
 
@@ -1649,8 +1528,8 @@ fixture separates a single greedy run from the optimum; it does not separate
 anything from restarts, and a fixture that does is what the next comparison
 needs.
 
-**All three problem classes are now MDPs.** `sal.learn.Environment` had
-one instance, a 1-D Potts chain, which is the same position `sal.opt` was in
+**All three problem classes are now MDPs.** `snakes_and_ladders.learn.Environment` had
+one instance, a 1-D Potts chain, which is the same position `snakes_and_ladders.opt` was in
 before four instances made its model-agnosticism a measurement rather than an
 assertion. It now carries the Potts landscape over an arbitrary graph — the
 chain is the one-dimensional case of the same class, not a second one — and
@@ -1659,9 +1538,8 @@ than an energy. Both are pinned against the enumerated estimator oracle
 carried over unchanged from the chain, and against exhaustive enumeration of
 their own state spaces: 19,683 configurations for a 3-state 3x3 lattice, 729
 paths for a 3-state sequence of six. Neither takes an application type, so
-`sal.learn` still imports nothing from `sal.sim`, `sal.likelihood` or
-`sal.search`, and a test asserts it.
-
+`snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
+`snakes_and_ladders.search`, and a test asserts it.
 
 **The tree policy learns once it has something to learn**
 ([#328](https://github.com/michaelJwilson/snakes_and_ladders/issues/328)).
@@ -1737,26 +1615,6 @@ targets, and what expert iteration taught here is the critic. The
 factor-graph environment and the surrogate reward model wait on #296 and
 #308 landing on `dev`.
 
-**The tree policy learns once it has something to learn**
-([#328](https://github.com/michaelJwilson/snakes_and_ladders/issues/328)).
-#178 trained a policy over one feature, the improvement a move buys, and
-measured a tie with greedy hill climbing on the hard seven-taxon fixture,
-because a softmax over one column is an inverse temperature. `FeatureSet.FULL`
-gives each move seven columns without a fit — the improvement, the Fitch
-parsimony change, the pattern support of the split broken and of the split
-made, and the sizes of the two exchanged subtrees — standardized within the
-neighbourhood, each pinned to an independent computation and each shown to
-vary within a neighbourhood (a planted Robinson–Foulds column, constant across
-NNI moves, is refused). At #178's budget of 640 episodes over 50 starts and 16
-training seeds, the single feature reaches the enumerated maximum from 0.487
-of episodes against greedy's 0.480 (sign test p = 0.79) and the full set from
-0.796, ahead on 16 of 16 seeds (p = 3.05e-5;
-`docs/experiments/005-tree-policy-features.md`). The known-parameter reward
-now scores GTR from a given rate matrix through the pruning recursion. Not
-measured: the full set against random-restart hill climbing, which #194 showed
-reaches every start on this fixture, and any column's individual necessity.
-
-
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
 **The ledger has a record format before it has a run store**
@@ -1788,8 +1646,8 @@ blocked on an oracle rather than on effort
 **The relaxation is an extension, checked at every corner.** Over every
 configuration of an enumerable instance the relaxed score equals the discrete
 one to `1e-11` relative, for both spaces. The HMM check crosses a module
-boundary — `sal.learn` may not import `sal.likelihood`, so
-`RelaxedHmmPath.discrete` and `sal.likelihood.hmm_paths.path_log_probability`
+boundary — `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so
+`RelaxedHmmPath.discrete` and `snakes_and_ladders.likelihood.hmm_paths.path_log_probability`
 are independent implementations — and the relaxed objective's enumerated
 optimum is the Viterbi path.
 
@@ -1923,8 +1781,7 @@ citation, a regime and a pin: ground states as cuts (`eq:cut-energy`,
 `eq:gw`), alpha expansion and its bound (`eq:alpha-expansion`), the heat bath
 and the cluster moves with the field accept step (`eq:heat-bath`,
 `eq:cluster-accept`), and temperature, annealing and tempering with the
-exchange ratio and the tempered weight it licenses (`eq:exchange`,
-`eq:tempered-weight`). The hidden Markov section states the backward
+exchange ratio (`eq:exchange`). The hidden Markov section states the backward
 pass, the posterior and Viterbi as max-product (`eq:posterior`,
 `eq:viterbi`). The coupled spatio-sequential model of #290 has its own section
 (`sec:coupled`): the ticket's Forney-style figure, the spatial and chain

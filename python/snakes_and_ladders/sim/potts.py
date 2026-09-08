@@ -217,11 +217,11 @@ def _simulate_open_chain_exact(
     """Exact i.i.d. samples on an open chain, by backward messages.
 
     Moved verbatim (not reimplemented) from the recursion
-    ``sal.opt.potts.simulate_chains`` used before this module existed: the
+    ``snakes_and_ladders.opt.potts.simulate_chains`` used before this module existed: the
     chain's backward messages give the conditional distributions directly,
     so the fixture carries no equilibration assumption (root ``CLAUDE.md``,
     "Simulate Component-Wise"). Generalized to a per-edge coupling, which
-    reduces to the uniform-coupling case ``sal.opt.potts`` needs.
+    reduces to the uniform-coupling case ``snakes_and_ladders.opt.potts`` needs.
     """
     length = graph.n_nodes
     n_states = field.shape[0]

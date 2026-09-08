@@ -1,7 +1,7 @@
 """Regression tests for the phylogenetic instance of ``Objective``.
 
 Two things are pinned here that nothing else in the suite can pin. The
-optimizer is the same model-agnostic ``sal.opt.fit`` the Potts chain and
+optimizer is the same model-agnostic ``snakes_and_ladders.opt.fit`` the Potts chain and
 the HMM use, so this file is where issue #63's claim -- that the interface
 was not secretly shaped by one model -- is either confirmed or refuted.
 

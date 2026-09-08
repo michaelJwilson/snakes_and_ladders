@@ -1,4 +1,4 @@
-"""Shared derivative check for any ``sal.opt.objective.Objective``.
+"""Shared derivative check for any ``snakes_and_ladders.opt.objective.Objective``.
 
 `DEV.md`'s Test Layout puts a fixture shared across modules in a top-level
 underscore-prefixed module, imported rather than collected. `opt/CLAUDE.md`

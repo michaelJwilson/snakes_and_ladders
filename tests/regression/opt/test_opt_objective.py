@@ -2,7 +2,7 @@
 
 Two things are asserted here that no other module can assert: that the
 constraint maps are bijections onto their feasible sets (so a fitted
-parameter has an identifiable value), and that ``sal.opt`` contains no
+parameter has an identifiable value), and that ``snakes_and_ladders.opt`` contains no
 application knowledge -- the structural claim issue #63 exists to make.
 """
 

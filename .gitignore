@@ -31,7 +31,6 @@ docs/tex/*.log
 docs/tex/*.out
 docs/tex/*.pdf
 docs/tex/*.toc
-docs/tex/main.dvi
 
 # QA figures/captions under docs/tex/figures/ are committed, not ignored:
 # they are the technical document's evidence, and a reviewer should see a
@@ -51,15 +50,3 @@ docs/*.out
 docs/*.toc
 docs/*.synctex.gz
 
-# LaTeX build products; only the PDFs are committed
-docs/*.aux
-docs/*.bbl
-docs/*.blg
-docs/*.fdb_latexmk
-docs/*.fls
-docs/*.log
-docs/*.out
-docs/*.toc
-
-
-docs/nb/.ipynb_checkpoints/

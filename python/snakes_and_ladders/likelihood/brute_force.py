@@ -6,7 +6,7 @@ another backend... two backends agreeing proves nothing if both are wrong."
 Sums ``eq:site-independence`` of ``docs/tex/textbook.tex`` directly, over every
 joint assignment of internal-node states, without ``eq:pruning``'s conditional-independence
 factorization. Shares no traversal or accumulation code with
-``sal.likelihood.pruning`` -- only the already-independently-validated
+``snakes_and_ladders.likelihood.pruning`` -- only the already-independently-validated
 substitution model, ``jc_transition_probabilities``.
 
 Cost is ``O(n_sites * k**(internal nodes) * n_edges)``, and the

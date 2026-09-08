@@ -1,9 +1,9 @@
 """Differentiable PyTorch Felsenstein pruning -- pinned against
-``sal.likelihood.pruning``, the NumPy oracle (CLAUDE.md, "The NumPy
+``snakes_and_ladders.likelihood.pruning``, the NumPy oracle (CLAUDE.md, "The NumPy
 reference is the oracle and it stays").
 
 Branch lengths are a tensor kept separate from the
-topology: a ``sal.sim.tree.Node`` here describes only shape (leaf names,
+topology: a ``snakes_and_ladders.sim.tree.Node`` here describes only shape (leaf names,
 children), never a differentiable quantity, while ``branch_lengths`` --
 ordered by ``branch_order(tau)`` -- is the tensor ``torch.autograd``
 differentiates through. ``Node.branch_length`` is never read by
@@ -152,7 +152,7 @@ def log_likelihood(
         closed form.
     rescale : bool
         Whether to rescale partial likelihoods per node, matching
-        ``sal.likelihood.pruning``'s ``rescale`` flag.
+        ``snakes_and_ladders.likelihood.pruning``'s ``rescale`` flag.
 
     Returns
     -------

@@ -1,4 +1,4 @@
-"""Regression tests for ``sal.likelihood.pruning_torch``.
+"""Regression tests for ``snakes_and_ladders.likelihood.pruning_torch``.
 
 Four independent checks per issue #70, none sharing an implementation with
 the thing it judges:

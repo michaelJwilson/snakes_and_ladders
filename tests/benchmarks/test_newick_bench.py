@@ -1,4 +1,4 @@
-"""Benchmark for ``sal.sim.newick.to_newick``.
+"""Benchmark for ``snakes_and_ladders.sim.newick.to_newick``.
 
 See tests/regression/test_newick.py for correctness. Runs across the same
 site/taxa fixtures as the simulator benchmark, per sim/CLAUDE.md's local

@@ -1,11 +1,11 @@
-"""The phylogenetic instance of ``sal.opt.objective.Objective``.
+"""The phylogenetic instance of ``snakes_and_ladders.opt.objective.Objective``.
 
-It lives here rather than in ``sal.opt`` because ``opt/CLAUDE.md`` forbids
+It lives here rather than in ``snakes_and_ladders.opt`` because ``opt/CLAUDE.md`` forbids
 that package from importing any application module, and a test enforces it
 (issue #63). The dependency runs one way -- an application knows the
 optimization vocabulary, the optimizer knows no models -- and this file is
-that direction made concrete: it imports ``sal.opt.constrain`` and is
-imported by nothing in ``sal.opt``.
+that direction made concrete: it imports ``snakes_and_ladders.opt.constrain`` and is
+imported by nothing in ``snakes_and_ladders.opt``.
 
 **Not every branch length is identifiable, and which ones are depends on the
 root.** Under a reversible model the likelihood is invariant to where the

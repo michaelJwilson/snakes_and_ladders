@@ -16,7 +16,7 @@ every score in a state, exactly as a softmax over logits is invariant to
 adding a constant to all of them. So a feature that is constant across the
 available actions has no effect and no identifiable weight -- there is no
 bias term here, and :class:`Environment` implementations are told not to
-supply one. This is the same failure ``sal.opt.constrain.log_simplex``
+supply one. This is the same failure ``snakes_and_ladders.opt.constrain.log_simplex``
 exists to prevent, one module over.
 """
 

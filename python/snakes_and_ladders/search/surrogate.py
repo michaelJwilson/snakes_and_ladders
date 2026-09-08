@@ -1,6 +1,6 @@
 """Learned surrogates for the two searches: the data they are fitted to, and the seam that ranks by them (issue #308).
 
-``sal.learn.surrogate`` sees tensors; this module, which may import both
+``snakes_and_ladders.learn.surrogate`` sees tensors; this module, which may import both
 halves, turns topologies and lattices into them. :func:`tree_examples` scores
 every topology it is handed by an exact target -- the maximized
 log-likelihood, or the log-likelihood at given lengths -- and pairs it with

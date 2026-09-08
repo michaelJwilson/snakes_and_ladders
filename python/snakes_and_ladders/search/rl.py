@@ -1,8 +1,8 @@
 """The phylogenetic environment: tree search as the MDP ``sec:policy-gradient`` of ``docs/tex/textbook.tex`` states.
 
 This is the application instance of :class:`snakes_and_ladders.learn.environment.Environment`,
-and it lives here rather than in ``sal.learn`` for the reason the
-phylogenetic ``Objective`` lives in ``sal.likelihood``: ``learn/`` may
+and it lives here rather than in ``snakes_and_ladders.learn`` for the reason the
+phylogenetic ``Objective`` lives in ``snakes_and_ladders.likelihood``: ``learn/`` may
 import no application module, so the direction of the dependency has to run
 application to infrastructure. An agent developed inside ``learn/`` would be
 an agent shaped by trees, which is the thing that module exists to prevent.
@@ -309,7 +309,7 @@ class TopologyEnvironment:
 
         Counted on cache misses, not on calls: a topology reached twice by
         different move sequences costs once, which is the same accounting
-        ``sal.search.infer`` uses and the reason both are stated in
+        ``snakes_and_ladders.search.infer`` uses and the reason both are stated in
         candidate scorings rather than seconds.
         """
         return self._evaluations

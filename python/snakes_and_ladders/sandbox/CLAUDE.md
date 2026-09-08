@@ -20,7 +20,7 @@ and is principle.
   nothing behind but the adapter that fronts the framework. Its regression
   tests move with it and keep passing: they are what the adapter is pinned
   against.
-- **Only `tests/` and `sal.qa` import from here.** Never
+- **Only `tests/` and `snakes_and_ladders.qa` import from here.** Never
   `sim/`, `likelihood/`, `opt/`, `search/` or `learn/`, asserted by
   `tests/regression/test_sandbox.py`. A hot path that reaches back into its
   own oracle has not been replaced, and a test that pins a framework against

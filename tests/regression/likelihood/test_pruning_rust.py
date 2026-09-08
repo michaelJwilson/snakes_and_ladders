@@ -1,4 +1,4 @@
-"""Regression tests for ``sal.likelihood.pruning_rust`` (the Rust CPU backend).
+"""Regression tests for ``snakes_and_ladders.likelihood.pruning_rust`` (the Rust CPU backend).
 
 Checks per ``likelihood/CLAUDE.md``, mirroring ``test_pruning_torch.py``'s
 structure for the PyTorch backend:

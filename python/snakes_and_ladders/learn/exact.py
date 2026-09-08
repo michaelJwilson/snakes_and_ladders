@@ -20,7 +20,7 @@ That gives two independent checks on a sampled estimator, neither of which is
 
 The cost is ``|A| ** horizon``, so this is an oracle for the deliberately
 small reference instance and for nothing else. That is the same bargain
-``sal.search.topology.enumerate_topologies`` strikes below eight taxa.
+``snakes_and_ladders.search.topology.enumerate_topologies`` strikes below eight taxa.
 """
 
 from __future__ import annotations

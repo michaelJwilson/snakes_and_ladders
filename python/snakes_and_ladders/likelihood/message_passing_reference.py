@@ -232,7 +232,7 @@ def sum_product(
     ValueError
         If the tree schedule is asked of a loopy graph, or ``damping`` is
         outside ``[0, 1)``.
-    ConvergenceError
+    snakes_and_ladders.likelihood.message_passing.ConvergenceError
         If flooding does not settle in ``max_iterations`` sweeps.
     """
     to_variable, to_factor, iterations = _run(

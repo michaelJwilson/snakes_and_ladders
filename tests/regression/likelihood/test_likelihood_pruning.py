@@ -1,10 +1,10 @@
-"""Regression tests for ``sal.likelihood.pruning``.
+"""Regression tests for ``snakes_and_ladders.likelihood.pruning``.
 
 Four independent checks per issue #62, no two sharing an implementation:
 
 - Brute-force agreement at ``n <= 6`` taxa, to machine precision
   (``test_pruning_matches_brute_force``) -- a genuinely different algorithm
-  (direct marginalization, ``sal.likelihood.brute_force``), not a second
+  (direct marginalization, ``snakes_and_ladders.likelihood.brute_force``), not a second
   opinion from the same recursion.
 - Rescaled and unrescaled paths agreeing on small problems where both run
   (``test_rescaled_and_unrescaled_agree_on_small_problems``), the check

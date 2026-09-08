@@ -7,7 +7,7 @@
 Mixed discrete-continuous optimization over graph-structured models —
 phylogenetic trees, Potts models in an external field, and hidden Markov
 models. Autodiff fits the continuous half, a learned policy is intended to
-propose the discrete half, and a Rust backend (`sal.oxi_snakes_and_ladders`, via
+propose the discrete half, and a Rust backend (`snakes_and_ladders.oxi_snakes_and_ladders`, via
 [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs)) carries the
 CPU-bound recursions.
 
@@ -25,11 +25,7 @@ application** is the science.
 uv sync --locked --all-extras
 source .venv/bin/activate
 pytest -m "not release"
-python -c "import snakes_and_ladders as sal; print(sal.likelihood.pruning.__doc__)"
 ```
-
-The package is `sal` everywhere it is named: `import snakes_and_ladders as sal`,
-then `sal.<module>.<name>`, a submodule importing on first access.
 
 [INSTALL.md](INSTALL.md) covers the full workflow: prerequisites, building the
 Rust extension, running both test suites, the checks CI enforces, dependency
@@ -130,18 +126,12 @@ from the other: a better topology scored with badly fitted parameters looks
 worse than a poor one scored well.
 
 That shape is not unique to phylogenies. Felsenstein pruning, the HMM forward
-algorithm, and the Potts transfer matrix are the same sum-product recursion on
-different graphs — a tree, a chain, a lattice — so one discrete/continuous
-interface serves all three. The project treats that as a design constraint
-rather than a coincidence, and enforces it structurally: `sal.opt` and
-`sal.learn` may import no application module, asserted by test.
-
 algorithm, the Potts transfer matrix and the decoder of a low-density
 parity-check code are the same sum-product recursion on different graphs — a
 tree, a chain, a lattice, a Tanner graph — so one discrete/continuous
 interface serves all four. The project treats that as a design constraint
-rather than a coincidence, and enforces it structurally: `sal.opt` and
-`sal.learn` may import no application module, asserted by test.
+rather than a coincidence, and enforces it structurally: `snakes_and_ladders.opt` and
+`snakes_and_ladders.learn` may import no application module, asserted by test.
 
 [ROADMAP.md](ROADMAP.md) states the goal, the accuracy and hardware
 requirements, and the milestones.
@@ -152,7 +142,7 @@ requirements, and the milestones.
 parameter vector, a differentiable scalar, and a map back to named constrained
 parameters. Four instances run against it unchanged — a Potts chain, a discrete
 HMM, branch lengths on a fixed topology, and the GTR substitution model — and
-none required a change to `sal.opt`.
+none required a change to `snakes_and_ladders.opt`.
 
 **Fitting with intervals, not just convergence.** L-BFGS under a strong-Wolfe
 line search, with confidence intervals from the observed Fisher information
@@ -182,7 +172,7 @@ an exact trajectory-enumeration oracle for the expected return and its
 gradient. Claims rest on that oracle rather than on a training curve.
 
 **A QA pipeline that is the evidence.** Every figure and table in the technical
-document is rendered by `sal.qa` from the code it reports on, and CI rebuilds
+document is rendered by `snakes_and_ladders.qa` from the code it reports on, and CI rebuilds
 and compares them, so a plot cannot drift from what produced it.
 
 ## What exists, measured

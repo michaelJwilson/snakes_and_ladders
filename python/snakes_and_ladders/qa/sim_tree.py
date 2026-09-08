@@ -1,7 +1,7 @@
 """QA figure: the assumed simulation tree, topology and branch lengths.
 
 Renders the topology and branch lengths (expected substitutions/site) that
-``sal.sim.simulate`` draws an alignment over, from a
+``snakes_and_ladders.sim.simulate`` draws an alignment over, from a
 ``simulation_params.yaml``-format file, as a labelled phylogram -- so the
 tree a reader sees in the technical document is the one the simulator
 actually used, not a schematic redrawn by hand.

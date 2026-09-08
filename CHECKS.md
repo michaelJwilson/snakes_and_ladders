@@ -232,7 +232,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (95)
+## `tests/regression/search/` (89)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -307,18 +307,12 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_support.py::test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_supports_agree` | oracle |  |
 | `test_search_support.py::test_the_generating_splits_have_full_bootstrap_support_at_many_sites` | simulated_truth |  |
 | `test_search_support.py::test_the_enumerated_support_is_calibrated_on_simulated_data` | simulated_truth | The test the ticket names: bin the returned trees by the support they report and the fraction that equal the generating topology must not fall as the support rises. |
-| `test_search_support.py::test_the_neighbourhood_and_bootstrap_supports_are_calibrated_at_seven_and_eight_taxa` | simulated_truth |  |
-| `test_search_support.py::test_the_single_site_neighbourhood_is_the_whole_space_only_where_one_site_is_free` | oracle |  |
-| `test_search_support.py::test_the_enumerated_labelling_weight_is_enumerate_potts_s_boltzmann_weight_at_beta_one` | oracle |  |
-| `test_search_support.py::test_the_enumerated_decoding_weight_is_the_path_posterior_and_pins_the_ambiguous_fixture` | oracle |  |
 | `test_search_support.py::test_pattern_support_is_the_fraction_of_sites_some_tree_with_the_split_fits_in_the_fewest_changes` | oracle |  |
 | `test_search_support.py::test_the_four_taxon_support_is_one_minus_the_frequency_of_the_two_conflicting_patterns` | oracle |  |
 | `test_search_support.py::test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_returns_it_always` | simulated_truth |  |
 | `test_search_surrogate.py::test_learned_surrogates_rank_held_out_neighbourhoods` | simulated_truth | Six alignments, every topology of each fitted (90 fits at 200 sites), split by alignment: three to train, two to validate, one held out. |
 | `test_search_surrogate.py::test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments` | oracle | Against a full fit of every topology on three alignments: the plug-in bound and the parsimony bound each put the fitted best first, at a hundredth (2.4 ms against 250 ms) and a thousandth of the cost. |
 | `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
-| `test_search_tempered.py::test_the_tempered_weight_of_the_four_taxon_topologies_is_the_enumerated_one` | oracle |  |
-| `test_search_tempered.py::test_the_tempered_weight_of_a_labelling_is_the_enumerated_one` | oracle |  |
 | `test_search_topology.py::test_enumeration_matches_count_topologies` | oracle |  |
 | `test_search_topology.py::test_nni_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_spr_neighbour_count_and_validity` | oracle |  |
@@ -387,4 +381,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-344 checks.
+338 checks.

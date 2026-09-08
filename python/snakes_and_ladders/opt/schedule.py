@@ -1,8 +1,8 @@
 """Temperature schedules: a temperature per step, and nothing about what is tempered.
 
 Three consumers want one and sit in three modules --- the Hamiltonian sampler
-in ``sal.opt``, the Potts move sets in ``sal.search``, and the
-Boltzmann policy in ``sal.learn``. ``opt`` and ``learn`` may import no
+in ``snakes_and_ladders.opt``, the Potts move sets in ``snakes_and_ladders.search``, and the
+Boltzmann policy in ``snakes_and_ladders.learn``. ``opt`` and ``learn`` may import no
 application module and ``search`` may import both, so this is the one
 placement all three can reach --- the same argument that puts ``constrain.py``
 here rather than beside its callers (issue #267).

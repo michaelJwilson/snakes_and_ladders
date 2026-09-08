@@ -1,5 +1,3 @@
-"""Self-time profiling over ``sal.sim``, ``sal.search`` and ``sal.learn``.
-
 """Self-time profiling over every module's representative workload.
 
 Ranks each module's entry points by ``cProfile`` self time, at the enumerable
@@ -252,13 +250,25 @@ def opt_sections(mid: bool) -> list[Section]:
         fit(potts_objective, max_iterations=50)
 
     def _hmc() -> None:
-        hmc.sample(potts_objective, 0, draws, step_size=0.05, n_steps=5)
+        hmc.sample(
+            potts_objective,
+            torch.Generator().manual_seed(0),
+            draws,
+            step_size=0.05,
+            n_steps=5,
+        )
 
     def _method(_instance: int, budget: Budget, rng: np.random.Generator) -> Outcome:
         return Outcome(float(rng.normal()), budget.size)
 
     def _budget() -> None:
-        compare({"a": _method, "b": _method}, [0, 1], Budget("sweeps", 10), range(40))
+        compare(
+            {"a": _method, "b": _method},
+            [0, 1],
+            Budget("sweeps", 10),
+            range(40),
+            workers=1,
+        )
 
     return [
         (f"opt.fit L-BFGS on the tree @ {n_taxa} taxa x 500 sites", _tree_fit, 1),

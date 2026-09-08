@@ -8,19 +8,19 @@ Guidance for Claude Code when working in this repository.
 3.  **Stay neutral and objective:** Avoid hype, subjective opinions, and weak qualifiers. Use nouns and verbs; avoid adjectives and adverbs.
 4.  **Provide evidence:** Back every claim in PRs/commits with benchmark numbers, test validated outputs, or reproductions.
 5.  **Maintain formatting:** Apply naming, terminology, and syntax consistently.
-6.  ***CLAUDE.md edits are rare* Do not add technical details to CLAUDE.md files, but principles.  These edits are rare, as principles become clear.  Other docs support details.
+6.  ***CLAUDE.md edits are rare* Do not add technical details to CLAUDE.md files, but principles.  These edits are rare, as principles become clear.
 
 These rules govern everything written in this repository: every document, each module's `CLAUDE.md` included, and every docstring, comment, commit message, pull-request body, and plan or comment posted to a ticket thread. They are stated here once and referenced from the module files rather than copied into them, so there is one text to change and nothing to fall out of step with it.
 
-See docs/CLAUDE.md for an expected reader description.
+**Expected Reader:** a well-educated developer with scientific and performance-computing background, but not an application expert, e.g. phylogenetics. Keep tech. doc. streamlined — hyperlinks and citations over inline derivation — and push required application background (e.g. NNI, other standard algorithms) into a dedicated appendix, cited from the point of use rather than re-derived there. Treat the main text as a high-level overview of the current best-known approach (simulation, models, results) in terms of the roadmap, not an exhaustive record; link out to supporting docs, with plots, and results for dedicated studies that informed the technical doc. Adopt the style of an academic paper, supported by a textbook on domain-specific material likely new to the developer — two documents rather than one file with appendices (issue #249), so the paper can report results without carrying the formulations that support them, and the textbook can state an algorithm without naming any code that implements it.
 
 ## Project
 `snakes_and_ladders` is a high-performance scientific repository. Correctness and reproducibility of numerical and scientific results take priority over convenience.
 
 Two concerns are supported, and they must stay separable:
 
-*   **Infrastructure:** the build, the checks, the release process, the agentic workflow. None of it tied an application.
-*   **Application:** inference of phylogenetics, lattice models, error correction and quantum computing.
+*   **Infrastructure:** the build, the checks, the release process, the agentic workflow. None of it names an application.
+*   **Application:** phylogenetic substitution models, likelihoods, tree search, and the standards this science requires.
 
 An infrastructure rule that acquires an application reference has lost the separation. Structure enforces it: `README.md` and `DEV.md` put infrastructure before application, and the file layout keeps them apart (`infra/` against `python/snakes_and_ladders/*` and `docs/tex/`).
 
@@ -39,11 +39,13 @@ This file is authoritative. Each of the remainder has a defined task:
 | `CHECKS.md` | The checks the roadmap's claims rest on, generated from the tests' own markers |
 | `CHANGELOG.md` | What has landed, per dated release section; built from `changelog.d/` fragments by `towncrier` |
 | `docs/tex/` | Two documents: a paper reporting results, and a textbook of the problem statements, algorithms, and the properties that referee them |
-| `docs/nb/` | One worked notebook per supported problem class, from a fixture to a learned policy via the other defined functionality |
+| `docs/nb/` | One worked notebook per problem class, from a fixture to a learned policy |
 
-`python/snakes_and_ladders/sim/`, `likelihood/`, `opt/`, `learn/`, `search/`, `qa/`, `infra/`, and `docs/` each carry their own `CLAUDE.md`. Those add what applies only inside one module; The writing style rules defined here are essential and should be interpreted verbatim in the submodule CLAUDE.mds.  A rule that binds the whole repository belongs here, not in one of them.
+`python/snakes_and_ladders/sim/`, `likelihood/`, `opt/`, `learn/`, `search/`, `qa/`, `sandbox/`, `infra/`, and `docs/` each carry their own `CLAUDE.md`. Those add what applies only inside one module; they never override this file except for the vital **writing style rules, which bind every one of them**. A rule that binds the whole repository belongs here, not in one of them.
 
-**Altitude, and what may repeat.** `ROADMAP.md`, `STATUS.md` and `TICKETS.md` plan and track — what the project is doing, how far it has got, what remains — at a level a reader holds in their head. `DEV.md` and `INSTALL.md` are followed step by step, so they carry their detail in full rather than as pointers: someone working through one of them should not have to assemble the answer from three. Detail may therefore repeat between them, and where it repeats it must agree — a copy that has drifted is a defect, and the version control and logic should settle the truth.
+**Altitude, and what may repeat.** `ROADMAP.md`, `STATUS.md` and `TICKETS.md` plan and track — what the project is doing, how far it has got, what remains — at a level a reader holds in their head. `DEV.md` and `INSTALL.md` are followed step by step, so they carry their detail in full rather than as pointers: someone working through one of them should not have to assemble the answer from three. Detail may therefore repeat between them, and where it repeats it must agree — a copy that has drifted is a defect, and this file settles which reading is right.
+
+Every `CLAUDE.md`, this one included, is the exception, on rule 6: it carries the principle and names where the detail lives, never the detail itself. A measurement belongs to the thing that produced it — `STATUS.md` where it is evidence for a milestone, the module that defines the constant where a caller must act on it — and a `CLAUDE.md` that restates it acquires a second copy to keep true. The Writing Style above is the one text referenced rather than copied, because it binds every file at once.
 
 ## Environment & Tooling
 *   **Python (3.12):** Manage via `uv`. Run `uv sync --locked --all-extras`. Regenerate locks with `uv lock` and commit `uv.lock` in the same PR.
@@ -54,15 +56,19 @@ This file is authoritative. Each of the remainder has a defined task:
 *   **Audit:** `pip-audit` (Python) and `cargo audit` (Rust).
 *   **Docs:** Build with `sphinx-build -W` in `docs/source/`.
 
-## DEV conventions
-See ./DEV.md
+## Conventions
+*   **Documentation Sync:** Any change affecting behavior, CI, dev setup, or math models must update, in the same PR, whichever of these it makes untrue: `README.md`, `CLAUDE.md` (including a module's), `DEV.md`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md`, `TICKETS.md`, `docs/tex/`, `docs/nb/`. If the change is user-visible, add a fragment under `changelog.d/` (see `changelog.d/README.md`) rather than editing `CHANGELOG.md` directly — `towncrier` merges fragments into `CHANGELOG.md` at release time, and CI's `towncrier check` enforces one exists.
+*   **Single Version Source:** The package version lives exclusively in `Cargo.toml`'s `[package].version`.
+*   **Package Surface:** `python/snakes_and_ladders/__init__.py` re-exports nothing beyond the package's own top-level utilities (currently `double`); import submodule contents explicitly (`from snakes_and_ladders.likelihood import ...`), not through the top-level namespace.
+*   **Code Standards:** Use type hints on all Python functions. Do not introduce silent behavior changes (e.g., default parameters). Keep dependencies minimal and justify additions.
+*   **Dev Standards:** The number of PRs should be minimized to limit the amount of review work and test runs, particularly given tickets are typically scoped to a work item. 
 
 ## Performance
-*   **GPU (PyTorch, Triton, JAX):** Target if the hot path is data-parallel and is expected to earn $\ge 10\times$ speedup over vectorized NumPy, at realistic problem sizes.
-*   **Rust Backend (`oxi_snakes_and_ladders`):** Target for data structures and algorithms not well handled by numpy or numba.  Including
-*   **Autodiff:** **PyTorch** supports autodiff for likelihood evaluations. MPS/metal and CUDA are to be supported, e.g. with custom kernels where necessary.
+*   **GPU (PyTorch, Triton, JAX):** Target if the hot path is data-parallel and earns $\ge 10\times$ speedup over vectorized NumPy at realistic problem sizes.
+*   **Rust Backend (`oxi_snakes_and_ladders`):** Target for CPU-bound hot paths (control flow, tree traversal, irregular memory access, small sizes).
+*   **Autodiff:** **PyTorch**, decided. Its MPS backend is the path on Apple Silicon, which `ROADMAP.md` targets alongside CUDA.
 *   **Measurement:** Benchmark candidates against the NumPy reference before committing to a port. Report both numbers in the PR.
-*   **The Oracle:** Every accelerated kernel keeps its pure Python/NumPy implementation as an oracle. Regression tests must pin the accelerated output against it within an explicit tolerance, at some sizes.
+*   **The Oracle:** Every accelerated kernel keeps its pure Python/NumPy implementation as an oracle. Regression tests must pin the accelerated output against it within an explicit tolerance.
 
 ### Runtime Optimization Opportunities
 Checked in this order when a hot path is proposed; `DEV.md` carries the procedure, `STATUS.md` the numbers.
@@ -75,14 +81,14 @@ Checked in this order when a hot path is proposed; `DEV.md` carries the procedur
 *   **Allocation.** Preallocate and reuse buffers across sweeps; NumPy `out=` and in-place operators over temporaries (Gorelick & Ozsvald ch. 6).
 *   **Double buffering.** Reading and writing one array in a sweep is a *different Markov chain* from reading the previous buffer; the docstring says which and the oracle pins it before either is timed.
 *   **The FFI boundary.** Cross it once per call with contiguous arrays; time a kernel alone *and* through its binding, since the marshalling has been the dominant term here (Gorelick & Ozsvald ch. 7; Antão).
-*   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — runs through `sal.parallel`, one seam and no pool of its own; `workers` is explicit and `1` is serial. A parallel run is bitwise the serial run or it is not a parallel run: one generator per task, spawned in item order, and one intra-op thread per worker, since a pool of multithreaded kernels oversubscribes the machine. A site under 2× at 4 workers stays serial and `STATUS.md` records why.
+*   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — runs through `snakes_and_ladders.parallel`, one seam and no pool of its own; `workers` is explicit and `1` is serial. A parallel run is bitwise the serial run or it is not a parallel run: one generator per task, spawned in item order, and one intra-op thread per worker, since a pool of multithreaded kernels oversubscribes the machine. A site under 2× at 4 workers stays serial and `STATUS.md` records why.
 *   **Compiled backends.** Two, each for a reason: Rust carries the sampling sweep, whose agreement with its oracle is distributional, so it stays opt-in; `numba`'s `njit` carries deterministic kernels whose pin against the oracle is bitwise, so it may be the default. Every backend is one more implementation held to the NumPy oracle, and a third joins only against a measurement on an existing hot path (Gorelick & Ozsvald ch. 7).
 
 ## Testing & Quality Assurance
 *   **Simulate Component-Wise:** Build fixtures by simulating from a known generative model under an explicitly seeded generator. Test components individually and in combination.
 *   **Pin to Independent Sources:** Validate expected values against analytic results, brute-force computations, or secondary implementations with stated tolerances.
 *   **Check Math Invariants:** Rows of a transition matrix sum to 1, a reversible model satisfies detailed balance, gradients match finite differences, and a fit's likelihood increases monotonically.
-*   **Cross-Device Agreement Is a Tolerance:** `float32` and `float64` behave differently across CPU, CUDA, and Metal, and deep recursions accumulate that. Agreement is checked against the tolerance stated in `likelihood/CLAUDE.md`, with the measurements it is derived from, and implemented in `sal.likelihood.device`, never bitwise. A discrepancy inside it is not a bug and must not be "fixed". Two rules that fall out of it: the tolerance is **relative**, because the log-likelihood is a sum over sites and an absolute bound fixed at one problem size does not transfer to another; and it is keyed on the **lowest precision** in the comparison, because Metal cannot do `float64` and one bound loose enough for `float32` would let a broken `float64` backend pass.
+*   **Cross-Device Agreement Is a Tolerance:** `float32` and `float64` behave differently across CPU, CUDA, and Metal, and deep recursions accumulate that. Agreement is checked against the tolerance stated in `likelihood/CLAUDE.md`, with the measurements it is derived from, and implemented in `snakes_and_ladders.likelihood.device`, never bitwise. A discrepancy inside it is not a bug and must not be "fixed". Two rules that fall out of it: the tolerance is **relative**, because the log-likelihood is a sum over sites and an absolute bound fixed at one problem size does not transfer to another; and it is keyed on the **lowest precision** in the comparison, because Metal cannot do `float64` and one bound loose enough for `float32` would let a broken `float64` backend pass.
 *   **No Coverage Theatre:** Tests asserting only output shapes or successful execution without exceptions are forbidden. Leave gaps unwritten and track them as GitHub issues rather than writing meaningless tests.
 *   **Every Test Says What It Is Checked Against:** a test carries a marker naming the kind of thing that referees it, and a test that fits no kind is either a missing category or a test with nothing to assert. This is what makes the rule above checkable rather than a matter of a reviewer noticing. The kind is a *tag* and not a partition: one test may be refereed two ways, and splitting it to fit a taxonomy would make it worse. Whether a test gates early is a separate axis from what it checks, because a test is critical *and* refereed somehow, never instead. `pyproject.toml` registers the names, `DEV.md` says which selection runs when, and a guard in `tests/regression/` enforces that every test carries one.
 *   **Worked Notebooks:** `docs/nb/` carries one notebook per problem class, each running the application end to end against the oracles the regression suite already establishes, and each ending with a **Further Work** section that names, with its issue number, what it could not demonstrate because the feature is not built. A notebook states no result the suite does not also pin. A change that alters a number a notebook prints re-runs it in the same pull request, as it would regenerate a figure. A CI job re-executes every notebook and fails a pull request whose output disagrees with the committed one, so a notebook is held to the standard a `docs/tex/` figure is; `docs/nb/README.md` states what that comparison covers, and what it deliberately does not.
@@ -92,9 +98,22 @@ Checked in this order when a hot path is proposed; `DEV.md` carries the procedur
 ## Technical Document & Reference Sources
 `docs/tex/` is treated as code. Cite these texts where they carry the material, and state any deviation from their standard algorithms explicitly. The core references are a routing table, grouped by what they inform:
 
+**Infrastructure (Build, Structure, and Speed)**
+*   **Software Craft:** Martin (*Clean Code*); Blandy et al. (*Programming Rust*); Ramalho (*Fluent Python*)
+*   **Systems & Hardware:** Bryant & O'Hallaron (*Computer Systems*); Hwu et al. (*Programming Massively Parallel Processors*)
+*   **Python Performance:** Gorelick & Ozsvald (*High Performance Python*); Antão (*Fast Python*)
 
-##  References
-See ./REFERENCES.md
+**Optimization (Discrete and Continuous)**
+*   **Algorithms & Math:** Cormen et al. (*Introduction to Algorithms*); Rosen (*Discrete Mathematics and Its Applications*)
+*   **Numerical Optimization:** Nocedal & Wright (*Numerical Optimization*)
+*   **Probabilistic Inference:** MacKay (*Information Theory...*); Koller & Friedman (*Probabilistic Graphical Models*); Frey (*Graphical Models...*); Ortega (*Introduction to Graph Signal Processing*)
+*   **Statistical Physics:** Mézard & Montanari (*Information, Physics, and Computation*); Newman & Barkema (*Monte Carlo Methods in Statistical Physics*)
+*   **Information Geometry:** Amari (*Information Geometry and Its Applications*)
+*   **Learning & RL:** Goodfellow et al. / Prince (*Deep Learning*); Sutton & Barto (*Reinforcement Learning*); Lapan (*Deep RL Hands-On*); Raschka (*Build a Large Language Model*)
+
+**Application (The Science)**
+*   **Phylogenetics:** Felsenstein (*Inferring Phylogenies*); Durbin et al. (*Biological Sequence Analysis*); Compeau & Pevzner (*Bioinformatics Algorithms*); Pachter & Sturmfels (*Algebraic Statistics for Computational Biology*)
+*   **Information/Quantum:** Blahut (*Algebraic Codes for Data Transmission*); Nielsen & Chuang (*Quantum Computation and Quantum Information* — background only)
 
 ## Definition of Done
 1.  **Regression Test:** Asserts scientific validity (not just shape/execution/coverage theatre) and pins expected output.

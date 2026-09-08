@@ -1,5 +1,5 @@
 """Rust CPU Felsenstein pruning (`snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`) --
-pinned against ``sal.likelihood.pruning``, the NumPy oracle
+pinned against ``snakes_and_ladders.likelihood.pruning``, the NumPy oracle
 (``likelihood/CLAUDE.md``, "The NumPy reference is the oracle and it
 stays").
 
@@ -23,7 +23,7 @@ decayed to parity at the declared scale (issue #232). It is the same fix
 issue #202 applied to the categorical sampler, for the same reason.
 
 Nodes cross the boundary in post-order (children before parents, root
-last): ``sal.sim.tree`` has no ``postorder`` helper, so this module builds
+last): ``snakes_and_ladders.sim.tree`` has no ``postorder`` helper, so this module builds
 one locally rather than adding one there for a single caller. Validated to
 machine precision against the NumPy oracle
 (``tests/regression/test_pruning_rust.py``), per ``likelihood/CLAUDE.md``'s
@@ -72,9 +72,9 @@ def log_likelihood(
 ) -> float:
     """Total log-likelihood of an alignment under the k-state Jukes-Cantor model.
 
-    Signature matches ``sal.likelihood.pruning.log_likelihood``; this
+    Signature matches ``snakes_and_ladders.likelihood.pruning.log_likelihood``; this
     wrapper flattens ``tau`` and ``alignment`` into the arrays
-    ``sal.oxi_snakes_and_ladders.pruning_log_likelihood`` expects and calls the compiled
+    ``snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`` expects and calls the compiled
     Rust kernel.
 
     Parameters
@@ -92,7 +92,7 @@ def log_likelihood(
     rescale : bool
         Whether to rescale partial likelihoods per node, accumulating the log
         of the scale factor separately, matching
-        ``sal.likelihood.pruning``'s ``rescale`` flag.
+        ``snakes_and_ladders.likelihood.pruning``'s ``rescale`` flag.
 
     Returns
     -------

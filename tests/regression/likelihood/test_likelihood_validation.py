@@ -1,4 +1,4 @@
-"""Validation-error paths for ``sal.likelihood``.
+"""Validation-error paths for ``snakes_and_ladders.likelihood``.
 
 Separated from tests/regression/test_likelihood_pruning.py, which pins
 scientific correctness; these pin the guardrails around malformed inputs,

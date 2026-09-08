@@ -1,7 +1,7 @@
 """NNI and SPR neighbourhood generators over unrooted binary topologies.
 
-Topologies are ``sal.sim.tree.Node`` in the trifurcating-root convention
-(``sal.sim.newick.validate_unrooted_newick``): the root has 3 children,
+Topologies are ``snakes_and_ladders.sim.tree.Node`` in the trifurcating-root convention
+(``snakes_and_ladders.sim.newick.validate_unrooted_newick``): the root has 3 children,
 every other internal node has 2. Branch lengths and internal labels carry no
 information here -- this is pure combinatorics over topology (issue #79),
 not likelihood -- so generated neighbours have ``branch_length=None`` and

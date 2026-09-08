@@ -3,8 +3,8 @@
 Neither a topology nor a lattice appears here: a :class:`Bound` is what a
 surrogate claims, a :class:`Surrogate` is any callable that makes the claim,
 and :func:`certify` is what holds it to the claim against the exact value.
-``sal.likelihood.surrogate`` builds the analytic bounds on
-these and ``sal.learn.surrogate`` the learned ones, and
+``snakes_and_ladders.likelihood.surrogate`` builds the analytic bounds on
+these and ``snakes_and_ladders.learn.surrogate`` the learned ones, and
 ``learn/CLAUDE.md`` is why the seam lives above both.
 """
 

@@ -11,20 +11,26 @@ produces them or in `STATUS.md`, and the module docstrings say which.
 
 ## What lives here
 
-Topology neighbourhoods and the searches that walk them for the supported problems.
+Topology neighbourhoods and the searches that walk them; two-state ground
+states by minimum cut, extended to any label count by expansion moves; Max-Cut
+with a certificate; Monte Carlo moves for the Potts lattice, a Gibbs sampler
+and annealer over any factor graph, and the statistics that judge them; the
+inference loop, the coupled block ascent, the `learn` environment instance and
+its Gymnasium adapter (`gym.py`), a vocabulary over the unchanged protocol.
 
-Two seams run through: a discrete move changes the structure being fitted, so the
-loop builds a new objective rather than stepping inside a fit currently.  This will
-change in the future for computational efficiency.
-
-The environments currently live here rather than beside the estimator that consumes it,
-because `learn/` may import no application module. but an envs/ module will be created.
+Two seams run through it and neither may be reversed. A discrete move changes
+the structure being fitted, so the loop builds a new objective rather than
+stepping inside a fit — which is why this module may import `snakes_and_ladders.likelihood`
+and `snakes_and_ladders.opt` while neither may import it. And the environment lives here
+rather than beside the estimator that consumes it, because `learn/` may import
+no application module.
 
 ## Local rules
 
-- **Discrete tests run where an exact oracle reaches.** Exhaustive enumeration
-  is the reference, so the sizes are chosen to keep it available; a move test
-  past that size proves nothing extra and costs the budget `DEV.md` sets.
+- **Discrete tests run where an exact oracle reaches.** Exhaustive
+  enumeration is the reference, so the sizes are chosen to keep it available;
+  a move test past that size proves nothing extra and costs the budget
+  `DEV.md` sets.
 
 - **Neighbourhood generators are verified against counts.** Where a closed
   form for the neighbour count exists the test uses it, and otherwise
@@ -45,9 +51,8 @@ because `learn/` may import no application module. but an envs/ module will be c
 
 - **A structure is scored at most once per search**, keyed on a canonical form
   independent of how it was spelled, because overlapping neighbourhoods pay
-  the dominant cost twice otherwise. A returned structure states its support and
-  names which of `support.py`'s four it is — neighbourhood, enumerated, tempered,
-  or bootstrap; a tempered weight is a posterior only beside its mixing diagnostics.
+  the dominant cost twice otherwise. A returned structure states its support
+  and names which it is: neighbourhood, enumerated, or bootstrap (`support.py`).
 
 - **Truth is a terminal penalty, never a training signal.** An agent that can
   see the answer during training learns to look it up.
@@ -75,8 +80,7 @@ because `learn/` may import no application module. but an envs/ module will be c
 - **A fixture whose answer is trivial measures nothing.** A uniform field
   makes a ferromagnetic ground state constant; a bipartite graph makes its
   maximum cut every edge. Both admit a solver broken in ways only a harder
-  instance exposes, and a benchmark built on either is measuring its own
-  fixture.
+  instance exposes; a benchmark built on either measures its own fixture.
 
 - **An approximation with a bound states the bound and measures the gap.**
   The bound is the claim that holds at every size; the realized ratio is
