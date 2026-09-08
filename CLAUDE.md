@@ -63,6 +63,7 @@ Every `CLAUDE.md`, this one included, is the exception, on rule 6: it carries th
 *   **Code Standards:** Use type hints on all Python functions. Do not introduce silent behavior changes (e.g., default parameters). Keep dependencies minimal and justify additions.
 *   **Dev Standards:** The number of PRs should be minimized to limit the amount of review work and test runs, particularly given tickets are typically scoped to a work item. 
 *   **Model Routing:** Claude Fable carries the judgement: it plans tickets, implements the plans, writes the pull requests, reviews work before it is posted, and takes review tickets. Everything else is delegated to Claude Opus subagents: the mechanical steps such as merges and rebuilds, measurements, searches, and re-executions, each briefed with the plan and validated by Fable before it lands.
+*   **A release ticket reports as it goes:** the pull request for a Release-template ticket opens as a draft as soon as its branch exists, and its body is updated every 10 minutes with the work still to be completed and the estimated time to the finished pull request, so the maintainer reads the state of the release from the pull request rather than asking for it. The draft leaves that state when the plan's steps are all landed and validated.
 
 ## Performance
 *   **GPU (PyTorch, Triton, JAX):** Target if the hot path is data-parallel and earns $\ge 10\times$ speedup over vectorized NumPy at realistic problem sizes.
