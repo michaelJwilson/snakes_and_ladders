@@ -21,44 +21,55 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_emissions.py::test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform` | oracle | `BetaBinomial(n, 1, 1)` puts equal mass on every one of the n + 1 outcomes. |
 | `test_emissions.py::test_the_closed_form_count_m_steps_are_the_weighted_mean` | oracle |  |
 | `test_numerics_rust.py::test_the_rust_sampler_is_bit_identical_to_the_oracle` | oracle |  |
-| `test_numerics_rust.py::test_both_agree_on_a_row_that_does_not_quite_sum_to_one` | oracle | The case `sal.numerics`' docstring calls out as ordinary float64 behaviour: the row leaves a sliver of the unit interval above its own total, and a draw landing there crosses no column. |
+| `test_numerics_rust.py::test_both_agree_on_a_row_that_does_not_quite_sum_to_one` | oracle | The case `snakes_and_ladders.numerics`' docstring calls out as ordinary float64 behaviour: the row leaves a sliver of the unit interval above its own total, and a draw landing there crosses no column. |
 | `test_numerics_rust.py::test_the_generator_is_consumed_identically_by_both` | oracle | A caller may swap the implementations without its stream diverging, and that is a property of the port rather than a coincidence: both draw one uniform per entry, in order, before doing any lookup. |
 | `test_numerics_rust.py::test_a_non_contiguous_input_gives_the_same_answer` | oracle | Borrowing rather than copying makes stride a real concern where it was not before. |
 | `test_pairwise_distance.py::test_pairwise_distance_small_fixed_input` | oracle | Small, hand-checkable input. |
 | `test_scale_tiers.py::test_the_budget_script_states_both_budgets` | simulated_truth | The numbers `DEV.md` documents and the numbers the script measures against have to be the same two, or the report is against a budget nothing else knows about. |
 
-## `tests/regression/learn/` (26)
+## `tests/regression/learn/` (37)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
+| `test_learn_critic.py::test_the_optimal_value_over_a_long_horizon_reaches_the_enumerated_optimum` | oracle | With enough decisions the best return from any start is the gap to the enumerated minimum energy, since single flips connect every pair of configurations. |
+| `test_learn_critic.py::test_a_fitted_critic_explains_the_enumerated_state_values` | oracle |  |
+| `test_learn_critic.py::test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy` | simulated_truth | 60 iterations of 32 episodes, the budget #135 trained REINFORCE on: the actor-critic reaches the enumerated optimum from 88.9% of the 81 starts against greedy's 80.2% (measured; asserted at greedy's rate). |
 | `test_learn_environment.py::test_greedy_takes_the_best_rewarded_action_at_every_step` | oracle |  |
 | `test_learn_hmm.py::test_the_local_reward_matches_re_evaluating_the_joint_probability` | oracle | The failure this class is most exposed to: an O(1) update that disagrees with a full evaluation would be invisible to any test that only checked the search improved. |
 | `test_learn_hmm.py::test_enumeration_counts_every_path` | oracle |  |
 | `test_learn_hmm.py::test_hill_climbing_reaches_the_enumerated_optimum` | oracle | 729 paths, so "did the search find the best one" has an answer. |
-| `test_learn_hmm.py::test_the_enumerated_gradient_matches_central_differences` | oracle | The oracle that makes this an *instance* rather than a second class with the same method names: `sal.learn.exact` carries it unchanged from the Potts landscape, and the agreement it reaches here is the same claim at 1.5e-11 that one reports. |
+| `test_learn_hmm.py::test_the_enumerated_gradient_matches_central_differences` | oracle | The oracle that makes this an *instance* rather than a second class with the same method names: `snakes_and_ladders.learn.exact` carries it unchanged from the Potts landscape, and the agreement it reaches here is the same claim at 1.5e-11 that one reports. |
+| `test_learn_planning.py::test_one_step_search_with_the_exact_leaf_value_picks_an_optimal_action` | oracle | Depth one: every backed-up value is r + V*(s'), so the most visited move is an argmax of Q*, ties allowed. |
+| `test_learn_planning.py::test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_greedys_evaluations` | simulated_truth |  |
 | `test_learn_potts.py::test_energy_matches_its_definition_term_by_term` | oracle | E(s) = J * (agreeing adjacent pairs) + sum of the field at each site, written out here independently of the implementation's loop. |
 | `test_learn_potts.py::test_the_local_reward_equals_a_full_energy_difference` | oracle | The step function updates two bonds and one site rather than re-evaluating E. |
 | `test_learn_potts.py::test_the_neighbourhood_has_one_flip_per_site_and_alternative_state` | oracle |  |
 | `test_learn_potts.py::test_enumeration_produces_every_configuration_exactly_once` | oracle |  |
 | `test_learn_potts.py::test_the_optimum_is_the_best_of_every_configuration` | oracle |  |
 | `test_learn_potts.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle | Not a convenience: it is what makes "the agent beat hill climbing" a statement about learning rather than about two unrelated algorithms. |
+| `test_learn_potts.py::test_the_vectorized_features_are_the_scalar_deltas_exactly` | oracle | `features` computes every action's (agreement, field) change in one NumPy pass since #264; `_deltas` is the scalar statement it replaces and stays as the oracle. |
 | `test_learn_potts_lattice.py::test_a_chain_built_as_a_graph_is_the_chain` | oracle | The claim that justifies one class rather than two: if the two constructors disagreed anywhere, the generalization would have changed the reference instance every existing result rests on. |
 | `test_learn_potts_lattice.py::test_the_local_reward_matches_re_evaluating_the_energy_on_a_lattice` | oracle | A 3x3 open lattice has interior sites with four neighbours, which the chain never exercises: its delta only ever sums two terms. |
 | `test_learn_potts_lattice.py::test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary` | oracle | Periodic wrapping gives every site the same degree and makes a 2-extent dimension list the same pair twice, as a doubled bond. |
 | `test_learn_potts_lattice.py::test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice` | oracle | 3**9 = 19,683 configurations, the same size #170's simulator validates against, so the best configuration is an enumerated fact. |
-| `test_learn_potts_lattice.py::test_the_enumerated_gradient_matches_central_differences_on_a_lattice` | oracle | The oracle that makes this an instance rather than a lookalike: `sal.learn.exact` carries it unchanged from the chain. |
+| `test_learn_potts_lattice.py::test_the_enumerated_gradient_matches_central_differences_on_a_lattice` | oracle | The oracle that makes this an instance rather than a lookalike: `snakes_and_ladders.learn.exact` carries it unchanged from the chain. |
+| `test_learn_ppo.py::test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matched_budget` | oracle |  |
+| `test_learn_ppo.py::test_an_mlp_policy_trained_by_ppo_reaches_the_optimum` | simulated_truth | Measured 97.5% of the 81 starts with mean exact return 2.55, against the linear policy's 96.3% and 2.28: the deeper scorer can represent the worsening move a chain needs, which the two linear features cannot. |
 | `test_learn_reinforce.py::test_the_enumerated_gradient_matches_finite_differences` | oracle | Autodiff against numerical differentiation of the same closed form. |
 | `test_learn_reinforce.py::test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient` | oracle | The claim REINFORCE rests on, checked rather than cited. |
 | `test_learn_reinforce.py::test_training_raises_the_enumerated_expected_return` | oracle | Against the enumerated J, not the sampled mean the training loop reports: that curve is a Monte Carlo estimate under a moving policy and can rise while the estimator is wrong. |
 | `test_learn_reinforce.py::test_the_learned_policy_is_at_least_as_good_as_hill_climbing` | simulated_truth | Milestone 8's criterion, at a size where the answer is enumerable. |
 | `test_learn_relaxed.py::test_the_potts_relaxation_is_exact_at_every_corner` | oracle | The first thing that must be true. |
-| `test_learn_relaxed.py::test_the_hmm_relaxation_is_exact_at_every_corner` | oracle | The same check across a module boundary, which makes it stronger than the one above: `sal.learn` may not import `sal.likelihood`, so `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely independent implementations of `log P(path, observations)`. |
+| `test_learn_relaxed.py::test_the_hmm_relaxation_is_exact_at_every_corner` | oracle | The same check across a module boundary, which makes it stronger than the one above: `snakes_and_ladders.learn` may not import `snakes_and_ladders.likelihood`, so `RelaxedHmmPath.discrete` and `path_log_probability` are genuinely independent implementations of `log P(path, observations)`. |
 | `test_learn_relaxed.py::test_the_relaxed_optimum_of_the_hmm_is_the_viterbi_path` | oracle | The relaxed objective's discrete optimum must be the answer another module computes for the same question, or the relaxation is optimizing something else. |
 | `test_learn_relaxed.py::test_the_expected_discrete_score_equals_the_score_at_the_marginals` | oracle |  |
 | `test_learn_relaxed.py::test_the_exact_gradient_matches_a_finite_difference` | oracle | The reference every estimator is measured against needs its own check, or a bias measurement is only evidence that two wrong things differ. |
 | `test_learn_relaxed.py::test_the_hmm_path_is_recovered_from_every_restart` | simulated_truth | The HMM half validates correctness, not difficulty: Viterbi is exact in `O(T k**2)` and nothing here is hard. |
+| `test_learn_surrogate.py::test_linear_surrogate_recovers_a_linear_target_on_held_out_groups` | simulated_truth | Without the token term the target is affine in the features; the standardization and the offset are undone on the way out, so the held-out prediction is the target to the noise. |
+| `test_learn_surrogate.py::test_models_explain_the_target_on_held_out_groups` | simulated_truth | The token models see the bilinear term the MLP cannot, so their held-out R^2 clears 0.9 while the MLP, which reads only the feature vector, is held to what the features explain. |
+| `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 
-## `tests/regression/likelihood/` (47)
+## `tests/regression/likelihood/` (58)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -106,9 +117,20 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_pruning_torch.py::test_torch_matches_brute_force` | oracle |  |
 | `test_pruning_torch.py::test_matrix_exp_rate_matrix_path_matches_closed_form` | oracle |  |
 | `test_pruning_torch.py::test_gradient_matches_finite_differences_of_numpy_oracle` | oracle |  |
+| `test_pruning_torch.py::test_the_batched_transition_matrices_are_the_scalar_ones` | oracle | #264 computes every branch's P(t) in one call. |
 | `test_spatio_sequential.py::test_the_enumerated_evidence_equals_the_per_class_forward_route` | oracle |  |
 | `test_spatio_sequential.py::test_the_written_out_joint_is_the_factor_graph_log_density` | oracle |  |
 | `test_spatio_sequential.py::test_the_label_posterior_recovers_planted_labels_on_most_nodes` | simulated_truth | 42 of 48 when measured; asserted at three quarters. |
+| `test_spatio_sequential_fit.py::test_forward_backward_is_the_path_enumeration` | oracle |  |
+| `test_spatio_sequential_fit.py::test_the_class_e_step_is_the_conditional_posterior_by_enumeration` | oracle |  |
+| `test_spatio_sequential_fit.py::test_the_labelled_joint_is_the_enumeration_s_per_labelling_term` | oracle |  |
+| `test_spatio_sequential_fit.py::test_the_m_step_identity_holds_through_autograd` | oracle | the M-step identity: the gradient of log p(x \| l, theta) equals the posterior-weighted gradient of the emission terms. |
+| `test_spatio_sequential_fit.py::test_the_backward_sampler_draws_paths_from_the_posterior` | simulated_truth |  |
+| `test_surrogate.py::test_plug_in_bound_is_below_every_fitted_likelihood` | oracle | One pruning evaluation at least-squares lengths against a full fit, on all 15 topologies: never above, within 8 nats at 200 sites (6.7 was the worst gap measured at 1,200), and ranking the fitted best first. |
+| `test_surrogate.py::test_parsimony_bound_is_above_every_fitted_likelihood` | oracle |  |
+| `test_surrogate.py::test_site_fitch_scores_sum_to_the_fitch_score` | oracle |  |
+| `test_surrogate.py::test_mean_field_and_spanning_tree_bounds_sandwich_log_z` | oracle |  |
+| `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
 ## `tests/regression/opt/` (44)
 
@@ -185,7 +207,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (47)
+## `tests/regression/search/` (72)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -193,6 +215,16 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_alpha_expansion.py::test_the_multi_state_energy_agrees_with_the_two_state_one` | oracle | The generalization must reduce to what `maxflow` already validates, or the two modules are optimizing different objectives accurately. |
 | `test_alpha_expansion.py::test_expansion_beats_single_site_descent_past_enumeration` | simulated_truth | Where the move set earns its complexity. |
 | `test_alpha_expansion.py::test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term` | oracle | With no bonds the sites decouple and the optimum is `argmax` per node, so the answer is known without enumerating or cutting anything. |
+| `test_alpha_expansion.py::test_the_numba_descent_reproduces_the_python_one_bitwise` | oracle | The pin that lets the kernel be the default (#264): same update, same index order, same first-minimum tie rule, so the labelling and the energy are identical, not close. |
+| `test_gibbs.py::test_the_generic_sweep_samples_the_potts_boltzmann_distribution` | simulated_truth |  |
+| `test_gibbs.py::test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw` | oracle | Same uniforms, same site order, same cumulative search: the only way the two could differ is a uniform within rounding of a boundary, and over 2,000 sweeps of four sites none did. |
+| `test_gibbs.py::test_the_generic_sweep_samples_the_hidden_path_posterior` | simulated_truth |  |
+| `test_gibbs.py::test_the_block_move_draws_the_whole_chain_exactly` | simulated_truth | Every block draw is an independent sample from the posterior, so no thinning is needed: that is what "exact" buys. |
+| `test_gibbs.py::test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree` | oracle |  |
+| `test_gibbs.py::test_the_generic_sweep_samples_the_coupled_model_s_label_posterior` | simulated_truth |  |
+| `test_gibbs.py::test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_does` | oracle |  |
+| `test_gibbs.py::test_the_topology_move_at_temperature_one_samples_the_enumerated_flat_prior_weight` | oracle |  |
+| `test_gibbs.py::test_the_annealed_topology_move_reaches_the_enumerated_best` | oracle |  |
 | `test_max_cut.py::test_a_complete_bipartite_graph_has_every_edge_in_its_maximum_cut` | oracle |  |
 | `test_max_cut.py::test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice` | oracle |  |
 | `test_max_cut.py::test_max_cut_is_the_antiferromagnetic_ising_ground_state` | oracle | The identity the module rests on, checked rather than asserted in prose: with every coupling negative and no field, the minimum energy is the total weight less the maximum cut. |
@@ -210,6 +242,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_potts_mcmc.py::test_the_best_configuration_is_the_lowest_energy_any_replica_visited` | oracle |  |
 | `test_potts_mcmc_rust.py::test_the_rust_chain_is_drawn_from_the_exact_boltzmann_distribution` | oracle | The claim the port has to earn, against enumeration. |
 | `test_potts_mcmc_rust.py::test_the_rust_chain_is_still_exact_in_an_external_field` | oracle | A field is not optional here. |
+| `test_search_escape.py::test_epsilon_zero_reproduces_hill_climbing_exactly` | oracle |  |
 | `test_search_exhaustive.py::test_enumeration_produces_every_topology_exactly_once` | oracle | Checked against the closed form, not against a second enumeration. |
 | `test_search_exhaustive.py::test_hill_climbing_reaches_the_enumerated_maximum` | oracle |  |
 | `test_search_exhaustive.py::test_the_enumerated_maximum_is_reached_by_no_topology_twice_over` | oracle |  |
@@ -222,6 +255,12 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_infer.py::test_random_topology_reaches_every_topology_and_only_those` | oracle | The generator must be able to start anywhere, or a search seeded from it is quietly restricted to part of the space. |
 | `test_search_infer.py::test_a_fixed_topology_with_no_budget_is_exactly_the_continuous_fit` | oracle | The API's two cases are one code path, not two: with the topology given and no budget, `infer` must agree with calling the objective and the optimizer directly. |
 | `test_search_infer.py::test_score_topology_agrees_with_a_zero_budget_search` | oracle |  |
+| `test_search_infer.py::test_a_warm_start_reaches_the_cold_optimum_on_every_neighbour` | oracle | The pin that lets warm starts be the default: where a fit starts moves, where it ends does not. |
+| `test_search_infer.py::test_the_partial_cache_returns_what_the_recursion_computes` | oracle | Bitwise: a partial served from the cache is the tensor the recursion would produce, because the arithmetic inside a subtree is the same whatever sits above it. |
+| `test_search_infer.py::test_lazy_ranking_places_the_fitted_best_first_for_nni` | simulated_truth | One unfitted evaluation at the parent's lengths ranks the NNI neighbourhood correctly at eight taxa: the fitted best is the lazy best on 6 of 6 neighbourhoods measured. |
+| `test_search_infer.py::test_warm_starts_do_not_move_the_search_answer` | oracle | The search's answer is the same tree at the same likelihood, warm or cold, from the same start; what differs is the cost, which is reported. |
+| `test_search_infer.py::test_lazy_nni_search_reaches_what_the_full_search_reaches` | oracle | With every candidate ranked lazily and only the top one fitted, the NNI search still ends where the full search ends on the eight-taxon fixture, from each of three starts, at fewer fits. |
+| `test_search_ppo.py::test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget` | oracle |  |
 | `test_search_rl.py::test_the_known_score_is_the_likelihood_at_a_fixed_branch_length` | oracle | Against a direct call to the pruning recursion, built independently here: the environment is a wrapper, and this is the claim that it wraps what it says it does. |
 | `test_search_rl.py::test_the_fitted_score_is_the_maximized_likelihood` | oracle |  |
 | `test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum` | oracle | The exhaustive oracle, on the surface the agent actually sees. |
@@ -232,10 +271,18 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_support.py::test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_supports_agree` | oracle |  |
 | `test_search_support.py::test_the_generating_splits_have_full_bootstrap_support_at_many_sites` | simulated_truth |  |
 | `test_search_support.py::test_the_enumerated_support_is_calibrated_on_simulated_data` | simulated_truth | The test the ticket names: bin the returned trees by the support they report and the fraction that equal the generating topology must not fall as the support rises. |
+| `test_search_surrogate.py::test_learned_surrogates_rank_held_out_neighbourhoods` | simulated_truth | Six alignments, every topology of each fitted (90 fits at 200 sites), split by alignment: three to train, two to validate, one held out. |
+| `test_search_surrogate.py::test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments` | oracle | Against a full fit of every topology on three alignments: the plug-in bound and the parsimony bound each put the fitted best first, at a hundredth (2.4 ms against 250 ms) and a thousandth of the cost. |
+| `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
 | `test_search_topology.py::test_enumeration_matches_count_topologies` | oracle |  |
 | `test_search_topology.py::test_nni_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_spr_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_nni_and_spr_exhaustive_at_n8` | oracle | The same properties as the per-PR sweep, at the next size up. |
+| `test_search_topology.py::test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology` | oracle | `_split_key` is what `spr_neighbours` deduplicates on since #264; this asserts it names the same set of splits `leaf_bipartitions` does, on every one of the 105 six-leaf topologies, with the anchor convention (the smallest leaf's side is the complement) applied identically. |
+| `test_search_topology.py::test_spr_neighbours_are_the_definition_in_the_definition_order` | oracle | Order matters as well as membership: a hill climb takes the first of equally good neighbours, so a faster generator that permuted them would change which tree a search lands on while every count test passed. |
+| `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
+| `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
+| `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
 ## `tests/regression/sim/` (37)
 
@@ -274,9 +321,9 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_newick.py::test_to_newick_with_node_states_round_trips_ancestor_labels` | oracle |  |
 | `test_potts_simulate.py::test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice` | oracle |  |
 | `test_potts_simulate.py::test_gibbs_sampling_matches_brute_force_enumeration_at_a_second_size` | oracle | An independent confirmation at a different (n_states, shape) than the fixture, per the issue's own two named sizes: 2-state 4x4 is 65,536 configurations. |
-| `test_potts_simulate.py::test_the_open_chain_path_reproduces_the_transfer_matrix_log_z` | oracle | A reduction to an exact result, not sampler-vs-sampler agreement: the same distribution described by sal.opt.potts's transfer matrix and by the backward-message sampler this module generalizes it from. |
+| `test_potts_simulate.py::test_the_open_chain_path_reproduces_the_transfer_matrix_log_z` | oracle | A reduction to an exact result, not sampler-vs-sampler agreement: the same distribution described by snakes_and_ladders.opt.potts's transfer matrix and by the backward-message sampler this module generalizes it from. |
 | `test_spatio_sequential.py::test_the_labels_are_drawn_from_the_potts_prior` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-236 checks.
+283 checks.
