@@ -398,6 +398,7 @@ def test_warm_starts_do_not_move_the_search_answer(moves: MoveSet) -> None:
 
 
 @pytest.mark.oracle
+@pytest.mark.release
 def test_lazy_nni_search_reaches_what_the_full_search_reaches() -> None:
     # With every candidate ranked lazily and only the top one fitted, the NNI
     # search still ends where the full search ends on the eight-taxon fixture,

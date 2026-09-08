@@ -340,6 +340,7 @@ def test_a_non_positive_temperature_is_refused() -> None:
 
 
 @pytest.mark.oracle
+@pytest.mark.release
 def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not() -> (
     None
 ):

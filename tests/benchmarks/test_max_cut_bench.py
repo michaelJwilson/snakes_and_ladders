@@ -45,7 +45,12 @@ def test_goemans_williamson_benchmark(
     assert result.value >= 0.0
 
 
-@pytest.mark.parametrize("n_nodes", [12, 16, 20])
+# 20 nodes is 55.8 s on the reference host, over the 10 s per-pull-request
+# cap, so it runs at the release gate; 12 and 16 keep the crossover measured
+# per pull request (issue #372).
+@pytest.mark.parametrize(
+    "n_nodes", [12, 16, pytest.param(20, marks=pytest.mark.release)]
+)
 def test_enumerate_max_cut_benchmark(benchmark: BenchmarkFixture, n_nodes: int) -> None:
     graph = _random_graph(n_nodes, 0.3, n_nodes)
 

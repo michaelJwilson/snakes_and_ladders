@@ -279,6 +279,7 @@ def test_sankoff_refuses_what_fitch_refuses() -> None:
 
 
 @pytest.mark.simulated_truth
+@pytest.mark.release
 def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
     # The theorem, as a prediction. Parsimony does not merely do badly here --
     # more data does not help, because the systematic pull toward grouping the
@@ -292,6 +293,7 @@ def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
 
 
 @pytest.mark.simulated_truth
+@pytest.mark.release
 def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
     # The other half of the same claim, and the reason the zone is the
     # canonical argument for the criterion this repository actually uses.

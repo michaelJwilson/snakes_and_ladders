@@ -379,14 +379,16 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher(
 
 
 @pytest.mark.simulated_truth
+@pytest.mark.release
 def test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget(
     full: tuple[TopologyEnvironment, list[str]], starts: list[Topology]
 ) -> None:
-    # One seed at half the budget: what a pull request can afford. The
-    # control is the uniform policy; both trained policies must leave it far
-    # behind, land within 0.1 of the rates realized here, and keep their
-    # order, so a regression in either feature set's training is visible
-    # per PR. The 16-seed claim is the release run's.
+    # One seed at half the budget. The control is the uniform policy; both
+    # trained policies must leave it far behind, land within 0.1 of the rates
+    # realized here, and keep their order, so a regression in either feature
+    # set's training is visible. The 16-seed claim is the release run's. The
+    # one seed measured 33.1 s on the reference host, over the 10 s cap, so
+    # this runs at the release gate too (issue #372).
     built, taxa = full
     best = enumerated_maximum(built, taxa)
     assert greedy_rate(built, starts, best) == pytest.approx(_GREEDY)

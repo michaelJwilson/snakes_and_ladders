@@ -113,6 +113,10 @@ def test_one_neighbour_fit_benchmark(benchmark: BenchmarkFixture, warm: bool) ->
     assert math.isfinite(fitted.value)
 
 
+# 180.2 s cold, 117.6 s warm, 10.6 s lazy on the reference host: every
+# case is over the 10 s per-pull-request cap, so the whole benchmark runs at
+# the release gate (issue #372).
+@pytest.mark.release
 @pytest.mark.parametrize(
     ("warm_start", "lazy_top"),
     [(False, None), (True, None), (True, 1)],
