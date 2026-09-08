@@ -15,13 +15,12 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.parsimony import fitch_score
-
 from snakes_and_ladders.likelihood.hmm_paths import (
     emission_log_density,
     enumerate_hidden_paths,
     path_log_probability,
 )
+from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
 from snakes_and_ladders.search.infer import MoveSet, infer
 from snakes_and_ladders.search.support import (
@@ -413,7 +412,6 @@ def test_a_topology_with_no_competitor_has_all_the_weight() -> None:
     assert support.margin == np.inf
 
 
-<<<<<<< HEAD
 # --- pattern support (issue #328) -----------------------------------------
 
 
@@ -508,7 +506,8 @@ def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None
         split_pattern_support(frozenset(alignment), alignment, params.k)
     # A trivial split cannot be crossed, so every site is compatible.
     assert split_pattern_support(frozenset({"A"}), alignment, params.k) == 1.0
-=======
+
+
 @pytest.mark.structural
 def test_four_workers_report_the_bootstrap_one_worker_reports() -> None:
     """Replicate ``i`` draws the stream spawned for it, whichever worker runs it (issue #344).
@@ -560,4 +559,3 @@ def test_a_replicate_is_the_search_of_the_resample_its_spawned_generator_draws()
             if split in counts:
                 counts[split] += 1
     assert support == {split: count / 2 for split, count in counts.items()}
->>>>>>> origin/claude/infra-344-parallelism
