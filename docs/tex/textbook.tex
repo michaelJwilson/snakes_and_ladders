@@ -212,7 +212,7 @@ warm-up whose draws are discarded, after which the chain runs at fixed values
 and is a Markov chain with the target as its stationary distribution; a chain
 that kept adapting would not be. The scales are the sample standard deviations
 of a warm-up window. The step is driven to a target acceptance $\delta$ by dual
-averaging \citep[\S3.2]{hoffman2014}: after proposal $m$ with acceptance
+averaging \citep[Sec.~3.2]{hoffman2014}: after proposal $m$ with acceptance
 probability $\alpha_m$,
 \begin{equation}
   \bar h_m = \Big(1 - \frac{1}{m + t_0}\Big)\bar h_{m-1}
@@ -238,7 +238,7 @@ iteration driven by a single Metropolis probability per proposal, whose
 standard deviation is a sizeable fraction of one, oscillates across it and
 averages to a step whose acceptance is not $\delta$. Two remedies, both
 measured rather than assumed: each proposal's step is drawn uniformly from
-$\bar\varepsilon\,(1 \pm j)$ \citep[\S5.4.2.2]{neal2011}, which averages
+$\bar\varepsilon\,(1 \pm j)$ \citep[Sec.~5.4.2.2]{neal2011}, which averages
 $\alpha$ over the band and turns the cliff into a slope with one root; and
 $\gamma$ is set larger than the value published for a trajectory-averaged
 statistic, since the iterates' spread in $\log\varepsilon$ scales as
