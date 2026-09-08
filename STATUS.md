@@ -1179,6 +1179,25 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
 
+**The tree policy learns once it has something to learn**
+([#328](https://github.com/michaelJwilson/snakes_and_ladders/issues/328)).
+#178 trained a policy over one feature, the improvement a move buys, and
+measured a tie with greedy hill climbing on the hard seven-taxon fixture,
+because a softmax over one column is an inverse temperature. `FeatureSet.FULL`
+gives each move seven columns without a fit — the improvement, the Fitch
+parsimony change, the pattern support of the split broken and of the split
+made, and the sizes of the two exchanged subtrees — standardized within the
+neighbourhood, each pinned to an independent computation and each shown to
+vary within a neighbourhood (a planted Robinson–Foulds column, constant across
+NNI moves, is refused). At #178's budget of 640 episodes over 50 starts and 16
+training seeds, the single feature reaches the enumerated maximum from 0.487
+of episodes against greedy's 0.480 (sign test p = 0.79) and the full set from
+0.796, ahead on 16 of 16 seeds (p = 3.05e-5;
+`docs/experiments/004-tree-policy-features.md`). The known-parameter reward
+now scores GTR from a given rate matrix through the pruning recursion. Not
+measured: the full set against random-restart hill climbing, which #194 showed
+reaches every start on this fixture, and any column's individual necessity.
+
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
 **The ledger has a record format before it has a run store**
