@@ -87,11 +87,21 @@ none
 
 ## Finding
 
-FINDING_PLACEHOLDER
+Restarts are not beaten on the mixture at 3,000 evaluations: 7 of 40 starts
+against tempering's 4 (p = 0.549, no separation) and annealing's 1
+(p = 0.031, worse). The mean gap orders the same way, 2.6, 4.2 and 8.0 nats.
+This is the same finding as Rastrigin and the opposite of the frustrated
+lattice, where the Potts tempering of #267 wins: on a mixture whose basins are
+separated by relabelling and by component overlap rather than by energy
+barriers, a fresh EM start reaches a new basin more cheaply than a tempered
+chain crosses to it.
 
 ## Conclusion and actions
 
-ACTIONS_PLACEHOLDER
+- #333: an adapted ladder chosen from the measured exchange acceptance, which
+  this run set by hand at (1, 2, 4, 8), before the comparison is re-run.
+- #321: the inline table this file replaces is cited from `STATUS.md` rather
+  than restated.
 
 ## What is not claimed
 
