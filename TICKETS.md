@@ -83,7 +83,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
   it costs per step (#329)
 - Establish the external reference tools to benchmark against, and how they are
-  installed (#126)
+  installed (#126) — deferred while `CLAUDE.md` admits no external solver;
+  `docs/external_tools.md` is the survey a future adoption starts from
 - A classical baseline suite the applications are scored against under one
   budget — large parsimony under NNI and SPR is the tree baseline that exists
   and `opt.budget.compare` the budget; the HMM and Potts baseline suites remain
@@ -123,9 +124,12 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.3 — Empirical Validation & Benchmarking
 
-- Ingest empirical alignments, with their provenance recorded
-- Benchmark harness: budget-matched runs against IQ-TREE 2 and RAxML-NG on
-  shared seeds, once #126 installs them
+- Validation past enumeration on simulated fixtures at the sizes this milestone
+  targets, refereed by the parameters that generated them; ingesting an
+  empirical alignment waits on the external-solver decision (#126)
+- Benchmark harness: budget-matched runs on shared seeds against the classical
+  baselines this repository implements; runs against IQ-TREE 2 and RAxML-NG
+  wait on the same decision (#126)
 - Report RF and ΔlnL against known truth up to `n = 1000`
 - A fixed-hardware benchmark runner, since CI hardware cannot rank performance
 - GPU scaling for the site-parallel recursion, once a device exists to
