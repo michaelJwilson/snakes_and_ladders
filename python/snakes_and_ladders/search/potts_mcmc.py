@@ -48,6 +48,7 @@ from enum import StrEnum
 import numpy as np
 
 from snakes_and_ladders.likelihood.potts import log_weights
+from snakes_and_ladders.opt.anneal import Extremum, drive, exchange
 from snakes_and_ladders.opt.schedule import AdaptedLadder, Schedule, adapt_ladder
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -278,19 +279,29 @@ def anneal_potts(
     field = np.asarray(field, dtype=float)
     state = rng.integers(0, int(field.shape[0]), size=graph.n_nodes)
     neighbours = _adjacency(graph)
-
-    best_state = state.copy()
-    best_energy = float(energies(graph, field, state[None])[0])
     sweep = _sweep_at(graph, field, neighbours, backend)
-    for step in range(schedule.n_steps):
-        sweep(state, rng, 1.0 / schedule(step))
-        energy = float(energies(graph, field, state[None])[0])
-        if energy < best_energy:
-            best_state, best_energy = state.copy(), energy
+
+    def transition(
+        current: np.ndarray, _: float, temperature: float
+    ) -> tuple[np.ndarray, float, bool]:
+        # The sweep writes through `current`, so `drive` is told to snapshot
+        # a state worth keeping; without that, `labelling` would alias
+        # `final` and report the last sweep as the best one.
+        sweep(current, rng, 1.0 / temperature)
+        return current, float(energies(graph, field, current[None])[0]), False
+
+    run = drive(
+        state,
+        float(energies(graph, field, state[None])[0]),
+        transition,
+        schedule,
+        keep=Extremum.MINIMUM,
+        copy=lambda current: current.copy(),
+    )
     return AnnealedPotts(
-        labelling=best_state,
-        energy=best_energy,
-        final=state,
+        labelling=run.best,
+        energy=run.best_value,
+        final=run.final,
         n_sweeps=schedule.n_steps,
     )
 
@@ -328,21 +339,6 @@ class TemperedChains:
     best: np.ndarray
     best_energy: float
     n_sweeps: int
-
-
-def _swap_log_ratio(
-    beta_low: float, beta_high: float, energy_low: float, energy_high: float
-) -> float:
-    """Log acceptance of exchanging the configurations at two temperatures.
-
-    The joint target is the product of the tempered marginals, so the ratio
-    is ``(beta_i - beta_j)(E_i - E_j)``: an exchange that hands the colder
-    replica the lower energy is always accepted. A version that omits this
-    term still runs, still mixes, and converges to the wrong distribution ---
-    `tests/regression/search/test_potts_mcmc.py` replaces this function with
-    that version and asserts the chi-square catches it.
-    """
-    return (beta_low - beta_high) * (energy_low - energy_high)
 
 
 def parallel_tempering(
@@ -430,19 +426,17 @@ def parallel_tempering(
     best, best_energy = states[best_index].copy(), float(current[best_index])
 
     sweep = _sweep_at(graph, field, neighbours, backend)
+
+    def swap(first: int, second: int) -> None:
+        states[[first, second]] = states[[second, first]]
+        current[[first, second]] = current[[second, first]]
+
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(n_replicas):
             sweep(states[replica], children[replica], betas[replica])
         current = energies(graph, field, states)
-        for pair in range(n_replicas - 1):
-            log_ratio = _swap_log_ratio(
-                betas[pair], betas[pair + 1], current[pair], current[pair + 1]
-            )
-            proposed[pair] += 1
-            if log_ratio >= 0.0 or rng.random() < np.exp(log_ratio):
-                accepted[pair] += 1
-                states[[pair, pair + 1]] = states[[pair + 1, pair]]
-                current[[pair, pair + 1]] = current[[pair + 1, pair]]
+        proposed += 1
+        accepted += exchange(current, betas, rng.random, swap)
         lowest = int(np.argmin(current))
         if current[lowest] < best_energy:
             best, best_energy = states[lowest].copy(), float(current[lowest])

@@ -32,6 +32,7 @@ import math
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.potts import log_weights
+from snakes_and_ladders.opt import anneal
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.opt.schedule import Constant, Exponential
 from snakes_and_ladders.search import potts_mcmc
@@ -478,10 +479,13 @@ def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -
     # still runs and still mixes -- every exchange is accepted -- and every
     # replica's marginal is the wrong distribution: realized p = 0.0 at all
     # three temperatures.
+    # Patched on `snakes_and_ladders.opt.anneal`, where the one ratio now lives
+    # (issue #386); this module held its own copy before, and the guard is
+    # the same guard through the seam.
     def always_exchange(*_: float) -> float:
         return 0.0
 
-    monkeypatch.setattr(potts_mcmc, "_swap_log_ratio", always_exchange)
+    monkeypatch.setattr(anneal, "swap_log_ratio", always_exchange)
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     run = parallel_tempering(

@@ -34,6 +34,7 @@ from typing import TypeVar
 
 import numpy as np
 
+from snakes_and_ladders.opt.anneal import exchange
 from snakes_and_ladders.search.gibbs import (
     _Indexed,
     cached_topology_score,
@@ -41,7 +42,6 @@ from snakes_and_ladders.search.gibbs import (
     topology_step,
 )
 from snakes_and_ladders.search.infer import Model, MoveSet
-from snakes_and_ladders.search.potts_mcmc import _swap_log_ratio
 from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 
@@ -140,6 +140,11 @@ def _exchange(
     recorded_keys: list[list[Hashable]] = [[] for _ in range(n_replicas)]
     densities: list[list[float]] = []
     scores: dict[Hashable, float] = {}
+
+    def swap(first: int, second: int) -> None:
+        states[first], states[second] = states[second], states[first]
+        values[first], values[second] = values[second], values[first]
+
     for sweep in range(burn_in + n_sweeps):
         for replica in range(n_replicas):
             states[replica], values[replica] = step(
@@ -148,15 +153,11 @@ def _exchange(
                 temperatures[replica],
                 children[replica],
             )
-        for pair in range(n_replicas - 1):
-            log_ratio = _swap_log_ratio(
-                betas[pair], betas[pair + 1], -values[pair], -values[pair + 1]
-            )
-            proposed[pair] += 1
-            if log_ratio >= 0.0 or rng.random() < np.exp(log_ratio):
-                accepted[pair] += 1
-                states[pair], states[pair + 1] = states[pair + 1], states[pair]
-                values[pair], values[pair + 1] = values[pair + 1], values[pair]
+        # The energy is the negated log-density; `exchange` knows only
+        # energies, so the negation stays at this call site, where it was
+        # before issue #386.
+        proposed += 1
+        accepted += exchange([-value for value in values], betas, rng.random, swap)
         if sweep >= burn_in and (sweep - burn_in) % thin == 0:
             for replica in range(n_replicas):
                 name = key(states[replica])

@@ -41,6 +41,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from snakes_and_ladders.numerics import logsumexp
+from snakes_and_ladders.opt.anneal import Extremum, drive
 from snakes_and_ladders.opt.schedule import Schedule
 from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
 from snakes_and_ladders.search.topology import (
@@ -240,16 +241,23 @@ def anneal_factor_graph(
     """
     indexed = _Indexed(graph)
     state = indexed.start(rng, start)
-    best_state = state.copy()
-    best = indexed.log_density(state)
-    trajectory = [best]
-    for step in range(schedule.n_steps):
-        gibbs_sweep(indexed, state, rng, beta=1.0 / schedule(step))
-        value = indexed.log_density(state)
-        trajectory.append(value)
-        if value > best:
-            best, best_state = value, state.copy()
-    return Annealed(best_state, best, np.array(trajectory))
+
+    def transition(
+        current: np.ndarray, _: float, temperature: float
+    ) -> tuple[np.ndarray, float, bool]:
+        # The sweep writes through `current`, hence the `copy` below.
+        gibbs_sweep(indexed, current, rng, beta=1.0 / temperature)
+        return current, indexed.log_density(current), False
+
+    run = drive(
+        state,
+        indexed.log_density(state),
+        transition,
+        schedule,
+        keep=Extremum.MAXIMUM,
+        copy=lambda current: current.copy(),
+    )
+    return Annealed(run.best, run.best_value, run.trajectory)
 
 
 def chain_block_sweep(
@@ -384,21 +392,24 @@ def anneal_topology(
     """
     cache = {} if scores is None else scores
     score = cached_topology_score(alignment, k, cache, model=model)
-    current, value = start, score(start)
-    best, best_value = current, value
-    trajectory = [value]
-    accepted = 0
-    for step in range(schedule.n_steps):
-        current, value, moved = topology_step(
-            current, value, schedule(step), rng, score, moves=moves
-        )
-        if moved:
-            accepted += 1
-            if value > best_value:
-                best, best_value = current, value
-        trajectory.append(value)
+
+    def transition(
+        current: Topology, value: float, temperature: float
+    ) -> tuple[Topology, float, bool]:
+        return topology_step(current, value, temperature, rng, score, moves=moves)
+
+    # A topology is immutable, so the default identity `copy` is right. The
+    # loop this replaced nested its best-state test inside `if moved`; that
+    # gate was never live, because a rejected step returns the value it was
+    # given and `best_value` is an upper bound on every value seen. Dropping
+    # it changes no result and is pinned as not changing one.
+    run = drive(start, score(start), transition, schedule, keep=Extremum.MAXIMUM)
     return AnnealedTopology(
-        best, best_value, np.array(trajectory), accepted / schedule.n_steps, cache
+        run.best,
+        run.best_value,
+        run.trajectory,
+        run.accepted / schedule.n_steps,
+        cache,
     )
 
 

@@ -69,6 +69,7 @@ from dataclasses import dataclass
 
 import torch
 
+from snakes_and_ladders.opt.anneal import Extremum, drive, exchange
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.schedule import Schedule
 
@@ -661,27 +662,33 @@ def anneal(
     _check_trajectory(step_size, n_steps)
     position = _start(objective, theta0)
 
-    best, best_value = position.clone(), float(objective(position))
-    accepted = 0
-    for step in range(schedule.n_steps):
-        position, _, was_accepted, _ = _transition(
+    def transition(
+        current: torch.Tensor, _: float, temperature: float
+    ) -> tuple[torch.Tensor, float, bool]:
+        moved, _unused, was_accepted, _also = _transition(
             objective,
-            position,
-            schedule(step),
+            current,
+            temperature,
             generator,
             step_size,
             n_steps,
             integrator,
         )
-        accepted += was_accepted
-        value = float(objective(position))
-        if value < best_value:
-            best, best_value = position.clone(), value
+        return moved, float(objective(moved)), bool(was_accepted)
+
+    run = drive(
+        position,
+        float(objective(position)),
+        transition,
+        schedule,
+        keep=Extremum.MINIMUM,
+        copy=lambda current: current.clone(),
+    )
     return Annealed(
-        theta=best,
-        value=best_value,
-        final=position,
-        acceptance_rate=accepted / schedule.n_steps,
+        theta=run.best,
+        value=run.best_value,
+        final=run.final,
+        acceptance_rate=run.accepted / schedule.n_steps,
         force_evaluations=schedule.n_steps * integrator.force_evaluations(n_steps),
     )
 
@@ -722,20 +729,6 @@ class Tempered:
     acceptance_rate: torch.Tensor
     swap_acceptance: torch.Tensor
     force_evaluations: int
-
-
-def _swap_log_ratio(
-    temperature_cold: float, temperature_hot: float, value_cold: float, value_hot: float
-) -> float:
-    """Log acceptance of exchanging the positions at two temperatures.
-
-    The joint target is the product of the tempered marginals, so the ratio
-    is ``(1/T_cold - 1/T_hot)(U_cold - U_hot)``: an exchange that hands the
-    colder replica the lower value is always accepted. The same expression
-    :func:`snakes_and_ladders.search.potts_mcmc.parallel_tempering` accepts
-    on, with the objective where that has an energy.
-    """
-    return (1.0 / temperature_cold - 1.0 / temperature_hot) * (value_cold - value_hot)
 
 
 def parallel_tempering(
@@ -828,6 +821,10 @@ def parallel_tempering(
     swapped = torch.zeros(n_replicas - 1, dtype=torch.float64)
     recorded = torch.empty((n_rounds, n_replicas, start.shape[0]), dtype=torch.float64)
 
+    def swap(first: int, second: int) -> None:
+        positions[first], positions[second] = positions[second], positions[first]
+        values[first], values[second] = values[second], values[first]
+
     for round_index in range(n_rounds):
         for replica in range(n_replicas):
             positions[replica], _, was_accepted, _ = _transition(
@@ -841,21 +838,21 @@ def parallel_tempering(
             )
             accepted[replica] += was_accepted
             values[replica] = float(objective(positions[replica]))
-        for pair in range(n_replicas - 1):
-            log_ratio = _swap_log_ratio(
-                temperatures[pair],
-                temperatures[pair + 1],
-                values[pair],
-                values[pair + 1],
-            )
-            uniform = float(torch.rand(1, generator=parent))
-            if log_ratio >= 0.0 or uniform < math.exp(log_ratio):
-                swapped[pair] += 1
-                positions[pair], positions[pair + 1] = (
-                    positions[pair + 1],
-                    positions[pair],
-                )
-                values[pair], values[pair + 1] = values[pair + 1], values[pair]
+        # `draw_first`: this sampler draws its exchange uniform before
+        # testing the ratio, where the three discrete ones short-circuit and
+        # draw only when the test needs it. The distribution is the same and
+        # the stream is not, so the flag is what keeps every committed chain
+        # on both sides of the seam unmoved.
+        swapped += torch.as_tensor(
+            exchange(
+                values,
+                [1.0 / temperature for temperature in temperatures],
+                lambda: float(torch.rand(1, generator=parent)),
+                swap,
+                draw_first=True,
+            ),
+            dtype=torch.float64,
+        )
         lowest = min(range(n_replicas), key=values.__getitem__)
         if values[lowest] < best_value:
             best, best_value = positions[lowest].clone(), values[lowest]

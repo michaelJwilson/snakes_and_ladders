@@ -72,6 +72,7 @@ import torch
 
 from snakes_and_ladders.enumeration import assignments, best_assignment
 from snakes_and_ladders.learn.potts import Configuration, PottsLandscape
+from snakes_and_ladders.opt.schedule import Exponential
 
 #: Below this the softmax saturates in float64 and the gradient underflows, so
 #: a smaller temperature is refused rather than silently returning a stalled
@@ -389,6 +390,19 @@ def anneal(start: float, end: float, steps: int, step: int) -> float:
     the *ratio* of logit gaps to ``tau``, so equal multiplicative steps are
     equal steps in the thing that matters.
 
+    :class:`snakes_and_ladders.opt.schedule.Exponential` under this module's
+    conditions, since issue #386: a copy of that schedule, written before it
+    existed. What stays here is what this caller needs and the schedule does
+    not provide --- the relaxation's own lower bound on a temperature, the
+    requirement that the sequence cool rather than heat, and a ``step`` past
+    the end clamped rather than refused, because the optimizer's last
+    iterate asks for one.
+
+    The two arithmetics are not the same expression: this returned
+    ``start * (end / start) ** fraction`` and the schedule returns
+    ``start ** (1 - fraction) * end ** fraction``. Agreement is measured
+    rather than assumed, and the pin states the realized bound.
+
     Raises
     ------
     ValueError
@@ -406,8 +420,7 @@ def anneal(start: float, end: float, steps: int, step: int) -> float:
         raise ValueError(msg)
     if steps == 1:
         return start
-    fraction = min(step, steps - 1) / (steps - 1)
-    return float(start * (end / start) ** fraction)
+    return Exponential(start=start, end=end, n_steps=steps)(min(step, steps - 1))
 
 
 def optimize(
