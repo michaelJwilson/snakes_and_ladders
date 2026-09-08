@@ -3,6 +3,12 @@
 The same contract as ``CHECKS.md`` and a QA figure: the committed file is
 what the tool writes, the textbook names no code, and a catalogue symbol the
 generator cannot name fails rather than dropping out of the table.
+
+Since issue #376 the file carries a third table, in four parts, pairing each
+problem with each method family. Two things there can go wrong quietly and
+are checked: a pairing nothing tests could be dropped instead of marked, so
+the table would read as though the question had not been asked; and a note
+could cite an experiment a later pull request renumbered or retracted.
 """
 
 from __future__ import annotations
@@ -41,10 +47,78 @@ def test_every_catalogue_row_has_an_algorithm_and_an_oracle() -> None:
     # A row with no oracle would be a problem nothing referees, which the
     # catalogue's own preamble forbids.
     text = problems_tables.GENERATED.read_text()
+    # Twice for the algorithm and oracle tables, once per method family.
+    appearances = 2 + len(problems_tables.METHOD_FAMILIES)
     for problem, symbols in problems_tables.rows():
         assert problems_tables.unnamed(symbols) == [], problem
         assert any(s in problems_tables.ORACLES for s in symbols), problem
-        assert text.count(problems_tables._tex_text(problem)) == 2, problem
+        assert text.count(problems_tables._tex_text(problem)) == appearances, problem
+
+
+@pytest.mark.structural
+def test_every_problem_and_family_pairing_appears_once_per_family_table() -> None:
+    # A pairing dropped rather than marked is the failure this table exists to
+    # prevent: the reader cannot tell an untested pairing from one nobody
+    # asked about.
+    cells = problems_tables.method_cells()
+    problems = [problem for problem, _ in problems_tables.rows()]
+
+    assert len(cells) == len(problems) * len(problems_tables.METHOD_FAMILIES)
+    for name in problems_tables.METHOD_FAMILIES:
+        assert [problem for problem, family, *_ in cells if family == name] == problems
+
+
+@pytest.mark.structural
+def test_a_pairing_the_suite_does_not_pin_is_marked_untested() -> None:
+    # The catalogue carries a Gaussian-mixture initializer and a general
+    # time-reversible start that no test of either significant kind names.
+    # They are the standing examples, and each must be marked and not omitted.
+    marked = {
+        (problem, family)
+        for problem, family, _, referee, _ in problems_tables.method_cells()
+        if referee == "untested"
+    }
+    text = problems_tables.GENERATED.read_text()
+
+    assert marked, "no untested pairing: the mark itself is then unexercised"
+    assert ("Gaussian mixture", "initializers") in marked
+    assert text.count("untested") >= len(marked)
+
+
+@pytest.mark.structural
+def test_a_pairing_with_a_method_carries_a_note() -> None:
+    # The note is the one hand-written cell; a pairing that exists and says
+    # nothing about when it wins is the table half-written.
+    for problem, family, _, referee, note in problems_tables.method_cells():
+        if referee != "--":
+            assert note, f"{problem} / {family}"
+
+
+@pytest.mark.structural
+def test_every_experiment_a_note_cites_exists() -> None:
+    # A renumbered or retracted experiment must break the generation rather
+    # than leave the textbook pointing at a file that is not there.
+    assert problems_tables.missing_experiments() == []
+
+
+@pytest.mark.edge_case
+def test_a_note_citing_an_absent_experiment_is_refused() -> None:
+    # Guards the guard.
+    fabricated = {"Made up": {"optimizers": "wins here (experiment 999)"}}
+
+    assert problems_tables.cited_experiments("experiment 4, then experiment 999") == [
+        "004",
+        "999",
+    ]
+    assert problems_tables.missing_experiments(fabricated) == ["999"]
+
+
+@pytest.mark.edge_case
+def test_a_pairing_with_no_note_is_refused() -> None:
+    # Guards the guard: the failure mode is a family that exists and says
+    # nothing, which reads as a family that does not exist.
+    with pytest.raises(problems_tables.MissingNoteError, match="initializers"):
+        problems_tables.method_cells(note_map={})
 
 
 @pytest.mark.edge_case

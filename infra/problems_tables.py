@@ -2,9 +2,10 @@
 
 ``PROBLEMS.md`` names, per problem, the code that simulates, evaluates, fits,
 searches and learns on it. The textbook may name no code (``docs/CLAUDE.md``),
-so the two tables it typesets -- algorithms against problems, and oracles
-against problems -- carry the algorithm or oracle each symbol *is*, and this
-module is the one place that naming lives. A symbol the catalogue gains that
+so the three tables it typesets -- algorithms against problems, oracles
+against problems, and problems against the four method families -- carry the
+algorithm or oracle each symbol *is*, and this module is the one place that
+naming lives. A symbol the catalogue gains that
 this module cannot name fails the generation rather than vanishing from the
 tables, and the guard in ``tests/regression/docs/test_problems_tables.py``
 holds the committed file to a regeneration, as ``CHECKS.md`` and the QA
@@ -34,10 +35,14 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import checks_ledger
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = REPO_ROOT / "PROBLEMS.md"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "problems_tables.tex"
+#: The one hand-written input: a sentence per pairing on when the method wins.
+METHOD_NOTES = REPO_ROOT / "docs" / "tex" / "generated" / "method_notes.yaml"
+EXPERIMENTS = REPO_ROOT / "docs" / "experiments"
 
 #: The prefix every code symbol in the catalogue carries. A backticked cell
 #: without it is a path (a fixture, a notebook) and names no algorithm.
@@ -57,6 +62,33 @@ ALGORITHM_COLUMNS = (
     "relaxation",
     "policy learning",
 )
+
+#: The four families the textbook's algorithm appendix groups by, in its
+#: order. A problem is paired with a family when the catalogue names a symbol
+#: of that family for it.
+METHOD_FAMILIES = ("initializers", "samplers", "optimizers", "surrogates")
+
+#: Which family each algorithm column belongs to. A column naming what is
+#: *evaluated* rather than a method that moves --- simulation and exact
+#: evaluation --- belongs to none and does not reach the third table. Message
+#: passing does: on a code it is the decoder, which is where the appendix
+#: groups it.
+FAMILY_BY_COLUMN: dict[str, str] = {
+    "initializer": "initializers",
+    "sampling and tempering": "samplers",
+    "gradient fit": "optimizers",
+    "expectation--maximization": "optimizers",
+    "hill climbing": "optimizers",
+    "descent and expansion": "optimizers",
+    "exact ground state": "optimizers",
+    "message passing": "optimizers",
+    "policy learning": "optimizers",
+    "relaxation": "surrogates",
+}
+
+#: The symbols whose family is not the one their algorithm column implies. A
+#: fitted surrogate is a surrogate wherever it is learned.
+FAMILY_BY_SYMBOL: dict[str, str] = {"learn.surrogate.fit_surrogate": "surrogates"}
 
 ORACLE_COLUMNS = (
     "enumeration or brute force",
@@ -412,6 +444,141 @@ def _table(
     return lines
 
 
+class MissingNoteError(ValueError):
+    """A problem-and-family pairing the notes file does not carry."""
+
+
+def family(symbol: str) -> str | None:
+    """The method family ``symbol`` belongs to, or ``None`` if it is not a method."""
+    if symbol in FAMILY_BY_SYMBOL:
+        return FAMILY_BY_SYMBOL[symbol]
+    return FAMILY_BY_COLUMN.get(ALGORITHMS.get(symbol, ""))
+
+
+def notes(path: Path = METHOD_NOTES) -> dict[str, dict[str, str]]:
+    """``problem -> family -> note``, from the committed YAML."""
+    loaded = yaml.safe_load(path.read_text())
+    return {} if loaded is None else loaded
+
+
+_EXPERIMENT = re.compile(r"experiment (\d+)")
+
+
+def cited_experiments(note: str) -> list[str]:
+    """The experiment ids one note cites, zero-padded as the filenames are."""
+    return [f"{int(number):03d}" for number in _EXPERIMENT.findall(note)]
+
+
+def missing_experiments(
+    note_map: dict[str, dict[str, str]] | None = None,
+    experiments: Path = EXPERIMENTS,
+) -> list[str]:
+    """Every experiment a note cites that has no file, sorted.
+
+    A note is the only hand-written cell of the tables, so the one thing it
+    can get wrong on its own is the citation; a pull request that renumbers
+    or retracts an experiment must not leave a table pointing at it.
+    """
+    present = {path.name[:3] for path in experiments.glob("[0-9][0-9][0-9]-*.md")}
+    wanted = {
+        identifier
+        for families in (notes() if note_map is None else note_map).values()
+        for note in families.values()
+        for identifier in cited_experiments(note)
+    }
+    return sorted(wanted - present)
+
+
+def method_cells(
+    catalogue: Path = CATALOGUE, note_map: dict[str, dict[str, str]] | None = None
+) -> list[tuple[str, str, str, str, str]]:
+    """``(problem, family, tier, referee, note)`` for every problem and family.
+
+    Every pairing appears: one the suite names with no test of either
+    significant kind is ``untested``, and one the catalogue has no symbol for
+    is ``--``. Omitting either would make the table read as though the
+    question had not been asked.
+
+    Raises
+    ------
+    MissingNoteError
+        If a pairing the catalogue carries has no note.
+    """
+    known = notes() if note_map is None else note_map
+    pins = referees()
+    found: list[tuple[str, str, str, str, str]] = []
+    for problem, symbols in rows(catalogue):
+        for name in METHOD_FAMILIES:
+            here = [symbol for symbol in symbols if family(symbol) == name]
+            note = known.get(problem, {}).get(name, "")
+            if here and not note:
+                msg = (
+                    f"{problem!r} has {name} in PROBLEMS.md and no note in "
+                    f"{METHOD_NOTES.name}; add one saying when the family wins here"
+                )
+                raise MissingNoteError(msg)
+            pairs = [pin for symbol in here for pin in pins.get(symbol, ())]
+            kinds = {kind for kind, _ in pairs}
+            tiers = [tier for tier in TIERS if any(at == tier for _, at in pairs)]
+            if "oracle" in kinds:
+                referee = "oracle"
+            elif "simulated_truth" in kinds:
+                referee = r"truth$^{\dagger}$"
+            elif here:
+                referee = "untested"
+            else:
+                referee = "--"
+            found.append(
+                (problem, name, tiers[0] if tiers else "--", referee, note.strip())
+            )
+    return found
+
+
+def _method_table(cells: list[tuple[str, str, str, str, str]]) -> list[str]:
+    """The third table, one part per method family: problems down, what pins each.
+
+    Four parts rather than one grid, for the reason the appendix groups the
+    algorithms the same way: a reader compares problems within a family, and
+    a single grid of eleven problems by four sentences does not fit a page.
+    """
+    lines: list[str] = []
+    for name in METHOD_FAMILIES:
+        here = [cell for cell in cells if cell[1] == name]
+        lines += [
+            r"\begin{table}[htbp]",
+            r"  \centering",
+            r"  \footnotesize",
+            r"  \begin{tabular}{@{}p{0.21\textwidth}llp{0.44\textwidth}@{}}",
+            r"    \toprule",
+            r"    Problem & Tier & Referee & When it wins, and when it does not \\",
+            r"    \midrule",
+        ]
+        for problem, _, tier, referee, note in here:
+            lines.append(
+                f"    {_tex_text(problem)} & {tier} & {referee} & "
+                f"{_tex_text(note) if note else '--'} \\\\"
+            )
+        lines += [
+            r"    \bottomrule",
+            r"  \end{tabular}",
+            f"  \\caption{{The {name} each problem carries: the size tier at "
+            "which the pairing is validated, the kind of referee that "
+            "validates it, and what the pairing is worth. Tier and referee are "
+            "read from the suite, as in the two tables above --- "
+            "\\emph{oracle} a test pinned to an independent exact answer, "
+            "truth$^{\\dagger}$ a test pinned to the simulated truth only, "
+            "\\emph{untested} a family the problem carries that no test of "
+            "either kind names, and -- a family it carries no method of. The "
+            "last column is the one hand-written part of these tables, and "
+            "names the experiment that measured the comparison where one "
+            f"did.}}",
+            f"  \\label{{tab:methods-{name}}}",
+            r"\end{table}",
+            "",
+        ]
+    return lines[:-1]
+
+
 def truth_only(catalogue: Path = CATALOGUE) -> list[tuple[str, str]]:
     """``(problem, algorithm column)`` cells pinned by the simulated truth or by neither kind.
 
@@ -447,6 +614,14 @@ def render(catalogue: Path = CATALOGUE) -> str:
         msg = (
             f"PROBLEMS.md names {sorted(set(missing))}, which infra/problems_tables.py "
             "cannot place in either table; add each to ALGORITHMS or ORACLES"
+        )
+        raise UnnamedSymbolError(msg)
+
+    dangling = missing_experiments()
+    if dangling:
+        msg = (
+            f"{METHOD_NOTES.name} cites experiments with no file under "
+            f"docs/experiments/: {dangling}"
         )
         raise UnnamedSymbolError(msg)
 
@@ -497,6 +672,8 @@ def render(catalogue: Path = CATALOGUE) -> str:
             "no test of either kind at that tier (--). A planted truth is an "
             "upper bound on the optimum rather than the optimum.",
         ),
+        "",
+        *_method_table(method_cells(catalogue)),
     ]
     return "\n".join(lines) + "\n"
 

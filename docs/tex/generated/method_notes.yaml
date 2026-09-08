@@ -1,0 +1,154 @@
+# When each method family wins on each problem, and when it does not (issue #376).
+#
+# Hand-written and committed; the only hand-written input to
+# `infra/problems_tables.py`, which reads the tier and the referee of every
+# pairing from the suite and takes only this sentence from here. A note that
+# cites an experiment must name a file that exists under `docs/experiments/`,
+# and `tests/regression/docs/test_problems_tables.py` checks that; a note that
+# cites none is a statement about the method's regime, not a measurement, and
+# says so in its own words.
+#
+# One entry per problem, keyed by its row in `PROBLEMS.md`, then by method
+# family. A pairing the suite finds and this file does not name fails the
+# generation, so the table cannot go quiet about a method that exists.
+
+"Phylogenetic tree, Jukes–Cantor":
+  initializers: >-
+    Ties the objective's own start at five and six taxa, every start
+    converging in 22 to 27 evaluations (experiment 006); the joining start is
+    the only one available past the enumerable taxon count, where nothing
+    referees it.
+  samplers: >-
+    Annealing over topologies returns the flat-prior weight over maximized
+    likelihoods, which hill climbing cannot; it pays a full branch-length fit
+    per step, so it loses wherever only the optimum is wanted.
+  optimizers: >-
+    Hill climbing reaches the enumerated optimum from 12 of 12 starts at six
+    taxa; the learned policy ties it over one feature and wins over seven
+    (experiment 005), while random restarts reach 1.000 at the same budget.
+  surrogates: >-
+    A surrogate-ranked neighbourhood reaches its optimum at 5 fits against
+    312, and changes only what is fitted; it wins nothing where the
+    neighbourhood is small enough to fit exhaustively.
+
+"Phylogenetic tree, general time-reversible":
+  initializers: >-
+    The log-det distance is additive under any Markov process, so it starts a
+    fit the Jukes--Cantor distance cannot; no test of either significant kind
+    names it as a start, which is why the pairing reads untested.
+  optimizers: >-
+    The same quasi-Newton fit over a longer parameter vector, refereed by the
+    same brute-force marginalization; it recovers the rate matrix where the
+    alignment identifies it and refuses an interval where it does not.
+
+"Phylogenetic tree, parsimony":
+  optimizers: >-
+    One post-order pass per candidate rather than one optimization, so an
+    equal budget of candidates reaches a neighbourhood an order of magnitude
+    larger; it climbs the wrong criterion in the Felsenstein zone, where the
+    error rate rises with the alignment.
+
+"Potts chain in a field":
+  optimizers: >-
+    The transfer matrix makes the chain's normalizer exact at every length, so
+    the gradient fit is refereed wherever it runs; nothing here separates it
+    from enumeration, which is also exact at these sizes.
+  surrogates: >-
+    The relaxation is exact at every corner to 1e-11 and supplies a gradient
+    the discrete objective has not; it buys nothing at a size enumeration
+    reaches, and the learned policy beats greedy on the same landscape
+    (experiment 003).
+
+"Potts lattice and Markov random field":
+  samplers: >-
+    Cluster moves slow by 1.9$\times$ between extent 8 and 24 where single-site
+    sweeps slow by 3.2$\times$, a gap of 2.1$\times$ and widening (experiment 001); they
+    refuse a negative coupling, where the single-site sweep is all there is.
+  optimizers: >-
+    The minimum cut is exact and polynomial where the couplings are
+    submodular; above two states only alpha expansion applies, with a
+    factor-of-two bound rather than an optimum, and Max-Cut is bounded and
+    never solved.
+  surrogates: >-
+    Belief propagation is exact on a tree and the Bethe approximation
+    otherwise, so it stands in for the normalizer at sizes enumeration cannot
+    reach; on a loopy graph its error is reported and asserted against
+    nothing.
+
+"Frustrated Potts: triangular antiferromagnet, planted spin glass":
+  samplers: >-
+    No sampler of its own: the lattice's samplers apply unchanged, and the
+    cluster moves refuse the negative couplings these instances are built
+    from. What the row adds is the ground-state energy every search is scored
+    against.
+  optimizers: >-
+    No optimizer of its own. The exact cut refuses a non-submodular energy, so
+    these instances are where descent, annealing and tempering are separated
+    at an equal budget of sweeps and nothing is solved exactly.
+
+"Low-density parity-check code, Gallager (3,6)":
+  optimizers: >-
+    Sum-product decodes to the bitwise posterior and min-sum to the most
+    probable codeword; both are exact on a cycle-free code and the Bethe
+    approximation on a loopy one, where min-sum is the cheaper and the weaker
+    and the gap is measured.
+
+"Hidden Markov model, six emission families":
+  samplers: >-
+    The block sweep draws a whole path from its conditional in one pass, where
+    a single-site sweep would move one position at a time against the chain;
+    it is refereed by the simulated truth alone, an oracle being wanted.
+  optimizers: >-
+    Expectation--maximization re-estimates in closed form for every family
+    whose M step has one and wins on cost there; the gradient fit is the only
+    route where it does not, and the two are required to reach the same
+    optimum. Coverage at the fit reaches nominal from two standard deviations
+    of separation upward (experiment 002).
+  surrogates: >-
+    The relaxation of the state path is exact at every corner and gives a
+    gradient over paths; it says nothing at a length past which the path
+    enumeration that referees it cannot run.
+
+"Coupled spatio-sequential model":
+  initializers: >-
+    The annealed data-sampled burn-in beats a uniform start at an equal budget
+    on the planted lattice, where it is the start and not the move that
+    decides the labelling; it is refereed by the planted labels alone.
+  samplers: >-
+    The factor-graph sweep is one algorithm over the whole coupled graph and
+    is refereed by enumeration on the canonical instance; it is slower per
+    sweep than the specialized Potts kernel it generalizes.
+  optimizers: >-
+    Block-coordinate ascent does not decrease the joint at any block, for
+    every label solver; iterated conditional modes freezes into disjoint
+    clusters where the cluster move does not, and which wins is measured at an
+    equal budget rather than assumed.
+
+"Gaussian mixture":
+  initializers: >-
+    The seeding cost is within the published factor of the exact clustering
+    cost, which is the one oracle this initializer has; whether a seeded start
+    reaches a better likelihood optimum than a uniform one is not pinned by
+    any test of either significant kind, so the pairing reads untested.
+  optimizers: >-
+    Restarts of the fit reach the best-known optimum from 7 of 40 starts
+    against tempering's 4 and annealing's 1 at 3,000 evaluations
+    (experiment 004); expectation--maximization approaches a fixed point
+    linearly where components overlap, so an iterate stopped at a count needs
+    the polish an equal budget charges to every method.
+
+"Continuous test functions":
+  initializers: >-
+    Multi-start is what makes Himmelblau's four basins reachable at all; on a
+    unimodal surface it spends the budget for nothing, and it is refereed by
+    the analytic minimizers rather than by an oracle of its own.
+  samplers: >-
+    The annealed Hamiltonian chain with a polishing fit is beaten by plain
+    restarts on the mixture at 3,000 evaluations (experiment 004); on
+    Rastrigin it is the only method that crosses the ripple, and which wins is
+    a property of the surface.
+  optimizers: >-
+    The quasi-Newton fit reaches the analytic minimizer to a stated tolerance
+    in every dimension tried on Rosenbrock; on Rastrigin the fraction of
+    starts reaching the global minimum is asserted low, which is the bound on
+    what one fit of any multimodal surface may claim.
