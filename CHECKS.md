@@ -72,7 +72,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 | `test_learn_surrogate_pyg.py::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights` | oracle |  |
 
-## `tests/regression/likelihood/` (66)
+## `tests/regression/likelihood/` (73)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -85,6 +85,13 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_hmm_paths.py::test_a_marginal_is_the_summed_joint_over_paths_through_that_state` | oracle | The definition, computed a second way: `P(state_t = s \| y)` is the total weight of paths passing through `s` at `t`, normalized. |
 | `test_hmm_paths.py::test_the_viterbi_path_is_the_maximum_of_the_enumerated_joints` | oracle |  |
 | `test_hmm_paths.py::test_a_single_observation_is_decoded_by_the_prior_and_the_emission` | oracle | Length 1 has no transition, so both decoders reduce to `argmax_s pi[s] B[s, y]` and the answer is arithmetic rather than a recursion. |
+| `test_ldpc.py::test_sum_product_is_exact_on_a_cycle_free_code` | oracle | On a 22-bit caterpillar code the decoder equals the tree schedule and the enumeration over 32,768 codewords: 1e-12 in log-odds on the symmetric and Gaussian channels, 2e-13 in probability on the erasure channel, whose certain bits sit at the message cap. |
+| `test_ldpc.py::test_min_sum_is_max_product_and_the_ml_codeword_on_a_cycle_free_code` | oracle | On the caterpillar code min-sum's max-marginals equal the tree-schedule max-product's and its decision is the enumerated ML codeword, whose margin over the runner-up is pinned above 0.1 nats so no tie is being broken. |
+| `test_ldpc.py::test_the_enumeration_oracle_on_a_single_parity_check_by_hand` | oracle | On `H = [1 1 1]` the four codewords give posteriors a reader can write down. |
+| `test_ldpc.py::test_flooding_reaches_the_general_fixed_point_on_a_loopy_code` | oracle | On six loopy (3,6) codes the decoder's posteriors equal the general damped flooding's to 1e-9 -- the same Bethe fixed point from two codes. |
+| `test_ldpc.py::test_the_996_bit_code_corrects_the_bsc_below_its_threshold_and_not_above` | simulated_truth | Over 20 shared seeds the 996-bit (3,6) code has zero bit errors at `p = 0.05` and a bit error rate above 0.02 at `p = 0.09`, either side of the (3,6) BSC threshold `p* = 0.084`; realized 0 and 0.049. |
+| `test_ldpc.py::test_the_996_bit_code_on_the_erasure_channel_either_side_of_the_threshold` | simulated_truth | Over 20 seeds no erasure survives at `epsilon = 0.35` and more than half of them survive at `epsilon = 0.5`; realized 0 and 0.433 of 0.5. |
+| `test_ldpc.py::test_the_20000_bit_code_brackets_the_erasure_threshold` | simulated_truth | At `n = 19,998` (the multiple of six nearest the ticket's 20,000) the flooding decoder resolves every erasure at `epsilon = 0.42` and leaves more than a fifth of the bits erased at `0.44`, bracketing the density evolution threshold 0.4294 on three seeds each; realized 0 and 0.25-0.30. |
 | `test_likelihood_objective.py::test_expansion_reproduces_the_tree_s_own_branch_lengths` | oracle | The merge must be lossless in the direction that matters: a tree's lengths, encoded and expanded, must score identically. |
 | `test_likelihood_objective.py::test_the_fit_beats_the_generating_branch_lengths` | simulated_truth | The optimizer never sees the truth, so an early stop fails this while its own loss still went down. |
 | `test_likelihood_objective.py::test_every_branch_length_is_recovered_to_within_four_standard_errors` | simulated_truth |  |
@@ -225,7 +232,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (83)
+## `tests/regression/search/` (93)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -288,9 +295,15 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_rl.py::test_the_fitted_score_is_the_maximized_likelihood` | oracle |  |
 | `test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum` | oracle | The exhaustive oracle, on the surface the agent actually sees. |
 | `test_search_rl.py::test_the_known_optimum_is_the_generating_topology_here` | simulated_truth |  |
+| `test_search_rl.py::test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length` | oracle | The environment wraps the differentiable recursion with the model's Q at one length on every branch; here the recursion is called directly at the same lengths, for every topology on the leaf set. |
+| `test_search_rl.py::test_the_general_q_path_reduces_to_jukes_cantor_at_its_rate_matrix` | oracle | The reduction `search/CLAUDE.md` asks of every general construction: with Jukes-Cantor's own Q and uniform pi, the matrix-exponential path must reproduce the closed-form path, topology by topology. |
+| `test_search_rl.py::test_the_parsimony_column_is_the_change_in_fitch_score` | oracle |  |
+| `test_search_rl.py::test_the_support_columns_are_the_pattern_support_of_the_split_broken_and_made` | oracle |  |
+| `test_search_rl.py::test_the_subtree_columns_are_the_sizes_of_the_exchanged_subtrees` | oracle | Against `branch_splits`: each exchanged set is the leaf set below a branch of both topologies, the two are disjoint, and swapping them in the broken split yields the made split -- which is what "the subtrees an NNI move exchanges" means. |
 | `test_search_rl.py::test_the_spr_neighbourhood_is_larger_than_the_nni_one` | oracle | The environment is parameterized by move set, and the two must actually differ or that parameter is decoration. |
 | `test_search_statistics.py::test_the_chi_square_tail_matches_published_critical_values` | oracle |  |
 | `test_search_statistics.py::test_an_ar1_process_matches_its_closed_form` | oracle | For `x_t = rho x_{t-1} + noise`, `rho(t) = rho**t` exactly, so `tau = 0.5 + sum_{t>=1} rho**t = 0.5 + rho / (1 - rho)`. |
+| `test_search_statistics.py::test_the_sign_test_matches_the_binomial_tail_sums` | oracle |  |
 | `test_search_support.py::test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_supports_agree` | oracle |  |
 | `test_search_support.py::test_the_generating_splits_have_full_bootstrap_support_at_many_sites` | simulated_truth |  |
 | `test_search_support.py::test_the_enumerated_support_is_calibrated_on_simulated_data` | simulated_truth | The test the ticket names: bin the returned trees by the support they report and the fraction that equal the generating topology must not fall as the support rises. |
@@ -298,22 +311,26 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_support.py::test_the_single_site_neighbourhood_is_the_whole_space_only_where_one_site_is_free` | oracle |  |
 | `test_search_support.py::test_the_enumerated_labelling_weight_is_enumerate_potts_s_boltzmann_weight_at_beta_one` | oracle |  |
 | `test_search_support.py::test_the_enumerated_decoding_weight_is_the_path_posterior_and_pins_the_ambiguous_fixture` | oracle |  |
+| `test_search_support.py::test_pattern_support_is_the_fraction_of_sites_some_tree_with_the_split_fits_in_the_fewest_changes` | oracle |  |
+| `test_search_support.py::test_the_four_taxon_support_is_one_minus_the_frequency_of_the_two_conflicting_patterns` | oracle |  |
+| `test_search_support.py::test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_returns_it_always` | simulated_truth |  |
 | `test_search_surrogate.py::test_learned_surrogates_rank_held_out_neighbourhoods` | simulated_truth | Six alignments, every topology of each fitted (90 fits at 200 sites), split by alignment: three to train, two to validate, one held out. |
 | `test_search_surrogate.py::test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments` | oracle | Against a full fit of every topology on three alignments: the plug-in bound and the parsimony bound each put the fitted best first, at a hundredth (2.4 ms against 250 ms) and a thousandth of the cost. |
 | `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
-| `test_search_tempered.py::test_the_tempered_weight_of_the_four_taxon_topologies_is_the_enumerated_one` | oracle |  |
-| `test_search_tempered.py::test_the_tempered_weight_of_a_labelling_is_the_enumerated_one` | oracle |  |
 | `test_search_topology.py::test_enumeration_matches_count_topologies` | oracle |  |
 | `test_search_topology.py::test_nni_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_spr_neighbour_count_and_validity` | oracle |  |
 | `test_search_topology.py::test_nni_and_spr_exhaustive_at_n8` | oracle | The same properties as the per-PR sweep, at the next size up. |
 | `test_search_topology.py::test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology` | oracle | `_split_key` is what `spr_neighbours` deduplicates on since #264; this asserts it names the same set of splits `leaf_bipartitions` does, on every one of the 105 six-leaf topologies, with the anchor convention (the smallest leaf's side is the complement) applied identically. |
 | `test_search_topology.py::test_spr_neighbours_are_the_definition_in_the_definition_order` | oracle | Order matters as well as membership: a hill climb takes the first of equally good neighbours, so a faster generator that permuted them would change which tree a search lands on while every count test passed. |
+| `test_search_tree_features.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle |  |
+| `test_search_tree_features.py::test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget` | simulated_truth |  |
+| `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
-## `tests/regression/sim/` (44)
+## `tests/regression/sim/` (50)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -351,6 +368,12 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_hmm_simulate.py::test_realized_path_posterior_matches_brute_force_enumeration` | oracle | The exact posterior p(state_t = s \| observations) for one realized observation sequence, computed by brute-force enumeration over every hidden path consistent with the model (no forward-backward recursion involved). |
 | `test_jc_simulate.py::test_jc_transition_probabilities_at_zero_is_identity` | oracle |  |
 | `test_jc_simulate.py::test_simulated_substitution_frequencies_match_analytic_jc` | oracle, simulated_truth |  |
+| `test_ldpc.py::test_the_offsets_layout_is_the_dense_matrix` | oracle | The syndrome through the offsets equals `H c mod 2` by the dense product. |
+| `test_ldpc.py::test_the_enumerated_code_has_dimension_n_minus_rank` | oracle | A (3,6) code at `n = 12` has `2 ** k` codewords, every one with zero syndrome. |
+| `test_ldpc.py::test_the_flip_count_matches_the_flip_probability` | simulated_truth | Flips on 20,000 bits fall within four binomial standard deviations of `n p`. |
+| `test_ldpc.py::test_the_erasure_channel_is_zero_or_certain` | simulated_truth | An erased bit is exactly zero; a delivered one is `+-LLR_CAP` with the bit's sign, and the erasure count sits inside four standard deviations of `n epsilon`. |
+| `test_ldpc.py::test_the_gaussian_ratio_has_the_closed_form_moments` | simulated_truth | `L = 2 y / sigma^2` on the zero word has mean `2 / sigma^2` and variance `4 / sigma^2`. |
+| `test_ldpc.py::test_the_parity_check_factor_graph_scores_the_definition` | oracle | `log_density` is `-c . |
 | `test_mixture_simulate.py::test_truth_ships_with_the_data` | simulated_truth |  |
 | `test_newick.py::test_count_topologies_matches_brute_force_enumeration` | oracle |  |
 | `test_newick.py::test_count_topologies_matches_known_values` | oracle |  |
@@ -362,4 +385,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-319 checks.
+342 checks.
