@@ -108,6 +108,10 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - A feature set for the tree environment, with the unidentifiable-constant
   invariance pinned
+
+- The surrogate-bound columns of #308 in the tree feature set — the plug-in
+  lower and parsimony upper bounds — measured at the budget of
+  `docs/experiments/005-tree-policy-features.md`
 - A tree fixture hard enough to separate a policy from greedy (#177)
 - The factor-graph environment over #296, the #308 surrogate as a tree reward
   model, and the budget-matched harness of #281 for the RL comparisons
@@ -117,6 +121,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   lower and parsimony upper bounds — measured at the budget of
   `docs/experiments/005-tree-policy-features.md`
 - PPO and a learned state-value critic
+
 - Truth as a terminal penalty, never a training signal
 - Train a phylogenetic policy and report its learning curve against the
   enumerated expected return (#178)
