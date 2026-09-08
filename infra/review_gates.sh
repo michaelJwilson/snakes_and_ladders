@@ -40,14 +40,22 @@ export SAL_DURATION_CAP="${SAL_DURATION_CAP:-10}"
 log="${SAL_SCRATCH:-${TMPDIR:-/tmp}}/review_gates.log"
 
 failures=()
+started=$(date +%s)
 gate() {
-  # Runs one named gate and records its verdict.
+  # Runs one named gate, records its verdict, and prints its wall clock. The
+  # seconds are output rather than a comment because the budget is a number:
+  # `DEV.md` gives the whole table 30 s, above which a check belongs in CI
+  # rather than in something a reviewer runs per branch.
   local name="$1"
   shift
+  local start elapsed
+  start=$(date +%s)
   if "$@"; then
-    printf '%-44s PASS\n' "$name"
+    elapsed=$(( $(date +%s) - start ))
+    printf '%-44s PASS  %3ds\n' "$name" "$elapsed"
   else
-    printf '%-44s FAIL\n' "$name"
+    elapsed=$(( $(date +%s) - start ))
+    printf '%-44s FAIL  %3ds\n' "$name" "$elapsed"
     failures+=("$name")
   fi
 }
@@ -124,7 +132,7 @@ generated_ledgers_are_current() {
   local stale=0
   uv run python infra/checks_ledger.py --check >/dev/null 2>>"$log" || stale=1
   uv run python infra/seams_survey.py >/dev/null 2>>"$log" || stale=1
-  uv run python infra/problems_tables.py >/dev/null 2>>"$log" || stale=1
+  uv run python infra/problems_tables.py --check >/dev/null 2>>"$log" || stale=1
   [ "$stale" = 0 ] || {
     echo "  a generated ledger is stale; see its --write command in infra/" >&2
     return 1
@@ -142,8 +150,9 @@ gate "changed tests marked, inside the cap"  changed_tests_are_marked_and_inside
 gate "a new seam names its consumers"        new_seams_name_their_consumers
 gate "generated ledgers are current"         generated_ledgers_are_current
 
+total=$(( $(date +%s) - started ))
 if [ ${#failures[@]} -gt 0 ]; then
-  echo "review gates: ${#failures[@]} failed"
+  echo "review gates: ${#failures[@]} failed in ${total}s"
   exit 1
 fi
-echo "review gates: all passed; read the diff against the plan"
+echo "review gates: all passed in ${total}s; read the diff against the plan"

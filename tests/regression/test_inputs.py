@@ -557,6 +557,33 @@ def test_a_module_the_walk_cannot_narrow_is_named_and_hashed_whole(
     assert spec.input_digest(tmp_path) != before
 
 
+#: Constructs that look like the ones above and are not. A walk that fell back
+#: on these would report a saving it is not making, which is why they are
+#: pinned beside the fallbacks rather than left to the counts to reveal.
+BENIGN_LINES = (
+    "from importlib import metadata\nX = metadata.version('numpy')",
+    "import argparse\n\n\ndef parse(a):\n    return getattr(a, 'flag')",
+    "import numpy as np\nX = np.zeros(3)",
+    "from dataclasses import dataclass\n\n\n@dataclass\nclass Held:\n    x: int",
+)
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+@pytest.mark.parametrize("extra", BENIGN_LINES)
+def test_a_lookup_that_cannot_reach_a_definition_is_not_a_fallback(
+    tmp_path: Path, extra: str
+) -> None:
+    # `getattr` on an `argparse` namespace reaches an attribute of that object,
+    # never a definition this walk could have missed; reading a version out of
+    # `importlib.metadata` imports nothing chosen at run time. Falling back on
+    # either would leave `qa/runner.py` --- which does the first --- hashed
+    # whole, and the measured case unfixed.
+    spec = _opaque_tree(tmp_path, extra)
+
+    assert spec.reach(tmp_path).fallbacks == ()
+
+
 @pytest.mark.critical
 @pytest.mark.structural
 def test_a_module_the_walk_can_narrow_charges_only_what_is_reached(

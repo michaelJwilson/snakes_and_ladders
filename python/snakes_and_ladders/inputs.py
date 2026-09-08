@@ -174,7 +174,9 @@ WHOLE_MODULE = "*"
 MODULE_FRAME = "<frame>"
 #: Builtins that run code no name in the source points at.
 DYNAMIC_BUILTINS = frozenset({"eval", "exec", "globals", "locals", "vars"})
-#: Names that import or rebind a module at run time.
+#: Names that import a module chosen at run time. ``importlib`` itself is one
+#: only when the module object is bound, since then any of its functions is
+#: reachable: ``from importlib import metadata`` reads a version and is not.
 DYNAMIC_IMPORTS = frozenset({"importlib", "import_module", "__import__"})
 #: Attribute lookups by computed name. Flagged only on a name bound to a
 #: module: `getattr(args, dest)` on an `argparse` namespace reaches an
@@ -330,13 +332,12 @@ def _dynamic_reason(tree: ast.Module, opaque: set[str]) -> str:
             alias.name.split(".")[0] == PACKAGE for alias in node.names
         ):
             return "plain `import snakes_and_ladders...` reaches by attribute"
-        if isinstance(node, ast.Import | ast.ImportFrom):
-            imported = (
-                [alias.name for alias in node.names]
-                if isinstance(node, ast.Import)
-                else [node.module or "", *(alias.name for alias in node.names)]
-            )
-            named = {part for name in imported for part in name.split(".")}
+        if isinstance(node, ast.Import):
+            bound = {(alias.asname or alias.name).split(".")[0] for alias in node.names}
+            if bound & DYNAMIC_IMPORTS:
+                return f"binds the module {sorted(bound & DYNAMIC_IMPORTS)[0]}"
+        if isinstance(node, ast.ImportFrom):
+            named = {alias.name for alias in node.names}
             if named & DYNAMIC_IMPORTS:
                 return f"imports {sorted(named & DYNAMIC_IMPORTS)[0]}"
         if isinstance(node, ast.FunctionDef) and node.name == "__getattr__":
