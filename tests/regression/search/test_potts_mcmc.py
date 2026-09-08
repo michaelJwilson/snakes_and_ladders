@@ -41,6 +41,7 @@ from snakes_and_ladders.search.potts_mcmc import (
     PottsChain,
     PottsMove,
     TemperedChains,
+    adapt_ladder_potts,
     anneal_potts,
     energies,
     parallel_tempering,
@@ -58,6 +59,8 @@ from snakes_and_ladders.sim.canonical import (
     planted_spin_glass,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+
+from tests._scale import at_scale
 
 # Declared significance. The worst p-value over 36 runs -- six seeds across
 # all three move sets, with and without a field -- was 0.0145, so 0.001 does
@@ -590,3 +593,126 @@ def test_the_sweep_has_no_numba_backend() -> None:
             np.random.default_rng(0),
             backend=Backend.NUMBA,
         )
+
+
+# --- a ladder from its own exchange acceptance (#333) ------------------------
+
+#: The band the adapted ladder is driven into. Each acceptance is a fraction
+#: of 50 exchange proposals, a binomial sd of 0.07 at 0.5, and a band this
+#: wide is one that noise cannot keep a settled ladder out of: measured over
+#: 20 seeds every warm-up settled inside it, in 4.2 rounds on average.
+BAND = (0.25, 0.75)
+PROBE_SWEEPS = 50
+HAND_LADDER = (2.0, 1.2, 0.7, 0.4)
+
+
+@pytest.mark.structural
+@at_scale("n_seeds", ci=10, stress=20)
+def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
+    n_seeds: int,
+) -> None:
+    # The 9x9 periodic triangular antiferromagnet, from the endpoints alone.
+    # Two things are asserted: the warm-up reports every pair inside the
+    # band, and a *fresh* run on the ladder it returned -- a different seed,
+    # four times the sweeps -- exchanges inside the band widened by the
+    # measurement's noise. The second is the one that matters: a warm-up
+    # that stopped on a lucky measurement would pass the first alone.
+    # Realized over 20 seeds: 5 to 8 rungs, fresh acceptances 0.16 to 0.72.
+    # The hand ladder's pairs, for comparison, exchange at 0.28, 0.15 and
+    # 0.12 -- two of three below the band.
+    graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
+    field = np.zeros(2)
+
+    for seed in range(n_seeds):
+        adapted = adapt_ladder_potts(
+            graph,
+            field,
+            (2.0, 0.4),
+            np.random.default_rng(seed),
+            PROBE_SWEEPS,
+            BAND,
+            10,
+            12,
+            backend=Backend.RUST,
+        )
+        assert adapted.within_band, adapted
+        assert adapted.temperatures[0] == 2.0
+        assert adapted.temperatures[-1] == 0.4
+        assert all(BAND[0] <= value <= BAND[1] for value in adapted.acceptance)
+
+        fresh = parallel_tempering(
+            graph,
+            field,
+            adapted.temperatures,
+            np.random.default_rng(1000 + seed),
+            4 * PROBE_SWEEPS,
+            backend=Backend.RUST,
+        )
+        assert bool((fresh.swap_acceptance > 0.1).all()), fresh.swap_acceptance
+        assert bool((fresh.swap_acceptance < 0.9).all()), fresh.swap_acceptance
+
+
+@pytest.mark.structural
+@at_scale("n_seeds", ci=10, stress=20)
+def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
+    n_seeds: int,
+) -> None:
+    # The comparison the ticket asked for, with the warm-up charged: 2400
+    # sweeps per seed, of which the adapted ladder spends its warm-up
+    # (895 on average, 500 to 1900) and splits the rest across its rungs,
+    # while the hand ladder spends 600 per replica on four. Realized over
+    # 20 seeds: adapted 20/20, hand 20/20; at 1600 sweeps 19/20 against
+    # 20/20, and the hand ladder hits 18/20 at 100 sweeps, so the instance
+    # does not separate them -- the closed-form ground state is what makes
+    # the rate a measurement at all. What the adapted ladder buys is the
+    # band, which the hand ladder is outside on two pairs, on an instance
+    # where that did not matter. Asserted at the margin the measurement
+    # supports.
+    graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
+    field = np.zeros(2)
+    ground = float(minimum_frustrated_edges(graph))
+    budget = 2400
+
+    adapted_hits = 0
+    for seed in range(n_seeds):
+        rng = np.random.default_rng(seed)
+        adapted = adapt_ladder_potts(
+            graph,
+            field,
+            (2.0, 0.4),
+            rng,
+            PROBE_SWEEPS,
+            BAND,
+            10,
+            12,
+            backend=Backend.RUST,
+        )
+        remaining = budget - adapted.replicas_measured * PROBE_SWEEPS
+        assert remaining > 0, adapted
+        run = parallel_tempering(
+            graph,
+            field,
+            adapted.temperatures,
+            rng,
+            remaining // len(adapted.temperatures),
+            backend=Backend.RUST,
+        )
+        adapted_hits += abs(run.best_energy - ground) < 1e-12
+    hand_hits = sum(
+        abs(
+            parallel_tempering(
+                graph,
+                field,
+                HAND_LADDER,
+                np.random.default_rng(seed),
+                budget // len(HAND_LADDER),
+                backend=Backend.RUST,
+            ).best_energy
+            - ground
+        )
+        < 1e-12
+        for seed in range(n_seeds)
+    )
+
+    assert adapted_hits >= n_seeds - 2, (adapted_hits, hand_hits)
+    assert hand_hits >= n_seeds - 2, (adapted_hits, hand_hits)

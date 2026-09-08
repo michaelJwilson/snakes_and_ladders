@@ -19,9 +19,19 @@ other, with one deliberate difference: every schedule here declares its length
 and both endpoints, and reaches the final temperature at *exactly* the last
 step. A schedule that never quite arrives has no final temperature to check,
 and the off-by-one in "reaches at the last step" is the fault no downstream
-distributional test would ever localize. Adaptive schedules --- reheating on
-a stalled chain, targeting an acceptance rate --- are absent by the same
-standing decision that keeps step-size adaptation out of ``hmc.py``.
+distributional test would ever localize.
+
+**A tempering ladder is chosen from what it measures, not set by hand.** A
+ladder is a set of temperatures rather than a sequence in time, and what
+makes one right is the exchange acceptance between each neighbouring pair:
+near zero the replicas are independent chains and nothing crosses the gap,
+near one two temperatures are close enough that one is redundant.
+:func:`adapt_ladder` is a warm-up that measures those acceptances, bisects a
+gap whose acceptance is below a stated band and removes a temperature both of
+whose gaps are above it, until every pair sits inside the band or a budget is
+spent; it takes the measurement as a callable so it knows no model, and the
+sampler that owns the replicas supplies it (issue #333). Reheating on a
+stalled chain --- a schedule in *time* that adapts --- remains absent.
 
 The policy's learned softmax weight is an inverse temperature too, and it is
 **not** put on a schedule: it is the thing the agent learns, and a declared
@@ -31,7 +41,9 @@ it as a feature.
 
 from __future__ import annotations
 
+import itertools
 import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -198,3 +210,207 @@ def temperatures(schedule: Schedule) -> list[float]:
     in time asks for one step at a time.
     """
     return [schedule(step) for step in range(schedule.n_steps)]
+
+
+@dataclass(frozen=True)
+class AdaptedLadder:
+    """What a ladder warm-up settled on, and what it measured there.
+
+    Parameters
+    ----------
+    temperatures : tuple[float, ...]
+        The ladder, in the order the initial one was given.
+    acceptance : tuple[float, ...]
+        Exchange acceptance per neighbouring pair on the final ladder, from
+        the last measurement --- one fewer than the temperatures.
+    within_band : bool
+        Whether every entry of ``acceptance`` lies inside the band. False
+        means the warm-up stopped on its budget, or on a ladder it could not
+        change --- two fixed endpoints whose pair is above the band --- and
+        the caller decides whether that ladder is usable.
+    rounds : int
+        Measurements taken, the last one included.
+    replicas_measured : int
+        Sum of the ladder's length over every measurement --- the warm-up's
+        cost in replica-runs, so a caller that knows the sweeps per
+        measurement knows what the ladder cost in sweeps.
+    """
+
+    temperatures: tuple[float, ...]
+    acceptance: tuple[float, ...]
+    within_band: bool
+    rounds: int
+    replicas_measured: int
+
+
+def adapt_ladder(
+    measure: Callable[[tuple[float, ...]], Sequence[float]],
+    ladder: tuple[float, ...],
+    band: tuple[float, float],
+    max_rounds: int,
+    max_replicas: int,
+) -> AdaptedLadder:
+    """Insert and remove temperatures until every neighbouring pair exchanges within ``band``.
+
+    Each round measures the acceptance of every neighbouring pair on the
+    current ladder, then: a pair below the band gets the geometric mean of
+    its two temperatures inserted between them; an interior temperature
+    both of whose pairs are above the band is removed; and a pair above the
+    band beside one inside it has their shared temperature moved halfway
+    toward the far end of the pair inside, widening the one and narrowing
+    the other. Geometric, because
+    the exchange ratio ``eq:exchange`` depends on the temperatures through
+    ``beta_i - beta_j``, and for an energy whose variance is set by the
+    temperature the acceptance is a function of the ratio of neighbouring
+    temperatures rather than their difference. The endpoints are never
+    moved: they are the temperatures the caller wants the hottest and
+    coldest replica at, and the ladder's job is to connect them.
+
+    The measurement is a callable so this function knows no model and no
+    sampler: it is handed a ladder and returns one acceptance per
+    neighbouring pair, and whatever it runs to get them is its own. A
+    measurement is a Monte Carlo estimate, so a band narrower than its
+    noise is a ladder that never settles; the caller chooses a band the
+    measurement can resolve, and ``within_band`` on the result says whether
+    it did.
+
+    Parameters
+    ----------
+    measure : Callable[[tuple[float, ...]], Sequence[float]]
+        Exchange acceptance per neighbouring pair of a ladder.
+    ladder : tuple[float, ...]
+        The starting ladder, at least two temperatures, strictly monotone in
+        either direction. Its two endpoints are the result's.
+    band : tuple[float, float]
+        ``(low, high)``, the acceptance every pair is driven into, with
+        ``0 < low < high < 1``.
+    max_rounds : int
+        Measurements to take before stopping, at least 1.
+    max_replicas : int
+        The most temperatures the ladder may hold; no insertion is made
+        past it, so a band the budget cannot reach is reported rather than
+        pursued.
+
+    Returns
+    -------
+    AdaptedLadder
+
+    Raises
+    ------
+    ValueError
+        If the ladder has fewer than two temperatures, is not strictly
+        monotone or is not positive, the band is not an interval inside
+        ``(0, 1)``, or a budget is below 1.
+    """
+    _check_ladder(ladder)
+    low, high = band
+    if not 0.0 < low < high < 1.0:
+        msg = f"band must satisfy 0 < low < high < 1, got {band}"
+        raise ValueError(msg)
+    if max_rounds < 1:
+        msg = f"max_rounds must be at least 1, got {max_rounds}"
+        raise ValueError(msg)
+    if max_replicas < len(ladder):
+        msg = (
+            f"max_replicas is {max_replicas} but the starting ladder already has "
+            f"{len(ladder)} temperatures"
+        )
+        raise ValueError(msg)
+
+    current = tuple(ladder)
+    replicas_measured = 0
+    for round_index in range(1, max_rounds + 1):
+        acceptance = tuple(float(value) for value in measure(current))
+        replicas_measured += len(current)
+        if len(acceptance) != len(current) - 1:
+            msg = (
+                f"measure returned {len(acceptance)} acceptances for a ladder of "
+                f"{len(current)}; expected one per neighbouring pair"
+            )
+            raise ValueError(msg)
+        within = all(low <= value <= high for value in acceptance)
+        if within or round_index == max_rounds:
+            return AdaptedLadder(
+                current, acceptance, within, round_index, replicas_measured
+            )
+        proposal = _revise(current, acceptance, low, high, max_replicas)
+        if proposal == current:
+            return AdaptedLadder(
+                current, acceptance, False, round_index, replicas_measured
+            )
+        current = proposal
+    msg = "unreachable: the loop returns on its last round"  # pragma: no cover
+    raise AssertionError(msg)  # pragma: no cover
+
+
+def _revise(
+    ladder: tuple[float, ...],
+    acceptance: tuple[float, ...],
+    low: float,
+    high: float,
+    max_replicas: int,
+) -> tuple[float, ...]:
+    """One round of insertions, removals and moves; the endpoints stay.
+
+    In that order. A pair below the band is bisected. An interior
+    temperature both of whose pairs are above the band is removed --- never
+    two adjacent ones together, since dropping both leaves a gap no
+    measurement has seen. A pair above the band with a neighbouring pair
+    inside it *moves* their shared temperature halfway, geometrically,
+    toward the far end of the neighbouring pair: the high pair widens and
+    the neighbouring one narrows, and neither is a temperature the ladder
+    can lose. A temperature is moved once per round.
+    """
+    n = len(ladder)
+    room = max_replicas - n
+    insert = [False] * (n - 1)
+    for index in range(n - 1):
+        if acceptance[index] < low and room > 0:
+            insert[index] = True
+            room -= 1
+    keep = [True] * n
+    for index in range(1, n - 1):
+        if (
+            keep[index - 1]
+            and acceptance[index - 1] > high
+            and acceptance[index] > high
+        ):
+            keep[index] = False
+    value = list(ladder)
+    moved = [False] * n
+    for index in range(n - 1):
+        if not (acceptance[index] > high and keep[index] and keep[index + 1]):
+            continue
+        # Prefer moving the colder end toward the cold side, then the
+        # hotter end toward the hot side; either widens this pair.
+        for shared, far in ((index + 1, index + 2), (index, index - 1)):
+            if not 0 < shared < n - 1 or moved[shared] or not keep[far]:
+                continue
+            neighbour = min(shared, far)
+            if insert[neighbour] or not low <= acceptance[neighbour] <= high:
+                continue
+            value[shared] = math.sqrt(ladder[shared] * ladder[far])
+            moved[shared] = True
+            break
+    revised: list[float] = []
+    for index in range(n):
+        if keep[index]:
+            revised.append(value[index])
+        if index < n - 1 and insert[index]:
+            revised.append(math.sqrt(ladder[index] * ladder[index + 1]))
+    return tuple(revised)
+
+
+def _check_ladder(ladder: tuple[float, ...]) -> None:
+    if len(ladder) < 2:
+        msg = f"a ladder needs at least two temperatures, got {len(ladder)}"
+        raise ValueError(msg)
+    for temperature in ladder:
+        _check_temperature("every temperature", temperature)
+    differences = [b - a for a, b in itertools.pairwise(ladder)]
+    if not (all(d > 0 for d in differences) or all(d < 0 for d in differences)):
+        msg = (
+            f"a ladder must be strictly monotone so its neighbouring pairs are "
+            f"its exchanges, got {ladder}"
+        )
+        raise ValueError(msg)

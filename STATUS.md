@@ -791,6 +791,63 @@ sampled spread is **1.057, 1.031 and 1.036** times the Laplace one: slightly
 optimistic, the expected direction for a mildly non-Gaussian posterior, and
 reported rather than asserted away.
 
+**Adaptation is a warm-up, opted into and reported, and the standing decision
+against it is reversed on measurements**
+([#333](https://github.com/michaelJwilson/snakes_and_ladders/issues/333)).
+`hmc.sample` takes an `Adaptation(warmup, target_acceptance, step_jitter)`,
+every field required: the warm-up sets a diagonal mass matrix from the sample
+variance of its first window and the step size by dual averaging (Hoffman &
+Gelman 2014 §3.2, `eq:dual-averaging`), run once at unit mass and once on the
+metric; the chain is then drawn at those fixed values, and `HmcChain.adapted`
+reports them with the warm-up acceptance and `force_evaluations` what the chain
+cost. The mass matrix is a change of coordinates on the objective rather than a
+change to the integrator, held to a hand-written mass-matrix leapfrog to
+1e-12, and the fixed-parameter path is untouched — the 31 HMC tests pass with
+no number moved. Two measurements shaped it. On a locally quadratic target the
+acceptance is a cliff in the step — on the analytic Gaussian 0.88 at a step of
+1.2 and 0.01 at 1.4, the stiff direction's stability limit being 1.26 — so a
+target of 0.65 sits on the cliff, and each proposal's step is drawn from a
+uniform band around the adapted one (Neal 2011 §5.4.2.2), which the drawn
+chain keeps. And the published gain of 0.05 was set for a trajectory-averaged
+statistic: with a single Metropolis probability per proposal the drawn chain's
+acceptance against a target of 0.65 was **0.815** at 0.05, 0.691 at 0.1,
+**0.643** at 0.2 and 0.610 at 0.5, so 0.2 is the constant, stated as a
+deviation. What it achieves: the drawn chain's acceptance pooled over 20 seeds
+is **0.650** on the Gaussian (per-seed 0.578 to 0.758) and **0.673** on the
+four-taxon tree posterior (per-seed 0.573 to 0.750; 0.678 over the 3 seeds CI
+runs, the 20 in the stress tier), against the target 0.65. The adapted chain and the fixed-parameter chain agree on both posteriors
+— means within 1.83 standard errors on the Gaussian and 1.77 on the tree,
+spreads within 0.54 and 2.84, each standard error from the chain's own
+effective sample size — and the #268 interval is reported beside both: the
+adapted chain's spread is 1.009 and 1.008 of the exact Gaussian one, and 1.01
+to 1.13 of the delta-method interval on the tree's branch lengths against the
+fixed chain's 0.99 to 1.08. The effective sample size, by Geyer's initial
+positive sequence and held to an AR(1) whose autocorrelation time is a closed
+form (estimate over truth 0.83 to 1.12 at a coefficient of 0.9), prices a
+draw: on the tree's slowest branch the adapted chain gives **0.038** effective
+draws per gradient against the fixed chain's **0.019** at unit mass, whose
+masses the warm-up measured as spanning 5 to 124; on the Gaussian 0.099 and
+0.105 against 0.098 and 0.015.
+
+**A tempering ladder is chosen from its own exchange acceptance.**
+`schedule.adapt_ladder` takes the measurement as a callable and knows no
+model: a pair below a stated band is bisected geometrically, a rung both of
+whose pairs are above it is removed, and a pair above the band beside one
+inside it has their shared rung moved halfway toward the far end;
+`potts_mcmc.adapt_ladder_potts` supplies the measurement as a
+`parallel_tempering` run. On the 9×9 periodic triangular antiferromagnet from
+the endpoints (2.0, 0.4) alone, a band of (0.25, 0.75) at 50 sweeps per
+measurement settled inside the band **20/20** seeds in 4.2 rounds on average,
+on 5 to 8 rungs, and a fresh run on the returned ladder exchanged at 0.16 to
+0.72 on every pair; the hand ladder (2.0, 1.2, 0.7, 0.4) exchanges at 0.28,
+0.15 and 0.12. At equal sweeps with the warm-up charged — 2400 per seed, of
+which the warm-up spent 895 on average and 500 to 1900 — the adapted ladder
+reached the closed-form ground state **20/20** against the hand ladder's
+20/20, and 19/20 against 20/20 at 1600: the instance does not separate them,
+since the hand ladder hits 18/20 at 100 sweeps, and what the adapted ladder
+buys is the band on an instance where the band did not matter. NUTS remains
+out of scope; the tree comparison did not ask for it.
+
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one

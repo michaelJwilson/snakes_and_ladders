@@ -62,6 +62,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Realize the tolerance helper rather than assume it is applied by hand (#91)
 - Profile a gradient fit in memory and time across the declared `n × L × k`
   range (#232)
+- Trajectory-length adaptation (NUTS), only if a posterior the #268
+  comparison reaches is one the fixed trajectory length of #333 samples badly
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
