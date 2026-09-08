@@ -45,10 +45,10 @@ needs `frameworks`: every test that uses one of its packages skips without
 it, and `snakes_and_ladders.search.gym` is the only module that imports one
 at module level.
 
-`scipy` is in no extra and is not a dependency. Three regression modules
-referee our neighbor joining, our Hadamard transform and our fit against it
-and skip without it, so `--all-extras` does not run them; install it
-separately to see them run. Whether to declare it is open (issue #376).
+`scipy` is a core dependency since the 0.5.0 audit (issue #376): three
+regression modules referee our neighbor joining, our Hadamard transform and
+our fit against it, and `search.maxflow`'s replacement (#388) will front its
+maximum flow.
 
 ## Building
 

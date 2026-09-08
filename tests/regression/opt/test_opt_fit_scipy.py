@@ -57,7 +57,11 @@ def _scipy_minimizer(objective: Objective) -> np.ndarray:
         method="L-BFGS-B",
         options={"ftol": 1e-16, "gtol": 1e-12, "maxiter": 2000},
     )
-    assert result.success, result.message
+    # `success` is scipy's verdict on its own line search; at `gtol` of 1e-12
+    # it reports ABNORMAL from the exact minimum of Rastrigin, where the
+    # gradient it returns is 2e-9 and the value is 0.0. A vanishing gradient is
+    # the criterion independent of either optimizer's stopping rule.
+    assert result.success or np.linalg.norm(result.jac) < 1e-6, result.message
     return np.asarray(result.x, dtype=np.float64)
 
 

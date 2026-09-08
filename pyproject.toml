@@ -29,6 +29,11 @@ dependencies = [
     "numba>=0.61.0",
     "numpy>=1.26.0",
     "pyyaml>=6.0.3",
+    # 13k+ GitHub stars; the referee for three hand-rolled implementations
+    # (the Hadamard transform, UPGMA against neighbor joining, the minimizer
+    # on the continuous test functions), declared by the release audit of
+    # issue #376 when the maintainer approved it.
+    "scipy>=1.13.0",
     "torch>=2.4.0",
 ]
 
