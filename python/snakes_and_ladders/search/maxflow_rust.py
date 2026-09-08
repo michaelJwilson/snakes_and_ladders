@@ -17,10 +17,12 @@ the difference to the Python lists that crossed the boundary by copy, and
 issue #336 replaced them with `rust-numpy` buffers, the fix issue #202
 applied to the categorical sampler. Measured, that copy was 0.03-0.2 ms of a
 0.7-17 ms call at extents 16-64, and removing it moved the caller-visible
-number by under 3%. The term that remains is :func:`snakes_and_ladders.search.maxflow.energy`,
-which scores the returned configuration edge by edge in Python: 0.6, 2.6 and
-9.9 ms at extents 16, 32 and 64, against 0.14, 0.84 and 6.9 ms for the kernel.
-`STATUS.md` carries the table.
+number by under 3%. The term that remained was
+:func:`snakes_and_ladders.search.maxflow.energy`, which scored the returned
+configuration edge by edge in Python: 0.6, 2.6 and 9.9 ms at extents 16, 32
+and 64, against 0.14, 0.84 and 6.9 ms for the kernel. Issue #341 vectorized
+it to 0.08, 0.28 and 1.0 ms, below the kernel at every extent. `STATUS.md`
+carries both tables.
 
 A caller that needs only the configuration can call the extension directly
 with the arrays this wrapper builds and skip that term.

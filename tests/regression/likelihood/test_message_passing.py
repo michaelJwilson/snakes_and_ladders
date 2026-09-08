@@ -19,6 +19,7 @@ import math
 import numpy as np
 import pytest
 from snakes_and_ladders.emissions import CategoricalEmission
+from snakes_and_ladders.likelihood import message_passing_reference as reference
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
 from snakes_and_ladders.likelihood.hmm_paths import (
     emission_log_density,
@@ -26,6 +27,7 @@ from snakes_and_ladders.likelihood.hmm_paths import (
 )
 from snakes_and_ladders.likelihood.message_passing import (
     ConvergenceError,
+    Marginals,
     MessageSchedule,
     max_product,
     sum_product,
@@ -395,3 +397,150 @@ def test_a_variable_in_no_factor_is_refused() -> None:
 def test_an_empty_domain_is_refused() -> None:
     with pytest.raises(ValueError, match="domain"):
         Variable("a", 0)
+
+
+# --- the edge-array layout against the dictionary oracle (issue #341) ------------
+#
+# `message_passing` runs one vectorized pass per group of like-shaped edges;
+# `message_passing_reference` is the dictionary-per-message implementation it
+# replaced. The arithmetic per message is the same in the same order, so the
+# pin is bitwise on every marginal and every schedule; only ``log_partition``
+# sums its Bethe terms in a different order and is held to 1e-12 relative.
+
+
+def _assert_same_marginals(realized: Marginals, expected: Marginals) -> None:
+    assert realized.iterations == expected.iterations
+    assert realized.exact == expected.exact
+    assert set(realized.variable) == set(expected.variable)
+    assert set(realized.factor) == set(expected.factor)
+    for name, values in expected.variable.items():
+        np.testing.assert_array_equal(realized.variable[name], values, err_msg=name)
+    for name, values in expected.factor.items():
+        np.testing.assert_array_equal(realized.factor[name], values, err_msg=name)
+    if math.isnan(expected.log_partition):
+        assert math.isnan(realized.log_partition)
+    else:
+        assert math.isclose(
+            realized.log_partition, expected.log_partition, rel_tol=1e-12
+        )
+
+
+def _coupled_mixed_cardinality() -> FactorGraph:
+    # Three classes over two-state chains: the labels have cardinality 3 and
+    # the chain states 2, so the edge rows are padded and the padding is what
+    # this instance exercises. Loopy, so flooding.
+    rng = np.random.default_rng(11)
+    spatial = PottsGraph(n_nodes=3, edges=((0, 1), (1, 2)), coupling=(0.6, -0.3))
+    n_classes, n_states, length = 3, 2, 2
+    return from_coupled(
+        spatial,
+        0.8,
+        [np.log(rng.dirichlet(np.ones(n_states))) for _ in range(n_classes)],
+        [
+            np.log(rng.dirichlet(np.ones(n_states), size=n_states))
+            for _ in range(n_classes)
+        ],
+        rng.normal(size=(spatial.n_nodes, length, n_classes, n_states)),
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    "graph",
+    [
+        pytest.param(from_potts(TREE, FIELD), id="potts-tree"),
+        pytest.param(from_potts(TREE, FIELD).forney(), id="forney-form"),
+    ],
+)
+def test_the_tree_schedule_reproduces_the_dictionary_oracle_bitwise(
+    graph: FactorGraph,
+) -> None:
+    _assert_same_marginals(sum_product(graph), reference.sum_product(graph))
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    ("n_states", "n_symbols", "length", "seed"),
+    [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3), (4, 3, 3, 4)],
+)
+def test_sum_and_max_product_on_the_chain_reproduce_the_dictionary_oracle_bitwise(
+    n_states: int, n_symbols: int, length: int, seed: int
+) -> None:
+    params = _hmm(n_states, n_symbols, length, seed)
+    observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
+    graph = from_hmm(
+        np.log(params.initial),
+        np.log(params.transition),
+        emission_log_density(params, observations),
+    )
+
+    _assert_same_marginals(sum_product(graph), reference.sum_product(graph))
+    assignment, marginals = max_product(graph)
+    expected_assignment, expected = reference.max_product(graph)
+    assert assignment == expected_assignment
+    _assert_same_marginals(marginals, expected)
+
+
+@pytest.mark.oracle
+def test_the_tree_site_reproduces_the_dictionary_oracle_bitwise() -> None:
+    # Hard zeros: the leaf indicators put ``-inf`` in the tables.
+    params = load_fixture(SMALL_SITES)
+    dataset = simulate_alignment(
+        params.tau, params.k, params.pi, np.random.default_rng(params.seed), n_sites=1
+    )
+    site = {name: int(states[0]) for name, states in dict(dataset.alignment).items()}
+    graph = from_tree(
+        params.tau, params.k, params.pi, site, _transitions(params.tau, params.k)
+    )
+
+    _assert_same_marginals(sum_product(graph), reference.sum_product(graph))
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    "graph",
+    [
+        pytest.param(from_potts(LOOPY, FIELD), id="3x3-lattice"),
+        pytest.param(_coupled_mixed_cardinality(), id="coupled-mixed-cardinality"),
+    ],
+)
+def test_flooding_reproduces_the_dictionary_oracle_bitwise(graph: FactorGraph) -> None:
+    assert not graph.is_tree()
+
+    _assert_same_marginals(
+        sum_product(graph, schedule=MessageSchedule.FLOODING),
+        reference.sum_product(graph, schedule=MessageSchedule.FLOODING),
+    )
+    assignment, marginals = max_product(graph, schedule=MessageSchedule.FLOODING)
+    expected_assignment, expected = reference.max_product(
+        graph, schedule=MessageSchedule.FLOODING
+    )
+    assert assignment == expected_assignment
+    _assert_same_marginals(marginals, expected)
+
+
+@pytest.mark.oracle
+def test_the_tree_schedule_on_a_deep_chain_is_the_forward_recursion() -> None:
+    # 2,000 positions: past the interpreter's recursion limit for the
+    # reference's depth-first order, and the levelled schedule is
+    # breadth-first. The forward recursion is the oracle, so this is a claim
+    # about the evidence and not only about not raising.
+    import torch
+    from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
+
+    rng = np.random.default_rng(5)
+    log_initial = np.log(rng.dirichlet(np.ones(3)))
+    log_transition = np.log(rng.dirichlet(np.ones(3), size=3))
+    log_density = rng.normal(size=(2_000, 3))
+
+    result = sum_product(from_hmm(log_initial, log_transition, log_density))
+
+    expected = float(
+        forward_log_likelihood_from_density(
+            torch.as_tensor(log_density)[None],
+            torch.as_tensor(log_initial),
+            torch.as_tensor(log_transition),
+        )
+    )
+    assert result.exact
+    assert math.isclose(result.log_partition, expected, rel_tol=1e-12)

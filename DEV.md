@@ -173,7 +173,7 @@ Every entry point — a QA script, `snakes_and_ladders.qa.build`,
 
 `CLAUDE.md`'s **Runtime Optimization Opportunities** lists what to look for; this is the order to look, on fixed hardware per **No CI Profiling** above.
 
-1. `python tests/benchmarks/profile_hotpaths.py` — a `cProfile` self-time ranking for `sim`, `search` and `learn` at a CI-sized fixture and one larger size. Not collected by `pytest`; run by hand and read. A candidate not near the top does not proceed.
+1. `python tests/benchmarks/profile_hotpaths.py --tier enumerable` and `--tier mid` (`--module` selects one) — a `cProfile` self-time ranking of one workload per module, the top five functions with the fraction of the run each carries. Not collected by `pytest`; run by hand and read. A loop under 10% of its run is recorded in `STATUS.md` and does not proceed (#341).
 2. `pytest tests/benchmarks/test_<name>_bench.py` — the NumPy or PyTorch baseline at the size the port would run at. The 10x rule is stated against realistic sizes, not the smallest that fits CI.
 3. Time the port **alone** (`cargo bench`, Criterion, in `benches/`) **and through its binding** (`tests/benchmarks/`); the difference is the FFI boundary, and the pull request reports both.
 4. For anything recursive, report peak memory beside time. No helper exists yet (`STATUS.md` records the memory requirement as not measured; #232 closes it), so take `tracemalloc` peaks by hand and say so.
