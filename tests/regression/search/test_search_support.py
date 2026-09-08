@@ -244,6 +244,7 @@ def test_the_neighbourhood_and_bootstrap_supports_are_calibrated_at_seven_and_ei
                         params.k,
                         np.random.default_rng(seed),
                         n_replicates=8,
+                        workers=1,
                     ).values()
                 )
             )
@@ -486,7 +487,7 @@ def test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_re
     truth = params.tau
     (true_split,) = internal_splits(truth)
     bootstrap = bootstrap_support(
-        truth, alignment, params.k, np.random.default_rng(11), n_replicates=5
+        truth, alignment, params.k, np.random.default_rng(11), n_replicates=5, workers=1
     )
     assert bootstrap == {true_split: 1.0}
     alternatives = [frozenset({"B", "C"}), frozenset({"B", "D"})]
