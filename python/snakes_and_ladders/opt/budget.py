@@ -28,11 +28,23 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Generic, TypeVar
 
 import numpy as np
 
+from snakes_and_ladders.parallel import Backend, map_tasks
+
 InstanceT = TypeVar("InstanceT")
+
+# How the (method, instance, seed) cells of a comparison run beside each
+# other: processes, because a method is a fit or a sweep loop in Python that
+# holds the GIL. The intra-op thread count is left at the process default in
+# workers and serial alike, so the two runs reduce in the same order on one
+# machine. Each cell already seeds its own generator, so the cells are
+# independent by construction. No pool reached 2x at 4 workers at the
+# mid-size tier; STATUS.md carries the measurement (issue #344).
+_COMPARE_BACKEND: Backend = "processes"
+_COMPARE_INTRA_OP_THREADS: int | None = None
 
 
 class OverspendError(ValueError):
@@ -102,20 +114,36 @@ def restarts(single: Method[InstanceT], cost: int) -> Method[InstanceT]:
     if cost < 1:
         msg = f"a restart costs at least one unit, got {cost}"
         raise ValueError(msg)
+    return Restarts(single, cost)
 
-    def run(instance: InstanceT, budget: Budget, rng: np.random.Generator) -> Outcome:
-        if cost > budget.size:
-            msg = f"one restart costs {cost} {budget.unit}, above the budget of {budget.size}"
+
+@dataclass(frozen=True)
+class Restarts(Generic[InstanceT]):
+    """What :func:`restarts` returns: a method, and picklable where ``single`` is.
+
+    A closure would do the same arithmetic but cannot cross a process
+    boundary, and :func:`compare` runs its cells on a process pool.
+    """
+
+    single: Method[InstanceT]
+    cost: int
+
+    def __call__(
+        self, instance: InstanceT, budget: Budget, rng: np.random.Generator
+    ) -> Outcome:
+        if self.cost > budget.size:
+            msg = (
+                f"one restart costs {self.cost} {budget.unit}, above the budget "
+                f"of {budget.size}"
+            )
             raise ValueError(msg)
         best = np.inf
         spent = 0
-        for _ in range(budget.size // cost):
-            outcome = single(instance, Budget(budget.unit, cost), rng)
+        for _ in range(budget.size // self.cost):
+            outcome = self.single(instance, Budget(budget.unit, self.cost), rng)
             best = min(best, outcome.value)
             spent += outcome.spent
         return Outcome(best, spent)
-
-    return run
 
 
 @dataclass(frozen=True)
@@ -207,12 +235,19 @@ class Comparison:
         return "\n".join(lines)
 
 
+def _run_cell(task: tuple[Method[InstanceT], InstanceT, Budget, int, int]) -> Outcome:
+    """One (method, instance, seed) cell, importable so a process pool can run it."""
+    method, instance, budget, seed, index = task
+    return method(instance, budget, np.random.default_rng([seed, index]))
+
+
 def compare(
     methods: Mapping[str, Method[InstanceT]],
     instances: Sequence[InstanceT],
     budget: Budget,
     seeds: Sequence[int],
     *,
+    workers: int,
     known: Sequence[float] | None = None,
 ) -> Comparison:
     """Run every method on every instance over the seeds, at one budget.
@@ -222,13 +257,22 @@ def compare(
     methods : Mapping[str, Method]
         Name to method. Each is called once per (instance, seed) with the
         generator ``np.random.default_rng([seed, index])``, so a method sees
-        the same stream whichever other methods run beside it.
+        the same stream whichever other methods run beside it. Under
+        ``workers > 1`` a method must be picklable: a module-level function,
+        or :func:`restarts` of one, not a closure.
     instances : Sequence
         The instance set. What an instance is, the methods know.
     budget : Budget
         Held equal across methods.
     seeds : Sequence[int]
         At least one. The best over seeds is what each method is scored on.
+    workers : int
+        Cells run at once, through :func:`snakes_and_ladders.parallel.map_tasks` on
+        a process pool; ``1`` is the serial loop. Explicit rather than
+        defaulted, so a comparison does not change with the machine; bitwise
+        equal at every count because each cell seeds itself. Measured under
+        2x at 4 workers at the mid-size tier (``STATUS.md`` §0), so callers
+        pass ``1`` until a measurement on their hardware says otherwise.
     known : Sequence[float] | None
         A known optimum per instance, where one exists (a planted energy, an
         enumerated minimum). ``None`` scores against the best any method found.
@@ -256,20 +300,31 @@ def compare(
     names = tuple(methods)
     best = np.full((len(names), len(instances)), np.inf)
     spent = np.zeros((len(names), len(instances)), dtype=np.int64)
-    for row, name in enumerate(names):
-        for index, instance in enumerate(instances):
-            for seed in seeds:
-                outcome = methods[name](
-                    instance, budget, np.random.default_rng([seed, index])
-                )
-                if outcome.spent > budget.size:
-                    msg = (
-                        f"{name} spent {outcome.spent} {budget.unit} on instance "
-                        f"{index}, above the budget of {budget.size}"
-                    )
-                    raise OverspendError(msg)
-                best[row, index] = min(best[row, index], outcome.value)
-                spent[row, index] = max(spent[row, index], outcome.spent)
+    cells = [
+        (row, index, seed)
+        for row in range(len(names))
+        for index in range(len(instances))
+        for seed in seeds
+    ]
+    outcomes = map_tasks(
+        _run_cell,
+        [
+            (methods[names[row]], instances[index], budget, seed, index)
+            for row, index, seed in cells
+        ],
+        workers=workers,
+        backend=_COMPARE_BACKEND,
+        intra_op_threads=_COMPARE_INTRA_OP_THREADS,
+    )
+    for (row, index, _seed), outcome in zip(cells, outcomes, strict=True):
+        if outcome.spent > budget.size:
+            msg = (
+                f"{names[row]} spent {outcome.spent} {budget.unit} on instance "
+                f"{index}, above the budget of {budget.size}"
+            )
+            raise OverspendError(msg)
+        best[row, index] = min(best[row, index], outcome.value)
+        spent[row, index] = max(spent[row, index], outcome.spent)
     reference = (
         np.asarray(known, dtype=float) if known is not None else best.min(axis=0)
     )

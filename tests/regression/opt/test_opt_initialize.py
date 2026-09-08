@@ -63,7 +63,7 @@ def test_a_single_start_makes_the_multi_start_fit_the_ordinary_one() -> None:
     objective = Rosenbrock()
 
     single = fit(objective)
-    through_initializer = fit_from(objective, FromObjective())
+    through_initializer = fit_from(objective, FromObjective(), workers=1)
 
     assert through_initializer.best.value == pytest.approx(single.value, rel=1e-12)
     assert torch.allclose(through_initializer.best.theta, single.theta)
@@ -116,7 +116,9 @@ def test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one() -> No
     objective = Himmelblau()
 
     from_one = {
-        Himmelblau.nearest_minimum(fit_from(objective, FromObjective()).best.theta)[0]
+        Himmelblau.nearest_minimum(
+            fit_from(objective, FromObjective(), workers=1).best.theta
+        )[0]
         for _ in range(8)
     }
     assert len(from_one) == 1, "a deterministic start reached more than one basin"
@@ -125,7 +127,7 @@ def test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one() -> No
         Himmelblau.nearest_minimum(result.theta)[0]
         for trial in range(8)
         for result in fit_from(
-            objective, RandomRestart(4, 3.0, np.random.default_rng(trial))
+            objective, RandomRestart(4, 3.0, np.random.default_rng(trial)), workers=1
         ).all_fits
     }
     assert from_many == set(range(len(HIMMELBLAU_MINIMA)))
@@ -153,13 +155,16 @@ def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
     def one_start(
         instance: Rastrigin, _budget: Budget, _rng: np.random.Generator
     ) -> Outcome:
-        return Outcome(float(fit_from(instance, FromObjective()).best.value), 1)
+        return Outcome(
+            float(fit_from(instance, FromObjective(), workers=1).best.value), 1
+        )
 
     def random_start(
         instance: Rastrigin, _budget: Budget, rng: np.random.Generator
     ) -> Outcome:
         return Outcome(
-            float(fit_from(instance, RandomRestart(1, 2.0, rng)).best.value), 1
+            float(fit_from(instance, RandomRestart(1, 2.0, rng), workers=1).best.value),
+            1,
         )
 
     # Ten trials, each an instance of the same surface with its own stream;
@@ -171,6 +176,7 @@ def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
         [objective] * 10,
         Budget("fits", 8),
         seeds=(0,),
+        workers=1,
         known=[0.0] * 10,
     )
     hits = result.hits(tolerance=1e-6)
@@ -193,11 +199,15 @@ def test_the_spread_reports_that_the_starts_disagreed() -> None:
     returned as well as the spread. On Rastrigin the values differ, and the
     spread is what says a single fit could have been wrong by that much.
     """
-    flat = fit_from(Himmelblau(), RandomRestart(4, 3.0, np.random.default_rng(0)))
+    flat = fit_from(
+        Himmelblau(), RandomRestart(4, 3.0, np.random.default_rng(0)), workers=1
+    )
     assert flat.spread == pytest.approx(0.0, abs=1e-6)
     assert len({Himmelblau.nearest_minimum(f.theta)[0] for f in flat.all_fits}) > 1
 
-    rugged = fit_from(Rastrigin(), RandomRestart(6, 2.0, np.random.default_rng(0)))
+    rugged = fit_from(
+        Rastrigin(), RandomRestart(6, 2.0, np.random.default_rng(0)), workers=1
+    )
     assert rugged.spread > 0.0
     assert rugged.best.value == min(f.value for f in rugged.all_fits)
 
@@ -262,3 +272,36 @@ def test_a_non_positive_perturbation_is_refused() -> None:
     """A zero tilt does not leave a stationary point, which is the whole job."""
     with pytest.raises(ValueError, match="must be positive"):
         Perturbed(magnitude=0.0)
+
+
+@pytest.mark.structural
+def test_four_workers_fit_the_starts_one_worker_fits() -> None:
+    """A multi-start fit on a process pool is the serial one, bitwise (issue #344).
+
+    A start draws nothing once the initializer has produced it, and every
+    worker runs at the intra-op thread count the serial path runs at, so the
+    same kernels reduce in the same order: the fitted parameters are equal
+    with ``torch.equal``, not ``allclose``.
+    """
+    objective = Himmelblau()
+
+    serial = fit_from(
+        objective, RandomRestart(4, 3.0, np.random.default_rng(0)), workers=1
+    )
+    pooled = fit_from(
+        objective, RandomRestart(4, 3.0, np.random.default_rng(0)), workers=4
+    )
+
+    assert len(serial.all_fits) == 4
+    assert pooled.spread == serial.spread
+    for one, four in zip(serial.all_fits, pooled.all_fits, strict=True):
+        assert torch.equal(four.theta, one.theta)
+        assert four.value == one.value
+        assert four.iterations == one.iterations
+        assert four.converged == one.converged
+
+
+@pytest.mark.edge_case
+def test_a_multi_start_fit_refuses_no_workers() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        fit_from(Himmelblau(), FromObjective(), workers=0)
