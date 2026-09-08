@@ -52,6 +52,7 @@ def test_compare_scores_the_best_over_seeds_against_the_best_any_method_found() 
         instances,
         budget,
         seeds=(0, 1),
+        workers=1,
     )
 
     expected_single = np.array(
@@ -78,6 +79,7 @@ def test_a_known_optimum_is_the_reference_when_given() -> None:
         [0.0, 1.0],
         Budget("evaluations", 1),
         seeds=(0,),
+        workers=1,
         known=[0.0, 1.0],
     )
 
@@ -88,7 +90,9 @@ def test_a_known_optimum_is_the_reference_when_given() -> None:
 
 @pytest.mark.structural
 def test_the_table_names_the_unit_the_hits_and_the_spend() -> None:
-    result = compare({"single": _draw}, [0.0], Budget("sweeps", 5), seeds=(3,))
+    result = compare(
+        {"single": _draw}, [0.0], Budget("sweeps", 5), seeds=(3,), workers=1
+    )
 
     table = result.table()
 
@@ -103,7 +107,9 @@ def test_a_method_that_spends_past_its_budget_is_refused() -> None:
         return Outcome(instance, budget.size + 1)
 
     with pytest.raises(OverspendError, match="above the budget"):
-        compare({"greedy": greedy}, [0.0], Budget("evaluations", 3), seeds=(0,))
+        compare(
+            {"greedy": greedy}, [0.0], Budget("evaluations", 3), seeds=(0,), workers=1
+        )
 
 
 @pytest.mark.edge_case
@@ -132,7 +138,9 @@ def test_an_empty_or_inconsistent_comparison_is_refused(
     match: str,
 ) -> None:
     with pytest.raises(ValueError, match=match):
-        compare(methods, instances, Budget("evaluations", 1), seeds, known=known)
+        compare(
+            methods, instances, Budget("evaluations", 1), seeds, workers=1, known=known
+        )
 
 
 @pytest.mark.edge_case
@@ -185,6 +193,7 @@ def test_a_relative_tolerance_scales_with_the_reference_and_the_paired_p_reads_t
         [1000.0, 1000.0, 0.0],
         Budget("evaluations", 1),
         seeds=(0,),
+        workers=1,
         known=[1000.0, 1000.0, 0.0],
     )
 
@@ -193,3 +202,26 @@ def test_a_relative_tolerance_scales_with_the_reference_and_the_paired_p_reads_t
     assert result.reached(1e-3, relative=True)["first"].tolist() == [True] * 3
     assert result.paired_p("first", "second", 1e-3, relative=True) == 2.0 / 8.0
     assert result.paired_p("first", "second") == 1.0
+
+
+@pytest.mark.structural
+def test_four_workers_report_the_comparison_one_worker_reports() -> None:
+    """The cells of a comparison are independent by construction (issue #344).
+
+    Each seeds its own generator from ``[seed, index]``, so running them on a
+    process pool changes when they run and nothing about what they draw; the
+    two tables are equal bitwise, not within a tolerance. ``restarts`` is
+    included because it has to cross the process boundary, which a closure
+    could not.
+    """
+    methods = {"single": _draw, "restarts": restarts(_draw, 1)}
+    instances = [0.0, 10.0, 20.0]
+    budget = Budget("evaluations", 4)
+
+    serial = compare(methods, instances, budget, seeds=(0, 1), workers=1)
+    pooled = compare(methods, instances, budget, seeds=(0, 1), workers=4)
+
+    np.testing.assert_array_equal(pooled.best, serial.best)
+    np.testing.assert_array_equal(pooled.spent, serial.spent)
+    np.testing.assert_array_equal(pooled.reference, serial.reference)
+    assert pooled.methods == serial.methods

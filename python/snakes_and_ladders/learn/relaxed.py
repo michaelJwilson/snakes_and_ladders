@@ -409,7 +409,7 @@ def anneal(start: float, end: float, steps: int, step: int) -> float:
 
 def optimize(
     objective: RelaxedObjective,
-    seed: int,
+    generator: torch.Generator,
     *,
     temperature: float = 0.5,
     final_temperature: float | None = None,
@@ -425,8 +425,9 @@ def optimize(
     ----------
     objective : RelaxedObjective
         The discrete problem being relaxed.
-    seed : int
-        Seeds the initial logits and the Gumbel draws.
+    generator : torch.Generator
+        The only source of randomness, so a run is reproducible from the
+        generator its caller seeded (issue #337).
     temperature : float
         Fixed ``tau``, or the *starting* ``tau`` when ``final_temperature`` is
         given.
@@ -454,7 +455,6 @@ def optimize(
         Carrying the discrete score of the ``argmax`` configuration, which is
         the number to compare against an enumerated optimum.
     """
-    generator = torch.Generator().manual_seed(seed)
     logits = 0.01 * torch.randn(
         (objective.n_sites, objective.n_states),
         generator=generator,
