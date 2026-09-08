@@ -823,6 +823,21 @@ against **209 to 731**. The cutoff is a count, so it scales with the
 alignment: 8 at 1,200 sites loses the optimum from 6 of 12 starts and 4 does
 not, while 8 at 2,000 sites keeps all 12.
 
+**The interval is not a cheaper forward pass, and the measurement says so.**
+One thread, mean over 50 calls: at five taxa by 2,000 sites the uncompressed
+evaluation is **0.908 ms**, the pattern-compressed **0.660 ms**, the per-tree
+extremes **0.384 ms**, and the interval **3.650**, **3.314** and **3.047 ms**
+at cutoffs 1, 8 and 32; at four taxa by 20,000 sites, **3.974**, **0.511**,
+**0.257**, and **23.183**, **22.699** and **22.588 ms**. So the interval costs
+**4.0x** and **5.8x** the evaluation it stands in for, and raising the cutoff
+from 1 to 32 buys **17%** and **2.5%** — because the two terms that scale with
+the cutoff are bounded by 0.66 ms and 0.26 ms and everything else is the block
+partition's `np.unique`, which sorts every block whatever the cutoff. The
+bound's saving is in *fits*, not in passes: a fit is 254 ms at this fixture
+against a 3.65 ms interval, which is what the ranked search's 2 fits against
+13 buys. Making the interval itself cheap is a separate decision against a
+profile and is not taken here.
+
 **The LDPC decoder, specialised from the general sum-product and held to it**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
 `likelihood.ldpc.decode` runs the log-domain `tanh` rule or min-sum under a

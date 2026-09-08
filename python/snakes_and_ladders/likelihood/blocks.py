@@ -35,6 +35,17 @@ does. Only the lower end is then a bound on the *maximized* log-likelihood
 --- a value at feasible lengths is at most the maximum --- so only the lower
 end may be certified against a fit. The upper end bounds the evaluation, not
 the fit, and the class says so where it is constructed.
+
+**What it costs, which is more than the evaluation it replaces.** Measured,
+one thread: the interval is 4.0x the uncompressed evaluation at five taxa by
+2,000 sites and 5.8x at four taxa by 20,000, and the cutoff moves it by 17%
+and 2.5% because the block partition's sort dominates and does not depend on
+the cutoff. The saving is in *fits* --- a branch-length fit is 254 ms against
+a 3.65 ms interval --- and never in forward passes;
+``tests/benchmarks/test_likelihood_blocks_bench.py`` carries the table and
+`STATUS.md` the conclusion. A caller reaching for this to make an evaluation
+cheaper is reaching for the wrong thing, and
+:mod:`snakes_and_ladders.likelihood.patterns` is the right one.
 """
 
 from __future__ import annotations
