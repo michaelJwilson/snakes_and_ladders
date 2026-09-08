@@ -141,6 +141,9 @@ def test_main_reads_sys_argv_when_no_argv_is_given(
     caption_path = tmp_path / "sim_problem_sizes_caption.txt"
     assert table_path.is_file()
     assert caption_path.read_text() == build_caption(list(FIXTURE_NAMES))
+    # The runner reports what it wrote through the run logger (issue #311),
+    # which writes to stderr; nothing goes to stdout.
     captured = capsys.readouterr()
-    assert str(table_path) in captured.out
-    assert str(caption_path) in captured.out
+    written = captured.out + captured.err
+    assert str(table_path) in written
+    assert str(caption_path) in written
