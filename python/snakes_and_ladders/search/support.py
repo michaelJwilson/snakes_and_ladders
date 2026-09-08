@@ -24,7 +24,12 @@ are stated here, each as what it is and never as another:
 * **bootstrap support** (Felsenstein, 1985): resample sites with
   replacement, search again, and report per split the fraction of replicates
   containing it. The field's convention; its relation to the three above on
-  simulated data is a finding.
+  simulated data is a finding;
+* **pattern support**: per split, the fraction of sites compatible with it
+  --- a character and a split are compatible when at most one state occurs
+  on both sides (Felsenstein, *Inferring Phylogenies*, ch. 8). No fit and no
+  resample, so it is cheap enough to be a feature of a move (issue #328);
+  what it says about the bootstrap frequency is measured, not assumed.
 
 The first three serve every problem class through one score. For a
 **topology** the score is a *maximized* log-likelihood, not a marginal one,
@@ -475,3 +480,67 @@ def bootstrap_support(
             if split in counts:
                 counts[split] += 1
     return {split: count / n_replicates for split, count in counts.items()}
+
+
+def split_pattern_support(
+    split: frozenset[str], alignment: Mapping[str, np.ndarray], k: int
+) -> float:
+    """Fraction of sites compatible with ``split``: at most one state on both sides.
+
+    A site whose states partition the taxa without crossing the split can be
+    explained with one change per extra state, so it costs the split
+    nothing; a site with two states each straddling the split cannot, and is
+    the pattern a bootstrap replicate rich in it would drop the split for.
+    One vectorized pass over the alignment per state.
+
+    Parameters
+    ----------
+    split : frozenset[str]
+        One side of a bipartition of the alignment's taxa, as
+        :func:`snakes_and_ladders.search.topology.leaf_bipartitions` canonicalizes it.
+    alignment : Mapping[str, np.ndarray]
+        Observed states per taxon, each of shape ``(n_sites,)``.
+    k : int
+        Number of states.
+
+    Returns
+    -------
+    float
+        In ``[0, 1]``; ``1.0`` for a trivial split, which no site can cross.
+
+    Raises
+    ------
+    ValueError
+        If ``split`` names a taxon the alignment lacks, or is the whole
+        alignment or empty --- a side with no taxa is not a bipartition.
+    """
+    missing = sorted(split - set(alignment))
+    if missing:
+        msg = f"split names taxa the alignment lacks: {missing}"
+        raise ValueError(msg)
+    outside = sorted(set(alignment) - split)
+    if not split or not outside:
+        msg = "a split needs at least one taxon on each side"
+        raise ValueError(msg)
+    inside_states = np.stack([alignment[name] for name in sorted(split)])
+    outside_states = np.stack([alignment[name] for name in outside])
+    straddling = np.zeros(inside_states.shape[1], dtype=np.int64)
+    for state in range(k):
+        straddling += (inside_states == state).any(axis=0) & (
+            outside_states == state
+        ).any(axis=0)
+    return float(np.mean(straddling <= 1))
+
+
+def pattern_support(
+    topology: Topology, alignment: Mapping[str, np.ndarray], k: int
+) -> dict[frozenset[str], float]:
+    """Per internal split of ``topology``, :func:`split_pattern_support`.
+
+    The same keys :func:`bootstrap_support` reports, so the two are compared
+    split by split.
+    """
+    return {
+        split: split_pattern_support(split, alignment, k)
+        for split in internal_splits(topology)
+    }
