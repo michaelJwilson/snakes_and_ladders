@@ -16,7 +16,13 @@ import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.search import infer as infer_module
-from snakes_and_ladders.search.infer import Model, MoveSet, infer, score_topology
+from snakes_and_ladders.search.infer import (
+    Model,
+    MoveSet,
+    infer,
+    parsimony_search,
+    score_topology,
+)
 from snakes_and_ladders.search.topology import (
     nni_neighbours,
     random_topology,
@@ -135,4 +141,24 @@ def test_nni_hill_climb_eight_taxa_benchmark(
 
     benchmark.extra_info["fits"] = result.fits
     benchmark.extra_info["likelihood_evaluations"] = result.likelihood_evaluations
+    assert result.converged
+
+
+@pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
+def test_parsimony_hill_climb_eight_taxa_benchmark(
+    benchmark: BenchmarkFixture, moves: MoveSet
+) -> None:
+    """The same climb on the Fitch score (issue #335), where a candidate is one pass and not a fit."""
+    alignment, k = _eight_taxa()
+
+    result = benchmark(
+        parsimony_search,
+        alignment,
+        k,
+        rng=np.random.default_rng(1),
+        moves=moves,
+        max_evaluations=1000,
+    )
+
+    benchmark.extra_info["evaluations"] = result.evaluations
     assert result.converged

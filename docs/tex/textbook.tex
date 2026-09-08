@@ -584,6 +584,35 @@ of ancestral states; in the limit of short branches its cost counts
 substitutions, which is Fitch parsimony \citep{felsenstein2004}, the second
 criterion the search is scored against.
 
+Both parsimony scores are the same post-order pass with no branch lengths.
+Fitch's recursion \citep{fitch1971} carries at each node $v$ the set $S_v$
+of states reachable at the minimum cost so far, and a count $F$ of changes:
+\begin{equation}
+  S_v = \begin{cases}
+    S_a \cap S_b & S_a \cap S_b \neq \emptyset, \\
+    S_a \cup S_b \quad\text{and}\quad F \leftarrow F + 1 & \text{otherwise},
+  \end{cases}
+  \label{eq:fitch}
+\end{equation}
+for the children $a, b$ of $v$, folded pairwise at a trifurcation, a leaf's
+set being its observed state. Sankoff's recursion \citep{sankoff1975}
+replaces the set by a cost vector under a step matrix $W \in
+\mathbb{R}_{\ge 0}^{k \times k}$, $W_{ij}$ the cost of a change from a
+parent in state $i$ to a child in state $j$:
+\begin{equation}
+  S_v(i) = \sum_{c \in \mathrm{ch}(v)} \min_j \big[\, W_{ij} + S_c(j) \,\big],
+  \qquad
+  S_{\mathrm{leaf}}(i) = \begin{cases} 0 & i = x_{\mathrm{leaf}}, \\
+    \infty & \text{otherwise}, \end{cases}
+  \label{eq:sankoff}
+\end{equation}
+and a site's score is $\min_i S_{\mathrm{root}}(i)$. It is
+Equation~\ref{eq:pruning} in the min-plus semiring, and under the unit matrix
+$W = \mathbf{J} - \mathbf{I}$ it returns Fitch's count exactly. The score is
+that of a rooted tree: an asymmetric $W$ scores each rooting of one unrooted
+topology differently, and a search over unrooted topologies is well defined
+only when $W$ is a metric, where every rooting agrees.
+
 \paragraph{Regime.}
 Exact on every input, because a tree has no cycle. The one failure mode is
 numerical---underflow of a product of $n$ factors each below one---and it is
@@ -613,7 +642,10 @@ dominates NNI.
 
 Hill climbing over either neighbourhood fits the continuous parameters of
 every candidate and moves to the best; its budget is counted in candidates
-scored, never in seconds, so a run reproduces from its seed. A candidate
+scored, never in seconds, so a run reproduces from its seed. The same climb
+with Equation~\ref{eq:fitch} or~\ref{eq:sankoff} in place of the fit is
+\emph{large parsimony} \citep{felsenstein2004}: nothing continuous is fitted,
+a candidate costs one pass, and the budget and the oracle are the same. A candidate
 that shares all but a few branches with its parent may start its fit from the
 parent's lengths, a branch being identified by the leaf bipartition below it
 rather than by a node's name; and a neighbourhood may be \emph{ranked} by one
@@ -627,7 +659,11 @@ Enumeration of the $(2n-5)!!$ topologies referees the search below eight taxa:
 the climb must reach the enumerated maximum, and the neighbourhood counts
 above are asserted exactly over every topology. A warm start is pinned by
 reaching the cold fit's optimum; a cached partial likelihood by equalling the
-recomputed one bitwise, since it is the same arithmetic in the same order.
+recomputed one bitwise, since it is the same arithmetic in the same order. Large parsimony is held to the same enumeration from every
+start, and on the Felsenstein-zone fixture its enumerated optimum is
+asserted to be the wrong tree while the likelihood optimum is the right one,
+because there the criterion's failure is the theorem of
+Section~\ref{sec:properties} and not a defect of the search.
 
 \section{Problem Statement: Potts Models in an External Field}
 \label{sec:potts}
