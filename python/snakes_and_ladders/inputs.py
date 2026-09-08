@@ -1,12 +1,23 @@
-"""What a rendered artifact depends on, hashed so an unchanged one is not re-rendered.
+"""What a committed artifact depends on, hashed so an unchanged one is not remade.
 
-A committed figure or an executed notebook is a function of its inputs: the
-script or the cells, every ``snakes_and_ladders`` module they reach by import,
-the fixture files they read, and the versions of the libraries that draw or
-compute. A digest over those, recorded beside the artifact when it was made,
-says whether the artifact can have changed since. The build renders a figure
-only when its digest differs from the stamp, so a pull request that changed a
-paragraph of the textbook renders nothing (issue #372).
+A committed figure, an executed notebook or a fixture's recorded baseline is a
+function of its inputs: the script or the cells, every ``snakes_and_ladders``
+module they reach by import, the fixture files they read, and the versions of
+the libraries that draw or compute. A digest over those, recorded beside the
+artifact when it was made, says whether the artifact can have changed since.
+The build renders a figure only when its digest differs from the stamp, so a
+pull request that changed a paragraph of the textbook renders nothing (issue
+#372).
+
+**Top level, not inside ``qa``.** It began there, where the figures are, and
+moved when ``snakes_and_ladders.sim.fixtures`` came to need it for the
+baseline records (issue #401): ``qa`` renders what the other modules compute
+and nothing may import it, so a digest living there made ``sim`` depend on
+``qa`` and a ``qa`` change select and time ``sim``. The module names no model
+and imports nothing from this package, so it sits beside
+:mod:`snakes_and_ladders.numerics` and :mod:`snakes_and_ladders.enumeration`
+on the terms root ``CLAUDE.md`` states for those: importable from anywhere,
+inverting no layering.
 
 The import closure is read from the source with :mod:`ast`, as
 ``infra/select_tests.py`` reads the module graph: a listed dependency goes
