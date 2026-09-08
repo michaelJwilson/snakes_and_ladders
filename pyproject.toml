@@ -55,6 +55,18 @@ notebooks = [
     "nbformat>=5.10",
     "ipykernel>=6.29",
 ]
+# External frameworks that front or referee a hand-rolled implementation
+# (issue #322). An extra rather than a core dependency: the core install and
+# the per-pull-request suite pull none of them, and every test that needs one
+# `importorskip`s it. All four are OSI-licensed (MIT, Apache-2.0, MIT, MIT);
+# rustworkx sits near the 1,000-star bar and was flagged and approved on the
+# ticket.
+frameworks = [
+    "gymnasium>=1.0",
+    "rustworkx>=0.15",
+    "torchrl>=0.6",
+    "torch_geometric>=2.5",
+]
 test = [
     # >=9.0.3 is the fix for PYSEC-2026-1845; the previous <9 cap blocked it.
     "pytest>=9.0.3",
@@ -159,6 +171,28 @@ disallow_untyped_calls = false
 # `notebooks` job -- mypy still checks against the real thing.
 module = ["nbformat.*", "nbclient.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The `frameworks` extra (issue #322) is absent where the `lint` job runs, so
+# its imports resolve to nothing there; and torchrl, tensordict,
+# torch_geometric and networkx ship no type information where they are
+# present. gymnasium and rustworkx do, and are checked against it wherever
+# they are installed.
+module = [
+    "gymnasium.*",
+    "rustworkx.*",
+    "torchrl.*",
+    "tensordict.*",
+    "torch_geometric.*",
+    "networkx.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Where gymnasium is absent its `Env` is `Any`, and --strict refuses to
+# subclass `Any`; where it is present the class is checked in full.
+module = "snakes_and_ladders.search.gym"
+disallow_subclassing_any = false
 
 [tool.towncrier]
 directory = "changelog.d"

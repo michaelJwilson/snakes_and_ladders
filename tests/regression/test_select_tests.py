@@ -165,11 +165,17 @@ def test_benchmarks_run_only_for_the_modules_they_measure() -> None:
 @pytest.mark.structural
 def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
     # The pairing DEV.md requires, used as the selector: a learn change runs
-    # learn's benchmark and not the other twelve. Running all of them cost
-    # 40 s against 5 s for the one that measures what changed.
-    assert _benchmarks_of(select(["python/snakes_and_ladders/learn/reinforce.py"])) == {
-        "test_learn_reinforce_bench.py"
-    }
+    # learn's benchmark and those of its dependents, and not the rest.
+    # `search` imports `learn.environment` through its Gymnasium adapter
+    # (issue #322), so search's benchmarks come too, and likelihood's behind
+    # them through `likelihood.features` -> `search.topology`; `opt` imports
+    # none of the four, asserted by its own guard, so its benchmarks do not.
+    chosen = _benchmarks_of(select(["python/snakes_and_ladders/learn/reinforce.py"]))
+
+    assert "test_learn_reinforce_bench.py" in chosen
+    assert "test_search_rl_bench.py" in chosen
+    assert "test_opt_fit_bench.py" not in chosen
+    assert "test_pairwise_distance_bench.py" not in chosen
 
 
 @pytest.mark.critical

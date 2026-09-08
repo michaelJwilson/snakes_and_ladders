@@ -12,7 +12,8 @@ produces them or in `STATUS.md`, and the module docstrings say which.
 ## What lives here
 
 Substitution models on a tree; a general undirected graph carrying a per-edge
-coupling, the lattices and random graphs built as constructed cases of it, and
+coupling, the lattices and random graphs built as constructed cases of it —
+checked against `rustworkx`'s generators, and convertible to its graphs — and
 the samplers that draw spin configurations on them; hidden state paths and
 their emissions; the factor graph the three of those are shapes of, with its
 adapters, and the coupled spatio-sequential model that joins them, with its
