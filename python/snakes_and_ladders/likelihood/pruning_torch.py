@@ -18,7 +18,10 @@ the JC generator (tests/regression/test_pruning_torch.py).
 
 Rescaling (``likelihood/CLAUDE.md``, "Rescaling must stay differentiable")
 accumulates ``log_scale`` by tensor addition, never in place, so it composes
-correctly under autograd.
+correctly under autograd. The scaling *factor* is detached: it cancels between
+the division and the ``log`` it is added to, so it carries no derivative, and
+the gradient of the rescaled path is the gradient of the unrescaled one
+(tests/regression/likelihood/test_pruning_torch.py).
 """
 
 from __future__ import annotations
@@ -232,7 +235,14 @@ def log_likelihood(
             partial = partial * _message(child)
 
         if rescale:
-            scale = partial.amax(dim=1)
+            # Detached because the scale cancels: this node's partial is
+            # divided by ``s`` and ``log s`` is added to the running total, so
+            # the total is what it was and ``s`` contributes nothing to the
+            # derivative. Differentiating it would compute a zero through the
+            # amax, the comparison and the log -- half of the backward pass on
+            # the eight-taxon fixture (issue #397). The rescaling itself stays
+            # in the graph; what leaves it is a constant.
+            scale = partial.amax(dim=1).detach()
             # See snakes_and_ladders.likelihood.pruning: a zero scale means the site is
             # genuinely impossible under the model, left at 0 rather than
             # divided so log(0) = -inf propagates instead of being masked.

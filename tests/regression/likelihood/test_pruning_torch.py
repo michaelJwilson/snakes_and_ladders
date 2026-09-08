@@ -11,9 +11,11 @@ the thing it judges:
 - ``torch.autograd.gradcheck`` against central finite differences of the
   NumPy likelihood w.r.t. branch lengths
   (``test_gradient_matches_finite_differences_of_numpy_oracle``).
-- Rescaled and unrescaled Torch paths agreeing, the check
-  ``likelihood/CLAUDE.md``'s "Rescaling must stay differentiable" calls for
-  (``test_rescaled_and_unrescaled_torch_paths_agree``).
+- Rescaled and unrescaled Torch paths agreeing in value and in gradient, the
+  check ``likelihood/CLAUDE.md``'s "Rescaling must stay differentiable, and
+  the scaling factor is a constant" calls for
+  (``test_rescaled_and_unrescaled_torch_paths_agree``,
+  ``test_rescaled_and_unrescaled_torch_gradients_agree``).
 
 A fifth check pins the general ``rate_matrix`` path (``torch.matrix_exp``)
 against the closed-form JC path when given the JC generator
@@ -176,6 +178,36 @@ def test_rescaled_and_unrescaled_torch_paths_agree() -> None:
     )
 
     assert_allclose(float(rescaled), float(unrescaled), rtol=1e-10)
+
+
+@pytest.mark.mathematical
+def test_rescaled_and_unrescaled_torch_gradients_agree() -> None:
+    """The scaling factor carries no derivative, which is why it is detached.
+
+    ``likelihood/CLAUDE.md``'s "Rescaling must stay differentiable, and the
+    scaling factor is a constant": the factor cancels between the division it
+    performs and the log it is added to, so the rescaled path's gradient is
+    the unrescaled path's. Detaching it drops the amax, the comparison and the
+    log of the scale from the backward pass (issue #397), and this is the
+    check that says nothing else went with them. The value agreement above
+    would still hold if the gradient were wrong, so the two are separate
+    assertions on separate quantities.
+    """
+    tau = _small_tree_n6()
+    k = 4
+    pi = np.full(k, 0.25)
+    dataset = simulate_alignment(
+        tau=tau, k=k, pi=pi, rng=np.random.default_rng(20260912), n_sites=100
+    )
+
+    def _gradient(*, rescale: bool) -> np.ndarray:
+        lengths = pruning_torch.branch_lengths_from_tree(tau).requires_grad_(True)
+        value = pruning_torch.log_likelihood(
+            tau, k, pi, dataset.alignment, lengths, rescale=rescale
+        )
+        return torch.autograd.grad(value, lengths)[0].numpy()
+
+    assert_allclose(_gradient(rescale=True), _gradient(rescale=False), rtol=1e-10)
 
 
 @pytest.mark.oracle
