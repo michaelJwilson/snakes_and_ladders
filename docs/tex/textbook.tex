@@ -121,8 +121,8 @@ Sum-product sends, from factor $a$ to variable $i$,
   m_{i \to a}(x_i) = \prod_{b \in \partial i \setminus a} m_{b \to i}(x_i),
   \label{eq:sum-product}
 \end{equation}
-and on a tree one leaf-to-root and one root-to-leaf pass are exact: on the
-tree's factor graph this is pruning, Equation~\ref{eq:pruning}; on a chain it
+and on a tree one leaf-to-root and one root-to-leaf pass are exact
+(Appendix~\ref{app:sum-product}): on the tree's factor graph this is pruning, Equation~\ref{eq:pruning}; on a chain it
 is the forward recursion, Equation~\ref{eq:forward}; on a pairwise graph it
 is Equation~\ref{eq:bp-message}. On a loopy graph the fixed point is the
 Bethe approximation of Equation~\ref{eq:bethe}. Replacing the sum by a
@@ -579,7 +579,8 @@ the site likelihood read off at the root,
   p(\data_s \mid \tree, \branch, \Q) = \sum_{i \in \states} \pi_i\, L_{\rootnode}(i)
   \label{eq:root}
 \end{equation}
-\citep{felsenstein2004, durbin1998}. Products of many small numbers underflow,
+\citep{felsenstein2004, durbin1998}; Appendix~\ref{app:pruning} derives the
+recursion from the marginalization. Products of many small numbers underflow,
 so each node's partials are rescaled and the logarithm of the scaling
 accumulated separately; the rescaling must remain differentiable, since
 $\branch$ and $\Q$ are what the continuous optimization fits.
@@ -741,7 +742,7 @@ fixed point,
 with $E_{ij} = -J_{ij}\,\delta(\sigma_i,\sigma_j)$, $E_i = -h_i(\sigma_i)$ and
 $d_i$ the degree of $i$, equals $-\log Z$ exactly on a tree and approximates
 it on a loopy graph \citep{yedidia2005, mezard2009}; Appendix~\ref{app:bethe}
-states why. A fixed point the iteration never reached is not an estimate of
+states why, and Appendix~\ref{app:sum-product} places the tree case. A fixed point the iteration never reached is not an estimate of
 anything, so non-convergence is a refusal rather than a number.
 
 \paragraph{Regime.}
@@ -970,7 +971,8 @@ The forward recursion is Equation~\ref{eq:pruning} on a chain:
 Pruning on a caterpillar tree carrying one observed leaf per internal node
 \emph{is} this recursion \citep{durbin1998, koller2009}: the three problem
 classes are one marginalization over three structures, not three unrelated
-models sharing an optimizer. In the terms of Equation~\ref{eq:sum-product},
+models sharing an optimizer; Appendix~\ref{app:forward-backward} derives
+both passes from it. In the terms of Equation~\ref{eq:sum-product},
 $\alpha_t$ is the message arriving at $z_t$ from the left multiplied by the
 emission factor, the backward recursion $\beta_t$ is the same pass from the
 right, and the posterior at a position is their normalized product,
@@ -1464,6 +1466,130 @@ Each of these is standard; each is here because a claim in the main text
 depends on it, and the main text cites rather than derives, for the reader
 the preface names.
 
+\subsection{Pruning is the marginalization over internal states}
+\label{app:pruning}
+Root $\tree$ at $\rootnode$ and write $z_u$ for the state at node $u$, so the
+leaves' states at one site are the data $\data_s$ and the internal states are
+summed. Along each branch the state evolves by the Markov process of
+Section~\ref{sec:phylo}, and the branches are conditionally independent given
+the state at their common node, so the joint over every node is
+$p(z) = \pi_{z_{\rootnode}} \prod_{v \neq \rootnode}
+\Pmat_{z_{\mathrm{pa}(v)} z_v}(t_v)$, and the site likelihood is its sum over
+the internal states with the leaves clamped---the summand of
+Equation~\ref{eq:site-independence}, with $k^{n-2}$ terms. Define
+$L_u(i) = p(\data_s^{(u)} \mid z_u = i)$, the probability of the data at the
+leaves below $u$ given $u$'s state. The subtrees hanging from $u$'s children
+share no variable and, given $z_u$, no factor, so the sum over their states
+factorizes into one sum per child:
+\begin{equation*}
+  L_u(i) = \prod_{v \in \mathrm{children}(u)} p(\data_s^{(v)} \mid z_u = i)
+         = \prod_{v \in \mathrm{children}(u)} \sum_{j \in \states}
+           \Pmat_{ij}(t_v)\, p(\data_s^{(v)} \mid z_v = j),
+\end{equation*}
+the second equality conditioning on $z_v$ and using that the data below $v$
+depends on $z_u$ only through $z_v$. The inner probability is $L_v(j)$, which
+is Equation~\ref{eq:pruning}; at a leaf $L_u(i) = \mathbb{1}[z_u = i]$
+because the state is observed; and summing the root state against its prior
+gives Equation~\ref{eq:root}. Nothing in the argument fixes the order of the
+children or the depth of the tree, so the recursion is a post-order traversal
+in which each node's sum is done once per parent state: $O(n k^2)$ per site
+against $k^{n-2}$ terms. Each $L_u$ is linear in each $L_v$, so rescaling
+$L_u$ by a positive $c_u$ scales the site likelihood by $\prod_u c_u$ and
+nothing else, which is why the logarithm of the scaling may be accumulated
+apart from the recursion and the rescaled recursion is a transformation of
+this one rather than a second algorithm
+\citep{felsenstein1981, felsenstein2004}.
+
+\subsection{Forward--backward is the same marginalization on a chain}
+\label{app:forward-backward}
+With the factors of Section~\ref{sec:hmm} the joint over the hidden path and
+the observations is $p(\hidden, \data) = \pi_{z_1}\,\emission_{z_1}(y_1)
+\prod_{t > 1} \mathbf{A}_{z_{t-1} z_t}\, \emission_{z_t}(y_t)$, and the
+evidence sums it over $k^T$ paths. Define $\alpha_t(i) = p(y_1, \dots, y_t,
+z_t = i)$. Conditioning on $z_{t-1}$, and using that $y_1, \dots, y_{t-1}$
+depend on $z_t$ only through $z_{t-1}$, splits the sum over the first $t - 1$
+states from the rest:
+$\alpha_t(i) = \big[\sum_j \alpha_{t-1}(j)\,\mathbf{A}_{ji}\big]\,
+\emission_i(y_t)$, with $\alpha_1(i) = \pi_i\,\emission_i(y_1)$, and the
+evidence is $\sum_i \alpha_T(i)$: Equation~\ref{eq:forward}. Define
+$\beta_t(i) = p(y_{t+1}, \dots, y_T \mid z_t = i)$, so $\beta_T = 1$;
+conditioning on $z_{t+1}$ in the same way gives the backward recursion of
+Equation~\ref{eq:posterior}. The two meet at any position:
+$p(z_t = i, \data) = \alpha_t(i)\,\beta_t(i)$, because the observations
+before $t$ and after $t$ are independent given $z_t$, and dividing by the
+evidence gives the posterior of Equation~\ref{eq:posterior}; the same split
+one step wider gives the pairwise posterior
+$p(z_{t-1} = i, z_t = j \mid \data) = \alpha_{t-1}(i)\,\mathbf{A}_{ij}\,
+\emission_j(y_t)\,\beta_t(j) / p(\data)$, the sufficient statistic of the
+expectation step.
+
+The chain is the caterpillar tree of Section~\ref{sec:hmm} rooted at $z_1$:
+each $z_t$ has one child $z_{t+1}$ carrying the branch factor $\mathbf{A}$ and
+one observed leaf $y_t$ carrying the emission. Appendix~\ref{app:pruning}
+then gives $L_{z_t}(i) = \emission_i(y_t)\,\sum_j \mathbf{A}_{ij}\,
+L_{z_{t+1}}(j)$, so $L_{z_t}(i) = \emission_i(y_t)\,\beta_t(i)$ and
+Equation~\ref{eq:root} is $\sum_i \pi_i\,\emission_i(y_1)\,\beta_1(i) =
+\sum_i \alpha_1(i)\,\beta_1(i) = p(\data)$: pruning on the chain is the
+backward pass, and the forward pass is the same recursion run toward the
+other end with the prior entering as a leaf factor at $z_1$. Both passes in
+the logarithm are the rescaled recursion of Appendix~\ref{app:pruning} with
+the scale taken at every step. Replacing each sum by a maximum leaves every
+step of the argument intact, since a maximum distributes over a product of
+non-negative factors as a sum does, and gives Equation~\ref{eq:viterbi}
+\citep{durbin1998, koller2009}.
+
+\subsection{Sum-product on a tree, and its loopy stationary point}
+\label{app:sum-product}
+Both derivations above are one fact about a tree-structured factor graph.
+Take an edge between factor $a$ and variable $i$ and remove it; because the
+graph is a tree, the component containing $a$ is a subtree $\tree_{a \to i}$
+that meets the rest only at $x_i$. Define the message from $a$ to $i$ as the
+partition function of that subtree with $x_i$ clamped,
+$m_{a \to i}(x_i) = \sum_{x_{\tree_{a \to i}} \setminus x_i}
+\prod_{b \in \tree_{a \to i}} \psi_b(x_{\partial b})$, and $m_{i \to a}$
+likewise for the subtree on $i$'s side. The subtrees hanging from $a$'s other
+variables $j \in \partial a \setminus i$ are disjoint, so the sum over their
+variables factorizes into a product of their partition functions, each a
+function of its own $x_j$; and the subtrees hanging from $i$'s other factors
+share only $x_i$, so their product is $m_{i \to a}(x_i)$. That is
+Equation~\ref{eq:sum-product}, with the messages at a leaf variable or leaf
+factor being $1$ and the factor itself. At any variable the whole graph is
+the union of the subtrees on its factors, so $Z = \sum_{x_i} \prod_{a \in
+\partial i} m_{a \to i}(x_i)$ and the marginal is that product normalized;
+at a factor, $p(x_{\partial a}) \propto \psi_a(x_{\partial a}) \prod_{i \in
+\partial a} m_{i \to a}(x_i)$. A message depends only on messages from
+further from any chosen root, so one leaf-to-root pass computes every message
+toward it and one root-to-leaf pass every message away, and every marginal
+follows: two passes, each factor summed once per direction
+\citep{pearl1988, kschischang2001, koller2009}. Pruning is this with a node's
+state as the variable, a branch matrix as the factor between parent and
+child, the prior as a factor on the root and a leaf's observation as an
+indicator factor: $L_u(i)$ is the product of the factor-to-variable messages
+from below, which is the variable-to-factor message $m_{u \to \psi_u}$ that
+$u$ sends up its own branch. Forward--backward is this on the chain. The
+argument used only that sum distributes over product, so max-product follows
+by replacing every sum with a maximum, exact on a tree when the maximum is
+unique.
+
+On a graph with a cycle no edge separates the graph into two subtrees, so
+the message has no such definition; iterating Equation~\ref{eq:sum-product}
+regardless defines a map on messages, and a fixed point of that map is a
+stationary point of the Bethe free energy, which Appendix~\ref{app:bethe}
+derives for the pairwise case of Equation~\ref{eq:bethe} and which reads, for
+factors of any degree,
+\begin{equation}
+  F_{\mathrm{Bethe}}
+    = \sum_a \sum_{x_{\partial a}} b_a\,\big(\log b_a - \log \psi_a\big)
+    - \sum_i (d_i - 1) \sum_{x_i} b_i \log b_i,
+  \label{eq:bethe-factor}
+\end{equation}
+with $d_i$ the number of factors on $i$. On a tree $p(x) = \prod_a b_a /
+\prod_i b_i^{\,d_i - 1}$ exactly, the beliefs being the true marginals, so
+Equation~\ref{eq:bethe-factor} is $-\log Z$ and the stationary point is the
+answer of the two passes; on a loopy graph the factorization fails and the
+fixed point is the approximation
+\citep{yedidia2005, mezard2009}.
+
 \subsection{The Bethe free energy is stationary at a sum-product fixed point}
 \label{app:bethe}
 Write the beliefs of a pairwise graph as $b_i$ and $b_{ij}$ and constrain them
@@ -1477,7 +1603,11 @@ identifying $e^{\lambda_{ji}(\sigma_i)}$ with $\prod_{l \in \partial i
 Equation~\ref{eq:bp-message}. So a fixed point of belief propagation is a
 stationary point of the Bethe free energy and conversely; on a tree the Bethe
 free energy is the exact variational free energy, which is why the fixed point
-there gives $-\log Z$ \citep{yedidia2005}.
+there gives $-\log Z$ \citep{yedidia2005}. The argument uses only that
+each $b_a$ is a function of the variables its factor touches, so it holds
+for factors of any degree, with Equation~\ref{eq:bethe-factor} in place of
+Equation~\ref{eq:bethe} and $d_i - 1$ counting the factors on $i$ beyond
+the first (Appendix~\ref{app:sum-product}).
 
 \subsection{Detailed balance for a cluster move in a field}
 \label{app:detailed-balance}
