@@ -11,12 +11,12 @@ produces them or in `STATUS.md`, and the module docstrings say which.
 
 ## What lives here
 
-Topology neighbourhoods and the searches that walk them; an exact two-state
-ground-state solver by minimum cut and its extension to any label count by
-expansion moves; the same model read from its NP-hard side as Max-Cut, with a
-relaxation and a certificate; Monte Carlo move sets for the Potts lattice and
-the statistics that judge them; the outer inference loop; and this
-application's instance of `snakes_and_ladders.learn`'s environment protocol.
+Topology neighbourhoods and the searches that walk them; a two-state ground
+state by minimum cut, extended to any label count by expansion moves; Max-Cut,
+the same model from its NP-hard side, with a relaxation and a certificate;
+Monte Carlo move sets for the Potts lattice, a Gibbs sampler and annealer
+over any factor graph, and the statistics that judge them; the inference loop
+and the coupled model's block ascent; and the `learn` environment instance.
 
 Two seams run through it and neither may be reversed. A discrete move changes
 the structure being fitted, so the loop builds a new objective rather than
@@ -41,7 +41,7 @@ no application module.
   sound bound gives the second.
 
 - **Every move set states whether it is complete**, in which sense, and what
-  it costs per step.
+  it costs per step. A surrogate decides what is fitted, never what is reported.
 
 - **A budget is counted in evaluations, never in seconds.** `DEV.md` forbids
   ranking performance on CI hardware, and a wall-clock budget makes a result
@@ -50,8 +50,9 @@ no application module.
   orders of magnitude cheaper than scoring one.
 
 - **A structure is scored at most once per search**, keyed on a canonical form
-  that is independent of how it was spelled, because overlapping
-  neighbourhoods otherwise pay the dominant cost twice.
+  independent of how it was spelled, because overlapping neighbourhoods pay
+  the dominant cost twice otherwise. A returned structure states its support
+  and names which it is: neighbourhood, enumerated, or bootstrap (`support.py`).
 
 - **Truth is a terminal penalty, never a training signal.** An agent that can
   see the answer during training learns to look it up.
@@ -98,8 +99,9 @@ no application module.
 - **A sampler is validated by the distribution it converges to, never by
   inspection.** At an enumerable size the exact distribution is available, so
   a move set is tested by goodness-of-fit against it at a declared
-  significance and chain length. A chain that visibly moves is what a sampler
-  with a broken accept step also does.
+  significance and chain length. A chain that visibly moves is what a broken
+  accept step also does; a tempered chain is held to `exp(-E / T)` enumerated
+  from the *unscaled* model, which shares nothing with the scaling under test.
 
 - **A goodness-of-fit test must be thinned, and the thinning is part of the
   test.** Successive sweeps are not independent draws, so run on every sweep

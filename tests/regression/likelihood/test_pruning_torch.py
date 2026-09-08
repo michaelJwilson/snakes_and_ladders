@@ -39,7 +39,7 @@ from snakes_and_ladders.sim.tree import Node
 
 # Relative, not absolute -- see issue #111 and the note in
 # test_pruning_rust.py. CROSS_DEVICE_RTOL_FLOAT64 is the float64
-# implementation-agreement bound stated in docs/tex/.
+# implementation-agreement bound stated in docs/tex/textbook.tex (sec:tolerance).
 _RTOL_ORACLE = CROSS_DEVICE_RTOL_FLOAT64
 
 _FD_EPS = 1e-6
@@ -238,3 +238,36 @@ def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
         finite_diff_grad[i] = (_numpy_ll(plus) - _numpy_ll(minus)) / (2 * _FD_EPS)
 
     assert_allclose(autograd_grad, finite_diff_grad, rtol=_RTOL_GRADIENT)
+
+
+@pytest.mark.oracle
+def test_the_batched_transition_matrices_are_the_scalar_ones() -> None:
+    # #264 computes every branch's P(t) in one call. The JC closed form is
+    # elementwise, so each matrix of the batch equals the scalar call's
+    # bitwise -- `torch.equal`, not a tolerance. `matrix_exp` is not: torch
+    # picks its Pade degree per input norm and its batched kernel is a
+    # different code path, so the GTR matrices agree to 2.9e-13 absolute
+    # (measured, stable across runs) and are held to 1e-12 rather than to
+    # equality that would assert something false.
+    lengths = torch.tensor([0.01, 0.1, 0.35, 1.2, 3.0], dtype=torch.float64)
+    rate = torch.tensor(
+        [
+            [-1.1, 0.5, 0.3, 0.3],
+            [0.2, -0.9, 0.4, 0.3],
+            [0.3, 0.4, -1.0, 0.3],
+            [0.3, 0.3, 0.2, -0.8],
+        ],
+        dtype=torch.float64,
+    )
+
+    batched_jc = pruning_torch._transition_probabilities(lengths, 4, None)
+    batched_gtr = pruning_torch._transition_probabilities(lengths, 4, rate)
+
+    assert batched_jc.shape == batched_gtr.shape == (5, 4, 4)
+    for position, length in enumerate(lengths):
+        assert torch.equal(
+            batched_jc[position],
+            pruning_torch._transition_probabilities(length, 4, None),
+        )
+        scalar_gtr = pruning_torch._transition_probabilities(length, 4, rate)
+        assert float((batched_gtr[position] - scalar_gtr).abs().max()) < 1e-12

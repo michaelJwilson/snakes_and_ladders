@@ -10,12 +10,43 @@ to pass to be one.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import torch
 
 if TYPE_CHECKING:
     from snakes_and_ladders.opt.objective import Objective
+
+
+class AnalyticGaussian:
+    """``-log N(mean, covariance)`` up to a constant: the one analytic target.
+
+    The objective every approximation here is exact on. Its Hessian *is* the
+    precision, so a Laplace interval equals ``sqrt(diag(covariance))`` to
+    round-off and a chain's spread must match it to Monte Carlo error; a
+    method that disagrees with it is wrong, not approximate. Shared between
+    the sampler's tests and the interval tests rather than written twice.
+    """
+
+    def __init__(self, mean: list[float], covariance: list[list[float]]) -> None:
+        self.mean = torch.tensor(mean, dtype=torch.float64)
+        self.covariance = torch.tensor(covariance, dtype=torch.float64)
+        self._precision = torch.linalg.inv(self.covariance)
+
+    def initial(self) -> torch.Tensor:
+        return torch.zeros_like(self.mean)
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        return {"x": theta}
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return named["x"]
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        deviation = theta - self.mean
+        quadratic: torch.Tensor = 0.5 * deviation @ self._precision @ deviation
+        return quadratic
 
 
 def central_difference_gradient(

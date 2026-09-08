@@ -1,7 +1,8 @@
 # docs/nb/
 
 One notebook per problem class, each a single pass from a seeded fixture to a
-learned search policy, checking every claim against an oracle that shares no
+learned search policy (the coupled model's ends at fitted labels, its policy
+being #290's later work), checking every claim against an oracle that shares no
 code with what it checks.
 
 | Notebook | Problem | Oracles it rests on |
@@ -9,11 +10,16 @@ code with what it checks.
 | [`potts_chain.ipynb`](potts_chain.ipynb) | Potts chain in an external field | Exhaustive enumeration of the partition function; enumeration of all 81 configurations |
 | [`phylo_tree.ipynb`](phylo_tree.ipynb) | Phylogenetic trees, 6 taxa | Brute-force marginalization over ancestral states; all 105 unrooted topologies enumerated |
 | [`hmm.ipynb`](hmm.ipynb) | Discrete hidden Markov model | Enumeration over all `3**8` hidden paths; the retained hidden path; Baum-Welch as an independent algorithm |
+| [`spatio_sequential.ipynb`](spatio_sequential.ipynb) | Coupled spatio-sequential model: a Potts prior over class labels gating one hidden chain per class | Enumeration over all 65,536 joint states of the canonical instance; the per-class forward recursion as a second route to the evidence; planted labels on a 10x10 lattice |
 
 Each ends with a **Further Work** section naming what it could not demonstrate
 and the issue that carries it. Those sections are the point as much as the
 results are: a notebook that quietly skipped the unbuilt half would misreport
-the state of the repository.
+the state of the repository. `infra/check_notebooks.py` checks the shape —
+the last cell is that section, and every line in it names an issue or a
+`TICKETS.md` section — because re-execution compares outputs and a markdown
+cell has none; all three notebooks said "no job re-runs it" for months after
+one did (issue #278).
 
 ## Running them
 

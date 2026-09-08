@@ -107,7 +107,9 @@ authoritative — where it and any other document disagree, it wins.
 Develop and deploy modern solvers for mixed discrete-continuous optimization
 across three primary classes of graphical models: phylogenetic trees (the large
 parsimony problem), N-dimensional Potts models in an external field, and hidden
-Markov models (HMMs). The framework integrates automatic differentiation for
+Markov models (HMMs) — and the coupled spatio-sequential model that joins the
+last two, a Potts prior over class labels gating one hidden chain per class
+(#290), which every Stage 1 deliverable takes as its fourth instance. The framework integrates automatic differentiation for
 continuous parameters with reinforcement learning (RL) to learn proposal
 policies that score discrete structural candidates using exact, approximate, or
 bounded likelihoods/energies.
@@ -119,6 +121,8 @@ bounded likelihoods/energies.
     simulated ground-truth topologies.
   - *Potts/HMMs:* recovery of true coupling/transition parameters within 95%
     confidence intervals; precise state-sequence decoding.
+  - *Coupled model:* recovery of planted class labels up to permutation, and
+    of the emission parameters, on instances past enumeration.
   - *Performance parity:* convergence metrics (ΔlnL or ΔE) must match or exceed
     exact oracles on small `n`, and state-of-the-art classical frameworks
     (e.g. IQ-TREE 2 for trees) on large `n` under an **equal budget of
@@ -150,7 +154,8 @@ this LaTeX documentation. It must contain:
   pruning, belief propagation, forward-backward).
 - Formal definitions of the Markov decision process (MDP) formulations for the
   RL agents.
-- Proofs for any proposed upper/lower bounds used for branch-and-bound pruning.
+- Proofs for any proposed upper/lower bounds used for branch-and-bound pruning
+  (the first four are Appendix B of the textbook, #308).
 - Dynamically generated QA figures and tables (parameter recovery, convergence
   curves) sourced directly from tracked CI runs to guarantee empirical
   reproducibility.
@@ -250,6 +255,8 @@ parameterized by neural networks.
     using budget-matched metrics across shared random seeds. Require
     statistical significance via paired tests before adopting a new
     state-of-the-art.
+    The leaderboard is the generated index of `docs/experiments/` (#314), one
+    file per experiment against its commit.
 
 ## Stage 3: Research Extensions (Blue Sky)
 

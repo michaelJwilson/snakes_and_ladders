@@ -39,11 +39,13 @@ documents that describe it.
 
 Ten required checks gate a merge, and three of them do work no reviewer can
 do by inspection: the technical-document job rebuilds only the QA figures
-`docs/tex/main.tex` cites, comparing the rest at the release gate instead
+the documents under `docs/tex/` cite, comparing the rest at the release gate instead
 ([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
-request whose rebuilt `docs/draft.pdf` differs from the committed one
+request whose rebuilt `docs/paper.pdf` or `docs/textbook.pdf` differs from the committed one
 ([#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72)); the notebooks job
-re-executes every notebook under `docs/nb/` and fails one whose printed
+re-executes every notebook under `docs/nb/`, fails one whose Further work
+section is missing or names no ticket
+([#278](https://github.com/michaelJwilson/snakes_and_ladders/issues/278)), and fails one whose printed
 output has moved; and the coverage floor cannot be lowered to pass a change. Cost is managed rather than absorbed:
 benchmarks run only when the diff touches code they measure, and the
 release-gated suite is excluded per pull request — measured at 138 s over 540
@@ -133,6 +135,143 @@ against brute-force enumeration for the per-position state and emission
 marginals, self-normalized importance sampling against the exact path
 posterior for one realized observation, and the transition matrix's own
 stationary distribution for long-run occupancy.
+
+**Emission families: what a state emits, separated from how it is fitted.**
+`snakes_and_ladders.emissions` holds the interface — draw, score, re-estimate —
+with the categorical matrix one implementation of it and a univariate Gaussian
+the second; the simulator, the forward recursion, Baum-Welch, path enumeration
+and the state aligner all go through it
+([#228](https://github.com/michaelJwilson/snakes_and_ladders/issues/228)). Every
+categorical test in the suite passes against the family without its assertions
+being rewritten, which is what says the refactor did not alter a model already
+validated.
+
+The Gaussian case is where the discrete assumption stops holding, and both
+consequences are pinned rather than discovered later. The evidence is a
+*density*, so `log P(observations) <= 0` fails on correct code and no test
+asserts it. And the likelihood has **no maximum**: a state's mean on one
+observation with its variance going to zero diverges, at exactly `log 10` nats
+per tenfold narrowing, which a test exhibits. The variance floor is derived
+from the data rather than chosen — `s**2 / n**2`, the nearest-neighbour
+spacing below which a state has collapsed onto a point — and reaching it is a
+**refusal**, since a clamped fit returns normally and reports an interval
+around a degenerate optimum ([#122](https://github.com/michaelJwilson/snakes_and_ladders/issues/122)).
+
+**The identifiable regime is measured, not assumed.** Two states one common
+standard deviation apart are nearly the same state, and the fit says so.
+Coverage of the 95% Wald intervals over 24 replicates of 240 observations,
+against the separation of the emitting means:
+
+| separation | intervals covering | rate | replicates with no interval at all |
+| --- | --- | --- | --- |
+| 0.5 | 18/28 | 0.643 | 17/24 |
+| 1.0 | 46/56 | 0.821 | 10/24 |
+| 2.0 | 82/88 | 0.932 | 2/24 |
+| 3.0 | 90/96 | 0.938 | 0/24 |
+| 4.0 | 93/96 | 0.969 | 0/24 |
+| 6.0 | 92/96 | 0.958 | 0/24 |
+
+Recorded as `docs/experiments/002-hmm-gaussian-interval-coverage.md`.
+
+Coverage reaches nominal from two standard deviations of separation upward and
+degrades below it, seen twice over: the intervals that exist under-cover, and
+most replicates produce **no interval at all** — the observed information is
+too ill-conditioned to invert, which is what an unidentifiable model looks
+like from inside a fit. Those replicates are counted rather than dropped,
+since excluding them unannounced would select for the well-behaved samples.
+Reported as a finding: a fixture using only well-separated means would have
+been testing the fixture.
+
+**Count emissions: the dispersion axis, bracketed.** Four count families join
+the seam — binomial below equidispersion, Poisson exactly at it, negative
+binomial and beta-binomial above
+([#229](https://github.com/michaelJwilson/snakes_and_ladders/issues/229),
+[#260](https://github.com/michaelJwilson/snakes_and_ladders/issues/260)). The
+bracketing is the point: an interface exercised only by overdispersed families
+has never been asked whether it assumes overdispersion somewhere. Each referees
+the neighbour it is a limit of, so the oracles come from outside this
+repository rather than from a second call into it: `BetaBinomial(n, 1, 1)` is
+the discrete uniform and `Binomial(1, p)` is Bernoulli, both to 1e-14 or
+better; the negative binomial approaches Poisson as `r -> inf` and the
+beta-binomial approaches the binomial as `a + b -> inf`, both at the `O(1/x)`
+rate the truncation predicts, with `r` times the deviation measured at 18.75,
+18.88, 18.94, 18.97 and 18.98 across `r` from 500 to 8000 — converging rather
+than drifting, which is what makes the extrapolated tolerance legitimate.
+
+**Two of the four have an M step that is an optimization**, which is what
+tests whether the seam is real: `reestimate` now returns what its M step did,
+not only what it produced. **Both solves bracket rather than step**, and that
+was a measurement, not a preference. Newton on the negative binomial's
+weighted score converges for moderate `r` and, on a near-Poisson sample,
+overshoots in `log r` and underflows to zero — arriving as a domain error
+rather than a bad answer; safeguarded bisection reaches `|score| / weight` of
+1e-14 to 1e-16 in 45 evaluations and agrees with a 40001-point grid search to
+zero relative difference. Minka's fixed point for the beta-binomial is
+monotone but linearly convergent: at a true concentration of 120 it was still
+moving in the third decimal after 500 iterations and returned that as though
+it were an estimate. Alternating bisection in `(p, a + b)` settles in 3 to 9
+iterations at a residual of exactly zero. An M step that does not settle is
+refused, per `likelihood/CLAUDE.md`.
+
+**The flat-likelihood hazard is the mirror of the Gaussian's, and it is
+measured.** Where a Gaussian likelihood is *unbounded* as a variance falls, a
+count likelihood goes *flat* as the dispersion rises toward its Poisson or
+binomial limit. The bound is derived on the same construction for both count
+families — the dispersion at which the overdispersion the model is for falls
+below the sampling noise on measuring it, `mu sqrt(W/2)` for the negative
+binomial and `(n-1) sqrt(W/2)` for the beta-binomial. Coverage of the 95%
+intervals over 16 replicates of 480 counts, against the true dispersion:
+
+| true `r` | intervals covering | rate | replicates with no interval at all |
+| --- | --- | --- | --- |
+| 0.5 | 44/48 | 0.917 | 4/16 |
+| 1.0 | 60/64 | 0.938 | 0/16 |
+| 2.0 | 58/64 | 0.906 | 0/16 |
+| 5.0 | 59/64 | 0.922 | 0/16 |
+| 20.0 | 58/64 | 0.906 | 0/16 |
+| 100.0 | 32/36 | 0.889 | 7/16 |
+
+**The finding is not the coverage column.** Coverage sits near nominal at every
+dispersion; what degrades is *whether an interval exists*, and it degrades at
+**both** ends — a heavy tail at `r = 0.5`, a flat likelihood at `r = 100`.
+A non-identified count model announces itself as a singular information matrix,
+not as an interval in the wrong place, which is the opposite of what the
+Gaussian case showed and is why both were measured rather than one assumed
+from the other.
+
+**A Gaussian mixture: the emission seam with the Markov chain removed.**
+`snakes_and_ladders.sim.mixture` draws component labels and observations
+jointly, retaining the label so a clustering has something to be checked
+against; `snakes_and_ladders.opt.mixture` fits
+([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)). Its
+component M step **is** `GaussianEmission.reestimate`, called with
+responsibilities where an HMM passes state posteriors, and a test asserts the
+two produce identical numbers on the same responsibilities rather than merely
+similar ones — the evidence that the seam extracted from an HMM was not shaped
+by one. The unbounded likelihood transfers unchanged with it: a component
+collapsed onto a single observation is refused, not clamped.
+
+**The coupled spatio-sequential model has a simulator and an exact oracle**
+([#300](https://github.com/michaelJwilson/snakes_and_ladders/issues/300), #290
+part 2). `sim.spatio_sequential` declares the truth — a spatial graph with
+`J >= 0`, `M` classes, `K` states, `S` positions, `beta`, the circulant
+self-transition `t`, one initial distribution and one emission family per
+class — and draws labels by the single-site heat bath at `beta` with no field,
+chains by `Pi_m` and the circulant transition, and observations by the class's family
+at the node's class and the position's state, under one generator; labels may
+be planted for recovery studies. `likelihood.spatio_sequential` sums
+`eq:joint` over every assignment of the canonical instance (a 2x2 open
+lattice, `M = K = 2`, `S = 6`: 65,536 joint states) for the evidence, the
+label posterior, the per-class state posterior and the state posterior given
+a labelling that part 3's forward–backward is pinned to. The oracle is pinned
+two ways that share no code: its evidence equals the sum over labellings of
+the per-class forward recursion to a relative gap of 0.0 on three draws, and
+its written-out joint equals the factor graph's log-density on 50 random
+assignments to 1.4e-14. The simulator is held to what it composes by
+chi-square at 0.001 over 400 draws — labellings against the enumerated Potts
+prior, transitions against `t`, first states against `Pi_m`, and symbol
+counts per (class, state) against the families' tables — and the label
+posterior recovers planted labels on 42 of 48 nodes at `S = 6`.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
@@ -303,6 +442,95 @@ worst where the correlations it neglects are longest-ranged, and it recovers
 on both sides. Messages that do not settle raise rather than returning a
 number.
 
+**The three evaluators are one algorithm on one structure, and the
+structure now exists** ([#290](https://github.com/michaelJwilson/snakes_and_ladders/issues/290),
+part 1). `sim.factor_graph` holds variables, factors as log tables, adapters
+from a tree, a Potts graph, a hidden Markov chain and the coupled
+spatio-sequential model, and the Forney normal form; `likelihood.message_passing`
+runs sum-product and max-product over it with a tree schedule that is exact
+and refused off a tree, and a damped flooding schedule that is the Bethe
+approximation. Each shape is pinned to the evaluator that predates it and
+shares no code with it: on the six-node Potts tree `log Z` and every marginal
+agree with enumeration to 1e-14 relative; on four chains the evidence and
+posteriors agree with the path enumeration to 1e-13 and max-product returns
+the enumerated Viterbi path with its joint; per-site sum-product on the
+four-taxon fixture sums to pruning's log-likelihood to 1e-13; on the 3x3 open
+lattice flooding reproduces `belief_propagation`'s Bethe free energy to 1e-9
+and its beliefs to 1e-8; the coupled adapter's `log_density` equals `eq:joint`
+written out on all 4,096 joint assignments of a three-node, two-class,
+two-state, length-two instance; and the Forney form gives the same marginals
+as the bipartite one. The generality has a measured price: 10x the forward
+recursion on a 200-step, four-state chain (73 ms against 7 ms) and 57x
+`belief_propagation` on an 8x8 lattice (1.04 s against 18 ms), a table per
+factor and a dictionary per message against a recursion that knows its shape.
+The specialised evaluators therefore stay; the factor graph is the structure
+for the model none of them can express.
+
+**Forward–backward is an evaluator** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
+closing #173). `likelihood.forward_backward` returns the evidence, the
+position posteriors and the pairwise posteriors of one chain in the log
+domain, and a forward-filter backward-sample draw of the path; it is pinned
+against the path enumeration on four chains to 1e-12 and the E step of the
+coupled model built on it against the enumerated conditional posterior to
+1e-11. Baum–Welch keeps its own recursion for the gradient it needs.
+
+**The tree was audited against the runtime-optimization opportunities, and
+five of the ten lines had a measurement behind them**
+([#287](https://github.com/michaelJwilson/snakes_and_ladders/issues/287)). Profiling
+first (`tests/benchmarks/profile_hotpaths.py` plus a Potts-side probe) ranked
+the Python-level loops by self time, and the top of the ranking was not where a
+reader would guess: the SPR neighbourhood at 30 taxa spent 28 of 29 seconds
+building a `Node` tree and unioning `frozenset`s per candidate *to
+deduplicate*; a 6-taxon hill climb charged 8,730 scalar transition-matrix
+calls to 970 likelihood evaluations; a fifth of a REINFORCE run was Python
+arithmetic per action. Each change is pinned to the code it replaces, and no
+default sampler path moved:
+
+| rule | finding | change | pin | realized |
+| --- | --- | --- | --- | --- |
+| profile first | five loops above 20% of their run's self time | the five below | — | — |
+| layout | adjacency as a list of lists in every kernel | `PottsGraph.compressed_adjacency()`, one contiguous CSR | equal to the list adjacency in order, 4 graphs | exact |
+| compiled backends | descent sweep 6 µs/site in Python | `numba` kernel, default for `iterated_conditional_modes` | labelling and energy **bitwise**, 6 seeds | **7x** at 32x32, 3 labels |
+| FFI boundary | annealing and tempering on the Python sweep | `backend=Backend.RUST` runs the extension's sweep on the same uniforms | per-replica chi-square, both backends | tempering **5.8x** at 100 nodes, **7.8x** at 32x32; annealing 2.3x (the per-sweep energy now dominates) |
+| inlining / vectorization | one `P(t)` call per child per node | every branch's matrix in one call | `torch.equal` per branch for JC; GTR to 2.9e-13 (torch's batched `matrix_exp` is a different kernel); JC log-likelihood bitwise | hill climb **3.99 s to 2.32 s**; one 20-taxa evaluation unchanged at 12 ms |
+| inlining / vectorization | `_deltas` per action, 126,000 calls per 50 updates | `features` as one NumPy pass | `array_equal` to `_deltas`, 200 states, deviation 0.0 | REINFORCE **1.51 s to 1.00 s** |
+| profile first (algorithmic) | tree built and split-set unioned per SPR candidate | dedup on leaf bitmasks from the adjacency; tree built only for a new key | same neighbours in the same order as the definition, n = 5, 7, 9; key equals `leaf_bipartitions` on all 105 six-leaf topologies | **1.41 s to 0.59 s** at 30 taxa |
+| cache, branches, allocation, double buffering | no measurement separating them from the above | none | — | recorded as not measured |
+
+Two things the table does not say. The Rust-backed tempering chain agreed with
+the Python one **draw for draw** on the enumerable instance — identical
+p-values and exchange acceptances — which is the case `potts_mcmc_rust.py`
+says cannot be relied on, and it is not: one draw across a threshold moved by
+an ulp would part them, so the backend stays opt-in. And the batched
+transition matrices leave the JC log-likelihood bitwise unchanged while the
+gradient moves by 1.5e-11 absolute, autograd summing the same terms in a
+different order; the finite-difference check that pins the gradient is
+unaffected.
+
+**Bounds with proofs, certified rather than trusted**
+([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
+surrogate carries its claim — lower bound, upper bound or point prediction —
+and `certify` holds it to the claim on every structure an oracle can score.
+Two one-pass bounds bracket a topology's maximized log-likelihood: one pruning
+evaluation at non-negative least-squares lengths from below, and
+`sum_s log pi(x_1s) - F log k` from above, where `F` is the Fitch score — a
+vertex argument on the multilinear Jukes–Cantor site likelihood that the
+suite checks by enumerating all 256 vertices at five taxa and finding the
+bound attained on every site. Over the 15 topologies of the five-taxon
+fixture at 1,200 sites both hold with no violation; the plug-in bound's worst
+gap is 6.7 nats and its mean 2.9, at 2.4 ms against 254 ms for the fit; the
+parsimony bound costs 0.1 ms and its gap is 2.2 nats per site, so it is a
+bound and not an estimate. The entrywise-limit bound the plan proposed was
+derived and dropped: it sits above zero on every fixture, and the parsimony
+bound dominates it. For a lattice, the naive mean-field bound and the
+tree-reweighted spanning-tree bound (one tree per edge, uniform) sandwich
+`log Z` within 0.049 and 0.028 nats per node on average over 40 random
+open lattices (worst 0.078 and 0.052), both differentiable in the field and
+couplings and both agreeing with central differences to 1e-6 relative; from
+them a bracket on the ground-state energy that on the same lattices at
+`beta = 3` sits 0.028 nats per node below the enumerated minimum. The
+proofs are Appendix B of the textbook.
+
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
@@ -373,6 +601,29 @@ and the posterior standard deviation was 12% low, because divergent
 trajectories are rejected preferentially in the tails. Acceptance rate does
 not detect it; `max |dH|` tracks it monotonically.
 
+**A fourth-order integrator lands, and loses.** Yoshida's (1990) triple jump
+joins leapfrog as a selectable symplectic integrator, both expressed as
+compositions of the same kick-drift-kick sub-step so there is one
+implementation rather than two
+([#266](https://github.com/michaelJwilson/snakes_and_ladders/issues/266)). The
+orders are measured rather than claimed, as the ratio by which halving the
+step divides the energy error: leapfrog realizes 3.999, 4.000, 4.000, 4.000,
+4.000 against a predicted 4, and Yoshida 16.310, 16.077, 16.019, 16.005,
+16.001 against a predicted 16 — converging rather than drifting, which is what
+makes it an order and not a coincidence at one step size.
+
+**It is slower anyway, and the mechanism is worth recording.** A higher-order
+method pays where the step is limited by *accuracy*; here it is limited by
+*stability*. Yoshida's middle sub-step runs backwards in time with
+`|w0| = 1.70` times the nominal step, so its stability limit in the step size
+is about 0.59 of leapfrog's — measured at 0.0333 against 0.0500, a ratio of
+1.50 against the 1.70 the coefficient predicts. With three force evaluations
+per step on top, the order advantage is spent twice over. At equal
+acceptance on the Potts posterior, leapfrog reaches 0.855 at **21** gradient
+evaluations per trajectory while Yoshida needs **91** to reach 0.975 and
+accepts *nothing* at 61; on the analytic Gaussian it is 3 against 7. The
+default does not move.
+
 **Where a fit starts is now the caller's to choose, and multi-start is
 measured rather than assumed.** `Objective.initial()` was already the seam;
 what went through it was one fixed constant per objective.
@@ -390,7 +641,9 @@ satisfying the first-order condition, sixteen restarts reach the global minimum
 **2 times in 30** against **0 in 30** from one start -- sixteen times the cost
 for a success rate still near zero, and widening the draw does not help
 (the same 2 in 30 at scale 4.0 as at 2.0), because the obstacle is the density
-of the minima and not the reach of the proposal.
+of the minima and not the reach of the proposal. Held to eight fits by
+`opt.budget.compare` ([#281](https://github.com/michaelJwilson/snakes_and_ladders/issues/281))
+it is 0 of 10 either way.
 
 No default changes on that evidence. Every number below was produced from the
 objective's own start and still is.
@@ -417,6 +670,78 @@ removing an exactly flat direction that would otherwise leave every parameter
 without an interval. The roadmap's sub-second gradient update at `n = 100` is
 now measured — 203 ms at 1000 sites — rather than assumed.
 
+**k-means++ lands, and buys nothing the fit can use.** The first initializer
+that reads its objective's data
+([#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262)), and
+the case [#251](https://github.com/michaelJwilson/snakes_and_ladders/issues/251)
+built the `Initializer` protocol for. **The protocol needed no change.** A
+data-dependent strategy turns out to be model-*specific* rather than
+protocol-incompatible: it takes an `Objective` like every other initializer and
+refuses the ones whose parameter vector it cannot interpret, which is why it
+lives beside the mixture rather than with the model-free strategies.
+
+Measured against its published guarantee — Arthur & Vassilvitskii (2007) bound
+the expected seeding cost at `8 (ln k + 2)` times optimal, and in one dimension
+the optimal clustering is computable exactly by dynamic programming over
+contiguous runs, so the bound has something to be checked against. On three
+components six standard deviations apart, over 200 replicates: mean cost ratio
+**2.91** against a bound of **24.79**, worst draw 14.41. Uniform seeding
+realizes **11.03** mean and a worst draw of **58.08**, outside the k-means++
+guarantee.
+
+**And none of that reaches the likelihood, which is the finding.** EM reaches
+the same optimum from either seeding on that mixture — 200/200 from k-means++,
+195/200 from uniform — and from the objective's own quantile start too. Harder
+fixtures do not reverse it, they make both fail: at five components 1.5
+standard deviations apart neither seeding reached the best optimum found in 200
+draws, and at five with unequal weights uniform reached it 9 times in 150
+against k-means++'s 3 — noise, in the direction opposite to the one a default
+change would need. So **no default moves**; k-means++ lands as a strategy a
+caller may choose, at a cost of one objective evaluation (271 us of seeding
+against 260 us per evaluation at 4000 points).
+
+**An interval at a fit, whatever produced the fit.** The observed information
+is a property of an objective *at a point*, not of the route that reached it,
+but until now only a gradient fit could ask for one — expectation-maximization
+works in the model's own parameters and never builds an unconstrained vector,
+so the half of the fits with an independent oracle reported a point estimate
+and nothing else
+([#268](https://github.com/michaelJwilson/snakes_and_ladders/issues/268)).
+Every objective now inverts its own constraint map, exactly: the round trip
+`constrain(theta_from(named))` returns its input to between 0 and 4.4e-16
+across all eight likelihoods, and bitwise for the three closed-form test
+functions and the Gaussian-prior wrapper. `fit(include_intervals=True)` and
+`fit_from(include_intervals=True)` attach the interval to the fit — the latter
+to the best start only, one Hessian rather than one per start — and refuse it
+at an unconverged point rather than report a curvature that is not an
+information; off, they compute nothing and return `None`, so a fit inside a
+search loop costs what it did.
+
+**The check that costs nothing.** The gradient fit and Baum-Welch share the
+model and nothing else, and converge to the same optimum — log-likelihoods
+within 3.6e-9 relative. So their intervals must agree, and they do to **0.31%**,
+the width of the flat ridge EM approaches slowly. A broken round trip fails
+that loudly. The EM-derived intervals then cover truth at **243/264 = 0.920**
+over 12 replicates, with 1 of 12 reaching the boundary and contributing none.
+
+**The refusals survive, which is the part that mattered.** An interval from a
+Hessian is a statement about a maximum, and a Gaussian component at its
+variance floor is not one: the likelihood is unbounded there, the information
+is not positive definite, and the new entry point refuses exactly as the old
+one does — checked against the healthy point beside it, since a guard that
+refused everything would pass a refusal-only test.
+
+**And the comparison `hmc.py` promised is now complete, in both regimes.** A
+version already existed — a raw Hessian in unconstrained coordinates against
+grid quadrature. The missing halves are the delta-method interval on the
+parameters a person names, against a chain, where the approximation is exact
+and where it is not. On the analytic Gaussian the Laplace interval equals
+`sqrt(diag(covariance))` to 1e-8 and the chain's spread matches it to **0.04%
+and 0.47%** at 4000 draws, so agreement is asserted. On the Potts posterior the
+sampled spread is **1.057, 1.031 and 1.036** times the Laplace one: slightly
+optimistic, the expected direction for a mildly non-Gaussian posterior, and
+reported rather than asserted away.
+
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
@@ -438,6 +763,127 @@ so a run reproduces from its seed, and a topology is scored at most once per
 search, keyed on its leaf bipartitions. The fit is the only unit worth
 counting: one candidate fit measures 213 ms against 22 us to generate an
 entire NNI neighbourhood, a factor of about 10 000.
+
+**A discrete result now states how sure it is**
+([#270](https://github.com/michaelJwilson/snakes_and_ladders/issues/270)).
+`search.support` reports three quantities and names which: the
+*neighbourhood* weight of the returned tree among itself and its neighbours
+under a move set, with the margin over the best neighbour beside it; the
+*enumerated* weight over every topology, the exact flat-prior posterior over
+maximized likelihoods where `(2n-5)!!` fits; and Felsenstein's *bootstrap*,
+per internal split, over site-resampled searches. The first is held to the
+second: equal to 1e-9 at four taxa under NNI, where the neighbourhood is the
+whole space, and at five taxa never smaller than it on any of the 15
+topologies, with the best tree's NNI margin equal to its enumerated margin.
+The bootstrap is held to its definition — a frequency over the returned
+topology's internal splits, reproducible from its generator — and gives the
+generating splits support of at least 0.8 at 1,000 sites. The exact weight is
+calibrated: over 24 NNI searches on the five-taxon fixture at 30 to 300
+sites, the fraction of returned trees equal to the generating one does not
+fall from one support bin to the next. Each weight is over *maximized*
+likelihoods under a flat prior over topologies and is named so, not called a
+posterior; a tempered ensemble over topologies, which would give a marginal
+one, does not exist.
+
+**The coupled model is fitted, and the finding is about the start, not the
+move** ([#306](https://github.com/michaelJwilson/snakes_and_ladders/issues/306),
+#290 parts 3 to 6). `search.spatio_sequential` runs block-coordinate ascent
+on `log p(x, l | theta)` with the chains marginalized: an E step per class,
+an M step through each family's `reestimate` with `Pi_m` and the shared `t`
+in closed form, and a label block that is the ground state of a Potts model
+in the external field the posterior defines — by alpha expansion, by
+single-site descent, or by an annealed Wolff move in the field whose best
+visited labelling is taken only when it improves the joint. The M-step
+identity holds through autograd on a Gaussian instance to 1e-10 relative;
+the joint is non-decreasing across every block for every solver; and with
+the parameters at the truth the label block reaches the enumerated MAP
+labelling from the planted labels on 5 of 6 draws of the canonical instance
+for every solver. Past enumeration, on a planted 10x10 lattice with weak
+emissions, the label problem alone is easy — 0.98 accuracy up to permutation
+with the parameters known — and every cold start freezes:
+
+| start, then ten blocks | alpha expansion | single-site descent | annealed Wolff |
+| --- | --- | --- | --- |
+| uniform labels, true parameters | 0.66 | 0.78 | 0.68 |
+| `Graph_BurnIn++` (thirty annealed steps), then alpha expansion | 0.97 | — | — |
+
+The cluster move does not escape what descent freezes into; the trap is the
+parameters, which a cold EM collapses before the labels can separate them.
+The annealed start — labels nearly free while the emissions are fitted to
+what the data alone supports, the prior tightening as the classes separate,
+seeded by `Emission_Mixture++` (k-means++ under the family's own negative
+log-density, exactly k-means++ under a squared distance) — is what recovers
+the labels. Both are recorded, and the escape claim is retracted for this
+instance.
+
+**One Gibbs sampler and one annealer serve every problem, over the factor
+graph** ([#309](https://github.com/michaelJwilson/snakes_and_ladders/issues/309)).
+`search.gibbs` runs a heat-bath sweep over any `FactorGraph` — a variable's
+conditional is the product of the factors touching it — tempered by a
+schedule for annealing, with an exact block move for a chain-shaped subset
+by forward filter and backward sample, and a Metropolis move over tree
+topologies on the fitted likelihood. Each instance is held to the
+distribution it targets by chi-square at 0.001: the 2x2 Potts lattice in a
+field against enumeration; the five-step chain against the enumerated path
+posterior, for the single-site sweep and for the block move, whose every
+draw is independent; the four-taxon tree at one site against sum-product's
+exact marginals; the coupled model's labels against the enumerated
+posterior. The sweep copies the Potts kernel's arithmetic — one uniform per
+variable, a search of the cumulative conditional — and agrees with it draw
+for draw on 2,000 of 2,000 sweeps; annealing reaches the triangular
+antiferromagnet's closed-form ground state on 6 of 6 seeds, as `anneal_potts`
+does at the same schedule. At temperature one the topology move's visits
+over the 15 five-taxon topologies match the flat-prior weight over fitted
+likelihoods, the quantity #270 enumerates, and annealed to 0.02 it reaches
+the enumerated best from 6 of 6 random starts with every topology fitted
+once. The price of generality is smaller than expected: twenty sweeps of an
+8x8 three-state lattice take 19.1 ms over factor tables against 15.0 ms for
+the Python Potts sweep and 5.9 ms for the Rust one, 1.3x and 3.2x, because
+the Python kernel already pays a NumPy call per site. The specialised kernels
+stay the default for the Potts lattice.
+
+**What carries between neighbours, and what does not.** A branch is now
+identified by the leaf split it induces rather than by a node name, so a
+neighbour that shares all but a few branches with its parent starts its fit
+from the parent's lengths
+([#289](https://github.com/michaelJwilson/snakes_and_ladders/issues/289)). The
+warm fit reaches the cold optimum — worst relative gap 5.3e-12 in
+log-likelihood over the 90 SPR neighbours of an eight-taxon tree — and the
+search's answer does not move. What it saves is smaller than the ticket
+hoped, and in one measurement negative: over those 90 neighbours the warm
+fits spent 6,053 likelihood evaluations against 5,145 cold, a single
+neighbour fit costs the same 49 either way, and only a refit of the *same*
+topology from its own lengths drops to 14 — L-BFGS spends its evaluations on
+the branches the move changed, not on the ones it kept. The larger saving is
+lazy scoring: one cached likelihood evaluation at the warm lengths ranks a
+neighbourhood and only the top `K` candidates are fitted, the accepted move
+always in full. Subtree partials are cached keyed on the subtree's structure
+and lengths, and a cached partial equals a recomputed one bitwise, so the
+ranking evaluation is the same arithmetic in the same order. Over four
+random starts on the eight-taxon fixture at 2,000 sites, budget 400 candidates,
+counted in what the search reports:
+
+| move set | run | same optimum as cold | fits | likelihood evaluations |
+| --- | --- | --- | --- | --- |
+| NNI | cold | 4/4 | 68.8 | 5,061 |
+| NNI | warm | 4/4 | 68.8 | 3,660 |
+| NNI | warm, `lazy_top=3` | 4/4 | 26.5 | 1,354 |
+| NNI | warm, `lazy_top=1` | 4/4 | 9.5 | 493 |
+| SPR | cold | 4/4 | 336.8 | 24,423 |
+| SPR | warm | 4/4 | 339.5 | 22,677 |
+| SPR | warm, `lazy_top=3` | 4/4 | 13.8 | 1,032 |
+| SPR | warm, `lazy_top=1` | **2/4** | 5.2 | 579 |
+
+Warm starts alone are worth 28% on NNI and 7% on SPR. Lazy scoring at
+`K = 3` reaches the cold optimum on every start at 3.7x fewer evaluations on
+NNI and 24x fewer on SPR; at `K = 1` it holds on NNI and loses half the SPR
+starts, because the cheap surface ranks an SPR neighbourhood poorly — the
+fitted best sits at lazy rank one in 6 of 6 NNI neighbourhoods and 1 of 6 SPR
+neighbourhoods. So warm starts are the default, `lazy_top` is opt-in with
+`K` chosen per move set from this table, the budget stays in candidates
+scored, and `Inference` reports fits and likelihood evaluations beside it.
+RAxML's three-branch local optimization is not built; its gap to the full
+optimum is the measurement that would license it.
 
 **The accuracy requirement's first half is met.** Normalized Robinson-Foulds
 distance from the inferred to the generating topology is met at the 0.05 bound
@@ -481,7 +927,8 @@ normalized to sites touched:
 Single-site slows by 3.2x between extent 8 and 24 while both cluster
 algorithms slow by roughly 1.9x, so the gap is 2.1x at extent 24 and widening.
 That understates the asymptotic separation: these lattices are small and their
-boundary is open, both of which soften the transition.
+boundary is open, both of which soften the transition. Recorded as
+`docs/experiments/001-potts-cluster-autocorrelation.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
@@ -560,6 +1007,69 @@ a complete bipartite graph, whose maximum cut is exactly `|E|`, the ratio
 comes out slightly **above 1** — impossible for an exact solve, and the
 measurable evidence of what the certificate does and does not cover.
 
+**Temperature is one object, and it lives where all three consumers can reach
+it.** `snakes_and_ladders.opt.schedule` carries the schedules — constant, linear,
+geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
+and checked against it to 1e-12 (1e-10 for the cosine, whose torch form is a
+recursion) — with both endpoints reached *exactly* at the declared steps, and
+a step past the end refused rather than clamped
+([#267](https://github.com/michaelJwilson/snakes_and_ladders/issues/267)). The
+Potts sampler takes a temperature as model scaling, which the model makes an
+exact statement: the tempered energies equal the energies over `T` with a
+deviation of **0.0**, and every move set's chain at `T = 2` and `T = 0.5` in a
+field passes the chi-square against `exp(-E/T)` enumerated from the unscaled
+model (p-values 0.016 to 0.89 at the 0.001 significance). The Hamiltonian
+sampler takes it as the momentum's variance — the tempered dynamics are the
+untempered ones in rescaled time, so the integrator is untouched — and on the
+analytic Gaussian a chain at `T` is the chain at 1 with its deviations scaled
+by `sqrt(T)` **draw for draw to 1e-10**. At `T = 1` every operation is the
+identity bitwise, and the 31 existing HMC and 13 Potts tests pass untouched.
+
+**Annealing is the sampler on a schedule, and the first instance is a wash.**
+`anneal_potts` and `hmc.anneal` run one sweep or one proposal per schedule
+step and return the best state seen. On the 9×9 periodic triangular
+antiferromagnet, whose ground-state energy is a closed form, geometric
+annealing from `T = 2` to `0.05` over 200 sweeps reaches it **20/20** against
+single-site descent's **2/20** and a constant `T = 1` control's **7/20** — the
+schedule, not the wandering. But descent converges in 2.6 sweeps, so the same
+200 sweeps buy 78 restarts, and the best of 78 also reaches it 20/20. On
+Rastrigin, measured at equal *objective evaluations* with a counting wrapper:
+at 14,400 evaluations annealed Hamiltonian proposals plus a polishing fit reach
+the global basin **6/20**, and 101 random-restart fits on the same budget
+**10/20**; at 2,900 evaluations it is 0/20 against 1/20. Restarts win on the
+continuous surface. Neither is a default.
+
+**Parallel tempering, and the instance where restarts lose.** Replicas at
+fixed temperatures exchange configurations on `(β_i − β_j)(E_i − E_j)`, each
+replica on its own spawned generator from one seed. The oracle is the one the
+samplers already have: with exchanges on, every replica passes the chi-square
+against `exp(-E/T_r)` enumerated from the unscaled model (p 0.024 to 0.70,
+exchange acceptance 0.78 and 0.57), and the paired negative case — an exchange
+that omits the energy term — is caught at p = 0.0 on every replica. Then the
+comparison the plan asked for, at **400 sweeps per method** on the planted
+Viana–Bray spin glass, against the best energy any method found over 12
+instances:
+
+| instance | restarts of descent (100 × ≤4 sweeps) | annealing (1 × 400) | tempering (4 × 100) |
+| --- | --- | --- | --- |
+| 60 sites, degree 4, frustration 0.2 | 5/12, mean gap 0.75 | **12/12** | **12/12** |
+| 60 sites, degree 4, frustration 0.35 | 5/12, gap 1.00 | 9/12, gap 0.50 | 9/12, gap 0.25 |
+| 100 sites, degree 6, frustration 0.3 | 2/12, gap 2.58 | 7/12, gap 1.08 | **8/12**, gap 0.50 |
+
+Every method beats the planted energy on every instance, as frustration
+predicts. **The plan's prediction that tempering would be hard to justify at
+these sizes is retracted**: on the one class of instance the roadmap needs —
+frustrated, past enumeration — the tempered methods beat restarts at equal
+budget and tempering carries the smallest gap. The triangular antiferromagnet
+was too easy to show it; the glass is not. The first row is now held equal
+by `opt.budget.compare`
+([#281](https://github.com/michaelJwilson/snakes_and_ladders/issues/281)):
+with the utility's own streams and the best any method found as the
+reference, tempering **12/12**, annealing 10/12 with a mean gap of 0.17, and
+restarts of descent 4/12 with a mean gap of 0.75, every method at or below
+the planted energy. The five-component mixture comparison waits on the
+mixture branch (#263) landing and belongs to the same utility.
+
 **The single-site sweep has a Rust backend, beside the oracle.** Issue #232
 profiled it as the one place a Python-level loop dominates -- one interpreter
 iteration per site per sweep, five NumPy calls to move one spin. The port runs
@@ -584,6 +1094,38 @@ paths (`snakes_and_ladders.search.alpha_expansion` carries a lattice ICM as its 
 which is a different object). Single-flip local search over the Potts chain exists as an RL
 environment, not as a classical baseline suite.
 
+**A surrogate ranks the SPR neighbourhood the lazy score could not**
+([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). The
+one-evaluation lazy score of #289 put the fitted best at rank one in 1 of 6
+SPR neighbourhoods; on the same six neighbourhoods of the eight-taxon fixture
+at 1,000 sites the plug-in bound puts it first in 6 of 6 and the parsimony
+bound in 5 of 6, at 1.7 ms and 0.1 ms per candidate against 206 ms per fit.
+`infer(..., lazy_top=1, surrogate=)` ranks by any surrogate and fits only the
+top candidate. Over four random SPR starts at budget 400: the full search
+reaches its optimum from 4/4 at 312 fits and 20,718 likelihood evaluations;
+`lazy_top=1` alone reaches it from 2/4 at 5.5 fits; ranked by the plug-in
+bound, the parsimony bound, or a learned predictor, 4/4 at 5 fits and 275
+evaluations — 62 times fewer fits and 75 times fewer evaluations for the same
+answer. Learned predictors read the bound features and are trained on the
+gap above the plug-in bound, so a poor fit falls back to the bound: a linear
+model, a deep MLP, a Deep Sets model over branch tokens, a one-block
+attention model and a graph network over the tree all reach held-out R^2 at
+or above 0.999 on 15-topology neighbourhoods of the five-taxon fixture
+(16 alignments, split 10/3/3 by alignment) and 0.98 on the two held-out SPR
+neighbourhoods at eight taxa, ranking the fitted best first on every held-out
+neighbourhood; the three token models return the same value for a tree with
+its children shuffled, to 1e-13. The curriculum 5 → 6 taxa measures what
+ROADMAP §2.2 predicts: zero-shot at six taxa the set model falls to R^2 0.68
+and recovers to 0.94 after transfer; the MLP holds 0.92 zero-shot and 0.95
+transferred. On lattices the models predict the gap above the mean-field
+bound with R^2 0.996–0.999 held out (2×2 to 2×4), transfer zero-shot to
+3×4 and 4×6 at 0.99, and the ground-state energy is learned exactly because
+alpha expansion, one of the features, reaches it on every small lattice.
+A calibrated bound is a rate claim: at nominal coverage 0.9 the lower bound
+held on 100% of 45 held-out examples and the upper on 80%, so the claim
+transfers on one side and not the other with three calibration alignments,
+and `certify` at the stated rate is what says which.
+
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
 **The estimator is pinned to a closed form, not to a training curve**
@@ -602,7 +1144,8 @@ the reward decomposes exactly into the two features the policy scores, which
 puts hill climbing *inside* the policy class as the weight vector proportional
 to `(J, 1)`. The learned policy reaches the enumerated optimum from 86.6% of
 the 81 starts against greedy's 80.2%, in 8 of 8 training seeds — a statement
-about learning rather than about two unrelated algorithms.
+about learning rather than about two unrelated algorithms. Recorded as
+`docs/experiments/003-potts-chain-reinforce-vs-greedy.md`.
 
 **The phylogenetic environment exists, and the reward it can afford is
 measured** ([#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137)). A state
@@ -636,6 +1179,23 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
 
+## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
+
+**The ledger has a record format before it has a run store**
+([#314](https://github.com/michaelJwilson/snakes_and_ladders/issues/314)). An
+experiment is a file under `docs/experiments/`, written from a template: the
+commit, the feature under test, the fixture and its size tier, the methods
+compared at one budget over shared seeds, the results, the finding, and the
+tickets it filed. `infra/experiments.py` validates every file against the
+template's fields, vocabularies and sections and generates the index that is
+the leaderboard, and a guard runs it per pull request. Three measured
+comparisons this file already stated are the first entries — the cluster
+updates' autocorrelation at the transition, the Gaussian-emission interval
+coverage against separation, and REINFORCE against greedy on the Potts chain —
+and this file now cites them. The Aim run store (#75) is part 2, behind the
+dependency's approval; until then the Results section is typed from the
+measurement and names the script that produced it.
+
 ## §1.2 Requirements Ledger
 
 | Requirement | Status |
@@ -654,36 +1214,76 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `docs/tex/` now spans all three problem classes rather than the phylogenetic
 application alone: the abstract, methods and appendices state the Potts
 Hamiltonian and the HMM decoding problem beside the substitution model, and the
-Reference Taxonomy appendix routes the literature by concern. It is an eight-page
-specification, cut down in `14d32d6` from the academic-letter structure of
-[#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), and it is the shape
-the document is in rather than the shape §1.3 asks for.
+Reference Taxonomy appendix routes the literature by concern. It was cut down
+in `14d32d6` from the academic-letter structure of
+[#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148) to an
+eight-page specification, and has since grown back toward the shape §1.3 asks
+for section by section, as recorded below.
 
-Thirteen QA scripts run in the build, each committing a figure with a caption
+Thirteen QA scripts render the figures, each committing a figure with a caption
 naming the seed, the sizes and the model that produced it, and `docs/CLAUDE.md`
 states the rules that keep a CI-regenerated artifact true
-([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The document
-currently includes two of them — the worked simulation example and the backend
-agreement — so eleven committed figures are rebuilt by CI but cited nowhere.
+([#140](https://github.com/michaelJwilson/snakes_and_ladders/pull/140)). The two
+documents cite seven of them — the textbook the simulated tree and the
+Jukes–Cantor curves, the paper the worked simulation, the backend agreement,
+parameter recovery, interval coverage and the topology search — and the
+per-pull-request build regenerates only those; the remaining six are checked at
+the release gate
+([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)).
 
 Measured against §1.3's required contents: the model formulations are present
-for all three classes, at the level of a statement rather than a derivation.
-Absent are the derivations of pruning, belief propagation and forward-backward;
-the branch-and-bound bounds and their proofs, no such bound being implemented;
-and the parameter-recovery and convergence evidence, which exists as committed
-QA figures but is no longer included. Three framed placeholders stand in for
-the RL learning curve, the comparison against classical software, and hardware
-scaling — none of which is measured, and each labelled as a placeholder rather
-than drawn with invented data.
+for all three classes, and since
+[#274](https://github.com/michaelJwilson/snakes_and_ladders/issues/274) every
+equation and algorithm the code cites is stated in the textbook under a label —
+the Jukes–Cantor closed form and its normalization, site independence, pruning
+and the root marginalization, forward simulation, the forward recursion, the
+belief-propagation message and the Bethe free energy, the episode return and the
+REINFORCE estimator, and the cross-device tolerance — and
+`tests/regression/test_document_labels.py` fails on a citation no document
+resolves. The old document had labelled none of them, so nine citations had
+never resolved and two named equation numbers from a numbering that no longer
+existed. What remains at the level of a statement rather than a derivation is
+the pruning and forward–backward recursions; absent entirely are the
+branch-and-bound bounds and their proofs, no such bound being implemented.
+Three framed placeholders stand in for the RL learning curve, the comparison
+against classical software, and hardware scaling — none of which is measured,
+and each labelled as a placeholder rather than drawn with invented data.
+
+**The textbook is now one document at one standard**
+([#298](https://github.com/michaelJwilson/snakes_and_ladders/issues/298)). Every
+problem section carries the same four parts — the model, the model as an
+instance of the factor graph of `sec:factor-graph`, the algorithm as the
+instance of `eq:sum-product` or of the optimization it is, and the property
+that pins it — and the notation table states the factor-graph symbols once
+with the identification each section's classical symbol makes. The discrete
+solvers that were one sentence each are sections with a labelled equation, a
+citation, a regime and a pin: ground states as cuts (`eq:cut-energy`,
+`eq:gw`), alpha expansion and its bound (`eq:alpha-expansion`), the heat bath
+and the cluster moves with the field accept step (`eq:heat-bath`,
+`eq:cluster-accept`), and temperature, annealing and tempering with the
+exchange ratio (`eq:exchange`). The hidden Markov section states the backward
+pass, the posterior and Viterbi as max-product (`eq:posterior`,
+`eq:viterbi`). The coupled spatio-sequential model of #290 has its own section
+(`sec:coupled`): the ticket's Forney-style figure, the spatial and chain
+priors, the block-coordinate estimator with the M-step identity and the
+external field (`eq:coupled-m-step`, `eq:external-field`,
+`eq:label-ground-state`), and both algorithms (`alg:wolff-field`,
+`alg:graph-burnin`), with a paragraph stating which part is built and which
+is planned. Four derivations the main text depends on — the Bethe fixed
+point, detailed balance for a cluster move in a field, the exchange ratio, the
+delta method — sit in an appendix cited from the point of use. The document
+is 21 pages; `texlive-pictures` joins the CI TeX install for the figure.
 
 ## What Is Not Claimed
 
-- That a learned policy beats hill climbing on trees. The 6-taxon fixture
-  cannot support the claim in either direction, because greedy already reaches
-  the enumerated optimum from every start. Separating a policy from greedy
-  needs a problem harder than exhaustive enumeration can referee, so the oracle
-  that validates the search cannot validate the agent replacing it
-  (issues #177 and #178).
+- That a learned policy beats hill climbing on trees. A fixture that could
+  settle it now exists — 7 taxa, internal branches an order of magnitude
+  shorter than the pendant ones, where NNI hill climbing reaches the
+  enumerated maximum from 24 of 50 seeded starts and stops at a genuine local
+  optimum on the other 26 — but no policy has been trained on it and no
+  budget-matched comparison has been run (issue #178). The 6-taxon fixture
+  cannot support the claim in either direction, because greedy reaches the
+  enumerated optimum from every start there.
 - Any comparison against established software. IQ-TREE 2 and RAxML-NG are not
   installed, and no statement anywhere in the repository compares against them.
 - Runtime scaling. Benchmarks are not ranked on CI hardware, so timings live in

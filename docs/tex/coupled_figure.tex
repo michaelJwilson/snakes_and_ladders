@@ -1,0 +1,110 @@
+% The Forney-style factor graph of the coupled spatio-sequential model (issue
+% #290), drawn from the figure the ticket carries. Input by textbook.tex from
+% sec:coupled; kept in its own file because it is a drawing and not prose.
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    scale=0.85,
+    x={(1.0cm, 0.5cm)},
+    y={(0cm, 1.1cm)},
+    z={(1.5cm, 0cm)},
+    latent/.style={circle, draw, minimum size=0.50cm, inner sep=0.5pt, font=\tiny, fill=white},
+    x_latent/.style={circle, draw, minimum size=0.18cm, inner sep=0pt},
+    factor_style/.style={rectangle, draw, fill=white, minimum size=0.1cm},
+    high_factor_style/.style={regular polygon, regular polygon sides=3, draw, fill=white, minimum size=0.25cm, inner sep=0pt},
+    edge_style/.style={draw, thick, black},
+    cuboid_edge/.style={draw, thin, black, opacity=0.5},
+    dependency/.style={draw, thin, gray, opacity=0.4, bend left=15},
+    dependency_inv/.style={draw, thin, gray, opacity=0.4, bend right=15},
+    high_dep/.style={draw, thin, black, opacity=1.0},
+    colorA/.style={fill=blue!20},
+    colorB/.style={fill=red!20}
+]
+  % Lattice edges and pairwise factors
+  \foreach \i in {0,...,4} {
+    \foreach \j in {0,...,4} {
+      \ifnum\i<4
+        \draw[edge_style] (\i, \j, 0) -- (\i+1, \j, 0);
+        \node[factor_style] at (\i+0.5, \j, 0) {};
+      \fi
+      \ifnum\j<4
+        \draw[edge_style] (\i, \j, 0) -- (\i, \j+1, 0);
+        \node[factor_style] at (\i, \j+0.5, 0) {};
+      \fi
+    }
+  }
+  % Markov chain edges and factors, one chain per class
+  \foreach \yPos/\xPos/\chainID in {5.5/4/0, -1.5/0/1} {
+    \draw[edge_style] (\xPos, \yPos, 2.5) -- (\xPos, \yPos, 3.5);
+    \node[factor_style] at (\xPos, \yPos, 3.0) {};
+    \foreach \k [count=\t from 0] in {3.5, 4.5, 5.5, 6.5, 7.5} {
+       \ifnum\t<4
+         \draw[edge_style] (\xPos, \yPos, \k) -- (\xPos, \yPos, \k+1);
+         \node[factor_style] at (\xPos, \yPos, \k+0.5) {};
+       \fi
+    }
+  }
+  % Observation columns, and the gated factors joining a label to a chain state
+  \foreach \i in {0,2,4} {
+    \foreach \j in {0,2,4} {
+      \draw[dashed, gray!30, thin] (\i, \j, 0) -- (\i, \j, 3.5);
+      \foreach \k [count=\t from 0] in {3.5, 4.5, 5.5, 6.5, 7.5} {
+        \ifnum\t<4 \draw[cuboid_edge] (\i, \j, \k) -- (\i, \j, \k+1); \fi
+        \ifnum\i<4 \draw[cuboid_edge] (\i, \j, \k) -- (\i+2, \j, \k); \fi
+        \ifnum\j<4 \draw[cuboid_edge] (\i, \j, \k) -- (\i, \j+2, \k); \fi
+        \ifnum\t=0 \ifnum\i=0
+            \path[high_dep, bend left=15] (\i, \j, \k) edge node[pos=0.5, high_factor_style] (f-top-\j) {} (4, 5.5, \k);
+            \draw[high_dep, bend left=30] (\i, \j, 0) to (f-top-\j);
+            \path[high_dep, bend right=15] (\i, \j, \k) edge node[pos=0.5, high_factor_style] (f-bot-\j) {} (0, -1.5, \k);
+            \draw[high_dep, bend right=30] (\i, \j, 0) to (f-bot-\j);
+        \else
+            \path[dependency] (\i, \j, \k) edge (4, 5.5, \k);
+            \path[dependency_inv] (\i, \j, \k) edge (0, -1.5, \k);
+        \fi \else
+            \path[dependency] (\i, \j, \k) edge (4, 5.5, \k);
+            \path[dependency_inv] (\i, \j, \k) edge (0, -1.5, \k);
+        \fi
+      }
+    }
+  }
+  % Label variables on the lattice
+  \foreach \i in {0,...,4} {
+    \foreach \j in {0,...,4} {
+      \ifnum\i=4 \ifnum\j<2 \def\nodeCol{colorA} \else \def\nodeCol{colorB} \fi
+      \else \ifnum\i>2 \def\nodeCol{colorB} \else \ifnum\j<\i \def\nodeCol{colorB} \else \def\nodeCol{colorA} \fi \fi \fi
+      \node[latent, \nodeCol] at (\i, \j, 0) {$\ell_{\i,\j}$};
+    }
+  }
+  % Chain variables
+  \foreach \yPos/\xPos/\chainID in {5.5/4/0, -1.5/0/1} {
+    \ifnum\chainID=0 \def\chainCol{colorA} \else \def\chainCol{colorB} \fi
+    \node[latent, \chainCol] at (\xPos, \yPos, 2.5) {$\Pi_{\chainID}$};
+    \foreach \k [count=\t from 0] in {3.5, 4.5, 5.5, 6.5, 7.5} {
+      \node[latent, \chainCol] at (\xPos, \yPos, \k) {$k_{\t,\chainID}$};
+    }
+  }
+  % Observations
+  \foreach \i in {0,2,4} {
+    \foreach \j in {0,2,4} {
+      \foreach \k [count=\t from 0] in {3.5, 4.5, 5.5, 6.5, 7.5} {
+        \ifnum\i=4 \ifnum\j<2 \def\xCol{colorA} \else \def\xCol{colorB} \fi
+        \else \ifnum\i>2 \def\xCol{colorB} \else \ifnum\j<\i \def\xCol{colorB} \else \def\xCol{colorA} \fi \fi \fi
+        \node[x_latent, \xCol] at (\i, \j, \k-0.08) {};
+        \node[x_latent, \xCol] at (\i, \j, \k+0.08) {};
+      }
+    }
+  }
+\end{tikzpicture}
+\caption{The coupled spatio-sequential model as a Forney-style factor graph.
+Each spatial node $n$ carries a class label $\ell_n \in \{1, \dots, M\}$
+(circles on the lattice, coloured by class for $M = 2$); each class $m$ carries
+a hidden chain $k_{s,m} \in \{1, \dots, K\}$ with initial distribution $\Pi_m$
+(the two chains at the sides). Pairwise factors (squares) carry the Potts
+prior on the labels, Equation~\ref{eq:spatial-prior}, and the chain prior,
+Equation~\ref{eq:circulant}. The gated emission factors (triangles) join one
+label to one chain state and contribute $\log p(x_{sn} \mid k_{s,m}, \theta_m)$
+only when $\ell_n = m$; the observations $x_{sn}$ are the small circles along
+each column. Every second observation column is drawn along each spatial axis,
+and an illustrative subset of the gated factors, so the structure is legible.}
+\label{fig:coupled-factor-graph}
+\end{figure}

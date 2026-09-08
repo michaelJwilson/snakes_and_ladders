@@ -19,10 +19,10 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 | `python/snakes_and_ladders/opt/` | Model-agnostic continuous parameter fitting via autodiff (PyTorch): the `Objective` interface, shared constraint maps, and the Potts and HMM reference instances. Imports nothing from `sim/`, `likelihood/` or `search/`, asserted by test. |
 | `python/snakes_and_ladders/learn/` | Model-agnostic reinforcement learning: the `Environment` interface, the policy, REINFORCE, an exact trajectory-enumeration oracle, and a Potts-landscape reference instance. Imports nothing from `sim/`, `likelihood/` or `search/`, asserted by test. |
 | `python/snakes_and_ladders/search/` | Move sets, temperature schedules, and the hill-climbing search (`infer.py`) that joins them to `opt/`. The phylogenetic RL environment (`rl.py`) lives here too, for the reason the phylogenetic `Objective` lives in `likelihood/`: `learn/` may import no application module. |
-| `python/snakes_and_ladders/qa/` | QA figures/tables for the technical document; renders, doesn't recompute. |
+| `python/snakes_and_ladders/qa/` | QA figures/tables for the documents; renders, doesn't recompute. |
 | `src/lib.rs` | Rust extension (`oxi_snakes_and_ladders`), exposed through PyO3. |
-| `docs/tex/` | LaTeX source for the technical document. |
-| `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/draft.pdf` (committed). |
+| `docs/tex/` | LaTeX source for the paper and the textbook, with the notation and preamble both share. |
+| `infra/build_technical_doc.sh` | Regenerates QA figures, then builds `docs/paper.pdf` and `docs/textbook.pdf` (both committed). |
 
 *Note: Each directory contains a localized `CLAUDE.md` defining specific constraints (e.g., `sim/` oracles, `search/` constraints). These append to, rather than override, the root `CLAUDE.md`.*
 
@@ -86,7 +86,7 @@ Ten required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs a
 | `build` | `pip install .` (no lockfile, mimics fresh consumer), smoke import |
 | `python-tests` | `pytest -m "not release"`, gated on minimum coverage; benchmarks skipped unless computational code changed |
 | `docs` | Sphinx build (warnings as errors) |
-| `technical-doc` | Regenerate the QA figures the document cites (`infra/build_technical_doc.sh`), then LaTeX build. Fails on an undefined reference or citation, a multiply-defined label, or a rebuilt `docs/draft.pdf` that differs from the committed one |
+| `technical-doc` | Regenerate the QA figures the documents cite (`infra/build_technical_doc.sh`), then LaTeX build. Fails on an undefined reference or citation, a multiply-defined label in either log, or a rebuilt PDF that differs from its committed copy |
 | `notebooks` | Re-execute every notebook under `docs/nb/` (`infra/check_notebooks.py`) and fail on a re-executed output that differs from the committed one. Text is compared; a figure is checked only for still being produced. Regenerate with `--write` on the same script |
 | `audit` | `pip-audit`, `cargo audit` (skips on cache hit if lockfiles are unchanged) |
 | `pr-title` | The title starts with `[<base branch>]`, the branch the pull request targets (issue #292). One shell line; runs only where the workflow does, so on a stacked pull request it is the reviewer's until #273 lands |
@@ -114,9 +114,59 @@ Ten required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs a
 * **Two axes select tests, and they answer different questions.** `infra/select_tests.py` chooses **by module path** — what a diff could have broken. The *kind* markers choose **by what a test is checked against** — `oracle`, `simulated_truth`, `mathematical`, `edge_case`, `structural`, registered in `pyproject.toml` and required of every test outside `tests/benchmarks/` by `tests/regression/test_test_kinds.py`. They sit beside each other rather than one replacing the other: path selection carries the dependency reasoning issue #161 built, and the kinds are how you ask for a class of check independently of where the change landed. `--strict-markers` is on, so a misspelled marker fails collection instead of silently selecting nothing.
 * **`critical` is the early gate, and it is a second axis rather than a kind.** It marks the tests whose failure invalidates everything after them — the import graph, the documentation index, the `CLAUDE.md` pointers, `select_tests` itself, the compiled extension, and the categorical sampler. **76 tests in 3.0 s**, measured uncontended on one development machine, against a `-m "not release"` suite of several minutes. CI runs `pytest -m critical` unconditionally before selection, so a broken invariant reports in seconds; run it locally the same way. A test is critical *and* a kind, never instead of one.
 * **Benchmarks are conditional**, and are 29.6% of the suite's wall clock (40.2 s of the 136.0 s attributed to tests). They measure code a documentation or QA change cannot have altered, and since issue #161 they are selected per module rather than all together. The job itself always runs and always reports — it is a required check, and skipping the job rather than the step would leave it pending and block the merge. Coverage is unaffected, because every line a benchmark reaches is also reached by the regression module it pairs with.
-* **The document decides which figures a pull request rebuilds.** `snakes_and_ladders.qa.manifest` states which QA outputs exist and what renders each one; `infra/build_technical_doc.sh` regenerates only those `docs/tex/main.tex` cites. The figures it does not cite are regenerated and compared at the release gate instead (`infra/release.sh` runs `snakes_and_ladders.qa.build --all --check`), so the check moves rather than disappearing. The saving is the job: rendering all thirteen figures costs 281.6 s against a 1.5 s LaTeX build, and the document currently cites two of them, so a full build is 5.9 s. Citing a figure the manifest cannot render fails the build rather than skipping it — a figure in the document that no build regenerates is exactly the drift the committed figures exist to prevent. `infra/measure_build.sh` reproduces these numbers on fixed hardware.
+* **The documents decide which figures a pull request rebuilds, and it is the *union* of what they cite.** `snakes_and_ladders.qa.manifest` states which QA outputs exist and what renders each one; `infra/build_technical_doc.sh` passes every document to the selection. Deriving it from one document would stop regenerating the other's figures and fail nothing, which is issue #154's defect in mirror image, so `cited_stems` refuses an empty set of documents and a test pins that leaving one out selects a smaller set. The figures neither cites are regenerated and compared at the release gate instead (`infra/release.sh` runs `snakes_and_ladders.qa.build --all --check`), so the check moves rather than disappearing. The cost is the reason the split is scoped: rendering all thirteen figures costs 281.6 s, the two documents together cite seven, and a full build of both PDFs is **60.1 s** against **5.9 s** when one document cited two. `topology_accuracy` is the reason it is seven and not eight — at **124.0 s** alone it is more than twice the rest of the build, so it stays at the release gate with the other five. Citing a figure the manifest cannot render fails the build rather than skipping it. `infra/measure_build.sh` reproduces these numbers on fixed hardware.
 * **Tolerances on a quantity that scales with problem size are relative.** The log-likelihood is a sum over sites, so an absolute bound fixed at one site count does not transfer to another: the backends agree to ~8e-13 relative at every size, but that same agreement is 7.4e-07 absolute at 200,000 sites. Absolute bounds are correct for quantities that do not scale — a transition probability, a row sum, a Monte Carlo frequency — and are kept there.
 * **Concurrency:** Superseded CI runs on the same branch are automatically cancelled.
+
+### The Continuous Optimization Contract
+
+Moved here from the technical document (issue #249): it is a statement about
+the code's architecture rather than about a model, and the Altitude rule makes
+this file the single copy. The *mathematics* of the constraint map is the
+textbook's; what follows is what the implementation guarantees.
+
+* **One optimizer, three model classes.** An objective is a differentiable
+  scalar over an unconstrained vector, with a map back to the parameters the
+  model is stated in. Nothing in `snakes_and_ladders.opt` may import
+  `snakes_and_ladders.sim`, `.likelihood` or `.search`, and a test asserts it:
+  a single convenience import turns a model-agnostic optimizer into a
+  phylogenetics-specific one, and neither `ruff` nor `mypy` would notice.
+* **Feasibility by construction, never by projection.** Positive parameters
+  through a log or softplus map, distributions through a softmax on one fewer
+  free value than the distribution has entries. Every point in the
+  unconstrained space is a legal model, so no iterate has to be pushed back.
+* **A structural move constructs a new objective.** It changes what the
+  parameter vector means and how long it is, so it cannot be a step inside a
+  fit over a fixed-length vector. The loop proposing moves owns that
+  construction and fits per candidate.
+* **Intervals come from the observed information, pushed through the
+  constraint map by the delta method**, and are refused where the information
+  is singular or worse-conditioned than a stated bound — an interval around a
+  parameter the data does not identify summarizes nothing.
+
+### Run Logs
+
+Every entry point — a QA script, `snakes_and_ladders.qa.build`,
+`infra/check_notebooks.py` — logs through `snakes_and_ladders.log` (issue
+#311), and a line reads
+
+```
+2026-09-07 16:20:01 - 1.50m - INFO (render sim_tree) - snakes_and_ladders.qa.runner.figure_main:190 - wrote docs/tex/figures/sim_tree.pdf and docs/tex/figures/sim_tree_caption.txt
+```
+
+* **The second field is elapsed minutes** since the entry point started, so a
+  slow step is located by subtracting neighbours rather than by wall-clock
+  arithmetic.
+* **The parenthesis is the run's phase**, set with `phase("...")` around the
+  step and shared by every logger in the process; a line between phases has
+  none.
+* **Logs go to stderr**; stdout carries only what another script reads, such
+  as the stems `qa.build --list` prints.
+* **Libraries emit, entry points configure.** `opt.fit` and `search.infer` log
+  at DEBUG through `logging.getLogger(__name__)` and install no handler; an
+  entry point that wants those lines passes `level=logging.DEBUG` to
+  `get_logger`. `warning_once` and `info_once` say a repeated thing once per
+  logger, for a warning inside a loop.
 
 ### Profiling a Hot Path
 
@@ -149,6 +199,33 @@ Ten required checks run via GitHub Actions (`.github/workflows/ci.yml`) on PRs a
 2. **Validate:** Must use OSI-approved licenses. Flag items with $<1000$ GitHub stars.
 3. **Lock:** Run `uv lock` or update `Cargo.lock` and commit in the same PR.
 4. **Justify:** Explain the inclusion in the PR description.
+
+### Experiments
+
+A measured comparison lives in `docs/experiments/` as one file per experiment,
+written from `TEMPLATE.md` (issue #314): YAML front matter with the commit,
+branch and pull request, the tickets it tests and files, the problem, fixture
+and size tier, the methods compared, the budget and its unit, the shared
+seeds, the hardware and a status; then fixed sections — feature under test,
+setup, results, figures, finding, conclusion and actions, what is not
+claimed. `infra/experiments.py` validates every file and generates the index
+`README.md`; `--check` fails on an invalid file or a stale index, and
+`tests/regression/test_experiments.py` runs it per pull request.
+
+* **A number stated against a baseline lives in an experiment file.** A pull
+  request that measures one method against another adds or updates the
+  experiment it belongs to, and `STATUS.md` cites the file rather than
+  restating its table. The matrix the ledger fills is problems × size tiers ×
+  method families, every cell run through `opt.budget.compare` at one budget
+  over shared seeds; the index shows each cell's status and finding.
+* **Status is a claim about the record.** `open` while the comparison runs,
+  `confirmed` once the finding is stated against its commit, `retracted` when
+  a later measurement contradicts it (the file stays, with the contradiction
+  in its finding), `superseded` when a later experiment replaces it.
+* **A run store, when one exists, generates the Results section.** Until the
+  Aim ledger of #75 lands, results are typed from the measurement with the
+  script that produced them named; after it, `qa/experiment.py` renders them
+  from the store and the Markdown stays the reviewed artefact.
 
 ### Release
 
@@ -195,6 +272,6 @@ records the gap.
 `CLAUDE.md` states these and this file does not restate them: **Performance**
 for when a hot path earns a GPU port and why the NumPy reference stays,
 **Testing & Quality Assurance** for what an assertion must establish, and
-`docs/CLAUDE.md` for how the technical document is built and kept true. They
+`docs/CLAUDE.md` for how the documents are built and kept true. They
 were duplicated here until issue #146; a rule with two homes acquires two
 meanings.

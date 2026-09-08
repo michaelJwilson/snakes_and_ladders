@@ -18,11 +18,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.opt.fit import fit, fit_from
 from snakes_and_ladders.opt.hmm import HmmObjective
 from snakes_and_ladders.opt.initialize import (
     FromObjective,
-    Initializer,
     Perturbed,
     RandomRestart,
 )
@@ -146,19 +146,35 @@ def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
     This is why the defaults do not change in this pull request. Multi-start is
     a tool for a few well-separated basins, and asserting it as a general
     improvement would be asserting something the measurement contradicts.
+    Through `opt.budget.compare` at eight fits it is 0 of 10 either way.
     """
     objective = Rastrigin()
-    target = objective.minimizer()
 
-    def reaches_global(initializer: Initializer) -> bool:
-        best = fit_from(objective, initializer).best
-        return float(torch.linalg.vector_norm(best.theta - target)) < TOLERANCE
+    def one_start(
+        instance: Rastrigin, _budget: Budget, _rng: np.random.Generator
+    ) -> Outcome:
+        return Outcome(float(fit_from(instance, FromObjective()).best.value), 1)
 
-    single = sum(reaches_global(FromObjective()) for _ in range(10))
-    many = sum(
-        reaches_global(RandomRestart(8, 2.0, np.random.default_rng(trial)))
-        for trial in range(10)
+    def random_start(
+        instance: Rastrigin, _budget: Budget, rng: np.random.Generator
+    ) -> Outcome:
+        return Outcome(
+            float(fit_from(instance, RandomRestart(1, 2.0, rng)).best.value), 1
+        )
+
+    # Ten trials, each an instance of the same surface with its own stream;
+    # eight fits is the budget, and the fixed start spends one of them
+    # (issue #281). A hit is the global minimum's value, zero, within the
+    # optimizer's tolerance; every other minimum sits at least one above it.
+    result = compare(
+        {"one start": one_start, "restarts": restarts(random_start, 1)},
+        [objective] * 10,
+        Budget("fits", 8),
+        seeds=(0,),
+        known=[0.0] * 10,
     )
+    hits = result.hits(tolerance=1e-6)
+    single, many = hits["one start"], hits["restarts"]
 
     assert single == 0, "the fixed start unexpectedly found the global minimum"
     assert many <= 2, (

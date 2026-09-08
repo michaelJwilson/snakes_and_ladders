@@ -153,12 +153,13 @@ def test_no_public_signature_takes_a_seed() -> None:
     """The rule, enforced where it can be.
 
     Two exemptions, both stated on the ticket as non-goals. The `torch`
-    stream -- `opt.hmc.sample` and `search.max_cut.goemans_williamson` build a
-    `torch.Generator` -- is a separate conversion. And the declared fixture
+    stream -- `opt.hmc.sample`, `opt.hmc.anneal` and
+    `search.max_cut.goemans_williamson` build a `torch.Generator` -- is a
+    separate conversion. And the declared fixture
     parameters keep their `seed` *field*, which is how a run is declared
     reproducible; only the boundary at which it becomes a generator moved.
     """
-    torch_stream = {"sample", "goemans_williamson"}
+    torch_stream = {"sample", "anneal", "goemans_williamson"}
     offenders = [
         entry
         for path in sorted(PACKAGE.rglob("*.py"))

@@ -1,0 +1,49 @@
+\begin{thebibliography}{8}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Amari(2016)]{amari2016}
+Shun-ichi Amari.
+\newblock \emph{Information Geometry and Its Applications}.
+\newblock Springer, Tokyo, 2016.
+
+\bibitem[Goodfellow et~al.(2016)Goodfellow, Bengio, and
+  Courville]{goodfellow2016}
+Ian Goodfellow, Yoshua Bengio, and Aaron Courville.
+\newblock \emph{Deep Learning}.
+\newblock MIT Press, Cambridge, Massachusetts, 2016.
+
+\bibitem[MacKay(2003)]{mackay2003}
+David J.~C. MacKay.
+\newblock \emph{Information Theory, Inference, and Learning Algorithms}.
+\newblock Cambridge University Press, Cambridge, 2003.
+
+\bibitem[M{\'e}zard and Montanari(2009)]{mezard2009}
+Marc M{\'e}zard and Andrea Montanari.
+\newblock \emph{Information, Physics, and Computation}.
+\newblock Oxford University Press, Oxford, 2009.
+
+\bibitem[Nocedal and Wright(2006)]{nocedal2006}
+Jorge Nocedal and Stephen~J. Wright.
+\newblock \emph{Numerical Optimization}.
+\newblock Springer, 2nd edition, 2006.
+
+\bibitem[Prince(2023)]{prince2023}
+Simon J.~D. Prince.
+\newblock \emph{Understanding Deep Learning}.
+\newblock MIT Press, Cambridge, Massachusetts, 2023.
+
+\bibitem[Rosen(2019)]{rosen2019}
+Kenneth~H. Rosen.
+\newblock \emph{Discrete Mathematics and Its Applications}.
+\newblock McGraw-Hill, 8th edition, 2019.
+
+\bibitem[Sutton and Barto(2018)]{suttonbarto2018}
+Richard~S. Sutton and Andrew~G. Barto.
+\newblock \emph{Reinforcement Learning: An Introduction}.
+\newblock MIT Press, Cambridge, Massachusetts, 2nd edition, 2018.
+
+\end{thebibliography}

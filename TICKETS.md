@@ -38,15 +38,15 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   zero-field benchmark measures the fixture (#245)
 - Coloured iterated conditional modes on CUDA and Metal through torch,
   measured against the 10× rule before any Triton kernel (#227)
-- Expose forward-backward as an evaluator, not as Baum-Welch's internals (#173)
 - One energy/likelihood evaluator API across the three problem classes,
   asserted by an import-graph test (#238)
 - CUDA dispatch for the pruning recursion, pinned against the NumPy oracle
 - Metal/MPS dispatch, and the `float32` tolerance it forces
 - Evaluate a Triton or JAX kernel for the site-parallel recursion against the
   10× rule before porting
-- Bounded and approximate likelihoods for branch-and-bound pruning, with the
-  proofs `ROADMAP.md` §1.3 requires
+- Branch-and-bound over topologies with the certified bounds of #308, and a
+  bound for a non-Jukes–Cantor model, whose transition matrix is not affine
+  in one variable per branch
 - Put `stubtest` in CI — the type stub has already drifted (#37)
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
@@ -79,18 +79,20 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   key (#114)
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
   it costs per step
-- Temperature schedules, and the likelihood-versus-temperature curves that
-  judge exploration
+- Temperature schedules, annealing and parallel tempering, and the
+  likelihood-versus-temperature curves that judge exploration (#267)
 - Establish the external reference tools to benchmark against, and how they are
   installed (#126)
 - A classical baseline suite the three applications are scored against under
   one budget
+- Uncertainty for a discrete search result, where a Hessian is not defined:
+  a margin, a Boltzmann weight over the enumerated neighbourhood, or bootstrap
+  support, pinned against enumeration where it fits (#270)
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
 - A feature set for the tree environment, with the unidentifiable-constant
   invariance pinned
-- A tree fixture hard enough to separate a policy from greedy (#177)
 - PPO and a learned state-value critic
 - Truth as a terminal penalty, never a training signal
 - Train a phylogenetic policy and report its learning curve against the
@@ -114,9 +116,13 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
-- Create a ledger of benchmarked and validated runs with Aim (#75)
+- Create a ledger of benchmarked and validated runs with Aim (#75), revived
+  from the closed draft as the run store behind the experiment files (#314,
+  part 2; the `tracking` extra needs the dependency's yes)
 - Reproduce a run from a single manifest, and assert it
-- Budget-matched ablation leaderboard across shared seeds
+- Budget-matched ablation leaderboard across shared seeds: the experiment
+  ledger and its generated index landed (#314); the cells that remain are the
+  stress and release tiers, on the fixed-hardware runner
 - Paired significance test required before a variant is adopted as
   state-of-the-art
 
@@ -154,5 +160,5 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   all three problem classes are documented to the same standard
 - Re-include the eleven committed QA figures the technical document no longer
   cites, so CI rebuilds nothing the document does not rest on
-- Restore the pruning derivation and the parameter-recovery evidence the
-  document dropped, against `ROADMAP.md` §1.3's required contents
+- The textbook carries every equation and algorithm the code cites, and a
+  guard resolves each citation (#274)
