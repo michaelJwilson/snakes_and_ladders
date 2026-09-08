@@ -64,8 +64,18 @@ def test_optimize_benchmark(benchmark: BenchmarkFixture, stochastic: bool) -> No
     # against: the same 100 gradient steps, differing only by the Gumbel draw.
     objective = _objective(7)
 
+    # A generator, not a seed: `optimize` draws from the generator its caller
+    # seeded (issue #337), and the whole-suite run on main is the only one
+    # that collects this benchmark, so the drift went unnoticed until then.
+    generator = torch.Generator().manual_seed(1)
+
     result = benchmark(
-        optimize, objective, 1, temperature=0.5, steps=100, stochastic=stochastic
+        optimize,
+        objective,
+        generator,
+        temperature=0.5,
+        steps=100,
+        stochastic=stochastic,
     )
 
     assert len(result.configuration) == 7
