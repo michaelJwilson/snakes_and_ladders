@@ -54,6 +54,16 @@ known from outside this repository.
   the point *is* the literal --- a malformed input, an ensemble drawn over
   sizes, a test of the constructor itself --- and the module says which.
 
+- **A declaration and a measurement are two files.** What a *reference*
+  algorithm achieves on an instance --- an enumerated optimum, the rate hill
+  climbing reaches it from seeded starts --- is a measurement: written by a
+  tool, moving when the code that computes it moves, and worth nothing once
+  the tree has moved under it. It lives in `<tier>.baseline.json` beside
+  `<tier>.yaml`, carrying the seed and budget that produced each number and a
+  digest of everything it is a function of, so a regenerated number never
+  rewrites a hand-written instance, a reader is refused a stale one rather
+  than served it, and a diff says which of the two moved.
+
 - **A fixture is admitted on two clauses, and both are load-bearing.** Its
   answer must be known from *outside* this repository — a closed form, a
   published result, or an enumeration sharing no code with what it tests — and
