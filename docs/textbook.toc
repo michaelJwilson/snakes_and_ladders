@@ -48,14 +48,14 @@
 \contentsline {paragraph}{What pins it.}{15}{section*.22}%
 \contentsline {subsection}{\numberline {5.4}The algorithm: expectation-maximization}{15}{subsection.5.4}%
 \contentsline {paragraph}{What pins it.}{15}{section*.23}%
-\contentsline {subsection}{\numberline {5.5}Two decodings, and they are different answers}{15}{subsection.5.5}%
+\contentsline {subsection}{\numberline {5.5}Two decodings, and they are different answers}{16}{subsection.5.5}%
 \contentsline {section}{\numberline {6}Problem Statement: The Coupled Spatio-Sequential Model}{16}{section.6}%
 \contentsline {subsection}{\numberline {6.1}The model}{16}{subsection.6.1}%
 \contentsline {subsection}{\numberline {6.2}As a factor graph}{16}{subsection.6.2}%
 \contentsline {subsection}{\numberline {6.3}The estimator: block-coordinate ascent}{16}{subsection.6.3}%
 \contentsline {paragraph}{Why a cluster move.}{18}{section*.24}%
 \contentsline {subsection}{\numberline {6.4}The initializer: data-sampled burn-in}{18}{subsection.6.4}%
-\contentsline {paragraph}{What pins it, and what is built.}{18}{section*.25}%
+\contentsline {paragraph}{What pins it, and what is built.}{19}{section*.25}%
 \contentsline {section}{\numberline {7}The Properties That Referee Each Method}{19}{section.7}%
 \contentsline {subsection}{\numberline {7.1}Exact answers, where an oracle exists}{19}{subsection.7.1}%
 \contentsline {subsection}{\numberline {7.2}Structural invariants, where no oracle reaches}{19}{subsection.7.2}%
@@ -65,22 +65,25 @@
 \contentsline {subsection}{\numberline {7.6}Published constants, and asymptotic results}{20}{subsection.7.6}%
 \contentsline {section}{\numberline {8}Relevance to the Roadmap}{21}{section.8}%
 \contentsline {section}{\numberline {A}Derivations Cited From the Text}{23}{appendix.A}%
-\contentsline {subsection}{\numberline {A.1}The Bethe free energy is stationary at a sum-product fixed point}{24}{subsection.A.1}%
-\contentsline {subsection}{\numberline {A.2}Detailed balance for a cluster move in a field}{24}{subsection.A.2}%
-\contentsline {subsection}{\numberline {A.3}The exchange ratio in parallel tempering}{24}{subsection.A.3}%
-\contentsline {subsection}{\numberline {A.4}The delta method for an interval at a fit}{24}{subsection.A.4}%
-\contentsline {section}{\numberline {B}Derivations for the Actor--Critic}{24}{appendix.B}%
-\contentsline {paragraph}{Any state-dependent baseline leaves the estimator unbiased.}{24}{section*.27}%
-\contentsline {paragraph}{The generalized advantage telescopes to its two limits.}{24}{section*.28}%
-\contentsline {paragraph}{PUCT as policy improvement.}{25}{section*.29}%
-\contentsline {paragraph}{The clipped objective at the collecting policy.}{25}{section*.30}%
-\contentsline {section}{\numberline {C}Derivations of the Bounds}{25}{appendix.C}%
-\contentsline {paragraph}{The plug-in bound, \eqref {eq:plugin-bound}.}{25}{section*.31}%
-\contentsline {paragraph}{The parsimony bound, \eqref {eq:parsimony-bound}.}{25}{section*.32}%
-\contentsline {paragraph}{The mean-field bound, \eqref {eq:mean-field-bound}.}{25}{section*.33}%
-\contentsline {paragraph}{The spanning-tree bound, \eqref {eq:spanning-tree-bound}.}{26}{section*.34}%
-\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{26}{section*.35}%
-\contentsline {section}{\numberline {D}Reference Taxonomy}{26}{appendix.D}%
-\contentsline {paragraph}{Infrastructure (build, structure, and speed).}{26}{section*.36}%
-\contentsline {paragraph}{Optimization (discrete and continuous).}{26}{section*.37}%
-\contentsline {paragraph}{Application (the science).}{26}{section*.38}%
+\contentsline {subsection}{\numberline {A.1}Pruning is the marginalization over internal states}{24}{subsection.A.1}%
+\contentsline {subsection}{\numberline {A.2}Forward--backward is the same marginalization on a chain}{24}{subsection.A.2}%
+\contentsline {subsection}{\numberline {A.3}Sum-product on a tree, and its loopy stationary point}{24}{subsection.A.3}%
+\contentsline {subsection}{\numberline {A.4}The Bethe free energy is stationary at a sum-product fixed point}{25}{subsection.A.4}%
+\contentsline {subsection}{\numberline {A.5}Detailed balance for a cluster move in a field}{25}{subsection.A.5}%
+\contentsline {subsection}{\numberline {A.6}The exchange ratio in parallel tempering}{26}{subsection.A.6}%
+\contentsline {subsection}{\numberline {A.7}The delta method for an interval at a fit}{26}{subsection.A.7}%
+\contentsline {section}{\numberline {B}Derivations for the Actor--Critic}{26}{appendix.B}%
+\contentsline {paragraph}{Any state-dependent baseline leaves the estimator unbiased.}{26}{section*.27}%
+\contentsline {paragraph}{The generalized advantage telescopes to its two limits.}{26}{section*.28}%
+\contentsline {paragraph}{PUCT as policy improvement.}{26}{section*.29}%
+\contentsline {paragraph}{The clipped objective at the collecting policy.}{26}{section*.30}%
+\contentsline {section}{\numberline {C}Derivations of the Bounds}{27}{appendix.C}%
+\contentsline {paragraph}{The plug-in bound, \eqref {eq:plugin-bound}.}{27}{section*.31}%
+\contentsline {paragraph}{The parsimony bound, \eqref {eq:parsimony-bound}.}{27}{section*.32}%
+\contentsline {paragraph}{The mean-field bound, \eqref {eq:mean-field-bound}.}{27}{section*.33}%
+\contentsline {paragraph}{The spanning-tree bound, \eqref {eq:spanning-tree-bound}.}{27}{section*.34}%
+\contentsline {paragraph}{The ground-state bracket, \eqref {eq:ground-state-bounds}.}{27}{section*.35}%
+\contentsline {section}{\numberline {D}Reference Taxonomy}{27}{appendix.D}%
+\contentsline {paragraph}{Infrastructure (build, structure, and speed).}{28}{section*.36}%
+\contentsline {paragraph}{Optimization (discrete and continuous).}{28}{section*.37}%
+\contentsline {paragraph}{Application (the science).}{28}{section*.38}%
