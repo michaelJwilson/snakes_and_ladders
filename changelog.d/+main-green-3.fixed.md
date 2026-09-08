@@ -1,0 +1,1 @@
+Made `main` green after #352, #353 and #354 merged: `test_opt_hmc_adaptive.py` and `profile_hotpaths.py` call `hmc.sample` with the generator #345 introduced, `profile_hotpaths.py` passes `compare` the `workers` #353 requires, and the docs index lists `likelihood.message_passing_reference`.
