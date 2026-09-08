@@ -8,7 +8,7 @@ code with what it checks.
 
 | Notebook | Problem | Oracles it rests on |
 | --- | --- | --- |
-| [`potts_chain.ipynb`](potts_chain.ipynb) | Potts chain in an external field | Exhaustive enumeration of the partition function; enumeration of all 81 configurations |
+| [`potts_chain.ipynb`](potts_chain.ipynb) | Potts chain in an external field, and the Potts lattice as a Markov random field | Exhaustive enumeration of the partition function on the chain and on the 3x3 lattice (19,683 configurations); enumeration of all 81 configurations; the closed-form transition `J_c = ln(1 + sqrt(3))` |
 | [`phylo_tree.ipynb`](phylo_tree.ipynb) | Phylogenetic trees, 6 taxa | Brute-force marginalization over ancestral states; all 105 unrooted topologies enumerated |
 | [`hmm.ipynb`](hmm.ipynb) | Discrete hidden Markov model | Enumeration over all `3**8` hidden paths; the retained hidden path; Baum-Welch as an independent algorithm |
 | [`ldpc.ipynb`](ldpc.ipynb) | Low-density parity-check code, Gallager's (3,6) ensemble | The general sum-product on the parity-check factor graph; enumeration of all 32,768 codewords of a cycle-free code; the density-evolution threshold 0.4294 |

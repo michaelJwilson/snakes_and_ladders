@@ -76,7 +76,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 | `test_learn_surrogate_pyg.py::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights` | oracle |  |
 
-## `tests/regression/likelihood/` (82)
+## `tests/regression/likelihood/` (83)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -84,6 +84,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_belief_propagation.py::test_the_beliefs_are_the_exact_marginals_on_a_tree` | oracle |  |
 | `test_belief_propagation.py::test_a_zero_coupling_lattice_is_exact_despite_its_loops` | oracle | The loops are still there; what is gone is the coupling that makes them matter. |
 | `test_belief_propagation.py::test_the_bethe_deviation_is_the_measured_size` | oracle |  |
+| `test_belief_propagation.py::test_the_bethe_deviation_on_the_registry_lattice_is_the_measured_size` | oracle | The instance the registry declares, refereed by enumeration rather than by the strip transfer matrix: 3x3 at 3 states is 19,683 configurations, so `log Z` and every marginal are summed exactly. |
 | `test_belief_propagation.py::test_an_edgeless_graph_is_exactly_its_independent_sites` | oracle | No messages exist, so there is no residual to converge; handled as its own case rather than as a loop that runs zero times and then claims to have converged. |
 | `test_hmm_paths.py::test_the_enumerated_evidence_matches_the_forward_recursion` | oracle |  |
 | `test_hmm_paths.py::test_a_marginal_is_the_summed_joint_over_paths_through_that_state` | oracle | The definition, computed a second way: `P(state_t = s \| y)` is the total weight of paths passing through `s` at `t`, normalized. |
@@ -422,4 +423,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-379 checks.
+380 checks.
