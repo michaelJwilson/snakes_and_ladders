@@ -3,7 +3,9 @@
 Exponential in the sequence length and deliberately so, on the same footing
 as :mod:`snakes_and_ladders.likelihood.brute_force`: it shares no recursion with the
 forward algorithm in :mod:`snakes_and_ladders.opt.hmm`, so agreement between them is
-evidence rather than a tautology.
+evidence rather than a tautology. It is the sum over ``k^T`` paths that
+``app:forward-backward`` of ``docs/tex/textbook.tex`` reduces to two passes,
+performed here without the reduction.
 
 **What it exists to separate.** An HMM admits two different answers to "which
 hidden path produced this?", and they are not approximations of each other:
