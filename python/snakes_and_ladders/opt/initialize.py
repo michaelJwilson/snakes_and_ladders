@@ -31,7 +31,9 @@ defect `sim/CLAUDE.md` forbids and issue #240 removed elsewhere.
 mixture, or a warm start from a moment estimator — cannot live in this module:
 `opt/` may import no application module, and `test_opt_objective.py` asserts
 it. Those belong beside the objective they initialize, with this module holding
-the protocol and the model-free strategies only.
+the protocol and the model-free strategies only: `opt/mixture.py`'s k-means++
+for the mixture (issue #262), and `search/initialize.py`'s neighbor-joining
+and Hadamard starts for the tree (issue #364).
 """
 
 from __future__ import annotations

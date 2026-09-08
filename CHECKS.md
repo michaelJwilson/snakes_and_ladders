@@ -72,7 +72,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 | `test_learn_surrogate_pyg.py::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights` | oracle |  |
 
-## `tests/regression/likelihood/` (73)
+## `tests/regression/likelihood/` (79)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -92,6 +92,12 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_ldpc.py::test_the_996_bit_code_corrects_the_bsc_below_its_threshold_and_not_above` | simulated_truth | Over 20 shared seeds the 996-bit (3,6) code has zero bit errors at `p = 0.05` and a bit error rate above 0.02 at `p = 0.09`, either side of the (3,6) BSC threshold `p* = 0.084`; realized 0 and 0.049. |
 | `test_ldpc.py::test_the_996_bit_code_on_the_erasure_channel_either_side_of_the_threshold` | simulated_truth | Over 20 seeds no erasure survives at `epsilon = 0.35` and more than half of them survive at `epsilon = 0.5`; realized 0 and 0.433 of 0.5. |
 | `test_ldpc.py::test_the_20000_bit_code_brackets_the_erasure_threshold` | simulated_truth | At `n = 19,998` (the multiple of six nearest the ticket's 20,000) the flooding decoder resolves every erasure at `epsilon = 0.42` and leaves more than a fifth of the bits erased at `0.44`, bracketing the density evolution threshold 0.4294 on three seeds each; realized 0 and 0.25-0.30. |
+| `test_likelihood_distance.py::test_the_distance_converges_on_the_path_length_with_the_site_count` | simulated_truth | The error against the true path length falls as ``1/sqrt(L)``. |
+| `test_likelihood_distance.py::test_the_stated_variance_covers_the_truth_at_the_nominal_rate` | simulated_truth | ``value +- 1.96 sqrt(variance)`` covers the true path length 95% of the time. |
+| `test_likelihood_hadamard.py::test_the_conjugation_returns_the_true_split_weights_on_the_exact_spectrum` | oracle | On the pruning-computed two-state spectrum, ``q`` is the tree's lengths and zero elsewhere. |
+| `test_likelihood_hadamard.py::test_the_four_state_recoding_returns_two_thirds_of_every_branch` | oracle | The recoded four-state spectrum conjugates to ``2 t / 3`` on every split. |
+| `test_likelihood_hadamard.py::test_the_split_weights_converge_with_the_site_count` | simulated_truth | On simulated two-state data the weight error falls as ``1/sqrt(L)``. |
+| `test_likelihood_hadamard.py::test_the_closest_tree_of_the_fixture_alignment_is_the_generating_topology` | simulated_truth | The four-state fixtures, recoded, give the generating topology at their declared sites. |
 | `test_likelihood_objective.py::test_expansion_reproduces_the_tree_s_own_branch_lengths` | oracle | The merge must be lossless in the direction that matters: a tree's lengths, encoded and expanded, must score identically. |
 | `test_likelihood_objective.py::test_the_fit_beats_the_generating_branch_lengths` | simulated_truth | The optimizer never sees the truth, so an early stop fails this while its own loss still went down. |
 | `test_likelihood_objective.py::test_every_branch_length_is_recovered_to_within_four_standard_errors` | simulated_truth |  |
@@ -244,7 +250,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (95)
+## `tests/regression/search/` (99)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -272,6 +278,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_maxflow.py::test_a_zero_coupling_ground_state_follows_the_field_site_by_site` | oracle | With no bonds the sites decouple, so each independently takes its better state and the answer is `argmax` per node -- again with no enumeration. |
 | `test_maxflow.py::test_the_rust_kernel_reproduces_the_python_oracle_exactly` | oracle | Exact equality of energy, not a tolerance: this is a combinatorial minimum. |
 | `test_maxflow.py::test_the_rust_max_flow_reproduces_a_hand_computed_value` | oracle | Two disjoint paths carry 2 each; the cross edge carries a third unit a greedy first path would have blocked. |
+| `test_neighbor_joining.py::test_recovery_rises_with_sites_and_is_certain_inside_attesons_radius` | simulated_truth | The six-taxon fixture over 50 seeds at 100, 300, 1,500 and 10,000 sites. |
 | `test_potts_mcmc.py::test_the_chain_is_drawn_from_the_exact_boltzmann_distribution` | oracle |  |
 | `test_potts_mcmc.py::test_the_chain_is_still_exact_in_an_external_field` | oracle | The case the ticket exists for. |
 | `test_potts_mcmc.py::test_tempering_is_model_scaling_exactly` | oracle | The consistency check the model itself provides: the coupling absorbs beta, so the energy of the scaled model is the energy over T, and the deviation is 0.0 rather than a tolerance -- a division on each term. |
@@ -297,6 +304,9 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_infer.py::test_lazy_ranking_places_the_fitted_best_first_for_nni` | simulated_truth | One unfitted evaluation at the parent's lengths ranks the NNI neighbourhood correctly at eight taxa: the fitted best is the lazy best on 6 of 6 neighbourhoods measured. |
 | `test_search_infer.py::test_warm_starts_do_not_move_the_search_answer` | oracle | The search's answer is the same tree at the same likelihood, warm or cold, from the same start; what differs is the cost, which is reported. |
 | `test_search_infer.py::test_lazy_nni_search_reaches_what_the_full_search_reaches` | oracle | With every candidate ranked lazily and only the top one fitted, the NNI search still ends where the full search ends on the eight-taxon fixture, from each of three starts, at fewer fits. |
+| `test_search_initialize.py::test_every_start_reaches_the_fit_optimum_and_none_reaches_it_cheaper` | simulated_truth | Five-taxon fixture, three datasets: all five starts converge to one optimum at one cost. |
+| `test_search_initialize.py::test_the_estimator_starts_reach_the_enumerated_optimum_at_five_taxa` | simulated_truth | Five-taxon fixture, three datasets: the climb from either estimator reaches the enumerated optimum. |
+| `test_search_initialize.py::test_initializers_at_equal_evaluations` | simulated_truth | The measurement `docs/experiments/005` reports; ``pytest -s`` prints its tables. |
 | `test_search_parsimony.py::test_every_start_reaches_the_enumerated_minimum_at_five_taxa` | oracle |  |
 | `test_search_parsimony.py::test_every_start_reaches_the_enumerated_minimum_at_six_taxa` | oracle |  |
 | `test_search_parsimony.py::test_spr_escapes_the_local_minima_nni_stops_in_at_eight_taxa` | oracle | The first size at which the two neighbourhoods separate. |
@@ -399,4 +409,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-356 checks.
+366 checks.
