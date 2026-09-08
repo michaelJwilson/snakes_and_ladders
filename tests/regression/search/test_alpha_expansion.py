@@ -32,6 +32,7 @@ from snakes_and_ladders.search.alpha_expansion import (
     expand,
     iterated_conditional_modes,
 )
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import energy as binary_energy
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
@@ -247,3 +248,38 @@ def test_an_already_optimal_start_makes_no_moves() -> None:
 
     assert again.moves == 0
     assert again.energy == pytest.approx(settled.energy, abs=1e-12)
+
+
+# --- the compiled descent kernel -----------------------------------------------
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", range(6))
+def test_the_numba_descent_reproduces_the_python_one_bitwise(seed: int) -> None:
+    # The pin that lets the kernel be the default (#264): same update, same
+    # index order, same first-minimum tie rule, so the labelling and the
+    # energy are identical, not close. A random per-node field against a
+    # coupling of the same order makes the surface rugged enough that the
+    # start decides the optimum -- realized: 20 of 20 starts agree at 32x32.
+    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
+    field = np.random.default_rng(100 + seed).normal(size=(graph.n_nodes, 3))
+
+    python = iterated_conditional_modes(
+        graph, field, 3, np.random.default_rng(seed), backend=Backend.PYTHON
+    )
+    compiled = iterated_conditional_modes(
+        graph, field, 3, np.random.default_rng(seed), backend=Backend.NUMBA
+    )
+
+    assert np.array_equal(python[0], compiled[0])
+    assert python[1] == compiled[1]
+
+
+@pytest.mark.edge_case
+def test_descent_has_no_rust_backend() -> None:
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
+
+    with pytest.raises(ValueError, match="no rust backend"):
+        iterated_conditional_modes(
+            graph, np.zeros(3), 3, np.random.default_rng(0), backend=Backend.RUST
+        )

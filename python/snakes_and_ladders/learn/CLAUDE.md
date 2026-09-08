@@ -97,3 +97,12 @@ exception for convenience.
 
 PPO and a learned state-value critic; `docs/tex`'s reinforcement-learning
 section states the theory they are built against.
+
+A relaxation must reduce to the discrete objective exactly at every corner of
+the simplex, checked over every configuration of an enumerable instance. Under a
+factorized distribution the expected discrete score equals the relaxed score at
+the marginals whenever no term reuses a site — multilinearity, not graph shape,
+is the boundary — so the maximum sits at a vertex and a relaxation adds no
+optimum the discrete problem lacks. A gradient estimator's bias is measured
+against the exact gradient enumeration supplies, never assumed small. A learned
+surrogate predicts the gap above an analytic bound, scored on unseen groups.

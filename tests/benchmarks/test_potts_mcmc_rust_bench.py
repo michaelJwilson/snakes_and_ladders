@@ -19,7 +19,12 @@ import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.search import potts_mcmc_rust
-from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
+from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.search.potts_mcmc import (
+    PottsMove,
+    parallel_tempering,
+    sample_potts,
+)
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
 SWEEPS = 100
@@ -35,7 +40,14 @@ def test_python_single_site_sweep(benchmark: BenchmarkFixture, extent: int) -> N
     """The oracle, and the baseline the ratio is against."""
     graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 0.4)
 
-    chain = benchmark(sample_potts, graph, FIELD, PottsMove.SINGLE_SITE, 1, SWEEPS)
+    chain = benchmark(
+        sample_potts,
+        graph,
+        FIELD,
+        PottsMove.SINGLE_SITE,
+        np.random.default_rng(1),
+        SWEEPS,
+    )
 
     assert chain.states.shape == (SWEEPS, graph.n_nodes)
 
@@ -62,3 +74,33 @@ def test_rust_single_site_sweep(benchmark: BenchmarkFixture, extent: int) -> Non
 
     assert chain.states.shape == (SWEEPS, graph.n_nodes)
     assert math.isfinite(float(chain.states.sum()))
+
+
+LADDER = (2.0, 1.2, 0.7, 0.4)
+
+
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
+@pytest.mark.parametrize("extent", EXTENTS, ids=lambda e: f"{e}x{e}")
+def test_parallel_tempering_benchmark(
+    benchmark: BenchmarkFixture, extent: int, backend: Backend
+) -> None:
+    """Four replicas of 20 sweeps each, on the oracle sweep and on the Rust one.
+
+    The sweep is the whole of a replica's step and the exchange is O(1), so
+    this is the #246 ratio applied to tempering (#264): 5.8x at 100 nodes and
+    7.8x at 32x32 when it landed, the remainder being the per-sweep energy
+    evaluation the exchange needs.
+    """
+    graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 0.4)
+
+    run = benchmark(
+        parallel_tempering,
+        graph,
+        FIELD,
+        LADDER,
+        np.random.default_rng(1),
+        20,
+        backend=backend,
+    )
+
+    assert run.states.shape == (20, len(LADDER), graph.n_nodes)

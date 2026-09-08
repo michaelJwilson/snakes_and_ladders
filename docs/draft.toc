@@ -1,0 +1,20 @@
+\contentsline {section}{\numberline {1}Introduction}{2}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Scope and Limitations}{2}{subsection.1.1}%
+\contentsline {section}{\numberline {2}Methods}{2}{section.2}%
+\contentsline {subsection}{\numberline {2.1}The Continuous Optimization Abstraction}{2}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Differentiable Likelihoods and Energy Functions}{2}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Reinforcement Learning and Variational Search}{3}{subsection.2.3}%
+\contentsline {subsubsection}{\numberline {2.3.1}Advanced Architectural Extensions}{3}{subsubsection.2.3.1}%
+\contentsline {section}{\numberline {3}Results}{3}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Simulation and Exact Inference Validation}{3}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Memory Footprint at the Declared Scale}{3}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Empirical Benchmarking [PLACEHOLDERS]}{3}{subsection.3.3}%
+\contentsline {section}{\numberline {4}Conclusions}{3}{section.4}%
+\contentsline {section}{\numberline {A}Mathematical Foundations of the Application Domains}{7}{appendix.A}%
+\contentsline {subsection}{\numberline {A.1}Phylogenetic Inference and Substitution Models}{7}{subsection.A.1}%
+\contentsline {subsection}{\numberline {A.2}Potts Models in an External Field}{7}{subsection.A.2}%
+\contentsline {subsection}{\numberline {A.3}Hidden Markov Models (HMMs)}{8}{subsection.A.3}%
+\contentsline {section}{\numberline {B}Reference Taxonomy and Core Literature}{8}{appendix.B}%
+\contentsline {paragraph}{Infrastructure (Build, Structure, and Speed):}{8}{section*.3}%
+\contentsline {paragraph}{Optimization (Discrete and Continuous):}{8}{section*.4}%
+\contentsline {paragraph}{Application (The Science):}{8}{section*.5}%

@@ -13,12 +13,18 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.search.infer import MoveSet, infer, score_topology
-from snakes_and_ladders.search.topology import nni_neighbours, random_topology
+from snakes_and_ladders.search import infer as infer_module
+from snakes_and_ladders.search.infer import Model, MoveSet, infer, score_topology
+from snakes_and_ladders.search.topology import (
+    nni_neighbours,
+    random_topology,
+    spr_neighbours,
+)
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
-from tests._fixtures import SMALL_SITES, load_fixture
+from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
 
 _SITES = 2000
 
@@ -68,3 +74,65 @@ def test_hill_climb_benchmark(benchmark: BenchmarkFixture) -> None:
 
     assert result.converged
     assert math.isfinite(result.log_likelihood)
+
+
+# --- what carries between neighbours (issue #289) --------------------------
+
+
+def _eight_taxa() -> tuple[dict[str, np.ndarray], int]:
+    params = load_fixture(EIGHT_TAXA)
+    dataset = simulate_alignment(
+        params.tau,
+        params.k,
+        params.pi,
+        np.random.default_rng(params.seed),
+        n_sites=1000,
+    )
+    return dict(dataset.alignment), params.k
+
+
+@pytest.mark.parametrize("warm", [False, True], ids=["cold", "warm"])
+def test_one_neighbour_fit_benchmark(benchmark: BenchmarkFixture, warm: bool) -> None:
+    """One SPR neighbour fitted cold, and from its parent's lengths."""
+    alignment, k = _eight_taxa()
+    start = random_topology(sorted(alignment), np.random.default_rng(1))
+    parent = infer_module._score(Model.JC, start, k, alignment)
+    neighbour = next(iter(spr_neighbours(start)))
+
+    fitted = benchmark(
+        infer_module._score, Model.JC, neighbour, k, alignment, parent if warm else None
+    )
+
+    benchmark.extra_info["likelihood_evaluations"] = fitted.evaluations
+    assert math.isfinite(fitted.value)
+
+
+@pytest.mark.parametrize(
+    ("warm_start", "lazy_top"),
+    [(False, None), (True, None), (True, 1)],
+    ids=["cold", "warm", "warm-lazy1"],
+)
+def test_nni_hill_climb_eight_taxa_benchmark(
+    benchmark: BenchmarkFixture, warm_start: bool, lazy_top: int | None
+) -> None:
+    """The whole NNI search at eight taxa, in the three ways it can be run.
+
+    Wall-clock beside the counts the search itself reports, so the ratio can
+    be read in either unit -- and the unit that matters is the counts.
+    """
+    alignment, k = _eight_taxa()
+
+    result = benchmark(
+        infer,
+        alignment,
+        k,
+        rng=np.random.default_rng(1),
+        moves=MoveSet.NNI,
+        max_evaluations=300,
+        warm_start=warm_start,
+        lazy_top=lazy_top,
+    )
+
+    benchmark.extra_info["fits"] = result.fits
+    benchmark.extra_info["likelihood_evaluations"] = result.likelihood_evaluations
+    assert result.converged

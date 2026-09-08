@@ -20,6 +20,7 @@ from snakes_and_ladders.search.alpha_expansion import (
     alpha_expansion,
     iterated_conditional_modes,
 )
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
 sys.setrecursionlimit(50_000)
@@ -46,19 +47,22 @@ def test_alpha_expansion_benchmark(
     assert result.cycles >= 1
 
 
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.NUMBA], ids=str)
 @pytest.mark.parametrize("n_states", [3, 5])
 @pytest.mark.parametrize("extent", [8, 16])
 def test_single_site_descent_benchmark(
-    benchmark: BenchmarkFixture, extent: int, n_states: int
+    benchmark: BenchmarkFixture, extent: int, n_states: int, backend: Backend
 ) -> None:
+    # The Python sweep is the oracle and the `numba` kernel the default since
+    # #264; the two return the same labelling bitwise, so this measures cost
+    # alone -- 7x at 32x32 with three labels when it landed.
     graph, field_values = _problem(extent, n_states)
-
     _, energy = benchmark(
         iterated_conditional_modes,
         graph,
         field_values,
         n_states,
-        np.random.default_rng(1),
+        np.random.default_rng(0),
+        backend=backend,
     )
-
     assert np.isfinite(energy)
