@@ -33,12 +33,26 @@
 # under `--wide` MUST state its thread count wherever it is quoted, or it is
 # indistinguishable from a one-thread number and silently wrong.
 #
-# Three validate slots and not four: every job is single-threaded already
-# (OMP_NUM_THREADS=1), the reference host has four cores, and one is left for
-# the orchestrating session. The measured problem this solves: one agent under
-# the old exclusive lock occupied a quarter of the machine while seven waited,
-# and #399B measured 40 minutes of starvation inside a 104-minute run at five
-# agents while load average sat at 0.68 -- serialization, not saturation.
+# Three validate slots, by measurement rather than by arithmetic. Running
+# `pytest -m critical` at 1, 2, 3 and 4 concurrent on the idle 4-core
+# reference host, one BLAS thread each:
+#
+#   concurrent   total     throughput   vs one   per-job latency
+#   1            22.0 s    0.045/s      1.00x    --
+#   2            23.4 s    0.086/s      1.89x    +6%
+#   3            28.7 s    0.104/s      2.30x    +30%
+#   4            39.2 s    0.102/s      2.25x    +78%
+#
+# Three is the peak; four is past the knee and buys nothing for a 78% latency
+# cost. Note the trade the third slot makes: throughput 2.30x, but each
+# individual validation takes 30% longer than it would alone. That is the
+# right trade for correctness runs nobody times, and the wrong one for a
+# measurement, which is why measurements do not share.
+#
+# The problem this solves: one agent under the old exclusive lock occupied a
+# quarter of the machine while seven waited, and #399B measured 40 minutes of
+# starvation inside a 104-minute run at five agents while load average sat at
+# 0.68 -- serialization, not saturation.
 #
 # Usage:
 #   . infra/locks.sh
