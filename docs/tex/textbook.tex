@@ -215,8 +215,17 @@ neighbourhood of any size is admissible. A scorer with a single weight on the
 improvement a move buys is an inverse temperature, and greedy search is its
 zero-temperature limit; what such an agent can learn is exactly how much it
 should accept a worsening move to reach a better optimum, which is the
-credit-assignment question this search makes sharp. It is trained by the
-score-function estimator with a baseline,
+credit-assignment question this search makes sharp. That class cannot rank
+two moves differently from hill climbing, so the tree environment also scores
+a move by what it computes without a fit: the change in parsimony score, the
+fraction of sites compatible with the split the move breaks and with the
+split it makes, and the sizes of the two subtrees it exchanges, each
+standardized within the neighbourhood. A feature constant over a
+neighbourhood is cancelled by the softmax and is excluded rather than
+carried; the Robinson--Foulds distance from the current tree, the same for
+every NNI neighbour, is the standing example. Whether the wider class learns
+more is measured at a matched budget, never inferred from its width. The
+policy is trained by the score-function estimator with a baseline,
 \begin{equation}
   \nabla J = \mathbb{E}\Big[\sum_{t} \nabla \log \pi(a_t \mid s_t)\,
              \big(G_t - b(s_t)\big)\Big],

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.search.infer import MoveSet, infer
 from snakes_and_ladders.search.support import (
     Support,
@@ -20,6 +21,8 @@ from snakes_and_ladders.search.support import (
     enumerated_support,
     internal_splits,
     neighbourhood_support,
+    pattern_support,
+    split_pattern_support,
 )
 from snakes_and_ladders.search.topology import (
     enumerate_topologies,
@@ -177,3 +180,99 @@ def test_a_topology_with_no_competitor_has_all_the_weight() -> None:
     assert support.weight == 1.0
     assert support.n_candidates == 1
     assert support.margin == np.inf
+
+
+# --- pattern support (issue #328) -----------------------------------------
+
+
+@pytest.mark.oracle
+def test_pattern_support_is_the_fraction_of_sites_some_tree_with_the_split_fits_in_the_fewest_changes() -> (
+    None
+):
+    # A site is compatible with a split when a resolved tree carrying that
+    # split explains it in one change per extra state, the fewest any tree
+    # can (Felsenstein, *Inferring Phylogenies*, ch. 8). Enumerated per site
+    # as the minimum Fitch score over every five-taxon topology containing
+    # the split, which shares nothing with the straddling-state count under
+    # test. The split tree with polytomies is not the oracle: it charges a
+    # change for two unresolved leaves that share a state.
+    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    alignment = _alignment(params, 8, 120)
+    taxa = sorted(alignment)
+    n_sites = next(iter(alignment.values())).shape[0]
+    topologies = list(enumerate_topologies(taxa))
+    checked: set[frozenset[str]] = set()
+    for topology in topologies:
+        support = pattern_support(topology, alignment, params.k)
+        assert set(support) == set(internal_splits(topology))
+        for split, value in support.items():
+            if split in checked:
+                continue
+            checked.add(split)
+            containing = [t for t in topologies if split in leaf_bipartitions(t)]
+            assert len(containing) == 3
+            compatible = 0
+            for site in range(n_sites):
+                column = {
+                    name: states[site : site + 1] for name, states in alignment.items()
+                }
+                distinct = len({int(states[0]) for states in column.values()})
+                fewest = min(fitch_score(t, column, params.k) for t in containing)
+                assert fewest >= distinct - 1
+                compatible += fewest == distinct - 1
+            assert value == compatible / n_sites, split
+    # Every 2|3 bipartition of five taxa, C(5, 2) = 10 of them, each met
+    # under one canonical side.
+    assert len(checked) == 10
+
+
+@pytest.mark.oracle
+def test_the_four_taxon_support_is_one_minus_the_frequency_of_the_two_conflicting_patterns() -> (
+    None
+):
+    # Closed form at four taxa: a site conflicts with AB|CD exactly when it
+    # reads xyxy or xyyx, so the support is one minus those two frequencies,
+    # counted here directly on the columns.
+    params = load_simulation_params(fixture_path(FOUR_TAXA))
+    alignment = _alignment(params, 9, 400)
+    a, b, c, d = (alignment[name] for name in ("A", "B", "C", "D"))
+    conflicting = ((a == c) & (b == d) & (a != b)) | ((a == d) & (b == c) & (a != b))
+    expected = 1.0 - float(np.mean(conflicting))
+    assert split_pattern_support(frozenset({"C", "D"}), alignment, params.k) == expected
+    assert split_pattern_support(frozenset({"A", "B"}), alignment, params.k) == expected
+    assert 0.0 < expected < 1.0
+
+
+@pytest.mark.simulated_truth
+def test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_returns_it_always() -> (
+    None
+):
+    # What pattern support says about the bootstrap frequency is a finding:
+    # at 1000 sites on four taxa, the bootstrap returns the generating split
+    # in every replicate, and the pattern support of that split exceeds the
+    # pattern support of both alternatives.
+    params = load_simulation_params(fixture_path(FOUR_TAXA))
+    alignment = _alignment(params, 10, 1000)
+    truth = params.tau
+    (true_split,) = internal_splits(truth)
+    bootstrap = bootstrap_support(
+        truth, alignment, params.k, np.random.default_rng(11), n_replicates=5
+    )
+    assert bootstrap == {true_split: 1.0}
+    alternatives = [frozenset({"B", "C"}), frozenset({"B", "D"})]
+    assert true_split not in alternatives
+    winner = split_pattern_support(true_split, alignment, params.k)
+    for split in alternatives:
+        assert split_pattern_support(split, alignment, params.k) < winner
+
+
+@pytest.mark.edge_case
+def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None:
+    params = load_simulation_params(fixture_path(FOUR_TAXA))
+    alignment = _alignment(params, 12, 20)
+    with pytest.raises(ValueError, match="lacks"):
+        split_pattern_support(frozenset({"A", "Z"}), alignment, params.k)
+    with pytest.raises(ValueError, match="each side"):
+        split_pattern_support(frozenset(alignment), alignment, params.k)
+    # A trivial split cannot be crossed, so every site is compatible.
+    assert split_pattern_support(frozenset({"A"}), alignment, params.k) == 1.0

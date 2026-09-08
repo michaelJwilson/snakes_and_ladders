@@ -91,8 +91,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-- A feature set for the tree environment, with the unidentifiable-constant
-  invariance pinned
+- The surrogate-bound columns of #308 in the tree feature set — the plug-in
+  lower and parsimony upper bounds — measured at the budget of
+  `docs/experiments/004-tree-policy-features.md`
 - PPO and a learned state-value critic
 - Truth as a terminal penalty, never a training signal
 - Train a phylogenetic policy and report its learning curve against the

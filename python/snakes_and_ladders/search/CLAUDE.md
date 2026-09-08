@@ -11,12 +11,11 @@ produces them or in `STATUS.md`, and the module docstrings say which.
 
 ## What lives here
 
-Topology neighbourhoods and the searches that walk them; a two-state ground
-state by minimum cut, extended to any label count by expansion moves; Max-Cut,
-the same model from its NP-hard side, with a relaxation and a certificate;
-Monte Carlo move sets for the Potts lattice, a Gibbs sampler and annealer
-over any factor graph, and the statistics that judge them; the inference loop
-and the coupled model's block ascent; and the `learn` environment instance.
+Topology neighbourhoods and the searches that walk them; ground states by
+minimum cut and by expansion moves; Max-Cut with a relaxation and a
+certificate; Monte Carlo move sets, a Gibbs sampler and annealer over any
+factor graph, and the statistics that judge them; the inference loop and the
+coupled model's block ascent; and the `learn` environment instance.
 
 Two seams run through it and neither may be reversed. A discrete move changes
 the structure being fitted, so the loop builds a new objective rather than
@@ -57,6 +56,10 @@ no application module.
 - **Truth is a terminal penalty, never a training signal.** An agent that can
   see the answer during training learns to look it up.
 
+- **A move's features are what it already computes without a fit, and none
+  may be constant across the neighbourhood.** The softmax cancels a constant
+  (`learn/CLAUDE.md`), so a distance from the state under NNI is excluded.
+
 - **A cheap objective is a different surface, not a noisy estimate of the
   expensive one.** Substituting one for the other is licensed by *measuring*
   that they agree where it matters — the argmax — not by a high correlation,
@@ -84,30 +87,26 @@ no application module.
   measured beside it and is not quoted as if it were the guarantee.
 
 - **A certificate states what it actually certifies.** Where a guarantee
-  assumes a sub-problem is solved to optimality and this repository solves it
+  assumes a sub-problem solved to optimality and this repository solves it
   approximately, the certificate is optimistic and the symptom is asserted
-  rather than glossed — a case where an exact solve could not produce the
-  value that comes back. Where an exact oracle reaches, the realized ratio is
+  rather than glossed. Where an exact oracle reaches, the realized ratio is
   measured against the true optimum instead, and that is the number to trust.
 
 - **A construction error in a reduction does not break loudly.** A mis-costed
-  cut yields a labelling that is merely *worse*, which is indistinguishable
-  from a hard instance. Enumeration alone does not catch it: what does is a
-  **reduction** — a regime where the general construction must reproduce a
-  simpler one already validated, exactly. Any new reduction needs one.
+  cut yields a labelling that is merely *worse*, indistinguishable from a hard
+  instance. What catches it is a **reduction** — a regime where the general
+  construction must reproduce a simpler one already validated, exactly.
 
 - **A sampler is validated by the distribution it converges to, never by
   inspection.** At an enumerable size the exact distribution is available, so
   a move set is tested by goodness-of-fit against it at a declared
-  significance and chain length. A chain that visibly moves is what a broken
-  accept step also does; a tempered chain is held to `exp(-E / T)` enumerated
-  from the *unscaled* model, which shares nothing with the scaling under test.
+  significance and chain length; a tempered chain is held to `exp(-E / T)`
+  enumerated from the *unscaled* model, which shares nothing with the scaling.
 
 - **A goodness-of-fit test must be thinned, and the thinning is part of the
   test.** Successive sweeps are not independent draws, so run on every sweep
-  the test rejects a *correct* sampler. Move sets doing different amounts of
-  work per sweep need different thinning, or the comparison rejects whichever
-  was thinned less.
+  the test rejects a *correct* sampler; move sets doing different work per
+  sweep need different thinning, or the comparison rejects one for it.
 
 - **A sweep must not stop on a state-dependent condition.** Each step
   preserves the target distribution; composing a *number* of them chosen from
