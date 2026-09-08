@@ -60,3 +60,6 @@ that needs one skips without it, so the core install carries none of them.
   to find out later whether the work was right.
 - **A plan is subject to the Writing Style**, like everything else written
   here. Referenced, not restated: root `CLAUDE.md` holds it.
+- **One implementation agent per four cores**, the document build counted as
+  a process, and an agent waits for its own long job in the foreground: a job
+  it detaches ends its turn and nothing resumes it (issue #369).
