@@ -1166,6 +1166,20 @@ branch distinguishing them fits to zero and the tree collapses to the same
 polytomy — so a rank correlation moves by up to 0.04 under a perturbation of
 one part in 1e9 and is not a measurement.
 
+**The tree policy has now been trained, and the result is negative.** On the
+7-taxon fixture where NNI hill climbing reaches the enumerated maximum from
+only 24 of 50 starts, a trained policy reaches it on 0.485 of episodes against
+greedy's 0.480 at a matched per-episode budget — +0.005, standard deviation
+0.014 over 16 training seeds, 8 ahead, sign test p = 1.0. Two properties of
+the environment bound it, and both are measured rather than argued. An episode
+terminates when no move improves, and all 945 topologies contain 10 such
+states, so every run — 50 of 50 greedy, 800 of 800 learned — ends at one: the
+agent selects which local optimum to enter, and cannot leave one. And the
+policy ranks moves by a single feature, the improvement a move buys, which
+places hill climbing inside the policy class as a temperature. What would
+change the answer is named rather than hoped for: a richer feature set
+(`TICKETS.md` §2.1) and accepted-worsening steps (Stage 3, stochastic escape).
+
 **All three problem classes are now MDPs.** `snakes_and_ladders.learn.Environment` had
 one instance, a 1-D Potts chain, which is the same position `snakes_and_ladders.opt` was in
 before four instances made its model-agnosticism a measurement rather than an
@@ -1276,14 +1290,14 @@ is 21 pages; `texlive-pictures` joins the CI TeX install for the figure.
 
 ## What Is Not Claimed
 
-- That a learned policy beats hill climbing on trees. A fixture that could
-  settle it now exists — 7 taxa, internal branches an order of magnitude
-  shorter than the pendant ones, where NNI hill climbing reaches the
-  enumerated maximum from 24 of 50 seeded starts and stops at a genuine local
-  optimum on the other 26 — but no policy has been trained on it and no
-  budget-matched comparison has been run (issue #178). The 6-taxon fixture
-  cannot support the claim in either direction, because greedy reaches the
-  enumerated optimum from every start there.
+- That a learned policy beats hill climbing on trees. It has now been
+  measured on a fixture where hill climbing demonstrably fails, and it does
+  not: 0.485 of episodes reach the enumerated maximum against greedy's 0.480,
+  a difference of +0.005 with a standard deviation of 0.014 over 16 training
+  seeds, 8 of them ahead, at an exact two-sided sign test of p = 1.0. The
+  policy does train — an untrained one reaches the maximum on 0.018 — so this
+  is a tie rather than a failure to learn. The environment is what bounds it,
+  in two ways stated in §2.1 below.
 - Any comparison against established software. IQ-TREE 2 and RAxML-NG are not
   installed, and no statement anywhere in the repository compares against them.
 - Runtime scaling. Benchmarks are not ranked on CI hardware, so timings live in
