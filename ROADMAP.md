@@ -80,7 +80,12 @@ authoritative — where it and any other document disagree, it wins.
   Correctness comes from an independent source rather than from a second
   backend, and agreement across devices and precisions is a declared relative
   tolerance keyed on the lowest precision in the comparison, never bitwise
-  equality.
+  equality. The standard is two-way: where an oracle is affordable at a size
+  the claim is pinned to it, and where none is, recovering the simulated
+  truth — the generating parameters or structure of a seeded fixture, to a
+  stated tolerance or coverage — is sufficient, with the oracle still
+  desired and ticketed; the textbook's applicability tables mark which
+  referee each method has at each size tier.
 
 ### 0.5 The Record
 
@@ -108,10 +113,11 @@ Develop and deploy modern solvers for mixed discrete-continuous optimization
 across four primary classes of graphical models: phylogenetic trees (the large
 parsimony problem), N-dimensional Potts models in an external field, hidden
 Markov models (HMMs), and low-density parity-check codes decoded on their
-Tanner graphs (#340) — and the coupled spatio-sequential model that joins the
-Potts and hidden Markov classes, a Potts prior over class labels gating one
-hidden chain per class (#290), which every Stage 1 deliverable takes as a
-further instance. The framework integrates automatic differentiation for
+Tanner graphs (#340). Two derived instances sit between them and every
+Stage 1 deliverable takes them too: the coupled spatio-sequential model that
+joins the Potts and hidden Markov classes, a Potts prior over class labels
+gating one hidden chain per class (#290), and the Gaussian mixture, an HMM
+with the chain removed (#262). The framework integrates automatic differentiation for
 continuous parameters with reinforcement learning (RL) to learn proposal
 policies that score discrete structural candidates using exact, approximate, or
 bounded likelihoods/energies.
@@ -125,6 +131,9 @@ bounded likelihoods/energies.
     confidence intervals; precise state-sequence decoding.
   - *Coupled model:* recovery of planted class labels up to permutation, and
     of the emission parameters, on instances past enumeration.
+  - *Codes:* agreement with exhaustive maximum-likelihood decoding on codes
+    short enough to enumerate, and the block error rate reported against the
+    channel where they are not (#340).
   - *Performance parity:* convergence metrics (ΔlnL or ΔE) must match or exceed
     exact oracles on small `n`, and state-of-the-art classical frameworks
     (e.g. IQ-TREE 2 for trees) on large `n` under an **equal budget of
@@ -151,7 +160,10 @@ mathematical record of the project. The application logic is strictly bound to
 this LaTeX documentation. It must contain:
 
 - Complete mathematical formulations of all substitution models, energy
-  landscapes, and transition probabilities across the four problem classes.
+  landscapes, transition probabilities and parity constraints across the four
+  problem classes and the instances derived from them, with a problem
+  statement per row of `PROBLEMS.md` and generated tables of which algorithm
+  and which referee applies to each.
 - Rigorous derivations of the exact inference algorithms (Felsenstein's
   pruning, belief propagation, forward-backward; Appendix A of the textbook,
   #326).

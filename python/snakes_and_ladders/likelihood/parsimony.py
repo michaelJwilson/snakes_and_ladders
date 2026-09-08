@@ -16,9 +16,9 @@ the pair together is what makes the first interpretable: an implementation
 that is merely broken fails both.
 
 **Small parsimony only.** This scores a *given* topology. Searching for the
-most parsimonious tree is large parsimony and belongs to the search machinery
-(:func:`snakes_and_ladders.search.infer.parsimony_search`), which consumes
-either score exactly as it consumes a likelihood.
+most parsimonious tree is large parsimony (``sec:parsimony``) and belongs to
+the search machinery (:func:`snakes_and_ladders.search.infer.parsimony_search`),
+which consumes either score exactly as it consumes a likelihood.
 
 Two scores over the same post-order pass. :func:`fitch_score` is Fitch's
 algorithm for unordered characters (``eq:fitch``): every change costs 1 and

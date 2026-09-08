@@ -1,7 +1,8 @@
 """A Gaussian mixture: the reference instance whose start reads the data.
 
 The third instance of ``Objective`` beside the Potts chain and the HMM, and
-the one that exists to test two abstractions at once (issue #262).
+the one that exists to test two abstractions at once (issue #262); the
+problem is stated in ``sec:mixture``.
 
 **It is the emission seam without the Markov chain.** Its M step for the
 components *is*
@@ -240,7 +241,7 @@ def mixture_log_likelihood(
     log_weight: torch.Tensor,
     components: GaussianEmission,
 ) -> torch.Tensor:
-    """``sum_i log sum_k w_k N(y_i; mu_k, s_k)``, in log space throughout.
+    """``sum_i log sum_k w_k N(y_i; mu_k, s_k)``, in log space throughout (``eq:mixture``).
 
     Parameters
     ----------
@@ -267,7 +268,7 @@ def responsibilities(
     log_weight: torch.Tensor,
     components: GaussianEmission,
 ) -> torch.Tensor:
-    """``P(component | observation)``, shape ``(n_samples, n_components)``.
+    """``P(component | observation)``, shape ``(n_samples, n_components)`` (``eq:responsibilities``).
 
     The E step. An HMM's is a forward-backward recursion; a mixture's is one
     normalization, because independent observations carry no message between
@@ -439,7 +440,7 @@ def optimal_clustering_cost(observations: np.ndarray, n_centres: int) -> float:
 def kmeans_plus_plus(
     observations: np.ndarray, n_centres: int, rng: np.random.Generator
 ) -> np.ndarray:
-    """Seed ``n_centres`` centres by D-squared sampling (Arthur & Vassilvitskii, 2007).
+    """Seed ``n_centres`` centres by D-squared sampling (Arthur & Vassilvitskii, 2007; ``eq:kmeanspp``).
 
     The first centre is drawn uniformly from the observations; each subsequent
     one is drawn with probability proportional to its squared distance from
@@ -520,7 +521,7 @@ def uniform_seeds(
 #: 2007, theorem 1.1). An expectation, so a test checks a mean over replicates
 #: rather than a single draw.
 def seeding_guarantee(n_centres: int) -> float:
-    """``8 (ln k + 2)``, the factor of optimal k-means++ is expected within.
+    """``8 (ln k + 2)``, the factor of optimal k-means++ is expected within (``eq:kmeanspp-bound``).
 
     Parameters
     ----------

@@ -522,7 +522,7 @@ def parsimony_search(
     max_evaluations: int = 200,
     rng: np.random.Generator | None = None,
 ) -> ParsimonyInference:
-    """Hill-climb over topologies on the parsimony score: large parsimony.
+    """Hill-climb over topologies on the parsimony score: large parsimony (``eq:large-parsimony``).
 
     The loop of :func:`infer` with the fit replaced by one parsimony pass, and
     the same accounting: a budget in candidates scored, each topology scored
