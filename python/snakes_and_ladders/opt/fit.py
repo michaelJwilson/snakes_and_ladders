@@ -24,6 +24,7 @@ import torch
 
 from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.parallel import Backend, map_tasks
 
 _log = logging.getLogger(__name__)
 
@@ -37,6 +38,16 @@ _INNER_ITERATIONS = 20
 
 # Conditioning floor for the observed information; see parameter_covariance.
 _RCOND = 1e-6
+
+# How the starts of a multi-start fit run beside each other. Processes, not
+# threads: a fit is L-BFGS in Python that holds the GIL. The intra-op thread
+# count is left at the process default in workers and serial alike, so the two
+# runs reduce in the same order on one machine: pinning one thread per fit
+# slowed the serial fit 2.9x, because torch's intra-op parallelism over the
+# sites is the parallelism that pays here, and no pool reached 2x at 4
+# workers. STATUS.md carries the measurement (issue #344).
+_MULTI_START_BACKEND: Backend = "processes"
+_MULTI_START_INTRA_OP_THREADS: int | None = None
 
 
 @dataclass(frozen=True)
@@ -404,12 +415,19 @@ class MultiStartResult:
     spread: float
 
 
+def _fit_start(task: tuple[Objective, torch.Tensor, int, float]) -> FitResult:
+    """One start of a multi-start fit, importable so a process pool can run it."""
+    objective, theta0, max_iterations, gradient_tolerance = task
+    return fit(objective, theta0, max_iterations, gradient_tolerance)
+
+
 def fit_from(
     objective: Objective,
     initializer: Initializer,
     max_iterations: int = 500,
     gradient_tolerance: float = 1e-8,
     *,
+    workers: int,
     include_intervals: bool = False,
 ) -> MultiStartResult:
     """Fit from every start an initializer offers, and report all of them.
@@ -428,6 +446,14 @@ def fit_from(
         Passed to each fit.
     gradient_tolerance : float
         Passed to each fit.
+    workers : int
+        Starts fitted at once, through :func:`snakes_and_ladders.parallel.map_tasks`
+        on a process pool; ``1`` is the serial loop. Explicit rather than
+        defaulted, so a run does not change with the machine, and bitwise
+        equal at every count because a start draws nothing and the workers
+        run at the intra-op thread count the serial run does. Measured under
+        2x at 4 workers at the mid-size tier (``STATUS.md`` §0), so callers
+        pass ``1`` until a measurement on their hardware says otherwise.
     include_intervals : bool
         Attach standard errors to ``best`` only --- one Hessian rather than
         one per start, and the only fit whose interval a caller reads. The
@@ -442,17 +468,22 @@ def fit_from(
     Raises
     ------
     ValueError
-        If the initializer offers no starts. A caller asking for zero fits has
-        made a mistake that would otherwise surface as an empty ``min``.
+        If the initializer offers no starts, or ``workers`` is below one. A
+        caller asking for zero fits has made a mistake that would otherwise
+        surface as an empty ``min``.
     """
     starts = initializer.starts(objective)
     if not starts:
         msg = f"{type(initializer).__name__} offered no starting points"
         raise ValueError(msg)
 
-    results = [
-        fit(objective, theta0, max_iterations, gradient_tolerance) for theta0 in starts
-    ]
+    results = map_tasks(
+        _fit_start,
+        [(objective, theta0, max_iterations, gradient_tolerance) for theta0 in starts],
+        workers=workers,
+        backend=_MULTI_START_BACKEND,
+        intra_op_threads=_MULTI_START_INTRA_OP_THREADS,
+    )
     ordered = tuple(sorted(results, key=lambda result: result.value))
     spread = float(ordered[-1].value - ordered[0].value)
     best = _with_intervals(objective, ordered[0]) if include_intervals else ordered[0]

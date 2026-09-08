@@ -80,6 +80,15 @@ class LinearPolicy:
         """Width of the feature vector this policy consumes."""
         return int(self._weights.shape[0])
 
+    @property
+    def dtype(self) -> torch.dtype:
+        """Working precision."""
+        return self._dtype
+
+    def parameters(self) -> list[torch.Tensor]:
+        """The tensors an optimizer updates: the one weight vector."""
+        return [self._weights]
+
     def set_weights(self, values: torch.Tensor) -> None:
         """Replace the weights in place, keeping the same leaf tensor.
 
@@ -144,6 +153,101 @@ class LinearPolicy:
             return int(torch.argmax(self.log_probabilities(features)))
 
 
+class TrainablePolicy(Protocol):
+    """What the actor-critic and PPO trainers need: differentiable log-probabilities and the tensors behind them."""
+
+    @property
+    def dtype(self) -> torch.dtype: ...
+
+    def parameters(self) -> list[torch.Tensor]: ...
+
+    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor: ...
+
+    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int: ...
+
+    def greedy(self, features: torch.Tensor) -> int: ...
+
+
+class MLPPolicy:
+    """Scores each action by a small multilayer perceptron on its features, then softmaxes (issue #313).
+
+    A drop-in for :class:`LinearPolicy` where the reward is not linear in
+    the features. The linear scorer stays the reference every claim is
+    stated against first, because its weights are interpretable; this one
+    is measured against it, not assumed better.
+
+    Parameters
+    ----------
+    n_features : int
+        Width of the feature vector the environment emits.
+    hidden : int
+        Width of the two hidden layers.
+    generator : torch.Generator
+        Source of the initial weights, so a run is reproducible from the
+        seeds its caller declared.
+    dtype : torch.dtype
+        Working precision, ``float64`` by default for the same reason as
+        :class:`LinearPolicy`.
+    """
+
+    def __init__(
+        self,
+        n_features: int,
+        *,
+        hidden: int,
+        generator: torch.Generator,
+        dtype: torch.dtype = torch.float64,
+    ) -> None:
+        if n_features < 1 or hidden < 1:
+            msg = f"n_features and hidden must be >= 1, got {n_features}, {hidden}"
+            raise ValueError(msg)
+        self._dtype = dtype
+        self._n_features = n_features
+        self._net = torch.nn.Sequential(
+            torch.nn.Linear(n_features, hidden),
+            torch.nn.Tanh(),
+            torch.nn.Linear(hidden, hidden),
+            torch.nn.Tanh(),
+            torch.nn.Linear(hidden, 1, bias=False),
+        ).to(dtype)
+        for parameter in self._net.parameters():
+            if parameter.dim() > 1:
+                torch.nn.init.xavier_uniform_(parameter, generator=generator)
+            else:
+                torch.nn.init.zeros_(parameter)
+
+    @property
+    def dtype(self) -> torch.dtype:
+        return self._dtype
+
+    @property
+    def n_features(self) -> int:
+        return self._n_features
+
+    def parameters(self) -> list[torch.Tensor]:
+        return list(self._net.parameters())
+
+    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor:
+        """Log ``pi(a | s)`` over the actions ``features`` describes, as :meth:`LinearPolicy.log_probabilities`."""
+        if features.ndim != 2 or features.shape[1] != self._n_features:
+            msg = (
+                f"expected features of shape (n_actions, {self._n_features}), "
+                f"got {tuple(features.shape)}"
+            )
+            raise ValueError(msg)
+        scores: torch.Tensor = self._net(features.to(self._dtype))[:, 0]
+        return torch.log_softmax(scores, dim=0)
+
+    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
+        with torch.no_grad():
+            probabilities = torch.exp(self.log_probabilities(features))
+        return int(rng.choice(probabilities.shape[0], p=probabilities.numpy()))
+
+    def greedy(self, features: torch.Tensor) -> int:
+        with torch.no_grad():
+            return int(torch.argmax(self.log_probabilities(features)))
+
+
 class EpsilonGreedyPolicy:
     """Takes the wrapped policy's best action, except a fraction of the time.
 
@@ -188,7 +292,7 @@ class EpsilonGreedyPolicy:
         If ``epsilon`` is outside ``[0, 1]``.
     """
 
-    def __init__(self, policy: LinearPolicy, epsilon: float) -> None:
+    def __init__(self, policy: TrainablePolicy, epsilon: float) -> None:
         if not 0.0 <= epsilon <= 1.0:
             msg = f"epsilon must lie in [0, 1], got {epsilon}"
             raise ValueError(msg)
@@ -199,6 +303,29 @@ class EpsilonGreedyPolicy:
     def epsilon(self) -> float:
         """The exploration probability this policy was built with."""
         return self._epsilon
+
+    @epsilon.setter
+    def epsilon(self, value: float) -> None:
+        if not 0.0 <= value <= 1.0:
+            msg = f"epsilon must lie in [0, 1], got {value}"
+            raise ValueError(msg)
+        self._epsilon = value
+
+    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor:
+        """Log of the mixture this policy samples from: ``(1 - eps)`` on the greedy action plus ``eps / n`` everywhere.
+
+        What an off-policy learner divides by when the episodes were
+        collected under this policy (issue #313): the ratio
+        ``pi(a | s) / beta(a | s)`` needs ``beta`` as a distribution, not
+        only as a sampler. Detached, since nothing here is trained.
+        """
+        n_actions = int(features.shape[0])
+        with torch.no_grad():
+            probabilities = torch.full(
+                (n_actions,), self._epsilon / n_actions, dtype=torch.float64
+            )
+            probabilities[self._policy.greedy(features)] += 1.0 - self._epsilon
+        return torch.log(probabilities)
 
     def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
         """Choose an action index: uniform with probability ``epsilon``.

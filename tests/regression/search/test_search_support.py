@@ -96,10 +96,20 @@ def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_
     topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
 
     support = bootstrap_support(
-        topology, alignment, params.k, np.random.default_rng(4), n_replicates=8
+        topology,
+        alignment,
+        params.k,
+        np.random.default_rng(4),
+        n_replicates=8,
+        workers=1,
     )
     again = bootstrap_support(
-        topology, alignment, params.k, np.random.default_rng(4), n_replicates=8
+        topology,
+        alignment,
+        params.k,
+        np.random.default_rng(4),
+        n_replicates=8,
+        workers=1,
     )
 
     assert set(support) == set(internal_splits(topology))
@@ -116,7 +126,12 @@ def test_the_generating_splits_have_full_bootstrap_support_at_many_sites() -> No
     truth = params.tau
 
     support = bootstrap_support(
-        truth, alignment, params.k, np.random.default_rng(6), n_replicates=10
+        truth,
+        alignment,
+        params.k,
+        np.random.default_rng(6),
+        n_replicates=10,
+        workers=1,
     )
 
     assert set(support) == set(internal_splits(truth))
@@ -160,7 +175,9 @@ def test_an_enumeration_past_the_limit_and_an_empty_bootstrap_are_refused() -> N
     with pytest.raises(ValueError, match="topologies on 4 taxa"):
         enumerated_support(topology, alignment, params.k, max_topologies=2)
     with pytest.raises(ValueError, match="at least one replicate"):
-        bootstrap_support(topology, alignment, params.k, np.random.default_rng(0), 0)
+        bootstrap_support(
+            topology, alignment, params.k, np.random.default_rng(0), 0, workers=1
+        )
 
 
 @pytest.mark.edge_case
@@ -177,3 +194,56 @@ def test_a_topology_with_no_competitor_has_all_the_weight() -> None:
     assert support.weight == 1.0
     assert support.n_candidates == 1
     assert support.margin == np.inf
+
+
+@pytest.mark.structural
+def test_four_workers_report_the_bootstrap_one_worker_reports() -> None:
+    """Replicate ``i`` draws the stream spawned for it, whichever worker runs it (issue #344).
+
+    The frequencies are equal exactly, not within a Monte Carlo tolerance,
+    because the resample and the search of each replicate come from the
+    generator spawned for that replicate and from nothing scheduled.
+    """
+    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    alignment = _alignment(params, 3, 300)
+    topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
+
+    serial = bootstrap_support(
+        topology, alignment, params.k, np.random.default_rng(4), 8, workers=1
+    )
+    pooled = bootstrap_support(
+        topology, alignment, params.k, np.random.default_rng(4), 8, workers=4
+    )
+
+    assert pooled == serial
+
+
+@pytest.mark.structural
+def test_a_replicate_is_the_search_of_the_resample_its_spawned_generator_draws() -> (
+    None
+):
+    """The stream a replicate sees is stated, so a reader can reproduce one by hand.
+
+    Replicate ``i`` gets ``rng.spawn(n_replicates)[i]``, draws its columns
+    from it, then searches with the same generator. Pinned against that
+    construction rather than against a recorded frequency, because the
+    frequency would also hold under a stream nobody could name.
+    """
+    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    alignment = _alignment(params, 3, 300)
+    topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
+    n_sites = 300
+
+    support = bootstrap_support(
+        topology, alignment, params.k, np.random.default_rng(9), 2, workers=1
+    )
+
+    counts = dict.fromkeys(internal_splits(topology), 0)
+    for child in np.random.default_rng(9).spawn(2):
+        columns = child.integers(0, n_sites, size=n_sites)
+        resampled = {name: states[columns] for name, states in alignment.items()}
+        found = infer(resampled, params.k, rng=child).topology
+        for split in internal_splits(found):
+            if split in counts:
+                counts[split] += 1
+    assert support == {split: count / 2 for split, count in counts.items()}

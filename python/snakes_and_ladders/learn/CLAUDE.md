@@ -98,6 +98,14 @@ demonstrated rather than asserted.
   no epsilon measured does (issue #194; `STATUS.md` has the numbers). A
   result stated against single-run greedy alone overstates itself.
 
+- **A critic is pinned to enumeration, never to its loss.** Where the return
+  is exact so is the state value, and a critic's number is its fit to that;
+  a baseline may read the state and never the action sampled at that step.
+
+- **A planner is counted in evaluations, and its answer is compared with
+  greedy's at the same count.** A search that reaches the optimum by
+  evaluating more successors than hill climbing has not won.
+
 ## Framework
 
 **PyTorch**, per root `CLAUDE.md`, and `float64` throughout: the exact
