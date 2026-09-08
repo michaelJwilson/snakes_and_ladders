@@ -887,6 +887,23 @@ exchange carries what they find down the ladder. Each replica draws from its
 own generator, spawned from one parent that then draws only the exchange
 uniforms, so no two replicas share a stream and one seed reproduces the run.
 
+The replica at $T_1 = 1$ targets the unscaled model, so the fraction of its
+$N$ recorded sweeps spent at a structure $x$ estimates that structure's
+weight over the whole space,
+\begin{equation}
+  \hat{w}(x) = \frac{1}{N} \sum_{n=1}^{N} \big[\sigma_1^{(n)} = x\big]
+  \;\to\; \frac{\exp(-\energy(x))}{Z},
+  \label{eq:tempered-weight}
+\end{equation}
+where a weight over a neighbourhood is conditional on that neighbourhood and
+enumeration is refused past its cap. The structure may be a labelling, a
+hidden path, or a topology with $\energy$ the negative fitted log-likelihood,
+in which case the limit is the flat-prior weight over maximized likelihoods
+and not a marginal over branch lengths. It is a Monte Carlo estimate, and is
+named a posterior weight only beside the exchange acceptance of every
+adjacent pair and the autocorrelation time of the indicator, which say
+whether the ensemble mixed.
+
 \paragraph{What pins it.}
 Every replica's marginal must still be $\exp(-\energy/T_r)$, enumerated from
 the \emph{unscaled} model, with exchanges on: a wrong exchange ratio
