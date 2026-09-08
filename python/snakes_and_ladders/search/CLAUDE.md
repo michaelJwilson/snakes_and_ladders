@@ -41,7 +41,7 @@ no application module.
   sound bound gives the second.
 
 - **Every move set states whether it is complete**, in which sense, and what
-  it costs per step.
+  it costs per step. A surrogate decides what is fitted, never what is reported.
 
 - **A budget is counted in evaluations, never in seconds.** `DEV.md` forbids
   ranking performance on CI hardware, and a wall-clock budget makes a result

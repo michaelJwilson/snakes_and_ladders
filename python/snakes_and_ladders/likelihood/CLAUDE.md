@@ -109,3 +109,9 @@ application to infrastructure, never back.
   lengths reach the autodiff backend as a tensor, never read back off the
   topology object, so gradients flow through the tensor and never through
   Python floats baked into a structure.
+
+- **A surrogate carries its claim, and the claim is checked.** A bound is
+  proved in the textbook and certified against the exact value on every
+  structure an oracle scores, with no violation allowed; a learned predictor
+  claims a coverage and is certified to it. A cheap value that claims nothing
+  ranks, and is never reported as the evaluation it stands in for.

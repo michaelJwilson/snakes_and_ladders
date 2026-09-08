@@ -230,3 +230,23 @@ def test_features_have_one_row_per_action() -> None:
     features = landscape.features(state, actions)
     assert features.shape == (len(actions), landscape.n_features())
     assert features.dtype == torch.float64
+
+
+@pytest.mark.oracle
+def test_the_vectorized_features_are_the_scalar_deltas_exactly() -> None:
+    # `features` computes every action's (agreement, field) change in one
+    # NumPy pass since #264; `_deltas` is the scalar statement it replaces
+    # and stays as the oracle. Exact, because both are integer counts and one
+    # subtraction of the same two floats -- realized deviation 0.0 over 200
+    # random states.
+    landscape = PottsLandscape(0.75, np.array([0.4, -0.1, -0.3]), chain_length=5)
+    rng = np.random.default_rng(0)
+
+    for _ in range(50):
+        state = landscape.reset(rng)
+        actions = landscape.actions(state)
+        fast = landscape.features(state, actions).numpy()
+        slow = np.array([landscape._deltas(state, action) for action in actions])
+
+        assert fast.shape == (len(actions), 2)
+        assert np.array_equal(fast, slow)

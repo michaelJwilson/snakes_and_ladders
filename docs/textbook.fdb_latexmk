@@ -1,18 +1,18 @@
 # Fdb version 4
-["bibtex /home/user/wt-repoint2/docs/textbook"] 1788822331.16497 "/home/user/wt-repoint2/docs/textbook.aux" "/home/user/wt-repoint2/docs/textbook.bbl" "/home/user/wt-repoint2/docs/textbook" 1788822332.82297 0
-  "./references.bib" 1788822264.23028 9464 f1b2142ab1582919e0b63e6ba5b62174 ""
-  "/home/user/wt-repoint2/docs/textbook.aux" 1788822332.71029 20809 e70627ee798112e82589f5bb7b412935 "pdflatex"
+["bibtex /home/user/wt-repoint2/docs/textbook"] 1788826621.61038 "/home/user/wt-repoint2/docs/textbook.aux" "/home/user/wt-repoint2/docs/textbook.bbl" "/home/user/wt-repoint2/docs/textbook" 1788826623.21534 0
+  "./references.bib" 1788826220.34529 9780 40ab9e1db28fa3cd329b023ddb0c0773 ""
+  "/home/user/wt-repoint2/docs/textbook.aux" 1788826623.09454 22501 43a04107dae3a5c8c46e04cb50f996b4 "pdflatex"
   "/usr/share/texlive/texmf-dist/bibtex/bst/natbib/plainnat.bst" 1233624470 26816 ffe5423d2019860bad9f54bc402fac15 ""
   (generated)
   "/home/user/wt-repoint2/docs/textbook.bbl"
   "/home/user/wt-repoint2/docs/textbook.blg"
   (rewritten before read)
-["pdflatex"] 1788822331.18412 "textbook.tex" "/home/user/wt-repoint2/docs/textbook.pdf" "textbook" 1788822332.82322 0
+["pdflatex"] 1788826621.62965 "textbook.tex" "/home/user/wt-repoint2/docs/textbook.pdf" "textbook" 1788826623.21557 0
   "/etc/texmf/web2c/texmf.cnf" 1788609781.05059 475 c0e671620eb5563b2130f56340a5fde8 ""
-  "/home/user/wt-repoint2/docs/textbook.aux" 1788822332.71029 20809 e70627ee798112e82589f5bb7b412935 "pdflatex"
-  "/home/user/wt-repoint2/docs/textbook.bbl" 1788822331.17429 8872 744bf76ce247666d78ed1d9b0d2ab16b "bibtex /home/user/wt-repoint2/docs/textbook"
-  "/home/user/wt-repoint2/docs/textbook.out" 1788822332.71029 10404 ccd82c7c651a13feb9796cb180fddc97 "pdflatex"
-  "/home/user/wt-repoint2/docs/textbook.toc" 1788822332.71429 6169 05b4ba8adfd9e97ff822476b2af76008 "pdflatex"
+  "/home/user/wt-repoint2/docs/textbook.aux" 1788826623.09454 22501 43a04107dae3a5c8c46e04cb50f996b4 "pdflatex"
+  "/home/user/wt-repoint2/docs/textbook.bbl" 1788826621.62322 9193 e6153cda947c5cbb68027eb3bc9b5f54 "bibtex /home/user/wt-repoint2/docs/textbook"
+  "/home/user/wt-repoint2/docs/textbook.out" 1788826623.09454 10752 37a26a009935a550eba3fe39da66c183 "pdflatex"
+  "/home/user/wt-repoint2/docs/textbook.toc" 1788826623.09454 6834 91d49160a7c42614162adf64b3724e1a "pdflatex"
   "/root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk" 1788609820.38806 12644 36adb9dd3a291b652a55c18998eb6c39 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/tcrm1095.tfm" 1136768653 1536 02c06700a42be0f5a28664c7273f82e7 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmbsy6.tfm" 1246382020 1124 14ccf5552bc7f77ca02a8a402bea8bfb ""
@@ -209,13 +209,13 @@
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1788747054.56313 73770 cdb81e6988263283715a8870444b650f ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1788609798 6831072 97066924acff677d086b8d138968f8e6 ""
   "coupled_figure.tex" 1788822264.23028 5287 2aa09afe07dc7abc4186fd4deb164a99 ""
-  "figures/jc_transition.pdf" 1788822270.57028 17386 c5f64524b217ea1f65f339bb1b076d7e ""
-  "figures/jc_transition_caption.txt" 1788822270.5753 411 182e3ee0afeee472c2fd7a9537a52226 ""
-  "figures/sim_tree.pdf" 1788822266.02228 14489 d4d6e83614e757066cc6a6cb5fb6e552 ""
-  "figures/sim_tree_caption.txt" 1788822266.02573 304 06dfcd207eecdd4400721d2361b01138 ""
+  "figures/jc_transition.pdf" 1788826253.70252 17386 c5f64524b217ea1f65f339bb1b076d7e ""
+  "figures/jc_transition_caption.txt" 1788826253.70684 411 182e3ee0afeee472c2fd7a9537a52226 ""
+  "figures/sim_tree.pdf" 1788826249.40252 14489 d4d6e83614e757066cc6a6cb5fb6e552 ""
+  "figures/sim_tree_caption.txt" 1788826249.40678 304 06dfcd207eecdd4400721d2361b01138 ""
   "notation.tex" 1788820260.42267 2156 f3199689e9bd3028c12b69edfe081251 ""
   "preamble.tex" 1788822264.23028 452 fcc0778bd9c7b88bf90d77c67c30ad46 ""
-  "textbook.tex" 1788822264.23028 59867 d762104059afe9841d60e02f777b47a1 ""
+  "textbook.tex" 1788826220.31264 67415 0196321157f224ef4508ff712e84e420 ""
   (generated)
   "/home/user/wt-repoint2/docs/textbook.aux"
   "/home/user/wt-repoint2/docs/textbook.log"

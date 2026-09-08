@@ -218,8 +218,32 @@ class PottsLandscape:
         general, so neither is the unidentifiable direction the softmax would
         swallow; there is deliberately no third, constant feature.
         """
-        rows = [self._deltas(state, action) for action in actions]
-        return torch.tensor(rows, dtype=torch.float64).reshape(len(actions), 2)
+        # One NumPy pass over every action rather than a Python-level
+        # `_deltas` per action: the REINFORCE profile behind #264 charged
+        # 126,000 `_deltas` calls to 50 gradient updates, a fifth of the run.
+        # `_deltas` stays as the scalar oracle a test pins this against.
+        if not actions:
+            return torch.empty((0, 2), dtype=torch.float64)
+        sites = np.fromiter(
+            (site for site, _ in actions), dtype=np.int64, count=len(actions)
+        )
+        values = np.fromiter(
+            (value for _, value in actions), dtype=np.int64, count=len(actions)
+        )
+        current = np.asarray(state, dtype=np.int64)
+        agreement = np.zeros(len(actions))
+        for site, row in enumerate(self._neighbours):
+            if not row:
+                continue
+            picks = sites == site
+            if not picks.any():
+                continue
+            neighbour_states = current[list(row)]
+            agreement[picks] = (values[picks, None] == neighbour_states).sum(axis=1) - (
+                current[site] == neighbour_states
+            ).sum()
+        field = self._field[values] - self._field[current[sites]]
+        return torch.from_numpy(np.stack([agreement, field], axis=1))
 
     def n_features(self) -> int:
         """Two: the agreement change and the field change."""

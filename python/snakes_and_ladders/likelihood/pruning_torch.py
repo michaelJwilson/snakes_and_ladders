@@ -86,8 +86,14 @@ def branch_lengths_from_tree(
 
 
 def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
-    """Closed-form JC P(t), ``eq:jc`` of ``docs/tex/textbook.tex``, differentiable in ``t``."""
-    decay = torch.exp(-k * t / (k - 1))
+    """Closed-form JC P(t), ``eq:jc`` of ``docs/tex/textbook.tex``, differentiable in ``t``.
+
+    ``t`` may be a scalar or a vector of branch lengths; the result carries
+    one ``(k, k)`` matrix per entry of ``t`` in its leading dimensions. The
+    arithmetic is elementwise, so a matrix taken from the batched result is
+    the matrix the scalar call returns, bitwise -- a test pins it.
+    """
+    decay = torch.exp(-k * t / (k - 1))[..., None, None]
     off_diagonal = (1.0 - decay) / k
     diagonal = 1.0 / k + (k - 1) / k * decay
     eye = torch.eye(k, dtype=t.dtype, device=t.device)
@@ -97,9 +103,18 @@ def _jc_transition_probabilities(t: torch.Tensor, k: int) -> torch.Tensor:
 def _transition_probabilities(
     t: torch.Tensor, k: int, rate_matrix: torch.Tensor | None
 ) -> torch.Tensor:
+    """``P(t)`` for every branch length in ``t``, shape ``(*t.shape, k, k)``.
+
+    One call per likelihood evaluation rather than one per branch: the
+    hill-climb profile behind #264 charged 8,730 scalar calls per 970
+    evaluations to this function, a Python-level call per child per node that
+    root ``CLAUDE.md``'s inlining rule names. Batched, the closed form is one
+    ``exp`` over the branch vector and the matrix exponential one batched
+    ``matrix_exp``.
+    """
     if rate_matrix is None:
         return _jc_transition_probabilities(t, k)
-    result: torch.Tensor = torch.linalg.matrix_exp(rate_matrix * t)
+    result: torch.Tensor = torch.linalg.matrix_exp(rate_matrix * t[..., None, None])
     return result
 
 
@@ -180,6 +195,8 @@ def log_likelihood(
 
     n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
     log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
+    # Every branch's transition matrix at once, indexed by branch_order.
+    transitions = _transition_probabilities(branch_lengths, k, rate_matrix)
 
     def _post_order(node: Node) -> torch.Tensor:
         nonlocal log_scale
@@ -193,9 +210,8 @@ def log_likelihood(
 
         partial = torch.ones((n_sites, k), dtype=dtype, device=device)
         for child in node.children:
-            t = branch_lengths[index[child.name]]
             child_partial = _post_order(child)
-            transition = _transition_probabilities(t, k, rate_matrix)
+            transition = transitions[index[child.name]]
             # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
             partial = partial * (child_partial @ transition.T)
 
@@ -213,3 +229,136 @@ def log_likelihood(
     root_partial = _post_order(tau)
     site_likelihood = root_partial @ pi_t  # eq:root
     return torch.sum(torch.log(site_likelihood) + log_scale)
+
+
+class PartialCache:
+    """Partial likelihoods of subtrees, keyed by what determines them.
+
+    A subtree's partial likelihood is a function of the subtree's shape, the
+    branch lengths inside it, and the leaf data -- and of nothing above it.
+    So when a search evaluates a neighbour topology at the lengths its parent
+    was fitted with, every subtree the move did not touch has the partial the
+    parent already computed (issue #289). The key is the subtree's structure
+    with its lengths, built recursively and order-independent, so the same
+    subtree reached under a different rooting or child order still hits.
+
+    Two things are deliberate. The cache holds detached tensors and serves only
+    :func:`log_likelihood_cached`, which runs without gradients: inside a fit
+    every length moves, so nothing would hit and the graph would be pinned
+    alive. And hits are counted, because a cache that never hits is a cost.
+
+    Parameters
+    ----------
+    max_entries : int
+        Entries kept before the oldest is evicted; each is one
+        ``(n_sites, k)`` tensor and one ``(n_sites,)`` tensor.
+    """
+
+    def __init__(self, max_entries: int = 4096) -> None:
+        self._store: dict[object, tuple[torch.Tensor, torch.Tensor]] = {}
+        self._max_entries = max_entries
+        self.hits = 0
+        self.misses = 0
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+    def get(self, key: object) -> tuple[torch.Tensor, torch.Tensor] | None:
+        found = self._store.get(key)
+        if found is None:
+            self.misses += 1
+        else:
+            self.hits += 1
+        return found
+
+    def put(self, key: object, value: tuple[torch.Tensor, torch.Tensor]) -> None:
+        if len(self._store) >= self._max_entries:
+            del self._store[next(iter(self._store))]
+        self._store[key] = value
+
+
+def log_likelihood_cached(
+    tau: Node,
+    k: int,
+    pi: np.ndarray | torch.Tensor,
+    alignment: Mapping[str, np.ndarray | torch.Tensor],
+    branch_lengths: torch.Tensor,
+    cache: PartialCache,
+    *,
+    rate_matrix: torch.Tensor | None = None,
+) -> float:
+    """:func:`log_likelihood` without gradients, reusing cached subtree partials.
+
+    The same recursion and the same arithmetic per subtree, so a partial taken
+    from the cache is the partial the recursion would have computed, bitwise;
+    only the per-subtree rescaling sums are accumulated bottom-up rather than
+    in one running total, which is why this is a separate function and not a
+    flag on :func:`log_likelihood`, whose arithmetic stays exactly as it was.
+    A test pins the two within the float64 agreement tolerance.
+
+    Parameters
+    ----------
+    tau, k, pi, alignment, branch_lengths, rate_matrix
+        As :func:`log_likelihood`.
+    cache : PartialCache
+        Shared across the calls that should reuse each other's work -- one per
+        search, typically.
+
+    Returns
+    -------
+    float
+        The total log-likelihood.
+    """
+    dtype, device = branch_lengths.dtype, branch_lengths.device
+    order = branch_order(tau)
+    index = {name: i for i, name in enumerate(order)}
+    lengths = branch_lengths.detach()
+    with torch.no_grad():
+        pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
+        transitions = _transition_probabilities(lengths, k, rate_matrix)
+        leaves = [node for node in preorder(tau) if node.is_leaf]
+        n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
+
+        def visit(node: Node) -> tuple[object, torch.Tensor, torch.Tensor]:
+            if node.is_leaf:
+                key: object = ("leaf", node.name)
+                found = cache.get(key)
+                if found is not None:
+                    return key, *found
+                states = torch.as_tensor(
+                    alignment[node.name], dtype=torch.long, device=device
+                )
+                partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
+                partial[torch.arange(n_sites), states] = 1.0
+                scale = torch.zeros(n_sites, dtype=dtype, device=device)
+                cache.put(key, (partial, scale))
+                return key, partial, scale
+
+            parts = []
+            for child in node.children:
+                child_key, child_partial, child_scale = visit(child)
+                length = float(lengths[index[child.name]])
+                parts.append((child_key, length, child_partial, child_scale))
+            key = ("node", tuple(sorted((repr(ck), ln) for ck, ln, _, _ in parts)))
+            found = cache.get(key)
+            if found is not None:
+                return key, *found
+
+            partial = torch.ones((n_sites, k), dtype=dtype, device=device)
+            log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
+            for child, (_, _, child_partial, child_scale) in zip(
+                node.children, parts, strict=True
+            ):
+                transition = transitions[index[child.name]]
+                partial = partial * (child_partial @ transition.T)
+                log_scale = log_scale + child_scale
+            scale = partial.amax(dim=1)
+            safe_scale = torch.where(scale > 0, scale, torch.ones_like(scale))
+            partial = partial / safe_scale.unsqueeze(1)
+            log_scale = log_scale + torch.log(safe_scale)
+            cache.put(key, (partial, log_scale))
+            return key, partial, log_scale
+
+        _, root_partial, root_scale = visit(tau)
+        site_likelihood = root_partial @ pi_t  # eq:root
+        return float(torch.sum(torch.log(site_likelihood) + root_scale))

@@ -1,4 +1,4 @@
-\begin{thebibliography}{39}
+\begin{thebibliography}{40}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -208,6 +208,13 @@ Robert~H. Swendsen and Jian-Sheng Wang.
 \newblock Nonuniversal critical dynamics in monte carlo simulations.
 \newblock \emph{Physical Review Letters}, 58\penalty0 (2):\penalty0 86--88,
   1987.
+
+\bibitem[Wainwright et~al.(2005)Wainwright, Jaakkola, and
+  Willsky]{wainwright2005}
+Martin~J. Wainwright, Tommi~S. Jaakkola, and Alan~S. Willsky.
+\newblock A new class of upper bounds on the log partition function.
+\newblock \emph{IEEE Transactions on Information Theory}, 51\penalty0
+  (7):\penalty0 2313--2335, 2005.
 
 \bibitem[Wolff(1989)]{wolff1989}
 Ulli Wolff.

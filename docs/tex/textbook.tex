@@ -240,6 +240,72 @@ gradient with and without $b$ agree. An environment small enough to enumerate
 is therefore the oracle for the learning machinery, exactly as a tree small
 enough to enumerate is the oracle for the search.
 
+\subsection{Surrogates and Bounds}
+\label{sec:surrogates}
+The evaluation a discrete search pays for---a fit of $\branch$ per topology,
+or $\log Z$ for a lattice---is what makes the search expensive, so each
+problem carries \emph{surrogates}: cheaper functions of the structure that
+stand in for it. A surrogate makes a claim, a lower bound, an upper bound, or
+a point prediction, and the claim is part of the object. An analytic bound is
+proved (Appendix~\ref{app:bounds}) and \emph{certified}: checked against the
+exact value on every structure an oracle can score, with no violation allowed.
+A learned predictor is \emph{calibrated} instead, shifted by a quantile of its
+held-out residuals, and certified to the coverage it claims. The search
+ranks a neighbourhood by a surrogate and fits only the top candidates; the
+accepted move is always evaluated in full, so a surrogate changes what is
+fitted and never what is reported.
+
+For a topology the maximized log-likelihood $\ell^\ast(\tree) = \max_{\branch}
+\ell(\tree, \branch)$ is bracketed by two one-pass quantities. Any feasible
+lengths give a lower bound, and lengths $\hat{\branch}$ solved by
+non-negative least squares from the pairwise Jukes--Cantor distances
+$\hat d_{ab}$ are feasible:
+\begin{equation}
+  \ell(\tree, \hat{\branch}) \;\le\; \ell^\ast(\tree),
+  \qquad
+  \hat{\branch} = \arg\min_{\branch \ge 0}
+    \sum_{a<b} \Big(\sum_{e \in \mathrm{path}(a,b)} \tau_e - \hat d_{ab}\Big)^2 .
+  \label{eq:plugin-bound}
+\end{equation}
+Under Jukes--Cantor $\Pmat(t) = a\,\mathbf{I} + (1-a)\,\mathbf{J}/k$ with
+$a = e^{-kt/(k-1)}$, so a site likelihood is multilinear in the $a_e$ and its
+maximum over the box $[0,1]^{|E|}$ sits at a vertex, where every branch
+either forbids a change or forgets the parent's state at cost $1/k$. With the
+tree rooted at the first leaf, the vertex maximum of site $s$ is
+$\pi(x_{1,s})\,k^{-F_s(\tree)}$ for the site's Fitch score $F_s$, whence
+\begin{equation}
+  \ell^\ast(\tree) \;\le\; \sum_s \log \pi(x_{1,s}) \;-\; F(\tree)\,\log k .
+  \label{eq:parsimony-bound}
+\end{equation}
+Both apply to a subtree as they do to the tree.
+
+For a lattice the partition function is bracketed by two variational
+quantities. The naive mean-field bound is Gibbs' inequality at a product
+distribution $q = \prod_i q_i$, tightest at its fixed point:
+\begin{equation}
+  \log Z \;\ge\; \sum_i \sum_\sigma q_i(\sigma)\, h_i(\sigma)
+    + \sum_{\langle i,j \rangle} J_{ij} \sum_\sigma q_i(\sigma)\, q_j(\sigma)
+    - \sum_i \sum_\sigma q_i(\sigma) \log q_i(\sigma) .
+  \label{eq:mean-field-bound}
+\end{equation}
+Because $\log Z$ is convex in the parameters, Jensen's inequality over a
+distribution $\rho$ on spanning trees $T$, with parameters $\theta(T)$
+supported on $T$ and averaging to $\theta$, gives an upper bound each term of
+which is exact by one leaf-to-root pass:
+\begin{equation}
+  \log Z(\theta) \;\le\; \sum_T \rho(T)\, \log Z\big(\theta(T)\big),
+  \qquad
+  \sum_T \rho(T)\,\theta(T) = \theta ,
+  \label{eq:spanning-tree-bound}
+\end{equation}
+the tree-reweighted bound of \citet{wainwright2005}. From any bracket
+$L \le \log Z(\beta) \le U$ at inverse temperature $\beta$, and
+$e^{-\beta E_{\min}} \le Z(\beta) \le k^N e^{-\beta E_{\min}}$,
+\begin{equation}
+  -\frac{U}{\beta} \;\le\; E_{\min} \;\le\; \frac{N \log k - L}{\beta} .
+  \label{eq:ground-state-bounds}
+\end{equation}
+
 \section{Problem Statement: Phylogenetic Inference}
 \label{sec:phylo}
 
@@ -1095,6 +1161,73 @@ is asymptotic in the sample size and requires $\mathcal{I}$ to be invertible;
 a singular or ill-conditioned information is a parameter the data does not
 identify, and the interval is refused rather than reported
 (Section~\ref{sec:properties}).
+
+\section{Derivations of the Bounds}
+\label{app:bounds}
+
+\paragraph{The plug-in bound, \eqref{eq:plugin-bound}.}
+$\ell^\ast(\tree)$ is a maximum over the feasible set $\branch \ge 0$, and
+$\hat{\branch}$ lies in it by construction: projected gradient descent on the
+convex least-squares objective clamps every iterate to the non-negative
+orthant, so the value at $\hat{\branch}$ is one of the values maximized over.
+Equality holds exactly when $\hat{\branch}$ is a maximizer.
+
+\paragraph{The parsimony bound, \eqref{eq:parsimony-bound}.}
+Write $a_e = e^{-k t_e/(k-1)} \in [0,1]$. Each entry of $\Pmat(t_e)$ is affine
+in $a_e$ and each branch appears exactly once in the product of
+\eqref{eq:pruning}, so the site likelihood is a polynomial of degree at most
+one in each $a_e$: multilinear. A multilinear function on a box attains its
+maximum at a vertex, where each $\Pmat_e$ is either $\mathbf{I}$ (no change
+permitted) or $\mathbf{J}/k$ (the child's state independent of the parent's,
+at weight $1/k$). Root the tree at leaf $1$, which the pulley principle
+permits for a reversible model. At a vertex with cut set $C$ (the branches
+carrying $\mathbf{J}/k$), the site likelihood is a sum over ancestral
+assignments constant on each component of $\tree \setminus C$:
+$\pi(x_{1,s})\,k^{-|C|}\,k^{\,\ell'}$, with $\ell'$ the number of
+components containing no leaf (each contributes a free sum over $k$ states),
+provided every leafy component is monochromatic, and zero otherwise.
+Merging each leafless component into a neighbour across one of its boundary
+branches removes one cut and one leafless component at a time and leaves a
+valid partition with $|C| - \ell'$ cuts, all of whose components are leafy
+and monochromatic; assigning each its leaf state gives an ancestral labelling
+with at most $|C| - \ell'$ changes, so $F_s \le |C| - \ell'$ by minimality of
+the Fitch score. Hence every vertex value is at most
+$\pi(x_{1,s})\,k^{-F_s}$, and so is the maximum over the box. Summing over
+sites gives \eqref{eq:parsimony-bound}; the regression suite enumerates the
+$2^{|E|}$ vertices at five taxa and finds the bound attained on every site.
+The entrywise limit $\sup_t \Pmat_{ij}(t)$, one on the diagonal and $1/k$
+off it, gives a bound this one dominates, because that matrix is not
+row-stochastic and the polynomial is increasing in every entry.
+
+\paragraph{The mean-field bound, \eqref{eq:mean-field-bound}.}
+For any distribution $q$ on configurations,
+$\log Z = \mathbb{E}_q[-\energy] + H(q) + \mathrm{KL}(q \,\|\, p)$, and the
+divergence is non-negative (Gibbs' inequality). Restricting $q$ to products
+and evaluating the expectation gives the right-hand side; the fixed-point
+iteration $q_i \propto \exp(h_i + \sum_{j \in \partial i} J_{ij} q_j)$
+ascends it coordinate-wise, and the bound holds at every iterate, so a
+truncated iteration is a looser bound and never a wrong one
+\citep{mackay2003, mezard2009}.
+
+\paragraph{The spanning-tree bound, \eqref{eq:spanning-tree-bound}.}
+$\log Z(\theta)$ is the log-normalizer of an exponential family and therefore
+convex in $\theta$. For trees $T$ with weights $\rho(T)$ and parameters
+$\theta(T)$ with $\sum_T \rho(T)\theta(T) = \theta$, Jensen gives
+$\log Z(\theta) \le \sum_T \rho(T) \log Z(\theta(T))$. The implementation
+takes one tree per edge, built by breadth-first search from that edge so it
+contains it, weighted uniformly; an edge appearing in a fraction $\rho_e$ of
+the trees carries $J_e/\rho_e$ on each tree containing it and $0$ elsewhere,
+so the weighted mean is $J_e$, and the fields are shared. Each
+$\log Z(\theta(T))$ is exact by the leaf-to-root recursion, in the log
+domain. The bound is tight when the graph is a tree \citep{wainwright2005}.
+
+\paragraph{The ground-state bracket, \eqref{eq:ground-state-bounds}.}
+$Z(\beta) = \sum_\sigma e^{-\beta \energy(\sigma)}$ has $k^N$ terms, each at
+most $e^{-\beta E_{\min}}$ and at least one equal to it, so
+$-\beta E_{\min} \le \log Z(\beta) \le N \log k - \beta E_{\min}$. Combining
+with $L \le \log Z(\beta) \le U$ and dividing by $\beta > 0$ gives the
+bracket; as $\beta$ grows the $N \log k$ term is divided away, until the
+bounds on $\log Z$ themselves loosen.
 
 \section{Reference Taxonomy}
 \label{app:taxonomy}
