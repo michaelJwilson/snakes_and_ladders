@@ -21,7 +21,7 @@ from the suite; `PROBLEMS.md` names the code behind each problem class.
 | 1.2 Likelihood & energy engine | CPU landed (NumPy, PyTorch, Rust at 2.5x the oracle at 200 taxa by 11,000 sites); belief propagation with two exact oracles; Fitch and Sankoff parsimony; one factor graph with sum-product and max-product over it, Viterbi included; forward–backward as an evaluator; certified bounds and learned surrogates; the LDPC decoder pinned to the general sum-product and to enumeration; two runtime audits; GPU dispatch not started (#280) | Worst relative deviation 4.0e-14 against brute-force marginalization across three backends and four site counts spanning a factor of 30; max-product returns the enumerated Viterbi path on four chains; flooding on the 8x8 lattice within 1.8x of belief propagation after the audit; decoder posteriors within 4.6e-11 of the general flooding on six loopy codes and 1.9e-13 of enumeration on a cycle-free one; the 19,998-bit (3,6) code brackets the erasure threshold 0.4294 between 0.42 and 0.44 | [#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66), [#74](https://github.com/michaelJwilson/snakes_and_ladders/pull/74), [#81](https://github.com/michaelJwilson/snakes_and_ladders/pull/81), [#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#219](https://github.com/michaelJwilson/snakes_and_ladders/pull/219), [#247](https://github.com/michaelJwilson/snakes_and_ladders/pull/247), [#296](https://github.com/michaelJwilson/snakes_and_ladders/pull/296), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317), [#343](https://github.com/michaelJwilson/snakes_and_ladders/pull/343), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#354](https://github.com/michaelJwilson/snakes_and_ladders/pull/354), [#356](https://github.com/michaelJwilson/snakes_and_ladders/pull/356) |
 | 1.3 Continuous optimization | Landed for trees, the HMM, the Potts chain and lattice, and the mixture; an interval at any fit, whatever produced it; posterior sampling by leapfrog and Yoshida, tempered and adapted; initializers, multi-start and k-means++; closed-form test functions; the mixture at equal evaluations through the budget utility | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates; the lattice fitted against an enumerated normalizer, coverage 157/160 at 100 samples and 153/160 at 400 and 1600; integrator orders realized at 4.000 and 16.001; the adapted chain's acceptance 0.650 pooled over 20 seeds at a target of 0.65; restarts reach the mixture's best-known optimum from 7/40 starts against tempering's 4/40 (`p = 0.549`) and annealing's 1/40 (`p = 0.031`) | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#256](https://github.com/michaelJwilson/snakes_and_ladders/pull/256), [#263](https://github.com/michaelJwilson/snakes_and_ladders/pull/263), [#269](https://github.com/michaelJwilson/snakes_and_ladders/pull/269), [#271](https://github.com/michaelJwilson/snakes_and_ladders/pull/271), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#345](https://github.com/michaelJwilson/snakes_and_ladders/pull/345), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348), [#352](https://github.com/michaelJwilson/snakes_and_ladders/pull/352) |
 | 1.4 Move sets & classical baselines | Trees landed, with warm starts, lazy scoring and support; large parsimony; Potts cluster updates; the exact-baseline family — minimum cut, alpha expansion with its proved bound, Max-Cut with a certificate; schedules, annealing and parallel tempering with an opt-in Rust sweep; one Gibbs sampler and annealer over any factor graph, and a tempered ensemble over labellings, decodings and topologies; the coupled model fitted; Viterbi and posterior decoding landed; iterated conditional modes over HMM paths not started (#176) | NNI and SPR neighbour counts exhaustively verified at `n = 5..8`; hill climbing reaches the enumerated optimum from 12 of 12 starts and large parsimony from every start at five and six taxa; the two-state ground state exact against enumeration over 36 shape-coupling-field combinations; on the planted glass at equal sweeps tempering 12/12 against annealing 10/12 and restarts 4/12; the tempered weight within 0.039 of enumeration on every seed of 20 | [#82](https://github.com/michaelJwilson/snakes_and_ladders/pull/82), [#127](https://github.com/michaelJwilson/snakes_and_ladders/pull/127), [#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#212](https://github.com/michaelJwilson/snakes_and_ladders/pull/212), [#220](https://github.com/michaelJwilson/snakes_and_ladders/pull/220), [#221](https://github.com/michaelJwilson/snakes_and_ladders/pull/221), [#222](https://github.com/michaelJwilson/snakes_and_ladders/pull/222), [#255](https://github.com/michaelJwilson/snakes_and_ladders/pull/255), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284), [#289](https://github.com/michaelJwilson/snakes_and_ladders/pull/289), [#304](https://github.com/michaelJwilson/snakes_and_ladders/pull/304), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#310](https://github.com/michaelJwilson/snakes_and_ladders/pull/310), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#350](https://github.com/michaelJwilson/snakes_and_ladders/pull/350) |
-| 2.1 RL formulation & deployment | The estimator, the Potts, hidden-path and tree environments, a critic, an actor–critic, PPO and a PUCT planner landed, each pinned to enumeration; a tree policy trained on the fixture hill climbing fails and measured as a tie; the feature set that bounds it in review ([#328](https://github.com/michaelJwilson/snakes_and_ladders/issues/328)) | Enumerated gradient against finite differences at 1.5e-11 relative; on the Potts chain REINFORCE 86.6%, PPO 96.3% and the planner 92.6% at 8.3 evaluations per episode against greedy's 80.2% at 48; on the 7-taxon fixture 0.485 against greedy's 0.480, sign test `p = 1.0`, while restarts reach 1.000 at the same budget | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139), [#192](https://github.com/michaelJwilson/snakes_and_ladders/pull/192), [#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193), [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#320](https://github.com/michaelJwilson/snakes_and_ladders/pull/320), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355) |
+| 2.1 RL formulation & deployment | The estimator, the Potts, hidden-path and tree environments, a critic, an actor–critic, PPO and a PUCT planner landed, each pinned to enumeration; a tree policy trained on the fixture hill climbing fails, a tie over one feature and ahead of greedy over the seven-column set (#349); not yet measured against restarts | Enumerated gradient against finite differences at 1.5e-11 relative; on the Potts chain REINFORCE 86.6%, PPO 96.3% and the planner 92.6% at 8.3 evaluations per episode against greedy's 80.2% at 48; on the 7-taxon fixture the single feature reaches 0.487 against greedy's 0.480 (sign test `p = 0.79`) and the full set 0.796, ahead on 16 of 16 seeds (`p = 3.05e-5`), while restarts reach 1.000 at the same budget | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139), [#192](https://github.com/michaelJwilson/snakes_and_ladders/pull/192), [#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193), [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#320](https://github.com/michaelJwilson/snakes_and_ladders/pull/320), [#349](https://github.com/michaelJwilson/snakes_and_ladders/pull/349), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355) |
 | 2.2 Curriculum learning | Started: the surrogate curriculum from 5 to 6 taxa and from 3x3 to 4x6 lattices; weight transfer for a policy and batched rollout not started | Zero-shot at six taxa the set surrogate falls to `R^2` 0.68 and recovers to 0.94 after transfer, the MLP holds 0.92 and reaches 0.95; lattice surrogates transfer zero-shot at 0.99 | [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 | 2.3 Empirical validation | The budget utility and the exact paired test landed, and five budget-matched comparisons are recorded; no empirical alignment and no external tool ([#126](https://github.com/michaelJwilson/snakes_and_ladders/issues/126)) | Every comparison at one budget over shared seeds with McNemar's exact test: the glass, Rastrigin, the mixture, the relaxation against greedy, and the cluster updates at the transition | [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348) |
 | 2.4 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; four experiments recorded; the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
@@ -1594,6 +1594,25 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
 
+**The tree policy learns once it has something to learn**
+([#328](https://github.com/michaelJwilson/snakes_and_ladders/issues/328)).
+#178 trained a policy over one feature, the improvement a move buys, and
+measured a tie with greedy hill climbing on the hard seven-taxon fixture,
+because a softmax over one column is an inverse temperature. `FeatureSet.FULL`
+gives each move seven columns without a fit — the improvement, the Fitch
+parsimony change, the pattern support of the split broken and of the split
+made, and the sizes of the two exchanged subtrees — standardized within the
+neighbourhood, each pinned to an independent computation and each shown to
+vary within a neighbourhood (a planted Robinson–Foulds column, constant across
+NNI moves, is refused). At #178's budget of 640 episodes over 50 starts and 16
+training seeds, the single feature reaches the enumerated maximum from 0.487
+of episodes against greedy's 0.480 (sign test p = 0.79) and the full set from
+0.796, ahead on 16 of 16 seeds (p = 3.05e-5;
+`docs/experiments/005-tree-policy-features.md`). The known-parameter reward
+now scores GTR from a given rate matrix through the pruning recursion. Not
+measured: the full set against random-restart hill climbing, which #194 showed
+reaches every start on this fixture, and any column's individual necessity.
+
 **A critic, an actor–critic and PPO, each pinned to enumeration before it is
 measured** ([#313](https://github.com/michaelJwilson/snakes_and_ladders/issues/313),
 part 1). `learn.exact` now returns action values and the optimal value beside
@@ -1802,9 +1821,8 @@ REINFORCE estimator, and the cross-device tolerance — and
 resolves. The old document had labelled none of them, so nine citations had
 never resolved and two named equation numbers from a numbering that no longer
 existed. What remains at the level of a statement rather than a derivation is
-the pruning and forward–backward recursions, which
-[#347](https://github.com/michaelJwilson/snakes_and_ladders/pull/347) derives
-(#326); the bounds and their proofs are Appendix B since #317, and the
+the pruning and forward–backward recursions, derived since
+[#347](https://github.com/michaelJwilson/snakes_and_ladders/pull/347) (#326); the bounds and their proofs are Appendix B since #317, and the
 branch-and-bound search over them is #329. The paper's two framed placeholders
 — the comparison against classical software and hardware scaling — gave way at
 0.4.0 to the budgeted comparisons the ledger records and to #353's
@@ -1851,6 +1869,19 @@ simulated truth alone, the latter marked as a cell where an oracle is wanted.
 A guard holds the committed tables to a regeneration, and a catalogue symbol
 the generator cannot name fails it.
 
+**The three exact evaluators are derived, not stated**
+([#326](https://github.com/michaelJwilson/snakes_and_ladders/issues/326)).
+The derivations appendix carries pruning as the marginalization over internal
+states (`app:pruning`), forward–backward as the same marginalization on a
+chain, with pruning on the caterpillar tree shown to be the backward pass
+(`app:forward-backward`), and sum-product on a tree from the subtree
+factorization, with max-product as the same argument under a maximum and the
+Bethe free energy of a factor graph of any degree (`eq:bethe-factor`) as the
+loopy stationary point the existing Bethe derivation identifies
+(`app:sum-product`). Each is cited from the point of use in the main text and
+from the module that implements it, so the guard of #274 resolves them; the
+`TICKETS.md` bullet that named this work without an issue is closed by it.
+
 ## What Is Not Claimed
 
 - That a learned policy beats hill climbing on trees. It has now been
@@ -1860,8 +1891,10 @@ the generator cannot name fails it.
   seeds, 8 of them ahead, at an exact two-sided sign test of p = 1.0. The
   policy does train — an untrained one reaches the maximum on 0.018 — so this
   is a tie rather than a failure to learn. The environment is what bounds it,
-  in two ways stated under Milestone 2.1 above; the feature set that would
-  change the answer is in review (#328).
+  in two ways stated under Milestone 2.1 above. With the seven-column feature
+  set of #328 the policy reaches the maximum from 0.796 of episodes, ahead of
+  greedy on 16 of 16 seeds, and is not yet measured against random-restart
+  hill climbing, which reaches 1.000 on this fixture.
 - Any comparison against established software. IQ-TREE 2 and RAxML-NG are not
   installed, and no statement anywhere in the repository compares against them.
 - Runtime scaling. Benchmarks are not ranked on CI hardware, so timings live in
@@ -1888,7 +1921,7 @@ code, and fixed in the same pull request:
   the labels (#274), the kinds (#237), the root-detection fix (#168) and the
   hard tree fixture and trained policy (#177, #178) — and named as unfiled
   what has since been ticketed: rate variation (#323), multi-SPR and
-  branch-and-bound (#329), the tree features (#328), device dispatch (#280),
+  branch-and-bound (#329), device dispatch (#280),
   the milestone re-keying (#324), the uncited figures (#325).
 - `DEV.md`'s repository layout put the temperature schedules in `search/`
   (they are `opt.schedule` since #272), described `opt/` and `learn/` by their

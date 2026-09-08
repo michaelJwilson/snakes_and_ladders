@@ -100,9 +100,11 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-- A feature set for the tree environment beyond the improvement a move buys,
-  with the unidentifiable-constant invariance pinned, and the comparison it
-  changes (#328)
+- The surrogate-bound columns of #308 in the tree feature set — the plug-in
+  lower and parsimony upper bounds — measured at the budget of
+  `docs/experiments/005-tree-policy-features.md`, and the full feature set
+  against random-restart hill climbing, which reaches every start on #177's
+  fixture
 - The factor-graph environment over the Gibbs moves of #309, and the
   surrogates of #308 as a tree reward model — the parts of #313 that waited
   on #296 and #308 and have no ticket since it closed

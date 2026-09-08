@@ -244,7 +244,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (83)
+## `tests/regression/search/` (95)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -307,9 +307,15 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_rl.py::test_the_fitted_score_is_the_maximized_likelihood` | oracle |  |
 | `test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum` | oracle | The exhaustive oracle, on the surface the agent actually sees. |
 | `test_search_rl.py::test_the_known_optimum_is_the_generating_topology_here` | simulated_truth |  |
+| `test_search_rl.py::test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length` | oracle | The environment wraps the differentiable recursion with the model's Q at one length on every branch; here the recursion is called directly at the same lengths, for every topology on the leaf set. |
+| `test_search_rl.py::test_the_general_q_path_reduces_to_jukes_cantor_at_its_rate_matrix` | oracle | The reduction `search/CLAUDE.md` asks of every general construction: with Jukes-Cantor's own Q and uniform pi, the matrix-exponential path must reproduce the closed-form path, topology by topology. |
+| `test_search_rl.py::test_the_parsimony_column_is_the_change_in_fitch_score` | oracle |  |
+| `test_search_rl.py::test_the_support_columns_are_the_pattern_support_of_the_split_broken_and_made` | oracle |  |
+| `test_search_rl.py::test_the_subtree_columns_are_the_sizes_of_the_exchanged_subtrees` | oracle | Against `branch_splits`: each exchanged set is the leaf set below a branch of both topologies, the two are disjoint, and swapping them in the broken split yields the made split -- which is what "the subtrees an NNI move exchanges" means. |
 | `test_search_rl.py::test_the_spr_neighbourhood_is_larger_than_the_nni_one` | oracle | The environment is parameterized by move set, and the two must actually differ or that parameter is decoration. |
 | `test_search_statistics.py::test_the_chi_square_tail_matches_published_critical_values` | oracle |  |
 | `test_search_statistics.py::test_an_ar1_process_matches_its_closed_form` | oracle | For `x_t = rho x_{t-1} + noise`, `rho(t) = rho**t` exactly, so `tau = 0.5 + sum_{t>=1} rho**t = 0.5 + rho / (1 - rho)`. |
+| `test_search_statistics.py::test_the_sign_test_matches_the_binomial_tail_sums` | oracle |  |
 | `test_search_support.py::test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_supports_agree` | oracle |  |
 | `test_search_support.py::test_the_generating_splits_have_full_bootstrap_support_at_many_sites` | simulated_truth |  |
 | `test_search_support.py::test_the_enumerated_support_is_calibrated_on_simulated_data` | simulated_truth | The test the ticket names: bin the returned trees by the support they report and the fraction that equal the generating topology must not fall as the support rises. |
@@ -317,6 +323,9 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_support.py::test_the_single_site_neighbourhood_is_the_whole_space_only_where_one_site_is_free` | oracle |  |
 | `test_search_support.py::test_the_enumerated_labelling_weight_is_enumerate_potts_s_boltzmann_weight_at_beta_one` | oracle |  |
 | `test_search_support.py::test_the_enumerated_decoding_weight_is_the_path_posterior_and_pins_the_ambiguous_fixture` | oracle |  |
+| `test_search_support.py::test_pattern_support_is_the_fraction_of_sites_some_tree_with_the_split_fits_in_the_fewest_changes` | oracle |  |
+| `test_search_support.py::test_the_four_taxon_support_is_one_minus_the_frequency_of_the_two_conflicting_patterns` | oracle |  |
+| `test_search_support.py::test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_returns_it_always` | simulated_truth |  |
 | `test_search_surrogate.py::test_learned_surrogates_rank_held_out_neighbourhoods` | simulated_truth | Six alignments, every topology of each fitted (90 fits at 200 sites), split by alignment: three to train, two to validate, one held out. |
 | `test_search_surrogate.py::test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments` | oracle | Against a full fit of every topology on three alignments: the plug-in bound and the parsimony bound each put the fitted best first, at a hundredth (2.4 ms against 250 ms) and a thousandth of the cost. |
 | `test_search_surrogate.py::test_surrogate_ranked_search_reaches_what_the_full_search_reaches` | oracle | Lazy ranking by the plug-in bound, fitting one candidate per neighbourhood, lands on the full search's optimum from three starts on the small-sites fixture with fewer fits and no lazy evaluations. |
@@ -328,6 +337,9 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_topology.py::test_nni_and_spr_exhaustive_at_n8` | oracle | The same properties as the per-PR sweep, at the next size up. |
 | `test_search_topology.py::test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology` | oracle | `_split_key` is what `spr_neighbours` deduplicates on since #264; this asserts it names the same set of splits `leaf_bipartitions` does, on every one of the 105 six-leaf topologies, with the anchor convention (the smallest leaf's side is the complement) applied identically. |
 | `test_search_topology.py::test_spr_neighbours_are_the_definition_in_the_definition_order` | oracle | Order matters as well as membership: a hill climb takes the first of equally good neighbours, so a faster generator that permuted them would change which tree a search lands on while every count test passed. |
+| `test_search_tree_features.py::test_the_greedy_weights_reproduce_the_greedy_searcher` | oracle |  |
+| `test_search_tree_features.py::test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget` | simulated_truth |  |
+| `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
@@ -387,4 +399,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-344 checks.
+356 checks.

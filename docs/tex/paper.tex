@@ -309,8 +309,13 @@ buys, so the policy is an inverse temperature and no algorithm can learn
 what that class cannot express. Random-restart hill climbing reaches the
 enumerated maximum from every start at the same 60-decision budget, so the
 baseline the next comparison has to beat is 1.000 and a fixture that
-separates anything from restarts is what it needs. A richer feature set is
-under review (\#328).
+separates anything from restarts is what it needs. Given something to learn
+the policy learns: with seven columns per move---the improvement, the
+parsimony change, the pattern support of the split broken and of the split
+made, and the two exchanged subtree sizes---it reaches the maximum from
+0.796 of episodes at the same budget, ahead of greedy on 16 of 16 seeds
+($p = 3.05 \times 10^{-5}$, ledger entry 005), and is not yet measured
+against restarts.
 
 \qacaptionread{figures/rl_tree_policy_caption.txt}{\rlTreePolicyCaption}
 \begin{figure}[htbp]
