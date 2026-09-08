@@ -1259,6 +1259,61 @@ paths for a 3-state sequence of six. Neither takes an application type, so
 `snakes_and_ladders.learn` still imports nothing from `snakes_and_ladders.sim`, `snakes_and_ladders.likelihood` or
 `snakes_and_ladders.search`, and a test asserts it.
 
+**A critic, an actor–critic and PPO, each pinned to enumeration before it is
+measured** ([#313](https://github.com/michaelJwilson/snakes_and_ladders/issues/313),
+part 1). `learn.exact` now returns action values and the optimal value beside
+the expected return, and the three agree where they must: Bellman's equation
+to 1e-12 on every state checked, the optimal value above every policy's, and
+over eight decisions equal to the gap to the enumerated minimum energy. A
+critic reads state features derived from the action features the protocol
+already supplies (their mean and maximum, and the log of the neighbourhood's
+size), so no instance changed; fitted to the exact `V^pi` on all 81
+configurations of the chain, the linear critic explains 0.87 of its variance
+and a 16-unit MLP 0.996. The advantage-weighted score function with the exact
+critic as baseline is unbiased for the enumerated gradient to 5e-3 over 4,000
+episodes, and the unclipped PPO objective at the collecting policy has the
+actor–critic's gradient exactly. At the budget #135 trained REINFORCE on (60
+iterations of 32 episodes) the trained policy reaches the enumerated optimum
+from 88.9% of the 81 starts under REINFORCE, 88.9% under the actor–critic and
+**96.3% under PPO** (greedy: 80.2%), with mean exact expected return 2.21,
+2.23 and 2.28; at a quarter of that budget REINFORCE reaches it from 32.1% and
+PPO from 87.7%. An `MLPPolicy` trained by PPO reaches it from 97.5% with mean
+return 2.55, the worsening move a chain needs being representable where two
+linear features cannot.
+
+**On the hard tree fixture every algorithm lands on greedy, and the feature
+set is why.** At #178's budget (40 iterations of 16 episodes, horizon 30, 50
+seeded starts, the fixed-length NNI reward) greedy reaches the enumerated
+maximum from 0.48 of the starts, REINFORCE from 0.49, PPO from 0.47, and PPO
+collecting under an epsilon-greedy behaviour policy on a linear schedule from
+0.3 to 0.02 from 0.46 — all within the noise #178 measured (standard
+deviation 0.014 over seeds). The environment exposes one feature, the
+improvement a move buys, so the policy is an inverse temperature and no
+algorithm can learn what that class cannot express; the off-policy variant
+is correct by the ratio `pi / beta` and buys nothing here. The feature set of
+Milestone 2.1's first bullet is the prerequisite for a tree result, not a
+better optimizer.
+
+**A planner reaches the optimum at a fraction of greedy's evaluations, once
+its prior and critic are trained.** `learn.planning` runs PUCT search over
+any environment with the policy as prior and the critic as leaf value, and
+expert iteration fits the policy to the root visit distributions and the
+critic to the achieved returns. Pinned by enumeration: with the exact
+optimal value as leaf and one decision of depth the most visited move is an
+argmax of `Q*` on every state checked, and at depth three the visit
+distribution's one-step value under `Q^pi` is no less than the prior's on 13
+of 14 states. Measured on the chain, counted in successor evaluations: an
+untrained prior with a fresh critic reaches the enumerated optimum from
+76.5% of the 81 starts at 57 evaluations per episode against greedy's 80.2%
+at 48; after 10 iterations of 8 planned episodes (1,066 evaluations of
+training) the planner reaches it from **92.6% at 8.3 evaluations per
+episode**, and at six simulations, 6.3 evaluations, matches greedy's 80.2%
+— the same answer at an eighth of the cost. The policy alone, without the
+search, reaches 30.9%: the visit distributions at 20 simulations are flat
+targets, and what expert iteration taught here is the critic. The
+factor-graph environment and the surrogate reward model wait on #296 and
+#308 landing on `dev`.
+
 ## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
 
 **The ledger has a record format before it has a run store**
