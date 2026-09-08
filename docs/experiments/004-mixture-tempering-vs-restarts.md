@@ -67,7 +67,19 @@ against restarts.
 
 ## Results
 
-RESULTS_PLACEHOLDER
+Typed from the release run of
+`tests/regression/opt/test_opt_mixture_budget.py::test_at_forty_starts_restarts_reach_the_optimum_from_the_most_starts`
+(the 8-start tier of the same code runs per pull request and pins the
+ordering). The referee is the best-known optimum, 1111.596 nats, reached by
+16 of 1,000 polished restarts and 8.3 nats below the polished simulated
+parameters, whose basin is not the maximum on this sample; a start "reaches"
+it within 1e-6 relative.
+
+| method | starts reaching the optimum (of 40) | mean gap to the optimum | McNemar against restarts |
+| --- | --- | --- | --- |
+| restarts (7 polished EM restarts per start) | 7 | 2.6 nats | — |
+| parallel tempering, ladder (1, 2, 4, 8) | 4 | 4.2 nats | p = 0.549 |
+| annealing, temperature 8 to 1 | 1 | 8.0 nats | p = 0.031 |
 
 ## Figures
 
