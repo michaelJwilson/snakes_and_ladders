@@ -189,6 +189,31 @@ bits, where no enumeration reaches, the (3,6) code resolves every erasure at
 an erasure probability of 0.42 on three seeds and leaves 25 to 30\% of its
 bits erased at 0.44, bracketing the density-evolution threshold 0.4294.
 
+The turbo code is the second member of that class, and it separates two
+things the parity-check code does not. One constituent convolutional code is
+a terminated trellis, so it is a chain and BCJR on it is exact: its bit
+posteriors equal the sum over all $2^{K}$ messages to $2.8 \times 10^{-14}$
+in log-odds, and the tree schedule of the general sum-product on the same
+chain, built as a factor graph, agrees to $2.7 \times 10^{-15}$ with the same
+$\log Z$. The pair is not: two chains sharing the message bits through an
+interleaver have cycles, and the iteration between them is the Bethe
+approximation. What is reported there is the gap rather than an equality. At
+$K = 12$, where enumeration reaches, eight iterations give a bit error rate
+1.26 to 3.20 times the exact bitwise MAP's over four operating points and
+1,200 message bits each; the code is worse than sending the bits uncoded at
+$0$~dB, which is a property of a 12-bit interleaver and not of the decoder.
+At $K = 1{,}024$ over 200 frames per point the curve falls two orders of
+magnitude between $0$ and $1.2$~dB and stays below the uncoded
+$Q(\sqrt{2E_b/N_0})$ throughout (Figure~\ref{fig:turbo-waterfall} in the
+textbook draws the $K = 256$ instance). Two negative results travel with it.
+The ensemble bit error rate is not monotone in the iteration count: it rises
+between consecutive iterations at four of six operating points, the largest
+rise $2.3 \times 10^{-3}$, and every rise is inside one binomial interval of
+the sample, so the strong claim is refused and the weak one---no worse, and
+better than the first iteration---is what the suite asserts. And a bit error
+rate is reported with the frame count behind it in every case, because a
+waterfall without one bounds nothing.
+
 Collapsing identical alignment columns to weighted site patterns leaves the
 log-likelihood unchanged and cuts the column work by 1.6 to 781 times across
 the fixtures, the ratio set by the taxon count against the site count rather
@@ -502,8 +527,8 @@ density evolution for codes past the enumerable length.
 
 Decoupling structural exploration from continuous fitting yields a
 model-agnostic optimization engine that serves phylogenetics, Potts models,
-hidden Markov models, the parity-check code, the coupled model and the
-mixture without encoding any of them. Every evaluator is pinned to
+hidden Markov models, the parity-check and turbo codes, the coupled model
+and the mixture without encoding any of them. Every evaluator is pinned to
 an oracle that shares no code with it, every fit is judged by recovery at its
 nominal coverage, and every search by the enumeration that referees it where
 enumeration reaches. Formulating the search as a Markov decision process gave
