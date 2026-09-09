@@ -250,9 +250,8 @@ impl Topology {
 ///
 /// `leaf_row` is deliberately *not* held. It maps a node index to a row of
 /// `states`, so it is a function of the topology's numbering rather than of
-/// the alignment, and it changes exactly when the topology does -- which is
-/// every call on the screening path this exists for. It is `n_nodes` borrowed
-/// `i64`s, against the alignment's `n_leaves * n_sites`.
+/// the alignment, and it changes exactly when the topology does. It is
+/// `n_nodes` borrowed `i64`s, against the alignment's `n_leaves * n_sites`.
 #[derive(Debug)]
 pub struct PruningProblemCore {
     /// Row-major `n_rows * n_sites` observed states, one row per leaf.
