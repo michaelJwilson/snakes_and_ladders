@@ -191,7 +191,13 @@ def test_the_batch_s_advantages_benchmark(benchmark: BenchmarkFixture) -> None:
 def test_the_batch_s_advantages_through_torchrl_benchmark(
     benchmark: BenchmarkFixture,
 ) -> None:
-    """The declined `GAE` front, on the same batch and the same critic values."""
+    """The declined `GAE` front, on the same batch and the same critic values.
+
+    The tensordict and the estimator are built inside the timing, because a
+    front pays for them on every call. The experiment that declined `GAE`
+    reports the prebuilt figure as well, and the two differ by that
+    construction rather than by the recursion.
+    """
     torchrl_advantage = pytest.importorskip(
         "snakes_and_ladders.sandbox.torchrl_advantage"
     )
