@@ -144,9 +144,11 @@ unfixable = [
 strict = true
 # `infra/` is checked too: `select_tests.py` decides what CI runs, so a type
 # error there is a test that silently did not run. `mypy_path` lets the test
-# module import it the same way CI does.
+# module import it the same way CI does, and carries `tests/regression`
+# because `gate_changed_tests.py` reads the kind names from the guard that
+# owns them rather than keeping a second copy (root `CLAUDE.md`).
 files = ["python", "tests", "infra"]
-mypy_path = "infra"
+mypy_path = "infra:tests/regression"
 
 [[tool.mypy.overrides]]
 # pytest-benchmark ships no py.typed marker.
