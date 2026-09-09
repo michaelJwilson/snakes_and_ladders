@@ -42,7 +42,7 @@ and each topology scored at most once, and the oracle, which is enumeration.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -60,6 +60,7 @@ from snakes_and_ladders.likelihood.pruning_torch import (
     log_likelihood_cached,
 )
 from snakes_and_ladders.opt.fit import fit
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.search.topology import (
     Topology,
     branch_splits,
@@ -150,9 +151,7 @@ class _Fitted:
 class _Counting:
     """An objective that counts its evaluations; the protocol otherwise."""
 
-    def __init__(
-        self, inner: BranchLengthObjective | SubstitutionModelObjective
-    ) -> None:
+    def __init__(self, inner: Objective) -> None:
         self.inner = inner
         self.calls = 0
 
@@ -168,6 +167,64 @@ class _Counting:
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         self.calls += 1
         return self.inner(theta)
+
+
+class _Restricted:
+    """``inner`` on the coordinates ``free``, every other one held at ``base``.
+
+    Partial re-optimization (issue #408): a move changes a handful of
+    branches and leaves the rest of the tree alone, so a fit that varies
+    every coordinate spends most of its evaluations re-deriving lengths the
+    move did not touch. Holding those at the parent's fitted values makes
+    the fit ``len(free)``-dimensional, and the value it reaches is a lower
+    bound on the full fit's rather than equal to it --- which is why the
+    accepted move is refitted in full before it is reported.
+
+    The protocol is satisfied on the reduced vector: ``initial`` is
+    ``base`` restricted to ``free``, ``constrain`` scatters back before
+    delegating, so a caller reads the same named parameters it always did.
+    """
+
+    def __init__(
+        self, inner: Objective, base: torch.Tensor, free: torch.Tensor
+    ) -> None:
+        self.inner = inner
+        self._base = base
+        self._free = free
+
+    def _full(self, theta: torch.Tensor) -> torch.Tensor:
+        return self._base.index_copy(0, self._free, theta)
+
+    def initial(self) -> torch.Tensor:
+        return self._base[self._free]
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        return self.inner.constrain(self._full(theta))
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        return self.inner.theta_from(named)[self._free]
+
+    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
+        return self.inner(self._full(theta))
+
+
+def _disturbed(topology: Topology, warm: _Fitted) -> torch.Tensor:
+    """Indices into ``theta`` of the branches the move to ``topology`` created.
+
+    A branch is the split it induces, so a branch the move left alone is one
+    whose split the parent also had and whose fitted length therefore
+    carries over (:func:`_warm_lengths`). What is left is the path between
+    the pruning point and the regraft point, which is where an SPR move
+    actually changes the tree, and it is one edge for an NNI.
+    """
+    return torch.tensor(
+        [
+            index
+            for index, split in enumerate(branch_splits(topology))
+            if split not in warm.lengths_by_split
+        ],
+        dtype=torch.long,
+    )
 
 
 def _objective(
@@ -222,15 +279,28 @@ def _score(
     k: int,
     alignment: Mapping[str, np.ndarray],
     warm: _Fitted | None = None,
+    *,
+    partial: bool = False,
 ) -> _Fitted:
-    """Fit a candidate, from the parent's lengths when given, and record the cost."""
+    """Fit a candidate, from the parent's lengths when given, and record the cost.
+
+    ``partial`` varies only the branches the move created
+    (:func:`_disturbed`), holding every other coordinate at the parent's
+    fitted value; it needs ``warm`` to have those values and is ignored
+    without one.
+    """
     objective = _objective(model, topology, k, alignment)
-    counting = _Counting(objective)
     theta0 = None if warm is None else _warm_theta(objective, topology, warm)
+    scored: Objective = objective
+    if partial and warm is not None and theta0 is not None:
+        free = _disturbed(topology, warm)
+        if free.numel():
+            scored = _Restricted(objective, theta0, free)
+            theta0 = scored.initial()
+    counting = _Counting(scored)
     result = fit(counting, theta0=theta0)
     named = {
-        name: value.detach()
-        for name, value in objective.constrain(result.theta).items()
+        name: value.detach() for name, value in scored.constrain(result.theta).items()
     }
     lengths = named["branch_lengths"].tolist()
     return _Fitted(
@@ -270,6 +340,30 @@ def _lazy_score(
     )
 
 
+def _neighbourhood(
+    moves: MoveSet, radius: int | None
+) -> Callable[[Topology], Iterator[Topology]]:
+    """The move generator, with the SPR radius bound applied when asked.
+
+    Raises
+    ------
+    ValueError
+        If ``radius`` is given with ``MoveSet.NNI``, whose neighbourhood is
+        the internal edges and has no pruning point to measure from ---
+        silently ignoring it would report a bounded search that was not one.
+    """
+    if moves is MoveSet.NNI:
+        if radius is not None:
+            msg = "radius bounds an SPR regraft; MoveSet.NNI has no pruning point"
+            raise ValueError(msg)
+        return nni_neighbours
+
+    def bounded(topology: Topology) -> Iterator[Topology]:
+        return spr_neighbours(topology, radius=radius)
+
+    return bounded
+
+
 def infer(
     alignment: Mapping[str, np.ndarray],
     k: int,
@@ -282,6 +376,8 @@ def infer(
     warm_start: bool = True,
     lazy_top: int | None = None,
     surrogate: Surrogate | None = None,
+    radius: int | None = None,
+    partial_reoptimization: bool = False,
 ) -> Inference:
     """Hill-climb over topologies, fitting continuous parameters per candidate.
 
@@ -292,7 +388,12 @@ def infer(
     k : int
         Number of states.
     topology : Topology | None
-        Where to start. ``None`` draws a random topology from ``rng``.
+        Where to start. ``None`` draws a random topology from ``rng``. A
+        parsimony start is this argument and not a mode of its own:
+        ``parsimony_search(alignment, k, rng=rng).topology`` is the tree the
+        Fitch climb reaches, and it costs one post-order pass per candidate
+        against this loop's fit. What it buys is measured in
+        ``tests/benchmarks/test_search_infer_bench.py``.
     model : Model
         Substitution model for the continuous fit.
     moves : MoveSet
@@ -325,6 +426,23 @@ def infer(
         ``likelihood.surrogate`` or ``search.surrogate`` fits here. Its
         evaluations are not likelihood evaluations and are not counted as
         such; the fits it saves or costs are what ``fits`` reports.
+    radius : int | None
+        Bound an SPR regraft to within ``radius`` of the pruning point
+        (:func:`~snakes_and_ladders.search.topology.spr_neighbours`), which
+        makes the neighbourhood ``O(n * radius)`` rather than ``O(n ** 2)``.
+        ``None`` is unbounded, and so is any radius from the leaf count up:
+        the two are the same search, candidate for candidate. Rejected with
+        ``MoveSet.NNI``, which has no pruning point.
+    partial_reoptimization : bool
+        Fit a candidate over only the branches the move created, holding
+        every other length at the parent's fitted value (:class:`_Restricted`,
+        issue #408, extending the warm starts of issue #289). A partial fit
+        reaches a value no higher than the full fit's, so it screens
+        candidates rather than scoring them: the accepted move is refitted in
+        full, and ``log_likelihood`` is a full fit's whatever this is set to.
+        Which candidate wins can change, so it is opt-in, and what it costs
+        in missed optima is measured rather than assumed zero. Needs
+        ``warm_start``, which is where the lengths it holds fixed come from.
 
     Returns
     -------
@@ -336,7 +454,9 @@ def infer(
     ValueError
         If the alignment has fewer than 4 taxa, below which no unrooted
         topology has a neighbour to move to, ``lazy_top`` is not positive,
-        or a surrogate is given without ``lazy_top`` to apply it to.
+        a surrogate is given without ``lazy_top`` to apply it to, ``radius``
+        is given with ``MoveSet.NNI`` or is below 1, or
+        ``partial_reoptimization`` is set without ``warm_start``.
     """
     if lazy_top is not None and lazy_top < 1:
         msg = f"lazy_top must be at least 1 when given, got {lazy_top}"
@@ -344,12 +464,18 @@ def infer(
     if surrogate is not None and lazy_top is None:
         msg = "a surrogate ranks the candidates lazy_top selects; give both"
         raise ValueError(msg)
+    if partial_reoptimization and not warm_start:
+        msg = (
+            "partial_reoptimization holds the parent's fitted lengths on the "
+            "branches the move kept; warm_start is where they come from"
+        )
+        raise ValueError(msg)
 
+    neighbourhood = _neighbourhood(moves, radius)
     current = _start(alignment, topology, rng)
     best = _score(model, current, k, alignment)
     trace = [best.value]
     seen = {leaf_bipartitions(current)}
-    neighbourhood = nni_neighbours if moves is MoveSet.NNI else spr_neighbours
     cache = PartialCache()
 
     evaluations, fits, likelihood_evaluations = 0, 1, best.evaluations
@@ -394,7 +520,9 @@ def infer(
             likelihood_evaluations += len(fresh)
             to_fit = ranked[:lazy_top]
         for neighbour in to_fit:
-            fitted = _score(model, neighbour, k, alignment, warm)
+            fitted = _score(
+                model, neighbour, k, alignment, warm, partial=partial_reoptimization
+            )
             fits += 1
             likelihood_evaluations += fitted.evaluations
             if fitted.value > candidate_fit.value:
@@ -402,6 +530,13 @@ def infer(
         if candidate is None:
             converged = True
             break
+        if partial_reoptimization:
+            # A partial fit is a lower bound on the full one, so the winner is
+            # refitted over every branch before it is accepted: the reported
+            # log-likelihood, and the trace, stay maximized values.
+            candidate_fit = _score(model, candidate, k, alignment, candidate_fit)
+            fits += 1
+            likelihood_evaluations += candidate_fit.evaluations
         current, best = candidate, candidate_fit
         trace.append(best.value)
         _log.debug(

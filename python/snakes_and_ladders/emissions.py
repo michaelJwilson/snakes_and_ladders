@@ -152,12 +152,18 @@ class CountEmissionFamily(Protocol):
 
     @property
     def mean(self) -> torch.Tensor:
-        """Per-state mean, shape ``(n_states,)``."""
+        """Per-state mean, shape ``(n_states,)``.
+
+        A family whose observation is a tuple states one moment per channel,
+        shape ``(n_states, n_channels)``:
+        :class:`CountPairEmission` emits a depth and an allele count, and a
+        single mean over the two would be a number in no unit.
+        """
         ...  # pragma: no cover
 
     @property
     def variance(self) -> torch.Tensor:
-        """Per-state variance, shape ``(n_states,)``."""
+        """Per-state variance, shape ``(n_states,)``, or per channel."""
         ...  # pragma: no cover
 
 
@@ -1096,18 +1102,7 @@ class BetaBinomialEmission:
     def log_density(self, observations: torch.Tensor) -> torch.Tensor:
         """``log C(n, y) + log B(y + a, n - y + b) - log B(a, b)``."""
         counts = observations.unsqueeze(-1).to(self._trials.dtype)
-        total = self.concentration
-        return (
-            torch.lgamma(self._trials + 1.0)
-            - torch.lgamma(counts + 1.0)
-            - torch.lgamma(self._trials - counts + 1.0)
-            + torch.lgamma(counts + self._alpha)
-            + torch.lgamma(self._trials - counts + self._beta)
-            - torch.lgamma(self._trials + total)
-            + torch.lgamma(total)
-            - torch.lgamma(self._alpha)
-            - torch.lgamma(self._beta)
-        )
+        return _beta_binomial_log_density(counts, self._trials, self._alpha, self._beta)
 
     def validate(self, observations: np.ndarray) -> None:
         """Raise if an observation is not an integer in ``[0, max(trials)]``."""
@@ -1179,6 +1174,388 @@ class BetaBinomialEmission:
         return {"alpha": self._alpha, "beta": self._beta}
 
 
+class CountPairEmission:
+    """A total count and the successes within it, as one observation.
+
+    The emission a coverage-and-allele-count assay produces: a sequencing
+    depth ``n`` drawn from a negative binomial, and an allele count ``y``
+    drawn from a beta-binomial over that depth. An observation is a pair,
+    carried in a trailing axis of length :data:`N_CHANNELS`, channel ``0`` the
+    total and channel ``1`` the successes.
+
+    **The two forms are different models, and neither is a default.** In the
+    *independent* form the beta-binomial's trial count is a fixed parameter
+    and the two log-densities are added, so ``n`` and ``y`` are independent
+    given the state. In the *joint* form the trial count **is** the drawn
+    total, so ``y | n`` is a beta-binomial over ``n`` and the channels are
+    coupled: a deeper site carries a proportionally larger allele count. Which
+    of the two a dataset came from is a claim about the assay, not a knob, so
+    ``joint`` is keyword-only with no default --- a silent default here would
+    pick a generative model on a caller's behalf (``CLAUDE.md``, Code
+    Standards).
+
+    A success count above the trial count --- the drawn total in the joint
+    form, the fixed parameter in the independent one --- is outside the
+    support, and is scored at ``-inf`` rather than at the ``nan`` ``lgamma``
+    returns at a negative argument. That matters where the two forms are
+    compared: a fit whose likelihood is ``nan`` is not a fit that lost.
+
+    Parameters
+    ----------
+    dispersion, mean : Values
+        The total channel's negative-binomial ``r`` and ``mu``, shape
+        ``(n_states,)``.
+    alpha, beta : Values
+        The success channel's Beta parameters, shape ``(n_states,)``.
+    trials : Values | None
+        The independent form's fixed trial count per state, shape
+        ``(n_states,)``, positive integers. ``None`` in the joint form, where
+        the trial count is the observed total and a fixed one would be an
+        unused parameter a reader would have to work out was ignored.
+    joint : bool
+        Whether the success channel's trials are the drawn total.
+
+    Raises
+    ------
+    ValueError
+        If the shapes disagree, a parameter is out of range, or ``trials`` is
+        given in the joint form or omitted in the independent one.
+    """
+
+    #: Entries an observation carries: the total, then the successes within it.
+    N_CHANNELS = 2
+
+    def __init__(
+        self,
+        dispersion: Values,
+        mean: Values,
+        alpha: Values,
+        beta: Values,
+        trials: Values | None = None,
+        *,
+        joint: bool,
+    ) -> None:
+        if joint and trials is not None:
+            msg = (
+                "the joint form's trial count is the observed total; pass "
+                "trials=None, or joint=False to fix it"
+            )
+            raise ValueError(msg)
+        if not joint and trials is None:
+            msg = "the independent form needs a fixed trial count per state"
+            raise ValueError(msg)
+        self._joint = joint
+        self._total = NegativeBinomialEmission(dispersion, mean)
+        self._alpha = torch.as_tensor(alpha, dtype=torch.float64).reshape(-1)
+        self._beta = torch.as_tensor(beta, dtype=torch.float64).reshape(-1)
+        # Built even in the joint form's absence, so the shape and positivity
+        # checks are one implementation: a placeholder trial count of 1 is
+        # never read, since the joint form scores against the observed total.
+        placeholder = torch.ones_like(self._alpha)
+        self._success = BetaBinomialEmission(
+            placeholder if trials is None else trials, self._alpha, self._beta
+        )
+        if self._success.n_states != self._total.n_states:
+            msg = (
+                f"the two channels must have the same number of states, got "
+                f"{self._total.n_states} and {self._success.n_states}"
+            )
+            raise ValueError(msg)
+
+    @property
+    def joint(self) -> bool:
+        """Whether the success channel's trials are the drawn total."""
+        return self._joint
+
+    @property
+    def n_states(self) -> int:
+        """Hidden states this family emits from."""
+        return self._total.n_states
+
+    @property
+    def is_discrete(self) -> bool:
+        """True: the support is a pair of non-negative integers."""
+        return True
+
+    @property
+    def observation_dtype(self) -> torch.dtype:
+        """Floating point, as both channels' ``lgamma`` terms need."""
+        return torch.float64
+
+    @property
+    def total(self) -> NegativeBinomialEmission:
+        """The total channel, as the family it is."""
+        return self._total
+
+    @property
+    def alpha(self) -> torch.Tensor:
+        """The success channel's ``a``, shape ``(n_states,)``."""
+        return self._alpha
+
+    @property
+    def beta(self) -> torch.Tensor:
+        """The success channel's ``b``, shape ``(n_states,)``."""
+        return self._beta
+
+    @property
+    def concentration(self) -> torch.Tensor:
+        """``a + b``: how close the success channel is to a binomial."""
+        return self._alpha + self._beta
+
+    @property
+    def rate(self) -> torch.Tensor:
+        """``a / (a + b)``, the expected success fraction of a trial."""
+        return self._alpha / self.concentration
+
+    @property
+    def trials(self) -> torch.Tensor | None:
+        """The independent form's fixed trial count; ``None`` in the joint form."""
+        return None if self._joint else self._success.trials
+
+    @property
+    def mean(self) -> torch.Tensor:
+        """Per-state mean of each channel, shape ``(n_states, 2)``.
+
+        The joint form's success mean is ``mu p``, the total's mean scaled by
+        the rate, since ``E[y] = E[E[y | n]] = p E[n]``.
+        """
+        if not self._joint:
+            return torch.stack([self._total.mean, self._success.mean], dim=1)
+        return torch.stack([self._total.mean, self._total.mean * self.rate], dim=1)
+
+    @property
+    def variance(self) -> torch.Tensor:
+        """Per-state variance of each channel, shape ``(n_states, 2)``.
+
+        The joint form's success variance is the law of total variance over
+        the drawn total: ``E[Var(y | n)] + Var(E[y | n])``, which is
+        ``p (1 - p) (E[n**2] + M E[n]) / (1 + M) + p**2 Var(n)`` with
+        ``M = a + b``. Both terms matter --- dropping the second understates
+        the spread by the whole contribution of the varying depth.
+        """
+        if not self._joint:
+            return torch.stack([self._total.variance, self._success.variance], dim=1)
+        rate = self.rate
+        total = self.concentration
+        depth_mean = self._total.mean
+        depth_variance = self._total.variance
+        second = depth_variance + depth_mean**2
+        success = (
+            rate * (1.0 - rate) * (second + total * depth_mean) / (1.0 + total)
+            + rate**2 * depth_variance
+        )
+        return torch.stack([depth_variance, success], dim=1)
+
+    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+        """Draw one ``(total, successes)`` pair per entry of ``states``.
+
+        The total is drawn first and the successes second, so the two forms
+        consume the generator in the same order and a fixture that switches
+        form changes the data it is about rather than every draw in it.
+
+        Returns
+        -------
+        np.ndarray
+            Shape ``(n_draws, 2)``.
+        """
+        totals = self._total.sample(states, rng)
+        if self._joint:
+            rate = rng.beta(self._alpha.numpy()[states], self._beta.numpy()[states])
+            successes = np.asarray(rng.binomial(totals.astype(np.int64), rate))
+        else:
+            successes = self._success.sample(states, rng)
+        return np.stack([totals, successes], axis=-1)
+
+    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+        """Score every pair under every state.
+
+        Parameters
+        ----------
+        observations : torch.Tensor
+            Shape ``(..., 2)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        values = observations.to(self._alpha.dtype)
+        totals = values[..., 0].unsqueeze(-1)
+        successes = values[..., 1].unsqueeze(-1)
+        trials = totals if self._joint else self._success.trials
+        # A success count above the trial count is outside the support, and
+        # `lgamma` of the negative argument it produces is `nan`. `nan`
+        # propagates through a sum and turns a comparison of two fits into a
+        # comparison of two `nan`s, so the pair is scored at `-inf`: what is
+        # actually true of it under this model. The trial count is raised to
+        # the success count *inside* the density so the discarded branch is
+        # finite: `torch.where` multiplies the branch it did not take by zero,
+        # and `0 * nan` is `nan`, so a `nan` there would reach the gradient
+        # even though it never reaches the value.
+        supported = successes <= trials
+        scored = self._total.log_density(values[..., 0]) + _beta_binomial_log_density(
+            successes, torch.maximum(trials, successes), self._alpha, self._beta
+        )
+        return torch.where(supported, scored, torch.full_like(scored, -float("inf")))
+
+    def validate(self, observations: np.ndarray) -> None:
+        """Raise if the pairs are not counts, or a success count is impossible.
+
+        Raises
+        ------
+        ValueError
+            If the trailing axis is not of length 2, an entry is not a
+            non-negative integer, or a success count exceeds the total (joint
+            form) or the state's largest fixed trial count (independent form).
+        """
+        values = np.asarray(observations)
+        if values.ndim < 1 or values.shape[-1] != self.N_CHANNELS:
+            msg = (
+                f"a count pair has {self.N_CHANNELS} channels; got a trailing "
+                f"axis of shape {tuple(values.shape)}"
+            )
+            raise ValueError(msg)
+        _validate_counts(values)
+        if self._joint:
+            excess = int((values[..., 1] > values[..., 0]).sum())
+            if excess:
+                msg = (
+                    f"the joint form's successes cannot exceed the total; "
+                    f"{excess} pair(s) do"
+                )
+                raise ValueError(msg)
+            return
+        self._success.validate(values[..., 1])
+
+    def reestimate(
+        self, observations: torch.Tensor, posterior: torch.Tensor
+    ) -> Reestimate[CountPairEmission]:
+        """The M step: each channel's own, on the trials the form supplies.
+
+        The total channel is :class:`NegativeBinomialEmission`'s dispersion
+        solve, unchanged. The success channel is the same alternating
+        bisection :class:`BetaBinomialEmission` uses, given the fixed trial
+        count in the independent form and the *observed totals* in the joint
+        one --- which is the whole difference between the two M steps, and the
+        reason the solve takes a per-observation trial count rather than a
+        scalar.
+
+        Returns
+        -------
+        Reestimate
+            The re-estimated pair, converged only if both channels' solves
+            were, at the boundary if either was, and reporting the larger
+            iteration count and residual of the two.
+        """
+        values = observations.reshape(-1, self.N_CHANNELS).to(posterior.dtype)
+        weights = posterior.reshape(-1, self.n_states)
+        totals, successes = values[:, 0], values[:, 1]
+
+        depth = self._total.reestimate(totals, weights)
+        if not self._joint:
+            rate = self._success.reestimate(successes, weights)
+            return Reestimate(
+                CountPairEmission(
+                    depth.emissions.dispersion,
+                    depth.emissions.mean,
+                    rate.emissions.alpha,
+                    rate.emissions.beta,
+                    self._success.trials,
+                    joint=False,
+                ),
+                converged=depth.converged and rate.converged,
+                at_boundary=depth.at_boundary or rate.at_boundary,
+                iterations=max(depth.iterations, rate.iterations),
+                residual=max(depth.residual, rate.residual),
+            )
+
+        alpha = torch.empty(self.n_states, dtype=torch.float64)
+        beta = torch.empty(self.n_states, dtype=torch.float64)
+        boundary = depth.at_boundary
+        converged = depth.converged
+        iterations = depth.iterations
+        residual = depth.residual
+        for state in range(self.n_states):
+            concentration = float(self._alpha[state] + self._beta[state])
+            solved = _solve_beta_binomial(
+                successes,
+                weights[:, state],
+                totals,
+                float(self._alpha[state]) / concentration,
+                concentration,
+            )
+            alpha[state] = solved.alpha
+            beta[state] = solved.beta
+            boundary = boundary or solved.at_boundary
+            converged = converged and solved.converged
+            iterations = max(iterations, solved.iterations)
+            residual = max(residual, solved.residual)
+        return Reestimate(
+            CountPairEmission(
+                depth.emissions.dispersion,
+                depth.emissions.mean,
+                alpha,
+                beta,
+                None,
+                joint=True,
+            ),
+            converged=converged,
+            at_boundary=boundary,
+            iterations=iterations,
+            residual=residual,
+        )
+
+    def alignment_key(self) -> torch.Tensor:
+        """Both channels' mean and variance, shape ``(n_states, 4)``.
+
+        The two-moment signature :class:`NegativeBinomialEmission` gives its
+        reasons for, once per channel: two states agreeing on the depth and
+        differing on the allele fraction are different states, and a key over
+        the total alone would tie them.
+        """
+        return torch.cat([self.mean, self.variance], dim=1)
+
+    def named_parameters(self) -> Mapping[str, torch.Tensor]:
+        """``dispersion``, ``mean``, ``alpha`` and ``beta``.
+
+        The independent form's trial count is a constant, as it is for
+        :class:`BetaBinomialEmission`, and the joint form has none.
+        """
+        return {
+            "dispersion": self._total.dispersion,
+            "mean": self._total.mean,
+            "alpha": self._alpha,
+            "beta": self._beta,
+        }
+
+
+def _beta_binomial_log_density(
+    counts: torch.Tensor,
+    trials: torch.Tensor,
+    alpha: torch.Tensor,
+    beta: torch.Tensor,
+) -> torch.Tensor:
+    """``log C(n, y) + log B(y + a, n - y + b) - log B(a, b)``, broadcast.
+
+    Written once because two families evaluate it: :class:`BetaBinomialEmission`
+    with a trial count per state, and :class:`CountPairEmission`'s joint form
+    with one per observation. Every argument broadcasts, so the caller decides
+    which of the two it has.
+    """
+    total = alpha + beta
+    return (
+        torch.lgamma(trials + 1.0)
+        - torch.lgamma(counts + 1.0)
+        - torch.lgamma(trials - counts + 1.0)
+        + torch.lgamma(counts + alpha)
+        + torch.lgamma(trials - counts + beta)
+        - torch.lgamma(trials + total)
+        + torch.lgamma(total)
+        - torch.lgamma(alpha)
+        - torch.lgamma(beta)
+    )
+
+
 @dataclass(frozen=True)
 class _SolvedBetaBinomial:
     """One state's ``(a, b)`` solve."""
@@ -1194,11 +1571,17 @@ class _SolvedBetaBinomial:
 def _beta_binomial_rate_score(
     values: torch.Tensor,
     weights: torch.Tensor,
-    trials: float,
+    trials: float | torch.Tensor,
     rate: float,
     concentration: float,
 ) -> float:
-    """Score in the mean rate ``p`` at fixed concentration, divided by ``M``."""
+    """Score in the mean rate ``p`` at fixed concentration, divided by ``M``.
+
+    ``trials`` is a scalar where the family fixes it and a tensor of the same
+    shape as ``values`` where the observation supplies it
+    (:class:`CountPairEmission`'s joint form); every term broadcasts either
+    way.
+    """
     alpha = torch.tensor(rate * concentration, dtype=values.dtype)
     beta = torch.tensor((1.0 - rate) * concentration, dtype=values.dtype)
     return float(
@@ -1217,7 +1600,7 @@ def _beta_binomial_rate_score(
 def _beta_binomial_concentration_score(
     values: torch.Tensor,
     weights: torch.Tensor,
-    trials: float,
+    trials: float | torch.Tensor,
     rate: float,
     concentration: float,
 ) -> float:
@@ -1233,7 +1616,7 @@ def _beta_binomial_concentration_score(
                 + (1.0 - rate)
                 * (torch.digamma(trials - values + beta) - torch.digamma(beta))
                 - (
-                    torch.digamma(torch.tensor(trials, dtype=values.dtype) + total)
+                    torch.digamma(torch.as_tensor(trials, dtype=values.dtype) + total)
                     - torch.digamma(total)
                 )
             )
@@ -1242,7 +1625,10 @@ def _beta_binomial_concentration_score(
 
 
 def _rate_score_at(
-    values: torch.Tensor, weights: torch.Tensor, trials: float, concentration: float
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    trials: float | torch.Tensor,
+    concentration: float,
 ) -> Callable[[float], float]:
     """The rate score as a function of the rate alone, at a held concentration."""
 
@@ -1253,7 +1639,10 @@ def _rate_score_at(
 
 
 def _concentration_score_at(
-    values: torch.Tensor, weights: torch.Tensor, trials: float, rate: float
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    trials: float | torch.Tensor,
+    rate: float,
 ) -> Callable[[float], float]:
     """The concentration score as a function of ``log M`` alone, at a held rate."""
 
@@ -1283,7 +1672,7 @@ def _bisect(
 def _solve_beta_binomial(
     values: torch.Tensor,
     weights: torch.Tensor,
-    trials: float,
+    trials: float | torch.Tensor,
     rate: float,
     concentration: float,
     *,
@@ -1306,7 +1695,9 @@ def _solve_beta_binomial(
     with the mean rate bracketed by ``(0, 1)`` and the concentration by
     ``(0, bound]``, so each inner solve is unconditional.
     """
-    bound = identifiable_concentration_bound(trials, float(weights.sum()))
+    bound = identifiable_concentration_bound(
+        _effective_trials(trials, weights), float(weights.sum())
+    )
     concentration = min(concentration, bound)
     at_boundary = False
     residual = float("inf")
@@ -1353,6 +1744,20 @@ def _solve_beta_binomial(
         iterations=iterations,
         residual=residual,
     )
+
+
+def _effective_trials(trials: float | torch.Tensor, weights: torch.Tensor) -> float:
+    """The one trial count :func:`identifiable_concentration_bound` is read at.
+
+    A fixed trial count is itself. A per-observation one has no single value,
+    so the bound is taken at the *posterior-weighted mean* depth: the bound
+    scales as ``n - 1`` and the states' effective sample size is what weights
+    each observation's contribution to the concentration's score, so the mean
+    under those same weights is the depth the bound is about.
+    """
+    if isinstance(trials, torch.Tensor):
+        return float((weights * trials).sum() / weights.sum())
+    return trials
 
 
 def identifiable_concentration_bound(trials: float, weight: float) -> float:

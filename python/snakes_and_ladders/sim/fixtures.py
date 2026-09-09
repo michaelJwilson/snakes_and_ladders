@@ -52,6 +52,7 @@ from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.opt.testfunctions import load_test_function_params
 from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
 from snakes_and_ladders.sim.count_pairs import load_spatio_sequential_counts_params
+from snakes_and_ladders.sim.emission_mixture import load_emission_mixture_params
 from snakes_and_ladders.sim.hmm import load_hmm_params
 from snakes_and_ladders.sim.ldpc import load_ldpc_params
 from snakes_and_ladders.sim.mixture import load_mixture_params
@@ -81,6 +82,7 @@ LOADERS: dict[str, Callable[[Path], Any]] = {
     "potts-spots": load_potts_spots_params,
     "hidden-markov": load_hmm_params,
     "gaussian-mixture": load_mixture_params,
+    "emission-mixture": load_emission_mixture_params,
     "spatio-sequential": load_spatio_sequential_params,
     "spatio-sequential-counts": load_spatio_sequential_counts_params,
     "ldpc": load_ldpc_params,

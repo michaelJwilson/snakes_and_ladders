@@ -23,7 +23,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from snakes_and_ladders.inputs import Reach, digest, library_versions, reachable
+from snakes_and_ladders.inputs import (
+    digest,
+    library_versions,
+    module_closure,
+    source_fingerprint,
+)
 
 FIXTURES = "tests/regression/fixtures"
 
@@ -70,75 +75,43 @@ class FigureSpec:
     arguments: tuple[str, ...]
     seconds: float
 
-    def reach(self, root: Path) -> Reach:
-        """The definitions this renderer executes, fingerprinted.
-
-        Parameters
-        ----------
-        root : Path
-            The repository root.
-
-        Returns
-        -------
-        Reach
-            See :func:`snakes_and_ladders.inputs.reachable`.
-        """
-        return reachable([self.module], root)
-
-    def data(self, root: Path, reach: Reach) -> list[Path]:
+    def data(self, root: Path) -> list[Path]:
         """The inputs hashed as bytes rather than as code.
-
-        Parameters
-        ----------
-        root : Path
-            The repository root.
-        reach : Reach
-            This renderer's reachable code, which says whether the compiled
-            extension is among what it runs.
 
         Returns
         -------
         list[Path]
-            Every argument naming an existing file, then the Rust sources and
-            ``Cargo.lock`` when a reachable definition names the extension.
+            Every argument naming an existing file. The Rust sources and
+            ``Cargo.lock`` are not here: they are in the import closure when a
+            module in it names the extension, and hashed there.
         """
-        files = [root / argument for argument in self.arguments]
-        found = [path for path in files if path.is_file()]
-        if reach.extension:
-            found += sorted((root / "src").rglob("*.rs"))
-            found.append(root / "Cargo.lock")
-        return found
+        return [
+            root / argument
+            for argument in self.arguments
+            if (root / argument).is_file()
+        ]
 
     def inputs(self, root: Path) -> list[Path]:
         """Every file whose change can change what this figure renders.
 
-        The sources are hashed by :meth:`reach` as code rather than as bytes,
-        so this is what they cover, for reporting and for tests; the digest
-        below is what the stamp records.
-
-        Parameters
-        ----------
-        root : Path
-            The repository root.
+        The sources are hashed by :func:`snakes_and_ladders.inputs.source_fingerprint`
+        as code rather than as bytes, so this is what they cover, for reporting
+        and for tests; the digest below is what the stamp records.
 
         Returns
         -------
         list[Path]
-            The package sources the renderer executes, then the fixtures its
-            arguments name and the Rust sources when it reaches the extension.
+            The renderer's import closure, then the fixtures its arguments name.
         """
-        reach = self.reach(root)
-        return [*reach.modules, *self.data(root, reach)]
+        return [*module_closure([self.module], root), *self.data(root)]
 
     def input_digest(self, root: Path) -> str:
         """Hash of the inputs, the spec itself and the drawing libraries.
 
-        The package sources enter as :attr:`Reach.fingerprint` --- the ASTs of
-        the definitions the renderer reaches, docstrings and comments removed
-        --- and not as their bytes, so a reworded docstring or a constant the
-        renderer never reads is not a new figure (issues #372, #394). The
-        modules the walk had to hash whole enter by name, so a module that
-        becomes opaque to it restamps rather than quietly widening.
+        The package sources enter as
+        :func:`snakes_and_ladders.inputs.source_fingerprint` --- the ASTs of the
+        import closure, docstrings removed --- and not as their bytes, so a
+        reworded docstring is not a new figure (issues #372, #394).
 
         Returns
         -------
@@ -146,12 +119,10 @@ class FigureSpec:
             A SHA-256 hex digest; equal for two trees that render the same
             figure, different when any input differs.
         """
-        reach = self.reach(root)
         return digest(
-            self.data(root, reach),
+            self.data(root),
             root,
-            reach.fingerprint,
-            *reach.fallbacks,
+            source_fingerprint([self.module], root),
             self.stem,
             self.module,
             *self.arguments,
@@ -309,6 +280,12 @@ FIGURES: tuple[FigureSpec, ...] = (
     # figure scores every topology of the 8-taxon fixture at a reduced site
     # count; the other three name the fixture their instance is declared in,
     # as every entry here does since issue #382.
+    FigureSpec(
+        "tropical_relaxation",
+        "snakes_and_ladders.qa.tropical_relaxation",
+        ("--params", f"{FIXTURES}/tree_search/ci.yaml"),
+        seconds=5.4,
+    ),
     FigureSpec(
         "parsimony_zones",
         "snakes_and_ladders.qa.parsimony_zones",

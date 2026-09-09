@@ -281,6 +281,60 @@ climbed; the second the tree it selected beside the best one it rejected.
   \label{fig:search-topologies}
 \end{figure}
 
+\subsection{Differentiable topology search}
+\label{sec:res-tropical}
+
+The space of trees on $n$ leaves is the tropical Grassmannian
+$\mathrm{Gr}(2,n)$ \citep{speyer2004}, a quartet's resolution is the
+$\arg\min$ of three linear forms in its coordinates, and softening that
+$\arg\min$ makes the topology differentiable
+(the companion textbook states the construction). What the roadmap
+recorded as missing was the referee, and enumeration supplies one below nine
+taxa.
+
+At the tree metric of every one of the 15, 105 and 945 topologies of the
+five-, six- and seven-taxon fixtures, and of 201 of the 10{,}395 at eight, the
+relaxation equals the discrete quartet score to $3.8\times10^{-16}$ of its
+magnitude, at a temperature derived per corner from that corner's own quartet
+gaps rather than chosen. The softmin's own contribution is certified under
+$10^{-11}$; what is left at that temperature is float64 rounding of a sum over
+$\binom{n}{4}$ terms, which is why the agreement is pinned relatively.
+The relaxation's $\arg\min$ reading of a quartet agrees with the tree's leaf
+bipartitions over all 1{,}065 topologies at the first three sizes. The
+Hadamard conjugation of the exact two-state spectrum returns a metric whose
+four-point violation is below $10^{-12}$ and which resolves every quartet as
+the generating tree does --- a point of $\mathrm{Gr}(2,n)$ from a closed form
+sharing no algebra with a walk over the tree.
+
+\qacaptionread{figures/tropical_relaxation_caption.txt}{\tropicalRelaxationCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/tropical_relaxation}
+  \caption{\tropicalRelaxationCaption}
+  \label{fig:tropical-relaxation}
+\end{figure}
+
+What the relaxation buys is a separate question and on these fixtures the
+answer is nothing. Annealed ascent from 8 random metrics reaches the
+enumerated maximum of the quartet surface 8 of 8 times at five and six taxa
+and 7 of 8 at eight, the miss stopping at the runner-up, $15.8$ below in
+$302{,}287$. Neighbor joining on the estimated distances reaches the same
+maximum on every fixture measured, at no gradient steps. The quartet surface
+shares its maximizer with the fitted likelihood at five and six taxa, where
+both enumerate. On the seven-taxon fixture chosen so that hill climbing fails,
+the top two quartet scores differ by $0.0117$ in $339{,}982$ ---
+$3.4\times10^{-8}$, inside the convergence of the fits that produced them ---
+so the enumerated maximum is not a target any method can be held to there, and
+both the relaxation and neighbor joining return the generating topology.
+Ascent leaves the variety: the four-point violation where it stops is $0.24$,
+$0.05$, $2.15$ and $1.04$ in units where the metric has mean 1, and at seven
+taxa its relaxed value exceeds every corner's by $0.96$, which is the outer
+relaxation's gap measured rather than assumed absent. No budget-matched claim
+is made against the bounded-radius search of Section~\ref{sec:res-budget}:
+the relaxation costs $3\binom{n}{4}$ four-taxon fits, 15 to 210 over these
+sizes, against that search's 31 six-taxon fits, and no fixture measured here
+separates the two on quality.
+
 \subsection{The reward an agent can afford}
 \label{sec:res-reward}
 
@@ -356,7 +410,15 @@ expectation--maximization reach the best-known optimum from 7 starts,
 parallel tempering from 4 ($p = 0.549$ against restarts) and annealing from
 1 ($p = 0.031$), with mean gaps of 2.6, 4.2 and 8.0 nats (ledger entry 004).
 On Rastrigin, held to eight fits, neither multi-start nor annealing reaches
-the global minimum from any of 10 starts. Restarts are therefore not beaten
+the global minimum from any of 10 starts. Three economies of the topology
+climb are compared the same way, at a budget of 500 candidates over 8 seeds
+and refereed by enumeration: a parsimony start, a regraft bounded to radius
+$r$, and refitting only the branches a move changed each reach the enumerated
+maximum from every start at five and six taxa, at 1,902, 755 and 1,810 forward
+passes against the unbounded search's 2,848 at six taxa, and together at
+1,009. At eight taxa, past enumeration, all three together return the
+unbounded search's log-likelihood for 1,930 and 3,359 passes against 16,600
+and 24,493. Restarts are therefore not beaten
 on the continuous surfaces measured and are beaten on the frustrated
 lattice, the one instance class past enumeration the roadmap needs. On an
 antiferromagnetic chain whose optimum needs coordinated flips the
@@ -375,6 +437,13 @@ The Rust pruning backend runs at 2.5 times the NumPy oracle at 200 taxa by
 11,000 sites, with peak memory 22.6\,MB, and the minimum-cut kernel at 26 to
 32 times the reference as a kernel and 6.3 to 10.7 times as a caller sees it,
 the difference being the Python energy evaluation and not the boundary copy.
+Laying the pruning kernel's partial likelihoods out with sites contiguous and
+walking them in tiles, so its inner loops are contiguous, unaliased and free of
+early exits, cuts the kernel by 28\% at four taxa by 200,000 sites and 35\% at
+eight; through the binding at 11,000 sites it changes nothing measurable, the
+call there being 199 internal nodes and a logarithm per site per node rather
+than the message pass. The layout was chosen by benchmark and no vector width
+is asserted anywhere.
 Process parallelism over independent tasks---the multi-start fit, the
 budgeted comparison, the bootstrap---was measured on a four-core host at 1, 2
 and 4 workers with the intra-op thread count at 1 and at the default: no

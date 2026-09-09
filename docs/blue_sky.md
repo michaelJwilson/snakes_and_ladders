@@ -18,7 +18,7 @@ three that have none at the size that matters say so.
 | Source | Proposal | State | Evidence |
 | --- | --- | --- | --- |
 | Roadmap Stage 3, differentiable topology | Gumbel-softmax relaxation of Potts and HMM states | Landed (#225) | Relaxation exact at every corner to `1e-11`; deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098`; the relaxation on the Potts lattice and joint structure-plus-parameter optimization not built (`STATUS.md` Stage 3) |
-| Roadmap Stage 3, differentiable topology | Tropical Grassmannian relaxation over trees | Not started, blocked on an oracle (#211) | No tree instance at an interesting size has a known optimum (`TICKETS.md` Stage 3) |
+| Roadmap Stage 3, differentiable topology | Tropical Grassmannian relaxation over trees | Landed (#408); not shown to beat a classical baseline | Enumeration at 5 to 8 taxa and the Hadamard closed form referee it; neighbor joining reaches the same optimum at no gradient steps on every fixture measured (`STATUS.md` Stage 3) |
 | Roadmap Stage 3, neural surrogates | Networks approximating the likelihood or energy, exact re-scoring of the top-`K` | Landed as certified bounds plus learned predictors on the gap (#317, closing #308) | Plug-in lower and parsimony upper bounds with 0/15 violations; surrogate-ranked SPR search reaches the full search's optimum 4/4 at 277 likelihood evaluations against 20,718; learned gap R² 0.98 held out at eight taxa. The `10,000×` filter at large `n` is unmeasured |
 | Roadmap Stage 3, compound moves | Macro-actions sampled dynamically | Not started (#147) | #310's chain block move is an exact macro-move with no learning; multi-SPR neighbourhoods are #329's third item |
 | Roadmap Stage 3, transformer policy | Autoregressive or policy-gradient model over canonical encodings | Not started | #317's per-branch and per-node tokens and one-block attention model are the encoding half, fitted as a surrogate rather than trained as a policy; #114 gave topologies a canonical key |
@@ -48,8 +48,9 @@ Each: what is built, the oracle, the tier, and what the roadmap item it serves.
   distribution the support #270 estimates. *Oracle:* the flat-prior weight
   over fitted likelihoods, enumerated at 5 to 8 taxa (15 to 10,395
   topologies), the quantity #310's topology move is already pinned against.
-  *Tier:* CI at 5 and 6 taxa; stress at 8. *Serves:* the tropical
-  Grassmannian half, by supplying what it lacks.
+  *Tier:* CI at 5 and 6 taxa; stress at 8. *Serves:* a second
+  differentiable-topology route beside the tropical Grassmannian one #408
+  landed, which parameterizes a point rather than a distribution.
 - **A graph-network policy over the tree**, #317's graph model as the encoder
   and #328's features as its input, trained by #313's PPO. *Oracle:* the
   enumerated maximum on #177's 7-taxon fixture, where greedy reaches it from

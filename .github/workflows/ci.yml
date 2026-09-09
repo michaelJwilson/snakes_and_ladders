@@ -162,10 +162,10 @@ jobs:
   python-tests:
     name: Python tests (pytest)
     runs-on: ubuntu-24.04
-    # The job's cap is the outer one; the bounded merge gate carries its own,
-    # tighter cap on the step that runs the tests (issue #423). It has to sit
-    # there rather than here, because whether the selection is bounded is a
-    # step output and a job-level `timeout-minutes` cannot read one.
+    # One cap for the job, and no tighter one on the step. A bound on the
+    # selection and a fixed timeout cannot coexist: the 15-minute cap fired on
+    # exactly the pull requests the bound refused, and a cancelled job is
+    # indistinguishable from a failing one (issues #423, #425).
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -274,24 +274,20 @@ jobs:
           git fetch --no-tags origin "${{ github.base_ref }}" || true
           changed="$(git diff --name-only "$base"...HEAD)"
           echo "changed files:"; echo "$changed" | sed 's/^/  /'
-          # `--budget` bounds the fallback, and only the fallback: a change
-          # this cannot attribute to a module selects what it can plus what
-          # always runs, rather than the whole suite, which took 23 to 36
-          # minutes against 156 seconds for the nine other jobs together
-          # (issue #409). The whole suite still runs, on the push to main
-          # below, where nobody waits for it. A change touching a likelihood
-          # kernel, the Rust sources or a lockfile refuses the bound.
-          echo "$changed" | python3 infra/select_tests.py --budget >> "$GITHUB_OUTPUT"
-          echo "$changed" | python3 infra/select_tests.py --budget | sed 's/^/::notice::/'
+          echo "$changed" | python3 infra/select_tests.py >> "$GITHUB_OUTPUT"
+          echo "$changed" | python3 infra/select_tests.py | sed 's/^/::notice::/'
+      # NOT on a pull request (issue #455). A pull request is judged by the
+      # critical gate above; the tier below runs on the push to `main`, where
+      # nobody waits for it, and at the release gate. The pytest job took 17
+      # to 32 minutes on a pull request while the other nine jobs finished
+      # inside three, so it was the whole of the wait.
+      #
+      # The trade, stated because it is real: the `ci` tier can now break in a
+      # merge rather than before one, and `main` carries the failure until
+      # someone fixes it. `main`'s own run is what catches it, and a red
+      # `main` is work before anything else -- DEV.md says so.
       - name: Run the selected tests
-        # 15 minutes when the selection is bounded, and the 90 the job allows
-        # when it is not. #409's `--budget` deliberately refuses to bound a
-        # change to a likelihood kernel, the Rust sources or a lockfile, and
-        # the whole suite takes 23 to 36 minutes -- so a flat 15-minute cap
-        # cancelled exactly those pull requests, and a cancelled job is
-        # indistinguishable from a failing one. Measured: PR #420 was
-        # cancelled at 15:15 with the suite 57% run.
-        timeout-minutes: ${{ (github.event_name == 'pull_request' && steps.selection.outputs.bounded == 'true') && 15 || 90 }}
+        if: github.event_name != 'pull_request'
         run: |
           paths="${{ steps.selection.outputs.paths }}"
           cov="${{ steps.selection.outputs.cov }}"
