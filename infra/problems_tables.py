@@ -224,6 +224,9 @@ ORACLES: dict[str, str] = {
     "likelihood.potts.enumerate_potts": "enumeration or brute force",
     "learn.potts.enumerate_configurations": "enumeration or brute force",
     "likelihood.hmm_paths.enumerate_hidden_paths": "enumeration or brute force",
+    "likelihood.mixture_assignments.enumerate_mixture_assignments": (
+        "enumeration or brute force"
+    ),
     "learn.hmm.enumerate_paths": "enumeration or brute force",
     "likelihood.spatio_sequential.enumerate_spatio_sequential": (
         "enumeration or brute force"

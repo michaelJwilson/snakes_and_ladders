@@ -411,11 +411,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.budget and not refused and chosen["paths"] != ["tests"]:
         print("selection bounded for the merge gate", file=sys.stderr)
 
+    # Whether the selection is bounded decides how long the merge gate may
+    # take, so it is an output rather than only a stderr notice: an
+    # unboundable change runs the whole suite, which cannot fit the bounded
+    # gate's timeout, and a job cancelled at that timeout is indistinguishable
+    # from a failing test (issue #423).
+    bounded = bool(args.budget) and not refused and chosen["paths"] != ["tests"]
+
     if args.format == "json":
-        print(json.dumps(chosen))
+        print(json.dumps({**chosen, "bounded": bounded}))
     else:
         print(f"paths={' '.join(chosen['paths'])}")
         print(f"cov={' '.join('--cov=' + target for target in chosen['cov'])}")
+        print(f"bounded={'true' if bounded else 'false'}")
     return 0
 
 
