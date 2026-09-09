@@ -30,6 +30,21 @@ run_check "mypy --strict" uv run mypy
 run_check "cargo clippy" cargo clippy --locked --all-targets -- -D warnings
 run_check "cargo fmt --check" cargo fmt --check
 run_check "cargo test" cargo test --locked
+# The only two things that compile the `sandbox` feature. A `#[cfg(feature)]`
+# route nothing builds stops compiling the first time a neighbouring API moves
+# and nobody learns for months, which is the rot `sandbox/CLAUDE.md`'s
+# conservation rule exists to prevent. Both are needed and neither is
+# redundant: `cargo test` does not build a `[[bench]]` target, so the gated
+# criterion bench is compiled and linted by the clippy pass, and clippy runs
+# no test, so the gated unit tests are run by the `cargo test` pass. The
+# Python route in front of it is refereed by
+# `tests/regression/likelihood/test_pruning_burn.py`, which skips against the
+# default extension the `pytest` line below runs against; a release build
+# rebuilds it with `maturin develop --release --features sandbox` to see it
+# pass (DEV.md, Build System).
+run_check "cargo clippy --features sandbox" \
+  cargo clippy --locked --all-targets --features sandbox -- -D warnings
+run_check "cargo test --features sandbox" cargo test --locked --features sandbox
 # Plain `pytest`, not `-m release`: the latter marker-filters down to only
 # release-marked tests, dropping everything `python-tests`' `-m "not
 # release"` already covers. DEV.md's "Run the full suite ... with `pytest -m
