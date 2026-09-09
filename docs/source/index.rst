@@ -96,6 +96,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.ldpc
    :members:
 
+.. automodule:: snakes_and_ladders.sim.convolutional
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood
    :members:
 
@@ -166,6 +169,12 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.ldpc
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.convolutional
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.turbo
    :members:
 
 .. automodule:: snakes_and_ladders.opt
@@ -424,6 +433,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.tanner_graph
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.turbo_waterfall
    :members:
 
 .. automodule:: snakes_and_ladders.qa.coupled_labelling
