@@ -124,22 +124,16 @@ def _sibling_products(messages: Sequence[torch.Tensor]) -> list[torch.Tensor]:
         # Every internal node of a binary tree, so it is worth not allocating
         # the scan's two identity tensors to reach the same answer.
         return [messages[1], messages[0]]
-    prefix: list[torch.Tensor | None] = [None] * count
-    for position in range(1, count):
-        running = messages[position - 1]
-        prefix[position] = running if position == 1 else prefix[position - 1] * running
-    result: list[torch.Tensor] = [messages[0]] * count
-    suffix: torch.Tensor | None = None
+    # Only a multifurcation reaches here, so the scan's two identity tensors
+    # are two allocations on a path a binary tree never takes.
+    prefix = [torch.ones_like(messages[0])]
+    for message in messages[:-1]:
+        prefix.append(prefix[-1] * message)
+    result = list(messages)
+    suffix = torch.ones_like(messages[0])
     for position in range(count - 1, -1, -1):
-        head = prefix[position]
-        if head is None:
-            assert suffix is not None
-            result[position] = suffix
-        elif suffix is None:
-            result[position] = head
-        else:
-            result[position] = head * suffix
-        suffix = messages[position] if suffix is None else suffix * messages[position]
+        result[position] = prefix[position] * suffix
+        suffix = suffix * messages[position]
     return result
 
 

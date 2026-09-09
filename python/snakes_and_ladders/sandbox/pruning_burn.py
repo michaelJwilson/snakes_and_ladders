@@ -157,9 +157,9 @@ class _PruningLogLikelihood(torch.autograd.Function):
             flattened.leaf_row,
             k,
             np.ascontiguousarray(pi.detach().cpu().numpy(), dtype=np.float64),
-            None if weight is None else np.ascontiguousarray(
-                weight.detach().cpu().numpy(), dtype=np.float64
-            ),
+            None
+            if weight is None
+            else np.ascontiguousarray(weight.detach().cpu().numpy(), dtype=np.float64),
             rescale,
         )
         ctx.gradient = torch.as_tensor(

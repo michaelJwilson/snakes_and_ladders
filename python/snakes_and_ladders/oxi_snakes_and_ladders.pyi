@@ -20,6 +20,7 @@ def pruning_log_likelihood(
     pi: np.ndarray,
     rescale: bool,
 ) -> float: ...
+
 # Declared unconditionally, present only when the extension was built with the
 # `sandbox` Cargo feature (`src/pruning_burn.rs`). A stub cannot be conditional
 # on how the extension was compiled, and the module that calls this ---

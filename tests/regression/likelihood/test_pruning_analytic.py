@@ -70,7 +70,9 @@ def _gradient(evaluate, case, **kwargs) -> tuple[float, np.ndarray]:  # type: ig
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)])
+@pytest.mark.parametrize(
+    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
+)
 def test_value_is_the_taped_path_s(fixture_name: str, n_sites: int) -> None:
     """The forward value is ``pruning_torch``'s, which is the oracle."""
     case = _case(fixture_name, n_sites)
@@ -81,7 +83,9 @@ def test_value_is_the_taped_path_s(fixture_name: str, n_sites: int) -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)])
+@pytest.mark.parametrize(
+    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
+)
 def test_gradient_matches_the_taped_gradient(fixture_name: str, n_sites: int) -> None:
     """The gradient the tape produces, to the float64 agreement tolerance."""
     case = _case(fixture_name, n_sites)
@@ -91,7 +95,9 @@ def test_gradient_matches_the_taped_gradient(fixture_name: str, n_sites: int) ->
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)])
+@pytest.mark.parametrize(
+    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
+)
 def test_gradient_matches_central_differences(fixture_name: str, n_sites: int) -> None:
     """Against a quotient of the forward pass alone, at the derived tolerance."""
     tau, k, pi, alignment, lengths = _case(fixture_name, n_sites)
@@ -135,7 +141,9 @@ def test_weighted_patterns_give_the_uncompressed_gradient() -> None:
     """
     tau, k, pi, alignment, lengths = _case(EIGHT_TAXA, 2000)
     compressed = compress(alignment)
-    _, full = _gradient(pruning_analytic.log_likelihood, (tau, k, pi, alignment, lengths))
+    _, full = _gradient(
+        pruning_analytic.log_likelihood, (tau, k, pi, alignment, lengths)
+    )
     _, weighted = _gradient(
         pruning_analytic.log_likelihood,
         (tau, k, pi, compressed.alignment, lengths),
@@ -153,9 +161,7 @@ def test_a_general_rate_matrix_agrees_with_the_taped_path() -> None:
     )
     rate_matrix = off_diagonal - torch.diag(off_diagonal.sum(dim=1))
     case = (tau, k, pi, alignment, lengths)
-    _, expected = _gradient(
-        pruning_torch.log_likelihood, case, rate_matrix=rate_matrix
-    )
+    _, expected = _gradient(pruning_torch.log_likelihood, case, rate_matrix=rate_matrix)
     _, actual = _gradient(
         pruning_analytic.log_likelihood, case, rate_matrix=rate_matrix
     )

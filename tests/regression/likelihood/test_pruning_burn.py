@@ -75,7 +75,9 @@ def _gradient(evaluate, case, **kwargs) -> tuple[float, np.ndarray]:  # type: ig
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)])
+@pytest.mark.parametrize(
+    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
+)
 def test_value_is_the_taped_path_s(fixture_name: str, n_sites: int) -> None:
     """The forward value is ``pruning_torch``'s, which is the oracle."""
     tau, k, pi, alignment, lengths = _case(fixture_name, n_sites)
@@ -85,7 +87,9 @@ def test_value_is_the_taped_path_s(fixture_name: str, n_sites: int) -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)])
+@pytest.mark.parametrize(
+    ("fixture_name", "n_sites"), [(SMALL_SITES, 2000), (EIGHT_TAXA, 2000)]
+)
 def test_gradient_matches_the_taped_gradient(fixture_name: str, n_sites: int) -> None:
     """A second tape reaches the first tape's derivative, in ``float64``."""
     case = _case(fixture_name, n_sites)
@@ -163,7 +167,12 @@ def test_a_general_rate_matrix_is_refused() -> None:
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 100)
     with pytest.raises(ValueError, match="Jukes-Cantor"):
         pruning_burn.log_likelihood(
-            tau, k, pi, alignment, lengths, rate_matrix=torch.eye(k, dtype=torch.float64)
+            tau,
+            k,
+            pi,
+            alignment,
+            lengths,
+            rate_matrix=torch.eye(k, dtype=torch.float64),
         )
 
 

@@ -54,9 +54,7 @@ def test_every_route_agrees_with_the_taped_gradient(route: str) -> None:
     gradients = []
     for evaluate in (pruning_torch.log_likelihood, _ROUTES[route]):
         at = lengths.clone().requires_grad_(True)
-        evaluate(
-            params.tau, params.k, params.pi, dataset.alignment, at
-        ).backward()  # type: ignore[no-untyped-call]
+        evaluate(params.tau, params.k, params.pi, dataset.alignment, at).backward()  # type: ignore[no-untyped-call]
         assert at.grad is not None
         gradients.append(at.grad.numpy().copy())
     assert_allclose(gradients[1], gradients[0], rtol=CROSS_DEVICE_RTOL_FLOAT64)
