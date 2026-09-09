@@ -24,10 +24,12 @@ git -C "$main" fetch --quiet --no-tags origin
 git -C "$main" worktree add -b "$branch" "$path" "$base"
 ln -s "$main/.venv" "$path/.venv"
 
-extension=$(git -C "$main" worktree list --porcelain |
-  sed -n 's/^worktree //p' |
-  while read -r tree; do ls "$tree"/python/snakes_and_ladders/*.so 2>/dev/null; done |
-  head -n 1)
+extension=""
+for tree in "$main" $(git -C "$main" worktree list --porcelain | sed -n 's/^worktree //p'); do
+  for candidate in "$tree"/python/snakes_and_ladders/*.so; do
+    if [ -f "$candidate" ]; then extension=$candidate; break 2; fi
+  done
+done
 if [ -z "$extension" ]; then
   echo "no compiled extension in any worktree; build one with maturin" >&2
   exit 1
