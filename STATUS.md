@@ -248,6 +248,60 @@ tracks resolving, by moving `PottsParams` into `snakes_and_ladders.sim.potts` th
 #171 moved the HMM's truth type. No fitting, cluster updates, or evaluator
 on the general graph yet (issues #172, #174).
 
+**The external field is per site, and three instances need one.** `h` was one
+row every site shared, so the spatial half of the coupled model could not be
+studied with anything site-specific driving it and nothing declared a lattice
+at the transition. `h` is now `(n_states,)` or `(n_nodes, n_states)`, widened
+once by `snakes_and_ladders.sim.potts.site_field` at each entry point, and the
+exact open-chain recursion, the Gibbs sweep, `enumerate_potts` and
+`strip_log_partition` index one shape. A per-site field whose rows are equal
+reproduces the shared-field `log Z` and marginals to 0.0, and the strip
+matches enumeration to 0.0 on a per-site field, which is what the widening had
+to satisfy.
+
+`potts_spots` declares the spatial half with the chains and the gated
+emissions removed and the field `h[n, m] = alpha[m] * log(size[n] / size_bar)`
+added: 3x3 at `ci`, where enumeration over 19,683 configurations gives the
+exact marginals; a 12x6 strip at `stress`, where 3\*\*72 configurations are
+past enumeration and the column transfer matrix is not; and 71x71 triangular
+at `release`, the geometry `spatio_sequential_counts/stress` declares. At `ci`
+Gibbs matches enumeration to 0.0153 against the declared 0.04, the covariate
+moves the exact marginals by 0.2555 against its own site average, and `alpha`
+is recovered inside its 95% intervals with the flat class covering zero
+(0.0186 against a half-width of 0.0411). At `stress` the exact mean field
+energy, `d log Z(t h) / dt` at `t = 1` from two more transfer-matrix
+evaluations, is 15.121 against the sampler's 15.126, inside the declared 0.25
+and 0.06 standard errors. At `release` the mean `alpha` of a label rises
+monotonely across size quartiles (-0.2335, -0.0549, 0.0862, 0.2602) and the
+tilt between the outer two is 0.4935 +/- 0.0101 over eight chains.
+
+**A finding: at the coupled fixture's coupling the field is swamped.** The
+71x71 triangular instance was proposed at the coupled fixture's `J = 1.0`.
+The `q`-state Potts model on a triangular lattice orders above the coupling
+solving `v**3 + 3 v**2 = q` for `v = exp(J) - 1` (Baxter, ch. 12), which at
+`q = 10` is `J_c = 0.913`, so `J = 1.0` is on the ordered side: a seeded draw
+put 3,991 of 5,041 sites into the two extreme classes after 200 sweeps (44.9 s)
+and the counts were still moving, which makes the draw a coarsening front
+rather than an equilibrium sample. The instance is declared at `J = 0.7`
+instead, where the ten classes hold 415 to 593 sites each and the tilt above is
+stable; the swamped configuration is recorded here rather than declared.
+
+**A lattice at the transition, declared rather than built twice.**
+`potts_lattice/stress` is the 12x12 open square at the exact 3-state
+transition in zero field. The coupling is resolved by
+`snakes_and_ladders.sim.potts.critical_coupling` from the file's own state
+count rather than stored as a rounded float, so the instance cannot drift off
+`J_c`. `tests/regression/search/test_potts_mcmc.py` and section 9 of
+`docs/nb/potts_chain.ipynb` each built that lattice for themselves; both now
+read the file, and the notebook re-executes to the same energy autocorrelation
+times it printed before — 6.70, 4.17 and 2.34 site updates for single-site,
+Swendsen-Wang and Wolff — which is the evidence the two copies were one
+instance. The values are now pinned beside the ordering, at the file's 10%
+relative tolerance. A duplication guard keeps `ln(1 + sqrt(q))` in one place
+and found two further copies on its first run, in
+`test_belief_propagation.py` and `test_potts_mcmc_bench.py`
+([#413](https://github.com/michaelJwilson/snakes_and_ladders/issues/413)).
+
 **HMMs: a first-class simulator.** `snakes_and_ladders.sim.hmm` draws a hidden state path
 and an observation sequence jointly from a declared `(pi, A, B)`, retaining
 the path alongside the data on the footing the tree simulator already has
