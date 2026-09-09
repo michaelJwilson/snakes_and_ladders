@@ -212,6 +212,9 @@ def _coupling(path: Path, raw: object, n_states: int) -> float:
             msg = f"{path}: coupling {raw!r} is not a number or {CRITICAL!r}"
             raise ValueError(msg)
         return critical_coupling(n_states)
+    if not isinstance(raw, int | float):
+        msg = f"{path}: coupling {raw!r} is not a number or {CRITICAL!r}"
+        raise ValueError(msg)
     return float(raw)
 
 
