@@ -403,11 +403,15 @@ jobs:
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
       - run: uv sync --locked --extra notebooks
-      # Re-executes every notebook whose inputs changed since its committed
-      # stamp (docs/nb/<name>.inputs, issue #372) and diffs what it printed
-      # against what is committed; an unchanged one is skipped. Its own job
-      # rather than release-gated: a notebook that stopped running would
-      # otherwise reach main and sit there until a release.
+      # Re-executes every notebook under docs/nb/ -- all six of them -- and
+      # diffs what each printed against what is committed. Which ones run is
+      # not a digest's decision (issues #480, #507): a stamp skipped
+      # `turbo.ipynb` for as long as no diff reached its import closure, and
+      # the check it had been skipping failed on the merge that first ran it.
+      # The set is fixed, so what a run verified does not depend on what the
+      # diff happened to touch. Its own job rather than release-gated: a
+      # notebook that stopped running would otherwise reach main and sit
+      # there until a release.
       - run: uv run python infra/check_notebooks.py
 
   # The push to `main`, not the pull request: at 15.8 s current and up to

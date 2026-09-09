@@ -718,6 +718,61 @@ that of a rooted tree: an asymmetric $W$ scores each rooting of one unrooted
 topology differently, and a search over unrooted topologies is well defined
 only when $W$ is a metric, where every rooting agrees.
 
+\paragraph{The gradient in the branch lengths.}
+Fitting $\branch$ needs $\partial \ell / \partial t_v$ for all $2n-3$ branches.
+Differentiating Equation~\ref{eq:pruning} branch by branch costs one recursion
+each; a single root-to-tip pass returns all of them together, and it is the
+transpose of the post-order pass rather than a second algorithm
+\citep{felsenstein2004}. Write $A^s_u(i) = \partial \ell / \partial L^s_u(i)$
+for the adjoint of node $u$'s partial at site $s$, $m^s_v(i) = \sum_j
+\Pmat_{ij}(t_v)\, L^s_v(j)$ for the message $v$ sends its parent, and
+$\dot{\Pmat}(t) = \mathrm{d}\Pmat/\mathrm{d}t$, which is closed form under
+Equation~\ref{eq:jc} and $\Q\,\Pmat(t)$ in general. Equation~\ref{eq:root}
+starts the pass,
+\begin{equation}
+  A^s_{\rootnode}(i) = \frac{\pi_i}{\sum_{j \in \states} \pi_j\, L^s_{\rootnode}(j)},
+  \label{eq:adjoint-root}
+\end{equation}
+and for a non-root node $v$ with parent $u$, abbreviating
+$B^s_v(i) = A^s_u(i) \prod_{w \in \mathrm{children}(u) \setminus \{v\}} m^s_w(i)$,
+\begin{equation}
+  \frac{\partial \ell}{\partial t_v}
+    = \sum_{i,j \in \states} \dot{\Pmat}_{ij}(t_v) \sum_s B^s_v(i)\, L^s_v(j),
+  \qquad
+  A^s_v(j) = \sum_{i \in \states} B^s_v(i)\, \Pmat_{ij}(t_v),
+  \label{eq:pruning-backward}
+\end{equation}
+which is Algorithm~\ref{alg:pruning-backward}. Its cost is $O(n L k^2)$, the
+forward pass's, and independent of the number of branches differentiated.
+
+Two properties of that pass are worth stating, because both are places an
+implementation goes wrong silently. First, the rescaling contributes nothing:
+$\ell$ is algebraically independent of the per-node scales, the divided
+partial and the accumulated logarithm moving against each other, so the
+derivative may be taken with the scales frozen at the values the forward pass
+produced, and each adjoint is simply divided by its own node's scale. Second,
+the sibling product $\prod_{w \neq v} m^s_w$ must be formed by a scan over the
+siblings and not as $L^s_u / m^s_v$: a message vanishes at any site whose
+observation forbids that state, where the quotient is $0/0$ and the derivative
+is finite.
+
+\begin{algorithm}[htbp]
+\caption{Two-pass gradient of the pruning recursion in the branch lengths}
+\label{alg:pruning-backward}
+\begin{algorithmic}[1]
+\State run Equation~\ref{eq:pruning} in post-order, keeping each node's
+       partial $L^s_v$ and the message $m^s_v$ it sent its parent
+\State $A^s_{\rootnode} \gets \bpi \,/ \sum_{j} \pi_j L^s_{\rootnode}(j)$
+       \Comment{Equation~\ref{eq:adjoint-root}}
+\For{each non-root node $v$ in pre-order, with parent $u$}
+  \State $B^s_v(i) \gets A^s_u(i) \prod_{w \in \mathrm{children}(u) \setminus \{v\}} m^s_w(i)$
+  \State $\partial \ell / \partial t_v \gets \sum_{i,j} \dot{\Pmat}_{ij}(t_v) \sum_s B^s_v(i) L^s_v(j)$
+  \State $A^s_v(j) \gets \sum_i B^s_v(i)\, \Pmat_{ij}(t_v)$
+\EndFor
+\State \Return $(\partial \ell / \partial t_v)_{v \neq \rootnode}$
+\end{algorithmic}
+\end{algorithm}
+
 \paragraph{Regime.}
 Exact on every input, because a tree has no cycle. The one failure mode is
 numerical---underflow of a product of $n$ factors each below one---and it is
@@ -728,7 +783,10 @@ Direct marginalization, Equation~\ref{eq:site-independence}, at the sizes it
 allows, to a relative tolerance (Section~\ref{sec:tolerance}). Two invariants
 past those sizes: the pulley principle, that a reversible model's likelihood
 does not depend on where the root is placed along a branch, and a gradient
-against central differences relative to its own norm. And the recovery test of
+against central differences relative to its own norm---which is what refereed
+Algorithm~\ref{alg:pruning-backward} against the same likelihood
+differentiated by a tape, the two agreeing to a tighter tolerance than either
+agrees with the difference quotient. And the recovery test of
 Section~\ref{sec:properties}: on simulated data the fitted branch lengths
 cover the truth at their nominal rate, and the search recovers the generating
 topology at a stated site count.
@@ -1021,13 +1079,16 @@ normalizer sums over $q^{|V|}$ configurations.
 The exact referee is the $q^{|V|}$ enumeration, refused past 200,000
 configurations, which puts the ceiling at eleven nodes at three states and
 seventeen at two. The fixtures sit under it: a chain of twelve sites at three
-states over 400 replicates, and an open $3 \times 3$ lattice at three states,
-whose $3^9 = 19{,}683$ configurations give the exact normalizer and every
-marginal. Above it the transfer matrix referees a strip of any length at a
-width that fits, belief propagation is compared on the $8 \times 8$ lattice
-where nothing is exact, the minimum cut is checked at extents 8, 12 and 16,
-and the cluster moves are separated from single-site sweeps at extents 8 and
-24. The general graph carries $G(n, p)$ instances to a thousand nodes,
+states over 400 replicates, and two open $3 \times 3$ lattices at three
+states, one in a shared field and one in a per-site field, whose
+$3^9 = 19{,}683$ configurations give the exact normalizer and every marginal.
+Above it the transfer matrix referees a strip of any length at a width that
+fits --- which is where the $12 \times 6$ per-site-field instance sits, at
+$3^{72}$ configurations --- belief propagation is compared on the
+$8 \times 8$ lattice where nothing is exact, the minimum cut is checked at
+extents 8, 12 and 16, and the cluster moves are separated from single-site
+sweeps at extents 8 and 24, the $12 \times 12$ of them at the square-lattice
+transition of Section~\ref{sec:potts-sampling} being a declared instance. The general graph carries $G(n, p)$ instances to a thousand nodes,
 refereed by the planted energy of Section~\ref{sec:frustrated} rather than by
 any enumeration.
 
@@ -1185,7 +1246,11 @@ The single-site heat bath draws each spin from its conditional,
 one site at a time; a \emph{sweep} is one update of every site,
 Algorithm~\ref{alg:heat-bath}. Near a
 critical coupling correlated regions span the lattice and single-site moves
-decorrelate slowly. Cluster moves flip such regions together
+decorrelate slowly. On the square lattice that coupling is the self-dual
+point $J_c = \ln(1 + \sqrt{q})$, and on the triangular lattice it is
+$\ln(1 + v)$ for the positive root of $v^3 + 3v^2 = q$ \citep{baxter1982};
+both are closed forms, so an instance meant to sit at one is placed there
+rather than near it. Cluster moves flip such regions together
 \citep{swendsen1987, wolff1989, newman1999}: in the Edwards--Sokal
 representation \citep{edwards1988} a bond is placed between equal neighbours
 with probability $1 - e^{-\beta J_{ij}}$, and each bond-connected cluster is

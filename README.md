@@ -78,7 +78,7 @@ working in.
 | [`python/snakes_and_ladders/learn/CLAUDE.md`](python/snakes_and_ladders/learn/CLAUDE.md) | The RL interface, its oracles, and the rules a reward and a baseline obey |
 | [`python/snakes_and_ladders/search/CLAUDE.md`](python/snakes_and_ladders/search/CLAUDE.md) | Move sets, search budgets, and the phylogenetic environment |
 | [`python/snakes_and_ladders/qa/CLAUDE.md`](python/snakes_and_ladders/qa/CLAUDE.md) | QA figures: rendering, never recomputing |
-| [`python/snakes_and_ladders/sandbox/CLAUDE.md`](python/snakes_and_ladders/sandbox/CLAUDE.md) | The oracle home: what a framework replaced, kept to referee it |
+| [`python/snakes_and_ladders/sandbox/CLAUDE.md`](python/snakes_and_ladders/sandbox/CLAUDE.md) | The oracle home: what a framework replaced, and what a measurement declined |
 | [`infra/CLAUDE.md`](infra/CLAUDE.md) | CI/CD, the agentic workflow, experiment tracking |
 | [`docs/CLAUDE.md`](docs/CLAUDE.md) | How the documents are built and kept true |
 
