@@ -1,0 +1,38 @@
+model: potts-spots
+oracle: transfer-matrix
+
+# The same construction as `ci` on a strip past enumeration: 12 columns of 6
+# sites is 72 sites and 3**72 configurations, and the column transfer matrix
+# of `snakes_and_ladders.likelihood.potts.strip_log_partition` is still exact
+# there -- 3**6 = 729 column states, 3**12 = 531,441 operations per column
+# step. That is the whole reason the width is 6: it is the largest strip
+# whose exact normalizer is affordable, and an instance with no exact
+# referee would be `release`'s job rather than this one's.
+geometry: square
+shape: [12, 6]
+boundary: open
+n_classes: 3
+coupling: 0.6
+alpha: [1.0, -1.0, 0.0]
+
+# Drawn rather than written out: 72 numbers no reader checks are worse than
+# a seed and a shape parameter that reproduce them. `log_sigma` is 0.6, the
+# spread of the profile `ci` declares, so the two instances differ in size
+# and geometry and not in how hard the covariate pushes. There is no
+# location parameter because the field divides by the geometric mean, and a
+# declared one would cancel.
+sizes:
+  form: lognormal
+  seed: 4130906
+  log_sigma: 0.6
+
+seed: 20260909
+n_samples: 2000
+burn_in: 500
+
+# Tolerance on the mean field energy, which is what the exact normalizer
+# referees the sampler by: d log Z / dt at t = 1 for a field scaled by t is
+# that mean exactly, and two more transfer-matrix evaluations give it. Three
+# Monte Carlo standard errors of the sampled mean at 2,000 chains, which is
+# 3 x 0.0805 measured, rounded up. The deviation itself measured 0.005.
+tolerance: 0.25

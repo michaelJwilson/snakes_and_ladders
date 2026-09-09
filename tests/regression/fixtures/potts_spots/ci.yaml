@@ -1,0 +1,41 @@
+model: potts-spots
+oracle: enumeration
+
+# The spatial half of the coupled model (issue #413): a Potts prior over M
+# class labels whose external field varies *per site*, driven by a declared
+# per-site covariate. Every field is required -- see
+# python/snakes_and_ladders/sim/potts.py and sim/CLAUDE.md.
+#
+# 3x3 at 3 classes is 3**9 = 19,683 configurations, so `log Z`, every
+# marginal and the covariate's effect on them are exact. The geometry,
+# boundary, coupling and Monte Carlo budget are `potts_lattice/ci`'s, so the
+# two instances differ in exactly one thing: whether the field varies by
+# site.
+geometry: square
+shape: [3, 3]
+boundary: open
+n_classes: 3
+coupling: 0.6
+
+# h[n, m] = alpha[m] * log(size[n] / size_bar), size_bar the geometric mean.
+# One class rises with the covariate, one falls, one is flat. The flat class
+# is the null the other two are measured against: its field is zero at every
+# site whatever the sizes are, so an interval on its alpha that excluded zero
+# would say the estimator, not the instance, put it there.
+alpha: [1.0, -1.0, 0.0]
+
+# Written out rather than drawn, so a reader sees which site is large. The
+# order is deliberately not a gradient across the lattice: a monotone profile
+# would agree with the ferromagnetic coupling everywhere and the field would
+# never have to overcome it.
+sizes:
+  form: declared
+  values: [1.0, 3.2, 0.6, 2.0, 0.8, 4.0, 2.6, 1.2, 1.6]
+
+# 2000 independent chains, each run 500 Gibbs sweeps from its own random
+# start, holding Monte Carlo error on a single-site marginal near p = 0.3 to
+# sqrt(0.3 * 0.7 / 2000) ~= 0.0102. The tolerance is four of those.
+seed: 20260909
+n_samples: 2000
+burn_in: 500
+tolerance: 0.04
