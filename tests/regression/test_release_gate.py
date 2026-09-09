@@ -131,7 +131,7 @@ def test_the_gate_builds_the_documentation_in_full() -> None:
 
 
 @pytest.mark.structural
-def test_dev_md_states_the_figure_pass_at_the_manifest_s_own_total() -> None:
+def test_release_md_states_the_figure_pass_at_the_manifest_s_own_total() -> None:
     """The cost beside the gate is the manifest's, to the tenth of a second.
 
     The number this replaced --- ~6 min a figure --- was a whole re-stamp
@@ -139,12 +139,16 @@ def test_dev_md_states_the_figure_pass_at_the_manifest_s_own_total() -> None:
     disagreed with it (issue #476). `snakes_and_ladders.qa.manifest` carries a
     measured `seconds` per figure, so the released total has a source that a
     reader can add up, and this fails when the manifest moves away from it.
+
+    Read from `RELEASE.md`, which took the release procedure and its costs
+    from `DEV.md` (issue #494). The claim is unchanged; only its home moved,
+    and the copy left behind had already drifted to 437.7 s over 22 entries.
     """
     total = sum(spec.seconds for spec in FIGURES)
     stated = f"**{total:.1f} s**"
-    dev = (REPO_ROOT / "DEV.md").read_text()
-    assert stated in dev, (
-        f"DEV.md's release gate does not state the figure pass as {stated}, "
+    release = (REPO_ROOT / "RELEASE.md").read_text()
+    assert stated in release, (
+        f"RELEASE.md's release gate does not state the figure pass as {stated}, "
         f"the sum of the {len(FIGURES)} declared render times in "
         "snakes_and_ladders.qa.manifest"
     )

@@ -60,7 +60,8 @@ holds it.
    tolerance-based test beside the tolerance it was checked against, and which
    documents the change made untrue.
 5. **A release is itself a ticket**, gated on `infra/release.sh` passing before
-   a version is tagged.
+   a version is tagged. [RELEASE.md](RELEASE.md) carries the procedure and
+   what each step costs.
 
 ## The contract an agent reads first
 
@@ -107,7 +108,8 @@ Three further rules constrain what the suite may contain:
 | Document | Contents |
 | --- | --- |
 | [INSTALL.md](INSTALL.md) | Installing, building, running the tests, working locally |
-| [DEV.md](DEV.md) | Repository layout, test layout, CI jobs, the CI budget, the release procedure |
+| [DEV.md](DEV.md) | Repository layout, test layout, CI jobs, the CI budget, how a change is reviewed |
+| [RELEASE.md](RELEASE.md) | Cutting a release: what it is cut against, the steps, who runs each, and what each costs |
 | [CHANGELOG.md](CHANGELOG.md) | What has landed, per dated release |
 | [`docs/source/`](docs/source) | Sphinx API documentation, built from the docstrings |
 | [`docs/nb/`](docs/nb) | Worked notebooks, one per problem class, fixture to learned policy |

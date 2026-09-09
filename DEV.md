@@ -121,7 +121,7 @@ Ten checks run via GitHub Actions (`.github/workflows/ci.yml`). Nine run on a pu
 | `audit` | `pip-audit`, `cargo audit` (skips on cache hit if lockfiles are unchanged) |
 | `pr-title` | The title starts with `[<base branch>]`, the branch the pull request targets (issue #292). One shell line; runs only where the workflow does, so on a stacked pull request it is the reviewer's until #273 lands |
 
-Branch protection names each required check by the job's `name:`, not by its id, so renaming one is two changes. Issue #377 renamed the LaTeX job to **Documents (paper and textbook)**, and merged as #379 on 2026-09-08; the maintainer replaces its former name — the one entry in the branch protection no job reports under any more — with that string. Until both say it, the renamed job reports and the retired entry sits pending, blocking every merge. Confirming that replacement is a precondition of the 0.5.0 release, and is where the 0.4.0 audit left it.
+Branch protection names each required check by the job's `name:`, not by its id, so renaming one is two changes and only a maintainer can make the second. Issue #377 renamed the LaTeX job to **Documents (paper and textbook)**, merged as #379 on 2026-09-08, and the maintainer has replaced the retired entry with that string: `main` took three merges on 2026-09-09, and #463 reported ten check runs including the renamed one, all green, with `mergeable_state: clean`. A retired entry no job reports under blocks every merge until it is replaced, which is the failure that was; a required check a job *skips* blocks nothing, which is the failure that remains (see Documents). Whether every required check reports under the name branch protection lists is a release precondition, checked per release rather than recorded here: [RELEASE.md](RELEASE.md) carries it with its current verdict.
 
 `lint`, `python-tests`, `docs`, and `notebooks` restore a `~/.cache/uv` cache keyed on `uv.lock`'s hash before installing `uv`. `rust-lint`, `rust-tests`, `build`, and those same four jobs restore a shared `~/.cargo/registry`, `~/.cargo/git`, and `target/` cache keyed on `Cargo.lock`'s hash, so `oxi_snakes_and_ladders` (built via `maturin`/`pyo3` on every `uv sync` or `pip install .`) compiles from scratch only when a lockfile changes or no job has populated the cache yet. `audit`'s per-week marker cache (above) is unrelated and unaffected.
 
@@ -401,91 +401,28 @@ request.
 
 ### Release
 
-A release is cut from a Release-template issue (`.github/ISSUE_TEMPLATE/release.yml`):
-it drives the repository-consolidation audit (roadmap progress, doc/code
-consistency, duplicated machinery, suggested follow-up tickets) and gates on
-`infra/release.sh` passing before a maintainer adds the `release` label.
+A release is cut from a Release-template issue
+(`.github/ISSUE_TEMPLATE/release.yml`): it drives the repository-consolidation
+audit (roadmap progress, doc/code consistency, duplicated machinery, suggested
+follow-up tickets) and gates on `infra/release.sh` passing before a maintainer
+adds the `release` label.
 
-0. **Check the ledgers name open work.** Every `TICKETS.md` bullet names the
-   issue that carries it, and a release audit checks each is still open: a
-   bullet whose carrier has closed either describes work that landed, and is
-   removed, or work that remains with nothing behind it, and is re-pointed to
-   a ticket filed then. The same reading covers the notebooks' Further Work
-   sections, which name an issue per line. Twelve such bullets and nine such
-   lines were found at the 0.5.0 audit (issue #400); the check is a reading
-   rather than a script, because it needs the issue tracker and a judgement on
-   whether the work landed.
-1. **Run the gate.** `infra/release.sh` runs every per-PR CI check
-   (`ruff check`, `ruff format --check`, `mypy --strict`, `cargo clippy -D
-   warnings`, `cargo fmt --check`, `cargo test --locked`) plus what CI skips
-   per PR: the full `pytest` suite including `@pytest.mark.release` tests
-   (see "Release-Gated" above), the full `sphinx-build -W`, every figure, and
-   `infra/build_documents.sh`. It runs every check regardless of earlier
-   failures and prints a pass/fail summary at the end; a non-zero exit means
-   at least one check failed.
+**[RELEASE.md](RELEASE.md) carries the procedure and what each step costs** —
+what the cut is taken against, who can run each step, the preconditions and
+their current verdicts, the version rule, `towncrier`, and what a release does
+not do. It is not repeated here: a release is a different task from a change,
+and this file is about changes.
 
-   Two of its steps rebuild something in full rather than deciding what to
-   rebuild:
-
-   | Step | What it rebuilds | Cost |
-   | --- | --- | --- |
-   | `QA figures (every figure)` | every manifest figure, cited and uncited, compared against the committed bytes | **437.7 s**, the declared `seconds` in `snakes_and_ladders.qa.manifest` summed over its 22 entries; **not yet measured as a pass on this host** |
-   | `sphinx-build -W (full)` | all 134 modules, `-E -a` so no saved environment is reused | 32.2 s cold, against 8.2 s when nothing changed (issue #476) |
-
-   **Neither step predicts.** The figure step passes `--all`, which ignores
-   the stamps: the stamps' false-positive rate is 100% over 476 decisions
-   (issue #476), and the guarantee that a figure whose rendered bytes would
-   change cannot reach a release claiming to be current is enforced by
-   rendering every figure, not by a digest. `--check` compares a rebuild
-   without overwriting, so a mismatch is a failure naming the figure and
-   never a silent refresh; the step runs **before** `infra/build_documents.sh`
-   for that reason, since that script renders a stale cited figure into
-   `docs/tex/figures/` and would otherwise supply the bytes the comparison is
-   against. The Sphinx step is `-E -a` for the same reason in miniature: an
-   incremental build states only what changed, and its verdict depends on what
-   `docs/_build/` holds from an earlier branch or an interrupted run, while a
-   release claims all 134 modules are clean. Autodoc does record each module
-   as a dependency, so an incremental build re-reads a *changed* docstring —
-   measured on the pull request that added this step, with #448's `:cite:`
-   role reintroduced: the incremental form failed too. Zero warnings across
-   all 134 modules is the current state and the baseline `-W` holds.
-
-   **The figure pass is minutes, and its cost is concentrated rather than
-   spread.** `topology_accuracy` at 124.0 s and `rl_tree_policy` at 101.4 s
-   are 52.2% of the 431.8 s between them; four more run 27.3–39.6 s and
-   `turbo_waterfall` 16.0 s; the
-   remaining sixteen are 2.5–7.7 s each, and the median figure is 5.0 s. The
-   manifest is the source because it is in the tree and a guard already reads
-   it (`CITED_RENDER_CAP`), each entry's `seconds` being one render measured
-   alone on the reference host. The sum is arithmetic over those values, not a
-   timed pass: the gate renders each figure in its own process and compares
-   the bytes, so a measured pass will exceed it. An earlier per-figure cost of
-   ~6 min was a whole re-stamp pass's total read as one render and is
-   retracted (issue #476); it made this step look hours-scale when it is
-   minutes, which is the argument for rendering everything rather than
-   predicting what to render.
-2. **Bump the version.** Edit `[package].version` in `Cargo.toml` — the
-   single version source (CLAUDE.md) — then run `cargo build` so
-   `Cargo.lock`'s `oxi_snakes_and_ladders` entry picks up the new version, and commit both.
-   `maturin` reads the Python package version from the same field
-   (`dynamic = ["version"]` in `pyproject.toml`), so nothing else needs
-   editing.
-3. **Build the changelog.** Run `uv run towncrier build --version
-   <version>` from the repository root: it consumes every fragment in
-   `changelog.d/`, deletes them, and inserts a dated `## [<version>]` section
-   into `CHANGELOG.md` (see `changelog.d/README.md`). Commit the result.
-4. **Tag and publish.** Open a PR with the version bump and changelog
-   commit; once merged, tag the merge commit (`git tag v<version> && git
-   push origin v<version>`) and publish a GitHub release from that tag,
-   with the new `CHANGELOG.md` section as its body.
-
-**A version whose changelog section exists is already spent.** `0.1.0`'s
-section was built into `CHANGELOG.md` before the repository was tagged, and
-fragments accumulated after it. Running `towncrier build` at that same version
-writes a second section rather than extending the first, so step 2 bumps to
-the next version whenever the top section of `CHANGELOG.md` already carries
-the one in `Cargo.toml`. `infra/release.sh` does not check this; issue #146
-records the gap.
+What belongs here is the part a change meets. `infra/release.sh` runs every
+per-pull-request CI check (`ruff check`, `ruff format --check`, `mypy
+--strict`, `cargo clippy -D warnings`, `cargo fmt --check`, `cargo test
+--locked`) plus what CI skips per pull request: the full `pytest` suite
+including `@pytest.mark.release` tests (see "Release-Gated" above), the full
+`sphinx-build -W`, every figure compared against the committed bytes,
+`infra/build_documents.sh`, the generated ledgers and the fixture baselines. So
+a test moved to the `release` tier, a figure whose renderer changed, and a
+baseline recomputed by hand are all read again there, and nowhere between here
+and there.
 
 ---
 
