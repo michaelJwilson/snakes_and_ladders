@@ -50,6 +50,16 @@ jobs:
             "[$BASE]"*) echo "ok: $TITLE" ;;
             *) echo "::error::title must start with [$BASE]: $TITLE"; exit 1 ;;
           esac
+      # DEV.md: a body is capped at 40 content lines (issue #521), counted by
+      # `infra/experiments.py`'s `body_lines` so the repository has one meaning
+      # for how long a text is. Checked here because this job already has the
+      # payload; a checkout and the interpreter the runner ships are the whole
+      # cost, and nothing here imports the package.
+      - uses: actions/checkout@v4
+      - name: Check the body length
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$BODY" | python3 infra/check_pr_body.py
 
   lint:
     name: Lint & type-check (ruff, mypy)
