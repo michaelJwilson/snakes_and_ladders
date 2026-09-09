@@ -24,6 +24,11 @@ and is principle.
   nothing behind but the adapter that fronts the framework. Its regression
   tests move with it and keep passing: they are what the adapter is pinned
   against.
+- **Whichever side lost moves in, and it moves in when the measurement
+  lands.** A framework that beat the implementation on the hot path by the
+  margin root `CLAUDE.md` sets leaves that implementation here; a framework
+  that lost stays here itself. Both numbers go in the pull request either
+  way, and the hot path keeps exactly one implementation.
 - **A declined route moves in only if it was finished.** Clean, scoped to a
   question that was posed, and refereed by tests that still pass — an
   abandoned attempt is not conserved, it is dropped. What is conserved is the
