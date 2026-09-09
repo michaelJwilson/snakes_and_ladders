@@ -143,6 +143,10 @@ labelling #389 names is not on that path at all.
   it is as the Rust path's oracle.
 - #390 — closed on 7.0%; nothing moves. PyTorch Geometric stays the referee
   it already was in `test_learn_surrogate_pyg.py`.
+- #450 — seen while running the whole `search` suite for this experiment and
+  not caused by it: the seven-taxon support calibration fails its
+  bin-occupancy precondition with all 16 runs in the lowest bin. `release`
+  tier, and no import path reaches it from the sweep this experiment changed.
 - #405 — the Python Dinic is 49.9% of `alpha_expansion` at extents 16 and 32,
   which has no compiled path: `maxflow_rust.max_flow` returns the flow value
   and not the cut, and `expand` needs the cut. scipy's 3.5× to 8.8× would
