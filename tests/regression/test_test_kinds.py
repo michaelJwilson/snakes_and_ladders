@@ -18,6 +18,7 @@ satisfied by a `conftest.py` applying markers invisibly.
 from __future__ import annotations
 
 import ast
+import sys
 import tomllib
 from pathlib import Path
 
@@ -25,25 +26,15 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: What a test is checked against. Exactly one home for the names: they are
-#: registered in `pyproject.toml`, and `test_the_registered_markers_are_these`
-#: asserts this tuple and that registration agree.
-KINDS = (
-    "oracle",
-    "simulated_truth",
-    "mathematical",
-    "edge_case",
-    "structural",
+# The names live in `infra/test_kinds.py`, which the merge gate also reads:
+# one definition, and `infra/` is already on `mypy_path`. See that module.
+sys.path.insert(0, str(REPO_ROOT / "infra"))
+
+from test_kinds import (  # noqa: E402
+    EXCLUDED_DIRECTORY,
+    KINDS,
+    SCHEDULING,
 )
-
-#: The second axis. Not a kind: it says when a test runs, not what it checks.
-#: `stress` (#232) is the same axis as `release`: a size, not a claim.
-SCHEDULING = ("critical", "release", "stress")
-
-#: Benchmarks measure rather than assert, so they carry no kind. Excluded here
-#: rather than exempted case by case, because the exclusion is a property of the
-#: directory and not of any test in it.
-EXCLUDED_DIRECTORY = "benchmarks"
 
 
 def _test_functions(path: Path) -> list[ast.FunctionDef]:
