@@ -86,7 +86,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from scipy.spatial.distance import squareform
 
 from snakes_and_ladders.likelihood.distance import tree_distances
 from snakes_and_ladders.search.infer import Model, score_topology
@@ -152,7 +151,7 @@ def _pair_position(n: int, first: np.ndarray, second: np.ndarray) -> np.ndarray:
     vector converts to a square matrix for neighbor joining without a second
     convention to keep true.
     """
-    return (first * (2 * n - first - 1)) // 2 + second - first - 1
+    return np.asarray((first * (2 * n - first - 1)) // 2 + second - first - 1)
 
 
 def pairing_positions(n: int) -> np.ndarray:
@@ -395,6 +394,12 @@ def corner(topology: Topology, branch_length: float = 1.0) -> np.ndarray:
 def condensed(distances: np.ndarray) -> np.ndarray:
     """A square distance matrix as the condensed vector this module optimizes.
 
+    The row-major upper triangle, which is what :func:`_pair_position`
+    indexes and what :func:`expanded` inverts. Hand-rolled rather than taken
+    from ``scipy``: no module of the package imports it, and the two
+    directions here are four lines of indexing that :func:`expanded`'s round
+    trip pins.
+
     Parameters
     ----------
     distances : np.ndarray
@@ -405,12 +410,33 @@ def condensed(distances: np.ndarray) -> np.ndarray:
     np.ndarray
         Length ``n (n - 1) / 2``.
     """
-    return np.asarray(squareform(distances, checks=False), dtype=np.float64)
+    size = distances.shape[0]
+    return np.asarray(distances[np.triu_indices(size, 1)], dtype=np.float64)
 
 
-def _pairing_sums(
-    positions: np.ndarray, distances: torch.Tensor
-) -> torch.Tensor:
+def expanded(distances: np.ndarray, n: int) -> np.ndarray:
+    """A condensed vector back as a symmetric ``(n, n)`` matrix with a zero diagonal.
+
+    Parameters
+    ----------
+    distances : np.ndarray
+        Length ``n (n - 1) / 2``, in :func:`condensed`'s layout.
+    n : int
+        Taxon count.
+
+    Returns
+    -------
+    np.ndarray
+        Symmetric ``(n, n)``.
+    """
+    matrix = np.zeros((n, n), dtype=np.float64)
+    rows, columns = np.triu_indices(n, 1)
+    matrix[rows, columns] = distances
+    matrix[columns, rows] = distances
+    return matrix
+
+
+def _pairing_sums(positions: np.ndarray, distances: torch.Tensor) -> torch.Tensor:
     """The three pairing sums of every quartet, shape ``(m, 3)``."""
     return distances[positions[..., 0]] + distances[positions[..., 1]]
 
@@ -568,7 +594,7 @@ def temperature_for(
         )
         raise ValueError(msg)
     budget = 2.0 * table.n_quartets * float(table.ranges.max())
-    return max(smallest / np.log(budget / tolerance), MINIMUM_TEMPERATURE)
+    return max(smallest / float(np.log(budget / tolerance)), MINIMUM_TEMPERATURE)
 
 
 @dataclass(frozen=True)
@@ -714,7 +740,7 @@ def optimize(
         final = torch.exp(logarithms)
         value = float(relaxed_score(table, positions, final, current))
         metric = final.numpy()
-    square = np.asarray(squareform(metric))
+    square = expanded(metric, table.n_taxa)
     topology = neighbor_joining(list(table.names), square)
     return TropicalOptimum(
         topology=topology,
