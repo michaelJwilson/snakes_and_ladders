@@ -1,14 +1,25 @@
-"""The oracle home: hand-rolled implementations a framework has replaced on a hot path (issue #322).
+"""The home of the second implementation, whichever side won (issue #322).
 
-An implementation moves in here when a measured adoption lands -- a framework
-fronts the hot path, and the implementation it replaced stays as the referee
-the framework is pinned against, per root ``CLAUDE.md``'s oracle rule. Only
-``tests/`` and ``snakes_and_ladders.qa`` import from here, never ``sim``,
-``likelihood``, ``opt``, ``search`` or ``learn``; nothing is deleted from it;
-and nothing is re-exported from the package root. ``CLAUDE.md`` in this
-directory states the rules and ``tests/regression/test_sandbox.py`` asserts
-them.
+A framework and the hand-rolled code it was measured against are two
+implementations of one equation, and one of them belongs here: the
+implementation a framework replaced on a hot path, kept as the referee root
+``CLAUDE.md``'s oracle rule requires, or the framework front that lost, kept
+so the decline stays re-checkable when the library's next version moves the
+numbers. Only ``tests/`` and ``snakes_and_ladders.qa`` import from here, never
+``sim``, ``likelihood``, ``opt``, ``search`` or ``learn``; nothing is deleted
+from it; and nothing is re-exported from the package root. ``CLAUDE.md`` in
+this directory states the rules and ``tests/regression/test_sandbox.py``
+asserts them.
 
-Empty so far: no adoption has yet been measured to beat the implementation it
-would replace, so nothing has been moved.
+Three framework fronts so far, all declined on their numbers (issues #388,
+#389, #390): :mod:`~snakes_and_ladders.sandbox.pyg_surrogate` computes
+``GraphSurrogate``'s forward through PyTorch Geometric's ``GINConv``,
+:mod:`~snakes_and_ladders.sandbox.rustworkx_clusters` labels the
+Swendsen-Wang bond graph through ``rustworkx.connected_components``, and
+:mod:`~snakes_and_ladders.sandbox.scipy_mincut` solves the ground state's
+minimum cut through ``scipy.sparse.csgraph.maximum_flow``. Each module's
+docstring carries the ratio it was declined at and the host that produced it.
+The first two import the ``frameworks`` extra at module scope, so a caller
+without it fails rather than silently falling back to what the front referees;
+scipy is a core dependency and the third imports it directly.
 """

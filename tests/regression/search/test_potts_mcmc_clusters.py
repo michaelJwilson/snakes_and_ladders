@@ -9,12 +9,13 @@ from a different chain. So the roots are pinned against the walk they
 replaced, and the grouping against the ``unique``/``flatnonzero`` scan it
 replaced, on seeded bond sets.
 
-`rustworkx` and `scipy.sparse.csgraph` referee the partition from outside.
-Neither replaced the labelling: issue #389 measured `rustworkx` slower than
-this module's own code on the whole sweep at every extent, and `scipy` faster
+`scipy.sparse.csgraph` referees the partition from outside, by a different
+algorithm. It did not replace the labelling: issue #389 measured it faster
 only past extent 16 and only by renumbering the clusters, which composes a
-different chain from the same seed. So what they are here for is the partition
-itself, which each computes by a different algorithm.
+different chain from the same seed. The `rustworkx` front is the one that was
+proposed and declined, so it is conserved in
+`snakes_and_ladders.sandbox.rustworkx_clusters` and refereed by
+`test_potts_mcmc_rustworkx.py` rather than open-coded here.
 """
 
 from __future__ import annotations
@@ -105,26 +106,3 @@ def test_scipy_connected_components_finds_the_same_clusters(extent: int) -> None
         _, theirs = connected_components(adjacency, directed=False)
 
         assert _partition(_roots(parent.copy())) == _partition(theirs)
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize("extent", EXTENTS)
-def test_rustworkx_connected_components_finds_the_same_clusters(extent: int) -> None:
-    rustworkx = pytest.importorskip("rustworkx")
-    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
-    bonds = _bonds_of(graph)
-    for parent, active in _seeded_bond_sets(extent, N_DRAWS):
-        theirs = rustworkx.PyGraph(multigraph=False)
-        theirs.add_nodes_from(range(graph.n_nodes))
-        theirs.add_edges_from_no_data(
-            [
-                (int(bonds.first[edge]), int(bonds.second[edge]))
-                for edge in np.flatnonzero(active)
-            ]
-        )
-        blocks = frozenset(
-            frozenset(int(node) for node in component)
-            for component in rustworkx.connected_components(theirs)
-        )
-
-        assert _partition(_roots(parent.copy())) == blocks
