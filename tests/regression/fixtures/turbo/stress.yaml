@@ -1,0 +1,19 @@
+model: turbo
+oracle: closed-form
+
+# The memory-2 (7, 5) turbo code at the message length the waterfall's shape
+# is visible at inside the 30 s cited-figure render cap (`DEV.md`), which is
+# what `qa.turbo_waterfall` draws: 6 points x 50 frames x 51 ms per frame
+# at K = 256 is 15.4 s of decoding.
+#
+# Past enumeration, so the closed form this tier is refereed against is the
+# uncoded antipodal bit error rate Q(sqrt(2 E_b / N_0)) measured through the
+# same channel, and the coded curve is held to falling below it.
+seed: 233
+message_length: 256
+memory: 2
+feedback: "7"
+feedforward: "5"
+iterations: 8
+eb_n0_db: [0.0, 0.4, 0.8, 1.2, 1.6, 2.0]
+frames: 50

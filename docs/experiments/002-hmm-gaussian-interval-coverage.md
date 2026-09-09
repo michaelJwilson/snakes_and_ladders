@@ -17,53 +17,18 @@ status: confirmed
 
 # Do the Wald intervals of a Gaussian-emission fit cover at their nominal rate, and from what separation?
 
-## Feature under test
+## Question
 
-The 95% Wald intervals from the observed information at a Gaussian-emission
-fit cover the generating parameters at their nominal rate once the emitting
-means are separated enough for the states to be identifiable, and under-cover
-below that separation.
+Do the 95% Wald intervals from the observed information cover the generating parameters at their nominal rate once the emitting means are separated enough for the states to be identifiable, and under-cover below that?
 
-## Setup
+## Numbers
 
-Two hidden states with univariate Gaussian emissions one common standard
-deviation wide, with the means separated by 0.5 to 6 standard deviations; 24
-replicates of 240 observations per separation, each fitted by L-BFGS and given
-Wald intervals from the observed information. A replicate at the variance
-floor is a refusal, not an interval, and is counted as such. The oracle is the
-generating parameter: an interval covers or it does not.
-
-## Results
-
-From `tests/regression/opt/test_opt_hmm_gaussian.py` and the coverage figure
-`opt_coverage` at the commit above:
-
-| separation | intervals covering | rate | replicates with no interval at all |
-| --- | --- | --- | --- |
-| 0.5 | 18/28 | 0.643 | 17/24 |
-| 1.0 | 46/56 | 0.821 | 10/24 |
-| 2.0 | 82/88 | 0.932 | 2/24 |
-| 3.0 | 90/96 | 0.938 | 0/24 |
-| 4.0 | 93/96 | 0.969 | 0/24 |
-| 6.0 | 92/96 | 0.958 | 0/24 |
-
-## Figures
-
-`opt_coverage`
+| separation, standard deviations | 0.5 | 1.0 | 2.0 | 3.0 | 4.0 | 6.0 |
+| --- | --- | --- | --- | --- | --- | --- |
+| intervals covering | 18/28 | 46/56 | 82/88 | 90/96 | 93/96 | 92/96 |
+| rate | 0.643 | 0.821 | 0.932 | 0.938 | 0.969 | 0.958 |
+| replicates at the variance floor, no interval | 17/24 | 10/24 | 2/24 | 0/24 | 0/24 | 0/24 |
 
 ## Finding
 
-Coverage reaches nominal from two standard deviations of separation upward and
-degrades below it, seen twice over: the intervals that exist under-cover, and
-an increasing fraction of replicates reach the variance floor and report no
-interval at all.
-
-## Conclusion and actions
-
-none
-
-## What is not claimed
-
-Nothing about coverage at other sequence lengths or state counts; the
-asymptotic argument behind the Wald interval is not tested past the two-state
-case, and 24 replicates bound a coverage rate to roughly ±0.1.
+Coverage is nominal from two standard deviations of separation upward and degrades below it twice over: the intervals that exist under-cover, and an increasing fraction of replicates reach the variance floor and report none. From `pytest tests/regression/opt/test_opt_hmm_gaussian.py -m release`, figure `opt_coverage`; no actions.

@@ -104,6 +104,19 @@
     approximation on a loopy one, where min-sum is the cheaper and the weaker
     and the gap is measured.
 
+"Turbo code, two (7,5) recursive systematic encoders":
+  optimizers: >-
+    BCJR is exact on one constituent code, since a terminated trellis is a
+    chain, and Viterbi over the same branch metrics returns the most likely
+    message rather than the most likely bits --- two answers, and a received
+    word separates them. The pair is loopy sum-product on a serial schedule
+    and is exact nowhere: at K = 12 its bit error rate is 1.26 to 3.20 times
+    the enumerated bitwise MAP's, and it is not monotone in the iteration
+    count, every rise lying inside one binomial interval of the sample. The
+    iteration wins where the interleaver is long: at K = 256 it is under the
+    uncoded closed form at every declared point and at K = 1,024 the curve
+    turns between 0.4 and 1.2 dB.
+
 "Hidden Markov model, six emission families":
   samplers: >-
     The block sweep draws a whole path from its conditional in one pass, where
