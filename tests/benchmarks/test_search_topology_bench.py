@@ -37,3 +37,17 @@ def test_spr_neighbours_benchmark(benchmark: BenchmarkFixture) -> None:
     neighbours = benchmark(lambda: list(spr_neighbours(topology)))
 
     assert len(neighbours) == 2 * (N_TAXA - 3) * (2 * N_TAXA - 7)
+
+
+def test_spr_neighbours_bounded_benchmark(benchmark: BenchmarkFixture) -> None:
+    """The bounded regraft, at the radius the search is measured under.
+
+    Generation is not where a search spends its time -- the whole point of
+    the bound is the candidates it never scores -- so what this number says
+    is that the BFS the bound costs stays far below one fit.
+    """
+    topology = _caterpillar(N_TAXA)
+
+    neighbours = benchmark(lambda: list(spr_neighbours(topology, radius=2)))
+
+    assert 0 < len(neighbours) < 2 * (N_TAXA - 3) * (2 * N_TAXA - 7)

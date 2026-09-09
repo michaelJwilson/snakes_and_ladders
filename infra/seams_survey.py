@@ -78,7 +78,7 @@ PROTOCOLS = (
         "emissions",
         "CountEmissionFamily",
         "protocol",
-        "the count families' shared moments; #399's two-channel emission is its next implementer",
+        "the count families' shared moments, which now bracket equidispersion in five families and carry a per-channel pair (#399)",
     ),
     Seam("opt.schedule", "Schedule", "protocol"),
     Seam("opt.initialize", "Initializer", "protocol"),

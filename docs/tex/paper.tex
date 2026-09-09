@@ -381,7 +381,15 @@ expectation--maximization reach the best-known optimum from 7 starts,
 parallel tempering from 4 ($p = 0.549$ against restarts) and annealing from
 1 ($p = 0.031$), with mean gaps of 2.6, 4.2 and 8.0 nats (ledger entry 004).
 On Rastrigin, held to eight fits, neither multi-start nor annealing reaches
-the global minimum from any of 10 starts. Restarts are therefore not beaten
+the global minimum from any of 10 starts. Three economies of the topology
+climb are compared the same way, at a budget of 500 candidates over 8 seeds
+and refereed by enumeration: a parsimony start, a regraft bounded to radius
+$r$, and refitting only the branches a move changed each reach the enumerated
+maximum from every start at five and six taxa, at 1,902, 755 and 1,810 forward
+passes against the unbounded search's 2,848 at six taxa, and together at
+1,009. At eight taxa, past enumeration, all three together return the
+unbounded search's log-likelihood for 1,930 and 3,359 passes against 16,600
+and 24,493. Restarts are therefore not beaten
 on the continuous surfaces measured and are beaten on the frustrated
 lattice, the one instance class past enumeration the roadmap needs. On an
 antiferromagnetic chain whose optimum needs coordinated flips the
@@ -400,6 +408,13 @@ The Rust pruning backend runs at 2.5 times the NumPy oracle at 200 taxa by
 11,000 sites, with peak memory 22.6\,MB, and the minimum-cut kernel at 26 to
 32 times the reference as a kernel and 6.3 to 10.7 times as a caller sees it,
 the difference being the Python energy evaluation and not the boundary copy.
+Laying the pruning kernel's partial likelihoods out with sites contiguous and
+walking them in tiles, so its inner loops are contiguous, unaliased and free of
+early exits, cuts the kernel by 28\% at four taxa by 200,000 sites and 35\% at
+eight; through the binding at 11,000 sites it changes nothing measurable, the
+call there being 199 internal nodes and a logarithm per site per node rather
+than the message pass. The layout was chosen by benchmark and no vector width
+is asserted anywhere.
 Process parallelism over independent tasks---the multi-start fit, the
 budgeted comparison, the bootstrap---was measured on a four-core host at 1, 2
 and 4 workers with the intra-op thread count at 1 and at the default: no

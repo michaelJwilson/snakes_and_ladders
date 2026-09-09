@@ -3,7 +3,7 @@
 The textbook's Notation section states the shape a problem statement takes:
 the model, the sizes it is supported at, the model as a factor graph with a
 sketch of that structure, the algorithms cited from the appendix, and the
-validation. Before this guard one of the nine sections carried all five and
+validation. Before this guard one of the sections carried all five and
 the rest carried between two and four, and nothing said so --- a section
 missing its sizes or its validation reads as complete, because what is absent
 leaves no mark on the page.
@@ -38,6 +38,7 @@ PROBLEMS = (
     "parsimony",
     "frustrated",
     "mixture",
+    "emissionmixture",
     "testfunctions",
     "ldpc",
     "turbo",

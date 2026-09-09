@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from functools import cache
-from itertools import combinations
+from itertools import combinations, pairwise
 
 import numpy as np
 import pytest
@@ -260,7 +260,7 @@ def _spr_by_definition(start: Topology) -> list[frozenset[frozenset[str]]]:
         if not isinstance(u, int):
             continue
         for v in list(adjacency[u]):
-            remainder, pruned = topology_module._prune(adjacency, u, v)
+            remainder, pruned, _ = topology_module._prune(adjacency, u, v)
             for x, y in topology_module._edges(remainder):
                 grafted, new_id = topology_module._regraft(remainder, pruned, v, x, y)
                 key = leaf_bipartitions(
@@ -287,3 +287,86 @@ def test_spr_neighbours_are_the_definition_in_the_definition_order(n_taxa: int) 
 
     assert generated == _spr_by_definition(start)
     assert len(generated) == 2 * (n_taxa - 3) * (2 * n_taxa - 7)
+
+
+# --- the bounded regraft (issue #408) -------------------------------------
+
+
+@pytest.mark.structural
+@pytest.mark.parametrize("n_taxa", [5, 6, 7, 8, 9])
+def test_spr_radius_at_the_leaf_count_is_the_unbounded_neighbourhood(
+    n_taxa: int,
+) -> None:
+    # The equivalence the bound is worth having: at a radius no edge can
+    # exceed, a bounded search is the unbounded one candidate for candidate.
+    # Order is asserted as well as membership for the reason above -- a hill
+    # climb takes the first of equally good neighbours.
+    start = random_topology(
+        [f"x{i}" for i in range(n_taxa)], np.random.default_rng(n_taxa)
+    )
+
+    unbounded = [leaf_bipartitions(neighbour) for neighbour in spr_neighbours(start)]
+    bounded = [
+        leaf_bipartitions(neighbour)
+        for neighbour in spr_neighbours(start, radius=n_taxa)
+    ]
+
+    assert bounded == unbounded
+    assert len(bounded) == 2 * (n_taxa - 3) * (2 * n_taxa - 7)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("n_taxa", [5, 6, 7, 8])
+def test_spr_radius_one_is_the_nni_neighbourhood(n_taxa: int) -> None:
+    # The reduction the module CLAUDE.md asks for: at radius 1 the general
+    # construction must reproduce the simpler one already validated. A
+    # mis-measured radius yields a merely *smaller* neighbourhood, which no
+    # count test would catch on its own, and this pins it against a
+    # generator built a different way.
+    start = random_topology(
+        [f"x{i}" for i in range(n_taxa)], np.random.default_rng(n_taxa)
+    )
+
+    bounded = {
+        leaf_bipartitions(neighbour) for neighbour in spr_neighbours(start, radius=1)
+    }
+
+    assert bounded == {
+        leaf_bipartitions(neighbour) for neighbour in nni_neighbours(start)
+    }
+    assert len(bounded) == 2 * (n_taxa - 3)
+
+
+@pytest.mark.mathematical
+@pytest.mark.parametrize("n_taxa", [6, 8])
+def test_spr_radius_nests(n_taxa: int) -> None:
+    # A radius is a bound on one distance, so the neighbourhoods are nested
+    # and saturate. A distance defined on the wrong endpoint would still
+    # grow with the radius but would not nest.
+    start = random_topology(
+        [f"x{i}" for i in range(n_taxa)], np.random.default_rng(n_taxa)
+    )
+
+    sets = [
+        {
+            leaf_bipartitions(neighbour)
+            for neighbour in spr_neighbours(start, radius=radius)
+        }
+        for radius in range(1, n_taxa + 1)
+    ]
+
+    for smaller, larger in pairwise(sets):
+        assert smaller <= larger
+    assert sets[-1] == {
+        leaf_bipartitions(neighbour) for neighbour in spr_neighbours(start)
+    }
+
+
+@pytest.mark.edge_case
+def test_spr_radius_below_one_is_refused() -> None:
+    # Radius 0 admits only the vacated edge, which reconstructs the parent,
+    # so the neighbourhood is empty and a search from it cannot move.
+    start = random_topology([f"x{i}" for i in range(6)], np.random.default_rng(6))
+
+    with pytest.raises(ValueError, match="radius must be at least 1"):
+        list(spr_neighbours(start, radius=0))
