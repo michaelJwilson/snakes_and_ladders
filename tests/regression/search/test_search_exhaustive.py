@@ -389,9 +389,8 @@ def test_what_the_cheaper_searches_cost_and_what_they_lose_at_six_taxa(
                 successes += 1
         reached[name] = successes
 
-    assert reached, "no configuration ran"
-    for name, successes in reached.items():
-        assert successes >= reached["unbounded"], (
-            f"{name} reached the enumerated maximum {successes}/{trials} times, "
-            f"against {reached['unbounded']}/{trials} unbounded"
-        )
+    table = ", ".join(f"{name} {count}/{trials}" for name, count in reached.items())
+    losing = [
+        name for name, count in reached.items() if count < reached["unbounded"]
+    ]
+    assert not losing, f"below the unbounded search: {losing}; measured {table}"

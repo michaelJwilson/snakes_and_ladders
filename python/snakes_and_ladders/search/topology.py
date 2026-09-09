@@ -27,7 +27,15 @@ associated graph (Robinson 1971) and inherited by SPR since it dominates
 NNI. Per-step cost: ``nni_neighbours`` is ``O(n)`` (one pass to build the
 adjacency, ``O(1)`` work per internal edge); ``spr_neighbours`` is
 ``O(n^2)`` (a prune-and-regraft candidate per (edge, edge) pair, before
-dedup).
+dedup), or ``O(n * radius)`` when the regraft is bounded.
+
+A bounded SPR is complete in the same sense and no weaker: at ``radius = 1``
+it *is* the NNI neighbourhood, whose transitive closure reaches every
+topology, and every larger radius contains it. What a radius costs is
+therefore steps rather than reachability -- a move the unbounded
+neighbourhood would take in one, a bounded one takes in several or does not
+find at all from where it stands, which is why the search that uses it is
+held to the enumerated optimum rather than to the count.
 """
 
 from __future__ import annotations

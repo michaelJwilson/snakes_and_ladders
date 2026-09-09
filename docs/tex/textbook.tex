@@ -758,12 +758,33 @@ always in full, so every reported score is an optimum. Whether the ranking
 finds the fitted best is a property of the move set and is measured per move
 set, not assumed.
 
+Three further economies apply to the same climb, and each is separable from
+the others. The climb may begin at a most-parsimonious topology rather than an
+arbitrary one, since a parsimony pass costs no fit. The regraft may be bounded
+to edges within distance $r$ of the vacated edge, giving
+$|\neighbourhood_{\mathrm{SPR}}^{r}(\tree)| = O(nr)$ in place of $O(n^2)$;
+$r=1$ is exactly the NNI neighbourhood, so a bounded SPR inherits NNI's
+transitive completeness at every $r$, and $r$ at least the tree's diameter is
+SPR itself. And a candidate may be fitted over only the branches whose
+bipartition the move changed --- the path between the vacated and the graft
+edge, one edge under NNI --- holding the rest at the parent's fitted lengths.
+That last is an optimization over a subspace, so its value is a lower bound on
+the candidate's maximum rather than equal to it: it decides which candidate to
+accept and the accepted one is refitted over every branch, exactly as a ranked
+neighbourhood is.
+
 \paragraph{What pins it.}
 Enumeration of the $(2n-5)!!$ topologies referees the search below eight taxa:
 the climb must reach the enumerated maximum, and the neighbourhood counts
-above are asserted exactly over every topology. A warm start is pinned by
-reaching the cold fit's optimum; a cached partial likelihood by equalling the
-recomputed one bitwise, since it is the same arithmetic in the same order. Large parsimony is held to the same enumeration from every
+above are asserted exactly over every topology. Each economy above is held to
+that same enumeration alone and in combination, or the rate at which it loses
+the optimum is measured and stated. Two of them also have an exact reduction
+to something already refereed, which a count alone would not catch: the
+bounded regraft at $r=1$ must equal the NNI neighbourhood, and at $r$ past the
+diameter must equal the unbounded one candidate for candidate. A warm start is
+pinned by reaching the cold fit's optimum; a cached partial likelihood by
+equalling the recomputed one bitwise, since it is the same arithmetic in the
+same order. Large parsimony is held to the same enumeration from every
 start, and on the Felsenstein-zone fixture its enumerated optimum is
 asserted to be the wrong tree while the likelihood optimum is the right one,
 because there the criterion's failure is the theorem of

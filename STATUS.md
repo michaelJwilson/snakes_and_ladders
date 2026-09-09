@@ -839,6 +839,21 @@ against a 3.65 ms interval, which is what the ranked search's 2 fits against
 13 buys. Making the interval itself cheap is a separate decision against a
 profile and is not taken here.
 
+**A cheaper climb, and a kernel the compiler can vectorize**
+([#408](https://github.com/michaelJwilson/snakes_and_ladders/issues/408)).
+Each change was ranked before it was written. `cProfile` over an eight-taxon
+SPR search at 1,000 sites and 300 candidates — 80.9 s, 301 fits, 18,955
+forward passes, 4 accepted moves, budget exhausted — puts **40.5%** of self
+time in the autograd backward pass, **19.7%** in the Torch pruning post-order
+and **6.7%** in the L-BFGS step, with neighbourhood generation nowhere in the
+top twenty. The search's cost is therefore candidates fitted times passes per
+fit, and each change attacks one of those two factors: a parsimony start and a
+bounded regraft reduce candidates, a partial refit reduces passes per
+candidate.
+PLACEHOLDER_SEARCH
+
+PLACEHOLDER_KERNEL
+
 **The LDPC decoder, specialised from the general sum-product and held to it**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
 `likelihood.ldpc.decode` runs the log-domain `tanh` rule or min-sum under a
