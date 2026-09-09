@@ -25,8 +25,8 @@ two terms are left, and each is read directly.
 moved when ``snakes_and_ladders.sim.fixtures`` came to need it for the
 baseline records (issue #401): ``qa`` renders what the other modules compute
 and nothing may import it, so a digest living there made ``sim`` depend on
-``qa``. It stays here now that the figures have gone the other way. The
-module names no model and imports nothing from this package, so it sits
+``qa``. The baseline records are the only caller left, and this is where
+they read it from. The module names no model and imports nothing from this package, so it sits
 beside :mod:`snakes_and_ladders.numerics` and
 :mod:`snakes_and_ladders.enumeration` on the terms root ``CLAUDE.md`` states
 for those: importable from anywhere, inverting no layering.
@@ -35,11 +35,8 @@ The import closure is read from the source with :mod:`ast`, as
 ``infra/select_tests.py`` reads the module graph: a listed dependency goes
 stale silently and an import does not. A module that reaches the Rust
 extension carries the Rust sources in its closure, since a kernel change
-alters what it computes.
-
-A closure is a set of paths, and a caller that hashes it hashes file
-contents rather than modification times, so a fresh clone and the tree that
-wrote the record agree.
+alters what it computes. The closure is paths, relative to the root the
+caller passes, so a fresh clone and the tree that wrote a record agree.
 """
 
 from __future__ import annotations
