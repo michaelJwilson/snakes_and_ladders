@@ -17,98 +17,18 @@ status: confirmed
 
 # Do annealing or parallel tempering reach the mixture's best-known optimum from more starts than restarts of EM, at equal likelihood evaluations?
 
-## Feature under test
+## Question
 
-At 3,000 likelihood evaluations per start, simulated annealing with
-Hamiltonian proposals or parallel tempering reaches the best-known optimum of
-the five-component mixture from more of 40 shared starts than multi-start EM
-does, with a McNemar p-value below 0.05.
+At 3,000 likelihood evaluations per start, do annealing or parallel tempering reach the five-component mixture's best-known optimum, 1111.596 nats, from more of 40 shared starts than multi-start EM does?
 
-## Setup
+## Numbers
 
-The fixture is the five-component Gaussian mixture #262 measured by hand and
-did not commit, built from `sim.mixture` under seed 20260908: means
-(-3, -1.5, 0, 1.5, 3) with unit scales, so adjacent components are 1.5
-standard deviations apart, weights (0.30, 0.10, 0.25, 0.15, 0.20), 500
-observations. Release tier: the 8-start version of the same code runs per
-pull request.
-
-The budget is 3,000 evaluations per start, held equal by `opt.budget.compare`.
-One evaluation is one pass over the observations' per-component log
-densities — an EM iteration, an objective value, or an objective gradient
-each count one (0.6 ms, 0.4 ms and 1.5 ms single-threaded). Every method ends
-with the same L-BFGS polish of at most 8 outer steps, reserved at 218
-evaluations and charged, because EM converges linearly on components this
-close and a raw EM value 500 iterations in sits 4 to 6 nats above its
-basin's optimum:
-
-- **restarts**: EM for 200 iterations from uniform weights, means at five
-  distinct observations and pooled scales, then the polish; 418 evaluations
-  per restart, so 7 restarts per start, best kept.
-- **anneal**: one Hamiltonian chain from the same random start on an
-  exponential schedule from temperature 8 to 1, step 0.02, 10 leapfrog
-  steps, 198 proposals of 14 evaluations, then the polish from the best point
-  visited.
-- **tempering**: four replicas at temperatures (1, 2, 4, 8) from the same
-  random start, exchanging after every round, 49 rounds, then the polish from
-  the best point visited.
-
-Step 0.02 is the largest at which every temperature tried accepted at least
-0.85 of proposals on tuning starts (seed 1000, not among the 40); the ladder
-is ratio 2 with four replicas as the Potts study's. Start `i` draws from
-`np.random.default_rng([0, i])` whichever method runs, so all three see the
-same random start.
-
-The referee is the best-known negative log-likelihood: the lower of the
-polished simulated parameters and the best of 1,000 polished restarts (EM for
-500 iterations, seeds `[20260908, i]`). A start reaches it within `1e-6`
-relative, 0.0011 nats. The McNemar p-value is exact, on the discordant starts
-against restarts.
-
-## Results
-
-Typed from the release run of
-`tests/regression/opt/test_opt_mixture_budget.py::test_at_forty_starts_restarts_reach_the_optimum_from_the_most_starts`
-(the 8-start tier of the same code runs per pull request and pins the
-ordering). The referee is the best-known optimum, 1111.596 nats, reached by
-16 of 1,000 polished restarts and 8.3 nats below the polished simulated
-parameters, whose basin is not the maximum on this sample; a start "reaches"
-it within 1e-6 relative.
-
-| method | starts reaching the optimum (of 40) | mean gap to the optimum | McNemar against restarts |
+| method, 40 starts, one shared L-BFGS polish | reaching the optimum | mean gap | McNemar against restarts |
 | --- | --- | --- | --- |
-| restarts (7 polished EM restarts per start) | 7 | 2.6 nats | — |
+| restarts, 7 polished EM restarts per start | 7 | 2.6 nats | --- |
 | parallel tempering, ladder (1, 2, 4, 8) | 4 | 4.2 nats | p = 0.549 |
 | annealing, temperature 8 to 1 | 1 | 8.0 nats | p = 0.031 |
 
-## Figures
-
-none
-
 ## Finding
 
-Restarts are not beaten on the mixture at 3,000 evaluations: 7 of 40 starts
-against tempering's 4 (p = 0.549, no separation) and annealing's 1
-(p = 0.031, worse). The mean gap orders the same way, 2.6, 4.2 and 8.0 nats.
-This is the same finding as Rastrigin and the opposite of the frustrated
-lattice, where the Potts tempering of #267 wins: on a mixture whose basins are
-separated by relabelling and by component overlap rather than by energy
-barriers, a fresh EM start reaches a new basin more cheaply than a tempered
-chain crosses to it.
-
-## Conclusion and actions
-
-- #333: an adapted ladder chosen from the measured exchange acceptance, which
-  this run set by hand at (1, 2, 4, 8), before the comparison is re-run.
-- #321: the inline table this file replaces is cited from `STATUS.md` rather
-  than restated.
-
-## What is not claimed
-
-Nothing about other budgets: the tempered methods run 198 proposals or 49
-rounds here, and the ordering can differ where they run longer. Nothing about
-the step size, ladder or schedule beyond the one configuration fixed a priori.
-Nothing about EM's own convergence rate, which the shared polish removes from
-the comparison. Nothing about wall time as a cost: the seconds per start are
-from a shared host under a load average above 30 and are reported for scale
-only; the budget is in evaluations.
+Restarts are not beaten: tempering does not separate from them and annealing is worse, as on Rastrigin and opposite to the frustrated lattice, because these basins are separated by relabelling and component overlap rather than by energy barriers. From `pytest tests/regression/opt/test_opt_mixture_budget.py -m release`. Actions #333, #321.
