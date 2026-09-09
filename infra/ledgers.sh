@@ -37,15 +37,25 @@ if [ "$check" = 0 ]; then
   exit 0
 fi
 
-# `git diff HEAD` and not `git status`: an untracked ledger is the expected
-# state and says nothing, while a tracked one that regeneration rewrote is
-# exactly the staleness this replaces.
-moved="$(git diff --name-only HEAD -- \
-  CHECKS.md SEAMS.md docs/tex/generated/problems_tables.tex)"
+LEDGERS=(CHECKS.md SEAMS.md docs/tex/generated/problems_tables.tex)
+
+# Two failures, and the second is the first one's cause. `git diff HEAD` and
+# not `git status`: an untracked ledger is the expected state and says
+# nothing, while a tracked one that regeneration rewrote is exactly the
+# staleness this replaces.
+moved="$(git diff --name-only HEAD -- "${LEDGERS[@]}")"
 if [ -n "$moved" ]; then
   echo "::error::regenerating rewrote a committed ledger: $moved" >&2
-  echo "these files are generated and must not be committed (.gitignore, issue #425)" >&2
   git --no-pager diff --stat HEAD -- $moved >&2
   exit 1
 fi
-echo "generated ledgers: regeneration changed no tracked file"
+# A committed ledger that happens to be current passes the check above and
+# will conflict on the next merge anyway, so it is refused on being tracked
+# rather than on being stale.
+tracked="$(git ls-files -- "${LEDGERS[@]}")"
+if [ -n "$tracked" ]; then
+  echo "::error::a generated ledger is committed: $tracked" >&2
+  echo "these are written from the tree and must not be tracked (.gitignore, issue #425)" >&2
+  exit 1
+fi
+echo "generated ledgers: regeneration changed no tracked file, and none is tracked"
