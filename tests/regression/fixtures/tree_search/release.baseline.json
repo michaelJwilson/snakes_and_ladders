@@ -1,5 +1,5 @@
 {
-  "digest": "fb6bbdaaec7ac2cc61ecccf02252d10167f2cfd26951ef36f68ab7f11d27c5c2",
+  "digest": "927614101c84905ae91b14b9b0a0e663983d9b3f72f3eda3945c490974506897",
   "libraries": [
     "numpy==2.5.2",
     "scipy==1.18.1",
