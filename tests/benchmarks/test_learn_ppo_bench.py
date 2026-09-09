@@ -148,10 +148,16 @@ def test_the_clipped_surrogate_through_torchrl_benchmark(
 def _prepared(
     landscape: PottsLandscape, critic: Critic
 ) -> tuple[list[list[float]], list[list[float]], list[bool]]:
-    """One batch's rewards, critic values and termination flags, per episode."""
+    """One batch's rewards, critic values and termination flags, per episode.
+
+    An episode that started at a local optimum took no decision and is
+    dropped, because `GAE` has no trajectory of length zero and the two sides
+    have to be timed on the same batch. Nothing else is filtered.
+    """
     policy = LinearPolicy(2)
     rng = np.random.default_rng(0)
-    episodes = [rollout(landscape, policy, rng, _HORIZON) for _ in range(_BATCH)]
+    rolled = [rollout(landscape, policy, rng, _HORIZON) for _ in range(_BATCH)]
+    episodes = [episode for episode in rolled if episode.rewards]
     with torch.no_grad():
         values = [
             [
@@ -185,7 +191,7 @@ def test_the_batch_s_advantages_benchmark(benchmark: BenchmarkFixture) -> None:
 
     advantages = benchmark(estimate)
 
-    assert len(advantages) == _BATCH
+    assert advantages
 
 
 def test_the_batch_s_advantages_through_torchrl_benchmark(
@@ -208,4 +214,4 @@ def test_the_batch_s_advantages_through_torchrl_benchmark(
         torchrl_advantage.episode_advantages, rewards, values, terminated, lam=_LAM
     )
 
-    assert len(advantages) == _BATCH
+    assert advantages
