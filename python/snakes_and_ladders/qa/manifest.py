@@ -343,6 +343,12 @@ FIGURES: tuple[FigureSpec, ...] = (
         seconds=2.7,
     ),
     FigureSpec(
+        "turbo_waterfall",
+        "snakes_and_ladders.qa.turbo_waterfall",
+        ("--params", f"{FIXTURES}/turbo/stress.yaml"),
+        seconds=17.0,
+    ),
+    FigureSpec(
         "coupled_labelling",
         "snakes_and_ladders.qa.coupled_labelling",
         ("--params", f"{FIXTURES}/spatio_sequential/stress.yaml"),

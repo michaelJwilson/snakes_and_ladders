@@ -397,6 +397,29 @@ prior, transitions against `t`, first states against `Pi_m`, and symbol
 counts per (class, state) against the families' tables — and the label
 posterior recovers planted labels on 42 of 48 nodes at `S = 6`.
 
+**A turbo code, the second member of the fourth problem class**
+([#233](https://github.com/michaelJwilson/snakes_and_ladders/issues/233)).
+`sim.convolutional` builds a recursive systematic convolutional encoder from
+two octal generator polynomials and holds its trellis as `(state, input)`
+arrays: `2 ** m` states, two edges leaving each, the parity bit per edge and
+the tail input that empties the register. The default register is the
+memory-2 `(7, 5)`, and LTE's `(13, 15)` is carried as the second. Two of
+them fed the same message in two orders through a seeded random interleaver
+make the rate-1/3 unpunctured turbo code: both encoders terminated, so a
+`K`-bit message transmits `3 K + 4 m` bits and both ends of both trellises
+are pinned. Pins, none sharing code with the arrays: the parity stream
+equals an explicit `b(D)/a(D)` long division over GF(2) on 40 random inputs
+for both registers; encoding is linear (`c(u + v) = c(u) + c(v)` on 10 pairs
+at `K = 12` and `K = 40`) and systematic; the tail returns the register to
+the zero state from every state it reaches and is not a string of zeros; the
+interleaver's inverse composes to the identity at `K = 12`, `256` and
+`1,024`; and `parity_check` turns the code into a `ParityCheck` by GF(2)
+nullspace at `n <= 512`, whose `2 ** 10` codewords under #340's
+`enumerate_codewords` are exactly the `2 ** 10` words the shift register
+produces at `K = 10`. Three instances are declared: `K = 12` (4,096
+messages, enumerable), `K = 256` (the figure's) and `K = 1,024` (the
+waterfall's).
+
 **A low-density parity-check code, the fourth problem class**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
 `sim.ldpc` draws a member of Gallager's regular ensemble by column
@@ -838,6 +861,59 @@ bound's saving is in *fits*, not in passes: a fit is 254 ms at this fixture
 against a 3.65 ms interval, which is what the ranked search's 2 fits against
 13 buys. Making the interval itself cheap is a separate decision against a
 profile and is not taken here.
+
+**BCJR, Viterbi and the turbo iteration, held to enumeration and to the
+general sum-product**
+([#233](https://github.com/michaelJwilson/snakes_and_ladders/issues/233)).
+`likelihood.convolutional.bcjr` runs the log-MAP forward and backward
+recursions with the observation on the *edge* rather than the state, since
+the bits transmitted at a step are a function of the transition taken, and
+returns the extrinsic ratio a turbo iteration exchanges;
+`viterbi` is max-product over the same branch metrics.
+`sim.factor_graph.from_trellis` presents the chain to the general
+implementation, extending #340's seam rather than adding a second.
+Pins at the enumerable size, on the `(7, 5)` register: the BCJR bit
+posteriors equal the sum over all `2 ** K` messages to **2.8e-14** in
+log-odds and the evidence to **1.4e-14** at `K = 10`, `sigma = 0.9`; the
+tree schedule of `message_passing.sum_product` on `from_trellis` gives the
+same posteriors to **2.7e-15** and the same `log Z` to **3.6e-15** at
+`K = 8`; `max_product` returns the Viterbi path on five draws; and a
+received word at `sigma = 1.6` separates the bitwise from the blockwise MAP,
+so the two decodings are pinned as different answers rather than assumed
+alike. An a priori ratio is pinned by enumerating with it folded into the
+systematic stream, which is the same posterior by definition.
+
+`likelihood.turbo.decode_turbo` runs the serial extrinsic exchange and
+returns #340's `Decoding` unchanged, with `decoded` reading the two
+constituent decoders' agreement in place of a syndrome. The joint graph has
+cycles, so equality against the exact bitwise MAP is not asserted and the
+gap is measured on the declared instance: at `K = 12`, 100 frames and 1,200
+message bits per point, the bit error rate at 8 iterations is 0.115, 0.061,
+0.033 and 0.013 at 0, 1, 2 and 3 dB against the exact MAP's 0.092, 0.037,
+0.019 and 0.004 — a factor of 1.26, 1.66, 1.74 and 3.20, which a `K = 12`
+interleaver does not close. Per point the iteration is asserted only *no
+worse* than its first iteration, because at 2 dB the two tie at 40 errors
+and 1,200 bits cannot separate them; the strict improvement is asserted over
+the four points together, 267 errors against 306. At `K = 1,024`, 200 frames
+per point over six points (239 s), the waterfall turns between 0.4 and 1.2
+dB.
+
+*The departure, reported rather than asserted.* The ensemble bit error rate
+is **not** monotone in the iteration count. Over the six declared points at
+`K = 256` it rises between consecutive iterations at four of them, the
+largest rise 2.3e-3 at 0 dB between iterations 7 and 8, and every rise is
+inside one binomial interval of the 12,800 message bits the point rests on.
+The suite therefore asserts only that the last iteration beats the first and
+that no rise exceeds twice that interval. At `K = 12` with a shorter
+interleaver the same non-monotonicity is larger relative to the rate. It is
+a property of loopy sum-product on a serial schedule, not a defect here.
+
+*A second negative result.* At `K = 12` the code buys nothing at 0 dB: the
+exact bitwise MAP's bit error rate, 0.092, is the uncoded antipodal closed
+form's 0.079 to within the sample, and the iteration's 0.115 is above it. Short-block turbo codes are worse than
+uncoded below the turn, which is why the closed-form pin is stated at
+`K = 256` and above, where the coded curve is under it at every declared
+point.
 
 **The LDPC decoder, specialised from the general sum-product and held to it**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).

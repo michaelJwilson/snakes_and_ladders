@@ -28,8 +28,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TEX = REPO_ROOT / "docs" / "tex"
 TEXTBOOK = TEX / "textbook.tex"
 
-#: The nine problem statements, by the stem their labels and figure file use.
-#: A tenth problem class adds a row here and to ``PROBLEMS.md`` together.
+#: The ten problem statements, by the stem their labels and figure file use.
+#: An eleventh problem class adds a row here and to ``PROBLEMS.md`` together.
 PROBLEMS = (
     "phylo",
     "potts",
@@ -40,6 +40,7 @@ PROBLEMS = (
     "mixture",
     "testfunctions",
     "ldpc",
+    "turbo",
 )
 
 _SECTION = re.compile(r"^\\section\{", re.MULTILINE)

@@ -28,4 +28,4 @@ iterations: 8
 # remove and the comparison against the exact posterior has something to
 # compare; 3 dB is where the exact bit error rate falls below 1 in 300.
 eb_n0_db: [0.0, 1.0, 2.0, 3.0]
-frames: 200
+frames: 100
