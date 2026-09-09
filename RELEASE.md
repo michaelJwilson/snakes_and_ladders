@@ -155,13 +155,19 @@ because that script renders a stale cited figure into `docs/tex/figures/` and
 would otherwise supply the very bytes the comparison is against. The Sphinx step
 is `-E -a` for the same reason in miniature: an incremental build's verdict
 depends on what `docs/_build/` holds from an earlier branch, while a release
-claims all 134 modules are clean. `tests/regression/test_release_gate.py` pins
-both flags and the ordering.
+claims all 134 modules are clean. That autodoc records each module as a
+dependency, so an incremental build does re-read a *changed* docstring, is
+measured rather than assumed — with issue #448's `:cite:` role reintroduced the
+incremental form failed too. `tests/regression/test_release_gate.py` pins both
+flags and the ordering.
 
 **The figure pass is minutes, and its cost is concentrated.**
 `topology_accuracy` at 124.0 s and `rl_tree_policy` at 101.4 s are 52.2% of the
-431.8 s the manifest declares between them; the median figure is 5.0 s. Sizing
-the step at the declared sum is close for 18 of the 23, but **four `opt_*`
+431.8 s the manifest declares between them; the median figure is 5.0 s. The sum
+is arithmetic over each entry's `seconds`, one render measured alone on the
+reference host, and not a timed pass: the gate renders each figure in its own
+process, so a measured pass exceeds it. Sizing the step at the declared sum is
+close for 18 of the 23, but **four `opt_*`
 figures blow out 8.0x, 8.5x, 24.3x and 79.0x under contention** (issue #477).
 That is not generic load — everything else at the same load stayed near 1.2x.
 `snakes_and_ladders.qa.build` strips `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`
