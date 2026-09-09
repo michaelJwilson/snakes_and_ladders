@@ -86,6 +86,14 @@ pdfs_are_the_base_s() {
 
 fragment_exists() { uv run towncrier check --compare-with "$base" >/dev/null; }
 
+# NOT A GATE (issue #455). Kept because `infra/release.sh` is where the claim
+# is now checked, through `qa.build --all --check`, and because a developer
+# may still want the answer before pushing. It stopped being a per-pull-request
+# gate because the check is cheap and the fix is not: a merge of `main` moves
+# a module in a figure's closure, the stamp goes stale, and the branch pays a
+# six-minute render for a figure that re-renders to identical bytes. That was
+# eight renders across four branches in one day, and no figure byte moved on
+# any of them.
 stamps_match_the_tree() {
   # Digest-only: nothing is rendered. A stale cited figure means the branch
   # changed an input and did not re-render, or re-rendered and did not
@@ -139,7 +147,6 @@ gate "environment imports this checkout"     environment_imports_this_checkout
 gate "head carries the base"                 carries_base
 gate "PDFs are the base's (or a rebuild)"    pdfs_are_the_base_s
 gate "changelog fragment exists"             fragment_exists
-gate "cited figure stamps match the tree"    stamps_match_the_tree
 gate "critical tier passes"                  critical_tier_passes
 gate "changed tests say what checks them"    changed_tests_say_what_checks_them
 gate "a new seam names its consumers"        new_seams_name_their_consumers

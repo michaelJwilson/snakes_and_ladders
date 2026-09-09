@@ -276,7 +276,18 @@ jobs:
           echo "changed files:"; echo "$changed" | sed 's/^/  /'
           echo "$changed" | python3 infra/select_tests.py >> "$GITHUB_OUTPUT"
           echo "$changed" | python3 infra/select_tests.py | sed 's/^/::notice::/'
+      # NOT on a pull request (issue #455). A pull request is judged by the
+      # critical gate above; the tier below runs on the push to `main`, where
+      # nobody waits for it, and at the release gate. The pytest job took 17
+      # to 32 minutes on a pull request while the other nine jobs finished
+      # inside three, so it was the whole of the wait.
+      #
+      # The trade, stated because it is real: the `ci` tier can now break in a
+      # merge rather than before one, and `main` carries the failure until
+      # someone fixes it. `main`'s own run is what catches it, and a red
+      # `main` is work before anything else -- DEV.md says so.
       - name: Run the selected tests
+        if: github.event_name != 'pull_request'
         run: |
           paths="${{ steps.selection.outputs.paths }}"
           cov="${{ steps.selection.outputs.cov }}"
