@@ -25,14 +25,13 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 
-from snakes_and_ladders.likelihood.distance import tree_distances
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
 from snakes_and_ladders.qa.style import INK_MUTED, ONE_COLUMN_WIDE, letter_style
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.search.tropical import (
-    condensed,
+    corner,
     corner_bound,
     discrete_score,
     pairing_positions,
@@ -56,10 +55,17 @@ class Sweep:
     Parameters
     ----------
     measured, bound : np.ndarray
-        ``|F_tau - D|`` and the certificate, one per :data:`TEMPERATURES`.
+        The largest ``|F_tau - D|`` over the corners of every enumerated
+        topology, and the largest certificate over the same, one per
+        :data:`TEMPERATURES`. Taken over every corner rather than at the
+        generating tree's: a relaxation that is an extension only near the
+        truth optimizes a different problem everywhere else, and at the
+        generating tree alone the gap reaches exactly zero and says nothing.
     derived : float
-        The temperature :func:`temperature_for` returns at
-        :data:`TOLERANCE`.
+        The largest temperature :func:`temperature_for` certifies
+        :data:`TOLERANCE` at over the same corners.
+    at_derived : float
+        The largest measured gap there.
     discrete : float
         ``D`` at the generating tree, the magnitude the residual is relative
         to.
@@ -68,6 +74,7 @@ class Sweep:
     measured: np.ndarray
     bound: np.ndarray
     derived: float
+    at_derived: float
     discrete: float
 
 
@@ -106,37 +113,49 @@ def measure(params: SimulationParams) -> tuple[Sweep, Surfaces]:
     table = quartet_table(alignment, params.k)
     positions = pairing_positions(table.n_taxa)
 
-    _, square = tree_distances(params.tau)
-    metric = condensed(square)
-    discrete = discrete_score(table, params.tau)
+    topologies = list(enumerate_topologies(sorted(alignment)))
+    corners = [corner(topology) for topology in topologies]
+    discretes = [discrete_score(table, topology) for topology in topologies]
+
+    def gap(metric: np.ndarray, discrete: float, temperature: float) -> float:
+        relaxed = float(
+            relaxed_score(table, positions, torch.from_numpy(metric), temperature)
+        )
+        return abs(relaxed - discrete)
+
     measured = np.array(
         [
-            abs(
-                float(
-                    relaxed_score(
-                        table, positions, torch.from_numpy(metric), temperature
-                    )
-                )
-                - discrete
+            max(
+                gap(metric, discrete, temperature)
+                for metric, discrete in zip(corners, discretes, strict=True)
             )
             for temperature in TEMPERATURES
         ]
     )
     bound = np.array(
         [
-            corner_bound(table, positions, metric, temperature)
+            max(
+                corner_bound(table, positions, metric, temperature)
+                for metric in corners
+            )
             for temperature in TEMPERATURES
         ]
+    )
+    derived = max(
+        temperature_for(table, positions, metric, TOLERANCE) for metric in corners
     )
     sweep = Sweep(
         measured=measured,
         bound=bound,
-        derived=temperature_for(table, positions, metric, TOLERANCE),
-        discrete=discrete,
+        derived=derived,
+        at_derived=max(
+            gap(metric, discrete, derived)
+            for metric, discrete in zip(corners, discretes, strict=True)
+        ),
+        discrete=discrete_score(table, params.tau),
     )
 
-    topologies = list(enumerate_topologies(sorted(alignment)))
-    quartet = np.array([discrete_score(table, topology) for topology in topologies])
+    quartet = np.array(discretes)
     likelihood = np.array(
         [score_topology(topology, alignment, params.k) for topology in topologies]
     )
@@ -200,24 +219,29 @@ def build_figure(
         axes[1].legend(loc="lower right", frameon=False, fontsize="small")
         fig.tight_layout()
 
-    relative = sweep.measured.min() / abs(sweep.discrete)
+    relative = sweep.at_derived / abs(sweep.discrete)
+    agreement = (
+        "share their maximizer"
+        if surfaces.argmax_agrees
+        else "do not share their maximizer"
+    )
     caption = (
         f"The tropical Grassmannian relaxation on the {len(params.pi)}-state "
         f"Jukes-Cantor fixture of {len(surfaces.quartet)} unrooted topologies "
-        f"(seed {params.seed}, {params.n_sites} sites). (a) At the generating "
-        f"tree's metric, the measured gap between the relaxed objective "
-        f"$F_\\tau$ and the discrete quartet score $D$ against the softmin "
-        f"temperature, with the certificate $\\sum_Q 2 e^{{-g_Q/\\tau}} R_Q$ "
-        f"over it. The dotted line is the temperature the certificate is "
-        f"inverted for at the dashed tolerance, $\\tau = "
-        f"{sweep.derived:.3g}$; below it the measured gap stops falling at "
-        f"{sweep.measured.min():.2g}, which is {relative:.1g} of $|D| = "
-        f"{abs(sweep.discrete):.0f}$ and is float64 rounding of a sum rather "
-        f"than the relaxation. (b) Every topology scored on both surfaces: "
-        f"$D$ is a quartet decomposition and not the tree's log-likelihood, "
-        f"and the two "
-        f"{'share their maximizer' if surfaces.argmax_agrees else 'do not share their maximizer'}, "
-        f"which is what licenses relaxing the one in place of the other."
+        f"(seed {params.seed}, {params.n_sites} sites). (a) At the tree metric "
+        f"of each of them, the largest gap between the relaxed "
+        f"objective and the discrete quartet score D against the softmin "
+        f"temperature, with the certificate (the sum over quartets of twice "
+        f"the score range times the exponential of minus the quartet gap "
+        f"over the temperature) drawn over it. The dotted line is the "
+        f"temperature the certificate is inverted for at the dashed "
+        f"tolerance, {sweep.derived:.3g}, where the measured gap is "
+        f"{sweep.at_derived:.2g} -- {relative:.1g} of the score magnitude "
+        f"{abs(sweep.discrete):.0f}, which is float64 rounding of a sum over "
+        f"quartets rather than the relaxation. (b) Every topology scored on both "
+        f"surfaces: D is a quartet decomposition and not the tree's "
+        f"log-likelihood, and the two {agreement}, which is what licenses "
+        f"relaxing the one in place of the other."
     )
     return fig, caption
 

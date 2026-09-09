@@ -14,7 +14,7 @@ point is a vector of ``n (n - 1) / 2`` pairwise distances, and it is the
 metric of some tree exactly when every quartet satisfies the tropical
 Plücker relation --- of the three pairings ``d_ij + d_kl``, ``d_ik + d_jl``,
 ``d_il + d_jk``, the largest is attained twice, which is the four-point
-condition of ``eq:four-point`` (:func:`snakes_and_ladders.search.neighbor_joining.four_point_violation`
+condition of ``sec:spectral-start`` (:func:`snakes_and_ladders.search.neighbor_joining.four_point_violation`
 measures how far a vector is from it). A tree metric's *smallest* pairing is
 then attained once, and which pairing that is is the quartet's topology. So
 the discrete object --- a resolution per quartet --- is an ``argmin`` of a
@@ -31,7 +31,7 @@ resolution by the softmin weights::
 
     F_tau(d) = sum_Q  <softmax(-s_Q(d) / tau),  l[Q, .]>
 
-with ``s_Q(d)`` the three pairing sums. ``F`` is *linear* in the weights, so
+with ``s_Q(d)`` the three pairing sums (``eq:tropical-relaxation``). ``F`` is *linear* in the weights, so
 at a one-hot weight vector it is ``D`` exactly --- the same "extension, not a
 second model" the Gumbel-softmax half is built on, and the reason the corner
 test below is an equality rather than a correlation.
@@ -64,7 +64,7 @@ off the corner's own resolution, so
 
     |F_tau(d) - D(T)|  <=  sum_Q 2 exp(-g_Q / tau) R_Q,
 
-which is :func:`corner_bound`; :func:`temperature_for` inverts it for the
+which is ``eq:tropical-corner`` and :func:`corner_bound`; :func:`temperature_for` inverts it for the
 ``tau`` that buys a requested tolerance. The 1e-11 the Gumbel-softmax half
 was held to is therefore a *measured* consequence of a fixture's minimum
 quartet gap rather than a constant, and the same statement transfers to a

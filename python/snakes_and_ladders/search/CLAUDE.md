@@ -66,6 +66,16 @@ no application module.
   that they agree where it matters — the argmax — not by a high correlation,
   and the comparison is rerun whenever the fixture changes.
 
+- **A relaxation is optimized over an ambient space, and the answer is read
+  back out of it.** The continuous coordinates that carry a discrete
+  structure carry more than the structures, so ascent may stop at a point no
+  structure occupies and at a value no structure attains. What is reported is
+  the projected structure's own discrete score, never the relaxed value; how
+  far off the locus the point sits is measured beside it, because that
+  distance is the relaxation's gap and not a diagnostic. Any scale the
+  relaxed objective is invariant to is a gauge and is fixed, or ascent moves
+  along it instead of moving the structure.
+
 - **A surface that does not totally order its candidates cannot be measured
   by a statistic that assumes it does.** Where candidates tie to within the
   optimizer's convergence, their relative order is not a property of the

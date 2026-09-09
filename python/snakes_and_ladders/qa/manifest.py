@@ -313,7 +313,7 @@ FIGURES: tuple[FigureSpec, ...] = (
         "tropical_relaxation",
         "snakes_and_ladders.qa.tropical_relaxation",
         ("--params", f"{FIXTURES}/tree_search/ci.yaml"),
-        seconds=6.0,
+        seconds=5.4,
     ),
     FigureSpec(
         "parsimony_zones",
