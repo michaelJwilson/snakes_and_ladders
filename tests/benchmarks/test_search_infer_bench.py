@@ -115,16 +115,23 @@ def test_one_neighbour_fit_benchmark(benchmark: BenchmarkFixture, warm: bool) ->
 
 # 113.8 s cold, 68.1 s warm, 7.3 s lazy on the reference host, down from
 # 180.2 s, 117.6 s and 10.6 s (issue #397). Every case stays at the release
-# gate. Two of them are still over the 10 s per-pull-request cap by an order
-# of magnitude and no further change was found that would close it: the
-# evaluation is bound by its backward pass, and what is left of that is the
-# autograd graph of a fit that has to be differentiable, so the next step is a
-# hand-written gradient rather than another rewrite of the forward pass. The
-# lazy case is now under the cap, and stays here anyway: over the five rounds
-# `pytest-benchmark` timed, the cold case ranged 10.0 s to 34.8 s per round on
-# an idle host holding the measurement lock, and a case whose spread is 3.5x
-# would gate merges on the host's mood at 27% headroom. `test_hill_climb_
-# benchmark` above is the per-pull-request sibling for the same claim.
+# gate, for two different reasons.
+#
+# Cold and warm are over the 10 s per-pull-request cap by an order of
+# magnitude, and nothing found closes that. The evaluation is bound by its
+# backward pass -- 59% of one forward-and-backward after the change, against
+# 5% for the leaf gather it now uses -- and what is left of that is the
+# autograd graph of a fit that has to be differentiable. The next step is a
+# hand-written gradient, not another rewrite of the forward pass.
+#
+# Lazy is 7.3 s and under the cap, and stays here anyway. Of that, 5.0 s is
+# the five rounds `pytest-benchmark` timed and 2.3 s is building the fixture;
+# a round ranged 0.60 s to 1.30 s, so a session of worst rounds lands near
+# 8.8 s, 12% inside the cap. Spending 7.3 s of the class's 300 s budget for
+# that margin buys nothing the tier does not already have:
+# `test_hill_climb_benchmark` above runs the same search per pull request at
+# the smaller fixture, and `tests/regression/search/test_search_exhaustive.py`
+# holds the optimum against enumeration.
 @pytest.mark.release
 @pytest.mark.parametrize(
     ("warm_start", "lazy_top"),
