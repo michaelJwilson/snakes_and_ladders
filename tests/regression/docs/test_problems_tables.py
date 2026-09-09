@@ -71,9 +71,9 @@ def test_every_problem_and_family_pairing_appears_once_per_family_table() -> Non
 
 @pytest.mark.structural
 def test_a_pairing_the_suite_does_not_pin_is_marked_untested(generated: str) -> None:
-    # The catalogue carries a Gaussian-mixture initializer and a general
-    # time-reversible start that no test of either significant kind names.
-    # They are the standing examples, and each must be marked and not omitted.
+    # The catalogue carries a general time-reversible start that no test of
+    # either significant kind names -- the standing example since #420 gave
+    # the mixture's seeding an oracle. It must be marked and not omitted.
     marked = {
         (problem, family)
         for problem, family, _, referee, _ in problems_tables.method_cells()
@@ -82,7 +82,7 @@ def test_a_pairing_the_suite_does_not_pin_is_marked_untested(generated: str) -> 
     text = generated
 
     assert marked, "no untested pairing: the mark itself is then unexercised"
-    assert ("Gaussian mixture", "initializers") in marked
+    assert ("Phylogenetic tree, general time-reversible", "initializers") in marked
     assert text.count("untested") >= len(marked)
 
 

@@ -2008,11 +2008,12 @@ and the kind of referee, both read from the suite, and a sentence on when the
 family wins on that problem and when it does not, taken from
 `docs/tex/method_notes.yaml` — the one hand-written input to any of
 the three, and the reason it does not live under `generated/`. Fourteen of those sentences cite an experiment, and a citation to a
-file that does not exist fails the generation. Two pairings are marked
-*untested* rather than omitted — the mixture's $k$-means$++$ seeding and the
-general time-reversible model's log-det start, neither named by a test of
-either significant kind — because a dropped pairing reads as a question nobody
-asked.
+file that does not exist fails the generation. One pairing is marked
+*untested* rather than omitted — the general time-reversible model's log-det
+start, named by no test of either significant kind — because a dropped pairing
+reads as a question nobody asked. The mixture's $k$-means$++$ seeding was the
+second until [#420](https://github.com/michaelJwilson/snakes_and_ladders/pull/420)
+gave it an oracle.
 
 **The three exact evaluators are derived, not stated**
 ([#326](https://github.com/michaelJwilson/snakes_and_ladders/issues/326)).
