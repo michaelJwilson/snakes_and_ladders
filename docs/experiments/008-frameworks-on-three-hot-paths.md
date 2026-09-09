@@ -85,6 +85,11 @@ Only the second column reproduces the chain: 60 sweeps from one seed at
 extents 8, 16 and 24 give an array equal to the current sampler's entry for
 entry, where both framework columns give a different one.
 
+The same change through the committed benchmark, which runs at the transition
+`J_c = ln(1 + sqrt(3))` rather than at `J = 0.6` and so builds fewer, larger
+clusters --- `tests/benchmarks/test_potts_mcmc_bench.py`, 60 sweeps, minimum:
+15.778 to 9.850 ms at extent 8 (1.60x) and 58.017 to 32.177 ms at 16 (1.80x).
+
 **#390, the surrogate.** `GraphSurrogate` against the same architecture built
 from `GINConv` with `eps = 0` and `global_add_pool`, weights copied across:
 
