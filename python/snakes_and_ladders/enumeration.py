@@ -162,10 +162,20 @@ def assignment_table(
     scores every assignment at once: the log weight is a vectorized
     expression over a column of this table, not a Python loop over tuples.
 
+    Built as the base-``n_states`` digits of each assignment's index rather
+    than by materializing :func:`itertools.product`, which is the same array
+    without the Python-level loop: identical for every case measured
+    (``3**4``, ``3**8``, ``2**16``, ``4**8``, ``2**17``), and 2.8x to 6.6x
+    faster over that range --- 50.4 ms against 11.9 ms at ``2**16``. That is
+    the vectorization pull request #420 needed for its own enumeration to fit
+    under the 10 s per-test cap, and it is here rather than there so the
+    ninth enumerator lands on the seam instead of beside it.
+
     Consumers: :mod:`snakes_and_ladders.likelihood.potts` (configurations, and the
-    transfer matrix's columns), :mod:`snakes_and_ladders.likelihood.hmm_paths` (paths) and
+    transfer matrix's columns), :mod:`snakes_and_ladders.likelihood.hmm_paths` (paths),
     :mod:`snakes_and_ladders.likelihood.spatio_sequential` (labellings, and paths per
-    class).
+    class) and :func:`snakes_and_ladders.opt.potts.graph_statistics`, which reads
+    the table into ``torch``.
 
     Parameters
     ----------
@@ -179,15 +189,6 @@ def assignment_table(
         refuses on labellings times paths per class, which dominates either
         factor, and checking a factor afterwards could only repeat a
         judgement already made under a less informative name.
-
-    Built as the base-``n_states`` digits of each assignment's index rather
-    than by materializing :func:`itertools.product`, which is the same array
-    without the Python-level loop: identical for every case measured
-    (``3**4``, ``3**8``, ``2**16``, ``4**8``, ``2**17``), and 2.8x to 6.6x
-    faster over that range --- 50.4 ms against 11.9 ms at ``2**16``. That is
-    the vectorization pull request #420 needed for its own enumeration to
-    fit under the 10 s per-test cap, and it is here rather than there so the
-    ninth enumerator lands on the seam instead of beside it.
 
     Returns
     -------
@@ -218,7 +219,11 @@ def normalize(log_weight: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
     :func:`snakes_and_ladders.likelihood.hmm_paths.enumerate_hidden_paths`, which
     accumulates the unnormalized weights and normalizes each site's row
     afterwards. Both forms are returned because the two roundings differ in
-    the last ulp and each is what its own pins were taken against.
+    the last ulp and each is what its own pins were taken against. Two
+    consumers rather than three, and named here for the reason
+    ``CLAUDE.md``'s seam rule asks for: pull request #420's
+    :func:`snakes_and_ladders.likelihood.mixture_assignments.enumerate_mixture_assignments`
+    is written on this same shift and is its third.
 
     Parameters
     ----------
