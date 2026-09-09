@@ -38,8 +38,8 @@ from snakes_and_ladders.qa.figure import (
     write_qa_table,
 )
 from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
-from snakes_and_ladders.sim.hmm import load_hmm_params
 from snakes_and_ladders.sim.convolutional import load_turbo_params
+from snakes_and_ladders.sim.hmm import load_hmm_params
 from snakes_and_ladders.sim.ldpc import load_ldpc_params
 from snakes_and_ladders.sim.mixture import load_mixture_params
 from snakes_and_ladders.sim.params import load_simulation_params
