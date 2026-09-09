@@ -165,7 +165,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_mean_field_and_spanning_tree_bounds_sandwich_log_z` | oracle |  |
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
-## `tests/regression/opt/` (53)
+## `tests/regression/opt/` (57)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -187,6 +187,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_hmm.py::test_forward_matches_brute_force_path_enumeration` | oracle |  |
 | `test_opt_hmm.py::test_theta_round_trips_through_the_constraint_map` | oracle |  |
 | `test_opt_hmm.py::test_align_states_recovers_a_known_permutation` | oracle |  |
+| `test_opt_hmm.py::test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point` | oracle | The E step is a forward-backward recursion and the number it reports is `sum_sequences log P(sequence)`. |
 | `test_opt_hmm_counts.py::test_the_forward_recursion_matches_enumeration_over_every_path` | oracle |  |
 | `test_opt_hmm_counts.py::test_a_known_truth_round_trips_through_the_unconstrained_coordinates` | simulated_truth |  |
 | `test_opt_hmm_counts.py::test_coverage_against_the_true_dispersion` | simulated_truth | The full sweep behind the table in `STATUS.md`. |
@@ -197,6 +198,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_hmm_gaussian.py::test_coverage_against_the_separation_of_the_emitting_states` | simulated_truth | The full sweep behind the table in `STATUS.md`. |
 | `test_opt_initialize.py::test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one` | simulated_truth | The case multi-start is for, measured against four analytic minima. |
 | `test_opt_initialize.py::test_restarts_barely_help_on_rastrigin_and_the_number_says_so` | simulated_truth | The negative result, kept because it is the more useful one. |
+| `test_opt_initialize.py::test_every_restart_lands_on_a_published_himmelblau_minimizer` | oracle | The multi-start initializer was refereed by basin *coverage*: four restarts reach four distinct basins. |
 | `test_opt_intervals.py::test_the_new_door_is_the_old_one` | oracle | `standard_errors_at` must be `constrained_standard_errors` reached another way, not a second implementation of it. |
 | `test_opt_intervals.py::test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it` | oracle | The comparison on the one target where it has an exact answer. |
 | `test_opt_intervals.py::test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate` | simulated_truth | An interval that exists and does not cover is worse than no interval, so the EM path is held to exactly the standard the gradient path is. |
@@ -204,6 +206,8 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_opt_mixture.py::test_the_component_m_step_is_the_emission_family_s_own` | oracle | Asserted rather than assumed: the mixture's EM and a direct call into `GaussianEmission.reestimate` on the same responsibilities must produce the same numbers, because they *are* the same call. |
 | `test_opt_mixture.py::test_the_optimal_clustering_is_exact_where_it_can_be_checked_by_hand` | oracle | Two obvious clusters of three points each: the optimum splits them, and the cost is the within-run sum of squares, 2 * (1 + 0 + 1) / ... |
 | `test_opt_mixture.py::test_a_known_truth_round_trips_through_the_unconstrained_coordinates` | simulated_truth |  |
+| `test_opt_mixture.py::test_the_evidence_and_the_e_step_match_the_enumerated_assignments` | oracle | The mixture's evidence and its responsibilities have a one-line factorized form because the observations are independent, and that form is what this module computes. |
+| `test_opt_mixture.py::test_the_seeded_start_lands_in_the_enumerated_maximum_posterior_assignment` | oracle |  |
 | `test_opt_mixture_budget.py::test_at_eight_starts_restarts_reach_the_optimum_from_the_most_starts` | simulated_truth | The per-pull-request tier of the release measurement below: the same code on its first 8 starts, pinning the direction and the referee's consistency. |
 | `test_opt_mixture_budget.py::test_at_forty_starts_restarts_reach_the_optimum_from_the_most_starts` | simulated_truth | The measurement `docs/experiments/004` reports. |
 | `test_opt_potts.py::test_transfer_matrix_matches_brute_force_enumeration` | oracle |  |
@@ -262,7 +266,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_qa_topology_accuracy.py::test_the_distance_is_the_symmetric_difference_of_the_splits` | oracle | Against the definition, computed here independently of the implementation: splits in one tree and not the other, both ways. |
 | `test_qa_topology_accuracy.py::test_more_sites_recover_the_topology_more_often` | simulated_truth | The claim the figure makes. |
 
-## `tests/regression/search/` (107)
+## `tests/regression/search/` (108)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -274,7 +278,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_gibbs.py::test_the_generic_sweep_samples_the_potts_boltzmann_distribution` | simulated_truth |  |
 | `test_gibbs.py::test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw` | oracle | Same uniforms, same site order, same cumulative search: the only way the two could differ is a uniform within rounding of a boundary, and over 2,000 sweeps of four sites none did. |
 | `test_gibbs.py::test_the_generic_sweep_samples_the_hidden_path_posterior` | simulated_truth |  |
-| `test_gibbs.py::test_the_block_move_draws_the_whole_chain_exactly` | simulated_truth | Every block draw is an independent sample from the posterior, so no thinning is needed: that is what "exact" buys. |
+| `test_gibbs.py::test_the_block_move_draws_the_whole_chain_from_the_enumerated_path_posterior` | oracle |  |
 | `test_gibbs.py::test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree` | oracle |  |
 | `test_gibbs.py::test_the_generic_sweep_samples_the_coupled_model_s_label_posterior` | simulated_truth |  |
 | `test_gibbs.py::test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_does` | oracle |  |
@@ -371,6 +375,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_search_tree_features.py::test_the_full_set_against_the_single_feature_over_sixteen_seeds` | simulated_truth | Issue #178's comparison at its budget, single feature against the full set. |
 | `test_search_tree_features.py::test_both_feature_sets_train_away_from_the_recorded_untrained_rate` | simulated_truth | The fast sibling of the two release-tier measurements above. |
 | `test_spatio_sequential_fit.py::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels` | oracle |  |
+| `test_spatio_sequential_fit.py::test_the_burn_in_start_reaches_the_enumerated_map_of_the_model_it_reached` | oracle | What an initializer is asked for is the mode of the labelling posterior under the parameters it has fitted, and at 2x2 that mode is enumerable. |
 | `test_spatio_sequential_fit.py::test_the_label_step_recovers_planted_labels_when_the_parameters_are_known` | simulated_truth | The label problem alone is easy: with theta at the truth, the field separates the classes on 98 to 99 percent of nodes over six draws. |
 | `test_spatio_sequential_fit.py::test_the_annealed_start_beats_every_cold_solver_at_equal_blocks` | simulated_truth | The study the ticket asked for, and it does not say what the ticket expected. |
 
@@ -429,4 +434,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-386 checks.
+391 checks.
