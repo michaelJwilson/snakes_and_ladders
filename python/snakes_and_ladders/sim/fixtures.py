@@ -26,20 +26,32 @@ which random-restart hill climbing reaches it, the rate an untrained policy
 reaches it. The fixture declares an instance and is written by hand; the
 record states a measurement and is written by ``infra/baselines.py``, so a
 regenerated measurement never rewrites a declaration and a reviewer reading
-a diff can tell which of the two moved. :func:`baseline` reads one and
-refuses a stale one, which is what stops a cached number outliving the code
-that produced it.
+a diff can tell which of the two moved.
 
-The digest machinery is :mod:`snakes_and_ladders.inputs`, which is top level
-rather than inside ``qa`` for exactly this: it names no model and imports
-nothing from this package, so taking it here inverts no layering, where a
-digest living beside the figures would have made ``sim`` depend on ``qa``.
+**A record carries no digest of the tree it was written from** (issue #460).
+It did until then: one hash over the fixture bytes, the transitive import
+closure of the computing modules and three library versions, which
+:func:`baseline` compared with the current tree's and raised on. Measured
+over the whole history of the five records, that field moved 54 times and
+carried a moved number 0 times --- every re-key was a source edit somewhere
+in a closure spanning 66 of the 145 tracked source files, and the
+recomputation that followed reproduced the values byte for byte. It also
+made 8 of the 38 conflicts across the eight open branches, over a
+sixty-four-character line the three sides disagreed on and nothing else.
+The referee it stood in for is now the thing itself: ``infra/baselines.py``
+recomputes the records a change could have moved, per pull request, and
+every record at the release gate.
+
+What survives here is the check a recomputation cannot make, because it is a
+fact about the machine and not about the tree: :func:`baseline` refuses a
+record whose ``numpy``, ``scipy`` or ``torch`` version is not the installed
+one, and that refusal is still a :class:`StaleBaselineError`.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,7 +59,7 @@ from typing import Any
 import yaml
 
 from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.inputs import digest, library_versions, module_closure
+from snakes_and_ladders.inputs import library_versions
 from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.opt.testfunctions import load_test_function_params
 from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
@@ -62,7 +74,8 @@ from snakes_and_ladders.sim.potts import load_potts_lattice_params
 from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
 
 #: The repository root, from this file rather than from a working directory:
-#: a baseline's digest covers source paths relative to it.
+#: the fixture directory is named from it, and a caller in another tree
+#: passes its own.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 #: Where the fixture files live, as a path from this file rather than from a
@@ -349,7 +362,7 @@ def declared(
 
 # --- baseline records (issue #401) ------------------------------------------
 
-#: The libraries whose version enters a baseline's digest. Narrower than
+#: The libraries a baseline's numbers are a function of. Narrower than
 #: ``inputs.LIBRARIES``, which a *figure* is hashed against: a search rate
 #: is a number, not a rendering, so the drawing libraries do not change it
 #: and a matplotlib release must not invalidate every record.
@@ -360,10 +373,14 @@ BASELINE_SUFFIX = ".baseline.json"
 
 
 class StaleBaselineError(RuntimeError):
-    """Raised when a baseline record's digest is not the current tree's.
+    """Raised when a record's numbers are not the ones this tree produces.
 
-    The record is then a number computed from code or data that has since
-    moved, and serving it would be a claim with no referee. Regenerate with
+    Two callers raise it. :func:`baseline` raises on the cheap read, when the
+    installed ``numpy``, ``scipy`` or ``torch`` is not the one the record was
+    computed against --- a difference no recomputation elsewhere can see,
+    because it is a fact about this machine. ``infra/baselines.py`` raises it
+    on the recomputation itself, when a recomputed value or a recorded budget
+    disagrees with what is committed. Regenerate with
     ``infra/baselines.py --write``, which recomputes rather than restamps.
     """
 
@@ -408,15 +425,14 @@ class Baseline:
     path : Path
         The record file, reported in every error.
     modules : tuple[str, ...]
-        The dotted names of the modules that computed the values. Their
-        transitive import closure is part of the digest, so a change to the
-        search this measures makes the record stale.
+        The dotted names of the modules that computed the values. They are
+        what ``infra/baselines.py`` selects on: a pull request touching one
+        module's import closure recomputes the records that closure reaches,
+        and no others.
     libraries : tuple[str, ...]
-        ``name==version`` at the computation, for the error message; the
-        digest is over the versions installed *now*, which is what makes a
-        library change visible.
-    digest : str
-        The recorded digest, from :func:`baseline_digest`.
+        ``name==version`` at the computation, for :data:`BASELINE_LIBRARIES`.
+        :func:`baseline` compares them with the versions installed *now*,
+        which is what makes a library change visible on the cheap read.
     measurements : Mapping[str, Measurement]
         The numbers, by name.
     """
@@ -426,7 +442,6 @@ class Baseline:
     path: Path
     modules: tuple[str, ...]
     libraries: tuple[str, ...]
-    digest: str
     measurements: Mapping[str, Measurement]
 
     def measurement(self, name: str) -> Measurement:
@@ -503,70 +518,6 @@ def baseline_path(
     return directory / problem / f"{Scale(tier)}{BASELINE_SUFFIX}"
 
 
-def _digest_terms(measurements: Mapping[str, Measurement]) -> list[str]:
-    """The parts of ``measurements`` that are inputs rather than results.
-
-    The algorithm, the seed and the budget decide what a number means, so a
-    record whose budget was edited by hand must fail to read. The value is
-    left out: it is the *output*, and a wrong one is caught by recomputing
-    at the release gate, not by a hash of itself.
-    """
-    return [
-        json.dumps(
-            [
-                name,
-                measurements[name].algorithm,
-                measurements[name].seed,
-                measurements[name].budget,
-            ],
-            sort_keys=True,
-        )
-        for name in sorted(measurements)
-    ]
-
-
-def baseline_digest(
-    fixture_file: Path,
-    modules: Iterable[str],
-    measurements: Mapping[str, Measurement],
-    root: Path = REPO_ROOT,
-) -> str:
-    """Hash everything a baseline's numbers are a function of.
-
-    The fixture enters as a digest of its own, keyed on its file name rather
-    than on its path from the repository root, so a record can be checked
-    against a copy of the fixture directory somewhere else --- which is how a
-    mutated fixture is shown to make the read raise, without editing the
-    committed one.
-
-    Parameters
-    ----------
-    fixture_file : Path
-        The ``<tier>.yaml`` the numbers were measured on. The file, not the
-        problem's directory: the directory holds the record itself, and
-        hashing it would make writing the record change its own digest.
-    modules : Iterable[str]
-        Dotted names of the computing modules; their transitive closure and,
-        where one reaches the extension, the Rust sources enter the hash.
-    measurements : Mapping[str, Measurement]
-        The record's own algorithms, seeds and budgets.
-    root : Path
-        The repository root the hashed source paths are taken relative to.
-
-    Returns
-    -------
-    str
-        A SHA-256 hex digest.
-    """
-    return digest(
-        module_closure(modules, root),
-        root,
-        digest([fixture_file], fixture_file.parent),
-        *library_versions(BASELINE_LIBRARIES),
-        *_digest_terms(measurements),
-    )
-
-
 def _as_measurement(name: str, raw: Mapping[str, Any], path: Path) -> Measurement:
     """One record entry, with a list value read as a vector.
 
@@ -592,11 +543,11 @@ def _as_measurement(name: str, raw: Mapping[str, Any], path: Path) -> Measuremen
 
 
 def read_baseline(path: Path) -> Baseline:
-    """Parse a baseline record without checking its digest.
+    """Parse a baseline record without checking it against this machine.
 
     The unchecked read, for the writer that is about to replace the file and
-    for an error message that wants to say what the stale record held.
-    Callers wanting a number want :func:`baseline`.
+    for the recomputation that is about to compare with it. Callers wanting a
+    number want :func:`baseline`.
 
     Returns
     -------
@@ -618,7 +569,6 @@ def read_baseline(path: Path) -> Baseline:
         "tier",
         "modules",
         "libraries",
-        "digest",
         "measurements",
     } - raw.keys()
     if missing:
@@ -630,7 +580,6 @@ def read_baseline(path: Path) -> Baseline:
         path=path,
         modules=tuple(str(name) for name in raw["modules"]),
         libraries=tuple(str(name) for name in raw["libraries"]),
-        digest=str(raw["digest"]),
         measurements={
             name: _as_measurement(name, entry, path)
             for name, entry in raw["measurements"].items()
@@ -649,7 +598,6 @@ def write_baseline(record: Baseline) -> None:
         "tier": str(record.tier),
         "modules": list(record.modules),
         "libraries": list(record.libraries),
-        "digest": record.digest,
         "measurements": {
             name: {
                 "algorithm": measurement.algorithm,
@@ -669,7 +617,6 @@ def baseline(
     problem: str,
     tier: str | Scale,
     directory: Path = FIXTURES_DIR,
-    root: Path = REPO_ROOT,
 ) -> Baseline:
     """The baseline record for a problem's tier, refused if it has gone stale.
 
@@ -681,34 +628,34 @@ def baseline(
         ``ci``, ``stress`` or ``release``.
     directory : Path
         Where the fixtures live.
-    root : Path
-        The repository root the digest's paths are relative to.
 
     Returns
     -------
     Baseline
-        The record, whose digest is the current tree's.
+        The record, computed against the libraries installed here.
 
     Raises
     ------
     FileNotFoundError
         If the problem declares no record at that tier.
     StaleBaselineError
-        If the fixture, the computing code, the libraries or the record's own
-        budgets have moved since it was written. Raising is the point: a test
-        reading a number no longer produced by the tree would assert against
-        history, and the failure has to be loud where the cheap read is.
+        If ``numpy``, ``scipy`` or ``torch`` is not the version the record
+        was computed against. That is the one input to the numbers this read
+        can check for nothing, and it is the one a recomputation on another
+        host cannot check at all: a test reading a number produced under a
+        different linear algebra would assert against history. Whether the
+        *code* still produces the numbers is refereed by recomputing them ---
+        ``infra/baselines.py``, per pull request over the records the change
+        could have moved and over every record at the release gate (issue
+        #460).
     """
     record = read_baseline(baseline_path(problem, tier, directory))
-    current = baseline_digest(
-        path_of(problem, tier, directory), record.modules, record.measurements, root
-    )
-    if current != record.digest:
+    installed = tuple(library_versions(BASELINE_LIBRARIES))
+    if installed != record.libraries:
         msg = (
-            f"{record.path} was written from a different tree "
-            f"({record.digest[:12]} against {current[:12]}); it recorded "
-            f"{list(record.libraries)} and covers {list(record.modules)}. "
-            f"Recompute with: uv run python infra/baselines.py --write"
+            f"{record.path} was computed against {list(record.libraries)}, "
+            f"and {list(installed)} is installed. Recompute with: "
+            f"uv run python infra/baselines.py --write"
         )
         raise StaleBaselineError(msg)
     return record
