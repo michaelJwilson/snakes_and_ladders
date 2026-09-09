@@ -169,13 +169,13 @@ generated caption naming the seed, sizes, and model that produced it.
 
 The simulator is held to the closed-form transition probabilities the
 companion textbook derives, rather than to the likelihood later fitted to its
-output: empirical substitution
-frequencies along a branch are compared against the closed form, within a
-Monte Carlo tolerance set by the site count. Table~\ref{tab:sim-problem-sizes}
-is the three instances that comparison runs on, each with the seed and the
-tolerance it is validated within; the site count is what buys the tolerance,
-and the eight-taxon instance is the one that exercises a tree deep enough for
-the frequencies along an interior branch to be worth measuring.
+output: empirical substitution frequencies along a branch are compared against
+that form within a Monte Carlo tolerance.
+Table~\ref{tab:sim-problem-sizes} is the three instances that comparison runs
+on. The tolerance is bought with sites rather than chosen---the two
+200{,}000-site instances are validated at a third of the tolerance the
+20{,}000-site one is---and the set is tabulated rather than described because
+a seed and a tolerance are what make the comparison repeatable at all.
 
 \qacaptionread{figures/sim_problem_sizes_caption.txt}{\simProblemSizesCaption}
 \begin{table}[htbp]
@@ -326,13 +326,14 @@ climbed; the second the tree it selected beside the best one it rejected.
 
 Enumeration referees whether the search found the best tree \emph{for the
 data}. Whether the best tree for the data is the tree that generated it is a
-different question, and the referee for it is simulated truth rather than
-enumeration: it is decided by how much signal the alignment carries, so it is
-asked against the site count. Figure~\ref{fig:topology-accuracy} sweeps that,
-at a low end deliberately below what the fixtures use, since a sweep confined
-to sizes already known to work locates no margin. The requirement it is read
-against is the roadmap's, a normalized Robinson--Foulds distance at or below
-$0.05$ from the generating topology.
+different question, refereed by simulated truth rather than by enumeration and
+decided by how much signal the alignment carries---so it is asked against the
+site count. Figure~\ref{fig:topology-accuracy} sweeps it, at a low end
+deliberately below what the fixtures use, because a sweep confined to sizes
+already known to work locates no margin, and reads the result against the
+roadmap's accuracy requirement. Where the sweep first clears that requirement
+is not quoted: it is a threshold crossing over an optimizer's output, and one
+that moves in its last digits on another machine.
 
 \qacaptionread{figures/topology_accuracy_caption.txt}{\topologyAccuracyCaption}
 \begin{figure}[htbp]
