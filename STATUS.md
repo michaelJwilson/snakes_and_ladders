@@ -772,6 +772,72 @@ them a bracket on the ground-state energy that on the same lattices at
 `beta = 3` sits 0.028 nats per node below the enumerated minimum. The
 proofs are Appendix B of the textbook.
 
+**Site patterns, and a bound where they saturate**
+([#408](https://github.com/michaelJwilson/snakes_and_ladders/issues/408)).
+The log-likelihood reads one alignment column per term, so identical columns
+collapse to distinct patterns carrying integer weights and the sum over
+columns is reassociated, not approximated. `likelihood.patterns.compress`
+builds the table once and `pruning`, `pruning_torch` and `pruning_rust` take
+the weights, so no two backends can disagree about what a pattern is.
+Compression at each fixture's declared size, as columns to distinct patterns:
+`tree_search/ci` 5 taxa, 1,200 to 321 (**3.7x**); `tree_jc/ci` 4 taxa, 20,000
+to 256 (**78.1x**); `tree_search/stress` 6 taxa, 1,500 to 526 (**2.9x**);
+`tree_jc/stress` 4 taxa, 200,000 to 256 (**781.2x**); `tree_search/release`
+7 taxa, 2,000 to 1,230 (**1.6x**); `tree_jc/release` 8 taxa, 200,000 to
+19,646 (**10.2x**). The ratio is set by the taxon count against the site
+count, not by either alone, which is why the widest alignment at the fewest
+taxa compresses hardest and the seven-taxon fixture at 2,000 sites barely at
+all.
+Agreement with the uncompressed value is 1.8e-16 to 5.0e-13 relative over the
+six backend-fixture pairs, inside `likelihood/CLAUDE.md`'s `1e-11` `float64`
+bound, and the weights are checked against a `Counter` over the columns, which
+knows nothing of `compress`.
+
+The saving saturates at `k ** n` — 256 distinct columns at four taxa however
+long the alignment — so blocks of `N > 1` consecutive sites buy a bound rather
+than a saving. `likelihood.blocks` partitions the alignment into blocks of `N`
+sites, evaluates exactly every block occurring at least `min_count` times
+through the pattern compression of those blocks' columns, and brackets the
+rest by the extremes of a single site's log-likelihood over the whole column
+alphabet — one pass over the tree, the pruning recursion with each leaf
+message replaced by the extremes of its transition row, with no data read.
+The interval contains the exact log-likelihood on the `tree_search` and
+`tree_jc` `ci` and `stress` fixtures over block sizes 1, 2, 3 and 5 against
+cutoffs 1, 2, 4, 8 and 32, on the simulated alignment and on four
+uniform-random ones each; the per-column extremes are checked against all 256
+columns of the four-taxon fixture, one evaluation apiece.
+`BlockFrequencyBound` is the tenth `Surrogate`, and its lower end is certified
+over the 15 five-taxon topologies at block sizes 1 and 2 and cutoffs 1, 4 and
+16 with no violation. What the cutoff buys is paid in width, exactly
+`(bounded sites) x (per-site extreme range)`: at 2,000 sites on
+`tree_search/ci` a cutoff of 8 at `N = 1` leaves 49 columns to evaluate and a
+width of **1.006** `|LL|`, and at `N >= 3` nothing repeats, the whole
+alignment falls in the tail and the width is **2.815** `|LL|` — so neither end
+orders topologies, and the measurement is reported rather than asserted away.
+The `POINT` claim drops the tail and ranks by the frequent blocks alone, the
+same sites for every candidate; under it a lazy `search.infer` reaches the
+same topology and the same fitted log-likelihood as the search that fits every
+candidate, from three starts under both move sets at 1,200 sites and cutoff 4,
+at **2 to 4** fits against **5 to 15** and **68 to 163** forward passes
+against **209 to 731**. The cutoff is a count, so it scales with the
+alignment: 8 at 1,200 sites loses the optimum from 6 of 12 starts and 4 does
+not, while 8 at 2,000 sites keeps all 12.
+
+**The interval is not a cheaper forward pass, and the measurement says so.**
+One thread, mean over 50 calls: at five taxa by 2,000 sites the uncompressed
+evaluation is **0.908 ms**, the pattern-compressed **0.660 ms**, the per-tree
+extremes **0.384 ms**, and the interval **3.650**, **3.314** and **3.047 ms**
+at cutoffs 1, 8 and 32; at four taxa by 20,000 sites, **3.974**, **0.511**,
+**0.257**, and **23.183**, **22.699** and **22.588 ms**. So the interval costs
+**4.0x** and **5.8x** the evaluation it stands in for, and raising the cutoff
+from 1 to 32 buys **17%** and **2.5%** — because the two terms that scale with
+the cutoff are bounded by 0.66 ms and 0.26 ms and everything else is the block
+partition's `np.unique`, which sorts every block whatever the cutoff. The
+bound's saving is in *fits*, not in passes: a fit is 254 ms at this fixture
+against a 3.65 ms interval, which is what the ranked search's 2 fits against
+13 buys. Making the interval itself cheap is a separate decision against a
+profile and is not taken here.
+
 **The LDPC decoder, specialised from the general sum-product and held to it**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
 `likelihood.ldpc.decode` runs the log-domain `tanh` rule or min-sum under a

@@ -77,7 +77,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_learn_surrogate.py::test_calibrated_bound_holds_at_its_coverage_on_fresh_groups` | simulated_truth | Calibrated at 0.9 on 8 groups, the lower bound is above the truth on no more than a fifth of 400 fresh examples: the nominal 10% plus the sampling margin a rate claim on 200 calibration points carries. |
 | `test_learn_surrogate_pyg.py::test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights` | oracle |  |
 
-## `tests/regression/likelihood/` (83)
+## `tests/regression/likelihood/` (87)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -98,6 +98,10 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_ldpc.py::test_the_996_bit_code_corrects_the_bsc_below_its_threshold_and_not_above` | simulated_truth | Over 20 shared seeds the 996-bit (3,6) code has zero bit errors at `p = 0.05` and a bit error rate above 0.02 at `p = 0.09`, either side of the (3,6) BSC threshold `p* = 0.084`; realized 0 and 0.049. |
 | `test_ldpc.py::test_the_996_bit_code_on_the_erasure_channel_either_side_of_the_threshold` | simulated_truth | Over 20 seeds no erasure survives at `epsilon = 0.35` and more than half of them survive at `epsilon = 0.5`; realized 0 and 0.433 of 0.5. |
 | `test_ldpc.py::test_the_20000_bit_code_brackets_the_erasure_threshold` | simulated_truth | At `n = 19,998` (the multiple of six nearest the ticket's 20,000) the flooding decoder resolves every erasure at `epsilon = 0.42` and leaves more than a fifth of the bits erased at `0.44`, bracketing the density evolution threshold 0.4294 on three seeds each; realized 0 and 0.25-0.30. |
+| `test_likelihood_blocks.py::test_the_lower_end_is_a_bound_on_the_fitted_log_likelihood` | oracle | Certified in the sense bound.py defines, against a full fit of all 15 five-taxon topologies: the lower end is a value at feasible lengths, so it cannot exceed the maximum over lengths, and one violation refuses the certificate. |
+| `test_likelihood_blocks.py::test_neither_end_ranks_and_the_frequent_half_does` | oracle | The measurement that shapes how the bound is used. |
+| `test_likelihood_blocks.py::test_a_ranked_search_reaches_what_the_exact_search_reaches` | oracle | One start under each move set, inside the per-pull-request tier. |
+| `test_likelihood_blocks.py::test_the_ranked_search_holds_over_starts_move_sets_and_taxa` | oracle | Six starts rather than two, and the six-taxon fixture as well as the five: an agreement that holds from one start is an agreement about that start, and one that holds at one size is an agreement about that size. |
 | `test_likelihood_distance.py::test_the_distance_converges_on_the_path_length_with_the_site_count` | simulated_truth | The error against the true path length falls as ``1/sqrt(L)``. |
 | `test_likelihood_distance.py::test_the_stated_variance_covers_the_truth_at_the_nominal_rate` | simulated_truth | ``value +- 1.96 sqrt(variance)`` covers the true path length 95% of the time. |
 | `test_likelihood_hadamard.py::test_the_conjugation_returns_the_true_split_weights_on_the_exact_spectrum` | oracle | On the pruning-computed two-state spectrum, ``q`` is the tree's lengths and zero elsewhere. |
@@ -434,4 +438,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-391 checks.
+395 checks.
