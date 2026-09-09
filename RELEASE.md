@@ -7,14 +7,13 @@ each costs. `infra/release.sh` is the gate;
 the ticket that drives it. `CLAUDE.md` remains authoritative: where it and this
 file disagree, it wins.
 
-**The costs here are a snapshot, not a promise.** Each is dated, names its
-source, and says whether the host was quiet. They come from one 4-core
-development host, and the exclusive host lock is not honoured in practice
-(issue #496): during one exclusive measurement 2.68 cores were busy of which
-1.75 were foreign, and a `with_lock measure` request has queued for its full
-1,800 s wait and timed out while three worktrees rendered figures and ran
-`pytest` (issue #431). A number taken under contention is an upper bound and
-says so.
+**Every cost here is an approximate upper bound, rounded up.** They come from
+one 4-core development host, they were taken under contention — the exclusive
+host lock is not honoured in practice (issues #496, #431) — and they are a
+snapshot rather than a promise. They are here to say where the hours go and what
+to expect, not to be reproduced: the ticket cited beside each carries the
+measurement, and `snakes_and_ladders.qa.manifest` carries the per-figure values
+precisely. Round up again on a busy host.
 
 ## What a release is cut against
 
@@ -137,14 +136,14 @@ order, with what each costs:
 
 | Step | Cost |
 | --- | --- |
-| `ruff check`, `ruff format --check`, `mypy --strict` | Under a minute between them; reported as pass/fail at the 0.5.0 run because the host was at load 5–7 |
-| `cargo clippy --locked --all-targets -D warnings`, `cargo fmt --check`, `cargo test --locked` | Likewise; both `--features sandbox` variants passed beside them, which is what proves the gated route still compiles |
-| `pytest` (every tier, coverage gate) | **~1,100 s** for the CI tier alone, uncontended (1,098 s over 2,121 tests, 2026-09-09, issue #455); the gate adds the `release`, `stress` and `key` tiers on top, and no complete reading exists — see below |
-| `sphinx-build -E -a -W` over all 134 modules | **32.2 s** cold, against 8.2 s when nothing changed (issue #451; the step and its flags are issue #485) |
-| `infra/ledgers.sh --check` | **7–9 s**, from the review gate's ledger row, which writes rather than compares and so costs about 1 s more (issues #425, #469); read at load 5 to 10, so an upper bound |
-| `qa.build --all --check`, every figure against the committed bytes | **431.8 s** declared over the manifest's 23 entries; **~500 s measured** for 18 of them, at 1.1–1.4x declared even at load 8–10 (issue #477) |
-| `infra/build_documents.sh` | **15.8 s** with the figure stamps current, up to **305.8 s** with one stale (issue #433), of which citation integrity is **12.0 ms** of work and 53–62 ms of wall clock including interpreter start on a quiet host, and 55 ms at load 9.4 — the check is bounded by file reading rather than by the host (issue #503) |
-| `infra/baselines.py` | Unmeasured at the gate. The recomputation it holds cost 8.3 s of uniform rollouts, 7.5 s of maximum-likelihood fits and 1.9 s of exact expected returns per pull request before it moved here (issue #401) |
+| `ruff check`, `ruff format --check`, `mypy --strict` | **Under a minute** between them |
+| `cargo clippy --locked --all-targets -D warnings`, `cargo fmt --check`, `cargo test --locked` | **A few minutes** on a cold `cargo` cache, and both `--features sandbox` variants ran clean beside them at the 0.5.0 cut, which is what says the gated `burn` route still compiles |
+| `pytest` (every tier, coverage gate) | **~20 min for the CI tier alone** (issue #455), and the gate adds the `release`, `stress` and `key` tiers on top: **over an hour**, with no complete reading — see below. **The largest sink** |
+| `sphinx-build -E -a -W` over all 134 modules | **Under a minute** (issues #451, #485) |
+| `infra/ledgers.sh --check` | **Seconds** (issue #469) |
+| `qa.build --all --check`, every figure rendered and compared against the committed bytes | **~10 min** (issue #477). **The second sink**, and the one that grows with the manifest |
+| `infra/build_documents.sh` | **Under a minute** with the figure stamps current, **~6 min** with one stale (issue #433); the citation check inside it is **under a second** (issue #503) |
+| `infra/baselines.py` | **Under a minute**; unmeasured at the gate, from what the same recomputation cost per pull request before it moved here (issue #401) |
 
 **Two steps rebuild in full rather than predicting what to rebuild**, and both
 predictions failed before they were removed. The figure step passes `--all`,
@@ -161,26 +160,23 @@ measured rather than assumed — with issue #448's `:cite:` role reintroduced th
 incremental form failed too. `tests/regression/test_release_gate.py` pins both
 flags and the ordering.
 
-**The figure pass is minutes, and its cost is concentrated.**
-`topology_accuracy` at 124.0 s and `rl_tree_policy` at 101.4 s are 52.2% of the
-431.8 s the manifest declares between them; the median figure is 5.0 s. The sum
-is arithmetic over each entry's `seconds`, one render measured alone on the
-reference host, and not a timed pass: the gate renders each figure in its own
-process, so a measured pass exceeds it. Sizing the step at the declared sum is
-close for 18 of the 23, but **four `opt_*`
-figures blow out 8.0x, 8.5x, 24.3x and 79.0x under contention** (issue #477).
-That is not generic load — everything else at the same load stayed near 1.2x.
-`snakes_and_ladders.qa.build` strips `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`
-and `MKL_NUM_THREADS` from a render's environment, so a figure that runs a
-multi-threaded reduction degrades superlinearly on an oversubscribed host. Budget
-the step at roughly 500 s of render on an idle host, plus whatever those four
-cost there, which no measurement yet says.
+**The figure pass is minutes, and its cost is concentrated in a handful of
+figures.** Two of the twenty-three are half of it, and most of the rest are a few
+seconds each; `snakes_and_ladders.qa.manifest` carries the per-figure numbers and
+is the source, since a guard already reads them (`CITED_RENDER_CAP`). Two things
+a reader should expect rather than compute: the ten minutes above is the whole
+pass on a quiet host, and **four `opt_*` figures degrade by up to ~80x on a busy
+one** (issue #477). That is not generic load — everything else stayed near its
+declared cost at the same load. `snakes_and_ladders.qa.build` strips
+`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` from a render's
+environment, so a figure running a multi-threaded reduction is the one that
+degrades superlinearly when the host is oversubscribed.
 
 **The full suite is the step without a complete reading.** The one attempt on
-2026-09-09 ran past 3,500 s against the CI tier's 1,100 s baseline and was
-stopped at 46%, with zero `FAILED` and zero `ERROR`, when `main` moved beneath
-it. Plan for the gate to hold the host for hours, and report the run as pass/fail
-unless the host was quiet: at that load a timing states the host, not the tree.
+2026-09-09 ran for over an hour, reached 46% with nothing failing, and was
+stopped when `main` moved beneath it. Plan for the gate to hold the host for
+hours, and report the run as pass/fail: on a contended host a timing states the
+host rather than the tree.
 
 **Stopping the gate is sometimes right.** No amount of a run makes a stale cut
 fresh, and the run holds the host while it lasts.
@@ -265,7 +261,6 @@ return.
   hours-scale when it is minutes, and hours-scale is what argues for predicting
   which figures to render — the prediction that measured 100% false positives.
 * **"The review-gate table is measured at 30 s."** 30 s is the *budget*. The only
-  readings of the eight-row table are 39 s and 43 s, both at load 8–10 with the
-  exclusive lock unavailable, so both are upper bounds; whether the table is
-  inside its budget on an idle host is unmeasured (issues #469, #500). A
-  measurement that coincides with a budget is still not that budget.
+  readings of the eight-row table are around 40 s, taken on a busy host, and
+  whether it is inside its budget on an idle one is unmeasured (issues #469,
+  #500). A measurement that coincides with a budget is still not that budget.

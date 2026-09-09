@@ -60,6 +60,31 @@ def _step_named(fragment: str) -> tuple[int, list[str]]:
     return found[0]
 
 
+#: The bound `RELEASE.md` states for the whole-figure step, in the row naming it.
+_FIGURE_ROW = re.compile(
+    r"^\|[^|\n]*every figure[^|\n]*\|(?P<cost>[^|\n]*)\|", re.MULTILINE
+)
+
+#: A rounded bound in that cell, in whole minutes.
+_MINUTES = re.compile(r"~(\d+)\s*min")
+
+
+def _figure_bound_minutes() -> int:
+    """The minutes `RELEASE.md` budgets the every-figure step at."""
+    release = (REPO_ROOT / "RELEASE.md").read_text()
+    row = _FIGURE_ROW.search(release)
+    assert row is not None, (
+        "RELEASE.md has no gate-table row naming the every-figure step, so "
+        "nothing states what that step is budgeted (issue #494)"
+    )
+    stated = _MINUTES.search(row.group("cost"))
+    assert stated is not None, (
+        "RELEASE.md's every-figure row states no `~N min` bound: "
+        f"{row.group('cost').strip()!r} (issue #494)"
+    )
+    return int(stated.group(1))
+
+
 @pytest.mark.structural
 @pytest.mark.critical
 def test_the_gate_renders_every_figure_without_consulting_a_stamp() -> None:
@@ -131,24 +156,27 @@ def test_the_gate_builds_the_documentation_in_full() -> None:
 
 
 @pytest.mark.structural
-def test_release_md_states_the_figure_pass_at_the_manifest_s_own_total() -> None:
-    """The cost beside the gate is the manifest's, to the tenth of a second.
+def test_release_md_s_figure_bound_covers_the_manifest_s_total() -> None:
+    """`RELEASE.md`'s figure-pass bound must not be under the manifest's sum.
 
     The number this replaced --- ~6 min a figure --- was a whole re-stamp
     pass's total read as one render, and it stood because nothing in the tree
     disagreed with it (issue #476). `snakes_and_ladders.qa.manifest` carries a
-    measured `seconds` per figure, so the released total has a source that a
-    reader can add up, and this fails when the manifest moves away from it.
+    measured `seconds` per figure and stays the precise source; `RELEASE.md`
+    states a rounded bound, because a reader wants what to expect rather than
+    a sum to the tenth of a second that no pass reproduces (issue #494).
 
-    Read from `RELEASE.md`, which took the release procedure and its costs
-    from `DEV.md` (issue #494). The claim is unchanged; only its home moved,
-    and the copy left behind had already drifted to 437.7 s over 22 entries.
+    So the assertion is an inequality, not an equality: a stated bound has to
+    be an actual bound. It fires when the manifest grows past what the
+    document tells a reader to expect, which is the drift worth catching --- a
+    figure set that has outgrown its stated cost --- and it does not fire on
+    the rounding.
     """
     total = sum(spec.seconds for spec in FIGURES)
-    stated = f"**{total:.1f} s**"
-    release = (REPO_ROOT / "RELEASE.md").read_text()
-    assert stated in release, (
-        f"RELEASE.md's release gate does not state the figure pass as {stated}, "
-        f"the sum of the {len(FIGURES)} declared render times in "
-        "snakes_and_ladders.qa.manifest"
+    minutes = _figure_bound_minutes()
+    assert minutes * 60 >= total, (
+        f"RELEASE.md budgets the figure pass at ~{minutes} min, under the "
+        f"{total:.1f} s the {len(FIGURES)} entries of "
+        "snakes_and_ladders.qa.manifest declare between them: the manifest has "
+        "outgrown the stated bound (issue #494)"
     )
