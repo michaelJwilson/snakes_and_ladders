@@ -37,9 +37,27 @@ one locally rather than adding one there for a single caller. Validated to
 machine precision against the NumPy oracle
 (``tests/regression/test_pruning_rust.py``), per ``likelihood/CLAUDE.md``'s
 statement of the Rust-backend tolerance.
+
+**Two entry points, and which one a caller wants is a byte count.**
+:func:`log_likelihood` rebuilds every argument on every call, including the
+alignment block. :class:`PruningProblem` holds the alignment, ``k`` and
+``pi`` across passes and rebuilds only what changes -- the branch lengths and
+the topology -- so a caller scoring many topologies against one alignment
+pays for the alignment once. Issue #444 carries the counts. The two return
+the same ``float``, not two values inside a tolerance: same kernel, same
+arithmetic, same order, which is what lets one replace the other in a caller
+without moving a committed number.
+
+A ``PruningProblem`` is gradient-free. It computes a value and no
+derivative, so it belongs on the screening and scoring paths and never
+inside a fit: a Rust call in a differentiated path is opaque to
+``torch.autograd``, and ``pruning_torch`` remains the only backend for that
+(``likelihood/CLAUDE.md``).
 """
 
 from __future__ import annotations
+
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -200,3 +218,127 @@ def log_likelihood(
         if selected.shape[1]:
             total += float(value) * _kernel(selected)
     return total
+
+
+class PruningProblem:
+    """An alignment held across many pruning passes: it crosses the FFI boundary once.
+
+    Of what :func:`log_likelihood` marshals on every call, only the branch
+    lengths change within a fit and only the topology changes between
+    candidates of a search. The alignment changes for neither, and issue
+    #436's profile is 301 fits and 18,955 forward passes over one alignment
+    -- so it crossed about 63 times more often than it changed. This class
+    holds it, ``k`` and ``pi`` in Rust and takes only what changes.
+
+    The topology crosses as a flat parent-index array rather than a list of
+    lists, so PyO3 borrows one NumPy buffer instead of walking ``n_nodes``
+    Python lists and allocating a ``Vec`` per node.
+
+    ``leaf_row`` is rebuilt per call and not held: it maps a node index to a
+    row of the alignment, so it is a function of the topology's numbering
+    rather than of the alignment, and it changes exactly when the topology
+    does. It is ``n_nodes`` ``int64``s against the alignment's
+    ``n_leaves * n_sites``.
+
+    Parameters
+    ----------
+    k : int
+        Number of states.
+    pi : np.ndarray
+        Root state distribution, shape (k,).
+    alignment : Mapping[str, np.ndarray]
+        Leaf name to its observed states, each of shape (n_sites,) with
+        entries in ``[0, k)``. Copied into the handle at construction; later
+        edits to the caller's arrays are not seen.
+
+    Raises
+    ------
+    ValueError
+        If ``pi`` does not have shape ``(k,)``, the alignment is empty or
+        ragged, or ``k < 2``.
+    """
+
+    def __init__(
+        self, k: int, pi: np.ndarray, alignment: Mapping[str, np.ndarray]
+    ) -> None:
+        if pi.shape != (k,):
+            msg = f"pi has shape {pi.shape}, expected ({k},)"
+            raise ValueError(msg)
+        names = sorted(alignment)
+        if not names:
+            msg = "alignment is empty"
+            raise ValueError(msg)
+        n_sites = int(alignment[names[0]].shape[0])
+        states = np.empty((len(names), n_sites), dtype=np.int64)
+        for row, name in enumerate(names):
+            observed = alignment[name]
+            if observed.shape != (n_sites,):
+                msg = (
+                    f"leaf {name!r} has shape {observed.shape}, "
+                    f"expected ({n_sites},) -- the alignment is ragged"
+                )
+                raise ValueError(msg)
+            states[row] = observed
+        self.k = k
+        self._row_of = {name: row for row, name in enumerate(names)}
+        self._handle = oxi_snakes_and_ladders.PruningProblem(
+            states, k, np.ascontiguousarray(pi, dtype=np.float64)
+        )
+
+    def log_likelihood(self, tau: Node, *, rescale: bool = True) -> float:
+        """Total log-likelihood of the held alignment on ``tau``.
+
+        Returns the same ``float`` as :func:`log_likelihood` called with the
+        same tree and alignment.
+
+        Parameters
+        ----------
+        tau : Node
+            Root of the topology, with branch lengths attached to each
+            non-root node. Its leaf names must be among the alignment's.
+        rescale : bool
+            Whether to rescale partial likelihoods per node, as
+            :func:`log_likelihood`.
+
+        Returns
+        -------
+        float
+            ``sum_s log Pr(data_s | tau, t, Q, pi)``, summed over sites.
+
+        Raises
+        ------
+        ValueError
+            If the alignment is missing a leaf of ``tau``, or a non-root node
+            has no ``branch_length``.
+        """
+        order = _postorder(tau)
+        missing = [
+            node.name
+            for node in order
+            if node.is_leaf and node.name not in self._row_of
+        ]
+        if missing:
+            msg = f"alignment is missing leaf(ves) {missing}"
+            raise ValueError(msg)
+
+        index = {id(node): position for position, node in enumerate(order)}
+        n_nodes = len(order)
+        branch_length = np.zeros(n_nodes, dtype=np.float64)
+        # -1 marks the root, which has no parent, and an internal node, which
+        # reads no row: the two sentinels the Rust side already expects.
+        parent = np.full(n_nodes, -1, dtype=np.int64)
+        leaf_row = np.full(n_nodes, -1, dtype=np.int64)
+        for position, node in enumerate(order):
+            if position != n_nodes - 1:
+                if node.branch_length is None:
+                    msg = f"non-root node {node.name!r} has no branch_length"
+                    raise ValueError(msg)
+                branch_length[position] = float(node.branch_length)
+            for child in node.children:
+                parent[index[id(child)]] = position
+            if node.is_leaf:
+                leaf_row[position] = self._row_of[node.name]
+
+        return float(
+            self._handle.log_likelihood(branch_length, parent, leaf_row, rescale)
+        )
