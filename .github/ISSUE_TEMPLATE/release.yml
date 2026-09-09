@@ -79,7 +79,9 @@ body:
         - label: Frustrated lattices
         - label: The Gaussian mixture
         - label: Continuous test functions
+        - label: The count-emission mixture
         - label: LDPC decoding
+        - label: Turbo decoding
         - label: A problem class added since the last release has a statement of its own
   - type: textarea
     id: frameworks
