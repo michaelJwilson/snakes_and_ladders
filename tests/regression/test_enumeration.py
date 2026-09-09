@@ -21,6 +21,7 @@ import itertools
 
 import numpy as np
 import pytest
+import torch
 from snakes_and_ladders.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
     accumulate,
@@ -239,3 +240,55 @@ def test_a_caller_that_already_refused_may_opt_out() -> None:
     # holds; 2**20 is 168 MB and would test the machine rather than the flag.
     assert assignment_table(2, 18, what="unchecked", limit=None).shape == (2**18, 18)
     assert next(assignments(4, 20, what="unchecked", limit=None)) == (0,) * 20
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_the_mixture_enumeration_is_bitwise_what_it_was_before_the_seam(
+    seed: int,
+) -> None:
+    # The twelfth adapter, and the one that arrived while the seam was being
+    # written (pull request #420). Its own tests hold it to 1.2e-16 of the
+    # factorized evidence; this holds it to *bitwise* the expression it
+    # carried, because a tolerance that loose would not see the seam
+    # re-associating a sum of 65,536 terms.
+    from snakes_and_ladders.emissions import GaussianEmission
+    from snakes_and_ladders.likelihood.mixture_assignments import (
+        enumerate_mixture_assignments,
+    )
+
+    rng = np.random.default_rng(seed)
+    n_components, n_samples = 2, 12
+    weights = rng.dirichlet(np.ones(n_components))
+    components = GaussianEmission(
+        torch.as_tensor(rng.normal(size=n_components)),
+        torch.as_tensor(np.abs(rng.normal(size=n_components)) + 0.5),
+        1e-6,
+    )
+    values = np.asarray(rng.normal(size=n_samples))
+
+    log_weight = np.log(weights)
+    scored = log_weight + components.log_density(
+        torch.as_tensor(values, dtype=torch.float64)
+    ).numpy().reshape(n_samples, n_components)
+    place = n_components ** np.arange(n_samples - 1, -1, -1, dtype=np.int64)
+    table = (
+        np.arange(n_components**n_samples, dtype=np.int64)[:, None] // place
+    ) % n_components
+    log_joint = scored[np.arange(n_samples)[None, :], table].sum(axis=1)
+    shift = float(log_joint.max())
+    weight = np.exp(log_joint - shift)
+    total = float(weight.sum())
+    posterior = weight / total
+    reference = np.stack(
+        [
+            np.bincount(table[:, site], weights=posterior, minlength=n_components)
+            for site in range(n_samples)
+        ]
+    )
+
+    realized = enumerate_mixture_assignments(weights, components, values)
+
+    assert realized.log_evidence == shift + float(np.log(total))
+    assert np.array_equal(realized.responsibilities, reference)
+    assert np.array_equal(realized.assignment, table[int(log_joint.argmax())])

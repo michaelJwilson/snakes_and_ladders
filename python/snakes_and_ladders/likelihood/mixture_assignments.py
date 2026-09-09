@@ -28,7 +28,9 @@ import torch
 from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
-    refuse_oversized,
+    accumulate,
+    assignment_table,
+    normalize,
 )
 
 
@@ -98,11 +100,6 @@ def enumerate_mixture_assignments(
             f"{components.n_states}"
         )
         raise ValueError(msg)
-    refuse_oversized(
-        n_components**n_samples,
-        what=f"{n_components}**{n_samples} component assignments",
-        limit=max_assignments,
-    )
 
     # (n_samples, n_components): log w_k + log N(y_i; mu_k, s_k), the only
     # per-observation quantity used. Everything below is a sum over whole
@@ -111,35 +108,27 @@ def enumerate_mixture_assignments(
         torch.as_tensor(values, dtype=torch.float64)
     ).numpy().reshape(n_samples, n_components)
 
-    # Every assignment as the digits of its index in base ``n_components``,
-    # which is ``itertools.product`` without the Python-level loop: at 65,536
-    # assignments the Python loop costs 0.4427 s per call and this costs
-    # 0.0222 s, 19.9x, for identical responsibilities; a test that calls the
-    # oracle forty times is the difference between 18.80 s and 0.99 s, either
-    # side of the 10 s per-test cap (``CLAUDE.md``, Vectorization). The sum
-    # below is still over whole assignments --- no per-observation
-    # factorization is used, which is the entire point of this module.
-    place = n_components ** np.arange(n_samples - 1, -1, -1, dtype=np.int64)
-    assignments = (
-        np.arange(n_components**n_samples, dtype=np.int64)[:, None] // place
-    ) % n_components
-    log_joint = scored[np.arange(n_samples)[None, :], assignments].sum(axis=1)
-
-    shift = float(log_joint.max())
-    weight = np.exp(log_joint - shift)
-    total = float(weight.sum())
-    log_evidence = shift + float(np.log(total))
-
-    posterior = weight / total
-    responsibilities = np.stack(
-        [
-            np.bincount(assignments[:, site], weights=posterior, minlength=n_components)
-            for site in range(n_samples)
-        ]
+    # The shared enumeration of :mod:`snakes_and_ladders.enumeration` (issue
+    # #387): the table is every assignment as the digits of its index in base
+    # ``n_components``, which is ``itertools.product`` without the
+    # Python-level loop --- at 65,536 assignments the Python loop cost 0.4427
+    # s per call and this costs 0.0222 s, 19.9x, for bitwise-identical
+    # responsibilities; a test that calls the oracle forty times is the
+    # difference between 18.80 s and 0.99 s, either side of the 10 s per-test
+    # cap (``CLAUDE.md``, Vectorization). The sum below is still over whole
+    # assignments --- no per-observation factorization is used, which is the
+    # entire point of this module.
+    assignments = assignment_table(
+        n_components,
+        n_samples,
+        what=f"{n_components}**{n_samples} component assignments",
+        limit=max_assignments,
     )
+    log_joint = scored[np.arange(n_samples)[None, :], assignments].sum(axis=1)
+    _, posterior, log_evidence = normalize(log_joint)
 
     return AssignmentEnumeration(
         log_evidence=log_evidence,
-        responsibilities=responsibilities,
-        assignment=assignments[int(log_joint.argmax())],
+        responsibilities=accumulate(assignments, posterior, n_components),
+        assignment=assignments[int(log_joint.argmax())].copy(),
     )

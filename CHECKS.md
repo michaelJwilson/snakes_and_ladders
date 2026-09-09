@@ -8,7 +8,7 @@ what each milestone claims; this is what pins it. Do not edit by hand --
 run `uv run python infra/checks_ledger.py --write`.
 
 
-## `tests/regression/` (24)
+## `tests/regression/` (25)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
@@ -27,6 +27,7 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_enumeration.py::test_normalize_is_bitwise_the_two_shifts_it_replaced` | oracle | `likelihood.potts` divided by the sum and reported `log(total) + peak`; `likelihood.hmm_paths` kept the unnormalized weights and reported `shift + log(sum)`. |
 | `test_enumeration.py::test_best_assignment_is_the_three_argmax_loops_it_replaced` | oracle | `learn.potts.optimum`, `learn.hmm.optimum` and `learn.relaxed.enumerate_optimum` each ran this loop. |
 | `test_enumeration.py::test_the_two_optimum_adapters_return_what_their_loops_returned` | oracle | The adapters end to end, not the helper: `optimum` in two modules, against the loop each carried before #387, on the fixture shape the committed baselines use. |
+| `test_enumeration.py::test_the_mixture_enumeration_is_bitwise_what_it_was_before_the_seam` | oracle |  |
 | `test_fixture_registry.py::test_the_coupled_fixture_is_the_canonical_instance` | oracle | The file restates `canonical_spatio_sequential`, whose enumerable size is the reason the instance exists. |
 | `test_fixture_registry.py::test_the_frustrated_fixture_builds_the_lattice_with_the_known_ground_state` | oracle |  |
 | `test_numerics_rust.py::test_the_rust_sampler_is_bit_identical_to_the_oracle` | oracle |  |
@@ -449,4 +450,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-406 checks.
+407 checks.

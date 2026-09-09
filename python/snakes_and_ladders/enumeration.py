@@ -28,9 +28,14 @@ same product and fold in here too, so that the guard in
 exception but this module: the torch configuration table of
 :mod:`snakes_and_ladders.opt.potts`, and the ancestral-state loops of
 :mod:`snakes_and_ladders.likelihood.parsimony` and
-:mod:`snakes_and_ladders.likelihood.brute_force`.
+:mod:`snakes_and_ladders.likelihood.brute_force`. A twelfth arrived while this
+was written ---
+:func:`snakes_and_ladders.likelihood.mixture_assignments.enumerate_mixture_assignments`
+(pull request #420) --- and is an adapter rather than a ninth enumerator
+beside the eight, which is what the vectorization below was taken from that
+branch for.
 
-The pieces the eleven share are here --- the product itself, the
+The pieces the twelve share are here --- the product itself, the
 shift-and-normalize, the accumulation into per-site bins, and the argmax ---
 and each consumer keeps its own log-weight and its own result type over them.
 What each function's consumers are is stated in its docstring, because a seam
@@ -183,8 +188,11 @@ def assignment_table(
     Consumers: :mod:`snakes_and_ladders.likelihood.potts` (configurations, and the
     transfer matrix's columns), :mod:`snakes_and_ladders.likelihood.hmm_paths` (paths),
     :mod:`snakes_and_ladders.likelihood.spatio_sequential` (labellings, and paths per
-    class) and :func:`snakes_and_ladders.opt.potts.graph_statistics`, which reads
-    the table into ``torch``.
+    class), :func:`snakes_and_ladders.opt.potts.graph_statistics`, which reads the
+    table into ``torch``, and
+    :func:`snakes_and_ladders.likelihood.mixture_assignments.enumerate_mixture_assignments`,
+    which discovered this vectorization (pull request #420) and now shares
+    it.
 
     Parameters
     ----------
@@ -227,12 +235,11 @@ def normalize(log_weight: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
     its marginals by the normalized probability, and
     :func:`snakes_and_ladders.likelihood.hmm_paths.enumerate_hidden_paths`, which
     accumulates the unnormalized weights and normalizes each site's row
-    afterwards. Both forms are returned because the two roundings differ in
-    the last ulp and each is what its own pins were taken against. Two
-    consumers rather than three, and named here for the reason
-    ``CLAUDE.md``'s seam rule asks for: pull request #420's
-    :func:`snakes_and_ladders.likelihood.mixture_assignments.enumerate_mixture_assignments`
-    is written on this same shift and is its third.
+    afterwards, and
+    :func:`snakes_and_ladders.likelihood.mixture_assignments.enumerate_mixture_assignments`,
+    which takes the normalized form. Both forms are returned because the two
+    roundings differ in the last ulp and each is what its own pins were taken
+    against.
 
     Parameters
     ----------
@@ -268,7 +275,11 @@ def accumulate(table: np.ndarray, weight: np.ndarray, n_states: int) -> np.ndarr
     marginals), :func:`snakes_and_ladders.likelihood.hmm_paths.enumerate_hidden_paths`
     (the path posterior) and
     :func:`snakes_and_ladders.likelihood.spatio_sequential.enumerate_spatio_sequential`
-    (the label posterior, and the state posterior of each class).
+    (the label posterior, and the state posterior of each class) and
+    :func:`snakes_and_ladders.likelihood.mixture_assignments.enumerate_mixture_assignments`
+    (the responsibilities), which wrote this as ``np.bincount`` --- the same
+    sum in the same order, measured bitwise identical at ``3**4``, ``3**8``,
+    ``2**16`` and ``4**8``.
 
     Parameters
     ----------
