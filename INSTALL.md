@@ -145,7 +145,27 @@ infra/build_documents.sh
 
 Open `docs/paper.pdf` and `docs/textbook.pdf`. CI runs the same script on
 every PR, and fails on an undefined or multiply-defined reference, an undefined
-citation, or a committed PDF that differs from the rebuild.
+citation, or a pull request that changes either committed PDF without being the
+rebuild the "Rebuild the documents" ticket asks for. The PDFs are *not* compared
+against the rebuild: they lag `docs/tex/` between rebuilds by design (`DEV.md`,
+Documents).
+
+**Revert `docs/paper.pdf` and `docs/textbook.pdf` after the build.** It rewrites
+both on every run, they are tracked, and only a "Rebuild the documents" pull
+request may carry the change:
+
+```
+git checkout -- docs/paper.pdf docs/textbook.pdf
+```
+
+The rest of what the build writes needs no such care, and the two cases are
+different: the `.aux`, `.log`, `.fdb_latexmk` and other files `latexmk` leaves
+in `docs/` are ignored and cannot be committed, while a re-rendered figure under
+`docs/tex/figures/` — its `.pdf` or `.tex`, its `_caption.txt` and its `.inputs`
+stamp — is committed by the pull request that changed it. `DEV.md` lists every
+path, and gives the wall clock: **230.7 s** from a clean checkout of `main` on
+the 4-core reference host, **13.9 s** when every figure stamp is already
+current, and **1.7 s** for a second run that finds nothing to do.
 
 ## Benchmarking locally
 
