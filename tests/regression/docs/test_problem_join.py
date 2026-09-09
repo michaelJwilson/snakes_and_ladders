@@ -163,8 +163,9 @@ def test_the_join_sees_a_statement_the_release_checklist_has_no_box_for() -> Non
 def test_the_key_travels_one_way_and_the_textbook_names_no_code() -> None:
     # The constraint the whole design rests on (root `CLAUDE.md`, issue #249):
     # the catalogue may name the document, and the document may name no code.
-    # Asserted here as well as in the citation guards because this ticket is
-    # what would break it -- a join is the natural place to put a module path.
+    # `test_problems_tables.py` asserts it of the *generated* table; nothing
+    # asserted it of the hand-written sources, which is where this ticket
+    # would break it -- a join is the natural place to put a module path.
     for name in TEXTBOOK_SOURCES:
         source = (problem_join.TEX_DIR / name).read_text()
         assert "snakes_and_ladders" not in source, f"{name} names code"
