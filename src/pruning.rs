@@ -49,7 +49,7 @@ use pyo3::prelude::*;
 /// `STATUS.md`. What sets the shape is that one tile's `k` parent rows and
 /// `k` child rows are live at once, so the `k * k` passes over them read L1
 /// rather than memory.
-const TILE: usize = 512;
+const TILE: usize = 128;
 
 /// Closed-form k-state Jukes-Cantor transition probabilities P(t), `eq:jc`
 /// of `docs/tex/textbook.tex`, ported from `snakes_and_ladders.sim.jc.jc_transition_probabilities`.

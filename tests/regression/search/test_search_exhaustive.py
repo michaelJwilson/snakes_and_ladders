@@ -377,6 +377,11 @@ def test_what_the_cheaper_searches_cost_and_what_they_lose_at_six_taxa(
     # reported in `STATUS.md` against issue #408 and are quoted nowhere else.
     # The assertion is that no change loses the optimum where the unbounded
     # search finds it, which is the claim the cheaper searches actually make.
+    # Measured here: every configuration 8 of 8, at medians of 49 fits and
+    # 2,848 forward passes unbounded against 15 and 755 at radius 1 and 31 and
+    # 1,009 for all three. The assertion is deliberately weaker than that: a
+    # configuration that fails sometimes is a true result about a bound, and a
+    # threshold tuned to 8 of 8 would hide it.
     alignment, k, _, best, _ = six_taxon
 
     trials = 8
@@ -390,7 +395,5 @@ def test_what_the_cheaper_searches_cost_and_what_they_lose_at_six_taxa(
         reached[name] = successes
 
     table = ", ".join(f"{name} {count}/{trials}" for name, count in reached.items())
-    losing = [
-        name for name, count in reached.items() if count < reached["unbounded"]
-    ]
+    losing = [name for name, count in reached.items() if count < reached["unbounded"]]
     assert not losing, f"below the unbounded search: {losing}; measured {table}"
