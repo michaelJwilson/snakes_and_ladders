@@ -16,7 +16,8 @@ in the graph. Passing ``rate_matrix`` switches to the general
 rate matrix would use -- and must agree with the closed form when ``Q`` is
 the JC generator (tests/regression/test_pruning_torch.py).
 
-Rescaling (``likelihood/CLAUDE.md``, "Rescaling must stay differentiable")
+Rescaling (``likelihood/CLAUDE.md``, "Rescaling must stay differentiable;
+its factor must not be")
 accumulates ``log_scale`` by tensor addition, never in place, so it composes
 correctly under autograd. The scaling *factor* is detached: it cancels between
 the division and the ``log`` it is added to, so it carries no derivative, and
@@ -203,7 +204,7 @@ def log_likelihood(
 
     # Contiguous, because a leaf's message is a gather along its rows and a
     # gather from a transposed view walks them at stride: measured on the
-    # eight-taxon fixture, 79 us per leaf against 8 us contiguous.
+    # eight-taxon fixture, 79 us per leaf against 17 us contiguous.
     transposed = transitions.transpose(-2, -1).contiguous()
 
     def _message(node: Node) -> torch.Tensor:

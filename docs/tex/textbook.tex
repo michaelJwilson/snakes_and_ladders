@@ -618,7 +618,10 @@ the site likelihood read off at the root,
 recursion from the marginalization. Products of many small numbers underflow,
 so each node's partials are rescaled and the logarithm of the scaling
 accumulated separately; the rescaling must remain differentiable, since
-$\branch$ and $\Q$ are what the continuous optimization fits.
+$\branch$ and $\Q$ are what the continuous optimization fits. The scaling
+constants themselves are not: Appendix~\ref{app:pruning} shows that they
+leave the site likelihood unchanged, so they carry no derivative with respect
+to $\branch$ or $\Q$ and differentiating them computes a zero.
 
 Equation~\ref{eq:pruning} is Equation~\ref{eq:sum-product} run leaf to root
 with the root as the last variable: $L_u(i)$ is the product over $u$'s
