@@ -12,8 +12,8 @@ the thing it judges:
   NumPy likelihood w.r.t. branch lengths
   (``test_gradient_matches_finite_differences_of_numpy_oracle``).
 - Rescaled and unrescaled Torch paths agreeing in value and in gradient, the
-  check ``likelihood/CLAUDE.md``'s "Rescaling must stay differentiable, and
-  the scaling factor is a constant" calls for
+  check ``likelihood/CLAUDE.md``'s "Rescaling must stay differentiable; its
+  factor must not be" calls for
   (``test_rescaled_and_unrescaled_torch_paths_agree``,
   ``test_rescaled_and_unrescaled_torch_gradients_agree``).
 
@@ -184,10 +184,10 @@ def test_rescaled_and_unrescaled_torch_paths_agree() -> None:
 def test_rescaled_and_unrescaled_torch_gradients_agree() -> None:
     """The scaling factor carries no derivative, which is why it is detached.
 
-    ``likelihood/CLAUDE.md``'s "Rescaling must stay differentiable, and the
-    scaling factor is a constant": the factor cancels between the division it
-    performs and the log it is added to, so the rescaled path's gradient is
-    the unrescaled path's. Detaching it drops the amax, the comparison and the
+    ``likelihood/CLAUDE.md``'s "Rescaling must stay differentiable; its factor
+    must not be": the factor cancels between the division it performs and the
+    log it is added to, so the rescaled path's gradient is the unrescaled
+    path's. Detaching it drops the amax, the comparison and the
     log of the scale from the backward pass (issue #397), and this is the
     check that says nothing else went with them. The value agreement above
     would still hold if the gradient were wrong, so the two are separate

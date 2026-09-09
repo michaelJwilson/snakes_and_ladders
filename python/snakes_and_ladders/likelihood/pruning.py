@@ -8,8 +8,8 @@ is computed post-order over ``(site, state)`` NumPy arrays, reusing
 underflow for realistic (site, taxa) counts, so they are rescaled per node
 with the log of the scale factor accumulated separately -- a transformation
 of the same computation, not a different algorithm (``likelihood/CLAUDE.md``,
-"Rescaling must stay differentiable") -- so the rescaled and unrescaled paths
-must agree wherever both run.
+"Rescaling must stay differentiable; its factor must not be") -- so the
+rescaled and unrescaled paths must agree wherever both run.
 
 This module is written to be obviously correct, not fast: it is the reference
 every accelerated backend (Rust, PyTorch, CUDA, Metal) is validated against,
