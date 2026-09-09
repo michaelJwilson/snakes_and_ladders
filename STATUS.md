@@ -146,8 +146,30 @@ timed apart from any call on 4 cores at a 1-minute load of 0.23: `to_rustworkx`
 747.2 µs and 3.78 ms at 64, against `rx.connected_components` at 4.6, 15.7 and
 212.3 µs and the Python `ising_ground_state` at 1.40, 5.85 and 186.5 ms. The
 conversion is below the cost of the cheapest call it would front at every
-size, and no hot path moves until a measured adoption says so; `TICKETS.md`
-carries the three candidates.
+size, and no hot path moves until a measured adoption says so.
+
+**The three candidates were measured, and none of them moved**
+([#388](https://github.com/michaelJwilson/snakes_and_ladders/issues/388),
+[#389](https://github.com/michaelJwilson/snakes_and_ladders/issues/389),
+[#390](https://github.com/michaelJwilson/snakes_and_ladders/issues/390);
+`docs/experiments/008-frameworks-on-three-hot-paths.md` carries the tables).
+PyTorch Geometric fails the profile bar: the `index_add` it would front is
+7.0% of a `GraphSurrogate` fit, under #341's 10%, and it is 1.04x slower at
+60 examples and 1.08x faster at 240. `scipy.sparse.csgraph.maximum_flow`
+clears the bar — Dinic is 61.1%, 66.2% and 73.5% of `ising_ground_state` at
+extents 16, 32 and 64 — and is 3.5x to 8.8x the Python reference at 2.15,
+7.26 and 33.02 ms, but 2.3x to 4.2x slower than the Rust Dinic already
+fronting that call at 0.51, 2.37 and 14.12 ms, all three reporting the same
+energy. `rustworkx.connected_components` clears the bar at extent 16 and
+above, where `_find` and `_union` are 14.8% and 15.6% of a Swendsen–Wang
+sweep, and reaches 1.29x to 1.77x of the sweep at extents 8 to 48 — against
+1.52x to 1.98x from `potts_mcmc`'s own pointer doubling and sorted grouping,
+which also leaves the chain equal entry for entry where both frameworks
+renumber the clusters and compose a different one. `sandbox/` is therefore
+still empty, and `alpha_expansion` — 49.9% Dinic at extents 16 and 32, with
+no compiled path because `maxflow_rust.max_flow` returns the value and not
+the cut — is the one call site where a compiled flow would still pay, tracked
+under [#405](https://github.com/michaelJwilson/snakes_and_ladders/issues/405).
 
 **CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
 three negative results
