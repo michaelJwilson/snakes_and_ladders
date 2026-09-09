@@ -35,4 +35,8 @@ is not a second implementation, so what it carries beyond the one
 ``torch.compile`` call is the reading of Dynamo's compile state that makes
 "compiled, and not silently fallen back to eager" an assertion; its docstring
 says so first, and names the experiment, the ratio and the host.
+:mod:`~snakes_and_ladders.sandbox.pruning_problem` is here on the same rule
+again: crossing the FFI boundary once per search rather than once per pass
+(issue #444), which cut bytes per pass 1,881x and left wall time within 8.4%
+at every size measured.
 """

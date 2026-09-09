@@ -1,9 +1,10 @@
 """Type stub for the compiled `snakes_and_ladders.oxi_snakes_and_ladders` Rust extension.
 
 Hand-written, so it can drift: keep the signatures here matching the
-`#[pyfunction]` definitions in src/lib.rs, src/pruning.rs, src/maxflow.rs,
-src/sampling.rs, src/coupled.rs and src/count_pairs.rs. Issue #37 tracks putting `stubtest` in CI so the drift
-is caught by a check rather than by whoever notices; until then,
+`#[pyfunction]` and `#[pyclass]` definitions in src/lib.rs, src/pruning.rs,
+src/maxflow.rs, src/sampling.rs, src/coupled.rs and src/count_pairs.rs. Issue
+#37 tracks putting `stubtest` in CI so the drift is caught by a check rather
+than by whoever notices; until then,
 `mypy --strict` catches only the direction where the stub is missing something
 a caller uses, which is how `sample_rows` was caught.
 """
@@ -20,6 +21,21 @@ def pruning_log_likelihood(
     pi: np.ndarray,
     rescale: bool,
 ) -> float: ...
+
+class PruningProblem:
+    def __init__(self, leaf_states: np.ndarray, k: int, pi: np.ndarray) -> None: ...
+    def log_likelihood(
+        self,
+        branch_length: np.ndarray,
+        parent: np.ndarray,
+        leaf_row: np.ndarray,
+        rescale: bool,
+    ) -> float: ...
+    @property
+    def n_sites(self) -> int: ...
+    @property
+    def n_rows(self) -> int: ...
+
 def sample_rows(
     distributions: np.ndarray,
     n_categories: int,

@@ -20,13 +20,14 @@ and is principle.
   an implementation rather than as scaffolding. Probes, harnesses,
   half-written experiments and code kept because deleting it feels wasteful
   do not qualify: they are deleted, and what survives is the measurement they
-  produced, in the pull request and wherever the result is recorded.
+  produced. Scaffolding is outside the rule; it never moves in.
 - **The problem it answers has to be well posed, and saying so is the
-  author's job.** Where a candidate cannot be expressed at the interface it
-  was supposed to replace, the honest move is to restate the problem at the
-  level where it can be, and to say that in the first paragraph — not to
-  write a wrapper that pretends. A solution to a question nobody can state is
-  not a second implementation, it is a file.
+  author's job.** The module's first paragraph states the problem, the
+  measured answer and that it is not on a hot path. Where a candidate cannot
+  be expressed at the interface it was supposed to replace, restate the
+  problem at the level where it can be and say so there — never a wrapper
+  that pretends. A solution to a question nobody can state is not a second
+  implementation, it is a file.
 - **Whichever side lost moves in, and it moves in when the measurement
   lands.** A framework that beat the implementation on the hot path by the
   margin root `CLAUDE.md` sets leaves that implementation here; a framework
@@ -55,25 +56,28 @@ PyTorch Geometric over `learn.surrogate.GraphSurrogate`, #389 for `rustworkx`
 over the Swendsen-Wang labelling, #388 for `scipy.sparse.csgraph` over the
 ground-state minimum cut). Each module's docstring names the experiment that
 declined it, the ratio and the host, and each arrives with the test that
-referees it, so the comparison is re-runnable when a library's next version
-moves the numbers rather than settled by a paragraph.
+referees it.
 
-Two further declines against no framework at all. `tropical` is the tropical
-Grassmannian relaxation of topology search, declined against neighbor joining
-(#408); a method declined against a simpler method is the case the header
-above names, and it is why the rule is stated over two solutions rather than
-over a library and our own code. `compiled_pruning` is thinner:
-`likelihood.pruning_torch`'s recursion through `torch.compile`, measured
-against the eager recursion and declined at 1.21x and 1.09x
+Three further declines against no framework at all. `tropical` is the
+tropical Grassmannian relaxation of topology search, declined against
+neighbor joining (#408). `compiled_pruning` is `likelihood.pruning_torch`'s
+recursion through `torch.compile`, declined at 1.21x and 1.09x
 ([experiment 007](../../../docs/experiments/007-per-fit-cost-of-the-tree-likelihood.md),
-issue #443). A compiler is not a second implementation and the module says so
-in its first paragraph: what it adds to the one `torch.compile` call is the
-reading of Dynamo's compile state, without which "compiled, and not silently
-fallen back to eager" is a claim rather than an assertion. The solution
-conserved is the pin, `tests/regression/likelihood/test_pruning_torch_compile.py`.
+issue #443); a compiler is not a second implementation, so what it adds to
+the one `torch.compile` call is the reading of Dynamo's compile state,
+without which "compiled, and not silently fallen back to eager" is a claim
+rather than an assertion, and the solution conserved is that pin.
+`pruning_problem.PruningProblem` is the declined answer to "cross the FFI
+boundary once per search rather than once per pass" — a `#[pyclass]` holding
+the alignment a pruning pass reads, at 1,881x fewer bytes per pass and wall
+time within 8.4% at every size measured (issue #444); `STATUS.md` carries the
+measurement, and its tests pin the handle bitwise against
+`likelihood.pruning_rust`, which is unchanged and remains the backend.
 
 The frameworks issue #322 adopted arrived instead as adapters and as referees
 on paths nobody proposed replacing — a Gymnasium adapter over the unchanged
 `learn.Environment` protocol, `rustworkx` conversions beside the generators
 they are checked against, TorchRL and PyTorch Geometric as unit oracles — and
-those stay where they are used.
+those stay where they are used. The candidate still open is `learn.ppo`'s
+advantage estimate and clipped loss behind TorchRL; it arrives here with the
+measurement that settles it, and `TICKETS.md` carries it as a follow-up.

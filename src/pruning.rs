@@ -28,6 +28,23 @@
 //! inside the accelerated call, even though Rust has no autograd graph to
 //! protect.
 //!
+//! **Two bindings, one kernel.** `pruning_log_likelihood` takes every
+//! argument on every call; `PruningProblem` holds the alignment, `k` and
+//! `pi` and takes only what changes. Both run
+//! `pruning_log_likelihood_core`, so there is one implementation held to the
+//! NumPy oracle, and the free function is what pins the class: the two
+//! return the same `f64`, not two values within a tolerance. Nothing here
+//! selects between them.
+//!
+//! `PruningProblem` fronts a **declined** implementation and has no caller
+//! on a hot path: `snakes_and_ladders.likelihood.pruning_rust` is the live
+//! backend, and the handle is held in
+//! `snakes_and_ladders.sandbox.pruning_problem` with the measurement that
+//! refused it -- the marshalling it removes is 1-5% of the call (issues #443
+//! and #444, and `STATUS.md`). The kernel's split into a core over a
+//! `Topology` in offsets form is kept because both bindings run it, not
+//! because the class needs it.
+//!
 //! The recursion itself (`pruning_log_likelihood_impl`) is plain Rust with
 //! no PyO3 types, returning `Result<f64, String>`; `pruning_log_likelihood`
 //! is a thin `#[pyfunction]` wrapper converting `Err` to a Python
@@ -94,6 +111,233 @@ pub struct LeafObservations<'a> {
     pub row: &'a [i64],
 }
 
+/// A topology as offsets into one array: node `i`'s children are
+/// `child[child_start[i]..child_start[i + 1]]`, in the order the caller gave
+/// them.
+///
+/// Root `CLAUDE.md`'s memory-layout rule -- neighbour lists as offsets into
+/// one array, not lists of lists -- applied to the one structure that used to
+/// cross the FFI boundary as a `Vec<Vec<usize>>`. The offsets form is also
+/// what lets a topology arrive as a flat parent-index array, which PyO3
+/// borrows from NumPy instead of walking.
+///
+/// **Child order is part of the answer.** A parent's partial is a product
+/// over its children, and a product of three or more `f64`s is not
+/// associative, so a reordering would move the log-likelihood. Both
+/// constructors preserve the caller's order: [`Topology::from_children`]
+/// copies it, and [`Topology::from_parents`] recovers it, because a
+/// post-order numbering puts a node's children in increasing index order
+/// (each child's subtree is numbered before the next child's begins).
+#[derive(Debug)]
+pub struct Topology {
+    /// Length `n_nodes + 1`; `child_start[i]..child_start[i + 1]` indexes `child`.
+    child_start: Vec<usize>,
+    /// Every node's children, concatenated in node order.
+    child: Vec<usize>,
+}
+
+impl Topology {
+    /// From one list of children per node, the shape the existing
+    /// `#[pyfunction]` binding and `benches/` still use.
+    pub fn from_children(children: &[Vec<usize>]) -> Self {
+        let mut child_start = Vec::with_capacity(children.len() + 1);
+        let mut child = Vec::with_capacity(children.iter().map(Vec::len).sum());
+        child_start.push(0usize);
+        for node_children in children {
+            child.extend_from_slice(node_children);
+            child_start.push(child.len());
+        }
+        Self { child_start, child }
+    }
+
+    /// From a flat parent-index array: `parent[i]` is node `i`'s parent, or
+    /// negative for the root.
+    ///
+    /// # Errors
+    /// Returns `Err` if the array is empty, a parent index is out of range,
+    /// a node is not numbered before its parent (the post-order the kernel's
+    /// single forward pass requires), or the roots are not exactly one node,
+    /// the last.
+    pub fn from_parents(parent: &[i64]) -> Result<Self, String> {
+        let n_nodes = parent.len();
+        if n_nodes == 0 {
+            return Err("tree has no nodes".to_string());
+        }
+        let mut count = vec![0usize; n_nodes];
+        let mut n_roots = 0usize;
+        for (idx, &entry) in parent.iter().enumerate() {
+            if entry < 0 {
+                n_roots += 1;
+                if idx != n_nodes - 1 {
+                    return Err(format!(
+                        "node {idx} has no parent, expected only node {} to be the root",
+                        n_nodes - 1
+                    ));
+                }
+                continue;
+            }
+            let up = entry as usize;
+            if up >= n_nodes {
+                return Err(format!(
+                    "node {idx} has parent {entry}, expected [0, {n_nodes})"
+                ));
+            }
+            if up <= idx {
+                return Err(format!(
+                    "node {idx} has parent {up}, expected > {idx} \
+                     (nodes must be in post-order, children before parents)"
+                ));
+            }
+            count[up] += 1;
+        }
+        if n_roots != 1 {
+            return Err(format!("tree has {n_roots} roots, expected exactly 1"));
+        }
+
+        let mut child_start = Vec::with_capacity(n_nodes + 1);
+        let mut total = 0usize;
+        child_start.push(0usize);
+        for &n in &count {
+            total += n;
+            child_start.push(total);
+        }
+        // Filled in increasing child index, which is the caller's child order
+        // under a post-order numbering -- see the type's docs.
+        let mut cursor = child_start.clone();
+        let mut child = vec![0usize; total];
+        for (idx, &entry) in parent.iter().enumerate() {
+            if entry < 0 {
+                continue;
+            }
+            let up = entry as usize;
+            child[cursor[up]] = idx;
+            cursor[up] += 1;
+        }
+        Ok(Self { child_start, child })
+    }
+
+    /// Number of nodes.
+    pub fn n_nodes(&self) -> usize {
+        self.child_start.len() - 1
+    }
+
+    /// Node `idx`'s children, in the caller's order.
+    #[inline]
+    fn children(&self, idx: usize) -> &[usize] {
+        &self.child[self.child_start[idx]..self.child_start[idx + 1]]
+    }
+}
+
+/// An alignment, `k` and `pi` held across many pruning passes: the state
+/// behind the `PruningProblem` binding, PyO3-free so `cargo test` reaches it.
+///
+/// **What this holds, and the measurement that declined it.** Of the seven
+/// arguments `pruning_log_likelihood` takes, one -- the branch lengths --
+/// changes between the forward passes of a fit, and the topology changes
+/// between candidates of a search; the alignment changes for neither.
+/// Holding it cuts the bytes a caller materialises per pass by 179x to
+/// 1,881x. It does not cut the time with them: marshalling is 1-5% of the
+/// call, so amortizing every crossing a fit would make is worth 1.34% at 8
+/// taxa and 0.79% at 20 (issues #443 and #444). `STATUS.md` carries both.
+///
+/// **A problem handle is not a generator.** `src/sampling.rs` states that
+/// Rust holds no random generator, because a chain's reproducibility must
+/// follow from the `numpy.random.Generator` the caller passed. Nothing here
+/// is random and nothing here is drawn from: this struct is an immutable
+/// copy of arguments the caller already owns, and two calls with the same
+/// arguments return the same `f64` whatever order they run in. That rule is
+/// untouched.
+///
+/// `leaf_row` is deliberately *not* held. It maps a node index to a row of
+/// `states`, so it is a function of the topology's numbering rather than of
+/// the alignment, and it changes exactly when the topology does. It is
+/// `n_nodes` borrowed `i64`s, against the alignment's `n_leaves * n_sites`.
+#[derive(Debug)]
+pub struct PruningProblemCore {
+    /// Row-major `n_rows * n_sites` observed states, one row per leaf.
+    states: Vec<i64>,
+    /// Row width of `states`.
+    n_sites: usize,
+    /// Number of states.
+    k: usize,
+    /// Root state distribution, length `k`.
+    pi: Vec<f64>,
+}
+
+impl PruningProblemCore {
+    /// Validate the shapes once, so no later pass repeats the check.
+    ///
+    /// # Errors
+    /// Returns `Err` if `n_sites` is 0, `states` is not a whole number of
+    /// rows of `n_sites`, `k < 2`, or `pi` does not have length `k`.
+    pub fn new(states: Vec<i64>, n_sites: usize, k: usize, pi: Vec<f64>) -> Result<Self, String> {
+        if n_sites == 0 {
+            return Err("n_sites is 0, expected at least one site".to_string());
+        }
+        if !states.len().is_multiple_of(n_sites) {
+            return Err(format!(
+                "leaf_states has length {}, not a multiple of n_sites {n_sites}",
+                states.len()
+            ));
+        }
+        if k < 2 {
+            return Err(format!("k must be >= 2, got {k}"));
+        }
+        if pi.len() != k {
+            return Err(format!("pi has length {}, expected {k}", pi.len()));
+        }
+        Ok(Self {
+            states,
+            n_sites,
+            k,
+            pi,
+        })
+    }
+
+    /// Row width of the held alignment.
+    pub fn n_sites(&self) -> usize {
+        self.n_sites
+    }
+
+    /// Number of rows of the held alignment, one per leaf.
+    pub fn n_rows(&self) -> usize {
+        self.states.len() / self.n_sites
+    }
+
+    /// One pruning pass over the held alignment, for a topology given as a
+    /// flat parent-index array.
+    ///
+    /// Returns the same `f64` as [`pruning_log_likelihood_impl`] on the same
+    /// tree and alignment -- the same arithmetic in the same order, not a
+    /// value within a tolerance of it.
+    ///
+    /// # Errors
+    /// Returns `Err` for anything [`Topology::from_parents`] or
+    /// [`pruning_log_likelihood_impl`] rejects.
+    pub fn log_likelihood(
+        &self,
+        branch_length: &[f64],
+        parent: &[i64],
+        leaf_row: &[i64],
+        rescale: bool,
+    ) -> Result<f64, String> {
+        let topology = Topology::from_parents(parent)?;
+        let observations = LeafObservations {
+            states: &self.states,
+            n_sites: self.n_sites,
+            row: leaf_row,
+        };
+        pruning_log_likelihood_core(
+            branch_length,
+            &topology,
+            observations,
+            self.k,
+            &self.pi,
+            rescale,
+        )
+    }
+}
+
 /// Total log-likelihood of an alignment under the k-state Jukes-Cantor model,
 /// computed by Felsenstein pruning -- the Rust port of
 /// `snakes_and_ladders.likelihood.pruning.log_likelihood`. Plain Rust (no PyO3 types) so
@@ -131,12 +375,36 @@ pub fn pruning_log_likelihood_impl(
     pi: &[f64],
     rescale: bool,
 ) -> Result<f64, String> {
+    pruning_log_likelihood_core(
+        branch_length,
+        &Topology::from_children(children),
+        observations,
+        k,
+        pi,
+        rescale,
+    )
+}
+
+/// [`pruning_log_likelihood_impl`] over a [`Topology`] already in offsets
+/// form: the one kernel both bindings run, so there is no second
+/// implementation to hold to the oracle.
+///
+/// See [`pruning_log_likelihood_impl`] for the parameters, the errors, and
+/// the algorithm; `topology` replaces its `children`.
+pub fn pruning_log_likelihood_core(
+    branch_length: &[f64],
+    topology: &Topology,
+    observations: LeafObservations<'_>,
+    k: usize,
+    pi: &[f64],
+    rescale: bool,
+) -> Result<f64, String> {
     let LeafObservations {
         states: leaf_states,
         n_sites,
         row: leaf_row,
     } = observations;
-    let n_nodes = children.len();
+    let n_nodes = topology.n_nodes();
     if branch_length.len() != n_nodes {
         return Err(format!(
             "branch_length has length {}, expected {n_nodes} (one per node)",
@@ -178,8 +446,13 @@ pub fn pruning_log_likelihood_impl(
     let mut message = vec![0.0f64; TILE.min(n_sites)];
     let mut scale = vec![0.0f64; n_sites];
 
+    // `idx` indexes the topology, `leaf_row` and `partials` together, and
+    // `partials` is written inside the loop, so an iterator over any one of
+    // them would not replace it.
+    #[allow(clippy::needless_range_loop)]
     for idx in 0..n_nodes {
-        let is_leaf = children[idx].is_empty();
+        let node_children = topology.children(idx);
+        let is_leaf = node_children.is_empty();
         let partial = if is_leaf {
             let row = leaf_row[idx];
             if row < 0 || row as usize >= n_rows {
@@ -202,7 +475,7 @@ pub fn pruning_log_likelihood_impl(
         } else {
             // Validated before the arithmetic starts, so the loops below carry
             // no bounds test that could exit them early.
-            for &child_idx in &children[idx] {
+            for &child_idx in node_children {
                 if child_idx >= idx {
                     return Err(format!(
                         "node {idx} has child index {child_idx}, expected < {idx} \
@@ -220,7 +493,7 @@ pub fn pruning_log_likelihood_impl(
             // One transition matrix per child, before the site loop: it does
             // not depend on the site, and `exp` inside the loop would be paid
             // once per tile.
-            let transitions: Vec<Vec<f64>> = children[idx]
+            let transitions: Vec<Vec<f64>> = node_children
                 .iter()
                 .map(|&child_idx| jc_transition_probabilities(branch_length[child_idx], k))
                 .collect();
@@ -236,7 +509,7 @@ pub fn pruning_log_likelihood_impl(
             while start < n_sites {
                 let width = TILE.min(n_sites - start);
                 for (position, transition) in transitions.iter().enumerate() {
-                    let child_partial = &partials[children[idx][position]];
+                    let child_partial = &partials[node_children[position]];
                     // message[i, s] = sum_j P_ij(t) * L_child(j, s) --
                     // eq:pruning, as k * k passes over one contiguous run of
                     // sites each. The products are formed in the same order
@@ -277,7 +550,7 @@ pub fn pruning_log_likelihood_impl(
             // holds one partial per *open* node rather than one per node: at
             // `n = 200, L = 11 000, k = 4` that is the difference between 140
             // MB live and a few MB.
-            for &child_idx in &children[idx] {
+            for &child_idx in node_children {
                 partials[child_idx] = Vec::new();
             }
 
@@ -378,6 +651,83 @@ pub fn pruning_log_likelihood(
         .map_err(PyValueError::new_err)
 }
 
+/// PyO3 boundary for [`PruningProblemCore`]: an alignment held across many
+/// pruning passes, so it crosses the FFI boundary once per alignment rather
+/// than once per pass. Declined, and consumed only by
+/// `snakes_and_ladders.sandbox.pruning_problem` -- see the module docs.
+///
+/// ```text
+/// PruningProblem(leaf_states, k, pi)             # crosses once
+///   .log_likelihood(branch_length, parent, leaf_row, rescale)  # per pass
+/// ```
+///
+/// `frozen`, so the handle is immutable once built and holds no per-call
+/// scratch: the class is a cache of arguments, and `PruningProblemCore`'s
+/// docs say why that is not the generator `src/sampling.rs` refuses.
+///
+/// The per-pass arguments are all borrowed NumPy buffers. The topology
+/// arrives as a flat parent-index array rather than the `Vec<Vec<usize>>`
+/// the free function takes, so PyO3 reads one buffer instead of walking
+/// `n_nodes` Python lists and allocating a `Vec` per node.
+#[pyclass(module = "snakes_and_ladders.oxi_snakes_and_ladders", frozen)]
+pub struct PruningProblem {
+    core: PruningProblemCore,
+}
+
+#[pymethods]
+impl PruningProblem {
+    /// Hold `leaf_states` (row-major `(n_rows, n_sites)`), `k` and `pi`.
+    ///
+    /// `as_slice` succeeds only for a C-contiguous array, so the stride is
+    /// checked here, once per alignment, rather than on every pass.
+    #[new]
+    #[pyo3(signature = (leaf_states, k, pi))]
+    fn new(
+        leaf_states: PyReadonlyArray2<'_, i64>,
+        k: usize,
+        pi: PyReadonlyArray1<'_, f64>,
+    ) -> PyResult<Self> {
+        let n_sites = leaf_states.shape()[1];
+        let states = leaf_states.as_slice()?.to_vec();
+        let pi = pi.as_slice()?.to_vec();
+        let core =
+            PruningProblemCore::new(states, n_sites, k, pi).map_err(PyValueError::new_err)?;
+        Ok(Self { core })
+    }
+
+    /// One pruning pass: same value as
+    /// `pruning_log_likelihood` on the same tree and alignment.
+    #[pyo3(signature = (branch_length, parent, leaf_row, rescale))]
+    fn log_likelihood(
+        &self,
+        branch_length: PyReadonlyArray1<'_, f64>,
+        parent: PyReadonlyArray1<'_, i64>,
+        leaf_row: PyReadonlyArray1<'_, i64>,
+        rescale: bool,
+    ) -> PyResult<f64> {
+        self.core
+            .log_likelihood(
+                branch_length.as_slice()?,
+                parent.as_slice()?,
+                leaf_row.as_slice()?,
+                rescale,
+            )
+            .map_err(PyValueError::new_err)
+    }
+
+    /// Row width of the held alignment.
+    #[getter]
+    fn n_sites(&self) -> usize {
+        self.core.n_sites()
+    }
+
+    /// Number of rows of the held alignment, one per leaf.
+    #[getter]
+    fn n_rows(&self) -> usize {
+        self.core.n_rows()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,6 +791,117 @@ mod tests {
             (ll - expected).abs() < 1e-12,
             "got {ll}, expected {expected}"
         );
+    }
+
+    /// A four-leaf tree, built both ways: the parent array must recover the
+    /// children lists exactly, order included, or the product over a node's
+    /// children would be formed in a different order.
+    #[test]
+    fn test_topology_from_parents_matches_from_children() {
+        // 0,1 -> 4; 2,3 -> 5; 4,5 -> 6.
+        let children = vec![
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![0usize, 1],
+            vec![2usize, 3],
+            vec![4usize, 5],
+        ];
+        let parent = vec![4i64, 4, 5, 5, 6, 6, -1];
+
+        let from_children = Topology::from_children(&children);
+        let from_parents = Topology::from_parents(&parent).unwrap();
+
+        assert_eq!(from_parents.n_nodes(), from_children.n_nodes());
+        for idx in 0..from_children.n_nodes() {
+            assert_eq!(
+                from_parents.children(idx),
+                from_children.children(idx),
+                "node {idx}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_topology_from_parents_rejects_parent_before_child() {
+        let err = Topology::from_parents(&[2i64, 0, -1]).unwrap_err();
+        assert!(err.contains("post-order"), "{err}");
+    }
+
+    #[test]
+    fn test_topology_from_parents_rejects_two_roots() {
+        let err = Topology::from_parents(&[-1i64, 2, -1]).unwrap_err();
+        assert!(err.contains("expected only node 2 to be the root"), "{err}");
+    }
+
+    #[test]
+    fn test_topology_from_parents_rejects_out_of_range_parent() {
+        let err = Topology::from_parents(&[7i64, 2, -1]).unwrap_err();
+        assert!(err.contains("expected [0, 3)"), "{err}");
+    }
+
+    /// The class path and the function path are the same arithmetic in the
+    /// same order, so they agree bitwise -- not within a tolerance. This is
+    /// what licenses replacing one with the other in a caller.
+    #[test]
+    fn test_problem_core_matches_function_bitwise() {
+        let k = 4usize;
+        let n_sites = 7usize;
+        let states: Vec<i64> = (0..(4 * n_sites) as i64).map(|v| v % 4).collect();
+        let leaf_row = vec![0i64, 1, -1, 2, 3, -1, -1];
+        let branch_length = vec![0.1, 0.23, 0.05, 0.31, 0.17, 0.42, 0.0];
+        let children = vec![
+            vec![],
+            vec![],
+            vec![0usize, 1],
+            vec![],
+            vec![],
+            vec![3usize, 4],
+            vec![2usize, 5],
+        ];
+        let parent = vec![2i64, 2, 6, 5, 5, 6, -1];
+        let pi = vec![0.25, 0.25, 0.25, 0.25];
+
+        for rescale in [true, false] {
+            let observations = LeafObservations {
+                states: &states,
+                n_sites,
+                row: &leaf_row,
+            };
+            let from_function = pruning_log_likelihood_impl(
+                &branch_length,
+                &children,
+                observations,
+                k,
+                &pi,
+                rescale,
+            )
+            .unwrap();
+
+            let problem = PruningProblemCore::new(states.clone(), n_sites, k, pi.clone()).unwrap();
+            let from_problem = problem
+                .log_likelihood(&branch_length, &parent, &leaf_row, rescale)
+                .unwrap();
+
+            assert_eq!(
+                from_function.to_bits(),
+                from_problem.to_bits(),
+                "rescale = {rescale}: {from_function} against {from_problem}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_problem_core_rejects_pi_with_wrong_length() {
+        let err = PruningProblemCore::new(vec![0i64, 1], 1, 4, vec![0.5, 0.5]).unwrap_err();
+        assert!(err.contains("pi has length"), "{err}");
+    }
+
+    #[test]
+    fn test_problem_core_rejects_ragged_states() {
+        let err = PruningProblemCore::new(vec![0i64; 7], 3, 2, vec![0.5, 0.5]).unwrap_err();
+        assert!(err.contains("not a multiple of n_sites"), "{err}");
     }
 
     #[test]
