@@ -55,7 +55,10 @@ through `gymnasium.vector`, the generalized advantage through TorchRL's
 `GAE`, and the clipped surrogate through its `ClipPPOLoss`, which cannot
 front `learn.ppo.ppo_loss` at its signature and says so where it is written.
 Each module's docstring names the experiment that declined it, the ratio and
-the host. The frameworks issue #322 adopted arrived instead as adapters and
+the host. `tropical`, the declined tropical Grassmannian relaxation of
+topology search (issue #408), is here on the same reading.
+
+The frameworks issue #322 adopted arrived instead as adapters and
 as referees on paths nobody proposed replacing — a Gymnasium adapter over the
 unchanged `learn.Environment` protocol, `rustworkx` conversions beside the
 generators they are checked against, PyTorch Geometric as a unit oracle — and

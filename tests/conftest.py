@@ -11,9 +11,10 @@ from the render environment, since a committed figure is rendered the way the
 manifest renders it.
 
 **A slow test carries its marker.** Every test's call duration is recorded;
-with ``SAL_DURATION_CAP`` set, a test over it that carries neither
-``release`` nor ``stress`` fails the session (``tests/_durations.py``).
-``infra/validate.sh`` sets the cap on the reference host; CI does not, per
+with ``SAL_DURATION_CAP`` set, a test over it that carries none of the
+out-of-tier markers fails the session, and with ``SAL_KEY_DURATION_CAP`` set,
+so does a ``key`` test over that (``tests/_durations.py``).
+``infra/validate.sh`` sets both caps on the reference host; CI does not, per
 `DEV.md`'s rule against timing on its runners, and prints ``--durations``
 instead.
 """
@@ -28,7 +29,7 @@ for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 
 import pytest  # noqa: E402
 
-from tests._durations import over_cap  # noqa: E402
+from tests._durations import key_over_cap, over_cap  # noqa: E402
 
 DURATIONS = pytest.StashKey[list[tuple[str, float, frozenset[str]]]]()
 
@@ -54,10 +55,13 @@ def pytest_sessionfinish(
     exitstatus: int,  # noqa: ARG001 -- the hook's signature
 ) -> None:
     cap = os.environ.get("SAL_DURATION_CAP")
-    if cap is None:
+    key_cap = os.environ.get("SAL_KEY_DURATION_CAP")
+    if cap is None and key_cap is None:
         return
     recorded: list[tuple[str, float, frozenset[str]]] = session.config.stash[DURATIONS]
-    offenders = over_cap(recorded, float(cap))
+    offenders = [] if cap is None else over_cap(recorded, float(cap))
+    if key_cap is not None:
+        offenders += key_over_cap(recorded, float(key_cap))
     if offenders:
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")
         assert reporter is not None

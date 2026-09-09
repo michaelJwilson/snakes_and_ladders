@@ -32,10 +32,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from itertools import permutations
 
 import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 
 from snakes_and_ladders.emissions import (
     CategoricalEmission,
@@ -44,7 +44,9 @@ from snakes_and_ladders.emissions import (
 )
 from snakes_and_ladders.likelihood.forward_backward import sample_path
 from snakes_and_ladders.likelihood.spatio_sequential import (
+    NUMPY_BACKEND,
     ClassPosteriors,
+    CoupledBackend,
     class_log_density,
     class_posteriors,
     external_field,
@@ -115,8 +117,8 @@ def m_step(
             emissions.append(family)
             continue
         block = torch.as_tensor(
-            observations[:, members].T, dtype=family.observation_dtype
-        )  # (n_m, S)
+            np.moveaxis(observations[:, members], 1, 0), dtype=family.observation_dtype
+        )  # (n_m, S), plus any channel axes the family's observation carries
         weights = torch.as_tensor(posteriors.posterior[m])[None].expand(
             members.size, -1, -1
         )  # (n_m, S, K)
@@ -254,6 +256,7 @@ def fit_spatio_sequential(
     labels: np.ndarray | None = None,
     fit_parameters: bool = True,
     wolff_schedule: Schedule | None = None,
+    backend: CoupledBackend = NUMPY_BACKEND,
 ) -> SpatioSequentialFit:
     """Block-coordinate ascent on ``log p(x, l | theta)``.
 
@@ -277,6 +280,12 @@ def fit_spatio_sequential(
         setting in which the label step is pinned against enumeration.
     wolff_schedule : Schedule | None
         Required by the Wolff solver.
+    backend : CoupledBackend
+        Which E step computes the class posteriors, the field and the labelled
+        log-likelihood. The default is the NumPy one, which is the oracle;
+        `likelihood.spatio_sequential_rust.RUST_BACKEND` is the tabulated
+        kernel, and is what makes the declared 5,041-vertex instance fit a
+        budget (issue #399).
 
     Raises
     ------
@@ -292,14 +301,16 @@ def fit_spatio_sequential(
         if labels is None
         else np.asarray(labels, dtype=np.int64).copy()
     )
-    values = [labelled_log_likelihood(params, observations, current)]
+    values = [backend.labelled_log_likelihood(params, observations, current)]
     for _ in range(n_blocks):
-        posteriors = class_posteriors(params, observations, current)
+        posteriors = backend.class_posteriors(params, observations, current)
         if fit_parameters:
             params = m_step(params, observations, current, posteriors)
-            posteriors = class_posteriors(params, observations, current)
-        values.append(labelled_log_likelihood(params, observations, current))
-        field = external_field(params, observations, current, posteriors.posterior)
+            posteriors = backend.class_posteriors(params, observations, current)
+        values.append(backend.labelled_log_likelihood(params, observations, current))
+        field = backend.external_field(
+            params, observations, current, posteriors.posterior
+        )
         proposed = label_step(
             params,
             observations,
@@ -309,25 +320,46 @@ def fit_spatio_sequential(
             field=field,
             wolff_schedule=wolff_schedule,
         )
-        candidate = labelled_log_likelihood(params, observations, proposed)
+        candidate = backend.labelled_log_likelihood(params, observations, proposed)
         if candidate >= values[-1]:
             current = proposed
             values.append(candidate)
         else:
             values.append(values[-1])
-    field = external_field(params, observations, current)
+    field = backend.external_field(params, observations, current, None)
     return SpatioSequentialFit(params, current, np.array(values), field)
 
 
 def label_accuracy(fitted: np.ndarray, planted: np.ndarray, n_classes: int) -> float:
-    """The fraction of nodes labelled as planted, up to the best permutation of classes."""
+    """The fraction of nodes labelled as planted, up to the best permutation of classes.
+
+    A class label is a name and not a quantity, so a labelling is right when
+    some renaming of it is: the comparison is over permutations of the ``M``
+    names. Searching them is a linear assignment on the contingency table of
+    fitted against planted counts --- ``M!`` is 3.6 million at the ``M = 10``
+    the declared 5,041-vertex instance carries (issue #399), and the
+    assignment is cubic --- so `scipy.optimize.linear_sum_assignment` finds
+    the best renaming and the answer is the same one enumerating the
+    permutations gives.
+
+    Parameters
+    ----------
+    fitted, planted : np.ndarray
+        One class per node, entries in ``[0, n_classes)``.
+    n_classes : int
+        ``M``.
+
+    Returns
+    -------
+    float
+        The fraction agreeing under the best renaming, in ``[0, 1]``.
+    """
     fitted = np.asarray(fitted)
     planted = np.asarray(planted)
-    best = 0.0
-    for order in permutations(range(n_classes)):
-        mapping = np.array(order)
-        best = max(best, float((mapping[fitted] == planted).mean()))
-    return best
+    agreements = np.zeros((n_classes, n_classes), dtype=np.int64)
+    np.add.at(agreements, (fitted, planted), 1)
+    rows, columns = linear_sum_assignment(agreements, maximize=True)
+    return float(agreements[rows, columns].sum()) / float(fitted.size)
 
 
 def seed_emissions(
