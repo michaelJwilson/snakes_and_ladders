@@ -113,6 +113,18 @@ sweep — but this module's own code reaches 1.52× to 1.98× over the same
 range, beating `rustworkx` at every extent measured and reproducing the chain
 exactly, which neither framework does.
 
+`scipy.sparse.csgraph.connected_components` is the framework #389 did not
+name, and it is the faster of the two past extent 16: 1.179 ms against this
+module's 1.386 at extent 24 and 3.745 against 5.220 at 48, 1.18x and 1.39x,
+while losing at extent 8 (0.346 against 0.195). It is declined on the chain
+rather than on the clock — its labels number the clusters by first appearance
+in the CSR scan, so the recolouring takes different draws in a different
+order, and experiment 001's autocorrelation times and every seeded Potts
+figure would move. Buying 1.39x at extent 48 with a re-based sampler is a
+trade this experiment does not make; a follow-up that wanted it would have to
+sort the components into the union-find's root order, which needs the
+union-find run anyway.
+
 The `_find`/`_union` share of a **Wolff** sweep is 0.0%: Wolff grows one
 cluster from a seed by breadth-first search and calls neither, so the
 labelling #389 names is not on that path at all.
