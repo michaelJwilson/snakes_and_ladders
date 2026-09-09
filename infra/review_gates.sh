@@ -7,8 +7,8 @@
 # a changelog fragment exists; every cited figure's stamp matches the tree;
 # the critical tier passes, under the duration cap; the tests the branch
 # touched say what checks them; a protocol it adds names the consumers the
-# seam rule wants; and the generated ledgers are a regeneration of the tree
-# rather than a recollection. Reading covers what a script cannot: whether the
+# seam rule wants; and the generated ledgers regenerate without rewriting a
+# committed one. Reading covers what a script cannot: whether the
 # change is the plan on the ticket, and whether the tests pin what they
 # claim to. Those two rows are the point of a review and stay with the
 # reviewer; a gate that claimed them would be worse than no gate.
@@ -125,18 +125,13 @@ new_seams_name_their_consumers() {
 }
 
 generated_ledgers_are_current() {
-  # CHECKS.md, SEAMS.md and the problem tables are regenerations, and each has
-  # a CI job that fails when the committed file disagrees with the tree. Late
-  # is the problem: a stale ledger is a re-push, and the three checks together
-  # cost less than the round trip.
-  local stale=0
-  uv run python infra/checks_ledger.py --check >/dev/null 2>>"$log" || stale=1
-  uv run python infra/seams_survey.py >/dev/null 2>>"$log" || stale=1
-  uv run python infra/problems_tables.py --check >/dev/null 2>>"$log" || stale=1
-  [ "$stale" = 0 ] || {
-    echo "  a generated ledger is stale; see its --write command in infra/" >&2
-    return 1
-  }
+  # CHECKS.md, SEAMS.md and the problem tables are written from the tree and
+  # are not committed (issue #425). Two things can still fail: a generator
+  # that no longer runs -- a catalogue symbol it cannot name, a pairing with
+  # no note -- and a copy of one that reached the index and has gone stale.
+  # CI checks both; here as well because late is the problem, a stale ledger
+  # being a re-push and this costing less than the round trip.
+  infra/ledgers.sh --check >/dev/null 2>>"$log"
 }
 
 echo "review gates against $base at $(git rev-parse --short HEAD)"

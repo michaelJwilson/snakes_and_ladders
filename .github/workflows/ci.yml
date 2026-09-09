@@ -92,9 +92,6 @@ jobs:
       # Fails a PR that changes user-visible behavior without a matching
       # changelog.d/ fragment; no-ops on push to main (no diff against itself).
       - run: uv run towncrier check --compare-with origin/main
-      # CHECKS.md is written from the tests' markers; a committed copy that a
-      # regeneration does not reproduce is stale, like a figure or a notebook.
-      - run: uv run python infra/checks_ledger.py --check
 
   rust-lint:
     name: Rust lint & format (clippy, fmt)
@@ -214,6 +211,27 @@ jobs:
       # a change `select_tests` mis-attributes is one of the things they catch.
       - name: Critical gate
         run: uv run pytest -m critical -q
+      # CHECKS.md, SEAMS.md and the textbook's applicability tables are
+      # written from the tree and are not committed (issue #425). This
+      # regenerates all three -- a generator that no longer runs fails here --
+      # and then fails if regenerating rewrote a *tracked* file, which is a
+      # committed copy that has gone stale. It runs in this job rather than in
+      # `lint` because the seams survey imports the package, gymnasium
+      # included, and only this job's environment has it.
+      - name: Generated ledgers regenerate to a no-op
+        run: infra/ledgers.sh --check
+      # The ledgers are Markdown and nobody can browse them in the tree any
+      # more, so the run summary carries them: the same read a reader used to
+      # get from GitHub's file view, against the commit that produced it.
+      - name: Publish the ledgers to the run summary
+        if: always()
+        run: |
+          for ledger in CHECKS.md SEAMS.md; do
+            [ -f "$ledger" ] || continue
+            printf '<details><summary>%s</summary>\n\n' "$ledger" >>"$GITHUB_STEP_SUMMARY"
+            cat "$ledger" >>"$GITHUB_STEP_SUMMARY"
+            printf '\n</details>\n\n' >>"$GITHUB_STEP_SUMMARY"
+          done
       # Benchmarks are half the suite's wall clock (36 s of 71 s) and measure
       # code that a docs or QA change cannot have altered, so they are skipped
       # unless something they measure moved. The job still runs and still
