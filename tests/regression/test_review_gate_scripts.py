@@ -1,4 +1,4 @@
-"""What the three review gates added under #418 must refuse.
+"""What the review gates written in Python must refuse.
 
 A gate is only worth its seconds if it fires. Each test here builds the
 situation the gate exists to catch and asserts the gate's verdict on it, and
@@ -10,6 +10,10 @@ The third gate, the generated ledgers, runs ``infra/ledgers.sh``. What that
 gate protects is checked here: the three files it writes are not in the index.
 A committed copy is what made a machine-written file a merge participant, and
 re-adding one is the way this change is silently undone (issue #425).
+
+The fourth gate parses the changed docstrings under the documentation
+configuration (issue #451). Its trigger is the pair of markup errors that
+reached CI on #448, reintroduced here as a module Sphinx is pointed at.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 import checks_ledger  # noqa: E402
 import gate_changed_tests  # noqa: E402
+import gate_docstring_markup  # noqa: E402
 import gate_new_seams  # noqa: E402
 import problems_tables  # noqa: E402
 import seams_survey  # noqa: E402
@@ -199,3 +204,109 @@ def test_the_derived_ledgers_are_not_in_the_index() -> None:
     ).stdout.split()
 
     assert listed == [], f"generated ledgers committed: {listed}"
+
+
+#: #448's two errors, which the `docs` job reported and no gate did: a role no
+#: extension in `docs/source/conf.py` defines, and a `|...|` substitution with
+#: no definition. Both are markup, neither is a code defect.
+BROKEN_DOCSTRING = (
+    '"""A module whose prose the documentation build rejects.\n'
+    "\n"
+    "Speyer and Sturmfels :cite:`speyer2004tropical` identify it.\n"
+    "\n"
+    "    |F_tau(d) - D(T)|  <=  sum_Q 2 exp(-g_Q / tau) R_Q,\n"
+    '"""\n'
+)
+#: The same prose with both errors corrected the way #448 corrected them:
+#: the citation written out, the inequality made a literal.
+FIXED_DOCSTRING = (
+    '"""A module whose prose the documentation build accepts.\n'
+    "\n"
+    "Speyer and Sturmfels (2004) identify it.\n"
+    "\n"
+    "    ``|F_tau(d) - D(T)|  <=  sum_Q 2 exp(-g_Q / tau) R_Q``,\n"
+    '"""\n'
+)
+
+
+@pytest.mark.structural
+def test_the_docstring_gate_reports_the_two_errors_that_reached_ci(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The gate's own trigger. Sphinx is given the real `docs/source/conf.py`
+    # and a module carrying #448's prose; both errors must be named, and the
+    # corrected prose must leave the warning stream empty -- a gate that
+    # refuses the fix is a gate that gets turned off.
+    module = tmp_path / "gate_451_fixture.py"
+    module.write_text(BROKEN_DOCSTRING)
+    monkeypatch.syspath_prepend(tmp_path)
+
+    reported = gate_docstring_markup.warnings_for(["gate_451_fixture"])
+
+    assert 'Unknown interpreted text role "cite"' in reported
+    assert 'Undefined substitution referenced: "F_tau(d) - D(T)"' in reported
+
+    module.write_text(FIXED_DOCSTRING)
+    for name in ("gate_451_fixture",):
+        sys.modules.pop(name, None)
+
+    assert gate_docstring_markup.warnings_for(["gate_451_fixture"]) == ""
+
+
+@pytest.mark.structural
+def test_the_docstring_gate_asks_only_about_what_the_branch_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A changed module is asked about; a changed test, a changed document and
+    # an untouched module are not. Nothing changed means nothing is built,
+    # which is what keeps the row free on a branch that touches no Python.
+    package = "python/snakes_and_ladders"
+    _repository(
+        tmp_path,
+        {
+            f"{package}/opt/fit.py": '"""Old."""\n',
+            f"{package}/sim/tree.py": '"""Old."""\n',
+            "tests/regression/test_old.py": UNMARKED,
+            "docs/source/index.rst": ".. automodule:: snakes_and_ladders.opt.fit\n",
+        },
+    )
+    monkeypatch.setattr(gate_docstring_markup, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gate_docstring_markup, "SOURCE", tmp_path / "docs/source")
+
+    assert gate_docstring_markup.changed_modules("main") == []
+
+    _commit(
+        tmp_path,
+        {
+            f"{package}/opt/fit.py": '"""New."""\n',
+            "tests/regression/test_old.py": MARKED,
+        },
+    )
+
+    assert gate_docstring_markup.changed_modules("main") == [
+        "snakes_and_ladders.opt.fit"
+    ]
+
+
+@pytest.mark.structural
+def test_the_docstring_gate_asks_about_every_module_when_the_index_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `docs/source/` is the configuration and the module list. A change there
+    # is not attributable to one module, so the gate widens to the index --
+    # the same "the unsafe answer is the one that looks like a saving" the
+    # test selection takes (`infra/CLAUDE.md`).
+    package = "python/snakes_and_ladders"
+    index = (
+        ".. automodule:: snakes_and_ladders.opt.fit\n"
+        ".. automodule:: snakes_and_ladders.sim.tree\n"
+    )
+    _repository(tmp_path, {f"{package}/opt/fit.py": '"""Old."""\n'})
+    monkeypatch.setattr(gate_docstring_markup, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gate_docstring_markup, "SOURCE", tmp_path / "docs/source")
+    _commit(tmp_path, {"docs/source/index.rst": index})
+
+    assert gate_docstring_markup.changed_modules("main") == [
+        "snakes_and_ladders.opt.fit",
+        "snakes_and_ladders.sim.tree",
+    ]
