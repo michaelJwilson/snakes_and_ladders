@@ -172,10 +172,18 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_surrogate.py::test_mean_field_and_spanning_tree_bounds_sandwich_log_z` | oracle |  |
 | `test_surrogate.py::test_ground_state_bracket_contains_the_enumerated_minimum` | oracle |  |
 
-## `tests/regression/opt/` (53)
+## `tests/regression/opt/` (61)
 
 | Test | Kind | Claim |
 | --- | --- | --- |
+| `test_opt_anneal.py::test_anneal_potts_is_the_loop_it_replaced_draw_for_draw` | oracle | The reference is `anneal_potts`'s body before #386, run on a generator seeded identically. |
+| `test_opt_anneal.py::test_anneal_factor_graph_is_the_loop_it_replaced_draw_for_draw` | oracle | The general annealer, against its own pre-seam body. |
+| `test_opt_anneal.py::test_potts_parallel_tempering_is_the_loop_it_replaced_draw_for_draw` | oracle |  |
+| `test_opt_anneal.py::test_a_constant_schedule_reproduces_hmc_sample_draw_for_draw` | oracle | The oracle `STATUS.md`'s audit table names for the continuous annealer. |
+| `test_opt_anneal.py::test_hmc_parallel_tempering_is_the_loop_it_replaced_draw_for_draw` | oracle |  |
+| `test_opt_anneal.py::test_the_relaxation_schedule_is_the_exponential_schedule` | oracle |  |
+| `test_opt_anneal.py::test_anneal_topology_is_the_loop_it_replaced_draw_for_draw` | oracle | The topology annealer, whose pre-seam loop nested its best-state test inside `if moved`. |
+| `test_opt_anneal.py::test_the_tempered_ensemble_is_the_loop_it_replaced_draw_for_draw` | oracle |  |
 | `test_opt_fit.py::test_the_fit_beats_the_truth_on_its_own_sample` | simulated_truth | The defining property of a maximum-likelihood estimate. |
 | `test_opt_fit.py::test_potts_intervals_cover_the_truth_at_the_nominal_rate` | simulated_truth | 60 independent datasets from the same truth, one fit each, every parameter's 95% Wald interval checked. |
 | `test_opt_fit.py::test_potts_point_estimates_land_near_the_truth` | simulated_truth |  |
@@ -436,4 +444,4 @@ run `uv run python infra/checks_ledger.py --write`.
 | `test_spatio_sequential.py::test_the_chains_follow_the_circulant_transition_and_the_initial` | simulated_truth |  |
 | `test_spatio_sequential.py::test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain` | simulated_truth |  |
 
-393 checks.
+401 checks.
