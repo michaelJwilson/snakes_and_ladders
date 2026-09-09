@@ -174,10 +174,6 @@
 # `tests/regression/docs/test_problems_tables.py` holds this block to that
 # list, so a pairing loses its reason only by gaining a test.
 untested pairings:
-  hmm / samplers: >-
-    The block sampler is refereed against enumerated path posteriors, and the
-    declared instance is 15 positions by 600 sequences --- past that
-    enumeration. The tests build the chains they can enumerate.
   ldpc / optimizers: >-
     The decoder's claim is about the (3,6) ensemble, so the tests draw codes
     at several block lengths and seeds rather than decoding one member. The
