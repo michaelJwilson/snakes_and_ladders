@@ -149,7 +149,7 @@ BOUNDARY_CELLS = [(8, 1_000), (8, 10_000), (20, 1_000), (20, 10_000)]
 
 
 def _marshalled(
-    tau: Node, k: int, pi: np.ndarray, alignment: dict[str, np.ndarray]
+    tau: Node, pi: np.ndarray, alignment: dict[str, np.ndarray]
 ) -> tuple[np.ndarray, list[list[int]], np.ndarray, list[int], np.ndarray]:
     """The arguments `pruning_rust.log_likelihood` builds before its kernel call.
 
@@ -174,6 +174,9 @@ def _marshalled(
     row = 0
     for position, node in enumerate(order):
         if position != n_nodes - 1:
+            if node.branch_length is None:
+                msg = f"non-root node {node.name!r} has no branch_length"
+                raise ValueError(msg)
             branch_length[position] = float(node.branch_length)
         children.append([index[id(child)] for child in node.children])
         if node.is_leaf:
@@ -215,7 +218,7 @@ def test_rust_argument_marshalling(
     returns, bitwise, since it is the same call on the same bytes.
     """
     tau, pi, alignment = _problem(cell)
-    arguments = benchmark(_marshalled, tau, 4, pi, alignment)
+    arguments = benchmark(_marshalled, tau, pi, alignment)
     branch_length, children, leaf_states, leaf_row, pi_contiguous = arguments
     through_the_copy = float(
         oxi_snakes_and_ladders.pruning_log_likelihood(
@@ -237,7 +240,7 @@ def test_rust_binding_call(benchmark: BenchmarkFixture, cell: tuple[int, int]) -
     """
     tau, pi, alignment = _problem(cell)
     branch_length, children, leaf_states, leaf_row, pi_contiguous = _marshalled(
-        tau, 4, pi, alignment
+        tau, pi, alignment
     )
     result = benchmark(
         oxi_snakes_and_ladders.pruning_log_likelihood,

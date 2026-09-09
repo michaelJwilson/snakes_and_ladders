@@ -911,6 +911,38 @@ kind and measured at **3.4e-15** and **1.5e-15** relative, inside
 rescale divide becoming a reciprocal and a multiply, which is why the pin is a
 relative tolerance and not bitwise.
 
+**What one fit costs, and which of three proposed ports the numbers license**
+([#443](https://github.com/michaelJwilson/snakes_and_ladders/issues/443) PR 1;
+[experiment 007](docs/experiments/007-per-fit-cost-of-the-tree-likelihood.md)).
+Measurement only, no implementation. Caterpillar topologies at 4 to 20 taxa by
+1,000 sites, under `with_lock measure` on the 4-core reference host at one
+BLAS thread, medians with the range; the 8-taxon SPR profile reproduces #436's
+to within 0.4 points, which is what licenses reading the 20-taxon one beside
+it.
+
+| question | measurement | verdict |
+| --- | --- | --- |
+| `torch.compile` on the pruning forward | forward and backward **1.21x** eager at 8 taxa, **1.09x** at 20; 0 graph breaks, 1.8e-16 relative agreement; the graph falls 105 to 94 nodes; the compile is 42.8 s cold and 3.7 s on a warm cache, and one artifact serves 12 distinct random topologies without recompiling | does not close the gap; amortization is not the obstacle, there is no win to amortize |
+| autograd graph nodes per fit | **7 x (tree nodes) + 9** exactly at every size, four per branch and five per internal node; 1,020 at 4 taxa, 12,925 at 20 | the mechanism #443 predicts, at 7x the constant it assumed |
+| the L-BFGS step against #341's 10% bar | **6.63%** of an 8-taxon SPR search, **3.57%** of a 20-taxon one; 3.18% and 2.08% of a bare fit | under the bar at both sizes and falling with size; **closed** |
+| the FFI boundary, decomposed | argument marshalling **1.1--4.9%** of a through-binding call, the binding call **90--100%**, the return **under 0.03%**; the residual is the wrapper's own validation at 0.018--0.097 ms, constant in sites. Per-crossing floor 0.0497 ms at 8 taxa, 0.0855 ms at 20 | the boundary is not most of the call; #436's kernel win did not go there |
+| crossing once per fit instead of once per pass (calculated from the two rows above, not benchmarked) | 27 crossings x 0.0497 ms = 1.34 ms of a 99.8 ms fit; 47 x 0.0855 ms = 4.02 ms of 511.9 ms | **1.34%** and **0.79%**; an order under the bar |
+
+What the candidates have to work with instead, at 1,000 sites: the backward
+costs **1.32x** the taped forward at 8 taxa and **1.36x** at 20 (2.01 against
+1.52 ms, 6.04 against 4.44 ms), and a level-synchronous schedule collapses the
+recursion by the nodes-to-levels ratio, **2.0x** on the caterpillar profiled
+and **2.8--3.8x** on a random topology — not to `O(log n)`, since a
+caterpillar's depth is half its node count. So level-synchronous batching is
+recommended and carries 10--18% of a search's self time as a floor and 30--53%
+as an upper bound; the analytic gradient's ceiling is `0.34 / 2.34` of a
+forward-and-backward pair, 12% of a search, and it shrinks further once
+batching lands, so it is not built against these numbers; and no Rust port is
+licensed, because the boundary it would amortize is worth 1.34%. The Rust
+forward is nevertheless **3.4x and 3.6x** the torch taped forward, so a port
+that paid would have to carry the gradient too, which neither #436 nor #443
+proposed.
+
 **The LDPC decoder, specialised from the general sum-product and held to it**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
 `likelihood.ldpc.decode` runs the log-domain `tanh` rule or min-sum under a
