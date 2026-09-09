@@ -113,9 +113,18 @@ def test_one_neighbour_fit_benchmark(benchmark: BenchmarkFixture, warm: bool) ->
     assert math.isfinite(fitted.value)
 
 
-# 180.2 s cold, 117.6 s warm, 10.6 s lazy on the reference host: every
-# case is over the 10 s per-pull-request cap, so the whole benchmark runs at
-# the release gate (issue #372).
+# 113.8 s cold, 68.1 s warm, 7.3 s lazy on the reference host, down from
+# 180.2 s, 117.6 s and 10.6 s (issue #397). Every case stays at the release
+# gate. Two of them are still over the 10 s per-pull-request cap by an order
+# of magnitude and no further change was found that would close it: the
+# evaluation is bound by its backward pass, and what is left of that is the
+# autograd graph of a fit that has to be differentiable, so the next step is a
+# hand-written gradient rather than another rewrite of the forward pass. The
+# lazy case is now under the cap, and stays here anyway: over the five rounds
+# `pytest-benchmark` timed, the cold case ranged 10.0 s to 34.8 s per round on
+# an idle host holding the measurement lock, and a case whose spread is 3.5x
+# would gate merges on the host's mood at 27% headroom. `test_hill_climb_
+# benchmark` above is the per-pull-request sibling for the same claim.
 @pytest.mark.release
 @pytest.mark.parametrize(
     ("warm_start", "lazy_top"),
@@ -128,7 +137,11 @@ def test_nni_hill_climb_eight_taxa_benchmark(
     """The whole NNI search at eight taxa, in the three ways it can be run.
 
     Wall-clock beside the counts the search itself reports, so the ratio can
-    be read in either unit -- and the unit that matters is the counts.
+    be read in either unit -- and the unit that matters is the counts, which
+    issue #397 left unchanged while wall clock fell by a third: the search
+    reaches the same optimum in the same 80 evaluations, 81 fits and 9 moves.
+    Correctness is `tests/regression/search/test_search_infer.py`'s, where
+    enumeration over the eight-taxon topologies referees the optimum.
     """
     alignment, k = _eight_taxa()
 

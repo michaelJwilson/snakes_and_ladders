@@ -432,6 +432,27 @@ spanning a factor of 30
 ([#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148)). The pulley
 principle and rescaled/unrescaled agreement are checked besides.
 
+**The PyTorch backend's evaluation is bound by its backward pass, and lost a
+third of it.** Profiled on the eight-taxon NNI hill climb at 300 evaluations,
+one BLAS thread, `cProfile` self time: `run_backward` 38.2% of the run and the
+post-order recursion 18.5%, with no other term over 7%. The evaluation is not
+compute-bound — cutting the sites tenfold, from 1,000 to 100, cut one
+forward-and-backward from 3.62 ms to 2.39 ms, so 58% of it is fixed cost per
+evaluation and site-pattern compression could reach at most the other 42%.
+What the fixed cost paid for was work that computes nothing: a leaf's one-hot
+partial built and multiplied where a gather of the transition matrix's rows
+gives the same message bitwise, and a rescaling factor differentiated where it
+cancels exactly between the division it performs and the log it is added to.
+Removing both leaves the log-likelihood bitwise unchanged and the gradient
+agreeing to 2.3e-14 relative. The climb went **26.25 s to 17.41 s cold, 18.30
+s to 11.05 s warm and 1.98 s to 1.42 s lazy** at 300 evaluations, reaching the
+same optimum in the same 80 evaluations, 81 fits and 9 moves
+([#397](https://github.com/michaelJwilson/snakes_and_ladders/issues/397)). L-BFGS is
+19.6% of what remains, and its 50-pair history is not the reason: at 13 pairs,
+one per parameter, the climb spent 6,668 likelihood evaluations against 6,102
+and ran slower, so the two-loop recursion is cheaper than the iterations a
+shorter history costs.
+
 **The Rust backend returned nothing at the declared scale, and now returns
 2.5x.** Measured against the NumPy oracle end to end, it was **1.8x** at 10
 taxa by 1,000 sites and **1.00x** at 200 by 11,000 — the top of the range
