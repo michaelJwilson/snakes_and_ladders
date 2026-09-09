@@ -33,7 +33,7 @@ from snakes_and_ladders.likelihood.turbo import (
     measure_error_rates,
     uncoded_bit_error_rate,
 )
-from snakes_and_ladders.qa.figure import QAFigure
+from snakes_and_ladders.qa.figure import QAFigure, latex_integer
 from snakes_and_ladders.qa.runner import TURBO_PARAMS, figure_main
 from snakes_and_ladders.qa.style import INK, INK_MUTED, ONE_COLUMN_WIDE, letter_style
 from snakes_and_ladders.sim.convolutional import TurboParams
@@ -80,6 +80,16 @@ def _floor(rates: list[ErrorRates]) -> float:
     result the frame count cannot support.
     """
     return 1.0 / rates[0].bits
+
+
+def _report(rate: float, floor: float) -> str:
+    """A measured rate, or the bound a point that saw no error supports.
+
+    Writing "0" would state a result the sample cannot carry: what 50 frames
+    of 256 bits establish is that the rate is below one in 12,800, not that
+    it is zero.
+    """
+    return f"{rate:.2g}" if rate > 0.0 else f"below {floor:.1g}"
 
 
 def build_figure(params: TurboParams) -> tuple[Figure, str]:
@@ -173,27 +183,30 @@ def build_figure(params: TurboParams) -> tuple[Figure, str]:
         fig.tight_layout()
 
     best = np.array([rate.bit_error_rate[-1] for rate in rates])
+    # Plain text, no LaTeX: `qa.figure.check_latex_safe` allows no backslash
+    # or underscore in a caption, so the closed form is written out in words
+    # rather than as mathematics.
     caption = (
         f"The waterfall of the memory-{params.memory} "
-        f"({params.feedback:o}, {params.feedforward:o}) turbo code at "
-        f"$K = {params.message_length}$: rate "
-        f"{params.code().rate:.3f} unpunctured, both constituent encoders "
-        f"terminated, a uniformly random interleaver drawn under seed "
-        f"{params.seed}, on the binary-input Gaussian channel. "
-        f"(a) Bit error rate at 1, 2, 4 and {params.iterations} iterations of "
-        f"the extrinsic exchange, each point {rates[0].frames} frames and "
-        f"{rates[0].bits:,} message bits, with the one-sigma binomial "
-        f"interval that sample supports; the dashed line is the uncoded "
-        f"antipodal closed form $Q(\\sqrt{{2E_b/N_0}})$, which the coded "
-        f"curve falls below at every point, reaching "
-        f"{best[-1]:.2g} at {points[-1]:g} dB against {uncoded[-1]:.2g} "
-        f"uncoded. (b) Frame error rate at {params.iterations} iterations on "
-        f"the same axis. A point at which no frame erred is drawn at "
-        f"$1/N$ with an arrow: the sample bounds the rate from above and "
-        f"says nothing below it. The interval understates the spread of the "
-        f"estimate, since bit errors inside one frame are correlated; it is "
-        f"the bar the sample size supports if the bits were independent, "
-        f"and a floor on the true one."
+        f"({params.feedback:o}, {params.feedforward:o}) turbo code at K = "
+        f"{params.message_length}: rate {params.code().rate:.3f} unpunctured, "
+        f"both constituent encoders terminated, a uniformly random "
+        f"interleaver drawn under seed {params.seed}, on the binary-input "
+        f"Gaussian channel. (a) Bit error rate at 1, 2, 4 and "
+        f"{params.iterations} iterations of the extrinsic exchange, each "
+        f"point {rates[0].frames} frames and {latex_integer(rates[0].bits)} "
+        f"message bits, with the one-sigma binomial interval that sample "
+        f"supports; the dashed line is the uncoded antipodal closed form "
+        f"Q(sqrt(2 Eb/N0)), which the coded curve falls below at every "
+        f"point, reaching {_report(best[-1], floor)} at {points[-1]:g} dB "
+        f"against {uncoded[-1]:.2g} uncoded. (b) Frame error rate at "
+        f"{params.iterations} iterations on the same axis. A point at which "
+        f"no frame erred is drawn at one over the sample size with an arrow: "
+        f"the sample bounds the rate from above and says nothing below it. "
+        f"The interval understates the spread of the estimate, since bit "
+        f"errors inside one frame are correlated; it is the bar the sample "
+        f"size supports if the bits were independent, and a floor on the "
+        f"true one."
     )
     return fig, caption
 
