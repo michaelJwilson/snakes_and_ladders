@@ -2,16 +2,18 @@
 # The Definition-of-Done gates a reviewer checks before reading a line, run
 # as one script so review starts from a pass/fail table rather than from a
 # checklist held in the head (CLAUDE.md, Throughput). Each gate is a fact
-# about the branch that CI does not assert or asserts late: the head carries
-# the base; the two committed PDFs are the base's unless this is a rebuild;
-# a changelog fragment exists; every cited figure's stamp matches the tree;
-# the critical tier passes, under the duration cap; the tests the branch
-# touched say what checks them; a protocol it adds names the consumers the
-# seam rule wants; and the generated ledgers regenerate without rewriting a
-# committed one. Reading covers what a script cannot: whether the
-# change is the plan on the ticket, and whether the tests pin what they
-# claim to. Those two rows are the point of a review and stay with the
-# reviewer; a gate that claimed them would be worse than no gate.
+# about the branch that CI does not assert or asserts late: the environment
+# imports this checkout; the head carries the base; the two committed PDFs
+# are the base's unless this is a rebuild; a changelog fragment exists; the
+# critical tier passes, under the duration cap; the tests the branch touched
+# say what checks them; a protocol it adds names the consumers the seam rule
+# wants; and regenerating the ledgers and the two blocks written from
+# `infra/gates.py` rewrites no committed file. Eight rows, and
+# `infra/gates.py` names them where the rest of the gate policy is written
+# down. Reading covers what a script cannot: whether the change is the plan
+# on the ticket, and whether the tests pin what they claim to. Those two
+# rows are the point of a review and stay with the reviewer; a gate that
+# claimed them would be worse than no gate.
 #
 # Usage: infra/review_gates.sh [--base <ref>] [--rebuild]
 #   --base     the branch the pull request targets (default origin/main)

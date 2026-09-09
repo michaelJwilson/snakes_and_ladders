@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from snakes_and_ladders.sim.convolutional import IMPOSSIBLE_EDGE, Trellis
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.ldpc import ParityCheck
 from snakes_and_ladders.sim.tree import Node, edges, preorder
@@ -443,4 +444,80 @@ def from_parity_check(code: ParityCheck, llr: np.ndarray) -> FactorGraph:
         parity = np.indices((2,) * bits.size).sum(axis=0) % 2
         table = np.where(parity == 0, 0.0, -np.inf)
         factors.append(Factor(f"c{j}", tuple(f"x{i}" for i in bits), table))
+    return FactorGraph(variables, factors)
+
+
+def from_trellis(
+    trellis: Trellis,
+    systematic_llr: np.ndarray,
+    parity_llr: np.ndarray,
+    apriori_llr: np.ndarray | None = None,
+    *,
+    terminated: bool = True,
+) -> FactorGraph:
+    """A terminated convolutional code with its channel output folded in.
+
+    The chain :func:`from_hmm` builds carries its observation on the *state*;
+    a trellis carries it on the *edge*, since the bits transmitted at a step
+    are a function of the transition taken. So the variables here are the
+    ``T + 1`` register states, and one factor per step holds the whole of
+    that step: the transition it allows and the channel's score for the two
+    bits that transition transmits (``sec:turbo``). Summing it out is
+    :func:`snakes_and_ladders.likelihood.convolutional.bcjr`, and the graph
+    is a chain, so :func:`snakes_and_ladders.likelihood.message_passing.sum_product`
+    on the tree schedule is exact on it and a test asserts the two agree.
+
+    The input bit is recoverable from the state pair rather than carried as a
+    variable of its own: it is the ``u`` for which ``next_state[s, u] = s'``,
+    unique because the two edges leaving a state enter different states, so a
+    variable per input bit would add a degree-2 equality node and nothing
+    else.
+
+    Parameters
+    ----------
+    trellis : Trellis
+    systematic_llr, parity_llr : np.ndarray
+        Shape ``(T,)`` each, in the convention of ``eq:ldpc-llr``.
+    apriori_llr : np.ndarray | None
+        Shape ``(T,)``: an a priori ratio on the input bit, as a turbo
+        half-iteration supplies. ``None`` is the uninformative zero.
+    terminated : bool
+        Whether the final state is pinned to zero by an indicator factor.
+
+    Raises
+    ------
+    ValueError
+        If the ratio arrays disagree in shape.
+    """
+    systematic = np.asarray(systematic_llr, dtype=float)
+    parity = np.asarray(parity_llr, dtype=float)
+    apriori = (
+        np.zeros_like(systematic)
+        if apriori_llr is None
+        else np.asarray(apriori_llr, dtype=float)
+    )
+    if systematic.ndim != 1 or not (systematic.shape == parity.shape == apriori.shape):
+        msg = (
+            f"systematic {systematic.shape}, parity {parity.shape} and a priori "
+            f"{apriori.shape} must be the same one-dimensional shape"
+        )
+        raise ValueError(msg)
+    length, n_states = systematic.size, trellis.n_states
+    variables = [Variable(f"s{t}", n_states) for t in range(length + 1)]
+    start = np.full(n_states, IMPOSSIBLE_EDGE)
+    start[0] = 0.0
+    factors = [Factor("start", ("s0",), start)]
+    inputs = np.array([0.0, 1.0])
+    for t in range(length):
+        table = np.full((n_states, n_states), IMPOSSIBLE_EDGE)
+        weight = -inputs[None, :] * (systematic[t] + apriori[t]) - (
+            trellis.parity * parity[t]
+        )
+        for u in (0, 1):
+            table[np.arange(n_states), trellis.next_state[:, u]] = weight[:, u]
+        factors.append(Factor(f"T{t}", (f"s{t}", f"s{t + 1}"), table))
+    if terminated:
+        end = np.full(n_states, IMPOSSIBLE_EDGE)
+        end[0] = 0.0
+        factors.append(Factor("end", (f"s{length}",), end))
     return FactorGraph(variables, factors)
