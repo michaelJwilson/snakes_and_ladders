@@ -422,9 +422,13 @@ consistency, duplicated machinery, suggested follow-up tickets) and gates on
    for that reason, since that script renders a stale cited figure into
    `docs/tex/figures/` and would otherwise supply the bytes the comparison is
    against. The Sphinx step is `-E -a` for the same reason in miniature: an
-   incremental build re-reads only what changed, so a warning in an untouched
-   docstring is one it never emits. Zero warnings across all 134 modules is
-   the current state and the baseline `-W` holds.
+   incremental build states only what changed, and its verdict depends on what
+   `docs/_build/` holds from an earlier branch or an interrupted run, while a
+   release claims all 134 modules are clean. Autodoc does record each module
+   as a dependency, so an incremental build re-reads a *changed* docstring —
+   measured on the pull request that added this step, with #448's `:cite:`
+   role reintroduced: the incremental form failed too. Zero warnings across
+   all 134 modules is the current state and the baseline `-W` holds.
 
    The hours are the point rather than a regression: they buy a release whose
    figures and documentation are known current, and they are written down here

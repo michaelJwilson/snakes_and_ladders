@@ -2,8 +2,9 @@
 
 Two of the gate's steps exist because prediction failed: the figure stamps
 were wrong on 476 of 476 decisions (issue #476), so the release gate renders
-every figure (issue #484), and an incremental Sphinx build re-reads only what
-changed, so the release gate reads all 134 modules (issue #485). Both are
+every figure (issue #484), and an incremental Sphinx build reports on what a
+saved environment says changed, so the release gate reads all 134 modules
+whatever ``docs/_build/`` holds (issue #485). Both are
 edits away from being cheap again --- a `--only`, a dropped `-E` --- and
 neither loss would fail anything at the time it was made, which is what these
 tests are for.
@@ -110,15 +111,16 @@ def test_the_figures_are_compared_before_the_document_build_rewrites_them() -> N
 def test_the_gate_builds_the_documentation_in_full() -> None:
     """`-E -a -W`: every module re-read, every output written, warnings fatal.
 
-    Without `-E` the build reuses a saved environment and re-reads only what
-    changed, so a warning in an untouched docstring is one it never emits ---
-    8.2 s and no finding, against 32.2 s cold (issue #485).
+    Without `-E` the build reuses whatever ``docs/_build/`` holds from an
+    earlier branch or an interrupted run and states only what changed --- 8.2 s
+    against 32.2 s cold (issue #485) --- while a release claims all 134 modules
+    are clean.
     """
     _, command = _step_named("sphinx-build")
     assert "sphinx-build" in command
     assert "docs/source" in command
     for flag, why in (
-        ("-E", "the saved environment is reused, so unchanged modules are not re-read"),
+        ("-E", "a saved environment decides which modules the run re-reads"),
         ("-a", "unchanged outputs are not rewritten"),
         ("-W", "a warning does not fail the build"),
     ):

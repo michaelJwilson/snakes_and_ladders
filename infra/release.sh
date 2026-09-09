@@ -37,14 +37,17 @@ run_check "cargo test" cargo test --locked
 # the full suite -- see this PR's DEV.md fix.
 run_check "pytest (full suite)" uv run pytest --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
 # The full documentation build, not an incremental one (issue #485). `-E`
-# discards any saved environment and `-a` writes every output, so the run
-# re-reads all 134 modules whatever `docs/_build/` holds from the last one: an
-# incremental build re-reads only what changed, and a warning in an untouched
-# docstring is a warning it never emits. `docs/source/index.rst` autodocuments
-# the modules in one document, so there is no cheap incremental form of this to
-# gate with -- 32.2 s cold against 8.2 s when nothing changed (#476), which is
-# free beside the figure step below. Zero warnings across all 134 modules is
-# the current state and `-W` is what holds it there.
+# discards any saved environment and `-a` writes every output, so the verdict
+# is a function of the tree and not of whatever `docs/_build/` holds from an
+# earlier branch or an interrupted run. Autodoc does record each module as a
+# dependency, so an incremental build re-reads a docstring that changed --
+# measured, not assumed: with #448's `:cite:` role reintroduced, the
+# incremental form failed too. What it cannot do is state what the other 133
+# modules say now, and `docs/source/index.rst` autodocuments them in one
+# document, so there is no cheap incremental form of this to gate with --
+# 32.2 s cold against 8.2 s when nothing changed (#476), free beside the
+# figure step below. Zero warnings across all 134 modules is the current
+# state and `-W` is what holds it there.
 run_check "sphinx-build -W (full)" \
   uv run sphinx-build -E -a -b html docs/source docs/_build/html -W
 # The generated ledgers are written here rather than read from the tree: none

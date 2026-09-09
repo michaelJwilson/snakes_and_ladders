@@ -27,9 +27,8 @@ policy against oracles the regression suite already establishes.
 The build script regenerates the cited figures whose inputs changed and then
 runs `latexmk` per document; nothing else invokes `latexmk`. `DEV.md` holds
 the selection and the stamps in full. The principle is that a partial rebuild
-*moves* a check and never removes one: at the release gate every figure is
-regenerated and compared, whatever a document cites and whatever a stamp
-said.
+*moves* a check and never removes one: the release gate regenerates and
+compares every figure, whatever a document cites and whatever a stamp said.
 
 Root `CLAUDE.md`'s **Expected Reader** states the formatting contract — what
 belongs in the body, what belongs in the appendix, and the register to write
