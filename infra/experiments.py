@@ -1,7 +1,8 @@
 """The experiment ledger: validate every experiment file, and generate the index (issue #314).
 
 An experiment under ``docs/experiments/`` is a Markdown file with YAML front
-matter and fixed sections, written from ``TEMPLATE.md``. This module is the
+matter, three fixed sections and a body of at most ten non-blank lines
+(issue #458), written from ``TEMPLATE.md``. This module is the
 one reading of that format: :func:`load` parses a file, :func:`problems`
 lists what it gets wrong, and :func:`render_index` writes the table
 ``README.md`` shows -- problem, size, methods, status, the best-known result
@@ -49,15 +50,12 @@ REQUIRED_FIELDS = (
 PROBLEMS = ("potts-lattice", "hmm-path", "coupled", "tree", "mixture")
 SIZES = ("ci", "stress", "release")
 STATUSES = ("open", "confirmed", "retracted", "superseded")
-SECTIONS = (
-    "Feature under test",
-    "Setup",
-    "Results",
-    "Figures",
-    "Finding",
-    "Conclusion and actions",
-    "What is not claimed",
-)
+SECTIONS = ("Question", "Numbers", "Finding")
+#: The body's budget: non-blank lines after the front matter's closing
+#: ``---``, section headings included (issue #458). Ten holds a four-line
+#: table with a one-line question and a one-line finding, which is the shape
+#: the ticket asks for; what survives is chosen rather than what fits.
+BODY_LINE_CAP = 10
 #: What a ``fixture`` field must name: a fixture file, or the problem
 #: directory holding one where the experiment swept sizes around it rather
 #: than running the declared instance (issue #382). Prose may follow; the
@@ -65,6 +63,10 @@ SECTIONS = (
 _FIXTURE_REFERENCE = re.compile(
     r"tests/regression/fixtures/[a-z0-9_]+(?:/[a-z]+\.yaml)?"
 )
+#: The ``# `` title, which the cap does not count: it is the file's identity,
+#: repeated by the front matter's ``id`` and linked by the index, and
+#: counting it would put the ticket's own shape over the cap.
+_TITLE = re.compile(r"\A# ")
 _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _TICKET = re.compile(r"#\d+")
 _COMMIT = re.compile(r"\A[0-9a-f]{40}\Z")
@@ -78,6 +80,19 @@ class Experiment:
     fields: dict[str, object]
     title: str
     sections: dict[str, str]
+    body_lines: int
+
+
+def body_lines(body: str) -> int:
+    """The lines the cap counts: non-blank, the ``# `` title excluded.
+
+    Blank lines carry nothing and the title is the file's identity rather
+    than its body, so neither is charged; a section heading is charged,
+    because three headings are what the format costs to read.
+    """
+    return sum(
+        1 for line in body.splitlines() if line.strip() and not _TITLE.match(line)
+    )
 
 
 def load(path: Path) -> Experiment:
@@ -99,7 +114,13 @@ def load(path: Path) -> Experiment:
         r"^## (.+?)\n(.*?)(?=^## |\Z)", body, re.MULTILINE | re.DOTALL
     ):
         sections[heading.strip()] = content.strip()
-    return Experiment(path, {str(k): v for k, v in fields.items()}, title, sections)
+    return Experiment(
+        path,
+        {str(k): v for k, v in fields.items()},
+        title,
+        sections,
+        body_lines(body),
+    )
 
 
 def problems(experiment: Experiment) -> list[str]:
@@ -133,11 +154,14 @@ def problems(experiment: Experiment) -> list[str]:
             found.append(f"section {section!r} missing")
         elif not experiment.sections[section]:
             found.append(f"section {section!r} is empty")
-    actions = experiment.sections.get("Conclusion and actions", "")
-    if actions and actions.strip().lower() != "none" and not _TICKET.search(actions):
+    if experiment.body_lines > BODY_LINE_CAP:
         found.append(
-            "every action in 'Conclusion and actions' names a ticket, or the section says none"
+            f"body is {experiment.body_lines} non-blank lines, over the cap of "
+            f"{BODY_LINE_CAP} (issue #458)"
         )
+    finding = experiment.sections.get("Finding", "")
+    if finding and not _TICKET.search(finding) and "no actions" not in finding.lower():
+        found.append("every action in 'Finding' names a ticket, or it says no actions")
     stem = experiment.path.stem
     if not re.match(r"\A\d{3}-[a-z0-9-]+\Z", stem):
         found.append(f"file name {experiment.path.name!r} is not NNN-slug.md")
@@ -205,14 +229,21 @@ def render_index(found: list[Experiment]) -> str:
         )
     header = (
         "# docs/experiments/\n\n"
-        "One file per experiment, written from [`TEMPLATE.md`](TEMPLATE.md): the commit,\n"
-        "the feature under test, the fixture and its size tier, the methods compared at\n"
-        "one budget over shared seeds, the results, the finding, and the actions it\n"
-        "filed (issue #314). `STATUS.md` cites an experiment rather than restating its\n"
-        "table, and `tests/regression/test_experiments.py` holds every file to the\n"
-        "template and this index to the files.\n\n"
+        "One file per experiment, written from [`TEMPLATE.md`](TEMPLATE.md): front\n"
+        "matter carrying the commit, the fixture and its size tier, the methods\n"
+        "compared at one budget over shared seeds, the hardware and the status; then\n"
+        "three sections --- Question, Numbers, Finding (issue #314).\n\n"
+        "**The body is capped at ten non-blank lines** after the front matter's closing\n"
+        "`---`, section headings counted and the `# ` title not (issue #458). The front\n"
+        "matter is the reproducibility record and is not counted. What survives the cap\n"
+        "is chosen, in this order: key metrics, motivation, reproducibility. A number\n"
+        "displaced by it moves to `STATUS.md` where it is evidence for a milestone, or\n"
+        "to the pull-request body where it is the argument for a change; a number that\n"
+        "fits neither was never evidence. `STATUS.md` cites an experiment rather than\n"
+        "restating its table, and `tests/regression/test_experiments.py` holds every\n"
+        "file to the template, the cap, and this index to the files.\n\n"
         "**This index is generated.** Rewrite it with `python infra/experiments.py`;\n"
-        "`--check` fails when a file is invalid or the index is stale.\n\n"
+        "`--check` fails when a file is invalid, over the cap, or the index is stale.\n\n"
     )
     return header + "\n".join(rows) + "\n"
 

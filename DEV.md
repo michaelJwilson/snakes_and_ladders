@@ -358,11 +358,18 @@ A measured comparison lives in `docs/experiments/` as one file per experiment,
 written from `TEMPLATE.md` (issue #314): YAML front matter with the commit,
 branch and pull request, the tickets it tests and files, the problem, fixture
 and size tier, the methods compared, the budget and its unit, the shared
-seeds, the hardware and a status; then fixed sections — feature under test,
-setup, results, figures, finding, conclusion and actions, what is not
-claimed. `infra/experiments.py` validates every file and generates the index
-`README.md`; `--check` fails on an invalid file or a stale index, and
-`tests/regression/test_experiments.py` runs it per pull request.
+seeds, the hardware and a status; then three sections — question, numbers,
+finding. **The body is at most ten non-blank lines** after the front matter's
+closing `---`, section headings counted and the `# ` title not (issue #458);
+the front matter is the reproducibility record and is not counted. What
+survives is chosen, in this order: key metrics, motivation, reproducibility.
+A number the cap displaces moves to `STATUS.md` where it is evidence for a
+milestone, or to the pull-request body where it is the argument for a change;
+one that fits neither was never evidence, and dropping it is the cap working.
+`infra/experiments.py` validates every file and generates the index
+`README.md`; `--check` fails on an invalid file, a body over the cap, or a
+stale index, and `tests/regression/test_experiments.py` runs it per pull
+request.
 
 * **A number stated against a baseline lives in an experiment file.** A pull
   request that measures one method against another adds or updates the

@@ -29,7 +29,7 @@ from the suite by `infra/ledgers.sh` and not committed (issue #425);
 | 2.1 RL formulation & deployment | The estimator, the Potts, hidden-path and tree environments, a critic, an actor–critic, PPO and a PUCT planner landed, each pinned to enumeration; a tree policy trained on the fixture hill climbing fails, a tie over one feature and ahead of greedy over the seven-column set (#349); not yet measured against restarts | Enumerated gradient against finite differences at 1.5e-11 relative; on the Potts chain REINFORCE 86.6%, PPO 96.3% and the planner 92.6% at 8.3 evaluations per episode against greedy's 80.2% at 48; on the 7-taxon fixture the single feature reaches 0.487 against greedy's 0.480 (sign test `p = 0.79`) and the full set 0.796, ahead on 16 of 16 seeds (`p = 3.05e-5`), while restarts reach 1.000 at the same budget | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139), [#192](https://github.com/michaelJwilson/snakes_and_ladders/pull/192), [#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193), [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#320](https://github.com/michaelJwilson/snakes_and_ladders/pull/320), [#349](https://github.com/michaelJwilson/snakes_and_ladders/pull/349), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355) |
 | 2.2 Curriculum learning | Started: the surrogate curriculum from 5 to 6 taxa and from 3x3 to 4x6 lattices; weight transfer for a policy and batched rollout not started | Zero-shot at six taxa the set surrogate falls to `R^2` 0.68 and recovers to 0.94 after transfer, the MLP holds 0.92 and reaches 0.95; lattice surrogates transfer zero-shot at 0.99 | [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 | 2.3 Empirical validation | The budget utility and the exact paired test landed, and six budget-matched comparisons are recorded; no empirical alignment and no external tool ([#126](https://github.com/michaelJwilson/snakes_and_ladders/issues/126)) | Every comparison at one budget over shared seeds with McNemar's exact test: the glass, Rastrigin, the mixture, the relaxation against greedy, the cluster updates at the transition, and the tree's starts at equal evaluations | [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348) |
-| 2.4 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded; the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
+| 2.4 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded, each capped at a ten-line body (#458); the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template and the cap per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
 | Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half landed, refereed by enumeration and the Hadamard closed form, and not shown to beat a classical baseline, so it is conserved in `sandbox/`; learned surrogates rank a neighbourhood with exact re-scoring of the top candidates; stochastic escape by epsilon-greedy landed | Gumbel-softmax exact at every corner to 1e-11 and deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098`; the tropical relaxation exact at every corner to 3.8e-16 relative, four-point violation of the Hadamard metric under 1e-12, ascent 8/8 at five and six taxa and 7/8 at eight against the enumerated maximum, and neighbor joining reaching it at no gradient steps; a surrogate-ranked SPR search reaches its optimum from 4/4 starts at 5 fits against 312; escape from a local optimum rises from 0.111 at `epsilon = 0` to 0.883 at 0.4 | [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 
 ## Progress Since the 0.4.0 Audit
@@ -1204,7 +1204,13 @@ returns every fixture and random trees at 20 and 50 taxa from their path
 lengths with every branch to `1e-12`, and on the six-taxon fixture recovers the
 topology on every replicate inside Atteson's radius of 0.030 — recovery
 **0.72, 0.96, 1.00 and 1.00** over 50 seeds at 100, 300, 1,500 and 10,000 sites, with
-**0, 0, 2 and 46** replicates inside the radius. `likelihood.hadamard` is the
+**0, 0, 2 and 46** replicates inside the radius. The guarantee is narrower than
+the recovery: against the largest distance standard error and the largest
+realized error at each fixture's declared sites and seed, the radius is
+**0.035** against **0.040** and **0.046** at five taxa, **0.030** against
+**0.039** and **0.056** at six, and **0.025** against **0.0035** and
+**0.0065** at eight, so neighbor joining recovers all three topologies and
+only the eight-taxon fixture sits inside the theorem. `likelihood.hadamard` is the
 two-state Hadamard conjugation at up to 12 taxa, exact to `1e-12` against the
 pruning likelihood evaluated on every pattern, with the four-state alignment
 reduced to it at `2/3` of every branch; the Kimura three-parameter conjugation
@@ -2006,9 +2012,21 @@ and this file now cites them. Six are recorded at 0.5.0: the mixture at 3,000
 evaluations (004), the tree policy's feature set (005), and the tree's starts
 at equal evaluations (006). The applicability tables of §1.3 cite a file by
 its number, and a citation naming one that does not exist fails the
-generation, so a retraction cannot leave the textbook pointing at nothing. The Aim run store (#75) is part 2, behind the
-dependency's approval; until then the Results section is typed from the
-measurement and names the script that produced it.
+generation, so a retraction cannot leave the textbook pointing at nothing.
+
+**The record is capped at one screen, so what it holds is chosen**
+([#458](https://github.com/michaelJwilson/snakes_and_ladders/issues/458)).
+Seven prose sections collapse to three — question, numbers, finding — and the
+body is at most ten non-blank lines after the front matter, section headings
+counted and the `# ` title not; the front matter is untouched, since it is the
+reproducibility record. The six files fall from **70, 69, 69, 114, 82 and 141**
+lines to **34, 34, 33, 34, 34 and 34**, bodies of **10, 10, 9, 10, 10 and 10**
+counted lines, every one of them a question, a table and a finding. No number
+was deleted to fit: each one displaced was already evidence in this file or an
+argument in the pull request that carried it, and the guard that validates the
+files now fails an eleven-line body. The Aim run store (#75) is part 2, behind the
+dependency's approval; until then the numbers are typed from the
+measurement and the file names the command that produced them.
 
 ## Stage 3 — Research Extensions
 
