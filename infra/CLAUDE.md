@@ -9,7 +9,14 @@ coverage over, from the files it changed. It reads the import graph rather than
 a list of dependents, and answers "everything" for any change it cannot
 attribute to one module — a lockfile, a shared fixture, this directory. A
 selection that guesses narrowly is a test that silently did not run, so the
-unsafe answer is the one that looks like a saving.
+unsafe answer is the one that looks like a saving. Nothing bounds that answer:
+a bound and the fixed timeout that reads it cannot coexist, because the
+timeout then cancels the pull requests the bound refused and a cancelled job
+is indistinguishable from a failing one.
+
+A worktree is created by `new_worktree.sh` rather than by a convention in a
+brief. A step a person repeats is a step a person skips, and each of the ones
+it replaces had already been skipped.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file too — and every docstring, comment and commit message
