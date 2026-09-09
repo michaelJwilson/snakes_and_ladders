@@ -122,7 +122,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
   and from 3×3 to 4×6 lattices, and a policy does not yet — the lattice
   half is filed (#414)
-- Batched episode rollout, so a budget at `n = 200` is affordable
+- Batched episode rollout, so a budget at `n = 200` is affordable. `search.gym.rollout_batch` collects a batch through `gymnasium.vector`, refereed against the sequential rollout draw for draw, and is 1.18x to 1.68x *slower* per episode: `SyncVectorEnv` is a serial loop in one process (#392, `docs/experiments/007-batched-rollout-and-torchrl-ppo.md`). What remains is a collector with real parallelism
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed
 
@@ -187,7 +187,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - TorchRL `TensorDict` environments and a `SyncDataCollector` over the
   Gymnasium adapter for Milestone 2.2's batched rollout, adopted only if the
   collector beats `learn.rollout` on the 8 → 20 taxa scaling with `float64`
-  forced throughout
+  forced throughout. The `SyncVectorEnv` half of this was measured and
+  declined (#392); TorchRL's `GAE` and `ClipPPOLoss` were too (#391), and
+  stay what they were, the second implementation refereeing ours at 1e-10
 - PyTorch Geometric `Batch.from_data_list` for surrogate training at 20+
   taxa, and `HeteroData` over `sim.factor_graph` for a learned message
   passing beside the exact one, gated on the training-time benchmark

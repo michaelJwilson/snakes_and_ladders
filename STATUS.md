@@ -149,6 +149,31 @@ conversion is below the cost of the cheapest call it would front at every
 size, and no hot path moves until a measured adoption says so; `TICKETS.md`
 carries the three candidates.
 
+**Two of the replacements are measured, and both are declined
+([#391](https://github.com/michaelJwilson/snakes_and_ladders/issues/391),
+[#392](https://github.com/michaelJwilson/snakes_and_ladders/issues/392),
+`docs/experiments/007-batched-rollout-and-torchrl-ppo.md`).**
+`search.gym.rollout_batch` collects a batch of episodes through
+`gymnasium.vector.SyncVectorEnv`, with `TimeLimit` carrying the decision budget
+and `RecordEpisodeStatistics` the episode boundary, and at one copy equals
+`learn.rollout.rollout` under the same generator draw for draw. It costs 1.311,
+0.993 and 0.945 ms per episode at batch 1, 4 and 16 on the Potts chain against
+the sequential rollout's 0.803, and 1.519, 1.506 and 1.647 ms against 0.981 on
+the 5-taxon tree: `SyncVectorEnv` is a serial loop in one process, so it has no
+parallelism to amortize the vector API's observation stacking and autoreset
+bookkeeping against, and no batch size makes it pay. TorchRL's `GAE` is 220x
+slower than the recursion it would front, 6.384 ms against 0.029 ms per
+32-episode batch. Its `ClipPPOLoss` cannot front `ppo_loss` at that function's
+signature at all --- it takes the actor, not the log-probabilities --- and a
+whole PPO loop rebuilt on it ran the 1,920-episode Potts-chain budget in 6.31 s
+against 8.06 s, at the identical result: 96.30% of the 81 starts, exact expected
+return 2.2779, and a sampled learning curve agreeing iteration for iteration to
+0.0. Of that 1.28x, 1.13x is the neighbourhood scoring hoisted out of PPO's
+epoch loop and the rest is clipping the concatenated batch instead of looping
+over episodes; both are changes to `learn.ppo`, which now runs the same budget
+in 6.25 s, and TorchRL stays what it already was here, the second implementation
+refereeing ours at 1e-10.
+
 **CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
 three negative results
 ([#344](https://github.com/michaelJwilson/snakes_and_ladders/issues/344)).**

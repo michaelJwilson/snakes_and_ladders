@@ -95,24 +95,48 @@ def episode_advantages[S, A](
     return advantages
 
 
-def _log_probabilities[S, A](
-    environment: Environment[S, A],
-    policy: TrainablePolicy | EpsilonGreedyPolicy,
-    episodes: Sequence[Episode[S, A]],
-) -> list[torch.Tensor]:
-    """``log pi(a_t | s_t)`` for every decision, one tensor per episode, on the current graph."""
-    out = []
+type Neighbourhoods = list[list[tuple[torch.Tensor, int]]]
+
+
+def _neighbourhoods[S, A](
+    environment: Environment[S, A], episodes: Sequence[Episode[S, A]]
+) -> Neighbourhoods:
+    """Every decision's neighbourhood features and the index taken, per episode.
+
+    Scored once for the whole batch, because PPO reuses a batch for
+    ``epochs`` gradient steps and the neighbourhood a decision was taken
+    from does not move while the policy is updated on it. Scoring it inside
+    the epoch loop instead spent the batch's ``environment.actions`` and
+    ``environment.features`` four times over: on the Potts chain at the CI
+    budget of 1,920 episodes that was 8.06 s against 7.14 s, with the
+    training curve identical iteration for iteration.
+    """
+    out: Neighbourhoods = []
     for episode in episodes:
         steps = []
         for step, action in enumerate(episode.actions):
             state = episode.states[step]
             available = environment.actions(state)
-            log_probabilities = policy.log_probabilities(
-                environment.features(state, available)
+            steps.append(
+                (environment.features(state, available), available.index(action))
             )
-            steps.append(log_probabilities[available.index(action)])
-        out.append(torch.stack(steps) if steps else torch.zeros(0, dtype=torch.float64))
+        out.append(steps)
     return out
+
+
+def _log_probabilities(
+    policy: TrainablePolicy | EpsilonGreedyPolicy,
+    neighbourhoods: Neighbourhoods,
+) -> list[torch.Tensor]:
+    """``log pi(a_t | s_t)`` for every decision, one tensor per episode, on the current graph."""
+    return [
+        torch.stack(
+            [policy.log_probabilities(features)[index] for features, index in steps]
+        )
+        if steps
+        else torch.zeros(0, dtype=torch.float64)
+        for steps in neighbourhoods
+    ]
 
 
 def ppo_loss(
@@ -126,27 +150,49 @@ def ppo_loss(
 
     Returns the loss and the fraction of steps at which the clipped term was
     the active one, a diagnostic of how far the policy has moved.
+
+    The episodes are concatenated and clipped in one pass. The objective is a
+    sum over every decision divided by the number of *episodes*, so the
+    episode boundaries carry no term of their own and a loop over them was
+    Python interpreting what one vectorized clip does: at the CI budget of
+    1,920 episodes the loop cost 6.84 s against 6.25 s, and the sole
+    difference is the order the sum is accumulated in.
     """
     if clip <= 0.0:
         msg = f"clip must be positive (use math.inf for no clipping), got {clip}"
         raise ValueError(msg)
-    total = torch.zeros(
-        (), dtype=log_probabilities[0].dtype if log_probabilities else torch.float64
+    dtype = log_probabilities[0].dtype if log_probabilities else torch.float64
+    current = torch.cat(
+        [t for t in log_probabilities if t.shape[0]] or [torch.zeros(0, dtype=dtype)]
     )
-    clipped, steps = 0, 0
-    for current, old, episode_advantages in zip(
-        log_probabilities, old_log_probabilities, advantages, strict=True
-    ):
-        if current.shape[0] == 0:
-            continue
-        ratio = torch.exp(current - old.detach())
-        weights = torch.as_tensor(list(episode_advantages), dtype=current.dtype)
-        unclipped = ratio * weights
-        limited = torch.clamp(ratio, 1.0 - clip, 1.0 + clip) * weights
-        total = total + torch.minimum(unclipped, limited).sum()
-        clipped += int((limited < unclipped).sum())
-        steps += int(current.shape[0])
-    return -total / len(log_probabilities), (clipped / steps if steps else 0.0)
+    old = torch.cat(
+        [
+            t.detach()
+            for t, c in zip(old_log_probabilities, log_probabilities, strict=True)
+            if c.shape[0]
+        ]
+        or [torch.zeros(0, dtype=dtype)]
+    )
+    weights = torch.as_tensor(
+        [
+            a
+            for episode, c in zip(advantages, log_probabilities, strict=True)
+            if c.shape[0]
+            for a in episode
+        ],
+        dtype=dtype,
+    )
+    steps = int(current.shape[0])
+    if steps == 0:
+        return torch.zeros((), dtype=dtype), 0.0
+    ratio = torch.exp(current - old)
+    unclipped = ratio * weights
+    limited = torch.clamp(ratio, 1.0 - clip, 1.0 + clip) * weights
+    clipped = int((limited < unclipped).sum())
+    return (
+        -torch.minimum(unclipped, limited).sum() / len(log_probabilities),
+        clipped / steps,
+    )
 
 
 def ppo[S, A](
@@ -212,19 +258,16 @@ def ppo[S, A](
             fit_critic(critic, features, targets, steps=critic_steps).losses[-1]
         )
         advantages = episode_advantages(environment, episodes, critic, lam=lam)
+        neighbourhoods = _neighbourhoods(environment, episodes)
         with torch.no_grad():
-            old = [
-                t.detach() for t in _log_probabilities(environment, collector, episodes)
-            ]
+            old = [t.detach() for t in _log_probabilities(collector, neighbourhoods)]
         fraction = 0.0
         for _ in range(epochs):
             optimizer.zero_grad()
-            current = _log_probabilities(environment, policy, episodes)
+            current = _log_probabilities(policy, neighbourhoods)
             loss, fraction = ppo_loss(current, old, advantages, clip=clip)
             if entropy_coefficient > 0.0:
-                loss = loss - entropy_coefficient * _entropy(
-                    environment, policy, episodes
-                )
+                loss = loss - entropy_coefficient * _entropy(policy, neighbourhoods)
             loss.backward()  # type: ignore[no-untyped-call]
             optimizer.step()
         clipped_fraction.append(fraction)
@@ -239,19 +282,13 @@ def ppo[S, A](
     )
 
 
-def _entropy[S, A](
-    environment: Environment[S, A],
-    policy: TrainablePolicy,
-    episodes: Sequence[Episode[S, A]],
-) -> torch.Tensor:
-    """Mean policy entropy over the visited decisions."""
+def _entropy(policy: TrainablePolicy, neighbourhoods: Neighbourhoods) -> torch.Tensor:
+    """Mean policy entropy over the visited decisions, on the scored neighbourhoods."""
     total = torch.zeros((), dtype=policy.dtype)
     count = 0
-    for episode in episodes:
-        for state in episode.states[:-1]:
-            log_probabilities = policy.log_probabilities(
-                environment.features(state, environment.actions(state))
-            )
+    for steps in neighbourhoods:
+        for features, _ in steps:
+            log_probabilities = policy.log_probabilities(features)
             total = total - (torch.exp(log_probabilities) * log_probabilities).sum()
             count += 1
     return total / max(count, 1)
