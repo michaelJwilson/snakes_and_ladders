@@ -1,9 +1,10 @@
 """Type stub for the compiled `snakes_and_ladders.oxi_snakes_and_ladders` Rust extension.
 
 Hand-written, so it can drift: keep the signatures here matching the
-`#[pyfunction]` and `#[pyclass]` definitions in src/lib.rs, src/pruning.rs, src/maxflow.rs
-and src/sampling.rs. Issue #37 tracks putting `stubtest` in CI so the drift
-is caught by a check rather than by whoever notices; until then,
+`#[pyfunction]` and `#[pyclass]` definitions in src/lib.rs, src/pruning.rs,
+src/maxflow.rs, src/sampling.rs, src/coupled.rs and src/count_pairs.rs. Issue
+#37 tracks putting `stubtest` in CI so the drift is caught by a check rather
+than by whoever notices; until then,
 `mypy --strict` catches only the direction where the stub is missing something
 a caller uses, which is how `sample_rows` was caught.
 """
@@ -63,4 +64,48 @@ def single_site_sweeps(
     couplings: np.ndarray,
     draws: np.ndarray,
     n_sweeps: int,
+) -> None: ...
+def class_posteriors(
+    totals: np.ndarray,
+    successes: np.ndarray,
+    labels: np.ndarray,
+    total_table: np.ndarray,
+    success_table: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    n_positions: int,
+    n_nodes: int,
+    n_classes: int,
+    n_states: int,
+    posterior: np.ndarray,
+    pairwise: np.ndarray,
+    log_evidence: np.ndarray,
+) -> None: ...
+def external_field(
+    totals: np.ndarray,
+    successes: np.ndarray,
+    total_table: np.ndarray,
+    success_table: np.ndarray,
+    weights: np.ndarray,
+    n_positions: int,
+    n_nodes: int,
+    n_classes: int,
+    n_states: int,
+    field: np.ndarray,
+) -> None: ...
+def simulate_count_pairs(
+    seed: int,
+    states: np.ndarray,
+    labels: np.ndarray,
+    dispersion: np.ndarray,
+    mean: np.ndarray,
+    trials: np.ndarray,
+    alpha: np.ndarray,
+    beta: np.ndarray,
+    n_positions: int,
+    n_nodes: int,
+    n_classes: int,
+    n_states: int,
+    totals: np.ndarray,
+    successes: np.ndarray,
 ) -> None: ...

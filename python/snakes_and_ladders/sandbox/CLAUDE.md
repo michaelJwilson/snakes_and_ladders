@@ -56,6 +56,9 @@ an adoption. `STATUS.md` carries the measurement and the module's first
 paragraph states it; its regression tests pin the handle bitwise against
 `likelihood.pruning_rust`, which is unchanged and remains the backend.
 
+`tropical`, the declined tropical Grassmannian relaxation of topology search
+(issue #408), is here on the same reading.
+
 The frameworks issue #322 adopted arrived as adapters and as referees — a
 Gymnasium adapter over the unchanged `learn.Environment` protocol,
 `rustworkx` conversions beside the generators they are checked against,
