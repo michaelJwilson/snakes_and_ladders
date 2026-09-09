@@ -19,6 +19,8 @@ use oxi_snakes_and_ladders::coupled::{
 };
 use oxi_snakes_and_ladders::double;
 use oxi_snakes_and_ladders::pruning::{pruning_log_likelihood_impl, LeafObservations};
+#[cfg(feature = "sandbox")]
+use oxi_snakes_and_ladders::pruning_burn::pruning_gradient_impl;
 use oxi_snakes_and_ladders::sampling::sample_rows_impl;
 
 fn bench_double(c: &mut Criterion) {
@@ -178,6 +180,54 @@ fn bench_sample_rows(c: &mut Criterion) {
     }
 }
 
+/// `burn`'s taped gradient (`src/pruning_burn.rs`) at the sites the fitted
+/// path runs at, for issue #449's comparison. This is the kernel alone; the
+/// same route through the binding is
+/// `tests/benchmarks/test_pruning_gradient_bench.py`, and the difference
+/// between the two numbers is the FFI boundary -- which is the whole question,
+/// since issue #436 measured a 28-35% criterion win arriving through the
+/// binding as nothing.
+///
+/// One iteration is a forward pass and a backward pass, so it is comparable
+/// with `bench_pruning_log_likelihood`'s forward-only number rather than a
+/// substitute for it.
+///
+/// Behind the `sandbox` Cargo feature, with the route it times: the default
+/// build links no `burn`.
+#[cfg(feature = "sandbox")]
+fn bench_pruning_gradient(c: &mut Criterion) {
+    let k = 4usize;
+    let pi = vec![0.25, 0.25, 0.25, 0.25];
+
+    let mut group = c.benchmark_group("pruning_gradient_burn");
+    for &(n_leaves, n_sites, label) in &[
+        (4usize, 20_000usize, "4taxa_20000sites"),
+        (8usize, 20_000usize, "8taxa_20000sites"),
+    ] {
+        let (branch_length, children, leaf_states, leaf_row) =
+            build_balanced_tree(n_leaves, n_sites, k, 20260930);
+        group.bench_function(label, |b| {
+            b.iter(|| {
+                pruning_gradient_impl(
+                    std::hint::black_box(&branch_length),
+                    std::hint::black_box(&children),
+                    std::hint::black_box(LeafObservations {
+                        states: &leaf_states,
+                        n_sites,
+                        row: &leaf_row,
+                    }),
+                    k,
+                    &pi,
+                    None,
+                    true,
+                )
+                .unwrap()
+            })
+        });
+    }
+    group.finish();
+}
+
 /// The coupled E step and its field, at the shape of the declared
 /// 5,041-vertex instance's coarsest bin factor scaled down to fit a
 /// benchmark's budget: 200 positions rather than 2,000, at the instance's own
@@ -248,6 +298,16 @@ fn bench_class_posteriors(c: &mut Criterion) {
     });
 }
 
+#[cfg(feature = "sandbox")]
+criterion_group!(
+    benches,
+    bench_double,
+    bench_pruning_log_likelihood,
+    bench_sample_rows,
+    bench_class_posteriors,
+    bench_pruning_gradient
+);
+#[cfg(not(feature = "sandbox"))]
 criterion_group!(
     benches,
     bench_double,

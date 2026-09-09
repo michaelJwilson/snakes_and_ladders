@@ -103,7 +103,9 @@ if echo "$changed" | grep -q '^docs/source/' \
 fi
 
 if echo "$changed" | grep -qE '^(docs/nb/|python/snakes_and_ladders/|tests/regression/fixtures/)'; then
-  # Skips every notebook whose inputs are unchanged since its last execution.
+  # Every notebook under docs/nb/, not the ones a digest calls stale: which
+  # claims a run verifies is not a hash's decision (issue #480). The six cost
+  # the number DEV.md's budget table carries, inside the 300 s.
   step "notebooks" uv run python infra/check_notebooks.py
 fi
 
