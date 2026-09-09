@@ -123,6 +123,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.pruning_rust
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.pruning_analytic
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.brute_force
    :members:
 
@@ -328,6 +331,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.tropical
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.pruning_burn
    :members:
 
 .. automodule:: snakes_and_ladders.qa

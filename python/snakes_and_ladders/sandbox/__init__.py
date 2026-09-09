@@ -19,5 +19,9 @@ per search rather than once per pass (issue #444), which cut bytes per pass
 
 ``tropical`` is here on the second rule: the tropical Grassmannian relaxation
 of topology search (issue #408), which neighbor joining matched at no
-gradient steps at every size enumeration referees.
+gradient steps at every size enumeration referees. ``pruning_burn`` is here on
+the same rule: `burn`'s taped gradient over the Felsenstein recursion (issue
+#449), which cost 46.80 ms against the route that replaced it at 16.36. Its
+Rust half is behind the ``sandbox`` Cargo feature and absent from the default
+build, so the module imports either way and refuses to run without it.
 """
