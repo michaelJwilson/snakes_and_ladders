@@ -1,8 +1,9 @@
 """The textbook's applicability tables are what ``PROBLEMS.md`` generates (issue #358).
 
-The same contract as ``CHECKS.md`` and a QA figure: the committed file is
-what the tool writes, the textbook names no code, and a catalogue symbol the
-generator cannot name fails rather than dropping out of the table.
+The file is generated and not committed (issue #425), so what is checked is
+what the tool writes: the textbook names no code, every catalogue row reaches
+the table, and a catalogue symbol the generator cannot name fails rather than
+dropping out of it.
 
 Since issue #376 the file carries a third table, in four parts, pairing each
 problem with each method family. Two things there can go wrong quietly and
@@ -24,17 +25,17 @@ sys.path.insert(0, str(REPO_ROOT / "infra"))
 import problems_tables  # noqa: E402
 
 
-@pytest.mark.structural
-def test_the_committed_tables_are_what_the_generator_writes() -> None:
-    # Regenerate with `python infra/problems_tables.py --write`.
-    assert problems_tables.GENERATED.read_text() == problems_tables.render()
+@pytest.fixture(scope="module")
+def generated() -> str:
+    """What the generator writes, rendered once for the module."""
+    return problems_tables.render()
 
 
 @pytest.mark.structural
-def test_the_generated_file_names_no_code() -> None:
+def test_the_generated_file_names_no_code(generated: str) -> None:
     # The textbook inputs this file, and `docs/CLAUDE.md` forbids a module
     # path, a filename or a function call in the textbook.
-    text = problems_tables.GENERATED.read_text()
+    text = generated
     assert [
         needle
         for needle in ("snakes_and_ladders.", ".py", "\\texttt{")
@@ -43,10 +44,10 @@ def test_the_generated_file_names_no_code() -> None:
 
 
 @pytest.mark.structural
-def test_every_catalogue_row_has_an_algorithm_and_an_oracle() -> None:
+def test_every_catalogue_row_has_an_algorithm_and_an_oracle(generated: str) -> None:
     # A row with no oracle would be a problem nothing referees, which the
     # catalogue's own preamble forbids.
-    text = problems_tables.GENERATED.read_text()
+    text = generated
     # Twice for the algorithm and oracle tables, once per method family.
     appearances = 2 + len(problems_tables.METHOD_FAMILIES)
     for problem, symbols in problems_tables.rows():
@@ -69,7 +70,7 @@ def test_every_problem_and_family_pairing_appears_once_per_family_table() -> Non
 
 
 @pytest.mark.structural
-def test_a_pairing_the_suite_does_not_pin_is_marked_untested() -> None:
+def test_a_pairing_the_suite_does_not_pin_is_marked_untested(generated: str) -> None:
     # The catalogue carries a Gaussian-mixture initializer and a general
     # time-reversible start that no test of either significant kind names.
     # They are the standing examples, and each must be marked and not omitted.
@@ -78,7 +79,7 @@ def test_a_pairing_the_suite_does_not_pin_is_marked_untested() -> None:
         for problem, family, _, referee, _ in problems_tables.method_cells()
         if referee == "untested"
     }
-    text = problems_tables.GENERATED.read_text()
+    text = generated
 
     assert marked, "no untested pairing: the mark itself is then unexercised"
     assert ("Gaussian mixture", "initializers") in marked
