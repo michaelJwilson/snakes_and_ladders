@@ -523,7 +523,12 @@ and one L-BFGS fit **454.2 ms (38.7) against 694.5 (52.3)**, both converging to
 148940.229159. Half the saving is in the forward pass, which builds no graph:
 12.38 ms taped against 8.10 under `no_grad`. The gradient agrees with the taped
 one to 2.1e-13 relative, passes `gradcheck` in `float64`, and leaves
-`search.infer`'s topology, trace, evaluations and fits unchanged.
+`search.infer`'s topology, trace, evaluations and fits unchanged. The ordering
+is the same at 4 taxa — 5.68 ms (0.74) against the taped 9.82 (1.11) — and
+against central differences swept over steps 1e-4 to 1e-7 all three routes
+deviate by the same amount to four significant figures, worst 9.5e-4 at
+h = 1e-4 and 1.007e-6 at h = 1e-6, so the deviation is the difference
+quotient's and not any gradient's.
 
 A `burn` `Autodiff<NdArray<f64>>` port of the same recursion was measured
 beside it and **declined**: 46.80 ms (3.86) per gradient and 1179.1 (144.1) per
@@ -533,8 +538,8 @@ is 48.01 ms [46.94, 49.27] by Criterion against 47.06 (6.09) for the same call
 from Python, so the crossing is inside the spread and the kernel by itself
 already costs 1.45x PyTorch's whole evaluation. Its `f64` path was sound —
 5.9e-13 against the taped `float64` gradient — so precision is not why it lost.
-`docs/experiments/007-pruning-gradient-routes.md` carries every number and the
-prediction they were taken to test. The route is conserved rather than deleted,
+`docs/experiments/007-pruning-gradient-routes.md` carries the question, the
+three routes' numbers and the prediction they were taken to test. The route is conserved rather than deleted,
 as `snakes_and_ladders.sandbox.pruning_burn` over `src/pruning_burn.rs` behind
 the `sandbox` Cargo feature, so the comparison can be re-run; the default
 build, the wheel and every per-pull-request job link no `burn`, and
