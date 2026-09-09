@@ -296,15 +296,18 @@ def test_every_manifest_entry_states_a_measured_time() -> None:
     assert all(spec.seconds > 0 for spec in FIGURES)
 
 
-# --- Reachability, in both directions ---------------------------------------
+# --- The closure hash, in both directions -----------------------------------
 #
-# The stamp narrowed from "every module the renderer imports" to "every
-# definition it executes" (issue #418, part 3). The saving is worth nothing on
-# its own: a stamp that misses a change publishes a committed figure the code
-# no longer produces, and nothing else in the suite would notice. So each test
-# below that pins a saving has a sibling pinning the fire, and the walk's own
-# escape hatch --- a module it cannot narrow --- is asserted rather than
-# trusted.
+# The unit of the hash is a module's AST with docstrings removed, over the
+# renderer's whole import closure. The saving is worth nothing on its own: a
+# stamp that misses a change publishes a committed figure the code no longer
+# produces, and nothing else in the suite would notice. So each test that pins
+# a saving has a sibling pinning the fire.
+#
+# Issue #418 narrowed this further, to the definitions the entry point
+# executes. Over the twelve branches merged before 2026-09-09 that walk staled
+# the same 26 figures this hash does --- it saved none --- and it cost seven
+# fallbacks, so #425 removed it and the tests that pinned them.
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 #: The module every figure renderer imports, and the one whose edits were
@@ -372,21 +375,6 @@ def _staled_by(root: Path, edit: tuple[str, str, str]) -> set[str]:
 
 
 @pytest.mark.structural
-def test_no_cited_figure_falls_back_to_a_whole_module() -> None:
-    # What makes the counts below mean anything. Each is measured on a walk
-    # that narrowed every module it crossed; one renderer falling back to a
-    # whole module would restamp on any edit to it and the saving would be
-    # reported for a case that is not being exercised.
-    reported = {
-        spec.stem: spec.reach(REPO_ROOT).fallbacks
-        for spec in _cited()
-        if spec.reach(REPO_ROOT).fallbacks
-    }
-
-    assert reported == {}
-
-
-@pytest.mark.structural
 def test_prose_in_a_shared_module_stales_no_figure(repo_copy: Path) -> None:
     # The case the AST hash exists for. `qa/runner.py` is in every cited
     # figure's closure, so before this a reworded docstring there restamped
@@ -418,43 +406,13 @@ def test_a_comment_in_a_shared_module_stales_no_figure(repo_copy: Path) -> None:
 
 
 @pytest.mark.structural
-def test_a_constant_no_renderer_reads_stales_no_figure(repo_copy: Path) -> None:
-    # #394's measured case exactly: two parameter constants declared beside
-    # the ones the renderers do read.
-    declaration = 'LDPC_PARAMS = ParamsArgument("params", load_ldpc_params)'
-    staled = _staled_by(
-        repo_copy,
-        (
-            SHARED,
-            declaration,
-            f'{declaration}\nUNREAD_A = ParamsArgument("a", load_ldpc_params)\n'
-            'UNREAD_B = ParamsArgument("b", load_ldpc_params)',
-        ),
-    )
-
-    assert staled == set()
-
-
-@pytest.mark.structural
-def test_an_edit_to_a_reached_function_stales_every_figure_that_calls_it(
+def test_an_edit_to_a_shared_module_stales_every_figure_that_imports_it(
     repo_copy: Path,
 ) -> None:
-    # The direction that matters. `figure_main` is what every figure renderer
-    # calls; `table_main` is what only the table renderers call. Each must
-    # stale exactly its callers -- fewer is a figure published against code
-    # that no longer produces it.
-    tables = {
-        spec.stem
-        for spec in _cited()
-        if "table_main"
-        in (REPO_ROOT / "python" / Path(*spec.module.split(".")))
-        .with_suffix(".py")
-        .read_text()
-    }
-    figures = {spec.stem for spec in _cited()} - tables
-    assert tables, "the cited set must contain a table renderer"
-    assert figures, "the cited set must contain a figure renderer"
-
+    # The direction that matters, and the price of the closure hash: an edit
+    # to a statement in `qa/runner.py` stales every cited figure, because
+    # every one of them imports it. Fewer would be a figure published against
+    # code that no longer produces it.
     staled = _staled_by(
         repo_copy,
         (
@@ -464,195 +422,23 @@ def test_an_edit_to_a_reached_function_stales_every_figure_that_calls_it(
         ),
     )
 
-    assert staled == figures
+    assert staled == {spec.stem for spec in _cited()}
 
 
 @pytest.mark.structural
-def test_an_edit_reached_by_one_renderer_stales_only_that_one(
-    repo_copy: Path,
-) -> None:
-    tables = {
-        spec.stem
-        for spec in _cited()
-        if "table_main"
-        in (REPO_ROOT / "python" / Path(*spec.module.split(".")))
-        .with_suffix(".py")
-        .read_text()
-    }
-
-    staled = _staled_by(
-        repo_copy,
-        (
-            SHARED,
-            'log.info("wrote %s and %s", written.table_path, written.caption_path)',
-            'log.info("wrote %s / %s", written.table_path, written.caption_path)',
-        ),
-    )
-
-    assert staled == tables
-
-
-def _opaque_tree(root: Path, extra: str) -> FigureSpec:
-    """A two-module package whose shared module carries ``extra``.
-
-    ``entry`` calls ``shared.used`` and never names ``shared.unused``, so a
-    walk that narrows correctly hashes the first and not the second. ``extra``
-    is the line that decides whether it may narrow at all.
-
-    Returns
-    -------
-    FigureSpec
-        A spec whose module is ``entry``.
-    """
-    package = root / "python" / "snakes_and_ladders"
-    (package / "qa").mkdir(parents=True)
-    (package / "__init__.py").write_text("")
-    (package / "qa" / "__init__.py").write_text("")
-    (package / "reg.py").write_text("def register(f):\n    return f\n")
-    (package / "other.py").write_text("VALUE = 1\n")
-    (package / "shared.py").write_text(
-        f"{extra}\n\n\ndef used():\n    return 1\n\n\ndef unused():\n    return 2\n"
-    )
-    (package / "qa" / "entry.py").write_text(
-        "from snakes_and_ladders.shared import used\n\n\ndef main():\n    return used()\n"
-    )
-    return FigureSpec("entry", "snakes_and_ladders.qa.entry", (), seconds=1.0)
-
-
-#: One line per way a module can reach a definition no name in it points at.
-#: Each must put the module in `Reach.fallbacks`; the test below then pins that
-#: the fallback restores the guarantee rather than merely reporting a doubt.
-OPAQUE_LINES = (
-    "from snakes_and_ladders.other import *",
-    "import snakes_and_ladders.other",
-    "from snakes_and_ladders import other\nX = getattr(other, 'VALUE')",
-    "import importlib",
-    "def __getattr__(name):\n    return name",
-    "X = globals()",
-    "from snakes_and_ladders.reg import register\n\n\n@register\ndef hidden():\n    return 3",
-)
-
-
-@pytest.mark.critical
-@pytest.mark.structural
-@pytest.mark.parametrize("extra", OPAQUE_LINES)
-def test_a_module_the_walk_cannot_narrow_is_named_and_hashed_whole(
-    tmp_path: Path, extra: str
-) -> None:
-    # The guarantee's escape hatch, asserted rather than silent. Each line is
-    # a way to call a definition the import graph does not name; the walk must
-    # say so and then hash the module whole, so a change to a function nothing
-    # references still moves the digest.
-    spec = _opaque_tree(tmp_path, extra)
-    reach = spec.reach(tmp_path)
-    before = spec.input_digest(tmp_path)
-
-    assert [entry.split(":")[0] for entry in reach.fallbacks] == [
-        "snakes_and_ladders.shared"
-    ]
-
-    shared = tmp_path / "python" / "snakes_and_ladders" / "shared.py"
-    shared.write_text(shared.read_text().replace("return 2", "return 22"))
-
-    assert spec.input_digest(tmp_path) != before
-
-
-#: Constructs that look like the ones above and are not. A walk that fell back
-#: on these would report a saving it is not making, which is why they are
-#: pinned beside the fallbacks rather than left to the counts to reveal.
-BENIGN_LINES = (
-    "from importlib import metadata\nX = metadata.version('numpy')",
-    "import argparse\n\n\ndef parse(a):\n    return getattr(a, 'flag')",
-    "import numpy as np\nX = np.zeros(3)",
-    "from dataclasses import dataclass\n\n\n@dataclass\nclass Held:\n    x: int",
-)
-
-
-@pytest.mark.critical
-@pytest.mark.structural
-@pytest.mark.parametrize("extra", BENIGN_LINES)
-def test_a_lookup_that_cannot_reach_a_definition_is_not_a_fallback(
-    tmp_path: Path, extra: str
-) -> None:
-    # `getattr` on an `argparse` namespace reaches an attribute of that object,
-    # never a definition this walk could have missed; reading a version out of
-    # `importlib.metadata` imports nothing chosen at run time. Falling back on
-    # either would leave `qa/runner.py` --- which does the first --- hashed
-    # whole, and the measured case unfixed.
-    spec = _opaque_tree(tmp_path, extra)
-
-    assert spec.reach(tmp_path).fallbacks == ()
-
-
-@pytest.mark.critical
-@pytest.mark.structural
-def test_a_module_the_walk_can_narrow_charges_only_what_is_reached(
+def test_the_rust_sources_are_inputs_only_where_the_closure_names_the_extension(
     tmp_path: Path,
 ) -> None:
-    # The saving, and its bound: with nothing opaque in it, the unreached
-    # function is not an input and the reached one is.
-    spec = _opaque_tree(tmp_path, "CONSTANT = 1")
-    before = spec.input_digest(tmp_path)
-
-    assert spec.reach(tmp_path).fallbacks == ()
-
-    shared = tmp_path / "python" / "snakes_and_ladders" / "shared.py"
-    shared.write_text(shared.read_text().replace("return 2", "return 22"))
-    assert spec.input_digest(tmp_path) == before
-
-    shared.write_text(shared.read_text().replace("return 1", "return 11"))
-    assert spec.input_digest(tmp_path) != before
-
-
-#: Ways one definition reaches another that are not a plain call. Each is a way
-#: the walk could under-fire, which is the direction that breaks the guarantee.
-INDIRECT_REFERENCES = (
-    "HANDLERS = {'a': target}\n\n\ndef used():\n    return HANDLERS['a']()",
-    "def used(f=target):\n    return f()",
-    "class Used:\n    def go(self):\n        return target()\n\n\ndef used():\n    return Used().go()",
-    "def used():\n    def inner():\n        return target()\n    return inner()",
-    "class Base:\n    pass\n\n\nclass Used(target):\n    pass\n\n\ndef used():\n    return Used()",
-    "def used():\n    return [target() for _ in range(1)]",
-)
-
-
-@pytest.mark.critical
-@pytest.mark.structural
-@pytest.mark.parametrize("shape", INDIRECT_REFERENCES)
-def test_a_definition_reached_indirectly_is_still_an_input(
-    tmp_path: Path, shape: str
-) -> None:
-    # A call is not the only way one definition reaches another: a dispatch
-    # table, a default argument, a method, a closure, a base class and a
-    # comprehension all do. Each must be followed, or the digest under-fires.
+    # The closure applied to the kernel: a renderer whose closure names the
+    # extension is restamped by a kernel change and one whose closure does not
+    # is left alone. The package's `__init__` is empty here so the two cases
+    # are distinguishable; in the checkout it re-exports `double`, which puts
+    # every renderer on the first side. That over-approximation cost nothing
+    # over the twelve branches merged before 2026-09-09, none of which touched
+    # `src/` or `Cargo.lock`.
     package = tmp_path / "python" / "snakes_and_ladders"
     (package / "qa").mkdir(parents=True)
     (package / "__init__.py").write_text("")
-    (package / "qa" / "__init__.py").write_text("")
-    (package / "target.py").write_text("class target:\n    VALUE = 1\n")
-    (package / "shared.py").write_text(
-        f"from snakes_and_ladders.target import target\n\n\n{shape}\n"
-    )
-    (package / "qa" / "entry.py").write_text(
-        "from snakes_and_ladders.shared import used\n\n\ndef main():\n    return used()\n"
-    )
-    spec = FigureSpec("entry", "snakes_and_ladders.qa.entry", (), seconds=1.0)
-    before = spec.input_digest(tmp_path)
-
-    (package / "target.py").write_text("class target:\n    VALUE = 2\n")
-
-    assert spec.input_digest(tmp_path) != before
-
-
-@pytest.mark.structural
-def test_the_rust_sources_are_inputs_only_where_a_renderer_reaches_the_extension(
-    tmp_path: Path,
-) -> None:
-    # The same narrowing, applied to the kernel: a figure that runs no Rust
-    # is not restamped by a kernel change, and one that does still is.
-    package = tmp_path / "python" / "snakes_and_ladders"
-    (package / "qa").mkdir(parents=True)
-    (package / "__init__.py").write_text("from .oxi_snakes_and_ladders import double\n")
     (package / "qa" / "__init__.py").write_text("")
     (package / "fast.py").write_text(
         "from snakes_and_ladders import oxi_snakes_and_ladders\n\n\n"
@@ -668,9 +454,6 @@ def test_the_rust_sources_are_inputs_only_where_a_renderer_reaches_the_extension
     kernel = FigureSpec("kernel", "snakes_and_ladders.qa.kernel", (), seconds=1.0)
     pure = FigureSpec("pure", "snakes_and_ladders.qa.pure", (), seconds=1.0)
     before = kernel.input_digest(tmp_path), pure.input_digest(tmp_path)
-
-    assert kernel.reach(tmp_path).extension
-    assert not pure.reach(tmp_path).extension
 
     (tmp_path / "src" / "lib.rs").write_text("// two\n")
 

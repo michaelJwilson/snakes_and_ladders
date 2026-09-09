@@ -1,0 +1,53 @@
+model: emission-mixture
+oracle: enumeration
+
+# The three-component mixture of two-channel count emissions
+# (`snakes_and_ladders.sim.emission_mixture`, issue #399). Every field is
+# required -- see python/snakes_and_ladders/sim/emission_mixture.py and
+# sim/CLAUDE.md.
+#
+# The components are `count-pair-joint`: each draws a depth from a negative
+# binomial and an allele count from a beta-binomial over *that* depth, which
+# is the coupling `emissions.CountPairEmission` exists to state. The form is
+# part of the family's name because the two forms are different generative
+# models, and a file naming the family without the form would state half of
+# one.
+#
+# Separation is in both channels at once: the depths are 30, 80 and 200 and
+# the allele fractions 0.15, 0.5 and 0.8, so no pair of components is
+# distinguished by one channel alone and a fit that reads only the depth is
+# caught. The weights are deliberately unequal, so a method recovering the
+# components by symmetry rather than from the data is caught too.
+#
+# The oracle at this size is the enumerated posterior over component
+# labellings: with K = 3 the 10-observation prefix of the draw has 59,049
+# labellings, inside the enumeration cap `snakes_and_ladders.enumeration`
+# sets, and the observations are independent, so the marginal at each of those
+# ten is the same quantity the responsibilities of the whole dataset carry.
+seed: 20260908
+n_samples: 900
+weights: [0.50, 0.30, 0.20]
+
+family: count-pair-joint
+
+# The total channel: a per-component sequencing depth and how far above
+# Poisson its spread sits.
+dispersion: [6.0, 10.0, 15.0]
+mean: [30.0, 80.0, 200.0]
+
+# The success channel: allele fractions 0.15, 0.5 and 0.8 at a shared
+# concentration of 12, which is `alpha + beta`. At 12 the beta-binomial is
+# measurably overdispersed relative to a binomial at these depths -- the
+# excess variance factor `1 + (n - 1) / (a + b)` is 3.4 at a depth of 30 --
+# so the concentration is a parameter the fit has something to find.
+alpha: [1.8, 6.0, 9.6]
+beta: [10.2, 6.0, 2.4]
+
+# Relative tolerance a recovered weight or component parameter is checked
+# against its planted value within. The concentration is the parameter this
+# data resolves least well -- its likelihood flattens as the family
+# approaches a binomial -- and the fit carries it, so the tolerance is the
+# one the concentration needs; `tests/regression/opt/test_opt_emission_mixture.py`
+# states the tighter per-parameter bounds the better-resolved ones are held
+# to and the measurements they come from.
+tolerance: 0.35

@@ -1965,6 +1965,130 @@ is a refusal, in either algorithm.
     (Section~\ref{sec:properties}).
 \end{itemize}
 
+\section{Problem Statement: The Count-Emission Mixture}
+\label{sec:emissionmixture}
+
+\subsection{The model}
+\label{sec:emissionmixture:model}
+Section~\ref{sec:mixture}'s mixture with its component family exchanged, and
+the exchange is the point: the mixture asks its components for a density and
+for an M step and for nothing else, so a family over a different observation
+drops in unaltered. Here the observation is a \emph{pair}---a total count
+$n_i$ and the successes $y_i$ within it, a sequencing depth and its allele
+count---and each component is a negative binomial for the total together with
+a beta-binomial for the successes,
+\begin{equation}
+  p(n_i, y_i) = \sum_{k=1}^{K} w_k\,
+    \mathrm{NB}(n_i;\ r_k, \mu_k)\;
+    \mathrm{BB}(y_i;\ m_{ik},\ a_k, b_k),
+  \qquad \sum_k w_k = 1,\quad w_k > 0 ,
+  \label{eq:countpair}
+\end{equation}
+with the component label $z_i$ latent and retained by the simulator. The
+trial count $m_{ik}$ carries the whole difference between the family's two
+forms and admits no default: it is a per-component constant $m_{ik} = m_k$ in
+the \emph{independent} form, where the two channels factorize given the
+component, and it is the drawn total $m_{ik} = n_i$ in the \emph{joint} form,
+where a deeper site carries a proportionally larger allele count. The joint
+form gives $y_i > n_i$ probability zero, so a pair outside the support is
+scored at $-\infty$ rather than left to the negative argument of a
+$\log\Gamma$.
+
+Two properties of Section~\ref{sec:properties} are inherited rather than
+restated. The likelihood is bounded above by zero, both channels being
+discrete, so the mixture has no counterpart of the Gaussian's collapsing
+component. What it has instead is two \emph{flat} directions: the dispersion
+$r_k$ toward the Poisson limit and the concentration $a_k + b_k$ toward the
+binomial one, each with a bound above which this much data cannot tell one
+value from infinity, and an estimate that reaches its bound is reported as a
+bound rather than raised on.
+
+\paragraph{Supported sizes.}
+\label{par:emissionmixture:sizes}
+$K$ components in single figures; $N$ observations in the hundreds to the
+low thousands. The declared instances are $K = 3$ at $N = 900$, where the
+posterior over labellings is enumerable, and $K = 10$, which is the size at
+which the fit stops being routine. The cost per iteration is not the mixture's
+but the family's: both shape parameters are solved for by bisection rather
+than by formula, at a few thousand score evaluations per component per M step,
+so the iteration count and not the sample count is what a budget is spent on.
+Enumerating the $K^{N}$ labellings is out of reach at every declared size, and
+the enumeration oracle therefore runs over a prefix: the observations are
+independent, so the marginal at each of ten of them is the same quantity the
+responsibilities of the whole dataset carry, and $3^{10}$ is affordable where
+$3^{900}$ is not.
+
+\subsection{As a factor graph}
+$N$ variables $x_i \equiv z_i$ with one unary factor each,
+$\psi_i(z_i) = w_{z_i}\, p(n_i, y_i \mid z_i)$, and no pairwise factor:
+Figure~\ref{fig:emissionmixture:sketch} is
+Figure~\ref{fig:mixture:sketch} with a pair at each observation instead of a
+scalar. Equation~\ref{eq:sum-product} is again a normalization per variable
+and the belief at $i$ is again Equation~\ref{eq:responsibilities}, now with
+Equation~\ref{eq:countpair}'s density in place of the Gaussian's. That the
+posterior factorizes across observations is what the enumeration oracle
+checks, and it is the property every step below rests on.
+
+\input{emissionmixture_figure}
+
+\subsection{The algorithms: expectation--maximization and a seeded start}
+Expectation--maximization, Algorithm~\ref{alg:baum-welch} with the chain
+removed, exactly as for the Gaussian mixture---what differs is only that the
+M step it calls is itself an optimization. The negative binomial's dispersion
+is a one-dimensional root find and the beta-binomial's $(a, b)$ an alternating
+one, each bracketed rather than stepped toward, and each reporting whether it
+settled; a mixture that discarded that report would surface an unsettled inner
+solve several iterations later as a non-monotone outer likelihood, which is
+why it is propagated and refused on.
+
+The start is $\mathrm{Emission\_Mixture}{+}{+}$: Algorithm~\ref{alg:kmeanspp}
+with the family's own negative log-density in place of the squared distance of
+Equation~\ref{eq:kmeanspp}. A component is placed \emph{on} an observation---
+its depth becomes the component's negative-binomial mean and its allele
+fraction, smoothed by a half-count, the beta-binomial's rate---and the two
+shape parameters, which no single observation carries, start at declared
+values shared across components. The seeding is drawn over observation
+\emph{indices} rather than over observation values, because a pair drawn from
+a flattened array of pairs is half of one.
+
+\paragraph{What pins it.}
+The responsibilities against the posterior enumerated over component
+labellings, at the size that admits one; the fitted weights and component
+parameters against the planted ones, up to the permutation of components; and
+the seeded start against the uniform one over shared seeds, reported whichever
+way it falls.
+
+\subsection{Validation}
+\label{sec:emissionmixture:validation}
+\begin{itemize}
+  \item \emph{The enumerated posterior over component labellings} referees the
+    E step at the $K = 3$ instance. An exhaustive sum sharing no code with the
+    normalization it checks, it establishes that the posterior factorizes
+    across observations---the property the method rests on and the one an
+    implementation can quietly break. It is available over a prefix only, and
+    says nothing at the $K = 10$ instance.
+  \item \emph{The component M step is the emission family's own}, unchanged
+    from the hidden Markov case and from the Gaussian mixture, and the family
+    carries its own referees: its density sums to one over the support, and
+    its estimates recover planted parameters at a stated size. Being two of
+    ours it is agreement, not truth.
+  \item \emph{Recovery of the planted mixture}, up to the permutation of
+    components, is the referee for the fit. The permutation is resolved by
+    ordering on the depth and the allele fraction rather than by enumerating
+    it, since at ten components that enumeration is $10!$ and the ordering is
+    exact wherever the instance separates its components---which a declared
+    instance does by construction.
+  \item \emph{The seeded start against the uniform one}, on the same seeds and
+    the same budget, is a comparison of two of ours and establishes nothing
+    general; it is reported whichever way it falls, on the terms
+    Section~\ref{sec:mixture} states for $k$-means${+}{+}$.
+  \item \emph{An estimate at its identifiability bound} is reported and not
+    raised on: the dispersion and the concentration each have a value above
+    which the data cannot distinguish the family from its limiting case, and a
+    fit that reaches one has found a bound rather than a maximum
+    (Section~\ref{sec:properties}).
+\end{itemize}
+
 \section{Problem Statement: Continuous Test Functions}
 \label{sec:testfunctions}
 

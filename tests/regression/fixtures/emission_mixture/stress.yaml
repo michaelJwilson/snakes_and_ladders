@@ -1,0 +1,51 @@
+model: emission-mixture
+oracle: none
+
+# The ten-component instance (issue #399). `none` is a statement rather than
+# an omission: the posterior over labellings is 10**3000 and no oracle
+# survives to this size, so a result here is refereed by the simulated truth
+# and by the CI instance's enumeration one tier down.
+#
+# **What the size is for.** Not more data --- 300 observations per component
+# against the CI instance's 300 --- but more components. The mixture's cost
+# and its difficulty both scale with the component count rather than with the
+# sample count, because each M step is one bracketed solve per component and
+# because every extra component is another way for expectation-maximization to
+# stop at a local optimum. Measured: one seeded run takes 121 s and resolves
+# seven of the ten planted components, against ten of ten at the CI instance's
+# three. That shortfall is the instance's difficulty, recorded rather than
+# tuned away (`sim/CLAUDE.md`), and it is what this tier exists to show.
+#
+# **Separation is alternating.** The depths are geometric at a ratio of 1.35,
+# which is between one and two standard deviations of the negative binomial at
+# each level, so the depth channel alone does not separate neighbours. The
+# allele fractions alternate 0.30 and 0.70 between consecutive depths, about
+# three standard deviations apart at these depths, so a component is separated
+# from its neighbours in the success channel and from its next-nearest in the
+# total channel. A fixture separated in one channel only would not exercise the
+# two-channel emission it is built on.
+seed: 20260909
+n_samples: 3000
+weights: [0.13, 0.12, 0.11, 0.10, 0.10, 0.09, 0.09, 0.09, 0.09, 0.08]
+
+family: count-pair-joint
+
+# The total channel. A dispersion of 60 is well inside
+# `emissions.identifiable_dispersion_bound`, which is 279 at the shallowest
+# component's mean of 20 and its share of the sample; at 200 the shallow
+# components sit against that bound and the fit returns it rather than an
+# estimate, which was measured and is why the value is 60.
+dispersion: [60.0, 60.0, 60.0, 60.0, 60.0, 60.0, 60.0, 60.0, 60.0, 60.0]
+mean: [20.0, 27.0, 36.5, 49.2, 66.4, 89.7, 121.1, 163.4, 220.6, 297.9]
+
+# The success channel: allele fractions alternating 0.30 and 0.70 at a shared
+# concentration of 15.
+alpha: [4.5, 10.5, 4.5, 10.5, 4.5, 10.5, 4.5, 10.5, 4.5, 10.5]
+beta: [10.5, 4.5, 10.5, 4.5, 10.5, 4.5, 10.5, 4.5, 10.5, 4.5]
+
+# Relative tolerance a recovered weight or component parameter is checked
+# against its planted value within, at ten components. Looser than the CI
+# instance's because the fit's difficulty is the component count:
+# `tests/regression/opt/test_opt_emission_mixture.py` states the measurement
+# it comes from and which parameters are held tighter.
+tolerance: 0.60
