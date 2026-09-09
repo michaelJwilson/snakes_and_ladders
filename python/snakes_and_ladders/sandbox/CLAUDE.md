@@ -49,24 +49,31 @@ and is principle.
 
 ## What is here
 
-Two declines, each with the tests that declined it. `tropical` is the
-tropical Grassmannian relaxation of topology search (issue #408), which
-neighbor joining matched at no gradient steps at every size enumeration
-referees. `compiled_pruning` is thinner: `likelihood.pruning_torch`'s
-recursion through `torch.compile`, measured against the eager recursion and
-declined at 1.21x and 1.09x
+Three framework fronts, each measured against the implementation it would
+have replaced on a hot path and declined on that measurement (issue #390 for
+PyTorch Geometric over `learn.surrogate.GraphSurrogate`, #389 for `rustworkx`
+over the Swendsen-Wang labelling, #388 for `scipy.sparse.csgraph` over the
+ground-state minimum cut). Each module's docstring names the experiment that
+declined it, the ratio and the host, and each arrives with the test that
+referees it, so the comparison is re-runnable when a library's next version
+moves the numbers rather than settled by a paragraph.
+
+Two further declines against no framework at all. `tropical` is the tropical
+Grassmannian relaxation of topology search, declined against neighbor joining
+(#408); a method declined against a simpler method is the case the header
+above names, and it is why the rule is stated over two solutions rather than
+over a library and our own code. `compiled_pruning` is thinner:
+`likelihood.pruning_torch`'s recursion through `torch.compile`, measured
+against the eager recursion and declined at 1.21x and 1.09x
 ([experiment 007](../../../docs/experiments/007-per-fit-cost-of-the-tree-likelihood.md),
 issue #443). A compiler is not a second implementation and the module says so
 in its first paragraph: what it adds to the one `torch.compile` call is the
 reading of Dynamo's compile state, without which "compiled, and not silently
 fallen back to eager" is a claim rather than an assertion. The solution
 conserved is the pin, `tests/regression/likelihood/test_pruning_torch_compile.py`.
+
 The frameworks issue #322 adopted arrived instead as adapters and as referees
 on paths nobody proposed replacing — a Gymnasium adapter over the unchanged
 `learn.Environment` protocol, `rustworkx` conversions beside the generators
 they are checked against, TorchRL and PyTorch Geometric as unit oracles — and
-those stay where they are used. The candidates still open are the Python
-`search.maxflow` Dinic against a library minimum cut and
-`learn.surrogate.GraphSurrogate`'s message passing against PyTorch Geometric;
-each arrives here with the measurement that settles it, whichever way it
-settles, and `TICKETS.md` carries them as follow-ups.
+those stay where they are used.

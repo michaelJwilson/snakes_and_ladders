@@ -318,6 +318,15 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox.compiled_pruning
    :members:
 
+.. automodule:: snakes_and_ladders.sandbox.pyg_surrogate
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.rustworkx_clusters
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.scipy_mincut
+   :members:
+
 .. automodule:: snakes_and_ladders.sandbox.tropical
    :members:
 
