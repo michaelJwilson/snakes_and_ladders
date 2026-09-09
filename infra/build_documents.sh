@@ -52,6 +52,16 @@ uv run --no-sync python -m snakes_and_ladders.qa.build \
   --document docs/tex/textbook.tex \
   --output-dir docs/tex/figures
 
+# The textbook \inputs docs/tex/generated/problems_tables.tex, which is
+# written from PROBLEMS.md and the suite and is not committed (issue #425).
+# Regenerated here rather than fetched, so the tables the documents typeset
+# are the tree's by construction. This generator and not infra/ledgers.sh:
+# the tables are what the documents need, and unlike the seams survey this
+# imports nothing from the package, so the documents job needs no extra it
+# does not already sync. Cheap beside latexmk -- it reads Markdown, a YAML
+# file and the test tree.
+uv run --no-sync python infra/problems_tables.py --write
+
 for document in paper textbook; do
   (
     cd docs/tex
