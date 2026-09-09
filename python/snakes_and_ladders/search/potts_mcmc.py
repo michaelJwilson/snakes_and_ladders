@@ -184,6 +184,7 @@ def sample_potts(
     n_states = int(field.shape[0])
     state = rng.integers(0, n_states, size=graph.n_nodes)
     neighbours = _adjacency(graph)
+    bonds = _bonds_of(graph)
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
     cluster_total, cluster_count = 0, 0
@@ -191,7 +192,7 @@ def sample_potts(
         if move is PottsMove.SINGLE_SITE:
             _single_site_sweep(state, field, neighbours, rng)
         elif move is PottsMove.SWENDSEN_WANG:
-            _swendsen_wang_sweep(state, graph, field, rng)
+            _swendsen_wang_sweep(state, bonds, field, rng)
         else:
             cluster_total += _wolff_sweep(state, field, neighbours, rng)
             cluster_count += 1
@@ -604,8 +605,33 @@ def _single_site_sweep(
         state[node] = np.searchsorted(cumulative, float(draws[node]) * cumulative[-1])
 
 
+@dataclass(frozen=True)
+class _Bonds:
+    """The edge endpoints and bond probabilities a Swendsen-Wang sweep reads.
+
+    Built once per chain rather than per sweep: the endpoints and
+    ``1 - exp(-J)`` do not change between sweeps, and rebuilding them was 4.5%
+    of the sweep's self time at extent 8 (issue #389).
+    """
+
+    first: np.ndarray
+    second: np.ndarray
+    activation: np.ndarray
+
+
+def _bonds_of(graph: PottsGraph) -> _Bonds:
+    """The edge arrays and bond probabilities of ``graph``."""
+    ends = np.asarray(graph.edges, dtype=np.int64).reshape(-1, 2)
+    coupling = np.asarray(graph.coupling, dtype=float)
+    return _Bonds(
+        first=np.ascontiguousarray(ends[:, 0]),
+        second=np.ascontiguousarray(ends[:, 1]),
+        activation=1.0 - np.exp(-coupling),
+    )
+
+
 def _swendsen_wang_sweep(
-    state: np.ndarray, graph: PottsGraph, field: np.ndarray, rng: np.random.Generator
+    state: np.ndarray, bonds: _Bonds, field: np.ndarray, rng: np.random.Generator
 ) -> None:
     """Activate bonds, find clusters, recolour each one.
 
@@ -613,25 +639,48 @@ def _swendsen_wang_sweep(
     needs its own accept step --- Wolff flips one cluster and needs one. They
     are different code for that reason rather than one rule assumed to cover
     both.
+
+    The clusters are recoloured in ascending root order with their members in
+    ascending site order, which is what fixes the draws each recolouring
+    takes. Any labelling that numbered the clusters differently would compose
+    a *different* chain from the same seed, which is why the order is stated
+    here rather than left to whatever the labelling happens to return
+    (issue #389).
     """
-    first = np.fromiter(
-        (edge[0] for edge in graph.edges), dtype=np.int64, count=len(graph.edges)
-    )
-    second = np.fromiter(
-        (edge[1] for edge in graph.edges), dtype=np.int64, count=len(graph.edges)
-    )
-    coupling = np.asarray(graph.coupling, dtype=float)
-    like = state[first] == state[second]
-    active = like & (rng.random(len(graph.edges)) < 1.0 - np.exp(-coupling))
+    like = state[bonds.first] == state[bonds.second]
+    active = like & (rng.random(bonds.first.shape[0]) < bonds.activation)
 
-    parent = np.arange(graph.n_nodes)
+    n_nodes = state.shape[0]
+    parent = np.arange(n_nodes)
     for edge in np.flatnonzero(active):
-        _union(parent, int(first[edge]), int(second[edge]))
+        _union(parent, int(bonds.first[edge]), int(bonds.second[edge]))
 
-    labels = np.array([_find(parent, node) for node in range(graph.n_nodes)])
-    for root in np.unique(labels):
-        members = np.flatnonzero(labels == root)
-        _recolour(state, members, field, rng)
+    labels = _roots(parent)
+    # One stable sort groups every cluster at once. Scanning `labels == root`
+    # per cluster instead is quadratic in the site count -- at extent 48 that
+    # scan and the per-site Python `_find` were 1.98x of the whole sweep
+    # (issue #389).
+    order = np.argsort(labels, kind="stable")
+    grouped = labels[order]
+    starts = np.flatnonzero(np.r_[True, grouped[1:] != grouped[:-1]])
+    for begin, end in zip(starts, np.r_[starts[1:], n_nodes], strict=True):
+        _recolour(state, order[begin:end], field, rng)
+
+
+def _roots(parent: np.ndarray) -> np.ndarray:
+    """Every node's union-find root, by squaring the parent map to a fixed point.
+
+    ``parent[parent]`` halves each node's distance to its root, so this
+    converges in ``log2`` of the deepest tree and gives the same roots the
+    per-node :func:`_find` walk gives -- a component's root is unique however
+    the walk compresses on the way. Vectorized because the walk was 12.7% of
+    the sweep's self time at extent 24 (issue #389).
+    """
+    while True:
+        stepped = parent[parent]
+        if np.array_equal(stepped, parent):
+            return parent
+        parent = stepped
 
 
 def _wolff_sweep(

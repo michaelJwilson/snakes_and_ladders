@@ -181,6 +181,12 @@ module = ["nbformat.*", "nbclient.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# scipy is a core dependency (issue #383) but ships no type information; its
+# stubs are a separate distribution and one this repository does not carry.
+module = ["scipy.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # The `frameworks` extra (issue #322) is absent where the `lint` job runs, so
 # its imports resolve to nothing there; and torchrl, tensordict,
 # torch_geometric and networkx ship no type information where they are
