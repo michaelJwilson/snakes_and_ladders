@@ -181,9 +181,10 @@ def test_the_seam_gate_refuses_a_protocol_under_the_rule_with_no_reason(
 def test_the_derived_ledgers_are_not_in_the_index() -> None:
     # The index, not the working tree: `infra/ledgers.sh` writes all three
     # into the tree on every document build and every review, so their
-    # presence there says nothing. Tracking one is what the gate refuses --
-    # demonstrated on a branch carrying a deliberately stale CHECKS.md, whose
-    # `infra/ledgers.sh --check` failed on it (STATUS.md, issue #425).
+    # presence there says nothing. Tracking one is what the gate refuses,
+    # demonstrated on a throwaway branch carrying a CHECKS.md committed with a
+    # row the tests do not have: `infra/ledgers.sh --check` exited 1 on it and
+    # so did this test (issue #425's pull request records the run).
     listed = subprocess.run(
         [
             "git",
