@@ -113,7 +113,8 @@ Develop and deploy modern solvers for mixed discrete-continuous optimization
 across four primary classes of graphical models: phylogenetic trees (the large
 parsimony problem), N-dimensional Potts models in an external field, hidden
 Markov models (HMMs), and low-density parity-check codes decoded on their
-Tanner graphs (#340). Two derived instances sit between them and every
+Tanner graphs (#340), with the turbo code as a second code family decoded on
+the same graph machinery (#233). Two derived instances sit between them and every
 Stage 1 deliverable takes them too: the coupled spatio-sequential model that
 joins the Potts and hidden Markov classes, a Potts prior over class labels
 gating one hidden chain per class (#290), and the Gaussian mixture, an HMM
@@ -200,7 +201,9 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *HMMs:* hidden state paths and emitted observation sequences.
     - *Codes:* Gallager's regular parity-check ensemble, the binary
       symmetric, erasure and Gaussian channels behind one log-likelihood
-      interface, and an encoder where elimination is affordable.
+      interface, and an encoder where elimination is affordable; the turbo
+      code as a second family over the same channels, its two convolutional
+      constituents and their interleaver (#233).
     - *Canonical cases:* instances whose answer is known from outside this
       repository — a closed form, a published result, or an enumeration
       sharing no code with what it tests — admitted only when more than one

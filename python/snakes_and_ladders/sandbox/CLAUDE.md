@@ -5,7 +5,11 @@ on a hot path moves in here, because the replacement is pinned against it and
 a deleted oracle is a claim with no referee (issue #322). It is the place root
 `CLAUDE.md`'s oracle rule — every accelerated path keeps its reference
 implementation — puts a reference once the accelerated path is a library
-rather than a backend of our own.
+rather than a backend of our own. A route that lost the measurement it was
+built for moves in for the same reason read the other way round: the numbers
+that declined it are a claim, and the code is what lets someone run them
+again. The two need not be a library and our own code — a method declined
+against a simpler method is the same case.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file too — and every docstring, comment and commit message
@@ -33,7 +37,14 @@ and is principle.
 
 ## What is here
 
-Nothing yet. The frameworks issue #322 adopted arrived as adapters and as
+`tropical`, the tropical Grassmannian relaxation of topology search (issue
+#408), which neighbor joining matched at no gradient steps at every size
+enumeration referees. It is here on the header's second reading — a method
+declined against a simpler method — kept so the comparison stays re-runnable
+rather than settled by a paragraph, and refereed by
+`tests/regression/test_sandbox_tropical.py`.
+
+The frameworks issue #322 adopted arrived as adapters and as
 referees — a Gymnasium adapter over the unchanged `learn.Environment`
 protocol, `rustworkx` conversions beside the generators they are checked
 against, TorchRL and PyTorch Geometric as unit oracles — and none of them

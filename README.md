@@ -132,7 +132,10 @@ algorithm, the Potts transfer matrix and the decoder of a low-density
 parity-check code are the same sum-product recursion on different graphs — a
 tree, a chain, a lattice, a Tanner graph — so one discrete/continuous
 interface serves all four, and the coupled spatio-sequential model and the
-Gaussian mixture derived from them. The project treats that as a design constraint
+Gaussian mixture derived from them. The turbo code is the fourth class's
+second family and takes the same interface: its BCJR recursion is sum-product
+on a trellis, pinned against the general one on the factor graph that trellis
+becomes (#233). The project treats that as a design constraint
 rather than a coincidence, and enforces it structurally: `snakes_and_ladders.opt` and
 `snakes_and_ladders.learn` may import no application module, asserted by test.
 
