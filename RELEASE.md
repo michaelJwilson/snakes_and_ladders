@@ -97,7 +97,9 @@ script: it needs the issue tracker and a judgement on whether the work landed.
 
 The template's sections, answered in the release pull request rather than on the
 ticket: roadmap progress per milestone, taken from `STATUS.md` with the pull
-request that moved it rather than re-derived; the consistency audit over
+request that moved it rather than re-derived, and an edit to `ROADMAP.md` where
+a milestone was reached that it does not describe — in the document's existing
+tone, never a rewrite; the consistency audit over
 `CLAUDE.md`, `DEV.md`, `README.md`, `INSTALL.md`, `ROADMAP.md`, this file and
 `docs/tex/` against the code; one box per problem statement in
 `docs/tex/textbook.tex` — count the sections rather than the boxes, since the
@@ -138,10 +140,10 @@ order, with what each costs:
 | `ruff check`, `ruff format --check`, `mypy --strict` | Under a minute between them; reported as pass/fail at the 0.5.0 run because the host was at load 5–7 |
 | `cargo clippy --locked --all-targets -D warnings`, `cargo fmt --check`, `cargo test --locked` | Likewise; both `--features sandbox` variants passed beside them, which is what proves the gated route still compiles |
 | `pytest` (every tier, coverage gate) | **~1,100 s** for the CI tier alone, uncontended (1,098 s over 2,121 tests, 2026-09-09, issue #455); the gate adds the `release`, `stress` and `key` tiers on top, and no complete reading exists — see below |
-| `sphinx-build -E -a -W` over all 134 modules | **32.2 s** cold, against 8.2 s when nothing changed (issue #451) |
-| `infra/ledgers.sh --check` | **8–9 s**, from the review gate's own ledger row at load 8–10, so an upper bound (issue #469) |
+| `sphinx-build -E -a -W` over all 134 modules | **32.2 s** cold, against 8.2 s when nothing changed (issue #451; the step and its flags are issue #485) |
+| `infra/ledgers.sh --check` | **7–9 s**, from the review gate's ledger row, which writes rather than compares and so costs about 1 s more (issues #425, #469); read at load 5 to 10, so an upper bound |
 | `qa.build --all --check`, every figure against the committed bytes | **431.8 s** declared over the manifest's 23 entries; **~500 s measured** for 18 of them, at 1.1–1.4x declared even at load 8–10 (issue #477) |
-| `infra/build_documents.sh` | **15.8 s** with the figure stamps current, up to **305.8 s** with one stale (issue #433), of which citation integrity is **12.0 ms** of work and 53–62 ms of wall clock including interpreter start, on a quiet host (issue #503) |
+| `infra/build_documents.sh` | **15.8 s** with the figure stamps current, up to **305.8 s** with one stale (issue #433), of which citation integrity is **12.0 ms** of work and 53–62 ms of wall clock including interpreter start on a quiet host, and 55 ms at load 9.4 — the check is bounded by file reading rather than by the host (issue #503) |
 | `infra/baselines.py` | Unmeasured at the gate. The recomputation it holds cost 8.3 s of uniform rollouts, 7.5 s of maximum-likelihood fits and 1.9 s of exact expected returns per pull request before it moved here (issue #401) |
 
 **Two steps rebuild in full rather than predicting what to rebuild**, and both
@@ -213,9 +215,11 @@ tree and landed on another describes neither.
 ### 5. Open the pull request, then tag and publish
 
 The pull request carries the version bump, the built changelog and the audit's
-fixes. A maintainer adds the `release` label once the gate has passed, merges,
-then tags the merge commit and publishes a GitHub release from that tag with the
-new `CHANGELOG.md` section as its body. No tag has ever been pushed here, so this
+fixes, and says at the top which commit of `main` it was cut from and what the
+gate returned on that tree, a step the gate did not reach included. A maintainer
+adds the `release` label once the gate has passed, merges, then tags the merge
+commit and publishes a GitHub release from that tag with the new `CHANGELOG.md`
+section as its body. No tag has ever been pushed here, so this
 step is documented and unexercised.
 
 ### If the cut is abandoned
