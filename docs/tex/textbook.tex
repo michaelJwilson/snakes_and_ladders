@@ -465,7 +465,8 @@ a bracket. Partition the $L$ columns into $\lceil L/N \rceil$ blocks of $N$
 consecutive sites, and let $\mathcal{F}$ be the blocks occurring at least $m$
 times. Evaluate those exactly, by Equation~\ref{eq:site-patterns} over their
 columns, and bound the remaining $B$ sites by the extremes of a single site's
-log-likelihood over the whole column alphabet:
+log-likelihood over the whole column alphabet
+(Algorithm~\ref{alg:block-frequency}):
 \begin{equation}
   \ell_{\mathcal{F}} + B \, \underline{\lambda}(\tree, \branch)
   \;\le\; \ell(\tree, \branch) \;\le\;
