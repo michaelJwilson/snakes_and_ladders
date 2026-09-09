@@ -12,9 +12,11 @@ The model is the one :func:`snakes_and_ladders.sim.potts.simulate_potts` samples
 the convention is taken from there rather than restated independently: a
 configuration ``s`` carries unnormalized log weight
 
-    sum_i h[s_i] + sum_(i,j) in edges J_ij [s_i == s_j]
+    sum_i h[i, s_i] + sum_(i,j) in edges J_ij [s_i == s_j]
 
-so ``J > 0`` favours agreement. See ``docs/tex/textbook.tex``, ``eq:potts`` ("Potts Models in an
+so ``J > 0`` favours agreement. ``h`` is per site or shared by every site,
+widened once by :func:`snakes_and_ladders.sim.potts.site_field` as it is
+there, so the three routines below score one model rather than two. See ``docs/tex/textbook.tex``, ``eq:potts`` ("Potts Models in an
 External Field" (Mezard & Montanari, ch. 2).
 """
 
@@ -31,6 +33,7 @@ from snakes_and_ladders.enumeration import (
 )
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph
+from snakes_and_ladders.sim.potts import site_field
 
 
 @dataclass(frozen=True)
@@ -63,7 +66,7 @@ def log_weights(
     graph : PottsGraph
         The graph. Its edge order fixes which coupling applies where.
     field : np.ndarray
-        External field ``h``, shape ``(n_states,)``.
+        External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
     configurations : np.ndarray
         Integer states, shape ``(n_configurations, n_nodes)``.
 
@@ -84,7 +87,8 @@ def log_weights(
             f"of {graph.n_nodes} nodes"
         )
         raise ValueError(msg)
-    total = field[configurations].sum(axis=1)
+    rows = site_field(field, graph.n_nodes)
+    total = rows[np.arange(graph.n_nodes)[np.newaxis, :], configurations].sum(axis=1)
     for (first, second), coupling in graph.weighted_edges():
         agree = configurations[:, first] == configurations[:, second]
         total = total + coupling * agree
@@ -106,7 +110,7 @@ def enumerate_potts(
     graph : PottsGraph
         The graph.
     field : np.ndarray
-        External field ``h``, shape ``(n_states,)``.
+        External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
     max_configurations : int | None
         Refuse above this many configurations. ``None`` uses
         :data:`snakes_and_ladders.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`.
@@ -124,7 +128,7 @@ def enumerate_potts(
         memory inside a test, which reads as infrastructure rather than as
         the caller asking for a size this cannot do.
     """
-    n_states = int(field.shape[0])
+    n_states = int(field.shape[-1])
     limit = (
         MAX_ENUMERABLE_CONFIGURATIONS
         if max_configurations is None
@@ -189,7 +193,10 @@ def strip_log_partition(
     coupling : float
         Uniform ``J``.
     field : np.ndarray
-        External field ``h``, shape ``(n_states,)``.
+        External field ``h``, shape ``(n_states,)`` or ``(N * M, n_states)``
+        in the same row-major node order the lattice carries. A per-site
+        field makes each column's internal term its own, which is the whole
+        of the difference between the two cases here.
 
     Returns
     -------
@@ -217,18 +224,30 @@ def strip_log_partition(
         raise ValueError(msg)
 
     n_columns, width = shape
-    n_states = int(field.shape[0])
+    n_states = int(field.shape[-1])
+    rows = site_field(field, n_columns * width)
     columns = np.array(
         list(itertools.product(range(n_states), repeat=width)), dtype=np.int64
     )
 
-    # Everything internal to one column: its own field, and the bonds running
-    # along it. Identical for every column, so it is built once.
-    internal = field[columns].sum(axis=1)
+    # The bonds running along one column, which the uniform coupling makes
+    # the same for every column.
+    along = np.zeros(columns.shape[0])
     for position in range(width - 1):
-        internal = internal + coupling * (
-            columns[:, position] == columns[:, position + 1]
-        )
+        along = along + coupling * (columns[:, position] == columns[:, position + 1])
+
+    # Everything internal to column `i`: that bond term, and the field of the
+    # `width` sites it holds. One array per column rather than one shared,
+    # since a per-site field differs between them.
+    internal = np.stack(
+        [
+            along
+            + rows[i * width : (i + 1) * width][
+                np.arange(width)[np.newaxis, :], columns
+            ].sum(axis=1)
+            for i in range(n_columns)
+        ]
+    )
 
     # The bond between adjacent columns, site by site: `between[u, v]` is the
     # coupling contribution of column state `u` sitting beside column state
@@ -236,7 +255,7 @@ def strip_log_partition(
     agreements = (columns[:, np.newaxis, :] == columns[np.newaxis, :, :]).sum(axis=2)
     between = coupling * agreements
 
-    alpha = internal
-    for _ in range(n_columns - 1):
-        alpha = logsumexp(alpha[:, np.newaxis] + between, axis=0) + internal
+    alpha = internal[0]
+    for i in range(1, n_columns):
+        alpha = logsumexp(alpha[:, np.newaxis] + between, axis=0) + internal[i]
     return float(logsumexp(alpha, axis=0))

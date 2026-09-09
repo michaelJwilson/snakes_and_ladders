@@ -248,6 +248,60 @@ tracks resolving, by moving `PottsParams` into `snakes_and_ladders.sim.potts` th
 #171 moved the HMM's truth type. No fitting, cluster updates, or evaluator
 on the general graph yet (issues #172, #174).
 
+**The external field is per site, and three instances need one.** `h` was one
+row every site shared, so the spatial half of the coupled model could not be
+studied with anything site-specific driving it and nothing declared a lattice
+at the transition. `h` is now `(n_states,)` or `(n_nodes, n_states)`, widened
+once by `snakes_and_ladders.sim.potts.site_field` at each entry point, and the
+exact open-chain recursion, the Gibbs sweep, `enumerate_potts` and
+`strip_log_partition` index one shape. A per-site field whose rows are equal
+reproduces the shared-field `log Z` and marginals to 0.0, and the strip
+matches enumeration to 0.0 on a per-site field, which is what the widening had
+to satisfy.
+
+`potts_spots` declares the spatial half with the chains and the gated
+emissions removed and the field `h[n, m] = alpha[m] * log(size[n] / size_bar)`
+added: 3x3 at `ci`, where enumeration over 19,683 configurations gives the
+exact marginals; a 12x6 strip at `stress`, where 3\*\*72 configurations are
+past enumeration and the column transfer matrix is not; and 71x71 triangular
+at `release`, the geometry `spatio_sequential_counts/stress` declares. At `ci`
+Gibbs matches enumeration to 0.0153 against the declared 0.04, the covariate
+moves the exact marginals by 0.2555 against its own site average, and `alpha`
+is recovered inside its 95% intervals with the flat class covering zero
+(0.0186 against a half-width of 0.0411). At `stress` the exact mean field
+energy, `d log Z(t h) / dt` at `t = 1` from two more transfer-matrix
+evaluations, is 15.121 against the sampler's 15.126, inside the declared 0.25
+and 0.06 standard errors. At `release` the mean `alpha` of a label rises
+monotonely across size quartiles (-0.2335, -0.0549, 0.0862, 0.2602) and the
+tilt between the outer two is 0.4935 +/- 0.0101 over eight chains.
+
+**A finding: at the coupled fixture's coupling the field is swamped.** The
+71x71 triangular instance was proposed at the coupled fixture's `J = 1.0`.
+The `q`-state Potts model on a triangular lattice orders above the coupling
+solving `v**3 + 3 v**2 = q` for `v = exp(J) - 1` (Baxter, ch. 12), which at
+`q = 10` is `J_c = 0.913`, so `J = 1.0` is on the ordered side: a seeded draw
+put 3,991 of 5,041 sites into the two extreme classes after 200 sweeps (44.9 s)
+and the counts were still moving, which makes the draw a coarsening front
+rather than an equilibrium sample. The instance is declared at `J = 0.7`
+instead, where the ten classes hold 415 to 593 sites each and the tilt above is
+stable; the swamped configuration is recorded here rather than declared.
+
+**A lattice at the transition, declared rather than built twice.**
+`potts_lattice/stress` is the 12x12 open square at the exact 3-state
+transition in zero field. The coupling is resolved by
+`snakes_and_ladders.sim.potts.critical_coupling` from the file's own state
+count rather than stored as a rounded float, so the instance cannot drift off
+`J_c`. `tests/regression/search/test_potts_mcmc.py` and section 9 of
+`docs/nb/potts_chain.ipynb` each built that lattice for themselves; both now
+read the file, and the notebook re-executes to the same energy autocorrelation
+times it printed before — 6.70, 4.17 and 2.34 site updates for single-site,
+Swendsen-Wang and Wolff — which is the evidence the two copies were one
+instance. The values are now pinned beside the ordering, at the file's 10%
+relative tolerance. A duplication guard keeps `ln(1 + sqrt(q))` in one place
+and found two further copies on its first run, in
+`test_belief_propagation.py` and `test_potts_mcmc_bench.py`
+([#413](https://github.com/michaelJwilson/snakes_and_ladders/issues/413)).
+
 **HMMs: a first-class simulator.** `snakes_and_ladders.sim.hmm` draws a hidden state path
 and an observation sequence jointly from a declared `(pi, A, B)`, retaining
 the path alongside the data on the footing the tree simulator already has
@@ -457,6 +511,39 @@ backend: worst relative deviation 4.0e-14 across all three and four site counts
 spanning a factor of 30
 ([#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148)). The pulley
 principle and rescaled/unrescaled agreement are checked besides.
+
+**A fourth backend, and two routes to the gradient that were not taken**
+([#449](https://github.com/michaelJwilson/snakes_and_ladders/issues/449)).
+`pruning_analytic` computes the same log-likelihood behind one
+`torch.autograd.Function` whose backward is the closed form of
+`alg:pruning-backward`, so the autograd graph is 2 nodes at every tree size
+against the taped path's 59, 115 and 227 at 4, 8 and 16 taxa. One gradient at
+8 taxa by 20,000 sites: **16.36 ms (IQR 1.37) against the taped 33.06 (3.56)**,
+and one L-BFGS fit **454.2 ms (38.7) against 694.5 (52.3)**, both converging to
+148940.229159. Half the saving is in the forward pass, which builds no graph:
+12.38 ms taped against 8.10 under `no_grad`. The gradient agrees with the taped
+one to 2.1e-13 relative, passes `gradcheck` in `float64`, and leaves
+`search.infer`'s topology, trace, evaluations and fits unchanged. The ordering
+is the same at 4 taxa — 5.68 ms (0.74) against the taped 9.82 (1.11) — and
+against central differences swept over steps 1e-4 to 1e-7 all three routes
+deviate by the same amount to four significant figures, worst 9.5e-4 at
+h = 1e-4 and 1.007e-6 at h = 1e-6, so the deviation is the difference
+quotient's and not any gradient's.
+
+A `burn` `Autodiff<NdArray<f64>>` port of the same recursion was measured
+beside it and **declined**: 46.80 ms (3.86) per gradient and 1179.1 (144.1) per
+fit, with a tape of 66, 134 and 270 nodes at 4, 8 and 16 taxa — larger than the
+tape it was meant to replace. The boundary is not the reason; the kernel alone
+is 48.01 ms [46.94, 49.27] by Criterion against 47.06 (6.09) for the same call
+from Python, so the crossing is inside the spread and the kernel by itself
+already costs 1.45x PyTorch's whole evaluation. Its `f64` path was sound —
+5.9e-13 against the taped `float64` gradient — so precision is not why it lost.
+`docs/experiments/007-pruning-gradient-routes.md` carries the question, the
+three routes' numbers and the prediction they were taken to test. The route is conserved rather than deleted,
+as `snakes_and_ladders.sandbox.pruning_burn` over `src/pruning_burn.rs` behind
+the `sandbox` Cargo feature, so the comparison can be re-run; the default
+build, the wheel and every per-pull-request job link no `burn`, and
+`infra/release.sh` is what compiles the feature.
 
 **The Rust backend returned nothing at the declared scale, and now returns
 2.5x.** Measured against the NumPy oracle end to end, it was **1.8x** at 10
