@@ -41,14 +41,19 @@ request whose re-executed output disagrees with the committed one
 standard the figures in `docs/tex/` are — CI regenerates those and
 byte-compares the rebuilt PDF.
 
-**A notebook is re-executed only when its inputs changed.** Beside each
-notebook is `<name>.inputs`, a digest of its code cells, every
-`snakes_and_ladders` module they reach by import, the fixtures they name ---
-by path or as a registry problem and tier --- and the library versions, written by `infra/check_notebooks.py --write` at the
-execution that produced the committed outputs (issue #372). The checker skips
-a notebook whose stamp matches the current tree and executes the rest;
-`--all` executes every one. A notebook whose module changed is executed and
-compared whether or not its author re-ran it.
+**Every notebook here is re-executed, on every run.** Which ones a run checks
+is its arguments and nothing else — the notebooks named, or all six when none
+is — and the run states the set before executing any of it. A digest decided
+it until issue #480: `<name>.inputs` beside each notebook recorded a hash of
+its code cells, the modules they import and the fixtures they name (#372),
+and the checker skipped a notebook whose stamp still matched. `turbo.ipynb`
+was skipped under that rule for as long as no diff reached its import
+closure, so the disagreement it had been carrying (#507) surfaced only when
+an unrelated merge moved the hash and the check ran. Whether an input changed
+and whether a correctness check runs are separate questions, and the second
+is not the first's to answer; a set too expensive to run whole would be cut
+by a budget `DEV.md` states, never by a hash. The stamps are still written by
+`--write` and read by nothing, until issue #490 removes them.
 
 **Text is compared; images are not.** Every number a notebook prints is
 determined by its seeds, so a re-executed stream output must match exactly.
@@ -63,7 +68,16 @@ states for a generated caption: **only quantities continuous in their inputs**.
 A near-zero residual is not one. The check's first run rejected two notebooks
 that printed a converged optimizer's gradient norm, which moved by two orders
 of magnitude between machines while every parameter it reported agreed to four
-decimals. They print the tolerance it cleared instead.
+decimals. They print the tolerance it cleared instead. Three more did the same
+thing where nothing had been running to catch it: `turbo.ipynb` printed two
+BCJR agreements at 1e-13 and 1e-14, one of which read 1.07e-14 on one machine
+and 1.15e-14 on another (#507); `phylo_tree.ipynb` a 1.33e-16 relative
+deviation, a residual gradient norm, and two log-likelihoods to a twelfth
+decimal that is the order 200 site terms were summed in; `potts_chain.ipynb` a
+1.27e-16 deviation, below float64's epsilon. Each now prints the verdict
+against the tolerance the regression suite pins that same comparison at, so
+the notebook states the claim the suite pins rather than the sample that
+carried it (#480).
 
 Install the kernel with `uv sync --extra notebooks`; a normal `pip install .`
 does not need it.
