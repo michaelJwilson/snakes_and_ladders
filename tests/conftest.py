@@ -16,6 +16,16 @@ with ``SAL_DURATION_CAP`` set, a test over it that carries neither
 ``infra/validate.sh`` sets the cap on the reference host; CI does not, per
 `DEV.md`'s rule against timing on its runners, and prints ``--durations``
 instead.
+
+The duration is collected through ``pytest_runtest_logreport`` and the
+markers ride on the report's ``user_properties``, because under
+``pytest-xdist`` the process that runs a test is not the process that exits
+the session: recording into the worker's own state left the controller with
+an empty list and the guard passed a run with two tests 22.5 s and 7.8 s over
+a 0.05 s cap (issue #456). ``pytest_runtest_logreport`` is called on the
+controller for every worker's report and in process when the run is serial,
+so one path serves both, and the cap is applied where the exit status is
+decided.
 """
 
 from __future__ import annotations
@@ -30,11 +40,16 @@ import pytest  # noqa: E402
 
 from tests._durations import over_cap  # noqa: E402
 
-DURATIONS = pytest.StashKey[list[tuple[str, float, frozenset[str]]]]()
+#: Node id, call duration and markers per test, on whichever process decides
+#: the exit status: the controller under `pytest-xdist`, the one process
+#: otherwise. Module state rather than the config stash, since the hook that
+#: fills it is handed a report and no config.
+DURATIONS: list[tuple[str, float, frozenset[str]]] = []
 
-
-def pytest_configure(config: pytest.Config) -> None:
-    config.stash[DURATIONS] = []
+#: The report property carrying a test's markers from a worker to the
+#: controller. `user_properties` is the one report field xdist serializes for
+#: a plugin's own use.
+MARKERS = "sal_markers"
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -45,8 +60,18 @@ def pytest_runtest_makereport(
     outcome = yield
     report = outcome.get_result()  # type: ignore[attr-defined]
     if report.when == "call":
-        markers = frozenset(marker.name for marker in item.iter_markers())
-        item.config.stash[DURATIONS].append((report.nodeid, report.duration, markers))
+        markers = sorted(marker.name for marker in item.iter_markers())
+        report.user_properties.append((MARKERS, markers))
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    if report.when != "call":
+        return
+    markers: frozenset[str] = frozenset()
+    for name, value in report.user_properties:
+        if name == MARKERS:
+            markers = frozenset(value)
+    DURATIONS.append((report.nodeid, report.duration, markers))
 
 
 def pytest_sessionfinish(
@@ -56,8 +81,11 @@ def pytest_sessionfinish(
     cap = os.environ.get("SAL_DURATION_CAP")
     if cap is None:
         return
-    recorded: list[tuple[str, float, frozenset[str]]] = session.config.stash[DURATIONS]
-    offenders = over_cap(recorded, float(cap))
+    if hasattr(session.config, "workeroutput"):
+        # An xdist worker: it reports its durations to the controller through
+        # the hook above, and its exit status is not the run's.
+        return
+    offenders = over_cap(DURATIONS, float(cap))
     if offenders:
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")
         assert reporter is not None

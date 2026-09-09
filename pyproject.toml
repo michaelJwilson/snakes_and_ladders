@@ -77,6 +77,13 @@ test = [
     "pytest>=9.0.3",
     "pytest-cov>=4.0.0",
     "pytest-benchmark>=4",
+    # 1,905 GitHub stars, MIT, maintained by pytest-dev; its one new
+    # transitive dependency, execnet, is MIT and by the same organisation and
+    # is flagged under the 1,000-star bar in the pull request. Distributes the
+    # CI tier over the host's cores (issue #456); `tests/benchmarks/` stays
+    # out of the parallel run, since pytest-benchmark disables itself when
+    # xdist is active.
+    "pytest-xdist>=3.6",
 ]
 
 [project.scripts]
