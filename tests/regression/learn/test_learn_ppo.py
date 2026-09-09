@@ -34,6 +34,7 @@ from snakes_and_ladders.learn.potts import (
 )
 from snakes_and_ladders.learn.ppo import (
     _log_probabilities,
+    _neighbourhoods,
     episode_advantages,
     generalized_advantages,
     ppo,
@@ -121,9 +122,10 @@ def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() 
     rng = np.random.default_rng(0)
     episodes = [rollout(landscape, policy, rng, 3) for _ in range(40)]
     advantages = episode_advantages(landscape, episodes, critic, lam=1.0)
-    old = [t.detach() for t in _log_probabilities(landscape, policy, episodes)]
+    neighbourhoods = _neighbourhoods(landscape, episodes)
+    old = [t.detach() for t in _log_probabilities(policy, neighbourhoods)]
     loss, fraction = ppo_loss(
-        _log_probabilities(landscape, policy, episodes), old, advantages, clip=math.inf
+        _log_probabilities(policy, neighbourhoods), old, advantages, clip=math.inf
     )
     (ppo_gradient,) = torch.autograd.grad(loss, policy.weights)
     (ac_gradient,) = torch.autograd.grad(
@@ -134,8 +136,10 @@ def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() 
     assert fraction == 0.0
     # Moving the policy makes ratios differ from one and the clip bind.
     policy.set_weights(torch.tensor([2.0, -3.0], dtype=torch.float64))
+    # The neighbourhoods are the batch's, not the moved policy's: what moved
+    # is the policy scoring them.
     _, moved = ppo_loss(
-        _log_probabilities(landscape, policy, episodes), old, advantages, clip=0.2
+        _log_probabilities(policy, neighbourhoods), old, advantages, clip=0.2
     )
     assert moved > 0.0
     with pytest.raises(ValueError, match="clip must be positive"):

@@ -31,6 +31,15 @@ folding it onto a valid row -- would be a silent behaviour change root
 ``CLAUDE.md`` forbids, and raising would leave ``gymnasium``'s own checker,
 which samples the action space unmasked, unable to step at all.
 
+**The batched rollout is not here (issues #392, #391).** Putting ``n`` copies
+of this adapter behind a ``gymnasium.vector.SyncVectorEnv`` was measured and
+declined --- it costs more per episode than rolling one at a time, at every
+batch size on every fixture --- so it lives in
+:mod:`snakes_and_ladders.sandbox.gym_vector` with the benchmarks and the pins
+that declined it. The adapter itself was not declined: it is what a
+Farama-API agent or checker drives, and what that batched driver is built
+out of.
+
 It lives in ``search/`` because it may import both halves; ``learn/`` may
 not import ``gymnasium`` on the core install, and ``gymnasium`` is the
 ``frameworks`` extra rather than a core dependency.
@@ -119,6 +128,18 @@ class GymnasiumEnvironment[S, A](gymnasium.Env[Observation, int]):
         """The wrapped environment."""
         return self._environment
 
+    @property
+    def available(self) -> Sequence[A]:
+        """The current neighbourhood, in the wrapped environment's own action type.
+
+        The observation is an index into it, and a caller assembling an
+        :class:`~snakes_and_ladders.learn.environment.Episode` needs the action
+        itself. It is the neighbourhood the last :meth:`reset` or :meth:`step`
+        scored, so reading it costs nothing; recomputing it would score the
+        neighbourhood a second time and double what a decision costs.
+        """
+        return self._available
+
     def reset(
         self, *, seed: int | None = None, options: dict[str, Any] | None = None
     ) -> tuple[Observation, dict[str, Any]]:
@@ -149,7 +170,10 @@ class GymnasiumEnvironment[S, A](gymnasium.Env[Observation, int]):
         )
         self._steps = 0
         self._evaluations = 0
-        return self._observe(), self._info(action_valid=True)
+        observation = self._observe()
+        return observation, self._info(
+            action_valid=True, terminal=self._environment.is_terminal(self.state)
+        )
 
     def step(
         self, action: int
@@ -172,7 +196,7 @@ class GymnasiumEnvironment[S, A](gymnasium.Env[Observation, int]):
             float(reward),
             terminated,
             truncated,
-            self._info(action_valid=valid),
+            self._info(action_valid=valid, terminal=terminated),
         )
 
     def _observe(self) -> Observation:
@@ -192,15 +216,27 @@ class GymnasiumEnvironment[S, A](gymnasium.Env[Observation, int]):
         observation[: len(self._available)] = features.detach().numpy()
         return observation
 
-    def _info(self, *, action_valid: bool) -> dict[str, Any]:
+    def _info(self, *, action_valid: bool, terminal: bool) -> dict[str, Any]:
+        """The info dictionary, with ``terminal`` passed in rather than recomputed.
+
+        ``step`` already returns the flag and ``reset`` computes it once, so
+        asking the environment a second time here scored the whole
+        neighbourhood again. Removing that call cut the adapter's
+        ``is_terminal`` count over a 64-episode Potts batch from 724 to 426
+        and the batched rollout from 1.51 to 1.31 ms per episode; the
+        sequential rollout does not go through ``_info`` and was unaffected.
+        """
         mask = np.zeros(self._n_max, dtype=np.bool_)
         mask[: len(self._available)] = True
         return {
             "action_mask": mask,
             "evaluations": self._evaluations,
             "action_valid": action_valid,
-            "terminal": self._environment.is_terminal(self.state),
+            "terminal": terminal,
         }
 
 
-__all__ = ["GymnasiumEnvironment", "Observation"]
+__all__ = [
+    "GymnasiumEnvironment",
+    "Observation",
+]

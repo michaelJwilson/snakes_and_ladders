@@ -318,6 +318,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox.compiled_pruning
    :members:
 
+.. automodule:: snakes_and_ladders.sandbox.gym_vector
+   :members:
+
 .. automodule:: snakes_and_ladders.sandbox.pruning_problem
    :members:
 
@@ -328,6 +331,12 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.scipy_mincut
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.torchrl_advantage
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.torchrl_clip
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.tropical

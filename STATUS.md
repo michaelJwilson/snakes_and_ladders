@@ -185,6 +185,45 @@ numbers fails a test rather than dating a paragraph. `alpha_expansion` —
 site where a compiled flow would still pay, tracked under
 [#405](https://github.com/michaelJwilson/snakes_and_ladders/issues/405).
 
+**Two of the replacements are measured, and both are declined
+([#391](https://github.com/michaelJwilson/snakes_and_ladders/issues/391),
+[#392](https://github.com/michaelJwilson/snakes_and_ladders/issues/392),
+`docs/experiments/009-batched-rollout-and-torchrl-ppo.md`).**
+`sandbox.gym_vector.rollout_batch` collects a batch of episodes through
+`gymnasium.vector.SyncVectorEnv`, with `TimeLimit` carrying the decision budget
+and `RecordEpisodeStatistics` the episode boundary, and at one copy equals
+`learn.rollout.rollout` under the same generator draw for draw. It costs 1.381,
+1.018 and 0.938 ms per episode at batch 1, 4 and 16 on the Potts chain against
+the sequential rollout's 0.795, 1.570, 1.499 and 1.639 ms against 0.929 on the
+5-taxon tree, and 6.314, 6.261 and 6.654 ms against 4.139 on the 7-taxon one: `SyncVectorEnv` is a serial loop in one process, so it has no
+parallelism to amortize the vector API's observation stacking and autoreset
+bookkeeping against, and no batch size makes it pay. TorchRL's `GAE` is 220x
+slower than the recursion it would front, 6.384 ms against 0.029 ms per
+32-episode batch. Its `ClipPPOLoss` cannot front `ppo_loss` at that function's
+signature at all --- it takes the actor, not the log-probabilities --- and a
+whole PPO loop rebuilt on it ran the 1,920-episode Potts-chain budget in 6.31 s
+against 8.06 s, at the identical result: 96.30% of the 81 starts, exact expected
+return 2.2779, and a sampled learning curve agreeing iteration for iteration to
+0.0. Of that 1.28x, 1.13x is the neighbourhood scoring hoisted out of PPO's
+epoch loop and the rest is clipping the concatenated batch instead of looping
+over episodes; both are changes to `learn.ppo`, which now runs the same budget
+in 5.83 s, and TorchRL stays what it already was here, the second implementation
+refereeing ours at 1e-10.
+
+All three declined fronts are kept as code in
+`python/snakes_and_ladders/sandbox/` --- `gym_vector`, `torchrl_advantage` and
+`torchrl_clip` --- rather than as numbers in a merged pull request, because the
+sandbox is the home of whichever side of a measurement is not on the hot path
+(`sandbox/CLAUDE.md`). Each is still pinned against ours ---
+`tests/regression/learn/test_learn_ppo_torchrl.py` at 1e-10 on both value and
+gradient, `tests/regression/search/test_search_gym_vector.py` at draw-for-draw
+equality --- and still timed beside ours by
+`tests/benchmarks/test_learn_ppo_bench.py` and
+`tests/benchmarks/test_search_gym_bench.py`, so a library release that changes
+an answer fails and one that moves a ratio is re-measured. The
+`GymnasiumEnvironment` adapter the batched rollout is built from was not
+declined and stays in `search.gym`.
+
 **CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
 three negative results
 ([#344](https://github.com/michaelJwilson/snakes_and_ladders/issues/344)).**

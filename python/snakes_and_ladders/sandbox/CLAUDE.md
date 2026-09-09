@@ -50,12 +50,15 @@ and is principle.
 
 ## What is here
 
-Three framework fronts, each measured against the implementation it would
-have replaced on a hot path and declined on that measurement (issue #390 for
-PyTorch Geometric over `learn.surrogate.GraphSurrogate`, #389 for `rustworkx`
-over the Swendsen-Wang labelling, #388 for `scipy.sparse.csgraph` over the
-ground-state minimum cut). Each module's docstring names the experiment that
-declined it, the ratio and the host, and each arrives with the test that
+Six framework fronts, each measured against the implementation it would have
+replaced on a hot path and declined on that measurement: PyTorch Geometric
+over `learn.surrogate.GraphSurrogate` (#390), `rustworkx` over the
+Swendsen-Wang labelling (#389), `scipy.sparse.csgraph` over the ground-state
+minimum cut (#388), `gymnasium.vector` over the batched rollout (#392), and
+TorchRL's `GAE` and `ClipPPOLoss` over `learn.ppo`'s advantage and clipped
+loss (#391) — the last of which cannot front `ppo_loss` at its signature and
+says so where it is written. Each module's docstring names the experiment
+that declined it, the ratio and the host, and each arrives with the test that
 referees it.
 
 Three further declines against no framework at all. `tropical` is the
@@ -78,6 +81,6 @@ The frameworks issue #322 adopted arrived instead as adapters and as referees
 on paths nobody proposed replacing — a Gymnasium adapter over the unchanged
 `learn.Environment` protocol, `rustworkx` conversions beside the generators
 they are checked against, TorchRL and PyTorch Geometric as unit oracles — and
-those stay where they are used. The candidate still open is `learn.ppo`'s
-advantage estimate and clipped loss behind TorchRL; it arrives here with the
-measurement that settles it, and `TICKETS.md` carries it as a follow-up.
+those stay where they are used. Every candidate the ticket named has now been
+measured and declined; a further one arrives here with the measurement that
+settles it, whichever way it settles.

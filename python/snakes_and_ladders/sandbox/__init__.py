@@ -24,6 +24,15 @@ The first two import the ``frameworks`` extra at module scope, so a caller
 without it fails rather than silently falling back to what the front referees;
 scipy is a core dependency and the third imports it directly.
 
+Three further framework fronts, all declined on their numbers (issues #391,
+#392) and each importing the ``frameworks`` extra at module scope for the same
+reason: :mod:`~snakes_and_ladders.sandbox.gym_vector` batches the rollout
+through ``gymnasium.vector``,
+:mod:`~snakes_and_ladders.sandbox.torchrl_advantage` computes the generalized
+advantage through TorchRL's ``GAE``, and
+:mod:`~snakes_and_ladders.sandbox.torchrl_clip` computes the clipped surrogate
+through its ``ClipPPOLoss``.
+
 :mod:`~snakes_and_ladders.sandbox.tropical` is a decline of the same kind
 against no framework at all: the tropical Grassmannian relaxation of topology
 search (issue #408), which neighbor joining matched at no gradient steps at

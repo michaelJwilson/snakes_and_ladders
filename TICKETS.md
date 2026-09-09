@@ -122,7 +122,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
   and from 3×3 to 4×6 lattices, and a policy does not yet — the lattice
   half is filed (#414)
-- Batched episode rollout, so a budget at `n = 200` is affordable
+- Batched episode rollout, so a budget at `n = 200` is affordable. `sandbox.gym_vector.rollout_batch` collects a batch through `gymnasium.vector`, refereed against the sequential rollout draw for draw, and is 1.18x to 1.75x *slower* per episode: `SyncVectorEnv` is a serial loop in one process (#392, `docs/experiments/007-batched-rollout-and-torchrl-ppo.md`). It is kept in the sandbox as the losing side, still pinned and still timed. What remains is a collector with real parallelism
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed
 
@@ -186,11 +186,15 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   Gibbs sampler (#405)
 - Adopt `rustworkx` on a hot path where a measurement says so —
   `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
-  of the bound — moving the replaced implementation to `sandbox/`
+  of the bound — moving whichever side the measurement declines to
+  `sandbox/`
 - TorchRL `TensorDict` environments and a `SyncDataCollector` over the
   Gymnasium adapter for Milestone 2.2's batched rollout, adopted only if the
   collector beats `learn.rollout` on the 8 → 20 taxa scaling with `float64`
-  forced throughout
+  forced throughout. The `SyncVectorEnv` half of this was measured and
+  declined (#392); TorchRL's `GAE` and `ClipPPOLoss` were too (#391). All
+  three fronts are in `sandbox/`, refereeing ours at 1e-10 and re-measured
+  beside it
 - PyTorch Geometric `Batch.from_data_list` for surrogate training at 20+
   taxa, and `HeteroData` over `sim.factor_graph` for a learned message
   passing beside the exact one, gated on the training-time benchmark
