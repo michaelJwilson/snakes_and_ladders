@@ -218,7 +218,9 @@ def checklist_labels(template: Path = RELEASE_TEMPLATE) -> list[str]:
         return []
     following = text.find("\n  - type:", start)
     block = text[start : following if following > 0 else len(text)]
-    return [match.group(1) for match in map(_CHECKBOX.match, block.splitlines()) if match]
+    return [
+        match.group(1) for match in map(_CHECKBOX.match, block.splitlines()) if match
+    ]
 
 
 def unchecked_statements(
@@ -236,7 +238,9 @@ def unchecked_statements(
     """
     boxed = {label.casefold() for label in checklist_labels(template)}
     return sorted(
-        title for title in statements(textbook).values() if title.casefold() not in boxed
+        title
+        for title in statements(textbook).values()
+        if title.casefold() not in boxed
     )
 
 
@@ -272,8 +276,7 @@ def render(catalogue: Path = CATALOGUE, textbook: Path = TEXTBOOK) -> str:
 
     lines += ["", "seen, not gated:"]
     lines += [
-        f"  rendered and cited by nothing (#492): {stem}"
-        for stem in uncited_figures()
+        f"  rendered and cited by nothing (#492): {stem}" for stem in uncited_figures()
     ]
     lines += [
         f"  no box in the release checklist: {title}"

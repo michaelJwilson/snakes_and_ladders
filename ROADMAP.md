@@ -168,12 +168,17 @@ this LaTeX documentation. It must contain:
 - Complete mathematical formulations of all substitution models, energy
   landscapes, transition probabilities and parity constraints across the four
   problem classes and the instances derived from them, with a problem
-  statement per row of `PROBLEMS.md` and generated tables of which algorithm
-  and which referee applies to each. A problem statement is complete when it
-  carries the model, the sizes it is supported at, the model as a factor graph
-  with a sketch of that structure, the algorithms it uses, and the validation
-  naming each referee with what it does and does not establish; a guard checks
-  that shape rather than a reviewer.
+  statement per problem key of `PROBLEMS.md` and generated tables of which
+  algorithm and which referee applies to each. A key, not a row: a row is one
+  implementation and several may share a statement --- another substitution
+  matrix, another graph, another size, another emission family --- so the
+  eleven statements carry fifteen rows, and `infra/problem_join.py` fails a
+  statement no row is code for and a row keyed to no statement (#495).
+  A problem statement is complete when it carries the model, the sizes it is
+  supported at, the model as a factor graph with a sketch of that structure,
+  the algorithms it uses, and the validation naming each referee with what it
+  does and does not establish; a guard checks that shape rather than a
+  reviewer.
 - Rigorous derivations of the exact inference algorithms (Felsenstein's
   pruning, belief propagation, forward-backward; Appendix A of the textbook,
   #326).

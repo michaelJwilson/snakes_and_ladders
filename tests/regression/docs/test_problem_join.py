@@ -40,9 +40,7 @@ TEXTBOOK_SOURCES = ("textbook.tex", "notation.tex", "preamble.tex")
 
 def _catalogue(tmp_path: Path, rows: str) -> Path:
     path = tmp_path / "PROBLEMS.md"
-    path.write_text(
-        "| Problem | Statement | Simulate |\n| --- | --- | --- |\n" + rows
-    )
+    path.write_text("| Problem | Statement | Simulate |\n| --- | --- | --- |\n" + rows)
     return path
 
 
@@ -106,7 +104,9 @@ def test_an_orphaned_statement_fails_the_join_and_is_named(tmp_path: Path) -> No
 def test_an_orphaned_row_fails_the_join_and_is_named(tmp_path: Path) -> None:
     # And the reverse, including the unkeyed row: an empty Statement cell is a
     # row naming no statement, not a row exempt from the join.
-    textbook = _textbook(tmp_path, "\\section{Problem Statement: A}\n\\label{sec:aaa}\n")
+    textbook = _textbook(
+        tmp_path, "\\section{Problem Statement: A}\n\\label{sec:aaa}\n"
+    )
     catalogue = _catalogue(
         tmp_path,
         "| Row A | sec:aaa | `x` |\n| Row B | sec:zzz | `y` |\n| Row C |  | `z` |\n",
@@ -119,7 +119,9 @@ def test_an_orphaned_row_fails_the_join_and_is_named(tmp_path: Path) -> None:
 def test_rows_sharing_a_key_are_variants_and_not_a_failure(tmp_path: Path) -> None:
     # The granularity decision: four keys carry two rows each in the tree, and
     # that must group rather than fail, or every variant becomes a statement.
-    textbook = _textbook(tmp_path, "\\section{Problem Statement: A}\n\\label{sec:aaa}\n")
+    textbook = _textbook(
+        tmp_path, "\\section{Problem Statement: A}\n\\label{sec:aaa}\n"
+    )
     catalogue = _catalogue(
         tmp_path, "| Row A | sec:aaa | `x` |\n| Row A prime | sec:aaa | `y` |\n"
     )

@@ -13,7 +13,7 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 | --- | --- |
 | `benches/`, `tests/` | Criterion benchmarks (Rust), pytest suite, and integration tests. |
 | `docs/source/` | Sphinx API documentation. |
-| `PROBLEMS.md` | The problem catalogue, hand-written and resolved by a test. `infra/problems_tables.py` reads it and the suite's markers into the textbook's applicability tables (`docs/tex/generated/`), from `docs/tex/method_notes.yaml`'s hand-written notes. |
+| `PROBLEMS.md` | The problem catalogue, hand-written and resolved by a test. Its `Statement` column is the problem key --- the LaTeX label of the textbook section stating the model the row is code for --- and `infra/problem_join.py` joins the two on it, failing a statement no row is keyed to and a row keyed to no statement (issue #495); `--report` prints the join and the orphans it sees and does not gate. `infra/problems_tables.py` reads it and the suite's markers into the textbook's applicability tables (`docs/tex/generated/`), from `docs/tex/method_notes.yaml`'s hand-written notes. |
 | `python/snakes_and_ladders/` | Python package: re-exports, typed extension stubs, stub CLI. |
 | `python/snakes_and_ladders/sim/` | Data generation and ground-truth retention. |
 | `python/snakes_and_ladders/likelihood/` | Felsenstein pruning; CPU dispatch landed (NumPy, PyTorch, Rust), CUDA and Metal dispatch not yet implemented. Also the phylogenetic `Objective` (`objective.py`), which adapts the recursion to `opt/`'s fitting interface — it is here because `opt/` may import no application module. |
