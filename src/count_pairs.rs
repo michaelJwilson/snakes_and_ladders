@@ -363,7 +363,9 @@ mod tests {
         let mut successes = vec![0u16; 2];
         let refused = simulate_count_pairs_into(
             1,
-            &[0, 0],
+            // M * S = 1, or the dimension check refuses before the dispersion
+            // one does and the test passes on the wrong error.
+            &[0],
             &[0, 0],
             &CountPairFamilies {
                 dispersion: &[-1.0],
