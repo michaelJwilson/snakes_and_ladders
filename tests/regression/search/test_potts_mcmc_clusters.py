@@ -10,9 +10,11 @@ replaced, and the grouping against the ``unique``/``flatnonzero`` scan it
 replaced, on seeded bond sets.
 
 `rustworkx` and `scipy.sparse.csgraph` referee the partition from outside.
-Neither replaced the labelling -- issue #389 measured both slower than this
-module's own code on the whole sweep -- so what they are here for is the
-partition itself, which they compute by a different algorithm.
+Neither replaced the labelling: issue #389 measured `rustworkx` slower than
+this module's own code on the whole sweep at every extent, and `scipy` faster
+only past extent 16 and only by renumbering the clusters, which composes a
+different chain from the same seed. So what they are here for is the partition
+itself, which each computes by a different algorithm.
 """
 
 from __future__ import annotations
