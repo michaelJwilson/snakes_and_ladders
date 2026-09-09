@@ -1,11 +1,12 @@
-"""`snakes_and_ladders.sandbox` is the oracle home, and only tests and QA may read it.
+"""`snakes_and_ladders.sandbox` holds the second implementation, and only tests and QA may read it.
 
-Issue #322. An implementation a framework replaced on a hot path is kept there
-to referee the framework. Two things follow that no reviewer would notice in a
-diff: a hot-path module importing its own oracle has not been replaced, and a
-package root re-exporting it would put it back on the package surface. Both
-are asserted from the source tree rather than from the import system, so a
-lazy import inside a function is caught too.
+Issue #322. Whichever side of a measurement is not on the hot path is kept
+there to referee the other: the implementation a framework replaced, or the
+framework front that lost. Two things follow that no reviewer would notice in
+a diff: a hot-path module importing its own referee has not chosen between the
+two, and a package root re-exporting it would put it back on the package
+surface. Both are asserted from the source tree rather than from the import
+system, so a lazy import inside a function is caught too.
 """
 
 from __future__ import annotations
@@ -20,9 +21,11 @@ import snakes_and_ladders.sandbox
 PACKAGE = Path(snakes_and_ladders.__file__).parent
 SANDBOX = "snakes_and_ladders.sandbox"
 
-# The packages the oracle home may not be imported from: everything that could
-# carry a hot path. `qa` renders and may read an oracle; `tests/` pins against
-# one. `sandbox` itself is excluded because an oracle may import a sibling.
+# The packages the sandbox may not be imported from: everything that could
+# carry a hot path. `qa` renders and may read a referee; `tests/` pins against
+# one. `sandbox` itself is excluded because a referee may import a sibling,
+# and it may import a hot-path module in the other direction -- a framework
+# front is written over the interface it would have replaced.
 FORBIDDEN_IMPORTERS = ("sim", "likelihood", "opt", "search", "learn")
 
 
@@ -68,6 +71,10 @@ def test_the_sandbox_states_its_rules_where_the_root_says_they_live() -> None:
     assert "Nothing is deleted" in rules
     assert "Only `tests/` and `snakes_and_ladders.qa` import from here" in rules
     assert "Not re-exported from the package root" in rules
+    # The rule the directory turns on: a decline is kept as code, so the
+    # losing side of a measurement lives here whichever side it was.
+    assert "Whichever side lost moves in" in rules
+    assert "A decline is kept as code, not as a paragraph" in rules
     assert snakes_and_ladders.sandbox.__doc__ is not None
     assert "test_sandbox.py" in snakes_and_ladders.sandbox.__doc__
 
