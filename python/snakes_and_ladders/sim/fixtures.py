@@ -51,6 +51,7 @@ from snakes_and_ladders.inputs import digest, library_versions, module_closure
 from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.opt.testfunctions import load_test_function_params
 from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
+from snakes_and_ladders.sim.convolutional import load_turbo_params
 from snakes_and_ladders.sim.count_pairs import load_spatio_sequential_counts_params
 from snakes_and_ladders.sim.emission_mixture import load_emission_mixture_params
 from snakes_and_ladders.sim.hmm import load_hmm_params
@@ -88,6 +89,7 @@ LOADERS: dict[str, Callable[[Path], Any]] = {
     "ldpc": load_ldpc_params,
     "frustrated-lattice": load_frustrated_lattice_params,
     "test-functions": load_test_function_params,
+    "turbo": load_turbo_params,
 }
 
 #: The oracles a fixture may state: an exhaustive sum over the instance, the

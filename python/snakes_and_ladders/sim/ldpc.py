@@ -373,6 +373,40 @@ def _reduced_row_echelon(matrix: np.ndarray) -> tuple[np.ndarray, list[int]]:
     return reduced, pivots
 
 
+def null_space(matrix: np.ndarray) -> np.ndarray:
+    """A basis of ``{x : matrix x = 0}`` over GF(2), as rows.
+
+    Gauss--Jordan to reduced row echelon form; each free column contributes
+    one basis vector, with a one there, zeros at the other free columns, and
+    the pivot entries the reduction forces. The dimension is
+    ``columns - rank``.
+
+    The one home of the GF(2) elimination in this package:
+    :func:`generator_matrix` takes the null space of a parity-check matrix
+    and :func:`snakes_and_ladders.sim.convolutional.parity_check` takes the
+    null space of a generator, which are the same operation on transposed
+    inputs and were two copies of it before issue #233.
+
+    Parameters
+    ----------
+    matrix : np.ndarray
+        A 0/1 array; it is not modified.
+
+    Returns
+    -------
+    np.ndarray
+        ``uint8`` of shape ``(columns - rank, columns)``.
+    """
+    reduced, pivots = _reduced_row_echelon(matrix)
+    n_columns = reduced.shape[1]
+    free = [column for column in range(n_columns) if column not in set(pivots)]
+    basis = np.zeros((len(free), n_columns), dtype=np.uint8)
+    for r, column in enumerate(free):
+        basis[r, column] = 1
+        basis[r, pivots] = reduced[: len(pivots), column]
+    return basis
+
+
 def generator_matrix(code: ParityCheck) -> np.ndarray:
     """A ``(k, n)`` basis of the code, systematic in the non-pivot columns.
 
@@ -391,13 +425,7 @@ def generator_matrix(code: ParityCheck) -> np.ndarray:
             f"{MAX_ENCODABLE_BITS}; a linear-time encoder is issue #340's later work"
         )
         raise ValueError(msg)
-    reduced, pivots = _reduced_row_echelon(code.dense())
-    free = [column for column in range(code.n_bits) if column not in set(pivots)]
-    generator = np.zeros((len(free), code.n_bits), dtype=np.uint8)
-    for r, column in enumerate(free):
-        generator[r, column] = 1
-        generator[r, pivots] = reduced[: len(pivots), column]
-    return generator
+    return null_space(code.dense())
 
 
 def encode(code: ParityCheck, message: np.ndarray) -> np.ndarray:

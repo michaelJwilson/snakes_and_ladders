@@ -16,7 +16,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 - Support the different lattice types (#231)
-- A turbo code problem, fixture and belief-propagation example (#233)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code rather than the zero word (#340)
 - Bicycle codes and quantum LDPC codes as a second code family (#362)

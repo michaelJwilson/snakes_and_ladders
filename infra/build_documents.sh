@@ -62,6 +62,16 @@ uv run --no-sync python -m snakes_and_ladders.qa.build \
 # file and the test tree.
 uv run --no-sync python infra/problems_tables.py --write
 
+# Citation integrity, before latexmk rather than after it: a cited figure
+# exists, a cited label is defined in the document that cites it, a \cite has
+# a bibliography entry. latexmk reports the same three in its log and the
+# `documents` job greps for it, but only once both documents are typeset, and
+# a log line does not say which document defined the label it could not find
+# -- a cross-document reference reads as clean in each log alone (issue #249).
+# Text and existence, no render: 55 ms over both documents against the build's
+# 15.8 s, so it runs here and fails before the build rather than beside it.
+uv run --no-sync python infra/check_citations.py
+
 for document in paper textbook; do
   (
     cd docs/tex
