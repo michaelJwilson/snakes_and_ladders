@@ -49,9 +49,12 @@ and is principle.
 
 ## What is here
 
-One front, and it is thin on purpose: `compiled_pruning` is
-`likelihood.pruning_torch`'s recursion through `torch.compile`, measured
-against the eager recursion and declined at 1.21x and 1.09x
+Two declines, each with the tests that declined it. `tropical` is the
+tropical Grassmannian relaxation of topology search (issue #408), which
+neighbor joining matched at no gradient steps at every size enumeration
+referees. `compiled_pruning` is thinner: `likelihood.pruning_torch`'s
+recursion through `torch.compile`, measured against the eager recursion and
+declined at 1.21x and 1.09x
 ([experiment 007](../../../docs/experiments/007-per-fit-cost-of-the-tree-likelihood.md),
 issue #443). A compiler is not a second implementation and the module says so
 in its first paragraph: what it adds to the one `torch.compile` call is the

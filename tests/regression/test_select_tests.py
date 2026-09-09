@@ -18,9 +18,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
 from select_tests import (
     ALWAYS,
+    ALWAYS_DESELECTED,
     BENCHMARKED,
     EVERYTHING,
     GUARDS,
+    KEY_TRIGGERS,
     MODULES,
     _benchmarks_for,
     dependents,
@@ -70,7 +72,10 @@ def test_a_documentation_only_change_selects_the_guards_and_measures_nothing() -
 @pytest.mark.structural
 def test_a_changelog_fragment_alone_selects_nothing() -> None:
     # `towncrier check` in the lint job is its guard; the suite has none.
-    assert select(["changelog.d/372.changed.md"]) == {"paths": [], "cov": []}
+    chosen = select(["changelog.d/372.changed.md"])
+
+    assert chosen["paths"] == []
+    assert chosen["cov"] == []
 
 
 @pytest.mark.critical
@@ -333,3 +338,39 @@ def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
     ]
 
     assert unmatched == []
+
+
+@pytest.mark.structural
+def test_the_key_tier_runs_only_for_what_could_move_it() -> None:
+    # A key test is two minutes, so it is deselected by default and selected
+    # by the change that could fail it: the coupled model, the emissions, the
+    # fixtures or the Rust crate (issue #399). Both directions, because a
+    # trigger that never fires and a tier that always runs are the two ways
+    # this stops paying for itself.
+    assert "key" in select(["python/snakes_and_ladders/learn/policy.py"])["deselect"]
+    for trigger in (
+        "src/coupled.rs",
+        "python/snakes_and_ladders/emissions.py",
+        "python/snakes_and_ladders/sim/count_pairs.py",
+        "tests/regression/fixtures/spatio_sequential_counts/stress.yaml",
+    ):
+        assert "key" not in select([trigger])["deselect"], trigger
+
+
+@pytest.mark.structural
+def test_every_key_trigger_names_something_in_the_tree() -> None:
+    # `EVERYTHING`'s check, for the second trigger list: an entry renamed on
+    # one side only stops selecting the key tier and fails nothing.
+    root = Path(__file__).resolve().parents[2]
+    missing = [trigger for trigger in KEY_TRIGGERS if not (root / trigger).exists()]
+
+    assert missing == []
+
+
+@pytest.mark.structural
+def test_the_release_and_stress_tiers_are_never_selected_locally() -> None:
+    # The two tiers `infra/validate.sh` has always deselected stay deselected
+    # whatever the change: they are the release gate's and the developer's,
+    # not the per-pull-request run's.
+    for changed in ([], ["src/coupled.rs"], ["README.md"]):
+        assert set(ALWAYS_DESELECTED) <= set(select(changed)["deselect"])

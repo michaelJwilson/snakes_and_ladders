@@ -137,6 +137,14 @@
     clusters where the cluster move does not, and which wins is measured at an
     equal budget rather than assumed.
 
+"Count-pair coupled spatio-sequential model":
+  optimizers: >-
+    Block-coordinate ascent recovers the planted labelling at every declared
+    bin factor on the 5,041-vertex instance, where the E step is the Rust
+    kernel and the label block is alpha-expansion on its field; what it is
+    refereed by at that size is the planted labelling alone, since no exact
+    evidence reaches 5,041 vertices.
+
 "Gaussian mixture":
   initializers: >-
     The seeding cost is within the published factor of the exact clustering
@@ -214,6 +222,11 @@ untested pairings:
   potts_lattice / surrogates: >-
     The relaxation is refereed against enumerated maximum cuts, which fixes
     the size at what enumeration reaches rather than at the declared one.
+  spatio_sequential_counts / optimizers: >-
+    The 5,041-vertex instance's fit runs at the key and stress budgets rather
+    than per pull request, so no test of either significant kind names the
+    declared fixture inside the tier this table reads; the ci instance is what
+    the E step and the binning are pinned on.
   test_functions / initializers: >-
     Random restarts are measured on functions constructed at the dimensions
     and starts each property needs, including ones chosen to be hard; the

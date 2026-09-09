@@ -247,12 +247,18 @@ def gated_log_density(
 ) -> np.ndarray:
     """``log P(x_{sn} | k, theta_m)`` for every node, position, class and state.
 
+    The leading two axes are position and node; a family whose observation is
+    not a scalar carries its own trailing axes after them --- the two-channel
+    count emission of :mod:`snakes_and_ladders.sim.count_pairs` is
+    ``(S, n_nodes, 2)`` --- so only the two this function indexes are
+    unpacked here.
+
     Returns
     -------
     np.ndarray
         Shape ``(n_nodes, S, M, K)``, the layout :func:`from_coupled` takes.
     """
-    n_positions, n_nodes = observations.shape
+    n_positions, n_nodes = observations.shape[:2]
     table = np.empty((n_nodes, n_positions, params.n_classes, params.n_states))
     for m, family in enumerate(params.emissions):
         scores = family.log_density(
