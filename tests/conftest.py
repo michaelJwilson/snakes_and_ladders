@@ -17,6 +17,13 @@ so does a ``key`` test over that (``tests/_durations.py``).
 ``infra/validate.sh`` sets both caps on the reference host; CI does not, per
 `DEV.md`'s rule against timing on its runners, and prints ``--durations``
 instead.
+
+**Which files the session collected** is recorded too, for issue #462's
+conservation guard in ``tests/regression/test_sandbox.py``. It is taken from
+``pytest_itemcollected``, which fires during collection and so before ``-m``
+deselects anything: the critical selection must still see the whole tree, or
+the guard would read the sandbox's importers as absent rather than
+deselected.
 """
 
 from __future__ import annotations
@@ -32,10 +39,16 @@ import pytest  # noqa: E402
 from tests._durations import key_over_cap, over_cap  # noqa: E402
 
 DURATIONS = pytest.StashKey[list[tuple[str, float, frozenset[str]]]]()
+COLLECTED_FILES = pytest.StashKey[set[str]]()
 
 
 def pytest_configure(config: pytest.Config) -> None:
     config.stash[DURATIONS] = []
+    config.stash[COLLECTED_FILES] = set()
+
+
+def pytest_itemcollected(item: pytest.Item) -> None:
+    item.config.stash[COLLECTED_FILES].add(str(item.path))
 
 
 @pytest.hookimpl(hookwrapper=True)
