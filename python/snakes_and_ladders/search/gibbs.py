@@ -238,6 +238,10 @@ def anneal_factor_graph(
     tracking the state of highest log-density seen. At ``T -> 0`` the heat
     bath is the argmax over each variable's conditional, so the two ends of a
     schedule are single-site descent and free sampling, as there.
+
+    :func:`snakes_and_ladders.opt.anneal.drive` with this module's sweep as the
+    transition, since issue #386; the loop was written here before that, and
+    is pinned draw for draw against the version that was.
     """
     indexed = _Indexed(graph)
     state = indexed.start(rng, start)
@@ -389,6 +393,9 @@ def anneal_topology(
 
     ``scores`` caches fitted log-likelihoods by leaf bipartitions across
     calls, since the fit is the whole cost.
+
+    :func:`snakes_and_ladders.opt.anneal.drive` with :func:`topology_step` as the
+    transition, since issue #386.
     """
     cache = {} if scores is None else scores
     score = cached_topology_score(alignment, k, cache, model=model)

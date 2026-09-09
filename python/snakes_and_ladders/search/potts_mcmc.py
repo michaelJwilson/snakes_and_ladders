@@ -272,6 +272,9 @@ def anneal_potts(
         gives: the two agree distributionally, not draw for draw, so the
         default path keeps every committed chain unchanged.
 
+    :func:`snakes_and_ladders.opt.anneal.drive` with the heat-bath sweep as the
+    transition, since issue #386.
+
     Returns
     -------
     AnnealedPotts
@@ -385,6 +388,9 @@ def parallel_tempering(
     backend : Backend
         As :func:`anneal_potts`: the oracle sweep by default, the Rust sweep
         on request, each replica on its own child generator either way.
+
+    :func:`snakes_and_ladders.opt.anneal.exchange` runs the exchange pass, on the
+    one ratio that was written three times before issue #386.
 
     Returns
     -------

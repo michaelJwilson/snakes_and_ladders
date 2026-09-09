@@ -655,6 +655,9 @@ def anneal(
         see the module note --- but a step that is stable at the hot end can
         still reject at the cold end, which the acceptance rate reports.
 
+    :func:`snakes_and_ladders.opt.anneal.drive` with the Hamiltonian transition,
+    since issue #386.
+
     Returns
     -------
     Annealed
@@ -777,6 +780,9 @@ def parallel_tempering(
         is the budget in gradients.
     step_size, n_steps, theta0, integrator
         As :func:`sample`; every replica starts at ``theta0``.
+
+    :func:`exchange` runs the exchange pass, on the one ratio that was
+    written three times before issue #386.
 
     Returns
     -------

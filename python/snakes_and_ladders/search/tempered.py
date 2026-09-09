@@ -132,6 +132,10 @@ def _exchange(
     ``step(state, value, temperature, generator)`` advances one replica one
     sweep and returns its new state and log-density at temperature one; the
     exchange ratio takes the energy ``-value``.
+
+    The pass itself is :func:`snakes_and_ladders.opt.anneal.exchange` since issue
+    #386; this module held the third copy of the ratio, imported privately
+    from :mod:`snakes_and_ladders.search.potts_mcmc` across a module line.
     """
     n_replicas = len(temperatures)
     betas = [1.0 / temperature for temperature in temperatures]
