@@ -33,6 +33,7 @@ from snakes_and_ladders.learn.environment import Episode
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsLandscape
 from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.search.gym import GymnasiumEnvironment
 from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
 from snakes_and_ladders.sim.params import load_simulation_params
@@ -42,6 +43,7 @@ from tests._fixtures import FIXTURES_DIR
 
 gymnasium = pytest.importorskip("gymnasium")
 from snakes_and_ladders.sandbox.gym_vector import (  # noqa: E402
+    _adapters,
     rollout_batch,
     vector_environment,
 )
@@ -213,7 +215,7 @@ def test_timelimit_truncates_on_the_decision_the_adapter_s_own_counter_does() ->
     policy = _policy()
     budget = 3
     vector = vector_environment(landscape, n_max=n_max, max_steps=budget, n=1)
-    adapter = vector.env.envs[0].unwrapped  # type: ignore[attr-defined]
+    adapter: GymnasiumEnvironment[Any, Any] = _adapters(vector)[0]
     adapter.np_random = np.random.default_rng(1)
     observations, _ = vector.reset()
     truncated = np.zeros(1, dtype=np.bool_)
@@ -236,7 +238,7 @@ def test_the_recorded_return_and_length_are_the_assembled_episode_s() -> None:
     landscape, n_max = _potts()
     policy = _policy()
     vector = vector_environment(landscape, n_max=n_max, max_steps=HORIZON, n=1)
-    adapter = vector.env.envs[0].unwrapped  # type: ignore[attr-defined]
+    adapter: GymnasiumEnvironment[Any, Any] = _adapters(vector)[0]
     adapter.np_random = np.random.default_rng(2)
     expected = rollout(landscape, policy, np.random.default_rng(2), HORIZON)
     observations, _ = vector.reset()

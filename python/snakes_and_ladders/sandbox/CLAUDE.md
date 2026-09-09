@@ -1,12 +1,12 @@
 # sandbox/
 
-The home of the second implementation. A framework and the hand-rolled code
-it was measured against are two implementations of one equation, and the one
-that is not on the hot path lives here, because a comparison with only one
-side left is a claim with no referee (issue #322). It is the place root
-`CLAUDE.md`'s oracle rule — every accelerated path keeps its reference
-implementation — puts a reference once one of the two sides is a library
-rather than a backend of our own.
+The home of the second solution. Two answers to one stated problem, and the
+one that is not on the hot path lives here, because a comparison with only
+one side left is a claim with no referee (issue #322). The two need not be a
+library and our own code: a method declined against a simpler method is the
+same case. It is the place root `CLAUDE.md`'s oracle rule — every accelerated
+path keeps its reference implementation — puts a reference once the choice is
+between two solutions rather than between two backends.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file too — and every docstring, comment and commit message
@@ -15,6 +15,18 @@ and is principle.
 
 ## Local rules
 
+- **What moves in is a solution, not the work that produced it.** A clean,
+  well-scoped answer to a problem that was posed, complete enough to read as
+  an implementation rather than as scaffolding. Probes, harnesses,
+  half-written experiments and code kept because deleting it feels wasteful
+  do not qualify: they are deleted, and what survives is the measurement they
+  produced, in the pull request and wherever the result is recorded.
+- **The problem it answers has to be well posed, and saying so is the
+  author's job.** Where a candidate cannot be expressed at the interface it
+  was supposed to replace, the honest move is to restate the problem at the
+  level where it can be, and to say that in the first paragraph — not to
+  write a wrapper that pretends. A solution to a question nobody can state is
+  not a second implementation, it is a file.
 - **Whichever side lost moves in, and it moves in when the measurement
   lands.** A framework that beat the implementation on the hot path by the
   margin root `CLAUDE.md` sets leaves that implementation here; a framework

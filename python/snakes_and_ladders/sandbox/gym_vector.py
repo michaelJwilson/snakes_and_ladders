@@ -43,6 +43,7 @@ to the rollout this exists to referee.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import cast
 
 import gymnasium
 import numpy as np
@@ -124,7 +125,7 @@ def _adapters[S, A](
     """The unwrapped adapters, in env order."""
     inner = vector.env
     assert isinstance(inner, SyncVectorEnv)
-    return [env.unwrapped for env in inner.envs]  # type: ignore[misc]
+    return [cast("GymnasiumEnvironment[S, A]", env.unwrapped) for env in inner.envs]
 
 
 def rollout_batch[S, A](
