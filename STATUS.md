@@ -861,6 +861,78 @@ against a 3.65 ms interval, which is what the ranked search's 2 fits against
 13 buys. Making the interval itself cheap is a separate decision against a
 profile and is not taken here.
 
+**A cheaper climb, and a kernel the compiler can vectorize**
+([#408](https://github.com/michaelJwilson/snakes_and_ladders/issues/408)).
+Each change was ranked before it was written. `cProfile` over an eight-taxon
+SPR search at 1,000 sites and 300 candidates — 80.9 s, 301 fits, 18,955
+forward passes, 4 accepted moves, budget exhausted — puts **40.5%** of self
+time in the autograd backward pass, **19.7%** in the Torch pruning post-order
+and **6.7%** in the L-BFGS step, with neighbourhood generation nowhere in the
+top twenty. The search's cost is therefore candidates fitted times passes per
+fit, and each change attacks one of those two factors: a parsimony start and a
+bounded regraft reduce candidates, a partial refit reduces passes per
+candidate.
+
+**What each change bought, alone and together.** SPR from a random start,
+budget 500 candidates, medians over 8 seeds, at the two sizes enumeration
+referees and at one past them. Every configuration reached the enumerated
+maximum **8 of 8** at five and at six taxa, and at eight taxa every one
+returned the unbounded search's own log-likelihood to the last digit printed,
+so the saving below is not paid for in optima on these fixtures. Six taxa,
+1,500 sites, as fits / forward passes / seconds: unbounded **49 / 2,848 /
+10.09**; parsimony start **31 / 1,902 / 6.61**; radius 1 **15 / 755 / 2.58**;
+radius 2 **43 / 2,482 / 8.63**; radius 3 **49 / 2,848 / 10.04**, which is the
+unbounded search, since no edge of a six-taxon remainder is further than 3;
+partial refit **50 / 1,810 / 6.06**; all three **31 / 1,009 / 3.37**. At eight
+taxa by 1,000 sites the unbounded search spends 16,600 and 24,493 forward
+passes over two seeds against all three's **1,930** and **3,359**, and 69.0
+and 101.7 s against **7.6** and **13.8** — **8.6x** and **7.3x** the passes,
+**9.1x** and **7.4x** the wall clock.
+
+The three do different work and it shows in the counts. A parsimony start cuts
+*moves* (0 and 1 accepted at eight taxa against 2 and 4) and leaves the
+neighbourhood alone. A radius cuts *candidates per move* and pays for it in
+moves (6 and 9 at radius 1 against 2 and 4), which is why it still wins by
+**5.6x** in passes: a candidate costs a fit and a move costs nothing. A
+partial refit changes neither, cutting *passes per candidate* — its fit count
+rises slightly, from the full refit of each accepted move, while its passes
+fall by a third. The smallest radius that keeps the optimum on these fixtures
+is **1**, which is the NNI neighbourhood exactly; the combination is reported
+at radius 2, the smallest radius that is still an SPR search.
+
+
+**The Rust pruning kernel, laid out for the vector unit.** The kernel is
+**93.2%** of the Python-visible call at 20 taxa by 11,000 sites and **96.1%**
+at 200, so the marshalling of issue #232 is no longer the term to chase;
+inside it the rescaling pass is **25.9%** and **32.5%** of the call, measured
+against `rescale=False`, and the message pass is the rest. A partial changed
+from `(site, state)` to `(state, site)`, making every inner loop a contiguous
+run over sites with no early exit and no data-dependent reduction. **That
+alone bought 3.9% at four taxa by 200,000 sites and nothing at eight**,
+because the sites-contiguous message reads each child row `k` times and those
+rows are not in cache: the traffic ate the vectorization. Tiling the site loop
+so one tile's `k` child rows and `k` parent rows are live together fixed it.
+Criterion against the committed baseline, tile swept: 128 sites per tile
+**-28.2%** and **-35.5%** at the two cells, 256 **-29.1%** and **-28.1%**, 512
+**-33.0%** and **-27.5%**, 1024 **-19.2%** and **-23.2%**, 4096 **-19.5%** and
+**-21.5%**. 128 wins on the pair and is what ships: 47.59 to **34.17 ms** at
+four taxa by 200,000 sites, 101.07 to **65.18 ms** at eight.
+
+**Through the binding it buys nothing at the declared scale, and that is the
+result.** The same two builds, measured from Python at the sizes `ROADMAP.md`
+declares: 20 taxa by 11,000 sites, 10.28 to **10.46 ms**; 200 taxa by 11,000,
+114.94 to **112.42 ms** — 1.8% the wrong way and 2.2% the right way, both
+inside the run-to-run spread. Against the NumPy oracle in the same runs, 1.91x
+to **2.06x** and 1.94x to **2.01x**. So the layout pays where an alignment is
+long enough for one node's rows to leave cache and not at 11,000 sites, where
+199 internal nodes and a `log` per site per node are the call and the message
+pass is not. The remaining term at many taxa is not identified and no further
+port is taken against a guess. Agreement with the NumPy oracle is unchanged in
+kind and measured at **3.4e-15** and **1.5e-15** relative, inside
+`likelihood/CLAUDE.md`'s `1e-11` `float64` bound; the one reassociation is the
+rescale divide becoming a reciprocal and a multiply, which is why the pin is a
+relative tolerance and not bitwise.
+
 **The LDPC decoder, specialised from the general sum-product and held to it**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
 `likelihood.ldpc.decode` runs the log-domain `tanh` rule or min-sum under a
