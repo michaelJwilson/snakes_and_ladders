@@ -37,6 +37,10 @@ run_check "cargo test" cargo test --locked
 # the full suite -- see this PR's DEV.md fix.
 run_check "pytest (full suite)" uv run pytest --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
 run_check "sphinx-build -W" uv run sphinx-build -b html docs/source docs/_build/html -W
+# The generated ledgers are written here rather than read from the tree: none
+# is committed (issue #425), and --check fails if a copy of one reached the
+# index and a regeneration disagrees with it.
+run_check "generated ledgers" infra/ledgers.sh --check
 run_check "documents" infra/build_documents.sh
 # The per-PR build regenerates only what the document cites (issue #154), so
 # the figures it does not cite are checked here instead -- the check moves to
@@ -46,6 +50,13 @@ run_check "documents" infra/build_documents.sh
 # snakes_and_ladders.qa.build, so this needs no environment of its own.
 run_check "QA figures (all, incl. uncited)" \
   uv run python -m snakes_and_ladders.qa.build --all --check
+# The baseline numbers beside each fixture are read per pull request and
+# recomputed here (issue #401), the same trade the figures make above: the
+# tests that used to compute an enumerated maximum or a hill-climbing rate
+# before measuring anything now read one, and the only thing that recomputes
+# it is this gate. A cached number no run ever reproduces would be a claim
+# with no referee.
+run_check "fixture baselines" uv run python infra/baselines.py
 
 echo
 if [ "${#failures[@]}" -eq 0 ]; then

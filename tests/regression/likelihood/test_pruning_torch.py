@@ -260,14 +260,14 @@ def test_the_batched_transition_matrices_are_the_scalar_ones() -> None:
         dtype=torch.float64,
     )
 
-    batched_jc = pruning_torch._transition_probabilities(lengths, 4, None)
-    batched_gtr = pruning_torch._transition_probabilities(lengths, 4, rate)
+    batched_jc = pruning_torch.transition_probabilities(lengths, 4, None)
+    batched_gtr = pruning_torch.transition_probabilities(lengths, 4, rate)
 
     assert batched_jc.shape == batched_gtr.shape == (5, 4, 4)
     for position, length in enumerate(lengths):
         assert torch.equal(
             batched_jc[position],
-            pruning_torch._transition_probabilities(length, 4, None),
+            pruning_torch.transition_probabilities(length, 4, None),
         )
-        scalar_gtr = pruning_torch._transition_probabilities(length, 4, rate)
+        scalar_gtr = pruning_torch.transition_probabilities(length, 4, rate)
         assert float((batched_gtr[position] - scalar_gtr).abs().max()) < 1e-12

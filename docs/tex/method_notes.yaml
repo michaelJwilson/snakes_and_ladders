@@ -85,6 +85,18 @@
     these instances are where descent, annealing and tempering are separated
     at an equal budget of sweeps and nothing is solved exactly.
 
+"Planted spin glass, enumerable ground state":
+  samplers: >-
+    Annealing is the sampler that separates from descent here, and the reason
+    the instance is declared: single-site descent reaches the enumerated
+    ground state from 0.079 of starts, so a sampler that escapes a local
+    minimum has something to win against and an exact answer to win it
+    against.
+  optimizers: >-
+    Descent is the baseline the instance defeats. The sizes are chosen so the
+    ground state is enumerated rather than bounded, which is what lets a
+    failure be a failure rather than an unknown.
+
 "Low-density parity-check code, Gallager (3,6)":
   optimizers: >-
     Sum-product decodes to the bitwise posterior and min-sum to the most
@@ -96,7 +108,8 @@
   samplers: >-
     The block sweep draws a whole path from its conditional in one pass, where
     a single-site sweep would move one position at a time against the chain;
-    it is refereed by the simulated truth alone, an oracle being wanted.
+    over eight positions its draws agree with the enumerated path posterior
+    site by site to 0.0146 and jointly over the lumped cells.
   optimizers: >-
     Expectation--maximization re-estimates in closed form for every family
     whose M step has one and wins on cost there; the gradient fit is the only
@@ -112,7 +125,8 @@
   initializers: >-
     The annealed data-sampled burn-in beats a uniform start at an equal budget
     on the planted lattice, where it is the start and not the move that
-    decides the labelling; it is refereed by the planted labels alone.
+    decides the labelling; it returns the enumerated maximum-posterior
+    labelling on 9 of 12 instances and is within 1.05 nats on the rest.
   samplers: >-
     The factor-graph sweep is one algorithm over the whole coupled graph and
     is refereed by enumeration on the canonical instance; it is slower per
@@ -134,9 +148,11 @@
 "Gaussian mixture":
   initializers: >-
     The seeding cost is within the published factor of the exact clustering
-    cost, which is the one oracle this initializer has; whether a seeded start
-    reaches a better likelihood optimum than a uniform one is not pinned by
-    any test of either significant kind, so the pairing reads untested.
+    cost, and on the enumerable instance the seeded start lands in the
+    maximum-posterior assignment over all 65,536 on 20 of 20 seeds where
+    uniform seeding lands in it on 10; what it buys past the basin is
+    nothing, since expectation--maximization reaches the same optimum from
+    either start.
   optimizers: >-
     Restarts reach the best-known optimum from 7 of 40 starts against
     tempering's 4 and annealing's 1 at 3,000 evaluations (experiment 004);
@@ -146,8 +162,10 @@
 "Continuous test functions":
   initializers: >-
     Multi-start is what makes Himmelblau's four basins reachable at all; on a
-    unimodal surface it spends the budget for nothing, and it is refereed by
-    the analytic minimizers rather than by an oracle of its own.
+    unimodal surface it spends the budget for nothing. Every fit from every
+    restart lands within 6.2e-07 of one of the four published minimizers, so
+    the closed form referees where in a basin the fit stopped and not only
+    which basin it found.
   samplers: >-
     The annealed Hamiltonian chain with a polishing fit is beaten by plain
     restarts on the mixture at 3,000 evaluations (experiment 004); on
@@ -164,10 +182,6 @@
 # `tests/regression/docs/test_problems_tables.py` holds this block to that
 # list, so a pairing loses its reason only by gaining a test.
 untested pairings:
-  hmm / samplers: >-
-    The block sampler is refereed against enumerated path posteriors, and the
-    declared instance is 15 positions by 600 sequences --- past that
-    enumeration. The tests build the chains they can enumerate.
   ldpc / optimizers: >-
     The decoder's claim is about the (3,6) ensemble, so the tests draw codes
     at several block lengths and seeds rather than decoding one member. The
@@ -180,6 +194,15 @@ untested pairings:
     Expectation-maximization is pinned against the gradient fit on mixtures
     built per test, where the two are given the same observations at several
     sizes; the declared instance carries the comparison at the release budget.
+  planted_glass / optimizers: >-
+    Descent is measured on the declared instance and the ground state is
+    enumerated, but the annealer and the exact cut are not: the cut refuses a
+    non-submodular energy and the annealer's own claims are pinned on the
+    lattice, at sizes chosen for the sampler rather than for this instance.
+  planted_glass / samplers: >-
+    The instance exists to defeat descent, and what it is pinned against is
+    descent. Separating a sampler from descent on it is the comparison it was
+    declared for and is not yet run.
   potts_lattice / surrogates: >-
     The relaxation is refereed against enumerated maximum cuts, which fixes
     the size at what enumeration reaches rather than at the declared one.

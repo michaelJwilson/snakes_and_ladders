@@ -457,6 +457,44 @@ $\pi(x_{1,s})\,k^{-F_s(\tree)}$ for the site's Fitch score $F_s$, whence
 \end{equation}
 Both apply to a subtree as they do to the tree.
 
+A third trades exactness for cost by the site count rather than by the tree.
+Site-pattern compression, Equation~\ref{eq:site-patterns}, is exact and
+saturates; blocks of $N > 1$ consecutive sites do not repeat often enough for
+the same identity to save anything, and what a block partition buys instead is
+a bracket. Partition the $L$ columns into $\lceil L/N \rceil$ blocks of $N$
+consecutive sites, and let $\mathcal{F}$ be the blocks occurring at least $m$
+times. Evaluate those exactly, by Equation~\ref{eq:site-patterns} over their
+columns, and bound the remaining $B$ sites by the extremes of a single site's
+log-likelihood over the whole column alphabet:
+\begin{equation}
+  \ell_{\mathcal{F}} + B \, \underline{\lambda}(\tree, \branch)
+  \;\le\; \ell(\tree, \branch) \;\le\;
+  \ell_{\mathcal{F}} + B \, \overline{\lambda}(\tree, \branch),
+  \qquad
+  \begin{aligned}
+    \underline{\lambda} &= \textstyle\min_{x \in \states^n}
+      \log p(x \mid \tree, \branch, \Q), \\
+    \overline{\lambda} &= \textstyle\max_{x \in \states^n}
+      \log p(x \mid \tree, \branch, \Q),
+  \end{aligned}
+  \label{eq:block-frequency-bound}
+\end{equation}
+with $\ell_{\mathcal{F}}$ the frequent blocks' own log-likelihood. Both
+$\underline\lambda$ and $\overline\lambda$ are had in one pass over the tree
+and independently of $L$, by Equation~\ref{eq:pruning} with each leaf's
+message replaced by the extremes of its transition row
+(Appendix~\ref{app:bounds}); relaxing them to those one-pass values is what
+makes the bracket cheap and what makes it loose. The width is exactly
+$B\,(\overline\lambda - \underline\lambda)$, so the cutoff $m$ sets the trade
+directly: $m = 1$ leaves $B = 0$ and returns the exact value, and raising $m$
+moves blocks into the tail and never out of it. Only the lower end bounds
+$\ell^\ast(\tree)$, by the same argument that
+Equation~\ref{eq:plugin-bound} rests on. Measured at five taxa and 2,000
+sites, $N = 1$ and $m = 8$ leaves a width of $1.0\,|\ell|$ and $N \ge 3$
+leaves the whole alignment in the tail, so neither end orders topologies and
+what ranks is $\ell_{\mathcal{F}}$ itself, a point prediction over a fixed
+subsample that claims nothing.
+
 For a lattice the partition function is bracketed by two variational
 quantities. The naive mean-field bound is Gibbs' inequality at a product
 distribution $q = \prod_i q_i$, tightest at its fixed point:
@@ -619,6 +657,26 @@ recursion from the marginalization. Products of many small numbers underflow,
 so each node's partials are rescaled and the logarithm of the scaling
 accumulated separately; the rescaling must remain differentiable, since
 $\branch$ and $\Q$ are what the continuous optimization fits.
+
+\paragraph{Site patterns.}
+Equation~\ref{eq:site-independence} reads one column per term, so two
+identical columns contribute identical terms and the sum over $L$ columns is
+a weighted sum over the $P \le \min(L, k^{\,n})$ distinct ones:
+\begin{equation}
+  \ell(\tree, \branch)
+    = \sum_{s=1}^{L} \log p(\data_s \mid \tree, \branch, \Q)
+    = \sum_{p=1}^{P} w_p \, \log p(\data_p \mid \tree, \branch, \Q),
+  \qquad \sum_p w_p = L,
+  \label{eq:site-patterns}
+\end{equation}
+with $w_p$ the number of columns equal to pattern $p$. The identity is exact:
+the arithmetic is reassociated, not approximated, and only the floating-point
+summation order distinguishes the two sides. It is the standard first step of
+a maximum-likelihood implementation \citep{felsenstein2004}, and it saturates,
+since $P \le k^{\,n}$ however long the alignment---at $k = 4$ and four taxa
+$P \le 256$ whatever $L$ is, so the recursion's cost stops growing once every
+column has appeared. Compression is a property of the alignment rather than of
+an evaluator, so every backend consumes patterns and weights.
 
 Equation~\ref{eq:pruning} is Equation~\ref{eq:sum-product} run leaf to root
 with the root as the last variable: $L_u(i)$ is the product over $u$'s
@@ -1370,12 +1428,22 @@ $p(x_{sn} \mid k_{s,m}, \theta_m)$ when $\ell_n = m$ and to one otherwise. A
 label sits on every emission factor of its node and on every Potts factor of
 its edges; in the Forney form it passes through an equality node of that
 degree, and the gated factors are the higher-degree nodes that join the
-lattice to the chains (Figure~\ref{fig:coupled:sketch}). The graph has cycles, so Equation~\ref{eq:sum-product}
+lattice to the chains (Figure~\ref{fig:coupled:sketch}). What that structure
+is for is a labelling, which Figure~\ref{fig:coupled-labelling} shows on a
+lattice past enumeration, planted beside recovered. The graph has cycles, so Equation~\ref{eq:sum-product}
 is the Bethe approximation on it, and the exact quantities below come from
 enumeration on an instance small enough to enumerate---a $2 \times 2$ lattice
 with $M = 2$, $K = 2$, $S = 3$ has $2^4 \cdot 2^{12}$ joint states.
 
 \input{coupled_figure}
+
+\qacaptionread{figures/coupled_labelling_caption.txt}{\coupledLabellingCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/coupled_labelling}
+  \caption{\coupledLabellingCaption}
+  \label{fig:coupled-labelling}
+\end{figure}
 
 \subsection{The estimator: block-coordinate ascent}
 The blocks are the emission parameters $\theta$ and the labels $\ell$, with the
@@ -2105,7 +2173,9 @@ per row of $\parity$, a hard constraint of degree $d_c$ whose log table
 is zero on even-parity assignments and $-\infty$ elsewhere. This is the
 Tanner graph of the code; a bit sits on $d_v$ parity factors and one unary,
 so in the Forney form every bit passes through an equality node of degree
-$d_v + 1$ (Figure~\ref{fig:ldpc:sketch}). The graph has cycles---a random draw of the ensemble does not
+$d_v + 1$ (Figure~\ref{fig:ldpc:sketch}). The sketch states the structure;
+Figure~\ref{fig:ldpc-tanner} draws one member of the ensemble, where which
+bits a check covers is the draw and not the design. The graph has cycles---a random draw of the ensemble does not
 avoid short ones---so Equation~\ref{eq:sum-product} is the Bethe
 approximation on it, and the exact quantities below come from enumerating
 the $2^k$ codewords where $2^k \le 200{,}000$ (a $(3,6)$ code at $n = 24$
@@ -2113,6 +2183,14 @@ has $k \ge 14$) and from the tree schedule on a cycle-free code, where
 message passing is exact.
 
 \input{ldpc_figure}
+
+\qacaptionread{figures/tanner_graph_caption.txt}{\tannerGraphCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/tanner_graph}
+  \caption{\tannerGraphCaption}
+  \label{fig:ldpc-tanner}
+\end{figure}
 
 \subsection{The algorithm: sum-product in the log domain}
 A binary variable's message is one number, its log-odds, and
@@ -2647,6 +2725,32 @@ The entrywise limit $\sup_t \Pmat_{ij}(t)$, one on the diagonal and $1/k$
 off it, gives a bound this one dominates, because that matrix is not
 row-stochastic and the polynomial is increasing in every entry.
 
+\paragraph{The block-frequency bracket, \eqref{eq:block-frequency-bound}.}
+Two claims, and only the second needs an argument. First, the partition is a
+partition: every site lies in exactly one block, the frequent blocks
+contribute $\ell_{\mathcal{F}}$ by Equation~\ref{eq:site-patterns}, and each
+of the remaining $B$ sites contributes a term lying in
+$[\underline\lambda, \overline\lambda]$ by definition, so summing gives
+\eqref{eq:block-frequency-bound}. Second, $\underline\lambda$ and
+$\overline\lambda$ are computable in one pass. Run \eqref{eq:pruning} in the
+log domain and carry an interval $[\underline{L}_u(i), \overline{L}_u(i)]$ in
+place of each partial. A leaf $v$ observed in state $x$ sends its parent the
+column $\Pmat_{\cdot x}(t_v)$, so over every $x$ that message lies entrywise
+in $[\min_j \Pmat_{ij}(t_v), \max_j \Pmat_{ij}(t_v)]$, which is the leaf case
+and the only place the data enters. Above a leaf, $\sum_j \Pmat_{ij}(t_v)
+L_v(j)$ and the product over children in \eqref{eq:pruning} are non-decreasing
+in each $L_v(j)$, since transition probabilities and partials are
+non-negative, and so is the root sum \eqref{eq:root}; a non-decreasing
+function of arguments confined to intervals is confined to the interval its
+endpoints give, so the bounds propagate and $\underline\lambda$,
+$\overline\lambda$ bracket $\log p(x \mid \tree, \branch, \Q)$ for every
+$x \in \states^n$ at once. The relaxation is that each child's extreme is
+taken independently of the others: the bracket is therefore sound, and no
+single column need attain either end. $\underline\lambda = -\infty$ where a
+branch of length zero makes some column impossible, which is that column's
+value and not a failure. The regression suite enumerates all $k^{\,n} = 256$
+columns of the four-taxon fixture and finds none outside the bracket.
+
 \paragraph{The mean-field bound, \eqref{eq:mean-field-bound}.}
 For any distribution $q$ on configurations,
 $\log Z = \mathbb{E}_q[-\energy] + H(q) + \mathrm{KL}(q \,\|\, p)$, and the
@@ -2919,6 +3023,31 @@ Equation~\ref{eq:tanh-rule}}
        accepted move in full whatever its rank
 \State \Return the accepted move, with a reported score that is always a full
        evaluation
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{The block-frequency bracket, Equation~\ref{eq:block-frequency-bound}}
+\label{alg:block-frequency}
+\begin{algorithmic}[1]
+\State cut the $L$ columns into $\lfloor L/N \rfloor$ blocks of $N$ consecutive
+       sites, and a shorter remainder if $N \nmid L$
+       \Comment{a remainder is never equal to a full block}
+\State count the occurrences of each distinct block;
+       $\mathcal{F} \gets$ those occurring at least $m$ times
+\State $\ell_{\mathcal{F}} \gets$ Equation~\ref{eq:site-patterns} over the
+       columns of $\mathcal{F}$, each weighted by its block's count
+       \Comment{a column shared by two frequent blocks is one pattern with the
+       counts added}
+\State $B \gets L - $ the sites $\mathcal{F}$ covers
+\State $\underline\lambda, \overline\lambda \gets$
+       Equation~\ref{eq:pruning} with each leaf's message replaced by the
+       extremes of its transition row, one pass, no data read
+\State \Return
+       $[\ell_{\mathcal{F}} + B \underline\lambda,\;
+         \ell_{\mathcal{F}} + B \overline\lambda]$, and
+       $\ell_{\mathcal{F}} \cdot L / (L - B)$ as the point prediction that
+       ranks
 \end{algorithmic}
 \end{algorithm}
 

@@ -28,6 +28,7 @@ from select_tests import (
     _benchmarks_for,
     dependents,
     guards_for,
+    main,
     select,
     unboundable,
 )
@@ -451,3 +452,39 @@ def test_every_unboundable_entry_names_something_in_the_tree() -> None:
     ]
 
     assert unmatched == []
+
+
+def _cli(flags: list[str], *changed: str) -> str:
+    """Run the command line and return what it printed to stdout."""
+    import contextlib
+    import io
+
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+        assert main([*flags, *changed]) == 0
+    return out.getvalue()
+
+
+@pytest.mark.structural
+def test_the_budget_reports_whether_it_bounded_the_selection() -> None:
+    # The merge gate's timeout reads this: a bounded selection gets the tight
+    # cap, an unbounded one gets the job's. Without it a change to a
+    # likelihood kernel -- which #409 deliberately refuses to bound -- runs
+    # the whole suite under a cap the whole suite cannot meet, and the job is
+    # cancelled rather than failed. PR #420 was cancelled at 15:15 with the
+    # suite 57% run, which is what this pins against.
+    unbounded = _cli(["--budget"], "python/snakes_and_ladders/likelihood/pruning.py")
+    assert "bounded=false" in unbounded
+
+    bounded = _cli(["--budget"], "docs/nb/potts_chain.ipynb")
+    assert "bounded=true" in bounded
+
+
+@pytest.mark.structural
+def test_without_the_budget_nothing_claims_to_be_bounded() -> None:
+    # The post-merge run takes the whole suite by design, so it must never
+    # report a bound the caller could act on.
+    assert "bounded=false" in _cli(
+        [], "python/snakes_and_ladders/likelihood/pruning.py"
+    )
+    assert "bounded=false" in _cli([], "docs/nb/potts_chain.ipynb")

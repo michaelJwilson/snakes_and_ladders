@@ -133,7 +133,11 @@ equations, and algorithms — are LaTeX under `docs/tex/`. The
 `snakes_and_ladders.qa` scripts render the figures and tables they include
 (`snakes_and_ladders.qa.manifest` lists them), so building them regenerates the
 cited ones first rather than only running `latexmk`; the applicability tables
-the textbook inputs are written by `infra/problems_tables.py --write`:
+the textbook inputs are not committed and are written by
+`infra/problems_tables.py --write`, which `infra/build_documents.sh` runs for
+you (`infra/ledgers.sh` writes the same tables beside `CHECKS.md` and
+`SEAMS.md` at the review and release gates; the document build runs the one
+generator its documents need):
 
 ```
 sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base \
@@ -145,7 +149,30 @@ infra/build_documents.sh
 
 Open `docs/paper.pdf` and `docs/textbook.pdf`. CI runs the same script on
 every PR, and fails on an undefined or multiply-defined reference, an undefined
-citation, or a committed PDF that differs from the rebuild.
+citation, or a pull request that changes either committed PDF without being the
+rebuild the "Rebuild the documents" ticket asks for. The PDFs are *not* compared
+against the rebuild: they lag `docs/tex/` between rebuilds by design (`DEV.md`,
+Documents).
+
+**Revert `docs/paper.pdf` and `docs/textbook.pdf` after the build.** It rewrites
+both on every run, they are tracked, and only a "Rebuild the documents" pull
+request may carry the change:
+
+```
+git checkout -- docs/paper.pdf docs/textbook.pdf
+```
+
+The rest of what the build writes needs no such care, and the two cases are
+different: the `.aux`, `.log`, `.fdb_latexmk` and other files `latexmk` leaves
+in `docs/`, and the applicability tables under `docs/tex/generated/`, are
+ignored and cannot be committed, while a re-rendered figure under
+`docs/tex/figures/` — its `.pdf` or `.tex`, its `_caption.txt` and its `.inputs`
+stamp — is committed by the pull request that changed it. `DEV.md` lists every
+path, and gives the wall clock on the 4-core reference host: **15.8 s** from a
+clean checkout when every figure stamp is current, **3.7 s** for a second run
+that finds nothing to do, and **230.7 s** on a checkout where nine of the
+nineteen cited stamps were stale — the stamps decide the cost, not the
+documents.
 
 ## Benchmarking locally
 

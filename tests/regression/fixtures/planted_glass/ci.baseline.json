@@ -1,0 +1,69 @@
+{
+  "digest": "c69c0107f3cab32380e68b9efb4cfd4e96171582b8eae75569884665e5029abb",
+  "libraries": [
+    "numpy==2.5.2",
+    "scipy==1.18.1",
+    "torch==2.13.0",
+    "python==3.12"
+  ],
+  "measurements": {
+    "descent_rate": {
+      "algorithm": "single-site descent from each seeded random start, to a local minimum, averaged over restarts and over seeds",
+      "budget": {
+        "frustration": 0.3,
+        "nodes": 18,
+        "restarts": 50,
+        "seeds": 16
+      },
+      "seed": 20260908,
+      "value": 0.07875000000000001
+    },
+    "descent_rate_half_width": {
+      "algorithm": "half the 95% normal interval of the per-seed rates",
+      "budget": {
+        "frustration": 0.3,
+        "nodes": 18,
+        "restarts": 50,
+        "seeds": 16
+      },
+      "seed": 20260908,
+      "value": 0.022481336704030748
+    },
+    "enumerated_ground_energy": {
+      "algorithm": "exhaustive enumeration of all 2**18 configurations at zero field",
+      "budget": {
+        "nodes": 18,
+        "states": 2
+      },
+      "seed": null,
+      "value": -14.0
+    },
+    "planted_energy": {
+      "algorithm": "the energy of the state the couplings were built around, an upper bound on the ground state and not the ground state here",
+      "budget": {
+        "frustration": 0.3,
+        "nodes": 18
+      },
+      "seed": 20260908,
+      "value": -7.0
+    },
+    "restart_success": {
+      "algorithm": "the fraction of seeds where at least one of the restarts reached the ground state --- random-restart descent, which is the baseline a policy has actually to beat",
+      "budget": {
+        "frustration": 0.3,
+        "nodes": 18,
+        "restarts": 50,
+        "seeds": 16
+      },
+      "seed": 20260908,
+      "value": 1.0
+    }
+  },
+  "modules": [
+    "snakes_and_ladders.likelihood.potts",
+    "snakes_and_ladders.search.alpha_expansion",
+    "snakes_and_ladders.sim.canonical"
+  ],
+  "problem": "planted_glass",
+  "tier": "ci"
+}

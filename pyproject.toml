@@ -144,7 +144,10 @@ unfixable = [
 strict = true
 # `infra/` is checked too: `select_tests.py` decides what CI runs, so a type
 # error there is a test that silently did not run. `mypy_path` lets the test
-# module import it the same way CI does.
+# module import it the same way CI does. The kind names `gate_changed_tests.py`
+# needs live in `infra/test_kinds.py` for the same reason: putting
+# `tests/regression` on this path made `test_test_kinds.py` reachable under two
+# module names and `--strict` refused the whole tree.
 files = ["python", "tests", "infra"]
 mypy_path = "infra"
 

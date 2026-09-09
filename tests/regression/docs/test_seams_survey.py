@@ -1,10 +1,10 @@
-"""`SEAMS.md` is what `infra/seams_survey.py` writes, and the survey means what it says.
+"""The seams survey means what it says.
 
-Two claims. The committed ledger is a regeneration, so a seam added or removed
-without re-running the tool fails here rather than in a reviewer's memory. And
-the structural check the tool runs is a check: every implementer the ledger
-names satisfies its protocol's members, and a class missing one is not named
-(issue #400).
+`SEAMS.md` is generated and not committed (issue #425), so there is no
+committed copy to hold to a regeneration; what is checked is the survey
+itself. The structural check the tool runs is a check: every implementer the
+ledger names satisfies its protocol's members, a class missing one is not
+named, and the verdict follows the consumer rule (issue #400).
 """
 
 from __future__ import annotations
@@ -24,14 +24,6 @@ import seams_survey  # noqa: E402
 @pytest.fixture(scope="module")
 def rows() -> list[seams_survey.Row]:
     return seams_survey.survey()
-
-
-@pytest.mark.structural
-def test_the_committed_ledger_is_what_the_survey_writes(
-    rows: list[seams_survey.Row],
-) -> None:
-    # Regenerate with `uv run python infra/seams_survey.py --write`.
-    assert seams_survey.LEDGER.read_text() == seams_survey.render(rows)
 
 
 @pytest.mark.structural

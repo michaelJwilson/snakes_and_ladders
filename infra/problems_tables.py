@@ -8,8 +8,9 @@ algorithm or oracle each symbol *is*, and this module is the one place that
 naming lives. A symbol the catalogue gains that
 this module cannot name fails the generation rather than vanishing from the
 tables, and the guard in ``tests/regression/docs/test_problems_tables.py``
-holds the committed file to a regeneration, as ``CHECKS.md`` and the QA
-figures are held.
+holds what it writes to the properties the textbook needs. The file itself is
+not committed (issue #425): ``infra/ledgers.sh`` writes it in the document
+build, at the release gate and in CI.
 
 What referees each method is read from the suite, never typed: the tests
 ``CHECKS.md`` lists (kind ``oracle`` or ``simulated_truth``) that import a
@@ -22,7 +23,7 @@ Infrastructure, not science: it reads a Markdown table, a dictionary and the
 test tree, and knows nothing about what a Potts lattice is. Run::
 
     python infra/problems_tables.py --write   # regenerate
-    python infra/problems_tables.py --check   # exit 1 if stale
+    python infra/problems_tables.py --check   # exit 1 if the tree's copy is stale
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = REPO_ROOT / "PROBLEMS.md"
 GENERATED = REPO_ROOT / "docs" / "tex" / "generated" / "problems_tables.tex"
 #: The one hand-written input: a sentence per pairing on when the method wins.
-METHOD_NOTES = REPO_ROOT / "docs" / "tex" / "generated" / "method_notes.yaml"
+METHOD_NOTES = REPO_ROOT / "docs" / "tex" / "method_notes.yaml"
 #: The block of that file holding the reason each untested pairing is
 #: untested, keyed ``"<fixture> / <family>"``.
 UNTESTED_KEY = "untested pairings"
@@ -230,6 +231,9 @@ ORACLES: dict[str, str] = {
     "likelihood.potts.enumerate_potts": "enumeration or brute force",
     "learn.potts.enumerate_configurations": "enumeration or brute force",
     "likelihood.hmm_paths.enumerate_hidden_paths": "enumeration or brute force",
+    "likelihood.mixture_assignments.enumerate_mixture_assignments": (
+        "enumeration or brute force"
+    ),
     "learn.hmm.enumerate_paths": "enumeration or brute force",
     "likelihood.spatio_sequential.enumerate_spatio_sequential": (
         "enumeration or brute force"
@@ -629,7 +633,7 @@ def untested_pairs(catalogue: Path = CATALOGUE) -> list[tuple[str, str]]:
     the first two assert and the third does not is what "every compatible
     method is applied to every supported problem" is checked by, and each one
     is either given a test or a reason in
-    ``docs/tex/generated/method_notes.yaml``.
+    ``docs/tex/method_notes.yaml``.
 
     Returns
     -------

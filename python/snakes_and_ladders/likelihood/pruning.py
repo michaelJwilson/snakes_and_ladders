@@ -11,6 +11,11 @@ of the same computation, not a different algorithm (``likelihood/CLAUDE.md``,
 "Rescaling must stay differentiable") -- so the rescaled and unrescaled paths
 must agree wherever both run.
 
+Duplicate alignment columns contribute the same term, so the caller may pass
+the distinct columns with their counts as ``weights``
+(``snakes_and_ladders.likelihood.patterns``) and read the same number off
+fewer columns. The identity is exact; ``weights=None`` is every column once.
+
 This module is written to be obviously correct, not fast: it is the reference
 every accelerated backend (Rust, PyTorch, CUDA, Metal) is validated against,
 per ``likelihood/CLAUDE.md``.
@@ -20,6 +25,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from snakes_and_ladders.likelihood.patterns import check_weights
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.tree import Node, preorder
 
@@ -30,6 +36,7 @@ def log_likelihood(
     pi: np.ndarray,
     alignment: dict[str, np.ndarray],
     *,
+    weights: np.ndarray | None = None,
     rescale: bool = True,
 ) -> float:
     """Total log-likelihood of an alignment under the k-state Jukes-Cantor model.
@@ -47,6 +54,11 @@ def log_likelihood(
         Leaf name to its observed states, each of shape (n_sites,) with
         entries in ``[0, k)`` -- the shape
         ``snakes_and_ladders.sim.simulate.SimulatedDataset.alignment`` produces.
+    weights : np.ndarray | None
+        One weight per column, or ``None`` for one occurrence each. Passing
+        the table of ``snakes_and_ladders.likelihood.patterns.compress``
+        alongside its weights evaluates the same log-likelihood over the
+        distinct columns alone, exactly (``eq:site-independence``).
     rescale : bool
         Whether to rescale partial likelihoods per node, accumulating the log
         of the scale factor separately (``docs/tex/textbook.tex``, ``eq:pruning``).
@@ -63,8 +75,8 @@ def log_likelihood(
     Raises
     ------
     ValueError
-        If ``pi`` does not have shape ``(k,)``, or ``alignment`` is missing a
-        leaf of ``tau``.
+        If ``pi`` does not have shape ``(k,)``, ``alignment`` is missing a
+        leaf of ``tau``, or ``weights`` does not have one entry per column.
     """
     if pi.shape != (k,):
         msg = f"pi has shape {pi.shape}, expected ({k},)"
@@ -77,6 +89,7 @@ def log_likelihood(
         raise ValueError(msg)
 
     n_sites = alignment[leaves[0].name].shape[0]
+    weight = check_weights(weights, n_sites)
     log_scale = np.zeros(n_sites)
 
     def _post_order(node: Node) -> np.ndarray:
@@ -111,4 +124,7 @@ def log_likelihood(
 
     root_partial = _post_order(tau)
     site_likelihood = root_partial @ pi  # eq:root
-    return float(np.sum(np.log(site_likelihood) + log_scale))
+    site_log_likelihood = np.log(site_likelihood) + log_scale
+    if weight is None:
+        return float(np.sum(site_log_likelihood))
+    return float(np.dot(weight, site_log_likelihood))

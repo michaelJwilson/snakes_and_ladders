@@ -5,14 +5,24 @@ search then fits only the top of; what they cost, what they miss, and
 whether the search's answer moves are the measurements. The learned models
 are trained on alignments whose every topology has been fitted and scored
 on alignments they never saw.
+
+Fitting that training set is what made the learned half slow, not the
+learning: 45 maximum-likelihood fits at 200 sites are 7.5 s and the two
+surrogates fitted to them are 0.1 s. The fits are a reference computation on
+a declared fixture, so they are the ``tree_search/ci`` baseline record, and
+the per-pull-request test reads them (issue #401). The six-alignment run at
+the release gate still fits its own.
 """
 
 from __future__ import annotations
+
+from collections.abc import Mapping
 
 import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.bound import Bound
+from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.learn.surrogate import (
     LinearSurrogate,
     SetSurrogate,
@@ -29,11 +39,17 @@ from snakes_and_ladders.likelihood.surrogate import (
 from snakes_and_ladders.search.infer import MoveSet, infer
 from snakes_and_ladders.search.surrogate import (
     LearnedTreeSurrogate,
+    TreeTarget,
     maximized_target,
     shuffle_children,
     tree_examples,
 )
-from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
+from snakes_and_ladders.search.topology import (
+    Topology,
+    enumerate_topologies,
+    leaf_bipartitions,
+)
+from snakes_and_ladders.sim.fixtures import baseline
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import SMALL_SITES, load_fixture
@@ -57,6 +73,25 @@ def _alignments(n: int) -> tuple[list[dict[str, np.ndarray]], int, np.ndarray]:
         for seed in range(n)
     ]
     return alignments, params.k, np.asarray(params.pi)
+
+
+def _recorded_target(problem: str, tier: str) -> TreeTarget:
+    """The committed maximized log-likelihoods, replayed in the order they were taken.
+
+    `tree_examples` calls its target once per topology per alignment, outer
+    loop over alignments and inner over `enumerate_topologies`, which is the
+    order `infra/baselines.py` recorded them in. Replaying a cursor rather
+    than keying on the topology is deliberate: a mis-alignment between the
+    two orders is then a wrong number rather than a lookup miss, and the
+    caller checks every replayed number against the analytic bound it has to
+    exceed.
+    """
+    remaining = iter(baseline(problem, tier).values("maximized_log_likelihood"))
+
+    def target(_topology: Topology, _alignment: Mapping[str, np.ndarray]) -> float:
+        return next(remaining)
+
+    return target
 
 
 @pytest.mark.simulated_truth
@@ -99,6 +134,45 @@ def test_learned_surrogates_rank_held_out_neighbourhoods() -> None:
     bound = LearnedTreeSurrogate(calibrate(fitted, validation, Bound.LOWER, 0.8), k, pi)
     assert bound.kind is Bound.LOWER
     assert float(bound(topology, alignment)) < float(surrogate(topology, alignment))
+
+
+@pytest.mark.simulated_truth
+def test_learned_surrogates_rank_a_held_out_alignment_from_the_recorded_fits() -> None:
+    # The per-pull-request sibling of the six-alignment run above (issue
+    # #401). Three alignments, one each to train, validate and hold out, and
+    # the 45 maximum-likelihood fits read from the `tree_search/ci` baseline
+    # record rather than recomputed -- 7.5 s of the 12.2 s that moved the
+    # release-tier test out of the tier. Every replayed target is checked
+    # against the plug-in lower bound computed here, so a record read in the
+    # wrong order fails rather than trains a model on shuffled labels.
+    # Measured on the three alignments: R^2 0.912 for the linear model and
+    # 0.953 for the set model, each ranking the held-out best first.
+    alignments, k, pi = _alignments(3)
+    topologies = [list(enumerate_topologies(sorted(a))) for a in alignments]
+    examples = tree_examples(
+        alignments, topologies, k, pi, _recorded_target("tree_search", Scale.CI)
+    )
+    offset = examples.offset
+    assert offset is not None
+    assert torch.all(examples.targets >= offset)
+
+    split = split_by_group(examples.groups, (1 / 3, 1 / 3, 1 / 3))
+    train, validation = examples.subset(split.train), examples.subset(split.validation)
+    test = examples.subset(split.test)
+    n_features, n_token_features = (
+        examples.features.shape[1],
+        examples.tokens[0].shape[1],
+    )
+    for model in (
+        LinearSurrogate(n_features),
+        SetSurrogate(n_features, n_token_features),
+    ):
+        fitted = fit_surrogate(
+            model, train, validation, generator=torch.Generator().manual_seed(0)
+        )
+        predicted = fitted.predict(test)
+        assert r_squared(predicted, test.targets) > 0.8
+        assert argmax_agreement(predicted, test.targets, test.groups) == 1.0
 
 
 @pytest.mark.oracle

@@ -92,9 +92,6 @@ jobs:
       # Fails a PR that changes user-visible behavior without a matching
       # changelog.d/ fragment; no-ops on push to main (no diff against itself).
       - run: uv run towncrier check --compare-with origin/main
-      # CHECKS.md is written from the tests' markers; a committed copy that a
-      # regeneration does not reproduce is stale, like a figure or a notebook.
-      - run: uv run python infra/checks_ledger.py --check
 
   rust-lint:
     name: Rust lint & format (clippy, fmt)
@@ -165,10 +162,11 @@ jobs:
   python-tests:
     name: Python tests (pytest)
     runs-on: ubuntu-24.04
-    # The merge gate is bounded (issue #409), so an overrun is a defect in the
-    # bound rather than a job to wait out. The push to main below is unbounded
-    # and takes the whole hour it needs.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 15 || 90 }}
+    # The job's cap is the outer one; the bounded merge gate carries its own,
+    # tighter cap on the step that runs the tests (issue #423). It has to sit
+    # there rather than here, because whether the selection is bounded is a
+    # step output and a job-level `timeout-minutes` cannot read one.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -213,6 +211,27 @@ jobs:
       # a change `select_tests` mis-attributes is one of the things they catch.
       - name: Critical gate
         run: uv run pytest -m critical -q
+      # CHECKS.md, SEAMS.md and the textbook's applicability tables are
+      # written from the tree and are not committed (issue #425). This
+      # regenerates all three -- a generator that no longer runs fails here --
+      # and then fails if regenerating rewrote a *tracked* file, which is a
+      # committed copy that has gone stale. It runs in this job rather than in
+      # `lint` because the seams survey imports the package, gymnasium
+      # included, and only this job's environment has it.
+      - name: Generated ledgers regenerate to a no-op
+        run: infra/ledgers.sh --check
+      # The ledgers are Markdown and nobody can browse them in the tree any
+      # more, so the run summary carries them: the same read a reader used to
+      # get from GitHub's file view, against the commit that produced it.
+      - name: Publish the ledgers to the run summary
+        if: always()
+        run: |
+          for ledger in CHECKS.md SEAMS.md; do
+            [ -f "$ledger" ] || continue
+            printf '<details><summary>%s</summary>\n\n' "$ledger" >>"$GITHUB_STEP_SUMMARY"
+            cat "$ledger" >>"$GITHUB_STEP_SUMMARY"
+            printf '\n</details>\n\n' >>"$GITHUB_STEP_SUMMARY"
+          done
       # Benchmarks are half the suite's wall clock (36 s of 71 s) and measure
       # code that a docs or QA change cannot have altered, so they are skipped
       # unless something they measure moved. The job still runs and still
@@ -265,6 +284,14 @@ jobs:
           echo "$changed" | python3 infra/select_tests.py --budget >> "$GITHUB_OUTPUT"
           echo "$changed" | python3 infra/select_tests.py --budget | sed 's/^/::notice::/'
       - name: Run the selected tests
+        # 15 minutes when the selection is bounded, and the 90 the job allows
+        # when it is not. #409's `--budget` deliberately refuses to bound a
+        # change to a likelihood kernel, the Rust sources or a lockfile, and
+        # the whole suite takes 23 to 36 minutes -- so a flat 15-minute cap
+        # cancelled exactly those pull requests, and a cancelled job is
+        # indistinguishable from a failing one. Measured: PR #420 was
+        # cancelled at 15:15 with the suite 57% run.
+        timeout-minutes: ${{ (github.event_name == 'pull_request' && steps.selection.outputs.bounded == 'true') && 15 || 90 }}
         run: |
           paths="${{ steps.selection.outputs.paths }}"
           cov="${{ steps.selection.outputs.cov }}"

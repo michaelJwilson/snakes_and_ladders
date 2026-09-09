@@ -22,6 +22,15 @@ kernel's advantage does not -- which is why the caller-visible speedup
 decayed to parity at the declared scale (issue #232). It is the same fix
 issue #202 applied to the categorical sampler, for the same reason.
 
+**The kernel takes no weights, and this wrapper supplies them by grouping.**
+``pruning_log_likelihood`` returns one scalar summed over the columns it is
+given, so site-pattern weights (``snakes_and_ladders.likelihood.patterns``)
+cannot be handed to it without changing the Rust signature. They do not have
+to be: the weighted sum is ``sum_w w * (unweighted sum over the patterns of
+weight w)``, so one kernel call per *distinct weight* gives the exact value
+over the pattern table. The alternative, a weights argument in ``src/``, is
+one call rather than a few and is what a later change should do.
+
 Nodes cross the boundary in post-order (children before parents, root
 last): ``snakes_and_ladders.sim.tree`` has no ``postorder`` helper, so this module builds
 one locally rather than adding one there for a single caller. Validated to
@@ -35,6 +44,7 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.likelihood.patterns import check_weights
 from snakes_and_ladders.sim.tree import Node
 
 
@@ -68,6 +78,7 @@ def log_likelihood(
     pi: np.ndarray,
     alignment: dict[str, np.ndarray],
     *,
+    weights: np.ndarray | None = None,
     rescale: bool = True,
 ) -> float:
     """Total log-likelihood of an alignment under the k-state Jukes-Cantor model.
@@ -89,6 +100,11 @@ def log_likelihood(
     alignment : dict[str, np.ndarray]
         Leaf name to its observed states, each of shape (n_sites,) with
         entries in ``[0, k)``.
+    weights : np.ndarray | None
+        One weight per column, or ``None`` for one occurrence each, matching
+        ``snakes_and_ladders.likelihood.pruning``. The kernel takes no
+        weights, so a weighted call is split into one kernel call per
+        distinct weight -- see the module docstring.
     rescale : bool
         Whether to rescale partial likelihoods per node, accumulating the log
         of the scale factor separately, matching
@@ -103,8 +119,8 @@ def log_likelihood(
     ------
     ValueError
         If ``pi`` does not have shape ``(k,)``, ``alignment`` is missing a
-        leaf of ``tau``, the alignment is ragged, or a non-root node has no
-        ``branch_length``.
+        leaf of ``tau``, the alignment is ragged, ``weights`` does not have
+        one entry per column, or a non-root node has no ``branch_length``.
     """
     if pi.shape != (k,):
         msg = f"pi has shape {pi.shape}, expected ({k},)"
@@ -154,13 +170,33 @@ def log_likelihood(
             leaf_row[position] = row
             row += 1
 
-    result = oxi_snakes_and_ladders.pruning_log_likelihood(
-        branch_length,
-        children,
-        leaf_states,
-        leaf_row.tolist(),
-        k,
-        np.ascontiguousarray(pi, dtype=np.float64),
-        rescale,
-    )
-    return float(result)
+    weight = check_weights(weights, n_sites)
+    row_index = leaf_row.tolist()
+    pi_contiguous = np.ascontiguousarray(pi, dtype=np.float64)
+
+    def _kernel(states: np.ndarray) -> float:
+        return float(
+            oxi_snakes_and_ladders.pruning_log_likelihood(
+                branch_length,
+                children,
+                np.ascontiguousarray(states),
+                row_index,
+                k,
+                pi_contiguous,
+                rescale,
+            )
+        )
+
+    if weight is None:
+        return _kernel(leaf_states)
+    # The kernel sums its columns unweighted, so the weighted sum is grouped
+    # by weight: sum_p w_p l_p = sum_w w * sum_{p : w_p = w} l_p, one kernel
+    # call per distinct weight. Exact up to the reassociation of a floating
+    # sum, and it crosses the boundary once per group rather than once per
+    # column -- the cost issue #232 measured.
+    total = 0.0
+    for value in np.unique(weight):
+        selected = leaf_states[:, weight == value]
+        if selected.shape[1]:
+            total += float(value) * _kernel(selected)
+    return total

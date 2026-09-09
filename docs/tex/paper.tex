@@ -189,6 +189,22 @@ bits, where no enumeration reaches, the (3,6) code resolves every erasure at
 an erasure probability of 0.42 on three seeds and leaves 25 to 30\% of its
 bits erased at 0.44, bracketing the density-evolution threshold 0.4294.
 
+Collapsing identical alignment columns to weighted site patterns leaves the
+log-likelihood unchanged and cuts the column work by 1.6 to 781 times across
+the fixtures, the ratio set by the taxon count against the site count rather
+than by either alone. It saturates at $k^{\,n}$ distinct columns, so the same
+trick over blocks of $N > 1$ consecutive sites buys a bracket instead: the
+blocks occurring at least $m$ times are evaluated exactly and the rare tail is
+bounded by the extremes of a single site's log-likelihood, had in one pass
+over the tree. The bracket contains the exact value on every fixture and on
+uniform-random alignments, over block sizes 1 to 5 and cutoffs 1 to 32, and
+its width is exactly the bounded site count times the per-site range: at five
+taxa and 2,000 sites, $1.0\,|\ell|$ at $N = 1$ and $m = 8$, and $2.8\,|\ell|$
+once $N \ge 3$ leaves the whole alignment in the tail. Neither end therefore
+orders topologies; the frequent blocks' own log-likelihood does, and ranking
+by it reaches the same optimum as fitting every candidate at 2 to 4 fits
+against 5 to 15.
+
 \qacaptionread{figures/backend_agreement_caption.txt}{\backendAgreementCaption}
 \begin{figure}[htbp]
   \centering

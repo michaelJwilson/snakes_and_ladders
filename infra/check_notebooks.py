@@ -33,7 +33,7 @@ A notebook whose inputs are unchanged is not re-executed (issue #372). Each
 committed notebook has a stamp beside it, ``<name>.inputs``, recording the
 digest of its code cells, every ``snakes_and_ladders`` module they reach by
 import, the fixtures they name and the library versions, at the execution that
-produced its outputs -- the mechanism ``snakes_and_ladders.qa.inputs`` gives
+produced its outputs -- the mechanism ``snakes_and_ladders.inputs`` gives
 the figures. A notebook whose stamp equals the digest of the current tree is
 reported as unchanged and skipped; ``--all`` executes every notebook
 regardless, and ``--write`` refreshes the stamp with the outputs.
@@ -273,7 +273,7 @@ def input_digest(path: Path) -> str:
         A SHA-256 hex digest.
     """
     import nbformat
-    from snakes_and_ladders.qa.inputs import (
+    from snakes_and_ladders.inputs import (
         digest,
         imported_names,
         library_versions,
@@ -313,7 +313,7 @@ def unchanged(path: Path) -> bool:
     bool
         True when re-executing it could not change what it prints.
     """
-    from snakes_and_ladders.qa.inputs import read_stamp
+    from snakes_and_ladders.inputs import read_stamp
 
     return read_stamp(stamp(path)) == input_digest(path)
 
@@ -361,7 +361,7 @@ def rewrite(path: Path) -> None:
     figure runs ``infra/build_documents.sh``.
     """
     import nbformat
-    from snakes_and_ladders.qa.inputs import write_stamp
+    from snakes_and_ladders.inputs import write_stamp
 
     nbformat.write(execute(path), path)
     write_stamp(stamp(path), input_digest(path))
