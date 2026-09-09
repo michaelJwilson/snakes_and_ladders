@@ -2520,6 +2520,211 @@ and the $19{,}998$-bit code is held to bracketing it.
     extension past the erasure channel would fill.
 \end{itemize}
 
+\section{Problem Statement: Turbo Decoding}
+\label{sec:turbo}
+
+\subsection{The model}
+\label{sec:turbo:model}
+A rate-$1/2$ \emph{recursive systematic convolutional} encoder is a linear
+feedback shift register of memory $m$ over $\mathrm{GF}(2)$, stated by two
+generator polynomials written in octal: a feedback $a(D)$ and a feedforward
+$b(D)$, both of degree $m$ with $a_0 = b_0 = 1$. With register contents
+$s_1 \dots s_m$, most recent first, one step on input $u_t$ forms the
+feedback value, emits the input unchanged and one parity bit, and shifts:
+\begin{equation}
+  d_t = u_t \oplus \bigoplus_{i \ge 1} a_i s_i,
+  \qquad
+  p_t = b_0 d_t \oplus \bigoplus_{i \ge 1} b_i s_i,
+  \qquad
+  (s_1, \dots, s_m) \gets (d_t, s_1, \dots, s_{m-1}).
+  \label{eq:rsc}
+\end{equation}
+The state is the register, so the encoder is a deterministic Markov chain on
+$2^m$ states with two edges leaving each: a \emph{trellis}. Setting $u_t =
+\bigoplus_{i \ge 1} a_i s_i$ makes $d_t = 0$, so $m$ such \emph{tail} steps
+empty the register from any state --- for a recursive encoder the tail is a
+function of the state and not a string of zeros, which is the whole of what
+termination costs.
+
+A \emph{turbo} code \citep{berrou1993} is two such registers fed the same
+$K$-bit message in two orders. The first reads $u$; the second reads $\Pi
+u$, where $\Pi$ is an interleaver, a permutation of $\{0, \dots, K-1\}$.
+Both are terminated, and the transmitted word is
+\begin{equation}
+  c = \big(\, \underbrace{u, t^{1}}_{K + m},
+              \underbrace{p^{1}}_{K + m},
+              \underbrace{t^{2}}_{m},
+              \underbrace{p^{2}}_{K + m} \,\big),
+  \label{eq:turbo-word}
+\end{equation}
+with $t^{1}, t^{2}$ each encoder's tail inputs and $p^{1}, p^{2}$ its parity
+stream: $n = 3K + 4m$ bits, rate $K/n$, unpunctured. The second encoder's $K$ message bits are
+already carried by the first's systematic stream in a different order, which
+is the whole of what the interleaver buys; its tail inputs are not, so they
+are transmitted. The channel and the log-likelihood ratio convention are
+Section~\ref{sec:ldpc}'s unchanged, Equation~\ref{eq:ldpc-llr}, and the
+posterior over messages is Equation~\ref{eq:ldpc-code} with the code taken
+as the image of the encoder.
+
+\paragraph{Supported sizes.}
+\label{par:turbo:sizes}
+Message lengths $K = 12$, $256$ and $1{,}024$ carry the refereed claims, all
+with the memory-2 $(7,5)$ register, so $n = 44$, $780$ and $3{,}080$. Three
+ceilings separate what is refereed by what. Enumerating the $2^K$ messages
+is refused past 200,000 configurations, so the exact bitwise MAP referee
+reaches $K \le 17$; a dense $\mathrm{GF}(2)$ nullspace turns the code into a
+parity-check matrix, and so into an instance of Section~\ref{sec:ldpc}, up
+to $n = 512$; and past both the referees are the output symmetry of
+Equation~\ref{eq:ldpc-llr}'s channels --- checked per realization where an
+encoder is affordable --- and the uncoded closed form
+$Q(\sqrt{2 E_b/N_0})$, which every coded curve must fall below at its
+operating point. The convolutional decoders themselves are linear in $K$ at
+every length: $2^m$ states times $K + m$ steps, with no ceiling of their
+own.
+
+\subsection{As a factor graph}
+The variables of one constituent code are the $K + m + 1$ register states,
+and one factor per step carries the whole of that step --- the transition
+the register allows and the channel's score for the two bits it transmits:
+\begin{equation}
+  \psi_t(s_{t}, s_{t+1}) =
+  \begin{cases}
+    \exp\!\big(-u\,(L^{s}_t + L^{a}_t) - p\,L^{p}_t\big)
+      & \text{if the edge } (s_t \to s_{t+1}) \text{ exists, with input } u
+        \text{ and parity } p, \\
+    0 & \text{otherwise,}
+  \end{cases}
+  \label{eq:turbo-factor}
+\end{equation}
+where $L^{s}, L^{p}$ are the channel ratios of the systematic and parity
+bits and $L^{a}$ an a priori ratio on the input, zero for a stand-alone
+decoding. The input bit needs no variable of its own: the two edges leaving
+a state enter different states, so $u_t$ is recoverable from the pair. This
+is a chain and the terminated boundary pins both ends, so
+Equation~\ref{eq:sum-product} on the tree schedule is exact on it. That is
+the difference between one constituent code and the pair. The turbo graph
+joins the two chains at the message bits through $\Pi$
+(Figure~\ref{fig:turbo:sketch}), which makes each message bit a variable of
+degree two shared between two chains and puts a cycle around every pair of
+positions the permutation reorders; no exact algorithm is available there at
+the lengths the code is used at, and what is run instead is
+Equation~\ref{eq:sum-product} on a serial schedule.
+
+\input{turbo_figure}
+
+\subsection{The algorithms: BCJR, and the extrinsic exchange}
+The forward and backward recursions on Equation~\ref{eq:turbo-factor} are
+the BCJR algorithm \citep{bahl1974}, which is
+Equation~\ref{eq:forward} with the observation moved from the state to the
+edge:
+\begin{equation}
+  \alpha_{t+1}(s') = \sum_{s} \alpha_t(s)\,\psi_t(s, s'),
+  \qquad
+  \beta_{t}(s) = \sum_{s'} \psi_t(s, s')\,\beta_{t+1}(s'),
+  \qquad
+  \tilde L_t = \log
+    \frac{\sum_{(s,s'):\,u=0} \alpha_t \psi_t \beta_{t+1}}
+         {\sum_{(s,s'):\,u=1} \alpha_t \psi_t \beta_{t+1}},
+  \label{eq:bcjr}
+\end{equation}
+with $\alpha_0$ and $\beta_{K+m}$ concentrated on the zero state because
+both ends are terminated. Replacing the sum by a maximum gives Viterbi,
+whose decision is the blockwise MAP against Equation~\ref{eq:bcjr}'s
+bitwise one --- two decodings of one model and different answers, as
+Section~\ref{sec:hmm} says of the chain, and the received word that
+separates them is a test.
+
+Turbo decoding is Algorithm~\ref{alg:turbo-decode}: two BCJR passes
+exchanging the \emph{extrinsic} part of the posterior,
+\begin{equation}
+  L^{e}_t = \tilde L_t - L^{s}_t - L^{a}_t,
+  \label{eq:extrinsic}
+\end{equation}
+what one chain learned about $u_t$ from every step but $t$. The subtraction
+is not a refinement: a decoder handed the other's full posterior would be
+handed its own previous output inside it, and the two would agree on a
+shared error whatever the channel said. Equation~\ref{eq:extrinsic} is the
+sum-product message from the message-bit variable to the other chain, and
+the serial order --- chain one, interleave, chain two, deinterleave --- is
+the schedule, not a consequence of it.
+
+\subsection{What pins it}
+Four referees, and they answer different questions. \emph{Enumeration over
+the $2^K$ messages} is exact at $K = 12$ and referees three things: the BCJR
+posterior of one constituent code, which it matches to $3 \times 10^{-14}$
+because a chain is a tree and the recursion is exact there; the Viterbi
+decision, with the margin over the runner-up pinned so that no tie is being
+broken; and the turbo iteration, which it does \emph{not} match, since the
+joint graph has cycles --- what is asserted there is that the iteration's
+bit error rate falls from its first iteration and stays within a stated
+factor of the exact MAP's. \emph{The general sum-product}, on the same chain
+built as a factor graph, referees the specialization: the tree schedule
+gives the same posteriors and the same $\log Z$ to $3 \times 10^{-15}$, and
+max-product returns the Viterbi path, which is the pairing
+Section~\ref{sec:ldpc} established. \emph{The nullspace parity-check matrix}
+referees the encoder: the $2^K$ words the shift register produces are the
+$2^K$ words Section~\ref{sec:ldpc}'s enumeration finds in the null space of
+a matrix built without it. And \emph{the uncoded closed form} $Q(\sqrt{2
+E_b/N_0})$ referees the waterfall at the lengths no enumeration reaches.
+
+\subsection{Validation}
+\label{sec:turbo:validation}
+\begin{itemize}
+  \item \emph{Enumeration of the $2^{K}$ messages} referees the BCJR
+    posterior, the Viterbi decision and the size of the turbo iteration's
+    gap. It establishes exactness for one constituent code and an ordering,
+    not an equality, for the pair; it reaches $K \le 17$ and no further.
+  \item \emph{The tree schedule of the general sum-product} referees the
+    trellis decoders on the factor graph of
+    Equation~\ref{eq:turbo-factor}. It establishes that the specialization
+    is the same computation as the one every other problem class here runs,
+    and nothing about whether either is the right model.
+  \item \emph{The polynomial division $b(D)/a(D)$} referees the trellis
+    arrays, run as an explicit long division over $\mathrm{GF}(2)$ sharing
+    no code with them; $\parity c = 0$ through a nullspace matrix referees
+    the encoder, and the tail is refereed by the state it leaves. Each
+    establishes one construction and nothing about decoding.
+  \item \emph{The interleaver as a permutation} is checked rather than
+    assumed: $\Pi^{-1}\Pi$ and $\Pi\Pi^{-1}$ are the identity, and the
+    fixture records the seed the permutation was drawn under, so the code
+    is reproduced by drawing it again rather than by a written-out array no
+    reader could check.
+  \item \emph{The channel symmetry argument} of Section~\ref{sec:ldpc} is
+    re-checked here for the recursive encoder and the turbo message map,
+    per realization: the decoded error pattern under a codeword equals the
+    decoded word under the all-zero message on the same noise. It
+    establishes that the all-zero shortcut is sound, which is what licenses
+    every error rate measured past $K = 17$.
+  \item \emph{The uncoded bit error rate $Q(\sqrt{2 E_b/N_0})$} referees the
+    waterfall at $K = 256$ and $K = 1{,}024$: the coded curve is held to
+    falling below it at every declared point and to falling with
+    $E_b/N_0$. It establishes that the code buys something and bounds
+    nothing about how much; the block error rate at a stated frame count is
+    what carries the resolution, and a curve is reported with the count it
+    rests on.
+\end{itemize}
+
+\paragraph{Where the iteration departs.} The strong claim --- that each
+turbo iteration improves on the last --- is \emph{not} made, because the
+measurement refuses it. Over the six declared points at $K = 256$ the
+ensemble bit error rate rises between consecutive iterations at four of
+them, the largest rise $2.3 \times 10^{-3}$ at $0$ dB between iterations 7
+and 8, and every rise is inside one binomial interval of the 12,800 message
+bits the point rests on. What is asserted is the weaker pair the sample
+supports: the last iteration beats the first, and no rise exceeds twice that
+interval. The same non-monotonicity is visible at $K = 12$ with a shorter
+interleaver, where it is larger relative to the rate; it is a property of
+loopy sum-product on a serial schedule and not a defect of this
+implementation.
+
+\qacaptionread{figures/turbo_waterfall_caption.txt}{\turboWaterfallCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/turbo_waterfall}
+  \caption{\turboWaterfallCaption}
+  \label{fig:turbo-waterfall}
+\end{figure}
+
 \section{The Properties That Referee Each Method}
 \label{sec:properties}
 
@@ -3217,6 +3422,28 @@ Equation~\ref{eq:tanh-rule}}
 \EndFor
 \State \Return $\hat c$, and whether the syndrome check was reached --- a
        failure here is the event a block error rate counts
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Turbo decoding: the serial extrinsic exchange,
+Equation~\ref{eq:extrinsic}}
+\label{alg:turbo-decode}
+\begin{algorithmic}[1]
+\State split the received ratios into $L^{s}, L^{p1}, L^{p2}$ and the second
+       encoder's tail, Equation~\ref{eq:turbo-word}
+\State $L^{a} \gets 0$ over the first chain's $K + m$ steps
+\For{iteration $1$ to the cap}
+  \State $\tilde L^{1} \gets$ BCJR$(L^{s}, L^{p1}, L^{a})$ by
+         Equation~\ref{eq:bcjr}; $L^{e1} \gets \tilde L^{1} - L^{s} - L^{a}$
+  \State $\tilde L^{2} \gets$ BCJR$(\Pi L^{s}, L^{p2}, \Pi L^{e1})$, the
+         message positions interleaved and the tails left alone
+  \State $L^{a} \gets \Pi^{-1}(\tilde L^{2} - \Pi L^{s} - \Pi L^{e1})$
+  \State \textbf{stop} if the two chains' hard decisions on $u$ agree
+\EndFor
+\State \Return $\hat u_i = \mathbb{1}[(\Pi^{-1}\tilde L^{2})_i < 0]$, and
+       whether the two agreed --- which is a stopping rule and not a
+       certificate, since the graph has cycles
 \end{algorithmic}
 \end{algorithm}
 

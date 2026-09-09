@@ -1,0 +1,22 @@
+model: turbo
+oracle: none
+
+# The memory-2 (7, 5) turbo code at the message length the waterfall is
+# measured at: K = 1024, 6 points, 200 frames -- 1,200 decodings, measured
+# at 0.196 s each, so this tier is `release` by measurement and not by
+# guess.
+#
+# `oracle: none` is the statement sim/CLAUDE.md asks for: 2 ** 1024 messages
+# is past every enumeration and the ensemble's threshold is an asymptotic
+# result that says nothing at one length. What referees a result here is the
+# all-zero symmetry the ci tier checks per realization, and the ordering the
+# waterfall must show -- monotone in E_b / N_0, and below the uncoded closed
+# form past the turn.
+seed: 233
+message_length: 1024
+memory: 2
+feedback: "7"
+feedforward: "5"
+iterations: 8
+eb_n0_db: [0.0, 0.4, 0.8, 1.2, 1.6, 2.0]
+frames: 200

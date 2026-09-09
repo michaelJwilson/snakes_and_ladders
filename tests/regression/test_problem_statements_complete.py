@@ -41,6 +41,7 @@ PROBLEMS = (
     "emissionmixture",
     "testfunctions",
     "ldpc",
+    "turbo",
 )
 
 _SECTION = re.compile(r"^\\section\{", re.MULTILINE)
