@@ -31,7 +31,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "tests" / "regression"))
-from test_test_kinds import EXCLUDED_DIRECTORY, KINDS  # noqa: E402
+from test_kinds import EXCLUDED_DIRECTORY, KINDS  # noqa: E402
 
 
 def changed_test_files(base: str) -> list[Path]:
