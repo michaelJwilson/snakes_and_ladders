@@ -105,7 +105,8 @@ the concatenated batch rather than episode by episode. Both are changes to
 #392 — the batched rollout lands as `sandbox.gym_vector.rollout_batch`,
 refereed and not adopted anywhere: no training loop calls it, because it is
 slower than what they call now. The `GymnasiumEnvironment` adapter it is built
-from was not measured against anything and stays in `search.gym`. A `SyncVectorEnv` cannot deliver Milestone 2.2's "a budget at
+from replaces nothing and was not in the comparison, so it stays in
+`search.gym`. A `SyncVectorEnv` cannot deliver Milestone 2.2's "a budget at
 `n = 200` is affordable"; only a collector with real parallelism could, which
 is `AsyncVectorEnv` or a process pool and is its own measurement.
 
