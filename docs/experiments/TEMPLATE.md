@@ -17,38 +17,16 @@ status: open
 
 # Title: the claim, as a question the results answer
 
-## Feature under test
+## Question
 
-One sentence, falsifiable: what would be true if the feature does what it
-claims, stated so the Results section can contradict it.
+One line, falsifiable: what the results could contradict.
 
-## Setup
+## Numbers
 
-The fixture and its size tier (`ci`, `stress` or `release`, per `DEV.md`), the
-budget every method runs at and the unit it is counted in, the seeds shared
-across methods, and the oracle that referees the comparison.
-
-## Results
-
-Per-seed outcomes for every method at the shared budget, the paired-test
-p-value on the per-seed differences, and the cost of each method. Generated
-from the run store where one exists; typed from the measurement otherwise,
-with the script that produced it named.
-
-## Figures
-
-The QA stems (`docs/tex/figures/<stem>`) that render this experiment's plots,
-or `none`.
+| the metric and its unit | method | method |
+| --- | --- | --- |
+| the instance compared on | value | value |
 
 ## Finding
 
-Numbers, no adjectives: what the results say about the feature under test.
-
-## Conclusion and actions
-
-Each action as a ticket number (`#NNN`) with one line on what it asks, or
-`none`.
-
-## What is not claimed
-
-The readings the results do not support, stated so nobody has to infer them.
+One line: what the numbers say, the command that reproduces them, and each action as `#NNN` or `no actions`. Ten non-blank lines, this title excluded (issue #458).
