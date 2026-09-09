@@ -6,6 +6,16 @@ sound if three things hold, and each is asserted here: a document can never cite
 figure the build skips, no committed figure falls outside the release gate's
 reach, and a rotted figure is still caught -- by the per-PR path when the
 document cites it, and by the release path when it does not.
+
+Since issue #492 the correspondence is a bijection and is asserted as one.
+``infra/check_citations.py`` covers cited-but-missing; the other direction,
+a figure the manifest renders and no document cites, is
+``test_every_manifest_figure_is_cited_by_a_document`` below. The two orphans
+that direction was written for, ``sim_problem_sizes`` and
+``topology_accuracy``, were rendered on every release and read by nobody. The
+selection tests that used to rely on their existence now construct the
+uncited case in ``tmp_path`` instead, so they check the mechanism rather than
+a state of the repository that is now forbidden.
 """
 
 from __future__ import annotations
@@ -24,7 +34,9 @@ DOCUMENTS = build.DEFAULT_DOCUMENTS
 COMMITTED_FIGURES = build.DEFAULT_OUTPUT_DIR
 
 # The cheapest entry in the manifest, so the tests that actually render
-# something cost a second rather than two minutes.
+# something cost a second rather than two minutes. It is cited since #492, so
+# a test needing an *uncited* figure writes its own document rather than
+# naming this one.
 CHEAP_STEM = "sim_problem_sizes"
 
 
@@ -56,15 +68,43 @@ def test_every_committed_figure_has_a_manifest_entry() -> None:
     assert committed - known == set()
 
 
+@pytest.mark.critical
 @pytest.mark.structural
-def test_the_document_selects_fewer_figures_than_the_release_gate() -> None:
-    # The whole point of the change. If these were equal the per-PR build
-    # would be doing the release gate's work, which is what it cost before.
-    cited = selected(DOCUMENTS, every=False)
-    every = selected(DOCUMENTS, every=True)
+def test_every_manifest_figure_is_cited_by_a_document() -> None:
+    # Issue #492's invariant, and the half `infra/check_citations.py` does not
+    # cover: that script fails a citation with no figure, and this fails a
+    # figure with no citation. An uncited figure is rendered by the release
+    # gate and read by nobody, so nothing ever decides whether it is right --
+    # which is how `sim_problem_sizes` and `topology_accuracy` sat stale on
+    # `main` for eight releases. A figure whose document has no room for it is
+    # deleted with its renderer, not left rendering.
+    uncited = {spec.stem for spec in FIGURES} - cited_stems(*DOCUMENTS)
 
-    assert set(cited) < set(every)
-    assert len(every) == len(FIGURES)
+    assert uncited == set(), (
+        f"rendered and cited by nothing: {sorted(uncited)}; cite each from the "
+        "document that asked for it, or remove it with its renderer (DEV.md, "
+        "'A figure exists because a document asked for it')"
+    )
+
+
+@pytest.mark.structural
+def test_the_release_gate_selects_the_whole_manifest() -> None:
+    # `--all` ignores the citations entirely, which is what makes the per-PR
+    # selection a cost decision rather than a substitute for the gate. It held
+    # when two figures were uncited and it holds now that none is.
+    assert selected(DOCUMENTS, every=True) == FIGURES
+
+
+@pytest.mark.structural
+def test_a_document_citing_less_selects_less(tmp_path: Path) -> None:
+    # What the strict subset above used to assert against the repository:
+    # the selection tracks the citations rather than returning the manifest.
+    # Constructed here, because every figure is cited on `main` since #492 and
+    # a test that read the repository would now be asserting the empty case.
+    document = tmp_path / "main.tex"
+    document.write_text(r"\includegraphics{figures/sim_tree}")
+
+    assert set(selected([document], every=False)) < set(selected(DOCUMENTS, every=True))
 
 
 @pytest.mark.structural
@@ -149,19 +189,31 @@ def test_matching_figures_are_reported_as_clean(tmp_path: Path) -> None:
     "gate's job; the cited-figure paths are checked at CI tier above"
 )
 def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None:
-    # Both directions of the trade, on a real rendering. `sim_problem_sizes`
-    # is committed and *not* cited by the document, so it is exactly the case
-    # the release gate exists to cover: `--check` without `--all` passes over
-    # it, and `--check --all` catches it.
+    # Both directions of the trade, on a real rendering: `--check` without
+    # `--all` passes over a figure the given document does not cite, and
+    # `--check --all` catches it.
+    #
+    # The document is written here rather than taken from `docs/tex/`. Every
+    # committed figure is cited since #492, so the repository no longer
+    # supplies this case -- and a version of this test that kept reading the
+    # real documents would still have passed, for the unrelated reason that
+    # the rotted figure's *stamp* was copied intact and the staleness cache
+    # skipped it. That would be the release gate's guarantee asserted by the
+    # cache's behaviour, which is the substitution this module exists to deny.
     output_dir = tmp_path / "figures"
     output_dir.mkdir()
     for path in COMMITTED_FIGURES.iterdir():
         shutil.copy(path, output_dir / path.name)
     (output_dir / f"{CHEAP_STEM}.tex").write_text("rotted")
+    (output_dir / f"{CHEAP_STEM}.inputs").write_text("stale-on-purpose\n")
+
+    document = tmp_path / "cites-something-else.tex"
+    document.write_text(r"\includegraphics{figures/sim_tree}")
 
     cited_only = build.main(
         [
-            *_document_arguments(),
+            "--document",
+            str(document),
             "--output-dir",
             str(output_dir),
             "--check",

@@ -274,8 +274,9 @@ def test_every_committed_figure_has_a_stamp() -> None:
 def test_a_cited_figure_renders_inside_the_cap_or_carries_a_waiver() -> None:
     # The per-pull-request build is the sum of its stale cited figures, so a
     # cited figure over the cap is a third of the whole validation budget on
-    # its own. One over it is either uncited, and rendered at the release
-    # gate as `topology_accuracy` is, or waived with the ticket that owns it.
+    # its own. Leaving it uncited was the other way out until #492 required
+    # every figure to be cited, so the only way out now is a waiver carrying
+    # the ticket that owns cutting it.
     cited = cited_stems(*build.DEFAULT_DOCUMENTS)
     over = {
         spec.stem: spec.seconds
