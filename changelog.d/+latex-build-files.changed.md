@@ -1,1 +1,0 @@
-The LaTeX intermediates `latexmk` leaves beside `docs/paper.pdf` and `docs/textbook.pdf` (`.aux`, `.bbl`, `.blg`, `.fdb_latexmk`, `.fls`, `.log`, `.out`, `.toc`) and the stale `docs/draft.*` set are untracked and ignored by glob; only the `.tex` sources and the two PDFs are committed, so a document rebuild no longer conflicts with every other one on files nobody reads.

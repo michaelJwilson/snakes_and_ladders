@@ -1,6 +1,6 @@
 [package]
 name = "oxi_snakes_and_ladders"
-version = "0.3.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/michaelJwilson/snakes_and_ladders"

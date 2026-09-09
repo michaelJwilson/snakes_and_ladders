@@ -1,1 +1,0 @@
-Three more `main` failures that predated every open pull request: `tests/regression/test_select_tests.py` expected `learn` to be a leaf module and its benchmark selection to be one file, which `search.rl` (#178) and the surrogates (#308) changed; the HMM notebook's committed outputs; and a stale `docs/paper.pdf`.

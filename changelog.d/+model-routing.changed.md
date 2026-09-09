@@ -1,1 +1,0 @@
-`CLAUDE.md` states the model routing: Claude Fable plans, implements, writes and reviews pull requests and takes review tickets; mechanical work is delegated to Claude Opus subagents and validated before it lands.

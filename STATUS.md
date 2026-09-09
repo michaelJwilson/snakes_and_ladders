@@ -2,10 +2,13 @@
 
 What has landed against `ROADMAP.md`, how it was established, and the pull
 request that carries it. Read at version `0.5.0`, the release
-[#376](https://github.com/michaelJwilson/snakes_and_ladders/issues/376) audits. The cut of `0.4.0` is deferred and the
-repository still carries no tag, so the release template's tag precondition is
-recorded here as not met rather than waited for; `Cargo.toml` reads `0.3.0`,
-which is the version the last built `CHANGELOG.md` section carries.
+[#376](https://github.com/michaelJwilson/snakes_and_ladders/issues/376) audited and
+[#468](https://github.com/michaelJwilson/snakes_and_ladders/issues/468) cuts. `0.4.0` is never spent as a
+version: it was audited (#358) and its cut held, so `Cargo.toml` moves from
+`0.3.0` straight to `0.5.0` and both audits' fragments are consumed into one
+`CHANGELOG.md` section. The repository still carries no tag, so the release
+template's tag precondition is recorded here as not met rather than waited
+for, and `0.5.0` is the first version a tag will name.
 
 This file is a ledger against the roadmap, not a project board. Open work lives
 in GitHub issues, and its titles are collected in `TICKETS.md`. A milestone is
@@ -47,8 +50,8 @@ milestone not named here did not move.
 | Milestone 1.3 | The tree's two data-driven starts --- neighbor joining on the pairwise Jukes--Cantor and log-det distances, and the closest tree of the Hadamard conjugation --- with Atteson's radius and the four-point condition as the guarantees they carry, measured against the objective's own start at equal evaluations | [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373) (#364) |
 | Milestone 2.3 | A sixth budget-matched comparison, the tree's starts at 2,000 evaluations over twenty seeds, recorded as experiment 006 | [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373) (#364) |
 
-The 0.4.0 cut itself did not move: no tag exists, so `0.4.0` and `0.5.0` are
-both unreleased and the version in `Cargo.toml` is still `0.3.0`.
+The 0.4.0 cut itself never moved and is not waited for: no tag exists, so
+`0.4.0` is retired as a number and `0.5.0` carries what both audits found.
 
 ## §0 The Development Loop
 
