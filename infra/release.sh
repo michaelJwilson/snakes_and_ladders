@@ -37,6 +37,10 @@ run_check "cargo test" cargo test --locked
 # the full suite -- see this PR's DEV.md fix.
 run_check "pytest (full suite)" uv run pytest --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
 run_check "sphinx-build -W" uv run sphinx-build -b html docs/source docs/_build/html -W
+# The generated ledgers are written here rather than read from the tree: none
+# is committed (issue #425), and --check fails if a copy of one reached the
+# index and a regeneration disagrees with it.
+run_check "generated ledgers" infra/ledgers.sh --check
 run_check "documents" infra/build_documents.sh
 # The per-PR build regenerates only what the document cites (issue #154), so
 # the figures it does not cite are checked here instead -- the check moves to

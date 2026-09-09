@@ -16,7 +16,8 @@ started**, on the terms §0.4 sets.
 ## Summary
 
 The checks each row rests on are listed, per test, in `CHECKS.md`, generated
-from the suite; `PROBLEMS.md` names the code behind each problem class.
+from the suite by `infra/ledgers.sh` and not committed (issue #425);
+`PROBLEMS.md` names the code behind each problem class.
 
 | Roadmap item | Status | Evidence | Key PRs |
 | --- | --- | --- | --- |
@@ -2062,8 +2063,8 @@ QA figure rendered from the fixture it states. Two tables
 which algorithm family runs on each problem, which kind of oracle referees it,
 and — per method and per size tier — whether the referee is an oracle or the
 simulated truth alone, the latter marked as a cell where an oracle is wanted.
-A guard holds the committed tables to a regeneration, and a catalogue symbol
-the generator cannot name fails it.
+A guard holds what the generator writes to what the textbook needs, and a
+catalogue symbol the generator cannot name fails it.
 
 A third reading joins them at 0.5.0 ([#376](https://github.com/michaelJwilson/snakes_and_ladders/issues/376)):
 `tab:methods-initializers` to `tab:methods-surrogates`, one part per method
@@ -2071,13 +2072,14 @@ family, pairing every problem with every family. Twenty-six of the
 forty-four pairings carry a method; each states the tier it is validated at
 and the kind of referee, both read from the suite, and a sentence on when the
 family wins on that problem and when it does not, taken from
-`docs/tex/generated/method_notes.yaml` — the one hand-written input to any of
-the three. Fourteen of those sentences cite an experiment, and a citation to a
-file that does not exist fails the generation. Two pairings are marked
-*untested* rather than omitted — the mixture's $k$-means$++$ seeding and the
-general time-reversible model's log-det start, neither named by a test of
-either significant kind — because a dropped pairing reads as a question nobody
-asked.
+`docs/tex/method_notes.yaml` — the one hand-written input to any of
+the three, and the reason it does not live under `generated/`. Fourteen of those sentences cite an experiment, and a citation to a
+file that does not exist fails the generation. One pairing is marked
+*untested* rather than omitted — the general time-reversible model's log-det
+start, named by no test of either significant kind — because a dropped pairing
+reads as a question nobody asked. The mixture's $k$-means$++$ seeding was the
+second until [#420](https://github.com/michaelJwilson/snakes_and_ladders/pull/420)
+gave it an oracle.
 
 **The three exact evaluators are derived, not stated**
 ([#326](https://github.com/michaelJwilson/snakes_and_ladders/issues/326)).

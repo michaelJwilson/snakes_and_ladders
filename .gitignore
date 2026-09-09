@@ -50,3 +50,16 @@ docs/*.out
 docs/*.toc
 docs/*.synctex.gz
 
+
+# The generated ledgers (issue #425). CHECKS.md is written from the tests'
+# own markers, SEAMS.md from the package, and the textbook's applicability
+# tables from PROBLEMS.md and the suite. Committing them made a machine-
+# written file a merge participant: on 2026-09-08 CHECKS.md conflicted on
+# nine branches and resolving one carries no information. They are written
+# by infra/ledgers.sh -- in the document build, at the release gate, and in
+# CI, where regenerating them must change no tracked file.
+# docs/tex/method_notes.yaml is hand-written and stays committed; it is an
+# input to the tables, which is why it does not live under generated/.
+/CHECKS.md
+/SEAMS.md
+/docs/tex/generated/
