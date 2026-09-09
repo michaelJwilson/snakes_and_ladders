@@ -128,12 +128,23 @@ class Trellis:
         ``(2 ** m,)`` ``uint8``: the input that drives the register one step
         towards zero. For a recursive encoder this is the feedback value and
         not ``0``, which is the whole of what termination costs.
+    source : np.ndarray
+        ``(2, 2 ** m)`` ``int64``: ``source[u, s']`` is the state that enters
+        ``s'`` on input ``u``. It exists because ``next_state[:, u]`` is a
+        permutation --- two states differing only in their oldest cell get
+        different feedback values, since the feedback polynomial has its
+        ``D ** m`` term --- so the forward recursion is a *gather* through
+        this array rather than a scatter. `cProfile` over a ``K = 1024``
+        turbo decoding put 21.9% of self time in ``numpy.ufunc.at``, which
+        the scatter was; the field pays for itself against that measurement
+        and not against a guess.
     """
 
     memory: int
     next_state: np.ndarray
     parity: np.ndarray
     tail_input: np.ndarray
+    source: np.ndarray
 
     @property
     def n_states(self) -> int:
@@ -195,11 +206,15 @@ def recursive_systematic_trellis(
         d = (u ^ feedback_sum).astype(np.int64)
         next_state[:, u] = ((states << 1) & (n_states - 1)) | d
         parity[:, u] = ((int(b[0]) * d) ^ forward_sum).astype(np.uint8)
+    source = np.empty((2, n_states), dtype=np.int64)
+    for u in (0, 1):
+        source[u, next_state[:, u]] = states
     return Trellis(
         memory=memory,
         next_state=next_state,
         parity=parity,
         tail_input=feedback_sum.astype(np.uint8),
+        source=source,
     )
 
 

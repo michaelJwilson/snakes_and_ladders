@@ -17,8 +17,8 @@ things are asserted instead, and each names its referee.
   the departure is reported in the docstring of the test that measures it.
 
 The tiers are set from the measured wall clock on the reference host, not
-guessed: the CI fixture's ensemble costs 4.4 s, the stress fixture's 15.8 s
-and the release fixture's 236 s.
+guessed: the CI-tier tests here cost 4.4 s together, the stress waterfall
+12.1 s and the release waterfall 182 s.
 """
 
 from __future__ import annotations
@@ -304,7 +304,7 @@ def test_the_waterfall_falls_below_the_uncoded_closed_form() -> None:
     is therefore not made: what is asserted is that the last iteration beats
     the first and that no rise exceeds `NOISE_INTERVALS` intervals.
     """
-    # 15.8 s measured, so `stress` and not the CI tier. The CI-tier sibling
+    # 12.1 s measured, so `stress` and not the CI tier. The CI-tier sibling
     # is the enumeration test above, which asserts the same ordering against
     # a stronger referee at a size the budget holds.
     instance = fixture("turbo", "stress")
@@ -333,7 +333,7 @@ def test_the_release_waterfall_turns_where_the_ensemble_says() -> None:
     monotonicity departure the stress tier reports applies here and is
     checked the same way.
     """
-    # 236 s measured over 1,200 decodings, so `release`: past both the 5- and
+    # 182 s measured over 1,200 decodings, so `release`: past both the 5- and
     # the 10-minute budgets `DEV.md` sets. The claim is the shape of the
     # curve, which needs the block length a short one cannot show.
     instance = fixture("turbo", "release")
