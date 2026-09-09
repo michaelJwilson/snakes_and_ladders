@@ -15,5 +15,12 @@ them.
 
 ``tropical`` is here on the second rule: the tropical Grassmannian relaxation
 of topology search (issue #408), which neighbor joining matched at no
-gradient steps at every size enumeration referees.
+gradient steps at every size enumeration referees. ``compiled_pruning`` is
+here on the same rule and is thinner: ``likelihood.pruning_torch``'s
+recursion through ``torch.compile``, declined at 1.21x and 1.09x eager
+(issue #443). A compiler is not a second implementation, so what it carries
+beyond the one ``torch.compile`` call is the reading of Dynamo's compile
+state that makes "compiled, and not silently fallen back to eager" an
+assertion; its docstring says so first, and names the experiment, the ratio
+and the host.
 """

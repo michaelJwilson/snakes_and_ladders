@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.likelihood import pruning, pruning_rust
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.search.rl import with_uniform_branch_lengths
@@ -135,3 +136,124 @@ def test_rust_pruning_at_declared_scale(
     expected = pruning.log_likelihood(tau, 4, pi, alignment)
     result = benchmark(pruning_rust.log_likelihood, tau, 4, pi, alignment)
     assert_allclose(result, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+
+
+# --- the FFI boundary, decomposed (issue #443) ----------------------------
+
+# Two taxon counts and two site counts an order apart, because the terms
+# scale differently and the ratio between them is the question: argument
+# marshalling scales with `n_leaves x n_sites` (one `int64` per observed
+# state), the kernel with `n_nodes x n_sites x k^2`. One cell reports a
+# ratio and cannot report a trend.
+BOUNDARY_CELLS = [(8, 1_000), (8, 10_000), (20, 1_000), (20, 10_000)]
+
+
+def _marshalled(
+    tau: Node, pi: np.ndarray, alignment: dict[str, np.ndarray]
+) -> tuple[np.ndarray, list[list[int]], np.ndarray, list[int], np.ndarray]:
+    """The arguments `pruning_rust.log_likelihood` builds before its kernel call.
+
+    A copy of that wrapper's body up to the call, rather than a flag inside
+    it: a seam that switches implementations outlives the measurement it was
+    added for (issue #425). The copy is pinned rather than trusted --
+    `test_rust_argument_marshalling` calls the kernel on what this returns
+    and asserts the wrapper's own value, so a wrapper that changes and a
+    copy that does not fails a test instead of silently mis-attributing the
+    boundary's cost.
+    """
+    order = pruning_rust._postorder(tau)
+    leaves = [node for node in order if node.is_leaf]
+    index = {id(node): position for position, node in enumerate(order)}
+    n_nodes = len(order)
+    n_sites = int(alignment[leaves[0].name].shape[0])
+
+    leaf_states = np.empty((len(leaves), n_sites), dtype=np.int64)
+    leaf_row = np.full(n_nodes, -1, dtype=np.int64)
+    branch_length = np.zeros(n_nodes, dtype=np.float64)
+    children: list[list[int]] = []
+    row = 0
+    for position, node in enumerate(order):
+        if position != n_nodes - 1:
+            if node.branch_length is None:
+                msg = f"non-root node {node.name!r} has no branch_length"
+                raise ValueError(msg)
+            branch_length[position] = float(node.branch_length)
+        children.append([index[id(child)] for child in node.children])
+        if node.is_leaf:
+            leaf_states[row] = alignment[node.name]
+            leaf_row[position] = row
+            row += 1
+    return (
+        branch_length,
+        children,
+        np.ascontiguousarray(leaf_states),
+        leaf_row.tolist(),
+        np.ascontiguousarray(pi, dtype=np.float64),
+    )
+
+
+@pytest.mark.parametrize(
+    "cell", BOUNDARY_CELLS, ids=lambda cell: f"{cell[0]}taxa_{cell[1]}sites"
+)
+def test_rust_whole_call_at_the_boundary_cells(
+    benchmark: BenchmarkFixture, cell: tuple[int, int]
+) -> None:
+    """The Python-visible call, the total the other two are fractions of."""
+    tau, pi, alignment = _problem(cell)
+    result = benchmark(pruning_rust.log_likelihood, tau, 4, pi, alignment)
+    assert math.isfinite(result)
+    assert result < 0.0
+
+
+@pytest.mark.parametrize(
+    "cell", BOUNDARY_CELLS, ids=lambda cell: f"{cell[0]}taxa_{cell[1]}sites"
+)
+def test_rust_argument_marshalling(
+    benchmark: BenchmarkFixture, cell: tuple[int, int]
+) -> None:
+    """Building the arrays that cross, without crossing.
+
+    The assertion pins the copy to the wrapper it copies: the kernel called
+    on these arguments must return what `pruning_rust.log_likelihood`
+    returns, bitwise, since it is the same call on the same bytes.
+    """
+    tau, pi, alignment = _problem(cell)
+    arguments = benchmark(_marshalled, tau, pi, alignment)
+    branch_length, children, leaf_states, leaf_row, pi_contiguous = arguments
+    through_the_copy = float(
+        oxi_snakes_and_ladders.pruning_log_likelihood(
+            branch_length, children, leaf_states, leaf_row, 4, pi_contiguous, True
+        )
+    )
+    assert through_the_copy == pruning_rust.log_likelihood(tau, 4, pi, alignment)
+
+
+@pytest.mark.parametrize(
+    "cell", BOUNDARY_CELLS, ids=lambda cell: f"{cell[0]}taxa_{cell[1]}sites"
+)
+def test_rust_binding_call(benchmark: BenchmarkFixture, cell: tuple[int, int]) -> None:
+    """Crossing, with the arrays already built: PyO3's extraction and the kernel.
+
+    `children` and `leaf_row` are Python lists and are converted per call;
+    the two NumPy arrays are borrowed. So this is the term that carries the
+    kernel's work, and the one a faster kernel changes.
+    """
+    tau, pi, alignment = _problem(cell)
+    branch_length, children, leaf_states, leaf_row, pi_contiguous = _marshalled(
+        tau, pi, alignment
+    )
+    result = benchmark(
+        oxi_snakes_and_ladders.pruning_log_likelihood,
+        branch_length,
+        children,
+        leaf_states,
+        leaf_row,
+        4,
+        pi_contiguous,
+        True,
+    )
+    assert_allclose(
+        result,
+        pruning.log_likelihood(tau, 4, pi, alignment),
+        rtol=CROSS_DEVICE_RTOL_FLOAT64,
+    )
