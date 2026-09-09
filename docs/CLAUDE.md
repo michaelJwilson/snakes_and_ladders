@@ -2,11 +2,11 @@
 
 The paper and the textbook (`tex/`), the API documentation (`source/`), and
 the worked notebooks (`nb/`). All are generated artifacts whose output is
-committed. CI regenerates the figures and notebooks whose inputs changed (a
-stamp beside each says) and compares them against what is committed; the
-PDFs it builds without comparing, since a rebuild ticket's pull request
-commits those and they lag their sources between (`DEV.md`). An artifact held
-to the comparison must come out the same on another machine, which constrains what it may say.
+committed. CI regenerates every cited figure and executes every notebook and
+compares both against what is committed; the PDFs it builds without comparing,
+since a rebuild ticket's pull request commits those and they lag their sources
+between (`DEV.md`). An artifact held to the comparison must come out the same
+on another machine, which constrains what it may say.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file too — and every docstring, comment and commit message
@@ -24,11 +24,11 @@ document includes rather than as an image, so it matches the surrounding type.
 problem class, each running the application from a seeded fixture to a learned
 policy against oracles the regression suite already establishes.
 
-The build script regenerates the cited figures whose inputs changed and then
-runs `latexmk` per document; nothing else invokes `latexmk`. `DEV.md` holds
-the selection and the stamps in full. The principle is that a partial rebuild
-*moves* a check and never removes one: the release gate regenerates and
-compares every figure, whatever a document cites and whatever a stamp said.
+The build script regenerates the cited figures and then runs `latexmk` per
+document; nothing else invokes `latexmk`, and `DEV.md` holds the selection in
+full. A partial rebuild *moves* a check and never removes one: the release gate
+regenerates and compares every figure, whatever a document cites. The document
+selects, never a stamp predicting which figure a change moved (issue #490).
 
 Root `CLAUDE.md`'s **Expected Reader** states the formatting contract — what
 belongs in the body, what belongs in the appendix, and the register to write

@@ -353,10 +353,12 @@ def declared(
 
 # --- baseline records (issue #401) ------------------------------------------
 
-#: The libraries whose version enters a baseline's digest. Narrower than
-#: ``inputs.LIBRARIES``, which a *figure* is hashed against: a search rate
-#: is a number, not a rendering, so the drawing libraries do not change it
-#: and a matplotlib release must not invalidate every record.
+#: The libraries whose version enters a baseline's digest, and the only list
+#: :func:`snakes_and_ladders.inputs.library_versions` is now called with: a
+#: search rate is a number, not a rendering, so the drawing libraries do not
+#: change it and a matplotlib release must not invalidate every record. The
+#: wider default that function carried was the figures' list, and it went
+#: with the figure stamps (issue #490).
 BASELINE_LIBRARIES: tuple[str, ...] = ("numpy", "scipy", "torch")
 
 #: What a baseline file is called, beside ``<tier>.yaml``.

@@ -70,12 +70,11 @@ run_check "sphinx-build -W (full)" \
 # index and a regeneration disagrees with it.
 run_check "generated ledgers" infra/ledgers.sh --check
 # Every figure, cited and uncited, rendered and compared against the committed
-# bytes (issue #484). `--all` ignores the stamps, so no digest, no prediction
-# and no skip decides what is checked: the guarantee is that a figure whose
-# rendered bytes would change cannot reach a release claiming to be current,
-# and rendering all of them is what enforces it. The stamps' measured
-# false-positive rate is 100% over 476 decisions (#476), so this is the whole
-# mechanism at the release gate rather than the remainder of one.
+# bytes (issue #484). `--all` selects the whole manifest, and no digest,
+# prediction or skip narrows it: the guarantee is that a figure whose rendered
+# bytes would change cannot reach a release claiming to be current, and
+# rendering all of them is what enforces it. The stamps that predicted this
+# were wrong on 476 of 476 decisions and are gone (issues #476, #490).
 #
 # Before `infra/build_documents.sh`, and that ordering is the check: that
 # script renders a stale cited figure *into* docs/tex/figures/, so running it

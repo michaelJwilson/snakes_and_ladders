@@ -35,8 +35,7 @@ docs/tex/*.toc
 # QA figures/captions under docs/tex/figures/ are committed, not ignored:
 # they are the documents' evidence, and a reviewer should see a
 # changed plot in the diff rather than have to build a document to find
-# out. infra/build_documents.sh regenerates the ones whose inputs
-# changed; the <stem>.inputs stamp beside each records the render (DEV.md).
+# out. infra/build_documents.sh regenerates every cited figure (DEV.md).
 
 # infra/build_documents.sh's LaTeX build output. The PDFs themselves
 # are committed (see DEV.md); everything latexmk leaves beside them is not.

@@ -45,8 +45,9 @@ export FORCE_SOURCE_DATE=1
 # selection is the *union* of what they cite, so leaving one out would stop
 # regenerating its figures and fail nothing (issue #249).
 #
-# Of the cited figures, only those whose inputs changed since their stamp
-# are rendered (issue #372); a change confined to docs/tex/ renders nothing.
+# Every figure the documents cite is rendered. Which of them a change could
+# have moved was predicted by a stamp until issue #490, wrongly on all 476
+# decisions it made; the cost is bounded by the render cap per figure instead.
 uv run --no-sync python -m snakes_and_ladders.qa.build \
   --document docs/tex/paper.tex \
   --document docs/tex/textbook.tex \

@@ -5,9 +5,9 @@
 # lint and types over the changed Python files; the critical gate; the tests
 # infra/select_tests.py names for the diff (the guards alone for a change to
 # prose); Sphinx when a docstring or docs/source/ changed; the notebook
-# checker, which skips a notebook whose inputs are unchanged; the document
-# build when docs/tex/ changed, which renders only the figures whose inputs
-# changed. CI runs the whole set and is the gate; this is the local answer.
+# checker, which executes every notebook it is given; the document build when
+# docs/tex/ changed, which renders every figure the documents cite. CI runs
+# the whole set and is the gate; this is the local answer.
 #
 # Usage: infra/validate.sh [--base <ref>]     default base: origin/main
 set -uo pipefail

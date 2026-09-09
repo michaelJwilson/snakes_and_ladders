@@ -39,16 +39,14 @@ been skipped (issues #480, #507). Whether an input changed and whether a
 correctness check runs are separate questions, and the second is not the
 first's to answer. A run too expensive to make unconditional is cut by a
 stated budget, never by a hash; ``DEV.md`` carries the budget and what it
-buys.
+buys. The digest and the ``<name>.inputs`` stamps beside the notebooks are
+gone with issue #490; nothing had read them since #480.
 
 ``--write`` re-executes and saves instead of comparing, which is how a
 notebook is regenerated after a change moves what it prints. Both live here
 rather than in two tools because they must execute a notebook *identically* --
 a regenerator that differed from the checker in working directory, timeout or
-kernel would write a notebook the checker then rejects. It still records
-``<name>.inputs`` beside each notebook it writes, so the stamps do not fall
-out of step with the outputs before issue #490 removes them; nothing reads
-them.
+kernel would write a notebook the checker then rejects.
 
 `nbformat` and `nbclient` are imported inside the functions that run a
 notebook, not at module scope. Comparing two runs is pure dict arithmetic and
@@ -69,7 +67,6 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK_DIR = REPO_ROOT / "docs" / "nb"
-FIXTURES = REPO_ROOT / "tests" / "regression" / "fixtures"
 
 # Generous: `potts_chain.ipynb` trains eight policies. A timeout here would
 # read as a rotted notebook, which is the one failure this must not invent.
@@ -226,91 +223,6 @@ def differences(
     return problems
 
 
-def code(cells: Sequence[dict[str, Any]]) -> str:
-    """The source of every code cell, in order, as one string.
-
-    Returns
-    -------
-    str
-        Cell sources joined by a blank line; the text the digest is over.
-    """
-    sources = []
-    for cell in cells:
-        if cell.get("cell_type") != "code":
-            continue
-        source = cell.get("source", "")
-        sources.append("".join(source) if isinstance(source, list) else str(source))
-    return "\n\n".join(sources)
-
-
-def _named_fixtures(source: str) -> list[Path]:
-    """Every fixture file the notebook's code names, by path or by registry key.
-
-    A notebook reaches a fixture two ways since issue #382: as a path, and as
-    ``fixture("<problem>", "<tier>")``. Both count, or a notebook whose
-    instance changed would keep a stamp saying it had not.
-
-    Returns
-    -------
-    list[Path]
-        The named files, sorted.
-    """
-    found = []
-    for path in sorted(FIXTURES.rglob("*.yaml")):
-        problem, tier = path.parent.name, path.stem
-        named_by_path = f"{problem}/{path.name}" in source
-        named_by_key = f'"{problem}"' in source and f'"{tier}"' in source
-        if named_by_path or named_by_key:
-            found.append(path)
-    return found
-
-
-def input_digest(path: Path) -> str:
-    """Hash what the notebook at ``path`` computes from.
-
-    The code cells, the import closure of every ``snakes_and_ladders`` module
-    they import (a magic line or a shell escape is dropped before parsing),
-    every fixture the cells name --- by path or as a registry problem and
-    tier --- and the library versions.
-
-    Returns
-    -------
-    str
-        A SHA-256 hex digest.
-    """
-    import nbformat
-    from snakes_and_ladders.inputs import (
-        digest,
-        imported_names,
-        library_versions,
-        module_closure,
-    )
-
-    source = code(nbformat.read(path, as_version=4).cells)
-    plain = "\n".join(
-        line for line in source.splitlines() if not line.lstrip().startswith(("%", "!"))
-    )
-    modules = imported_names(plain, "notebook")
-    fixtures = _named_fixtures(source)
-    return digest(
-        [*module_closure(modules, REPO_ROOT), *fixtures],
-        REPO_ROOT,
-        source,
-        *library_versions(),
-    )
-
-
-def stamp(path: Path) -> Path:
-    """The file recording the digest ``path`` was last executed from.
-
-    Returns
-    -------
-    Path
-        ``<name>.inputs`` beside the notebook.
-    """
-    return path.with_suffix(".inputs")
-
-
 def execute(path: Path) -> Any:
     """Run ``path`` in place and return the executed notebook.
 
@@ -354,10 +266,8 @@ def rewrite(path: Path) -> None:
     figure runs ``infra/build_documents.sh``.
     """
     import nbformat
-    from snakes_and_ladders.inputs import write_stamp
 
     nbformat.write(execute(path), path)
-    write_stamp(stamp(path), input_digest(path))
 
 
 def compare(path: Path) -> list[str]:

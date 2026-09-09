@@ -52,8 +52,8 @@ closure, so the disagreement it had been carrying (#507) surfaced only when
 an unrelated merge moved the hash and the check ran. Whether an input changed
 and whether a correctness check runs are separate questions, and the second
 is not the first's to answer; a set too expensive to run whole would be cut
-by a budget `DEV.md` states, never by a hash. The stamps are still written by
-`--write` and read by nothing, until issue #490 removes them.
+by a budget `DEV.md` states, never by a hash. Issue #490 deleted the stamps
+and the digest behind them.
 
 **Text is compared; images are not.** Every number a notebook prints is
 determined by its seeds, so a re-executed stream output must match exactly.
