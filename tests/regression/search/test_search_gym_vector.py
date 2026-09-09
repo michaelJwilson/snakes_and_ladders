@@ -17,6 +17,8 @@ Skips without the ``frameworks`` extra; the core suite does not install
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import numpy as np
 import pytest
 import torch
@@ -159,11 +161,7 @@ def test_every_episode_of_a_batch_is_the_one_its_own_generator_would_have_rolled
     ]
     for episode in batched:
         matched = next(
-            (
-                sequence
-                for sequence in remaining
-                if sequence and sequence[0] == episode
-            ),
+            (sequence for sequence in remaining if sequence and sequence[0] == episode),
             None,
         )
         assert matched is not None, "an episode no copy's generator would produce"
@@ -220,7 +218,7 @@ def test_timelimit_truncates_on_the_decision_the_adapter_s_own_counter_does() ->
         steps += 1
         assert not terminated[0]
     assert steps == budget
-    assert adapter._steps == budget  # noqa: SLF001
+    assert adapter._steps == budget
 
 
 @pytest.mark.structural
@@ -242,9 +240,11 @@ def test_the_recorded_return_and_length_are_the_assembled_episode_s() -> None:
         index = policy.sample(rows, adapter.np_random)
         observations, _, terminated, truncated, infos = vector.step(np.array([index]))
         done = terminated | truncated
-    recorded = infos["episode"]  # type: ignore[index]
-    assert int(recorded["l"][0]) == len(expected.actions)  # type: ignore[index,call-overload]
-    assert float(recorded["r"][0]) == pytest.approx(expected.total_reward)  # type: ignore[index,call-overload]
+    recorded = cast(
+        "dict[str, np.ndarray[Any, np.dtype[np.float64]]]", infos["episode"]
+    )
+    assert int(recorded["l"][0]) == len(expected.actions)
+    assert float(recorded["r"][0]) == pytest.approx(expected.total_reward)
 
 
 # --- refusals ------------------------------------------------------------
@@ -255,9 +255,7 @@ def test_an_empty_generator_list_or_a_non_positive_count_is_refused() -> None:
     landscape, n_max = _potts()
     policy = _policy()
     with pytest.raises(ValueError, match="at least one generator"):
-        rollout_batch(
-            landscape, policy, [], n_max=n_max, max_steps=HORIZON, episodes=1
-        )
+        rollout_batch(landscape, policy, [], n_max=n_max, max_steps=HORIZON, episodes=1)
     with pytest.raises(ValueError, match="episodes must be >= 1"):
         rollout_batch(
             landscape,
