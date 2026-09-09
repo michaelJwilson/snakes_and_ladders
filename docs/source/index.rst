@@ -315,6 +315,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox
    :members:
 
+.. automodule:: snakes_and_ladders.sandbox.tropical
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 
@@ -382,6 +385,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.parsimony_zones
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.tropical_relaxation
    :members:
 
 .. automodule:: snakes_and_ladders.qa.frustrated_lattices
