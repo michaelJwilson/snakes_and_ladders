@@ -118,14 +118,28 @@ def _sibling_products(messages: Sequence[torch.Tensor]) -> list[torch.Tensor]:
         ``messages[i]``; an all-ones tensor where the node has one child.
     """
     count = len(messages)
-    prefix = [torch.ones_like(messages[0]) for _ in range(count + 1)]
-    for position in range(count):
-        prefix[position + 1] = prefix[position] * messages[position]
-    suffix = torch.ones_like(messages[0])
-    result: list[torch.Tensor] = [suffix] * count
+    if count == 1:
+        return [torch.ones_like(messages[0])]
+    if count == 2:
+        # Every internal node of a binary tree, so it is worth not allocating
+        # the scan's two identity tensors to reach the same answer.
+        return [messages[1], messages[0]]
+    prefix: list[torch.Tensor | None] = [None] * count
+    for position in range(1, count):
+        running = messages[position - 1]
+        prefix[position] = running if position == 1 else prefix[position - 1] * running
+    result: list[torch.Tensor] = [messages[0]] * count
+    suffix: torch.Tensor | None = None
     for position in range(count - 1, -1, -1):
-        result[position] = prefix[position] * suffix
-        suffix = suffix * messages[position]
+        head = prefix[position]
+        if head is None:
+            assert suffix is not None
+            result[position] = suffix
+        elif suffix is None:
+            result[position] = head
+        else:
+            result[position] = head * suffix
+        suffix = messages[position] if suffix is None else suffix * messages[position]
     return result
 
 
