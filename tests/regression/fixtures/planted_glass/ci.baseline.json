@@ -1,5 +1,4 @@
 {
-  "digest": "ec0afb4044288c042ed74ed6f52e68c527b71e53264dfaa24bd18a54e738d8dd",
   "libraries": [
     "numpy==2.5.2",
     "scipy==1.18.1",

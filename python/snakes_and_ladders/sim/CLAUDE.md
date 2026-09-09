@@ -59,10 +59,13 @@ known from outside this repository.
   climbing reaches it from seeded starts --- is a measurement: written by a
   tool, moving when the code that computes it moves, and worth nothing once
   the tree has moved under it. It lives in `<tier>.baseline.json` beside
-  `<tier>.yaml`, carrying the seed and budget that produced each number and a
-  digest of everything it is a function of, so a regenerated number never
-  rewrites a hand-written instance, a reader is refused a stale one rather
-  than served it, and a diff says which of the two moved.
+  `<tier>.yaml`, carrying the seed and budget that produced each number and
+  the library versions it was computed against, so a regenerated number never
+  rewrites a hand-written instance and a diff says which of the two moved.
+  **A record is refereed by recomputing it, never by a hash of the tree it
+  came from**: a hash re-keys on every edit in a wide closure and says only
+  that the tree moved, where a recomputation says whether the number did.
+  `DEV.md` carries what that cost and bought (issue #460).
 
 - **A fixture is admitted on two clauses, and both are load-bearing.** Its
   answer must be known from *outside* this repository — a closed form, a

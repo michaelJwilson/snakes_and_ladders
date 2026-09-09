@@ -17,11 +17,17 @@ for; and the two fixtures that restate a canonical constructor are pinned
 against it, since a file that has drifted from the instance it copies is a
 second truth (``sim/CLAUDE.md``).
 
-The baseline records of issue #401 are held to the one property that makes
-reading a cached number safe: the reader returns what the writer wrote, and
-raises where the tree has moved under it. Both directions are asserted here,
-the second against a copy of a fixture directory with one byte changed, since
-the committed fixtures must not be edited to prove it.
+The baseline records of issue #401 are held to what makes reading a cached
+number safe. The reader returns what the writer wrote; a record computed
+against another ``numpy``, ``scipy`` or ``torch`` is refused rather than
+served; and a record the tree no longer produces is caught by recomputing it,
+which is what replaced the committed digest (issue #460). The selection that
+decides which records a change is recomputed against is asserted here too: it
+is the mechanism the digest was standing in for, so a selection that misses a
+record is a check that silently did not run.
+
+Every proof runs against a *copy* of the fixture directory, since the
+committed fixtures and records must not be edited to make one.
 """
 
 from __future__ import annotations
@@ -190,9 +196,10 @@ CHEAPEST = "potts_chain/ci"
 @pytest.mark.structural
 def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
     # The round trip the readers depend on: what `infra/baselines.py --write`
-    # wrote is what `baseline()` returns, and its digest is this tree's. A
-    # record left behind by a change to the code it measures fails here, on
-    # the pull request that made the change, without recomputing a number.
+    # wrote is what `baseline()` returns, computed against the libraries
+    # installed here. A record left behind by a library upgrade fails here
+    # without recomputing a number; one left behind by a change to the code
+    # it measures fails in `infra/baselines.py`, which recomputes.
     recorded = baselines()
     assert recorded, "no baseline record is committed"
 
@@ -203,40 +210,106 @@ def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
         assert record.measurements, f"{record.path} records no measurement"
         for name, measurement in record.measurements.items():
             assert measurement.algorithm, f"{record.path}: {name} names no algorithm"
-        assert read_baseline(record.path).digest == record.digest
+        assert read_baseline(record.path).libraries == record.libraries
 
 
 @pytest.mark.edge_case
-def test_a_mutated_fixture_makes_its_baseline_unreadable(tmp_path: Path) -> None:
-    # The property that makes a cached number safe to read. Against a *copy*
-    # of the fixture directory, so the committed instance is untouched: one
-    # changed seed and the record beside it is refused rather than served.
+def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
+    tmp_path: Path,
+) -> None:
+    # The property that makes a cached number safe: a record whose instance
+    # moved under it does not survive being recomputed. Against a *copy* of
+    # the fixture directory, so the committed instance is untouched --- one
+    # changed field and the recomputation disagrees with what is committed.
+    # This is the check the removed digest stood in for, and it is the
+    # stronger one: the digest said the tree had moved, this says the number
+    # did, and names both values (issue #460).
+    root = tmp_path / "tree"
+    (root / "tests" / "regression").mkdir(parents=True)
+    shutil.copytree(FIXTURES_DIR, root / "tests" / "regression" / "fixtures")
+
+    (spec,) = baseline_script.selected([CHEAPEST])
+    committed = read_baseline(baseline_path(spec.problem, spec.tier))
+    assert (
+        baseline_script.differences(baseline_script.compute(spec, root), committed)
+        == []
+    )
+
+    fixture_file = (
+        root / "tests" / "regression" / "fixtures" / "potts_chain" / "ci.yaml"
+    )
+    fixture_file.write_text(
+        fixture_file.read_text().replace("coupling: 0.75", "coupling: 1.25")
+    )
+    found = baseline_script.differences(baseline_script.compute(spec, root), committed)
+    assert found, "a changed coupling left every recomputed number where it was"
+    assert any("enumerated_optimum" in line for line in found), found
+
+
+@pytest.mark.edge_case
+def test_an_edited_budget_is_a_disagreement_the_recomputation_reports(
+    tmp_path: Path,
+) -> None:
+    # The budget says what a value means, so a record whose restart count was
+    # edited to match a test is describing a measurement other than the one it
+    # holds. `differences` reports it beside a moved value rather than only
+    # reporting the value, which would let the edit pass wherever the number
+    # happened to be reproduced.
+    copied = tmp_path / "release.baseline.json"
+    original = baseline_path("tree_search", Scale.RELEASE)
+    copied.write_text(original.read_text().replace('"starts": 50', '"starts": 20'))
+
+    found = baseline_script.differences(read_baseline(original), read_baseline(copied))
+    assert any("budget" in line for line in found), found
+
+
+@pytest.mark.edge_case
+def test_a_record_computed_against_another_library_is_refused(tmp_path: Path) -> None:
+    # The one input to a number that a recomputation elsewhere cannot check,
+    # because it is a fact about this machine and not about the tree. It is
+    # free on the read, so the read is where it is asserted (issue #460).
     copied = tmp_path / "fixtures"
     shutil.copytree(FIXTURES_DIR, copied)
     assert baseline("tree_search", Scale.RELEASE, copied).value("greedy_rate") == 0.48
 
-    fixture_file = copied / "tree_search" / "release.yaml"
-    fixture_file.write_text(
-        fixture_file.read_text().replace("seed: 20260907", "seed: 20260908")
-    )
-
-    with pytest.raises(StaleBaselineError, match="different tree"):
-        baseline("tree_search", Scale.RELEASE, copied)
-
-
-@pytest.mark.edge_case
-def test_an_edited_budget_makes_its_baseline_unreadable(tmp_path: Path) -> None:
-    # The other half of the digest's job. The recorded value is an output and
-    # is not hashed --- the release gate recomputes it --- but the budget that
-    # says what the value means is an input, so a record whose restart count
-    # was edited to match a test is refused rather than believed.
-    copied = tmp_path / "fixtures"
-    shutil.copytree(FIXTURES_DIR, copied)
     record = copied / "tree_search" / "release.baseline.json"
-    record.write_text(record.read_text().replace('"starts": 50', '"starts": 20'))
+    held = json.loads(record.read_text())
+    held["libraries"] = ["numpy==0.0.1", *held["libraries"][1:]]
+    record.write_text(json.dumps(held, indent=2, sort_keys=True) + "\n")
 
-    with pytest.raises(StaleBaselineError, match="different tree"):
+    with pytest.raises(StaleBaselineError, match="numpy==0.0.1"):
         baseline("tree_search", Scale.RELEASE, copied)
+
+
+@pytest.mark.structural
+def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
+    # The selection that replaced the digest, and the reason it is safe to
+    # recompute less than everything: a record's numbers are a function of its
+    # fixture and of the import closure of the modules that computed them, so
+    # a change to neither cannot move them. A selection that missed a record
+    # would be a check that silently did not run, which is the failure mode
+    # `infra/CLAUDE.md` names for `select_tests.py` too.
+    every = {f"{spec.problem}/{spec.tier}" for spec in baseline_script.SPECS}
+
+    def reached(*paths: str) -> set[str]:
+        return {
+            f"{spec.problem}/{spec.tier}" for spec in baseline_script.reached_by(paths)
+        }
+
+    assert reached("README.md", "docs/tex/paper.tex") == set()
+    assert reached("python/snakes_and_ladders/search/surrogate.py") == {
+        "tree_search/ci"
+    }
+    assert reached("tests/regression/fixtures/potts_chain/ci.yaml") == {
+        "potts_chain/ci"
+    }
+    assert reached("tests/regression/fixtures/potts_chain/ci.baseline.json") == {
+        "potts_chain/ci"
+    }
+    # The environment and this script itself reach every record: neither is in
+    # any closure, and both decide every number.
+    assert reached("uv.lock") == every
+    assert reached("infra/baselines.py") == every
 
 
 @pytest.mark.structural
@@ -249,7 +322,6 @@ def test_the_same_baseline_computed_twice_is_the_same_record() -> None:
     first, second = baseline_script.compute(spec), baseline_script.compute(spec)
 
     assert baseline_script.differences(first, second) == []
-    assert first.digest == second.digest
     assert baseline_script.differences(first, read_baseline(first.path)) == []
 
 

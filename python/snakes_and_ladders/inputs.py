@@ -1,22 +1,25 @@
-"""What a recorded measurement is a function of, hashed so a stale one is refused.
+"""What a recorded measurement is a function of: its code, and its libraries.
 
 A baseline record beside a fixture --- an enumerated maximum, the rate at
-which hill climbing reaches it --- is a number computed from that fixture,
-from the modules that computed it, and by the libraries installed when it
-ran. A digest over those, recorded in the record, is what
-:func:`snakes_and_ladders.sim.fixtures.baseline` refuses a stale record on
-(issue #401).
+which hill climbing reaches it --- is a number computed by some modules and
+by the libraries installed when it ran. :func:`module_closure` says which
+sources those modules reach, which is what ``infra/baselines.py --changed``
+selects the records a pull request could have moved on;
+:func:`library_versions` says which libraries were installed, which is what
+:func:`snakes_and_ladders.sim.fixtures.baseline` refuses a record on when
+they are not this machine's (issues #401, #460).
 
-**It hashed committed figures and notebooks too, and no longer does** (issue
-#490). A stamp beside each figure and each notebook recorded the same digest
-over the renderer's import closure, and the build skipped an artifact whose
-stamp matched. Over 476 decisions in two measured windows every stale call
-was a false positive and no figure byte moved, at a cost of ~48 minutes in
-one day; two causes are recorded in #490 rather than fixed, because the
-stamps are gone. What each stamp was nominally providing is provided by
-running the check instead of predicting it: ``infra/release.sh`` renders
-every figure and compares bytes (issue #484), and the ``notebooks`` job
-executes every notebook under ``docs/nb/`` (issue #480).
+**Nothing here hashes a committed artifact any more** (issue #490). A stamp
+beside each figure and each notebook recorded a digest over the renderer's
+import closure, and the build skipped an artifact whose stamp matched. Over
+476 decisions in two measured windows every stale call was a false positive
+and no figure byte moved, at a cost of ~48 minutes in one day; two causes
+are recorded in #490 rather than fixed, because the stamps are gone. What
+each stamp nominally provided is provided by running the check instead of
+predicting it: ``infra/release.sh`` renders every figure and compares bytes
+(issue #484), and the ``notebooks`` job executes every notebook under
+``docs/nb/`` (issue #480). The digest they shared went with them; only its
+two terms are left, and each is read directly.
 
 **Top level, not inside ``qa``.** It began there, where the figures are, and
 moved when ``snakes_and_ladders.sim.fixtures`` came to need it for the
@@ -34,14 +37,14 @@ stale silently and an import does not. A module that reaches the Rust
 extension carries the Rust sources in its closure, since a kernel change
 alters what it computes.
 
-The digest is over file contents, not modification times, so a fresh clone
-and the tree that recorded the digest agree.
+A closure is a set of paths, and a caller that hashes it hashes file
+contents rather than modification times, so a fresh clone and the tree that
+wrote the record agree.
 """
 
 from __future__ import annotations
 
 import ast
-import hashlib
 import sys
 from collections.abc import Iterable, Sequence
 from importlib import metadata
@@ -176,54 +179,3 @@ def library_versions(libraries: Sequence[str]) -> list[str]:
             versions.append(f"{name}==absent")
     versions.append(f"python=={sys.version_info.major}.{sys.version_info.minor}")
     return versions
-
-
-def _expanded(files: Iterable[Path]) -> list[Path]:
-    """Every file among ``files``, a directory replaced by the files under it.
-
-    Returns
-    -------
-    list[Path]
-    """
-    found: list[Path] = []
-    for path in files:
-        if path.is_dir():
-            found += sorted(child for child in path.rglob("*") if child.is_file())
-        else:
-            found.append(path)
-    return found
-
-
-def digest(files: Iterable[Path], root: Path, *extra: str) -> str:
-    """Hash file contents and extra strings into one hex digest.
-
-    Parameters
-    ----------
-    files : Iterable[Path]
-        Files whose bytes enter the hash, keyed by their path relative to
-        ``root`` so the digest does not depend on where the checkout lives.
-        A directory stands for the files under it: a fixture named as a
-        problem rather than as one tier (issue #382) is a directory, and
-        hashing it as a unit is what makes adding a tier to it a change the
-        digest sees.
-    root : Path
-        The repository root.
-    *extra : str
-        Strings that are inputs too: the record's own algorithms, seeds and
-        budgets, and the library versions.
-
-    Returns
-    -------
-    str
-        A SHA-256 hex digest.
-    """
-    hasher = hashlib.sha256()
-    for path in sorted(set(_expanded(files))):
-        hasher.update(str(path.relative_to(root)).encode())
-        hasher.update(b"\0")
-        hasher.update(path.read_bytes())
-        hasher.update(b"\0")
-    for item in extra:
-        hasher.update(item.encode())
-        hasher.update(b"\0")
-    return hasher.hexdigest()
