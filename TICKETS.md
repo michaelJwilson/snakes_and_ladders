@@ -122,7 +122,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
   and from 3×3 to 4×6 lattices, and a policy does not yet — the lattice
   half is filed (#414)
-- Batched episode rollout, so a budget at `n = 200` is affordable. `search.gym.rollout_batch` collects a batch through `gymnasium.vector`, refereed against the sequential rollout draw for draw, and is 1.18x to 1.68x *slower* per episode: `SyncVectorEnv` is a serial loop in one process (#392, `docs/experiments/007-batched-rollout-and-torchrl-ppo.md`). What remains is a collector with real parallelism
+- Batched episode rollout, so a budget at `n = 200` is affordable. `search.gym.rollout_batch` collects a batch through `gymnasium.vector`, refereed against the sequential rollout draw for draw, and is 1.18x to 1.75x *slower* per episode: `SyncVectorEnv` is a serial loop in one process (#392, `docs/experiments/007-batched-rollout-and-torchrl-ppo.md`). What remains is a collector with real parallelism
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed
 

@@ -156,10 +156,10 @@ carries the three candidates.
 `search.gym.rollout_batch` collects a batch of episodes through
 `gymnasium.vector.SyncVectorEnv`, with `TimeLimit` carrying the decision budget
 and `RecordEpisodeStatistics` the episode boundary, and at one copy equals
-`learn.rollout.rollout` under the same generator draw for draw. It costs 1.311,
-0.993 and 0.945 ms per episode at batch 1, 4 and 16 on the Potts chain against
-the sequential rollout's 0.803, and 1.519, 1.506 and 1.647 ms against 0.981 on
-the 5-taxon tree: `SyncVectorEnv` is a serial loop in one process, so it has no
+`learn.rollout.rollout` under the same generator draw for draw. It costs 1.381,
+1.018 and 0.938 ms per episode at batch 1, 4 and 16 on the Potts chain against
+the sequential rollout's 0.795, 1.570, 1.499 and 1.639 ms against 0.929 on the
+5-taxon tree, and 6.314, 6.261 and 6.654 ms against 4.139 on the 7-taxon one: `SyncVectorEnv` is a serial loop in one process, so it has no
 parallelism to amortize the vector API's observation stacking and autoreset
 bookkeeping against, and no batch size makes it pay. TorchRL's `GAE` is 220x
 slower than the recursion it would front, 6.384 ms against 0.029 ms per
@@ -171,7 +171,7 @@ return 2.2779, and a sampled learning curve agreeing iteration for iteration to
 0.0. Of that 1.28x, 1.13x is the neighbourhood scoring hoisted out of PPO's
 epoch loop and the rest is clipping the concatenated batch instead of looping
 over episodes; both are changes to `learn.ppo`, which now runs the same budget
-in 6.25 s, and TorchRL stays what it already was here, the second implementation
+in 5.83 s, and TorchRL stays what it already was here, the second implementation
 refereeing ours at 1e-10.
 
 **CPU parallelism has one seam and, at the mid-size tier on a 4-core host,

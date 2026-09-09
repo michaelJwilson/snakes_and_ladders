@@ -48,8 +48,9 @@ Rollout, wall clock per episode:
 
 | fixture | sequential | batch 1 | batch 4 | batch 16 |
 | --- | --- | --- | --- | --- |
-| Potts chain | 0.803 ms | 1.311 ms | 0.993 ms | 0.945 ms |
-| tree, 5 taxa | 0.981 ms | 1.519 ms | 1.506 ms | 1.647 ms |
+| Potts chain | 0.795 ms | 1.381 ms | 1.018 ms | 0.938 ms |
+| tree, 5 taxa | 0.929 ms | 1.570 ms | 1.499 ms | 1.639 ms |
+| tree, 7 taxa | 4.139 ms | 6.314 ms | 6.261 ms | 6.654 ms |
 
 PPO, one training run of 1,920 episodes:
 
@@ -58,8 +59,9 @@ PPO, one training run of 1,920 episodes:
 | `learn.ppo` as it stood | 8.06 s | 78/81 (96.30%) | 2.2779 |
 | neighbourhoods scored once per iteration | 7.14 s | 78/81 (96.30%) | 2.2779 |
 | TorchRL `GAE` + `ClipPPOLoss` | 6.31 s | 78/81 (96.30%) | 2.2779 |
+| both changes, as landed | 5.83 s | 78/81 (96.30%) | 2.2779 |
 
-The sampled return agreed iteration for iteration across all three loops: the
+The sampled return agreed iteration for iteration across every loop above: the
 largest gap over the 60 iterations was 0.0.
 
 The two equations timed alone on one 32-episode batch (164 decisions):
@@ -69,7 +71,9 @@ The two equations timed alone on one 32-episode batch (164 decisions):
 | generalized advantage | 0.029 ms | 6.384 ms, tensordicts prebuilt; 8.228 ms including their construction |
 | clipped surrogate | 1.467 ms | 0.775 ms |
 
-`ppo_loss` is 1.118 ms of a 175 ms PPO iteration, 0.6%.
+The clipped surrogate is 1.467 ms of a 175 ms PPO iteration, 0.8% --- too
+small a term for a port in any language to pay for (Gorelick & Ozsvald ch. 2),
+which is the first question `CLAUDE.md` puts to a proposed hot path.
 
 ## Figures
 
@@ -77,9 +81,9 @@ none
 
 ## Finding
 
-`SyncVectorEnv` costs 1.18x to 1.68x per episode against the sequential
-rollout at every batch size measured, and the cost does not fall with the
-batch. It is a serial loop in one process, so it evaluates the same
+`SyncVectorEnv` costs 1.18x to 1.75x per episode against the sequential
+rollout at every batch size measured, on every fixture, and the cost does not
+fall with the batch. It is a serial loop in one process, so it evaluates the same
 environments in the same order and adds the vector API's observation stacking,
 autoreset bookkeeping and the pad-to-`n_max` round trip through NumPy on top.
 No batch size makes it pay, because there is no parallelism in it to amortize
@@ -92,7 +96,7 @@ the framework's is a TensorDict rebuilt per episode.
 Of the 1.28x TorchRL's whole loop showed, 1.13x is the neighbourhood scoring
 hoisted out of the epoch loop and the rest is the clipped surrogate applied to
 the concatenated batch rather than episode by episode. Both are changes to
-`learn.ppo` itself; taking them leaves TorchRL nothing, at 6.25 s against its
+`learn.ppo` itself; taking them leaves TorchRL behind, at 5.83 s against its
 6.31 s.
 
 ## Conclusion and actions
@@ -113,6 +117,6 @@ Nothing about `AsyncVectorEnv` or any multi-process collector, which were not
 run: the host is four cores shared with other agents and every baseline in
 `STATUS.md` is a one-thread number. Nothing about batch sizes above 16, or
 about environments whose step is expensive enough for the vector API's overhead
-to vanish beside it — the 7-taxon fixture, the most expensive here at 3.819 ms
-per episode sequentially, did not reach that point. Nothing about TorchRL on a
+to vanish beside it — the 7-taxon fixture, the most expensive here at 4.139 ms
+per episode sequentially, is still 1.51x slower batched. Nothing about TorchRL on a
 GPU, where its vectorized loss would be timed against a different reference.
