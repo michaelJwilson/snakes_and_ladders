@@ -121,9 +121,9 @@ alike, alongside the rule that decides which documents may repeat detail
 [#242](https://github.com/michaelJwilson/snakes_and_ladders/issues/242) into it). A
 `frameworks` extra carries `gymnasium` 1.3.0, `rustworkx` 0.18.1, `torchrl`
 0.13.3 and `torch_geometric` 2.8.0, and `snakes_and_ladders.sandbox` is the
-home an implementation moves to once a framework replaces it on a hot path,
-with a guard that only tests and QA import it; nothing has moved yet, because
-nothing measured beat its reference. `search.gym.GymnasiumEnvironment` wraps
+home whichever side of a measurement is not on the hot path moves to, with a
+guard that only tests and QA import it; three declined framework fronts live
+there, conserved with the tests that referee them. `search.gym.GymnasiumEnvironment` wraps
 any `learn.Environment` unchanged — the protocol stays stateless and scores a
 neighbourhood at once, which `learn.exact` rests on — and passes Farama's
 `check_env` on the Potts chain and the 5-taxon tree environment while an
@@ -138,9 +138,10 @@ when that changes; `ising_ground_state` is pinned instead against `networkx`'s
 minimum cut at extents 8 to 16. TorchRL's `GAE` and `ClipPPOLoss` reproduce
 `learn.ppo`'s advantages, objective and gradient to 1e-10 once their float32
 buffers are handed float64, and PyTorch Geometric's `GINConv` reproduces
-`GraphSurrogate` to 1e-12 on tied first-layer weights — on general weights GIN
-sums node and neighbours before its network where ours concatenates them, so
-the two are different architectures and the test says so. Conversion cost,
+`GraphSurrogate` to 1.33e-15 on tied first-layer weights — 0 to 8.88e-16 over
+ten model seeds at #390's own size — and on general weights GIN sums node and
+neighbours before its network where ours concatenates them, so the two are
+different architectures and the test says so. Conversion cost,
 timed apart from any call on 4 cores at a 1-minute load of 0.23: `to_rustworkx`
 12.5 µs and `from_rustworkx` 46.4 µs at extent 8, 50.9 and 196.9 µs at 16,
 747.2 µs and 3.78 ms at 64, against `rx.connected_components` at 4.6, 15.7 and
@@ -160,16 +161,26 @@ clears the bar — Dinic is 61.1%, 66.2% and 73.5% of `ising_ground_state` at
 extents 16, 32 and 64 — and is 3.5x to 8.8x the Python reference at 2.15,
 7.26 and 33.02 ms, but 2.3x to 4.2x slower than the Rust Dinic already
 fronting that call at 0.51, 2.37 and 14.12 ms, all three reporting the same
-energy. `rustworkx.connected_components` clears the bar at extent 16 and
-above, where `_find` and `_union` are 14.8% and 15.6% of a Swendsen–Wang
-sweep, and reaches 1.29x to 1.77x of the sweep at extents 8 to 48 — against
-1.52x to 1.98x from `potts_mcmc`'s own pointer doubling and sorted grouping,
-which also leaves the chain equal entry for entry where both frameworks
-renumber the clusters and compose a different one. `sandbox/` is therefore
-still empty, and `alpha_expansion` — 49.9% Dinic at extents 16 and 32, with
-no compiled path because `maxflow_rust.max_flow` returns the value and not
-the cut — is the one call site where a compiled flow would still pay, tracked
-under [#405](https://github.com/michaelJwilson/snakes_and_ladders/issues/405).
+energy. The three energies are −317.489949509, −1359.092598119 and
+−5480.514606575. scipy takes `int32` capacities, so the real-valued reduction
+is scaled and rounded: over 20 fields at extent 16 the energy is exact from
+1e3 to 1e8 and wrong on 3 of them at 1e2, by 7.18e-4, 1.92e-3 and 4.31e-3,
+which narrows the single-field range #388 recorded and is why no rounding
+bound is claimed. `rustworkx.connected_components` clears the bar at extent 16
+and above, where `_find` and `_union` are 14.8% and 15.6% of a Swendsen–Wang
+sweep; the labelling alone is 28.5, 101.9, 262.9 and 1158.4 µs at extents 8,
+16, 24 and 48 against the union-find walk's 54.6, 172.7, 431.1 and 1699.8, and
+the whole sweep 0.229, 0.725, 1.568 and 5.846 ms against `potts_mcmc`'s own
+pointer doubling and sorted grouping at 0.195, 0.650, 1.386 and 5.220 — 1.12x
+to 1.17x slower, and renumbering the clusters where ours leaves the chain
+equal entry for entry. All three fronts are conserved in `sandbox/`
+(`pyg_surrogate`, `rustworkx_clusters`, `scipy_mincut`) with the tests that
+pin each against what beat it, so a library release that moves any of these
+numbers fails a test rather than dating a paragraph. `alpha_expansion` —
+49.9% Dinic at extents 16 and 32, with no compiled path because
+`maxflow_rust.max_flow` returns the value and not the cut — is the one call
+site where a compiled flow would still pay, tracked under
+[#405](https://github.com/michaelJwilson/snakes_and_ladders/issues/405).
 
 **CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
 three negative results
