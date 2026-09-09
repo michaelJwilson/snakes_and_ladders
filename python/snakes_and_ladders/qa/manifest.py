@@ -42,7 +42,11 @@ FIXTURES = "tests/regression/fixtures"
 CITED_RENDER_CAP = 30.0
 
 #: Cited figures over the cap, each with the ticket that owns cutting it.
-#: A waiver is a debt with a name, not an exemption.
+#: A waiver is a debt with a name, not an exemption. Issue #498 tried to pay
+#: both by rendering at five taxa and could pay neither: `rl_tree_policy`
+#: renders from the 7-taxon fixture issue #177 chose, so the taxon count is
+#: not its term to cut, and `search_trajectory` loses its trajectory panel at
+#: five taxa (the comment on its entry below).
 CAP_WAIVERS: dict[str, str] = {"rl_tree_policy": "#372", "search_trajectory": "#372"}
 
 
@@ -242,20 +246,38 @@ FIGURES: tuple[FigureSpec, ...] = (
         ("--params", f"{FIXTURES}/tree_jc/release.yaml"),
         seconds=7.5,
     ),
-    # The search figures each sweep all 105 unrooted topologies on the
-    # 6-taxon fixture.
+    # Issue #498 asked whether these three could sweep the 5-taxon fixture's
+    # 15 unrooted topologies instead of the 6-taxon fixture's 105. One can.
+    #
+    # `search_trajectory` stays at 6 taxa: its panel (a) is the climb, and at
+    # 5 taxa there is none -- hill climbing starts at or beside the optimum,
+    # both move sets terminate on the first evaluation, and the panel is a
+    # single marker at zero fits while the caption still reports which move
+    # set reached the optimum in fewer. The sweep is 61% of its 41.7 s, so
+    # the saving was real and the figure was not.
     FigureSpec(
         "search_trajectory",
         "snakes_and_ladders.qa.search_trajectory",
         ("--params", f"{FIXTURES}/tree_search/stress.yaml"),
         seconds=39.6,
     ),
+    # `search_topologies` moves: it draws two trees and never the sweep, which
+    # only picks the runner-up, so exhaustiveness is the whole of what it
+    # needs from the enumeration and 15 topologies are exhaustive. Every claim
+    # its caption makes survives -- the search still recovers the generating
+    # topology, the runner-up still differs by one split, and that split is
+    # still only supportable by collapsing an internal edge to 0.000.
     FigureSpec(
         "search_topologies",
         "snakes_and_ladders.qa.search_topologies",
-        ("--params", f"{FIXTURES}/tree_search/stress.yaml"),
-        seconds=29.6,
+        ("--params", f"{FIXTURES}/tree_search/ci.yaml"),
+        seconds=7.7,
     ),
+    # `rl_reward_surface` stays at 6 taxa: its panel (a) *is* a distribution
+    # over the topology space, a correlation between two scoring surfaces at
+    # every topology, and 15 points state it less precisely than 105.
+    # `tree_search/ci.yaml` already reserves the 6-taxon instance for it, the
+    # resolution being what the release gate pays for.
     FigureSpec(
         "rl_reward_surface",
         "snakes_and_ladders.qa.rl_reward_surface",
@@ -270,6 +292,10 @@ FIGURES: tuple[FigureSpec, ...] = (
         ("--params", f"{FIXTURES}/tree_search/release.yaml"),
         seconds=101.4,
     ),
+    # Enumerates no topology at all: its cost is 48 NNI hill-climbing
+    # inferences over six site counts, 91% of it L-BFGS branch-length fitting
+    # (issue #498). The fixture supplies the generating tree, so the taxon
+    # count is not the term to cut here.
     FigureSpec(
         "topology_accuracy",
         "snakes_and_ladders.qa.topology_accuracy",
