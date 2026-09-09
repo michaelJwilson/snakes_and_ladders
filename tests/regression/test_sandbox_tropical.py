@@ -18,7 +18,7 @@ the tree --- so the four-point condition holding on it, to ``1e-12``, is a
 statement about the model rather than about either implementation.
 
 **The corner tolerance is relative and is derived.**
-:func:`~snakes_and_ladders.search.tropical.temperature_for` returns the
+:func:`~snakes_and_ladders.sandbox.tropical.temperature_for` returns the
 ``tau`` at which the softmin leaks under ``1e-11`` of score off a corner's own
 resolutions; measured, what is then left is float64 rounding of a sum over
 quartets, at ``3.8e-16`` of the value across 5, 6, 7 and 8 taxa. So the
@@ -45,18 +45,7 @@ from snakes_and_ladders.likelihood.hadamard import (
     sequence_spectrum,
     split_weights,
 )
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.neighbor_joining import (
-    four_point_violation,
-    neighbor_joining,
-)
-from snakes_and_ladders.search.topology import (
-    Topology,
-    enumerate_topologies,
-    leaf_bipartitions,
-    normalized_robinson_foulds,
-)
-from snakes_and_ladders.search.tropical import (
+from snakes_and_ladders.sandbox.tropical import (
     MINIMUM_TEMPERATURE,
     PAIRINGS,
     QuartetTable,
@@ -73,6 +62,17 @@ from snakes_and_ladders.search.tropical import (
     relaxed_score,
     resolutions,
     temperature_for,
+)
+from snakes_and_ladders.search.infer import score_topology
+from snakes_and_ladders.search.neighbor_joining import (
+    four_point_violation,
+    neighbor_joining,
+)
+from snakes_and_ladders.search.topology import (
+    Topology,
+    enumerate_topologies,
+    leaf_bipartitions,
+    normalized_robinson_foulds,
 )
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment

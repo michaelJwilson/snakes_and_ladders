@@ -1,6 +1,6 @@
 """Benchmark for the tropical Grassmannian relaxation's objective.
 
-Correctness is pinned in ``tests/regression/search/test_search_tropical.py``,
+Correctness is pinned in ``tests/regression/test_sandbox_tropical.py``,
 per the repo's division of labour between the two directories.
 
 What is timed here is :func:`relaxed_score`, and only it. A run of the
@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.search.tropical import (
+from snakes_and_ladders.sandbox.tropical import (
     QuartetTable,
     pairing_positions,
     quartet_indices,

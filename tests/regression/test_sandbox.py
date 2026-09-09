@@ -11,6 +11,7 @@ lazy import inside a function is caught too.
 from __future__ import annotations
 
 import ast
+import importlib
 from pathlib import Path
 
 import pytest
@@ -58,6 +59,22 @@ def test_the_package_root_does_not_re_export_the_sandbox() -> None:
     # Root `CLAUDE.md`'s Package Surface rule, applied to the one package
     # whose contents are oracles rather than an API.
     assert not _imports_sandbox((PACKAGE / "__init__.py").read_text())
+
+
+@pytest.mark.structural
+def test_the_guard_has_a_subject_and_it_still_imports() -> None:
+    # The walk above passes vacuously over an empty sandbox, so what it is
+    # asserted against is named here and imported. An import that stopped
+    # working is the bit-rot the conservation rule exists to prevent, and
+    # nothing else in the package would notice it.
+    modules = sorted(
+        path.stem
+        for path in (PACKAGE / "sandbox").glob("*.py")
+        if path.name != "__init__.py"
+    )
+    assert modules, "the sandbox carries nothing for the import guard to guard"
+    for name in modules:
+        importlib.import_module(f"{SANDBOX}.{name}")
 
 
 @pytest.mark.structural

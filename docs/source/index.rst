@@ -252,9 +252,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.neighbor_joining
    :members:
 
-.. automodule:: snakes_and_ladders.search.tropical
-   :members:
-
 .. automodule:: snakes_and_ladders.search.initialize
    :members:
 
@@ -307,6 +304,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.tropical
    :members:
 
 .. automodule:: snakes_and_ladders.qa

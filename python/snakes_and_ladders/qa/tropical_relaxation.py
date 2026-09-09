@@ -11,7 +11,7 @@ quartet surface against the fitted likelihood, every unrooted topology of the
 five-taxon fixture scored on both: the two are different surfaces, and what
 licenses relaxing one in place of the other is that they agree at the argmax.
 
-Renders what ``snakes_and_ladders.search.tropical`` and
+Renders what ``snakes_and_ladders.sandbox.tropical`` and
 ``snakes_and_ladders.search.infer`` computed; it reimplements no score
 (``qa/CLAUDE.md``). The paper cites it as ``fig:tropical-relaxation``.
 """
@@ -28,9 +28,7 @@ from matplotlib.figure import Figure
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
 from snakes_and_ladders.qa.style import INK_MUTED, ONE_COLUMN_WIDE, letter_style
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
-from snakes_and_ladders.search.tropical import (
+from snakes_and_ladders.sandbox.tropical import (
     corner,
     corner_bound,
     discrete_score,
@@ -39,6 +37,8 @@ from snakes_and_ladders.search.tropical import (
     relaxed_score,
     temperature_for,
 )
+from snakes_and_ladders.search.infer import score_topology
+from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 

@@ -30,7 +30,7 @@ from the suite by `infra/ledgers.sh` and not committed (issue #425);
 | 2.2 Curriculum learning | Started: the surrogate curriculum from 5 to 6 taxa and from 3x3 to 4x6 lattices; weight transfer for a policy and batched rollout not started | Zero-shot at six taxa the set surrogate falls to `R^2` 0.68 and recovers to 0.94 after transfer, the MLP holds 0.92 and reaches 0.95; lattice surrogates transfer zero-shot at 0.99 | [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 | 2.3 Empirical validation | The budget utility and the exact paired test landed, and six budget-matched comparisons are recorded; no empirical alignment and no external tool ([#126](https://github.com/michaelJwilson/snakes_and_ladders/issues/126)) | Every comparison at one budget over shared seeds with McNemar's exact test: the glass, Rastrigin, the mixture, the relaxation against greedy, the cluster updates at the transition, and the tree's starts at equal evaluations | [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348) |
 | 2.4 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded; the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
-| Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half landed, refereed by enumeration and the Hadamard closed form, and not shown to beat a classical baseline; learned surrogates rank a neighbourhood with exact re-scoring of the top candidates; stochastic escape by epsilon-greedy landed | Gumbel-softmax exact at every corner to 1e-11 and deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098`; the tropical relaxation exact at every corner to 3.8e-16 relative, four-point violation of the Hadamard metric under 1e-12, ascent 8/8 at five and six taxa and 7/8 at eight against the enumerated maximum, and neighbor joining reaching it at no gradient steps; a surrogate-ranked SPR search reaches its optimum from 4/4 starts at 5 fits against 312; escape from a local optimum rises from 0.111 at `epsilon = 0` to 0.883 at 0.4 | [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
+| Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half landed, refereed by enumeration and the Hadamard closed form, and not shown to beat a classical baseline, so it is conserved in `sandbox/`; learned surrogates rank a neighbourhood with exact re-scoring of the top candidates; stochastic escape by epsilon-greedy landed | Gumbel-softmax exact at every corner to 1e-11 and deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098`; the tropical relaxation exact at every corner to 3.8e-16 relative, four-point violation of the Hadamard metric under 1e-12, ascent 8/8 at five and six taxa and 7/8 at eight against the enumerated maximum, and neighbor joining reaching it at no gradient steps; a surrogate-ranked SPR search reaches its optimum from 4/4 starts at 5 fits against 312; escape from a local optimum rises from 0.111 at `epsilon = 0` to 0.883 at 0.4 | [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 
 ## Progress Since the 0.4.0 Audit
 
@@ -122,8 +122,10 @@ alike, alongside the rule that decides which documents may repeat detail
 `frameworks` extra carries `gymnasium` 1.3.0, `rustworkx` 0.18.1, `torchrl`
 0.13.3 and `torch_geometric` 2.8.0, and `snakes_and_ladders.sandbox` is the
 home an implementation moves to once a framework replaces it on a hot path,
-with a guard that only tests and QA import it; nothing has moved yet, because
-nothing measured beat its reference. `search.gym.GymnasiumEnvironment` wraps
+with a guard that only tests and QA import it. No framework has yet beaten
+the implementation it would replace, so nothing has moved on that rule;
+`sandbox.tropical` moved on the other one, a measured decline conserved
+rather than deleted (#408). `search.gym.GymnasiumEnvironment` wraps
 any `learn.Environment` unchanged — the protocol stays stateless and scores a
 neighbourhood at once, which `learn.exact` rests on — and passes Farama's
 `check_env` on the Potts chain and the 5-taxon tree environment while an
@@ -1969,7 +1971,7 @@ violation is under `1e-12` at 5, 6 and 7 taxa. It resolves every quartet as
 the generating tree does, and so does the metric estimated from a recoded
 alignment.
 
-**What it buys is nothing yet, and that is the result.** Annealed ascent from
+**What it buys is nothing, and that is the result.** Annealed ascent from
 8 random metrics reaches the enumerated maximum of the quartet surface 8 of 8
 at five and six taxa and 7 of 8 at eight, the miss 15.8 below in 302,287.
 Neighbor joining on the estimated distances reaches the same maximum on every
@@ -1982,7 +1984,11 @@ target there — and both methods return the generating topology. Ascent leaves
 the variety: the four-point violation where it stops is 0.24, 0.05 and 2.15 in
 units where the metric has mean 1, and at seven taxa its relaxed value exceeds
 every corner's by 0.96, which is the outer relaxation's gap measured rather
-than assumed absent.
+than assumed absent. The module is therefore
+`snakes_and_ladders.sandbox.tropical` and not a member of `search/`: a
+declined implementation is conserved with the tests that declined it, so the
+measurement keeps its subject, and `snakes_and_ladders.qa.tropical_relaxation`
+keeps rendering `fig:tropical-relaxation` from it.
 
 **The relaxation is an extension, checked at every corner.** Over every
 configuration of an enumerable instance the relaxed score equals the discrete

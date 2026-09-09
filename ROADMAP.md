@@ -333,7 +333,9 @@ discrete structural search and minimizing expensive exact evaluations.
     by enumeration at 5 to 8 taxa and by the Hadamard closed form (#408). It
     is not measured to beat the bounded-radius search: on the fixtures where
     both are affordable neighbor joining already reaches the same optimum at
-    no gradient steps, so no budget-matched claim is made.
+    no gradient steps, so no budget-matched claim is made. The module is
+    conserved as `snakes_and_ladders.sandbox.tropical` on that measurement,
+    with the tests and the figure that referee it.
 - **Neural Surrogate Modeling:** train lightweight graph neural networks (GNNs)
   or transformers to directly approximate the Felsenstein likelihood, Potts
   energy, or HMM likelihood. The RL agent queries the surrogate 10,000× faster

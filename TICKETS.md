@@ -154,9 +154,10 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Differentiable topology search over the tropical Grassmannian — landed as
   a softmin over quartet resolutions (#408), refereed by enumeration at 5 to 8
-  taxa and by the Hadamard closed form. What remains is a fixture on which it
-  beats a classical baseline: on every one measured, neighbor joining reaches
-  the same optimum without a gradient step
+  taxa and by the Hadamard closed form, and conserved as
+  `snakes_and_ladders.sandbox.tropical` because it beat nothing. What remains
+  is a fixture on which it beats a classical baseline: on every one measured,
+  neighbor joining reaches the same optimum without a gradient step
 - Whether the deterministic multilinear relaxation extends past a chain, to
   the Potts lattice and to graphs with cycles — #211 established the identity
   holds for any objective with one factor per site per term, and measured the

@@ -8,6 +8,16 @@ discrete search finds" has an answer here rather than an opinion. This module
 takes that half; :mod:`snakes_and_ladders.learn.relaxed` took the
 Gumbel-softmax one and shares nothing with it.
 
+**It is here because the answer was no.** Neighbor joining reaches the same
+enumerated maximum at no gradient steps at 5, 6, 7 and 8 taxa, and the
+differentiable part is 3.2% of the run, so the relaxation buys nothing on any
+fixture measured and no search calls it. It is conserved rather than deleted,
+with the two oracles that referee it, because a measurement whose subject was
+removed is a claim with no way back to it (``sandbox/CLAUDE.md``). Only
+``tests/`` and :mod:`snakes_and_ladders.qa` import it, and
+:mod:`snakes_and_ladders.qa.tropical_relaxation` keeps reporting the figure
+the paper cites.
+
 **The coordinates are a dissimilarity, not a topology.** :cite:`speyer2004`
 identify the tropical Grassmannian ``Gr(2, n)`` with the space of trees: a
 point is a vector of ``n (n - 1) / 2`` pairwise distances, and it is the
@@ -40,7 +50,7 @@ test below is an equality rather than a correlation.
 log-likelihood: it is a quartet decomposition of it, a *different surface*,
 and ``search/CLAUDE.md`` licenses substituting one for the other only by
 measuring that they agree at the argmax. That measurement is
-``tests/regression/search/test_search_tropical.py``, at every size where
+``tests/regression/test_sandbox_tropical.py``, at every size where
 enumeration reaches. And ``F`` is optimized over the whole ambient
 ``R^C(n,2)``, not over the Grassmannian: a general dissimilarity resolves
 each quartet, and the collection need not come from any tree. So ascent can
