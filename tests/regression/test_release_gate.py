@@ -21,6 +21,7 @@ import shlex
 from pathlib import Path
 
 import pytest
+from snakes_and_ladders.qa.manifest import FIGURES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_GATE = REPO_ROOT / "infra" / "release.sh"
@@ -127,3 +128,23 @@ def test_the_gate_builds_the_documentation_in_full() -> None:
         assert flag in command, (
             f"the release gate's Sphinx step does not pass {flag}: {why} (issue #485)"
         )
+
+
+@pytest.mark.structural
+def test_dev_md_states_the_figure_pass_at_the_manifest_s_own_total() -> None:
+    """The cost beside the gate is the manifest's, to the tenth of a second.
+
+    The number this replaced --- ~6 min a figure --- was a whole re-stamp
+    pass's total read as one render, and it stood because nothing in the tree
+    disagreed with it (issue #476). `snakes_and_ladders.qa.manifest` carries a
+    measured `seconds` per figure, so the released total has a source that a
+    reader can add up, and this fails when the manifest moves away from it.
+    """
+    total = sum(spec.seconds for spec in FIGURES)
+    stated = f"**{total:.1f} s**"
+    dev = (REPO_ROOT / "DEV.md").read_text()
+    assert stated in dev, (
+        f"DEV.md's release gate does not state the figure pass as {stated}, "
+        f"the sum of the {len(FIGURES)} declared render times in "
+        "snakes_and_ladders.qa.manifest"
+    )

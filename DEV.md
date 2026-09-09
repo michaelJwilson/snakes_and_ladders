@@ -405,11 +405,11 @@ consistency, duplicated machinery, suggested follow-up tickets) and gates on
    at least one check failed.
 
    Two of its steps rebuild something in full rather than deciding what to
-   rebuild, and both are hours-scale or free rather than in between:
+   rebuild:
 
    | Step | What it rebuilds | Cost |
    | --- | --- | --- |
-   | `QA figures (every figure)` | every manifest figure, cited and uncited, compared against the committed bytes | hours — one render is ~6 min and 21 min in the worst case observed (issue #476), over 22 cited figures and the uncited ones; the swept total is pending issue #477, which is paying that pass once |
+   | `QA figures (every figure)` | every manifest figure, cited and uncited, compared against the committed bytes | **437.7 s**, the declared `seconds` in `snakes_and_ladders.qa.manifest` summed over its 22 entries; **not yet measured as a pass on this host** |
    | `sphinx-build -W (full)` | all 134 modules, `-E -a` so no saved environment is reused | 32.2 s cold, against 8.2 s when nothing changed (issue #476) |
 
    **Neither step predicts.** The figure step passes `--all`, which ignores
@@ -430,9 +430,19 @@ consistency, duplicated machinery, suggested follow-up tickets) and gates on
    role reintroduced: the incremental form failed too. Zero warnings across
    all 134 modules is the current state and the baseline `-W` holds.
 
-   The hours are the point rather than a regression: they buy a release whose
-   figures and documentation are known current, and they are written down here
-   rather than discovered while cutting one.
+   **The figure pass is minutes, and its cost is concentrated rather than
+   spread.** `topology_accuracy` at 124.0 s and `rl_tree_policy` at 101.4 s
+   are 51.5% of the 437.7 s between them; five more run 27.3–39.6 s; the
+   remaining fifteen are 2.5–7.5 s each, and the median figure is 5.0 s. The
+   manifest is the source because it is in the tree and a guard already reads
+   it (`CITED_RENDER_CAP`), each entry's `seconds` being one render measured
+   alone on the reference host. The sum is arithmetic over those values, not a
+   timed pass: the gate renders each figure in its own process and compares
+   the bytes, so a measured pass will exceed it. An earlier per-figure cost of
+   ~6 min was a whole re-stamp pass's total read as one render and is
+   retracted (issue #476); it made this step look hours-scale when it is
+   minutes, which is the argument for rendering everything rather than
+   predicting what to render.
 2. **Bump the version.** Edit `[package].version` in `Cargo.toml` — the
    single version source (CLAUDE.md) — then run `cargo build` so
    `Cargo.lock`'s `oxi_snakes_and_ladders` entry picks up the new version, and commit both.
