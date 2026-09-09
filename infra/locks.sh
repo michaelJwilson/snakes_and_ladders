@@ -93,7 +93,8 @@ with_lock() {
   local dir host slot fd status
   dir="$(_lock_dir)"
 
-  # The one wait a measurement does. Each descriptor closes when this shell exits, so a killed job leaks nothing.
+  # The one wait a measurement does. Each descriptor closes when this shell
+  # exits, so a killed job leaks nothing.
   exec {host}>"$dir/host.lock"
   if ! flock -w "$SAL_LOCK_WAIT" "$mode" "$host"; then
     exec {host}>&-
