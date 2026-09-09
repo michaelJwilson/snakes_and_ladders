@@ -7,7 +7,7 @@ Thitimajshima (1993) proposed is loopy sum-product on a *serial* schedule:
 decoder one runs a full BCJR pass over its own chain, its extrinsic output
 (``eq:extrinsic``) is interleaved and handed to decoder two as an a priori
 ratio, decoder two runs, and its extrinsic output is deinterleaved and
-handed back (``alg:turbo``). Two half-iterations are one iteration.
+handed back (``alg:turbo-decode``). Two half-iterations are one iteration.
 
 **Extrinsic, and why it must be.** A decoder handed the other's *posterior*
 would be handed back its own previous output inside it, and the two would
