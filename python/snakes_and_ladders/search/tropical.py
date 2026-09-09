@@ -244,10 +244,10 @@ def quartet_table(
     names = tuple(sorted(alignment))
     quartets = quartet_indices(len(names))
     scores = np.empty((quartets.shape[0], 3), dtype=np.float64)
+    single = np.array([[0, 1, 2, 3]], dtype=np.int64)
     for row, quartet in enumerate(quartets):
         members = [names[index] for index in quartet]
         restricted = {name: alignment[name] for name in members}
-        single = np.array([[0, 1, 2, 3]], dtype=np.int64)
         for topology in enumerate_topologies(members):
             resolution = int(resolutions(single, members, topology)[0])
             scores[row, resolution] = score_topology(
