@@ -18,7 +18,7 @@ from typing import Any, TypeVar
 
 import pytest
 from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.sim.fixtures import Fixture, fixture, tiers  # noqa: F401
+from snakes_and_ladders.sim.fixtures import KEY, Fixture, fixture, tiers  # noqa: F401
 
 T = TypeVar("T")
 
@@ -133,6 +133,75 @@ def stress_only(reason: str) -> pytest.MarkDecorator:
         The ``stress`` marker.
     """
     return pytest.mark.stress(reason=reason)
+
+
+#: The scheduling marker each bin instance's declared tier carries. The ci
+#: tier carries none, as :data:`_MARKS` says for a fixture's own tier.
+_BIN_MARKS: dict[str, tuple[pytest.MarkDecorator, ...]] = {
+    "ci": (),
+    "stress": (pytest.mark.stress,),
+    "release": (pytest.mark.release,),
+    "key": (pytest.mark.key,),
+}
+
+
+def at_bin(argument: str, problem: str) -> pytest.MarkDecorator:
+    """Parameterize one test over every bin factor a count-pair fixture declares.
+
+    The registry-driven form of :func:`at_scale` for a problem whose sizes are
+    *one* declared instance binned to several resolutions
+    (:mod:`snakes_and_ladders.sim.count_pairs`): the cases are the file's
+    ``bin`` entries and each carries the tier the file marks it with, which is
+    a measurement of the instance rather than a literal in the test.
+
+    Parameters
+    ----------
+    argument : str
+        Name of the test argument receiving the bin factor.
+    problem : str
+        The registry problem whose key file declares the factors.
+
+    Returns
+    -------
+    pytest.MarkDecorator
+        A ``parametrize`` decorator with one case per declared factor,
+        identified as ``bin-<factor>``.
+    """
+    declared = fixture(problem, KEY).params
+    return pytest.mark.parametrize(
+        argument,
+        [
+            pytest.param(
+                entry.factor,
+                id=f"bin-{entry.factor}",
+                marks=_BIN_MARKS[entry.marker],
+            )
+            for entry in declared.bins
+        ],
+    )
+
+
+def key_only(reason: str) -> pytest.MarkDecorator:
+    """Mark a test as the key fixture's, with the reason it is not in the tier.
+
+    The key tier is the one exempt from ``SAL_DURATION_CAP`` and held to
+    ``SAL_KEY_DURATION_CAP`` instead (`DEV.md`, and ``tests/_durations.py``).
+    Used where the test *is* the declared instance run end to end, so no
+    smaller size asserts the same thing and the instance's own budget is the
+    only one that applies.
+
+    Parameters
+    ----------
+    reason : str
+        Why the per-pull-request budget cannot hold this test. Recorded on the
+        marker, as :func:`stress_only` records its own.
+
+    Returns
+    -------
+    pytest.MarkDecorator
+        The ``key`` marker.
+    """
+    return pytest.mark.key(reason=reason)
 
 
 def scaled_values(scale: Scale, ci: dict[str, Any], stress: dict[str, Any]) -> Any:

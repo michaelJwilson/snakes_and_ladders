@@ -129,10 +129,12 @@ to `f32` would show at 1e-7. It is not why the route lost.
 
 - #449: closed by this measurement. B stays as
   `snakes_and_ladders.likelihood.pruning_analytic`, a backend beside
-  `pruning_rust` with its own tests and benchmark. A and the `burn`
-  dependency were removed from `Cargo.toml` in the same pull request that
-  added them, per the ticket's condition; the implementation is in that pull
-  request's history.
+  `pruning_rust` with its own tests and benchmark. A is conserved rather than
+  adopted: `snakes_and_ladders.sandbox.pruning_burn` over
+  `src/pruning_burn.rs`, with `burn` optional behind the `sandbox` Cargo
+  feature, so the comparison above can be run again and the default build
+  pays nothing for it. `infra/release.sh` compiles the feature and runs its
+  tests, which is what keeps the route from rotting unbuilt.
 - #443: the fitted path is that ticket's. `likelihood.objective` still calls
   `pruning_torch`, and switching it is one line against the 34.6% above ---
   taken there, beside PR 2's level-synchronous batching, which attacks the

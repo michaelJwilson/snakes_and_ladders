@@ -944,6 +944,79 @@ evaluated on every pattern, which shares nothing with the transform. And the
 starts against the objective's own, at equal evaluations, through the
 budgeted comparison of Section~\ref{sec:properties}.
 
+\subsection{The relaxation: the tropical Grassmannian}
+\label{sec:tropical}
+The four-point condition of Section~\ref{sec:spectral-start} is more than a
+test for additivity: it is the defining relation of a variety.
+\citet{speyer2004} show that the tropical Grassmannian $\mathrm{Gr}(2,n)$, the
+tropicalization of the Pl\"ucker relations for two-planes in $n$-space, is
+exactly the space of trees on $n$ leaves --- its points the vectors
+$d \in \mathbb{R}^{\binom{n}{2}}$ for which every quartet's largest pairing
+sum is attained twice. Two consequences make it a relaxation of topology
+search. The coordinates are continuous, so a tree is a point of a Euclidean
+space rather than a combinatorial object; and a quartet's resolution is the
+pairing attaining the \emph{smallest} of its three sums, so the discrete
+structure is an $\arg\min$ of a linear function of those coordinates.
+
+Relaxing the $\arg\min$ relaxes the topology. Write $s_Q(d) \in \mathbb{R}^3$
+for the pairing sums of quartet $Q$ and $\ell_Q \in \mathbb{R}^3$ for a score
+per resolution --- the maximized log-likelihood of the four-taxon tree, say.
+The softmin at temperature $\tau$ gives
+\begin{equation}
+  F_\tau(d) \;=\; \sum_Q \big\langle
+    \operatorname{softmax}(-s_Q(d)/\tau),\; \ell_Q \big\rangle,
+  \label{eq:tropical-relaxation}
+\end{equation}
+differentiable in $d$ throughout and linear in the softmin weights, so at a
+one-hot weight vector it equals the discrete objective
+$D(\tree) = \sum_Q \ell_Q[r_\tree(Q)]$ exactly. The relaxation is an
+extension of what it relaxes rather than a second model, which is the same
+demand Section~\ref{sec:properties} makes of the Gumbel-softmax relaxation of
+a discrete state space.
+
+Three properties bound what may be claimed for it, and each is checkable.
+\emph{The scale of $d$ is a gauge}: $F_\tau(c\,d) = F_{\tau/c}(d)$ for
+$c > 0$, so an unconstrained ascent maximizes $F$ by inflating the metric ---
+sharpening the softmin --- without moving a single resolution, and $d$ must be
+normalized for $\tau$ to be the only sharpness. \emph{The corner agreement is
+a derived tolerance, not a constant}: with $g_Q$ the gap between a corner's
+smallest and second-smallest pairing sum and $R_Q$ the range of $\ell_Q$, the
+softmin leaves at most $2\exp(-g_Q/\tau)$ weight off the corner's own
+resolution, so
+\begin{equation}
+  \big| F_\tau(d) - D(\tree) \big| \;\le\; \sum_Q 2\,e^{-g_Q/\tau}\,R_Q,
+  \label{eq:tropical-corner}
+\end{equation}
+which inverts for the $\tau$ any requested tolerance needs and shrinks with a
+fixture's shortest internal branch. \emph{The relaxation is outer}: $F_\tau$
+is defined on all of $\mathbb{R}^{\binom{n}{2}}$ and not on $\mathrm{Gr}(2,n)$,
+a general dissimilarity resolves every quartet, and the collection of
+resolutions need not come from any tree. Ascent may therefore leave the
+variety, and the topology is read back off the point it stops at by neighbor
+joining, which is exact on the variety.
+
+$D$ is a quartet decomposition of the criterion and not the tree's
+log-likelihood: it is a different surface, and substituting one for the other
+is licensed by measuring that the two agree at the $\arg\max$, never by a
+correlation between them.
+
+\paragraph{What pins it.}
+Equation~\ref{eq:tropical-relaxation} against $D$ at the metric of every
+enumerated topology, relatively --- the residual once
+Equation~\ref{eq:tropical-corner} is under an absolute bound is float64
+rounding of a sum over $\binom{n}{4}$ terms, which does not transfer between
+problem sizes. The $\arg\min$ reading of a quartet against the tree's own leaf
+bipartitions, which share no arithmetic. Equation~\ref{eq:hadamard} on the
+exact two-state spectrum, whose edge weights sum over separating splits to a
+metric that must satisfy the four-point condition and resolve every quartet as
+the tree does --- a route to a point of $\mathrm{Gr}(2,n)$ that shares no
+algebra with a walk over the tree. The $\arg\max$ of $D$ against the
+$\arg\max$ of the fitted likelihood, enumerated. And ascent against the
+enumerated maximum of $D$, or, where a fixture's top two topologies lie
+within the convergence of the fits that scored them, against the generating
+topology instead, since a ranking that turns on less than the optimizer's
+convergence is not a property of the model.
+
 \subsection{Validation}
 \label{sec:phylo:validation}
 Each referee below establishes one thing and is silent about the rest; the

@@ -22,6 +22,9 @@ burn-ndarray = { version = "0.18", default-features = false, features = ["std"],
 burn-tensor = { version = "0.18", default-features = false, features = ["std"], optional = true }
 numpy = "0.29"
 pyo3 = { version = "0.29", features = ["extension-module"] }
+rand = "0.10.2"
+rand_chacha = "0.10.0"
+rand_distr = "0.6.0"
 
 [features]
 # The declined routes issue #322's sandbox rule conserves, so their

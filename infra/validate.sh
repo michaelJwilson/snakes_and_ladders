@@ -25,9 +25,12 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 # The environment is synced once per worktree (`uv sync --locked`); no step
 # here may re-resolve it, which recompiles the Rust extension (issue #369).
 export UV_NO_SYNC=1
-# A test over this many seconds carries `release` or `stress`, or fails
+# A test over this many seconds carries `release`, `stress` or `key`, or fails
 # (tests/conftest.py). Asserted here, on the reference host, never in CI.
 export SAL_DURATION_CAP="${SAL_DURATION_CAP:-10}"
+# The `key` tier is exempt from that cap and held to this one: a key fixture
+# is by definition the largest declared instance that fits it (issue #399).
+export SAL_KEY_DURATION_CAP="${SAL_KEY_DURATION_CAP:-120}"
 # The selected tests are capped, so a selection that grew past the budget is
 # reported as such rather than waited for.
 selected_cap=180
@@ -78,11 +81,16 @@ step "pytest -m critical" uv run pytest -m critical -q -p no:cacheprovider
 
 selection="$(echo "$changed" | uv run python infra/select_tests.py --format json)"
 paths="$(echo "$selection" | uv run python -c 'import json,sys; print(" ".join(json.load(sys.stdin)["paths"]))')"
+# The tiers this change does not run. `key` is in the list unless the change
+# touches the coupled model, the emissions, the fixtures or the Rust crate,
+# so a key test costs its two minutes only where it can fail.
+markers="$(echo "$selection" | uv run python -c 'import json,sys; print(" and ".join("not " + m for m in json.load(sys.stdin)["deselect"]))')"
 if [ -n "$paths" ]; then
   echo "selected: $paths"
+  echo "markers: $markers"
   # shellcheck disable=SC2086
   step "selected tests (cap ${selected_cap}s)" timeout "$selected_cap" \
-    uv run pytest -m "not release and not stress" $paths -q -p no:cacheprovider --durations=10
+    uv run pytest -m "$markers" $paths -q -p no:cacheprovider --durations=10
 else
   echo "==> selected tests: nothing selected"
 fi

@@ -18,9 +18,9 @@ here**, because what it referees is a likelihood route and
 --- which is when a second tape disagreeing with the first is worth knowing.
 
 **It skips unless the extension carries the ``sandbox`` Cargo feature.** The
-route is not in the default build, so ``importorskip`` reads the module's
-``ImportError`` and skips; ``infra/release.sh`` is where the feature is built
-and these run.
+route is not in the default build, so the missing ``pruning_gradient`` skips
+the module rather than reaching a route that would fall back to the oracle it
+is checked against. ``infra/release.sh`` is where the feature is compiled.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood import pruning_torch
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.patterns import compress
+from snakes_and_ladders.sandbox import pruning_burn
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
@@ -40,8 +41,8 @@ from tests.regression.likelihood.test_pruning_analytic import (
     CENTRAL_DIFFERENCE_STEP,
 )
 
-pruning_burn = pytest.importorskip(
-    "snakes_and_ladders.sandbox.pruning_burn",
+pytestmark = pytest.mark.skipif(
+    not pruning_burn.AVAILABLE,
     reason="extension built without the `sandbox` Cargo feature",
 )
 

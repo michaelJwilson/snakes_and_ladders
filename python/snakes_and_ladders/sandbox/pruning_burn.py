@@ -17,10 +17,14 @@ import from here, and no hot path does.
 
 **Built only under the ``sandbox`` Cargo feature.** ``maturin develop
 --release`` links no ``burn``; ``maturin develop --release --features
-sandbox`` does. Importing this module without it raises ``ImportError`` and
-the test that referees the route skips. It never falls back to
-``pruning_torch``: a referee that quietly becomes the thing it referees
-asserts nothing.
+sandbox`` does. Without it the extension carries no ``pruning_gradient``,
+:data:`AVAILABLE` is ``False``, and :func:`log_likelihood` raises
+``ImportError`` before doing any work --- it never falls back to
+``pruning_torch``, because a referee that quietly becomes the thing it
+referees asserts nothing. The check is here rather than at import because
+``docs/source/index.rst`` lists every module and ``sphinx-build -W`` imports
+each one, so a module that refuses to import fails the default documentation
+build.
 
 **`f64` is the axis the route was adopted on, and it holds.** `burn`'s
 `NdArray` backend is generic over its float element, so the tape is `f64`
@@ -55,16 +59,16 @@ from snakes_and_ladders.likelihood.pruning_rust import _postorder
 from snakes_and_ladders.likelihood.pruning_torch import branch_order
 from snakes_and_ladders.sim.tree import Node, preorder
 
-if not hasattr(oxi_snakes_and_ladders, "pruning_gradient"):
-    # A missing attribute is the only signal the extension gives, and it is
-    # raised as an `ImportError` so `pytest.importorskip` reads it. Not a
-    # fallback: see the module docstring.
-    _MSG = (
-        "the compiled extension carries no `pruning_gradient`: it was built "
-        "without the `sandbox` Cargo feature. Rebuild with "
-        "`maturin develop --release --features sandbox`."
-    )
-    raise ImportError(_MSG)
+#: Whether the extension was built with the ``sandbox`` Cargo feature. A
+#: missing ``pruning_gradient`` is the only signal it gives, and it is what
+#: ``tests/regression/likelihood/test_pruning_burn.py`` skips on.
+AVAILABLE = hasattr(oxi_snakes_and_ladders, "pruning_gradient")
+
+_UNAVAILABLE = (
+    "the compiled extension carries no `pruning_gradient`: it was built "
+    "without the `sandbox` Cargo feature. Rebuild with "
+    "`maturin develop --release --features sandbox`."
+)
 
 
 class _Flattened:
@@ -134,7 +138,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(  # type: ignore[override]
+    def forward(
         ctx: Any,
         branch_lengths: torch.Tensor,
         flattened: _Flattened,
@@ -168,7 +172,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
         )
 
     @staticmethod
-    def backward(  # type: ignore[override]
+    def backward(
         ctx: Any, grad_output: torch.Tensor
     ) -> tuple[torch.Tensor | None, ...]:
         gradient: torch.Tensor = ctx.gradient
@@ -218,7 +222,11 @@ def log_likelihood(
         leaf of ``tau``, ``weights`` does not have one entry per column,
         ``pi`` requires a gradient this backward does not produce, or
         ``rate_matrix`` is given.
+    ImportError
+        If the extension was built without the ``sandbox`` Cargo feature.
     """
+    if not AVAILABLE:
+        raise ImportError(_UNAVAILABLE)
     if rate_matrix is not None:
         msg = (
             "pruning_burn implements the closed-form Jukes-Cantor transition "
@@ -257,7 +265,7 @@ def log_likelihood(
     weight_t = (
         None if weight is None else torch.as_tensor(weight, dtype=dtype, device=device)
     )
-    result: torch.Tensor = _PruningLogLikelihood.apply(
+    result: torch.Tensor = _PruningLogLikelihood.apply(  # type: ignore[no-untyped-call]
         branch_lengths, flattened, k, pi_t, weight_t, rescale
     )
     return result

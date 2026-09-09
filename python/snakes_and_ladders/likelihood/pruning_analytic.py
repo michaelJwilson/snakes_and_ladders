@@ -154,7 +154,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(  # type: ignore[override]
+    def forward(
         ctx: Any,
         branch_lengths: torch.Tensor,
         tau: Node,
@@ -230,7 +230,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
         return total
 
     @staticmethod
-    def backward(  # type: ignore[override]
+    def backward(
         ctx: Any, grad_output: torch.Tensor
     ) -> tuple[torch.Tensor | None, ...]:
         tau: Node = ctx.tau
@@ -351,7 +351,7 @@ def log_likelihood(
     weight_t = (
         None if weight is None else torch.as_tensor(weight, dtype=dtype, device=device)
     )
-    result: torch.Tensor = _PruningLogLikelihood.apply(
+    result: torch.Tensor = _PruningLogLikelihood.apply(  # type: ignore[no-untyped-call]
         branch_lengths, tau, k, pi_t, alignment, weight_t, rate_matrix, rescale
     )
     return result

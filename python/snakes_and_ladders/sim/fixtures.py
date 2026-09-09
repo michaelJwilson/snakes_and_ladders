@@ -51,6 +51,7 @@ from snakes_and_ladders.inputs import digest, library_versions, module_closure
 from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.opt.testfunctions import load_test_function_params
 from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
+from snakes_and_ladders.sim.count_pairs import load_spatio_sequential_counts_params
 from snakes_and_ladders.sim.emission_mixture import load_emission_mixture_params
 from snakes_and_ladders.sim.hmm import load_hmm_params
 from snakes_and_ladders.sim.ldpc import load_ldpc_params
@@ -79,6 +80,7 @@ LOADERS: dict[str, Callable[[Path], Any]] = {
     "gaussian-mixture": load_mixture_params,
     "emission-mixture": load_emission_mixture_params,
     "spatio-sequential": load_spatio_sequential_params,
+    "spatio-sequential-counts": load_spatio_sequential_counts_params,
     "ldpc": load_ldpc_params,
     "frustrated-lattice": load_frustrated_lattice_params,
     "test-functions": load_test_function_params,
@@ -92,6 +94,24 @@ LOADERS: dict[str, Callable[[Path], Any]] = {
 ORACLES = ("enumeration", "transfer-matrix", "closed-form", "none")
 
 _REQUIRED_FIELDS = frozenset({"model", "oracle"})
+
+#: The alias :func:`fixture` accepts beside a tier. It is not a fourth size:
+#: it names *which declared instance a study defaults to*, and the file says
+#: which by marking one of its own instances ``key`` (issue #399, fifth
+#: amendment). A problem whose instances all fit the per-pull-request budget
+#: needs none; one whose largest useful instance takes two minutes needs a
+#: name for it that is not "the stress file, factor 5".
+KEY = "key"
+
+
+def _declares_key(raw: Mapping[str, Any]) -> bool:
+    """Whether a fixture file marks one of its instances the key instance."""
+    declared = raw.get("bin")
+    if not isinstance(declared, list):
+        return False
+    return any(
+        isinstance(entry, Mapping) and entry.get("marker") == KEY for entry in declared
+    )
 
 
 @dataclass(frozen=True)
@@ -124,6 +144,41 @@ class Fixture:
     params: Any
 
 
+def _key_path(problem: str, directory: Path) -> Path:
+    """The file declaring ``problem``'s key instance.
+
+    Returns
+    -------
+    Path
+
+    Raises
+    ------
+    FileNotFoundError
+        If no file of the problem marks an instance ``key``. Refused here
+        rather than answered with the largest tier, because "the instance a
+        study defaults to" is a claim the fixture makes and not one the
+        registry may make for it.
+    """
+    found = [
+        path
+        for path in sorted((directory / problem).glob("*.yaml"))
+        if _declares_key(yaml.safe_load(path.read_text()))
+    ]
+    if len(found) == 1:
+        return found[0]
+    if not found:
+        msg = (
+            f"no key instance for {problem!r} in {directory}; a fixture file "
+            f"marks one by giving a bin entry marker: {KEY}"
+        )
+        raise FileNotFoundError(msg)
+    msg = (
+        f"{problem!r} marks a key instance in {[path.name for path in found]}; "
+        f"one problem has one default instance"
+    )
+    raise FileNotFoundError(msg)
+
+
 def path_of(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> Path:
     """The file a problem's tier is declared in.
 
@@ -132,7 +187,7 @@ def path_of(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
     problem : str
         Directory name under ``directory``.
     tier : str | Scale
-        ``ci``, ``stress`` or ``release``.
+        ``ci``, ``stress``, ``release``, or :data:`KEY`.
     directory : Path
         Where the fixtures live.
 
@@ -144,10 +199,14 @@ def path_of(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
     Raises
     ------
     FileNotFoundError
-        If no such fixture exists. The error lists what the problem does
-        carry, because the usual cause is asking for a tier a problem has no
-        instance at rather than a mis-spelled problem.
+        If no such fixture exists, or --- asked for :data:`KEY` --- if the
+        problem marks no key instance or marks one in more than one file. The
+        error lists what the problem does carry, because the usual cause is
+        asking for a tier a problem has no instance at rather than a
+        mis-spelled problem.
     """
+    if tier == KEY:
+        return _key_path(problem, directory)
     path = directory / problem / f"{Scale(tier)}.yaml"
     if not path.is_file():
         available = sorted(p.stem for p in (directory / problem).glob("*.yaml"))
@@ -167,14 +226,18 @@ def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
     problem : str
         Directory name under ``directory``.
     tier : str | Scale
-        ``ci``, ``stress`` or ``release``.
+        ``ci``, ``stress``, ``release``, or :data:`KEY`, which resolves to
+        whichever file declares the key instance.
     directory : Path
         Where the fixtures live.
 
     Returns
     -------
     Fixture
-        The loaded instance, its model and its oracle.
+        The loaded instance, its model and its oracle. Asked for by
+        :data:`KEY`, its ``tier`` is the file's own: ``key`` says which
+        instance a study defaults to, never which budget the file was sized
+        for.
 
     Raises
     ------
@@ -186,6 +249,7 @@ def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
     """
     path = path_of(problem, tier, directory)
     raw = yaml.safe_load(path.read_text())
+    resolved = Scale(path.stem) if tier == KEY else Scale(tier)
     missing = _REQUIRED_FIELDS - raw.keys()
     if missing:
         msg = f"{path}: missing required field(s) {sorted(missing)}"
@@ -200,7 +264,7 @@ def fixture(problem: str, tier: str | Scale, directory: Path = FIXTURES_DIR) -> 
         raise ValueError(msg)
     return Fixture(
         problem=problem,
-        tier=Scale(tier),
+        tier=resolved,
         model=model,
         oracle=oracle,
         path=path,

@@ -7,10 +7,10 @@ the same answer. A gradient that changes which topology
 :func:`snakes_and_ladders.search.infer.infer` returns has changed the answer
 and not the cost, whatever it did to the wall clock.
 
-The swap is a ``monkeypatch`` and not a seam. ``likelihood.objective`` calls
-``pruning_torch.log_likelihood`` directly and keeps calling it; a permanent
-switch for running the slow path would be machinery outliving its measurement
-(issue #425).
+The swap is a ``monkeypatch`` of ``pruning_torch.log_likelihood`` and not a
+seam. ``likelihood.objective`` calls that function directly and keeps calling
+it; a permanent switch for running the other path would be machinery outliving
+its measurement (issue #425).
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.likelihood import objective as objective_module
 from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.search.infer import infer
@@ -55,7 +54,9 @@ def test_every_route_agrees_with_the_taped_gradient(route: str) -> None:
     gradients = []
     for evaluate in (pruning_torch.log_likelihood, _ROUTES[route]):
         at = lengths.clone().requires_grad_(True)
-        evaluate(params.tau, params.k, params.pi, dataset.alignment, at).backward()
+        evaluate(
+            params.tau, params.k, params.pi, dataset.alignment, at
+        ).backward()  # type: ignore[no-untyped-call]
         assert at.grad is not None
         gradients.append(at.grad.numpy().copy())
     assert_allclose(gradients[1], gradients[0], rtol=CROSS_DEVICE_RTOL_FLOAT64)
@@ -78,7 +79,7 @@ def test_infer_returns_the_same_topology_and_trace(
     alignment = dict(dataset.alignment)
 
     expected = infer(alignment, params.k, rng=np.random.default_rng(449))
-    monkeypatch.setattr(objective_module.pruning_torch, "log_likelihood", _ROUTES[route])
+    monkeypatch.setattr(pruning_torch, "log_likelihood", _ROUTES[route])
     actual = infer(alignment, params.k, rng=np.random.default_rng(449))
 
     assert actual.topology == expected.topology

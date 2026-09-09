@@ -209,6 +209,17 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     analytic, closed-form transition probabilities and partition functions.
     A canonical case is validated against the outside answer it was admitted
     for, never against a run of the method it is meant to referee.
+  - *Deferred, the coupled model at the square-lattice scales:* the coupled
+    spatio-sequential model is declared at 5,041 vertices on a 71 x 71
+    triangular lattice, `M` = 10 classes, `K` = 10 hidden states, `S` =
+    20,000 sequential positions, binned by 1, 5 and 10. The square lattices
+    the same objective asks for — 447 x 447 = 199,809 and 837 x 837 = 700,569
+    vertices, at the same `M`, `K` and `S` — are not, and need two things this
+    does not: a **per-vertex simulator**, because the observations are drawn
+    and held for one vertex at a time rather than as one array, and a
+    **blocked E step**, because a materialized `S x V` count pair at 700,569
+    vertices is 28 GB at `int16` against 385 MiB at 5,041. Each gets its own
+    ticket when it is called; nothing here is blocked on them.
 - **Milestone 1.2: Differentiable Likelihood & Energy Engine**
   - *Deliverable:* high-performance evaluators implemented in
     PyTorch/Triton/JAX (GPU) and Rust (CPU).
@@ -317,15 +328,25 @@ discrete structural search and minimizing expensive exact evaluations.
     exact optimum, the exact expected score and the exact gradient are all
     computable and "does the relaxation find what discrete search finds" is
     falsifiable. Tree topologies at any interesting size are not. The
-    Gumbel-softmax half is therefore built first and the tropical Grassmannian
-    waits on an oracle rather than on effort.
+    Gumbel-softmax half was therefore built first. *The block on the tropical
+    Grassmannian half is lifted (#408):* below nine taxa every topology
+    enumerates, so the relaxation has an exact maximum to be held to, and the
+    Hadamard conjugation of a two-state spectrum is a closed form for the
+    coordinates themselves. Both referee it, and what remains unrefereed is
+    the size past enumeration, where simulated truth is the standard.
   - *Validation:* the relaxation must reduce to the discrete objective exactly
     at the corners of the simplex; the gradient estimator's bias and variance
     are measured against the exact gradient rather than assumed small; and any
     claim to beat a classical baseline needs the budget-matched paired test
     §2.4 requires.
   - *Landed:* the Gumbel-softmax half (#225); the tropical Grassmannian half
-    waits on an oracle (#211).
+    as a softmin over quartet resolutions in tree-metric coordinates, refereed
+    by enumeration at 5 to 8 taxa and by the Hadamard closed form (#408). It
+    is not measured to beat the bounded-radius search: on the fixtures where
+    both are affordable neighbor joining already reaches the same optimum at
+    no gradient steps, so no budget-matched claim is made. The module is
+    conserved as `snakes_and_ladders.sandbox.tropical` on that measurement,
+    with the tests and the figure that referee it.
 - **Neural Surrogate Modeling:** train lightweight graph neural networks (GNNs)
   or transformers to directly approximate the Felsenstein likelihood, Potts
   energy, or HMM likelihood. The RL agent queries the surrogate 10,000× faster
