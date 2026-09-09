@@ -306,6 +306,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox
    :members:
 
+.. automodule:: snakes_and_ladders.sandbox.pruning_problem
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 
