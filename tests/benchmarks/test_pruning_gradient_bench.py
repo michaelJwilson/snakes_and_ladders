@@ -1,16 +1,22 @@
-"""The two surviving routes to the gradient of the pruning recursion, timed.
+"""The routes to the gradient of the pruning recursion, timed against each other.
 
 Issue #449 compared three: PyTorch's taped backward (the oracle), a `burn`
 tape in Rust, and the analytic two-pass backward behind one
-``torch.autograd.Function``. The `burn` route lost and left the tree with its
-dependency; ``docs/experiments/007-pruning-gradient-routes.md`` carries its
-numbers. One evaluation here is a forward pass and a ``backward()``, which is
-what a fitting step costs.
+``torch.autograd.Function``. The `burn` route lost and is conserved in
+``snakes_and_ladders.sandbox``, so it is timed here where the extension
+carries the ``sandbox`` Cargo feature and absent where it does not ---
+``docs/experiments/007-pruning-gradient-routes.md`` carries the numbers it
+lost on. One evaluation is a forward pass and a ``backward()``, which is what
+a fitting step costs.
+
+The through-the-binding numbers are these; the `burn` kernel alone is
+``benches/oxi_snakes_and_ladders_bench.rs``, and the difference between the
+two is the FFI boundary.
 
 Correctness is pinned in
-``tests/regression/likelihood/test_pruning_analytic.py`` and
-``test_pruning_gradient.py``; this module asserts only that the value is
-finite, per `DEV.md`'s rule for this directory.
+``tests/regression/likelihood/test_pruning_analytic.py``,
+``test_pruning_gradient.py`` and ``test_pruning_burn.py``; this module asserts
+only that the value is finite, per `DEV.md`'s rule for this directory.
 """
 
 from __future__ import annotations
@@ -23,6 +29,7 @@ import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
+from snakes_and_ladders.sandbox import pruning_burn
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
@@ -33,6 +40,11 @@ _ROUTES: dict[str, Callable[..., torch.Tensor]] = {
     "taped": pruning_torch.log_likelihood,
     "analytic": pruning_analytic.log_likelihood,
 }
+if pruning_burn.AVAILABLE:
+    # Present only against an extension built with the `sandbox` Cargo
+    # feature. Adding the case rather than skipping it keeps the default run
+    # at the two routes that survived, and a release build at all three.
+    _ROUTES["burn"] = pruning_burn.log_likelihood
 
 
 def _dataset(
