@@ -29,20 +29,26 @@ a question for the release gate, not this tool.
 Exits 0 when every notebook agrees, 1 on the first that does not, printing a
 unified diff of the cell's output.
 
-A notebook whose inputs are unchanged is not re-executed (issue #372). Each
-committed notebook has a stamp beside it, ``<name>.inputs``, recording the
-digest of its code cells, every ``snakes_and_ladders`` module they reach by
-import, the fixtures they name and the library versions, at the execution that
-produced its outputs -- the mechanism ``snakes_and_ladders.inputs`` gives
-the figures. A notebook whose stamp equals the digest of the current tree is
-reported as unchanged and skipped; ``--all`` executes every notebook
-regardless, and ``--write`` refreshes the stamp with the outputs.
+**Every notebook this is given is executed.** Which ones a run checks is a
+property of its arguments and nothing else: the notebooks named, or every one
+under ``docs/nb/`` when none is, listed before the first is run. A staleness
+digest used to decide it instead (issue #372), and skipped ``turbo.ipynb``
+until an unrelated merge moved the hash -- at which point the check ran and
+found a disagreement the notebook had been carrying for as long as it had
+been skipped (issues #480, #507). Whether an input changed and whether a
+correctness check runs are separate questions, and the second is not the
+first's to answer. A run too expensive to make unconditional is cut by a
+stated budget, never by a hash; ``DEV.md`` carries the budget and what it
+buys.
 
 ``--write`` re-executes and saves instead of comparing, which is how a
 notebook is regenerated after a change moves what it prints. Both live here
 rather than in two tools because they must execute a notebook *identically* --
 a regenerator that differed from the checker in working directory, timeout or
-kernel would write a notebook the checker then rejects.
+kernel would write a notebook the checker then rejects. It still records
+``<name>.inputs`` beside each notebook it writes, so the stamps do not fall
+out of step with the outputs before issue #490 removes them; nothing reads
+them.
 
 `nbformat` and `nbclient` are imported inside the functions that run a
 notebook, not at module scope. Comparing two runs is pure dict arithmetic and
@@ -305,19 +311,6 @@ def stamp(path: Path) -> Path:
     return path.with_suffix(".inputs")
 
 
-def unchanged(path: Path) -> bool:
-    """Whether the notebook's stamp matches the digest of the current tree.
-
-    Returns
-    -------
-    bool
-        True when re-executing it could not change what it prints.
-    """
-    from snakes_and_ladders.inputs import read_stamp
-
-    return read_stamp(stamp(path)) == input_digest(path)
-
-
 def execute(path: Path) -> Any:
     """Run ``path`` in place and return the executed notebook.
 
@@ -421,12 +414,6 @@ def main(argv: list[str] | None = None) -> int:
             "change moves what a notebook prints, then commit the result."
         ),
     )
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        dest="every",
-        help="Execute every notebook, ignoring the stamps.",
-    )
     arguments = parser.parse_args(argv)
     from snakes_and_ladders.log import get_logger, phase
 
@@ -435,6 +422,13 @@ def main(argv: list[str] | None = None) -> int:
     if not paths:
         log.error("no notebooks found under %s", NOTEBOOK_DIR)
         return 1
+    # The set is stated before any of it runs, so a log says which claims this
+    # run verified without the reader inferring it from the absences.
+    log.info(
+        "executing %d notebook(s): %s",
+        len(paths),
+        ", ".join(path.name for path in paths),
+    )
 
     if arguments.write:
         import nbformat
@@ -453,9 +447,6 @@ def main(argv: list[str] | None = None) -> int:
 
     failed = False
     for path in paths:
-        if not arguments.every and unchanged(path):
-            log.info("skip %s (inputs unchanged since its last execution)", path)
-            continue
         with phase(f"compare {path.name}"):
             problems = compare(path)
         if problems:
