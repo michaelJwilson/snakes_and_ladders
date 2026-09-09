@@ -305,3 +305,40 @@ def test_four_workers_fit_the_starts_one_worker_fits() -> None:
 def test_a_multi_start_fit_refuses_no_workers() -> None:
     with pytest.raises(ValueError, match="at least one"):
         fit_from(Himmelblau(), FromObjective(), workers=0)
+
+
+#: Distance within which a fit counts as having *reached* a published
+#: minimizer rather than merely landed in its basin. Set from the precision
+#: the constants are quoted to --- six decimals
+#: (:data:`snakes_and_ladders.opt.testfunctions.HIMMELBLAU_MINIMA`) --- so a
+#: tighter bound would be checking the transcription and not the fit.
+PUBLISHED_TOLERANCE = 1e-5
+
+
+@pytest.mark.oracle
+def test_every_restart_lands_on_a_published_himmelblau_minimizer() -> None:
+    # The multi-start initializer was refereed by basin *coverage*: four
+    # restarts reach four distinct basins. Coverage is an identity check and
+    # passes whatever the fit converged to, so it says nothing about where in
+    # the basin the fit stopped. Himmelblau's minimizers are published to six
+    # decimals, which makes the stronger statement an exact one: every fit
+    # from every restart is within 6.2e-07 of one of them, against a
+    # tolerance of 1e-5, and its value is 7.9e-31 against an exact 0. The
+    # four together are still covered, so nothing the coverage test said is
+    # given up.
+    objective = Himmelblau()
+
+    reached, worst_distance, worst_value = set(), 0.0, 0.0
+    for trial in range(8):
+        result = fit_from(
+            objective, RandomRestart(4, 3.0, np.random.default_rng(trial)), workers=1
+        )
+        for one in result.all_fits:
+            index, distance = Himmelblau.nearest_minimum(one.theta)
+            reached.add(index)
+            worst_distance = max(worst_distance, distance)
+            worst_value = max(worst_value, abs(float(one.value)))
+
+    assert worst_distance < PUBLISHED_TOLERANCE, worst_distance
+    assert worst_value < 1e-12, worst_value
+    assert reached == set(range(len(HIMMELBLAU_MINIMA))), reached

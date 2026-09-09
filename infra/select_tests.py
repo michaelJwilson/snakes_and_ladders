@@ -118,6 +118,7 @@ GUARDS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         (
             "tests/regression/test_document_labels.py",
             "tests/regression/docs/test_reference_taxonomy.py",
+            "tests/regression/docs/test_problems_tables.py",
             "tests/regression/qa/test_qa_build.py",
         ),
     ),
@@ -141,7 +142,7 @@ GUARDS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         ("docs/source/",),
         ("tests/regression/docs/test_docs_index_covers_every_module.py",),
     ),
-    (("CHECKS.md", "PROBLEMS.md"), ("tests/regression/test_problems_catalogue.py",)),
+    (("PROBLEMS.md",), ("tests/regression/test_problems_catalogue.py",)),
     (("DEV.md",), ("tests/regression/test_scale_tiers.py",)),
     (("README.md", "INSTALL.md"), ("tests/regression/test_repository_links.py",)),
 )
@@ -411,11 +412,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.budget and not refused and chosen["paths"] != ["tests"]:
         print("selection bounded for the merge gate", file=sys.stderr)
 
+    # Whether the selection is bounded decides how long the merge gate may
+    # take, so it is an output rather than only a stderr notice: an
+    # unboundable change runs the whole suite, which cannot fit the bounded
+    # gate's timeout, and a job cancelled at that timeout is indistinguishable
+    # from a failing test (issue #423).
+    bounded = bool(args.budget) and not refused and chosen["paths"] != ["tests"]
+
     if args.format == "json":
-        print(json.dumps(chosen))
+        print(json.dumps({**chosen, "bounded": bounded}))
     else:
         print(f"paths={' '.join(chosen['paths'])}")
         print(f"cov={' '.join('--cov=' + target for target in chosen['cov'])}")
+        print(f"bounded={'true' if bounded else 'false'}")
     return 0
 
 

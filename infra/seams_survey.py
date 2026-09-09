@@ -13,9 +13,10 @@ The seam rule it reports against (`DEV.md`, Core Development Standards): a
 seam earns its place with three or more consumers; one with a single
 implementer and no second in sight is a name, not an abstraction.
 
-Run with ``uv run python infra/seams_survey.py --write`` to regenerate
-`SEAMS.md`; without ``--write`` it checks the committed file and exits 1 when
-stale. ``tests/regression/docs/test_seams_survey.py`` asserts the same.
+Run with ``uv run python infra/seams_survey.py --write`` to write `SEAMS.md`,
+which is not committed (issue #425); without ``--write`` it compares the
+tree's copy and exits 1 when that copy is missing or stale.
+``infra/ledgers.sh`` is what CI and the release gate call.
 """
 
 from __future__ import annotations
@@ -280,8 +281,8 @@ def render(rows: list[Row]) -> str:
         "protocol by its members, the modules that consume it, and the problem classes",
         "of `PROBLEMS.md` it reaches. The rule it is read against is in `DEV.md`",
         f"(Core Development Standards): a seam earns its place with {CONSUMER_RULE} or more",
-        "consuming modules. Do not edit by hand -- run",
-        "`uv run python infra/seams_survey.py --write`.",
+        "consuming modules. Generated and not committed (issue #425) -- write",
+        "it with `infra/ledgers.sh`, and do not edit it by hand.",
         "",
         f"## Protocols ({len(PROTOCOLS)})",
         "",

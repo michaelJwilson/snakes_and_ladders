@@ -133,7 +133,8 @@ equations, and algorithms — are LaTeX under `docs/tex/`. The
 `snakes_and_ladders.qa` scripts render the figures and tables they include
 (`snakes_and_ladders.qa.manifest` lists them), so building them regenerates the
 cited ones first rather than only running `latexmk`; the applicability tables
-the textbook inputs are written by `infra/problems_tables.py --write`:
+the textbook inputs are not committed and are written by `infra/ledgers.sh`,
+which `infra/build_documents.sh` runs for you:
 
 ```
 sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base \

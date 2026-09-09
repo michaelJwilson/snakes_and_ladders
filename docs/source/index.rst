@@ -102,6 +102,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.hadamard
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.patterns
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.pruning
    :members:
 
@@ -141,7 +144,13 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.hmm_paths
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.mixture_assignments
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.surrogate
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.blocks
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.features

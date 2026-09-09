@@ -1,0 +1,1 @@
+Made `main` green: the HMM/samplers pairing gained a test when #420 pinned the block sweep to the enumerated path posterior, and a pairing loses its entry in the untested block by gaining one, so the reason it carried is removed. `tests/regression/docs/test_problems_tables.py` failed on `main` for both of its untested-pairing assertions.

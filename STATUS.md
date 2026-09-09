@@ -16,7 +16,8 @@ started**, on the terms §0.4 sets.
 ## Summary
 
 The checks each row rests on are listed, per test, in `CHECKS.md`, generated
-from the suite; `PROBLEMS.md` names the code behind each problem class.
+from the suite by `infra/ledgers.sh` and not committed (issue #425);
+`PROBLEMS.md` names the code behind each problem class.
 
 | Roadmap item | Status | Evidence | Key PRs |
 | --- | --- | --- | --- |
@@ -771,6 +772,72 @@ couplings and both agreeing with central differences to 1e-6 relative; from
 them a bracket on the ground-state energy that on the same lattices at
 `beta = 3` sits 0.028 nats per node below the enumerated minimum. The
 proofs are Appendix B of the textbook.
+
+**Site patterns, and a bound where they saturate**
+([#408](https://github.com/michaelJwilson/snakes_and_ladders/issues/408)).
+The log-likelihood reads one alignment column per term, so identical columns
+collapse to distinct patterns carrying integer weights and the sum over
+columns is reassociated, not approximated. `likelihood.patterns.compress`
+builds the table once and `pruning`, `pruning_torch` and `pruning_rust` take
+the weights, so no two backends can disagree about what a pattern is.
+Compression at each fixture's declared size, as columns to distinct patterns:
+`tree_search/ci` 5 taxa, 1,200 to 321 (**3.7x**); `tree_jc/ci` 4 taxa, 20,000
+to 256 (**78.1x**); `tree_search/stress` 6 taxa, 1,500 to 526 (**2.9x**);
+`tree_jc/stress` 4 taxa, 200,000 to 256 (**781.2x**); `tree_search/release`
+7 taxa, 2,000 to 1,230 (**1.6x**); `tree_jc/release` 8 taxa, 200,000 to
+19,646 (**10.2x**). The ratio is set by the taxon count against the site
+count, not by either alone, which is why the widest alignment at the fewest
+taxa compresses hardest and the seven-taxon fixture at 2,000 sites barely at
+all.
+Agreement with the uncompressed value is 1.8e-16 to 5.0e-13 relative over the
+six backend-fixture pairs, inside `likelihood/CLAUDE.md`'s `1e-11` `float64`
+bound, and the weights are checked against a `Counter` over the columns, which
+knows nothing of `compress`.
+
+The saving saturates at `k ** n` — 256 distinct columns at four taxa however
+long the alignment — so blocks of `N > 1` consecutive sites buy a bound rather
+than a saving. `likelihood.blocks` partitions the alignment into blocks of `N`
+sites, evaluates exactly every block occurring at least `min_count` times
+through the pattern compression of those blocks' columns, and brackets the
+rest by the extremes of a single site's log-likelihood over the whole column
+alphabet — one pass over the tree, the pruning recursion with each leaf
+message replaced by the extremes of its transition row, with no data read.
+The interval contains the exact log-likelihood on the `tree_search` and
+`tree_jc` `ci` and `stress` fixtures over block sizes 1, 2, 3 and 5 against
+cutoffs 1, 2, 4, 8 and 32, on the simulated alignment and on four
+uniform-random ones each; the per-column extremes are checked against all 256
+columns of the four-taxon fixture, one evaluation apiece.
+`BlockFrequencyBound` is the tenth `Surrogate`, and its lower end is certified
+over the 15 five-taxon topologies at block sizes 1 and 2 and cutoffs 1, 4 and
+16 with no violation. What the cutoff buys is paid in width, exactly
+`(bounded sites) x (per-site extreme range)`: at 2,000 sites on
+`tree_search/ci` a cutoff of 8 at `N = 1` leaves 49 columns to evaluate and a
+width of **1.006** `|LL|`, and at `N >= 3` nothing repeats, the whole
+alignment falls in the tail and the width is **2.815** `|LL|` — so neither end
+orders topologies, and the measurement is reported rather than asserted away.
+The `POINT` claim drops the tail and ranks by the frequent blocks alone, the
+same sites for every candidate; under it a lazy `search.infer` reaches the
+same topology and the same fitted log-likelihood as the search that fits every
+candidate, from three starts under both move sets at 1,200 sites and cutoff 4,
+at **2 to 4** fits against **5 to 15** and **68 to 163** forward passes
+against **209 to 731**. The cutoff is a count, so it scales with the
+alignment: 8 at 1,200 sites loses the optimum from 6 of 12 starts and 4 does
+not, while 8 at 2,000 sites keeps all 12.
+
+**The interval is not a cheaper forward pass, and the measurement says so.**
+One thread, mean over 50 calls: at five taxa by 2,000 sites the uncompressed
+evaluation is **0.908 ms**, the pattern-compressed **0.660 ms**, the per-tree
+extremes **0.384 ms**, and the interval **3.650**, **3.314** and **3.047 ms**
+at cutoffs 1, 8 and 32; at four taxa by 20,000 sites, **3.974**, **0.511**,
+**0.257**, and **23.183**, **22.699** and **22.588 ms**. So the interval costs
+**4.0x** and **5.8x** the evaluation it stands in for, and raising the cutoff
+from 1 to 32 buys **17%** and **2.5%** — because the two terms that scale with
+the cutoff are bounded by 0.66 ms and 0.26 ms and everything else is the block
+partition's `np.unique`, which sorts every block whatever the cutoff. The
+bound's saving is in *fits*, not in passes: a fit is 254 ms at this fixture
+against a 3.65 ms interval, which is what the ranked search's 2 fits against
+13 buys. Making the interval itself cheap is a separate decision against a
+profile and is not taken here.
 
 **The LDPC decoder, specialised from the general sum-product and held to it**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
@@ -1996,8 +2063,8 @@ QA figure rendered from the fixture it states. Two tables
 which algorithm family runs on each problem, which kind of oracle referees it,
 and — per method and per size tier — whether the referee is an oracle or the
 simulated truth alone, the latter marked as a cell where an oracle is wanted.
-A guard holds the committed tables to a regeneration, and a catalogue symbol
-the generator cannot name fails it.
+A guard holds what the generator writes to what the textbook needs, and a
+catalogue symbol the generator cannot name fails it.
 
 A third reading joins them at 0.5.0 ([#376](https://github.com/michaelJwilson/snakes_and_ladders/issues/376)):
 `tab:methods-initializers` to `tab:methods-surrogates`, one part per method
@@ -2005,13 +2072,14 @@ family, pairing every problem with every family. Twenty-six of the
 forty-four pairings carry a method; each states the tier it is validated at
 and the kind of referee, both read from the suite, and a sentence on when the
 family wins on that problem and when it does not, taken from
-`docs/tex/generated/method_notes.yaml` — the one hand-written input to any of
-the three. Fourteen of those sentences cite an experiment, and a citation to a
-file that does not exist fails the generation. Two pairings are marked
-*untested* rather than omitted — the mixture's $k$-means$++$ seeding and the
-general time-reversible model's log-det start, neither named by a test of
-either significant kind — because a dropped pairing reads as a question nobody
-asked.
+`docs/tex/method_notes.yaml` — the one hand-written input to any of
+the three, and the reason it does not live under `generated/`. Fourteen of those sentences cite an experiment, and a citation to a
+file that does not exist fails the generation. One pairing is marked
+*untested* rather than omitted — the general time-reversible model's log-det
+start, named by no test of either significant kind — because a dropped pairing
+reads as a question nobody asked. The mixture's $k$-means$++$ seeding was the
+second until [#420](https://github.com/michaelJwilson/snakes_and_ladders/pull/420)
+gave it an oracle.
 
 **The three exact evaluators are derived, not stated**
 ([#326](https://github.com/michaelJwilson/snakes_and_ladders/issues/326)).
@@ -2206,6 +2274,7 @@ best state and the trajectory out — and one exchange step over
 | `likelihood.potts.enumerate_potts` | log weights over the product, then marginals | one algorithm, graph type | its own pin: the transfer matrix on a chain to machine precision |
 | `likelihood.hmm_paths.enumerate_hidden_paths` | log joints over the product, then the evidence, posteriors and both decodings | one algorithm, chain type | its own pin: the forward recursion to 1e-12 |
 | `likelihood.spatio_sequential.enumerate_spatio_sequential` | log joints over labellings times paths, then three posteriors | one algorithm, coupled type | its own pin: the per-class forward recursion at a relative gap of 0.0 |
+| `likelihood.mixture_assignments.enumerate_mixture_assignments` (#393) | log joints over every component assignment, then the evidence, the responsibilities and the argmax | one algorithm, independent-observation type | its own pin: the factorized E step at 1.2e-16 relative |
 | `likelihood.ldpc.enumerate_codewords` (#356) | every codeword from the generator matrix | product enumeration over the information bits | `H c = 0` on every word and the `2^k` count |
 
 The fix is one weighted enumeration — cardinalities and a log-weight
@@ -2218,11 +2287,21 @@ their result types over the shared kernel.
 from the suite by `infra/problems_tables.py` and typeset in the textbook's
 applicability tables; each is a cell where an oracle is wanted:
 
-| problem | method | referee today | the oracle it would need |
+Five of the six closed at 0.5.0 ([#393](https://github.com/michaelJwilson/snakes_and_ladders/issues/393)),
+each at the CI size and each with the agreement it realized:
+
+| problem | method | what now referees it | agreement | tolerance |
+| --- | --- | --- | --- | --- |
+| hidden Markov model | sampling (`chain_block_sweep`) | the enumerated path posterior over `3**8` paths, by chi-square | 0.0146 largest per-site deviation; smallest per-site p-value 0.062; joint p-value 0.251 over 36 lumped cells | p > 0.01 |
+| hidden Markov model | expectation–maximization (`baum_welch_family`) | the enumerated path evidence at the start, at three iterates, and at the fixed point | 0.0 relative at the start; 8.5e-13 at convergence; 2.2e-12 on the initial distribution against the enumerated first-site posterior | 1e-11 and 1e-10 |
+| coupled model | the annealed initializer (`graph_burn_in`) | the enumerated maximum-posterior labelling under the parameters it fitted | the mode on 9 of 12 instances, within 1.05 nats on the other 3, against a uniform start's 2 of 12 and a mean 1,020.8 nats | 8 of 12, 1.5 nats |
+| Gaussian mixture | the evaluator, the gradient fit and k-means++ | `enumerate_mixture_assignments` over `2**16` assignments | evidence 1.2e-16 relative, responsibilities 4.4e-16; the seeded start in the maximum-posterior assignment on 20 of 20 seeds against uniform seeding's 10 | 1e-12; 20 of 20 |
+| continuous test functions | the initializers (`RandomRestart`) | the published Himmelblau minimizers, since a continuous surface has nothing to enumerate | every fit within 6.2e-07 of a published minimizer, value 7.9e-31 | 1e-5, and 1e-12 on the value |
+
+Two remain, and neither is an enumeration that was not attempted:
+
+| problem | method | referee today | why it is not #393's to close |
 | --- | --- | --- | --- |
-| hidden Markov model | expectation–maximization (`baum_welch_family`) | monotonicity and agreement with the gradient fit, neither an oracle kind | the path enumeration's fixed point, or recovery marked as simulated truth |
-| hidden Markov model | sampling (`chain_block_sweep`) | simulated truth only | the enumerated path posterior by chi-square, as the Potts sweeps have |
-| coupled model | the annealed initializer (`graph_burn_in`) | simulated truth only (planted labels) | the enumerated MAP labelling on the canonical instance |
-| Gaussian mixture | the evaluator, the gradient fit and k-means++ | simulated truth, or a mathematical property | the enumerated responsibilities on a tiny instance; the closed-form seeding cost against the dynamic programme is the one oracle the row has |
-| continuous test functions | the initializers | simulated truth only | the analytic minimizers the fit is already held to |
-| any problem at the release tier | the HMM, the mixture, the test functions, the lattice and the code | simulated truth only at that tier | a branch-and-bound bound for trees past eight taxa (#329); a boundary contraction for lattices past the transfer-matrix width; density evolution beyond the erasure channel for the code (#340 part 2) |
+| phylogenetic tree, general time-reversible | the distance start (`FromDistances` on `log_det_distance`) | no test of either significant kind names it as a start | a missing test rather than a missing oracle: `enumerate_topologies` is already the oracle the row would use, and what is absent is a test that starts a GTR fit from the log-det distance at all (#364) |
+| phylogenetic tree, Jukes–Cantor | the learned surrogate (`fit_surrogate`) | simulated truth: the maximized likelihood of each enumerated topology | the target a surrogate is trained and scored against is itself a fit, so there is no exact answer to hold it to; the enumeration supplies the topology set, not the number |
+| any problem at the release tier | the HMM, the mixture, the test functions, the lattice and the code | simulated truth only at that tier | out of #393's scope by its own statement: a branch-and-bound bound for trees past eight taxa (#329); a boundary contraction for lattices past the transfer-matrix width; density evolution beyond the erasure channel for the code (#340 part 2) |

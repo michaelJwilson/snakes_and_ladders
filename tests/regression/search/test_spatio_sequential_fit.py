@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 from snakes_and_ladders.emissions import CategoricalEmission
 from snakes_and_ladders.likelihood.spatio_sequential import (
+    enumerate_spatio_sequential,
     labelled_log_likelihood,
     map_labelling,
 )
@@ -80,6 +81,65 @@ def test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels(
         hits += int(np.array_equal(fit.labels, target))
         assert bool((np.diff(fit.log_likelihoods) >= -1e-9).all())
     assert hits >= 4, hits
+
+
+BURN_IN = Exponential(4.0, 1.0, 30)
+
+
+def _enumerated_log_posterior(
+    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+) -> float:
+    """``log p(l | x)`` exactly: the labelled joint, less both normalizers.
+
+    :func:`labelled_log_likelihood` leaves out ``log Z_Potts`` and
+    :func:`enumerate_spatio_sequential` supplies it beside the evidence, so
+    at a size enumeration reaches the posterior of any labelling is an exact
+    number and not a rank.
+    """
+    exact = enumerate_spatio_sequential(params, observations)
+    return (
+        labelled_log_likelihood(params, observations, labels)
+        - exact.log_prior_normalizer
+        - exact.log_evidence
+    )
+
+
+@pytest.mark.oracle
+def test_the_burn_in_start_reaches_the_enumerated_map_of_the_model_it_reached() -> None:
+    # What an initializer is asked for is the mode of the labelling posterior
+    # under the parameters it has fitted, and at 2x2 that mode is enumerable.
+    # Over twelve draws Graph_BurnIn++ returns it on 9, and on the other 3 a
+    # labelling 0.66, 0.84 and 1.05 nats of enumerated log-posterior below
+    # it. The uniform labelling it replaces returns the mode on 2 and sits a
+    # mean 1,020.8 nats below, so the margin is three orders of magnitude and
+    # the assertion is at 8 of 12 and 1.5 nats.
+    params = fixture("spatio_sequential", "ci").params
+    hits = 0
+    gaps = []
+    cold_gaps = []
+    for seed in range(12):
+        data = simulate_spatio_sequential(params, np.random.default_rng(10 + seed))
+
+        warm = graph_burn_in(
+            params, data.observations, np.random.default_rng(seed), BURN_IN
+        )
+
+        target = map_labelling(warm.params, data.observations)
+        best = _enumerated_log_posterior(warm.params, data.observations, target)
+        hits += int(np.array_equal(warm.labels, target))
+        gaps.append(
+            best
+            - _enumerated_log_posterior(warm.params, data.observations, warm.labels)
+        )
+        cold = np.random.default_rng(seed).integers(
+            0, params.n_classes, size=params.graph.n_nodes
+        )
+        cold_gaps.append(
+            best - _enumerated_log_posterior(warm.params, data.observations, cold)
+        )
+    assert hits >= 8, hits
+    assert max(gaps) < 1.5, gaps
+    assert float(np.mean(cold_gaps)) > 100.0 * float(np.mean(gaps)), (gaps, cold_gaps)
 
 
 @pytest.mark.mathematical

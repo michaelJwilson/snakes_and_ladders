@@ -1,10 +1,12 @@
-"""The problem catalogue names only what exists, and the checks ledger is current.
+"""The problem catalogue names only what exists, and the checks ledger is writable.
 
 `PROBLEMS.md` is a table of symbols; a symbol that stops resolving is a row
 describing a problem the tree no longer supports the way the row says.
-`CHECKS.md` is generated from the tests' own markers, so the check here is
-the one every generated file in this repository has: a regeneration must
-reproduce the committed file (issue #291).
+`CHECKS.md` is generated from the tests' own markers and is not committed
+(issue #425), so what is checked here is what the generator writes: every
+significant test appears in it exactly once, and the guard refuses a stale
+file. That the tree carries no committed copy is
+`tests/regression/test_review_gate_scripts.py`.
 """
 
 from __future__ import annotations
@@ -46,21 +48,15 @@ def test_every_symbol_in_the_problem_catalogue_resolves() -> None:
 
 
 @pytest.mark.structural
-def test_the_checks_ledger_is_current() -> None:
-    # The same contract as a figure or a notebook: what is committed is what
-    # the tool writes. Regenerate with `infra/checks_ledger.py --write`.
-    assert checks_ledger.LEDGER.read_text() == checks_ledger.render(
-        checks_ledger.rows()
-    )
-
-
-@pytest.mark.structural
 def test_every_significant_test_appears_in_the_ledger_once() -> None:
+    # Read from what the generator writes rather than from a file: the ledger
+    # is not committed (issue #425), and the property is a property of the
+    # rendering, not of whether someone remembered to re-run the tool.
     entries = checks_ledger.rows()
     names = [f"{Path(file).name}::{name}" for file, name, _, _ in entries]
 
     assert len(names) == len(set(names))
-    text = checks_ledger.LEDGER.read_text()
+    text = checks_ledger.render(entries)
     for name in names:
         assert f"`{name}`" in text, name
     assert entries, "no oracle or simulated-truth test found"
