@@ -281,6 +281,12 @@ FIGURES: tuple[FigureSpec, ...] = (
     # count; the other three name the fixture their instance is declared in,
     # as every entry here does since issue #382.
     FigureSpec(
+        "tropical_relaxation",
+        "snakes_and_ladders.qa.tropical_relaxation",
+        ("--params", f"{FIXTURES}/tree_search/ci.yaml"),
+        seconds=5.4,
+    ),
+    FigureSpec(
         "parsimony_zones",
         "snakes_and_ladders.qa.parsimony_zones",
         ("--params", f"{FIXTURES}/tree_jc/release.yaml"),
