@@ -42,10 +42,10 @@ baseline's value changing — only the recorded digests. Where a file is a list
 rather than a generated artifact — a package `__init__`, a module `CLAUDE.md`,
 `STATUS.md` — both sides are kept in the file's existing order, and where both
 sides *deleted* a line, as `TICKETS.md`'s branches do, the union is of the
-deletions. Two hazards a merge carries that the tree does not otherwise show: a textual merge of two branches'
-bibliography entries can leave an entry's closing brace missing, which
-`infra/check_citations.py` now walks for (issue #503) and a reader caught by hand
-before it did; and concurrent branches write colliding experiment numbers that
+deletions. Two hazards a merge carries that the tree does not otherwise show:
+a textual merge of two branches' bibliography entries can leave an entry's
+closing brace missing, which `infra/check_citations.py` now walks for (issue
+#503) and a reader caught by hand before it did; and concurrent branches write colliding experiment numbers that
 `git` cannot see, three branches having written `docs/experiments/007` (issue
 #491).
 
