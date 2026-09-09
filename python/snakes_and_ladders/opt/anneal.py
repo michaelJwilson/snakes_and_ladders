@@ -259,11 +259,15 @@ def exchange(
         log_ratio = swap_log_ratio(
             betas[pair], betas[pair + 1], energy[pair], energy[pair + 1]
         )
+        # Drawn here when the caller draws unconditionally, and otherwise
+        # below, where the test is the only thing that needs it.
         uniform = draw() if draw_first else None
-        if log_ratio >= 0.0 or (uniform if uniform is not None else draw()) < math.exp(
-            log_ratio
-        ):
-            accepted[pair] = 1.0
-            energy[pair], energy[pair + 1] = energy[pair + 1], energy[pair]
-            swap(pair, pair + 1)
+        if log_ratio < 0.0:
+            if uniform is None:
+                uniform = draw()
+            if uniform >= math.exp(log_ratio):
+                continue
+        accepted[pair] = 1.0
+        energy[pair], energy[pair + 1] = energy[pair + 1], energy[pair]
+        swap(pair, pair + 1)
     return accepted
