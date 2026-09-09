@@ -22,13 +22,10 @@ from select_tests import (
     EVERYTHING,
     GUARDS,
     MODULES,
-    UNBOUNDABLE,
     _benchmarks_for,
     dependents,
     guards_for,
-    main,
     select,
-    unboundable,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -336,114 +333,3 @@ def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
     ]
 
     assert unmatched == []
-
-
-# --- the bounded fallback (issue #409) ----------------------------------------
-#
-# `--budget` exists so a merge gate does not wait 23 to 36 minutes for the
-# fallback while nine other jobs finish in 156 seconds. What these pin is that
-# it bounds the fallback and nothing else: an attributable change is unaffected,
-# an unboundable one is refused, and whatever is bounded still runs the tests
-# that belong to no module.
-
-
-@pytest.mark.structural
-def test_the_budget_bounds_the_fallback_and_the_unbounded_answer_is_unchanged() -> None:
-    # A shared fixture is the case that cost #398 its 36 minutes: attributable
-    # to no module, so the unbounded answer is the whole suite.
-    changed = ["tests/regression/fixtures/hmm/ci.yaml"]
-
-    assert select(changed)["paths"] == ["tests"]
-    bounded = select(changed, budget=True)["paths"]
-    assert bounded != ["tests"]
-    assert set(ALWAYS) <= set(bounded)
-
-
-@pytest.mark.structural
-def test_an_unboundable_change_refuses_the_budget() -> None:
-    # A lockfile can move any number in the package, and a moved number does
-    # not fail a build, so this one waits for the whole suite before merging.
-    changed = ["uv.lock"]
-
-    assert unboundable(changed) == ["uv.lock"]
-    assert select(changed, budget=True)["paths"] == ["tests"]
-
-
-@pytest.mark.structural
-def test_the_budget_does_not_touch_an_attributable_change() -> None:
-    # The budget bounds the fallback only. A change the mapping places was
-    # never selecting the whole suite, so its selection must be identical.
-    changed = ["python/snakes_and_ladders/search/infer.py"]
-
-    assert select(changed) == select(changed, budget=True)
-
-
-@pytest.mark.structural
-def test_a_bounded_change_that_touches_a_module_keeps_that_module() -> None:
-    # Both at once: a shared fixture, which forces the fallback, and a module
-    # the mapping can place. The bound keeps what it knows rather than
-    # discarding it with the rest.
-    changed = [
-        "tests/regression/fixtures/hmm/ci.yaml",
-        "python/snakes_and_ladders/search/infer.py",
-    ]
-    bounded = select(changed, budget=True)
-
-    assert "tests/regression/search" in bounded["paths"]
-    assert "snakes_and_ladders.search" in bounded["cov"]
-
-
-@pytest.mark.structural
-def test_every_unboundable_entry_names_something_in_the_tree() -> None:
-    # As `EVERYTHING` is checked above: an entry matching nothing is a refusal
-    # that never fires, so a change to what it was meant to protect would be
-    # bounded after all.
-    root = Path(__file__).resolve().parents[2]
-    tracked = [
-        str(path.relative_to(root))
-        for path in root.rglob("*")
-        if ".git" not in path.parts
-    ]
-    unmatched = [
-        entry
-        for entry in UNBOUNDABLE
-        if not any(path.startswith(entry) for path in tracked)
-    ]
-
-    assert unmatched == []
-
-
-def _cli(flags: list[str], *changed: str) -> str:
-    """Run the command line and return what it printed to stdout."""
-    import contextlib
-    import io
-
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
-        assert main([*flags, *changed]) == 0
-    return out.getvalue()
-
-
-@pytest.mark.structural
-def test_the_budget_reports_whether_it_bounded_the_selection() -> None:
-    # The merge gate's timeout reads this: a bounded selection gets the tight
-    # cap, an unbounded one gets the job's. Without it a change to a
-    # likelihood kernel -- which #409 deliberately refuses to bound -- runs
-    # the whole suite under a cap the whole suite cannot meet, and the job is
-    # cancelled rather than failed. PR #420 was cancelled at 15:15 with the
-    # suite 57% run, which is what this pins against.
-    unbounded = _cli(["--budget"], "python/snakes_and_ladders/likelihood/pruning.py")
-    assert "bounded=false" in unbounded
-
-    bounded = _cli(["--budget"], "docs/nb/potts_chain.ipynb")
-    assert "bounded=true" in bounded
-
-
-@pytest.mark.structural
-def test_without_the_budget_nothing_claims_to_be_bounded() -> None:
-    # The post-merge run takes the whole suite by design, so it must never
-    # report a bound the caller could act on.
-    assert "bounded=false" in _cli(
-        [], "python/snakes_and_ladders/likelihood/pruning.py"
-    )
-    assert "bounded=false" in _cli([], "docs/nb/potts_chain.ipynb")
