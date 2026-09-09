@@ -2,13 +2,24 @@
 //! (the NumPy oracle) to Rust, exposed to Python via PyO3 as
 //! `snakes_and_ladders.oxi_snakes_and_ladders.pruning_log_likelihood`.
 //!
-//! Implements `eq:pruning` and `eq:root` of `docs/tex/textbook.tex` exactly: message passing `partial[s, i] = sum_j P_ij(t) *
-//! child_partial[s, j]` over `(site, state)` arrays, post-order over the
-//! topology, with the same per-node rescaling behavior as the NumPy oracle
-//! (log of the scale factor accumulated separately; a site whose partial
-//! likelihood vanishes entirely is left at zero rather than divided, so
-//! `ln(0) = -inf` propagates instead of being masked by a spurious
-//! `log_scale` contribution -- see `pruning.py`'s docstring).
+//! Implements `eq:pruning` and `eq:root` of `docs/tex/textbook.tex` exactly: message passing `partial[i, s] = sum_j P_ij(t) *
+//! child_partial[j, s]`, post-order over the topology, with the same
+//! per-node rescaling behavior as the NumPy oracle (log of the scale factor
+//! accumulated separately; a site whose partial likelihood vanishes entirely
+//! is left at zero rather than divided, so `ln(0) = -inf` propagates instead
+//! of being masked by a spurious `log_scale` contribution -- see
+//! `pruning.py`'s docstring).
+//!
+//! **A partial is `(state, site)`, sites contiguous** -- states innermost is
+//! what the port started from, and it made the inner loop `k` elements long
+//! with a strided read of the child. Sites innermost makes every loop here a
+//! pass over one contiguous row of length `n_sites`, with no early exit and
+//! no data-dependent reduction, which is the shape the compiler vectorizes
+//! (root `CLAUDE.md`, Vectorization and SIMD). The layout is internal: the
+//! arrays crossing the FFI boundary are unchanged. The two orders were
+//! measured against each other rather than argued about, and the numbers are
+//! in `STATUS.md`; the rule that they be confirmed by benchmark and never by
+//! asserting a vector width is why no width appears anywhere in this file.
 //!
 //! The Python wrapper (`snakes_and_ladders.likelihood.pruning_rust`) flattens a
 //! `snakes_and_ladders.sim.tree.Node` topology into the arrays this module expects,
@@ -31,6 +42,14 @@
 use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+
+/// Sites per tile in the message pass.
+///
+/// Chosen by measurement, not by arithmetic on a cache size: the sweep is in
+/// `STATUS.md`. What sets the shape is that one tile's `k` parent rows and
+/// `k` child rows are live at once, so the `k * k` passes over them read L1
+/// rather than memory.
+const TILE: usize = 128;
 
 /// Closed-form k-state Jukes-Cantor transition probabilities P(t), `eq:jc`
 /// of `docs/tex/textbook.tex`, ported from `snakes_and_ladders.sim.jc.jc_transition_probabilities`.
@@ -153,6 +172,11 @@ pub fn pruning_log_likelihood_impl(
 
     let mut partials: Vec<Vec<f64>> = Vec::with_capacity(n_nodes);
     let mut log_scale = vec![0.0f64; n_sites];
+    // Two scratch rows reused for the whole traversal rather than allocated
+    // per node: one holds the message a child sends for one state over one
+    // tile of sites, one the per-site scale factor.
+    let mut message = vec![0.0f64; TILE.min(n_sites)];
+    let mut scale = vec![0.0f64; n_sites];
 
     for idx in 0..n_nodes {
         let is_leaf = children[idx].is_empty();
@@ -165,18 +189,19 @@ pub fn pruning_log_likelihood_impl(
             }
             let start = row as usize * n_sites;
             let states = &leaf_states[start..start + n_sites];
-            let mut partial = vec![0.0f64; n_sites * k];
+            let mut partial = vec![0.0f64; k * n_sites];
             for (s, &state) in states.iter().enumerate() {
                 if state < 0 || state as usize >= k {
                     return Err(format!(
                         "leaf at node {idx}, site {s} has state {state}, expected [0, {k})"
                     ));
                 }
-                partial[s * k + state as usize] = 1.0;
+                partial[state as usize * n_sites + s] = 1.0;
             }
             partial
         } else {
-            let mut partial = vec![1.0f64; n_sites * k];
+            // Validated before the arithmetic starts, so the loops below carry
+            // no bounds test that could exit them early.
             for &child_idx in &children[idx] {
                 if child_idx >= idx {
                     return Err(format!(
@@ -184,26 +209,67 @@ pub fn pruning_log_likelihood_impl(
                          (nodes must be in post-order, children before parents)"
                     ));
                 }
-                let t = branch_length[child_idx];
-                if t < 0.0 {
+                if branch_length[child_idx] < 0.0 {
                     return Err(format!(
-                        "branch_length at node {child_idx} is {t}, expected >= 0"
+                        "branch_length at node {child_idx} is {}, expected >= 0",
+                        branch_length[child_idx]
                     ));
                 }
-                let transition = jc_transition_probabilities(t, k);
-                let child_partial = &partials[child_idx];
-                // message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
-                for s in 0..n_sites {
-                    let child_row = &child_partial[s * k..s * k + k];
+            }
+
+            // One transition matrix per child, before the site loop: it does
+            // not depend on the site, and `exp` inside the loop would be paid
+            // once per tile.
+            let transitions: Vec<Vec<f64>> = children[idx]
+                .iter()
+                .map(|&child_idx| jc_transition_probabilities(branch_length[child_idx], k))
+                .collect();
+
+            let mut partial = vec![0.0f64; k * n_sites];
+            // Sites in tiles, so a child's `k` rows and the parent's `k` rows
+            // for one tile are live together in L1 while the `k * k` passes
+            // over them run. Untiled, the sites-contiguous layout reads each
+            // child row `k` times from memory rather than once, and at
+            // 200,000 sites that traffic ate the whole of what vectorizing
+            // the loop bought -- measured, and the numbers are in `STATUS.md`.
+            let mut start = 0usize;
+            while start < n_sites {
+                let width = TILE.min(n_sites - start);
+                for (position, transition) in transitions.iter().enumerate() {
+                    let child_partial = &partials[children[idx][position]];
+                    // message[i, s] = sum_j P_ij(t) * L_child(j, s) --
+                    // eq:pruning, as k * k passes over one contiguous run of
+                    // sites each. The products are formed in the same order
+                    // the (site, state) layout formed them, so the sum is the
+                    // same sum.
                     for i in 0..k {
-                        let mut acc = 0.0f64;
-                        let transition_row = &transition[i * k..i * k + k];
+                        let sent = &mut message[..width];
                         for j in 0..k {
-                            acc += transition_row[j] * child_row[j];
+                            let probability = transition[i * k + j];
+                            let offset = j * n_sites + start;
+                            let child_row = &child_partial[offset..offset + width];
+                            if j == 0 {
+                                for (value, &child) in sent.iter_mut().zip(child_row) {
+                                    *value = probability * child;
+                                }
+                            } else {
+                                for (value, &child) in sent.iter_mut().zip(child_row) {
+                                    *value += probability * child;
+                                }
+                            }
                         }
-                        partial[s * k + i] *= acc;
+                        let offset = i * n_sites + start;
+                        let row = &mut partial[offset..offset + width];
+                        if position == 0 {
+                            row.copy_from_slice(sent);
+                        } else {
+                            for (value, &value_sent) in row.iter_mut().zip(sent.iter()) {
+                                *value *= value_sent;
+                            }
+                        }
                     }
                 }
+                start += width;
             }
 
             // A child's partial is read exactly once, by this parent, and the
@@ -216,19 +282,34 @@ pub fn pruning_log_likelihood_impl(
             }
 
             if rescale {
-                for s in 0..n_sites {
-                    let row = &mut partial[s * k..s * k + k];
-                    let scale = row.iter().copied().fold(0.0f64, f64::max);
-                    // A site with scale == 0 has zero likelihood under the
-                    // model; leave it at 0 rather than dividing, so
-                    // log(0) = -inf propagates correctly instead of being
-                    // masked by a spurious log_scale contribution -- see
-                    // pruning.py's docstring for the identical rationale.
-                    if scale > 0.0 {
-                        for v in row.iter_mut() {
-                            *v /= scale;
-                        }
-                        log_scale[s] += scale.ln();
+                scale.copy_from_slice(&partial[0..n_sites]);
+                for i in 1..k {
+                    let row = &partial[i * n_sites..(i + 1) * n_sites];
+                    for (largest, &value) in scale.iter_mut().zip(row) {
+                        *largest = largest.max(value);
+                    }
+                }
+                // A site with scale == 0 has zero likelihood under the model;
+                // leave its row alone rather than dividing, so log(0) = -inf
+                // propagates instead of being masked by a spurious log_scale
+                // contribution -- see pruning.py's docstring for the identical
+                // rationale. `scale` is overwritten with the reciprocal so the
+                // k rows below are one multiply each rather than one divide;
+                // that reassociates a division and is why this kernel is
+                // pinned to the NumPy oracle within a relative tolerance
+                // rather than bitwise (`likelihood/CLAUDE.md`).
+                for (accumulated, factor) in log_scale.iter_mut().zip(scale.iter_mut()) {
+                    if *factor > 0.0 {
+                        *accumulated += factor.ln();
+                        *factor = 1.0 / *factor;
+                    } else {
+                        *factor = 1.0;
+                    }
+                }
+                for i in 0..k {
+                    let row = &mut partial[i * n_sites..(i + 1) * n_sites];
+                    for (value, &reciprocal) in row.iter_mut().zip(scale.iter()) {
+                        *value *= reciprocal;
                     }
                 }
             }
@@ -237,14 +318,22 @@ pub fn pruning_log_likelihood_impl(
         partials.push(partial);
     }
 
+    // eq:root, reusing `scale` as the per-site accumulator: one contiguous
+    // pass per state rather than a k-long reduction per site.
     let root_partial = &partials[n_nodes - 1];
-    let mut total_log_likelihood = 0.0f64;
-    for s in 0..n_sites {
-        let mut site_likelihood = 0.0f64;
-        for i in 0..k {
-            site_likelihood += root_partial[s * k + i] * pi[i];
+    for (site, &value) in scale.iter_mut().zip(&root_partial[0..n_sites]) {
+        *site = value * pi[0];
+    }
+    for i in 1..k {
+        let row = &root_partial[i * n_sites..(i + 1) * n_sites];
+        let weight = pi[i];
+        for (site, &value) in scale.iter_mut().zip(row) {
+            *site += value * weight;
         }
-        total_log_likelihood += site_likelihood.ln() + log_scale[s];
+    }
+    let mut total_log_likelihood = 0.0f64;
+    for (&site_likelihood, &scaled) in scale.iter().zip(log_scale.iter()) {
+        total_log_likelihood += site_likelihood.ln() + scaled;
     }
 
     Ok(total_log_likelihood)
