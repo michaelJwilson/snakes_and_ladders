@@ -62,11 +62,12 @@ _MARKER_EXPRESSION = re.compile(r'-m\s+(?:"([^"]+)"|([^\s"$]+))')
 #: `--cov-fail-under=90`.
 _COVERAGE_FLOOR = re.compile(r"--cov-fail-under=(\d+)")
 
-#: `**Eight rows in at most 39 s**` and `the other six rows`: the review
-#: table's size, and the count that has to follow from it. The seconds in the
-#: first are a measurement, not the budget, and the two coincided at the
-#: nine-row reading -- which is why the budget is read from its own sentence.
-_ROW_COUNT = re.compile(r"\*\*(\w+) rows in (?:at most )?\d+ s\*\*")
+#: `**Eight rows in 39 to 43 s**` and `the other six rows`: the review table's
+#: size, and the count that has to follow from it. The seconds beside the first
+#: are a measurement and are deliberately not read -- they coincided with the
+#: budget at the nine-row reading, and reading them would make the budget
+#: whatever the host last managed.
+_ROW_COUNT = re.compile(r"\*\*(\w+) rows\b")
 _REMAINING_ROWS = re.compile(r"the other (\w+) rows report")
 
 #: `The budget is 30 s, above which a check belongs in CI`.
@@ -273,9 +274,11 @@ def test_dev_md_counts_the_review_gate_rows() -> None:
     demoted the figure-stamp row to a function the script keeps and does not
     run, and the sentence's own arithmetic -- two rows named, the rest counted
     -- had drifted with it. The budget is read from the sentence that states
-    it rather than from the measurement beside it: the two were the same
-    number at nine rows, and reading the measurement would have made the
-    budget whatever the host last managed.
+    it, never from the measurement beside it: the two were the same number at
+    nine rows, and reading the measurement would have made the budget whatever
+    the host last managed. The measurement itself is not asserted at all --
+    it is a property of the machine, which the No CI Profiling rule keeps out
+    of the suite.
     """
     text = DEV.read_text()
     stated = _ROW_COUNT.search(text)
