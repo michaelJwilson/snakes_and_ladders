@@ -260,7 +260,7 @@ def _spr_by_definition(start: Topology) -> list[frozenset[frozenset[str]]]:
         if not isinstance(u, int):
             continue
         for v in list(adjacency[u]):
-            remainder, pruned = topology_module._prune(adjacency, u, v)
+            remainder, pruned, _ = topology_module._prune(adjacency, u, v)
             for x, y in topology_module._edges(remainder):
                 grafted, new_id = topology_module._regraft(remainder, pruned, v, x, y)
                 key = leaf_bipartitions(

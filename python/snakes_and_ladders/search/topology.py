@@ -414,7 +414,9 @@ def nni_neighbours(topology: Topology) -> Iterator[Topology]:
             yield _from_adjacency(new_adjacency, root_id)
 
 
-def spr_neighbours(topology: Topology) -> Iterator[Topology]:
+def spr_neighbours(
+    topology: Topology, *, radius: int | None = None
+) -> Iterator[Topology]:
     """Generate the subtree-prune-and-regraft neighbourhood of ``topology``.
 
     For every edge ``(u, v)`` with ``u`` internal, prune the component
@@ -429,14 +431,33 @@ def spr_neighbours(topology: Topology) -> Iterator[Topology]:
     ----------
     topology : Topology
         An unrooted binary topology with at least 4 leaves.
+    radius : int | None
+        Regraft only onto edges within ``radius`` of the pruning point,
+        measured by :func:`_regraft_distances`; ``None`` is every edge. The
+        neighbourhood is then ``O(n * radius)`` rather than ``O(n ** 2)``,
+        which is the whole of what the bound buys, and a radius of at least
+        the leaf count is every edge again --- pinned as an identity, order
+        included, because a bounded search that does not reduce to the
+        unbounded one at full radius is a different search rather than a
+        cheaper one.
 
     Returns
     -------
     Iterator[Topology]
         Distinct SPR neighbours, each a valid unrooted binary topology on
-        the same leaf set, differing from ``topology``. Matches the
-        closed-form count ``2 * (n - 3) * (2 * n - 7)``.
+        the same leaf set, differing from ``topology``. Unbounded, this
+        matches the closed-form count ``2 * (n - 3) * (2 * n - 7)``.
+
+    Raises
+    ------
+    ValueError
+        If ``radius`` is given and is less than 1. Radius 0 admits only the
+        vacated edge, which reconstructs ``topology``, so the neighbourhood
+        is empty and a search from it cannot move.
     """
+    if radius is not None and radius < 1:
+        msg = f"radius must be at least 1 when given, got {radius}"
+        raise ValueError(msg)
     adjacency, root_id = _to_adjacency(topology)
     bit_of = _leaf_bits(adjacency)
     seen: set[frozenset[int]] = {_split_key(adjacency, root_id, bit_of)}
@@ -445,8 +466,14 @@ def spr_neighbours(topology: Topology) -> Iterator[Topology]:
         if not isinstance(u, int):
             continue
         for v in list(adjacency[u]):
-            remainder, pruned = _prune(adjacency, u, v)
-            for x, y in _edges(remainder):
+            remainder, pruned, vacated = _prune(adjacency, u, v)
+            targets = list(_edges(remainder))
+            if radius is not None:
+                distance = _regraft_distances(remainder, vacated)
+                targets = [
+                    edge for edge in targets if distance[frozenset(edge)] <= radius
+                ]
+            for x, y in targets:
                 candidate_adjacency, new_id = _regraft(remainder, pruned, v, x, y)
                 key = _split_key(candidate_adjacency, new_id, bit_of)
                 if key in seen:
@@ -455,12 +482,44 @@ def spr_neighbours(topology: Topology) -> Iterator[Topology]:
                 yield _from_adjacency(candidate_adjacency, new_id)
 
 
+def _regraft_distances(
+    remainder: dict[NodeId, list[NodeId]], vacated: tuple[NodeId, NodeId]
+) -> dict[frozenset[NodeId], int]:
+    """Edges of ``remainder`` keyed to their distance from the pruning point.
+
+    ``vacated`` is the edge the suppressed node left behind, and it is where
+    the pruned subtree came from, so it is distance 0. An edge's distance is
+    the larger of its endpoints' distances from that edge's endpoints, which
+    makes the edges sharing an endpoint with it distance 1, theirs 2, and so
+    on --- regrafting at radius 1 is the move that reinserts one node away.
+    """
+    x, y = vacated
+    node_distance: dict[NodeId, int] = {x: 0, y: 0}
+    frontier = [x, y]
+    while frontier:
+        nxt: list[NodeId] = []
+        for node_id in frontier:
+            for neighbour in remainder[node_id]:
+                if neighbour not in node_distance:
+                    node_distance[neighbour] = node_distance[node_id] + 1
+                    nxt.append(neighbour)
+        frontier = nxt
+    return {
+        frozenset((a, b)): max(node_distance[a], node_distance[b])
+        for a, b in _edges(remainder)
+    }
+
+
 def _prune(
     adjacency: dict[NodeId, list[NodeId]], u: int, v: NodeId
-) -> tuple[dict[NodeId, list[NodeId]], dict[NodeId, list[NodeId]]]:
+) -> tuple[
+    dict[NodeId, list[NodeId]], dict[NodeId, list[NodeId]], tuple[NodeId, NodeId]
+]:
     """Remove edge ``(u, v)``: the ``u``-side component, with ``u``
     suppressed (now degree 2), is the remainder; the ``v``-side component,
-    unchanged but for the removed edge, is the pruned subtree.
+    unchanged but for the removed edge, is the pruned subtree. The third
+    return is the edge suppressing ``u`` left behind --- the pruning point a
+    bounded regraft measures its radius from.
     """
     cut = _rewired(adjacency, drop=[(u, v)], add=[])
     remainder = {node_id: list(cut[node_id]) for node_id in _component(cut, u)}
@@ -472,7 +531,7 @@ def _prune(
     remainder[y].remove(u)
     remainder[x].append(y)
     remainder[y].append(x)
-    return remainder, pruned
+    return remainder, pruned, (x, y)
 
 
 def _component(adjacency: dict[NodeId, list[NodeId]], start: NodeId) -> set[NodeId]:
