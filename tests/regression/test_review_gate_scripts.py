@@ -6,9 +6,10 @@ its mirror -- the situation that must pass -- because a gate that refuses
 everything is removed on the first false alarm and one that refuses nothing is
 never noticed at all (`DEV.md`, Review starts from `infra/review_gates.sh`).
 
-The third gate, the generated ledgers, has no script of its own: it runs the
-three tools' own ``--check`` modes, each already pinned by a test beside the
-tool.
+The third gate, the generated ledgers, runs ``infra/ledgers.sh``. What that
+gate protects is checked here: the three files it writes are not in the index.
+A committed copy is what made a machine-written file a merge participant, and
+re-adding one is the way this change is silently undone (issue #425).
 """
 
 from __future__ import annotations
@@ -22,9 +23,14 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
+import checks_ledger  # noqa: E402
 import gate_changed_tests  # noqa: E402
 import gate_new_seams  # noqa: E402
+import problems_tables  # noqa: E402
 import seams_survey  # noqa: E402
+
+#: What ``infra/ledgers.sh`` writes, and what must therefore never be tracked.
+DERIVED = (checks_ledger.LEDGER, seams_survey.LEDGER, problems_tables.GENERATED)
 
 MARKED = (
     "import pytest\n\n\n"
@@ -169,3 +175,27 @@ def test_the_seam_gate_refuses_a_protocol_under_the_rule_with_no_reason(
     )
 
     assert "1 consumers, 3 required" in gate_new_seams.verdicts("main")[0]
+
+
+@pytest.mark.structural
+def test_the_derived_ledgers_are_not_in_the_index() -> None:
+    # The index, not the working tree: `infra/ledgers.sh` writes all three
+    # into the tree on every document build and every review, so their
+    # presence there says nothing. Tracking one is what the gate refuses,
+    # demonstrated on a throwaway branch carrying a CHECKS.md committed with a
+    # row the tests do not have: `infra/ledgers.sh --check` exited 1 on it and
+    # so did this test (issue #425's pull request records the run).
+    listed = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--",
+            *(str(path.relative_to(REPO_ROOT)) for path in DERIVED),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+
+    assert listed == [], f"generated ledgers committed: {listed}"
