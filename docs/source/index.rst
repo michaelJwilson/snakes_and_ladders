@@ -306,6 +306,15 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox
    :members:
 
+.. automodule:: snakes_and_ladders.sandbox.gym_vector
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.torchrl_advantage
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.torchrl_clip
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 

@@ -1,10 +1,11 @@
 # sandbox/
 
-The oracle home. A hand-rolled implementation that a framework has replaced
-on a hot path moves in here, because the replacement is pinned against it and
-a deleted oracle is a claim with no referee (issue #322). It is the place root
+The home of the second implementation. A framework and the hand-rolled code
+it was measured against are two implementations of one equation, and the one
+that is not on the hot path lives here, because a comparison with only one
+side left is a claim with no referee (issue #322). It is the place root
 `CLAUDE.md`'s oracle rule — every accelerated path keeps its reference
-implementation — puts a reference once the accelerated path is a library
+implementation — puts a reference once one of the two sides is a library
 rather than a backend of our own.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
@@ -14,32 +15,40 @@ and is principle.
 
 ## Local rules
 
-- **An implementation moves in when a measured adoption lands, not before.**
-  The framework has to beat the implementation on the hot path by the margin
-  root `CLAUDE.md` sets, both numbers in the pull request, and the move leaves
-  nothing behind but the adapter that fronts the framework. Its regression
-  tests move with it and keep passing: they are what the adapter is pinned
-  against.
+- **Whichever side lost moves in, and it moves in when the measurement
+  lands.** A framework that beat the implementation on the hot path by the
+  margin root `CLAUDE.md` sets leaves that implementation here; a framework
+  that lost stays here itself. Both numbers go in the pull request either
+  way, and the hot path keeps exactly one implementation.
+- **A decline is kept as code, not as a paragraph.** The losing side is what
+  makes the comparison re-runnable, and a library's next version moves the
+  numbers that declined it. So its tests and its benchmark move in with it
+  and keep running beside the winner's: a decline nothing re-measures has
+  become an assertion about a version nobody is holding.
 - **Only `tests/` and `snakes_and_ladders.qa` import from here.** Never
   `sim/`, `likelihood/`, `opt/`, `search/` or `learn/`, asserted by
   `tests/regression/test_sandbox.py`. A hot path that reaches back into its
-  own oracle has not been replaced, and a test that pins a framework against
-  a copy the framework's caller also runs pins nothing.
-- **Nothing is deleted.** An oracle that is slow is still the oracle; an
-  oracle nothing tests against is a gap to file as a ticket, not a file to
-  remove.
+  own referee has not chosen between the two, and a test that pins a
+  framework against a copy the framework's caller also runs pins nothing.
+- **Nothing is deleted.** A referee that is slow is still the referee; one
+  nothing tests against is a gap to file as a ticket, not a file to remove.
 - **Not re-exported from the package root**, per root `CLAUDE.md`'s Package
-  Surface rule. A caller that wants an oracle names it.
+  Surface rule. A caller that wants a referee names it.
 
 ## What is here
 
-Nothing yet. The frameworks issue #322 adopted arrived as adapters and as
-referees — a Gymnasium adapter over the unchanged `learn.Environment`
-protocol, `rustworkx` conversions beside the generators they are checked
-against, TorchRL and PyTorch Geometric as unit oracles — and none of them
-replaced an implementation on a hot path. The candidates the ticket named are
-the Python `search.maxflow` Dinic behind a library minimum cut,
-`learn.surrogate.GraphSurrogate`'s message passing behind PyTorch Geometric,
-and `learn.ppo`'s advantage estimate and clipped loss behind TorchRL; each
-moves in with the measurement that justifies it, and `TICKETS.md` carries
-them as follow-ups.
+Three framework fronts, each measured against what it would have replaced and
+declined on that measurement (issues #391 and #392): the batched rollout
+through `gymnasium.vector`, the generalized advantage through TorchRL's
+`GAE`, and the clipped surrogate through its `ClipPPOLoss`, which cannot
+front `learn.ppo.ppo_loss` at its signature and says so where it is written.
+Each module's docstring names the experiment that declined it, the ratio and
+the host. The frameworks issue #322 adopted arrived instead as adapters and
+as referees on paths nobody proposed replacing — a Gymnasium adapter over the
+unchanged `learn.Environment` protocol, `rustworkx` conversions beside the
+generators they are checked against, PyTorch Geometric as a unit oracle — and
+those stay where they are used. The candidates still open are the Python
+`search.maxflow` Dinic against a library minimum cut and
+`learn.surrogate.GraphSurrogate`'s message passing against PyTorch Geometric;
+each arrives here with the measurement that settles it, whichever way it
+settles, and `TICKETS.md` carries them as follow-ups.

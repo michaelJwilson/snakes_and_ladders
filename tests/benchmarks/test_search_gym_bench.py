@@ -8,6 +8,12 @@ The unit is one episode, because that is what a training run buys. The batch
 sizes are 1, 4 and 16, and the number the ticket wants is whether the cost per
 episode falls as the batch grows. It does not:
 `docs/experiments/007-batched-rollout-and-torchrl-ppo.md` carries the table.
+
+Both sides are timed although only one is on a hot path. The batched rollout
+was declined and lives in `snakes_and_ladders.sandbox.gym_vector`
+(`sandbox/CLAUDE.md`); the ratio that declined it is a property of a
+Gymnasium version, so it is re-measured here rather than quoted from the
+pull request that took the decision.
 """
 
 from __future__ import annotations
@@ -22,7 +28,7 @@ from snakes_and_ladders.learn.potts import PottsLandscape
 from snakes_and_ladders.learn.rollout import rollout
 
 pytest.importorskip("gymnasium")
-from snakes_and_ladders.search.gym import rollout_batch
+from snakes_and_ladders.sandbox.gym_vector import rollout_batch
 
 _COUPLING = 0.75
 _FIELD = np.array([0.4, -0.1, -0.3])

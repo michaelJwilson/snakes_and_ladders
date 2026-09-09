@@ -9,20 +9,32 @@ one equation TorchRL's `ClipPPOLoss` computes. Timing the third against the
 first is what says whether a port of it could pay --- it is 0.6% of an
 iteration, so it cannot
 (`docs/experiments/007-batched-rollout-and-torchrl-ppo.md`).
+
+Each of the two equations #391 proposed replacing is timed on both sides: the
+declined TorchRL fronts live in `snakes_and_ladders.sandbox`
+(`sandbox/CLAUDE.md`) and are timed here beside ours on the same batch. The
+ratio is a property of a TorchRL version, so it is re-measured rather than
+quoted from the pull request that took the decision; the pins that say the
+two sides compute the same number are in
+tests/regression/learn/test_learn_ppo_torchrl.py. Only the two TorchRL
+benchmarks skip without the `frameworks` extra, so the reference numbers are
+taken wherever the suite runs.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.learn.critic import Critic, n_state_features
+from snakes_and_ladders.learn.critic import Critic, n_state_features, state_features
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsLandscape
 from snakes_and_ladders.learn.ppo import (
     _log_probabilities,
     _neighbourhoods,
     episode_advantages,
+    generalized_advantages,
     ppo,
     ppo_loss,
 )
@@ -97,3 +109,97 @@ def test_the_clipped_surrogate_benchmark(benchmark: BenchmarkFixture) -> None:
     # At the collecting policy every ratio is one, so nothing clips; the
     # regression counterpart pins the value.
     assert fraction == 0.0
+
+
+def test_the_clipped_surrogate_through_torchrl_benchmark(
+    benchmark: BenchmarkFixture,
+) -> None:
+    """The declined `ClipPPOLoss` front, on the batch above.
+
+    The front takes the policy and the scored neighbourhoods where
+    `ppo_loss` takes log-probabilities, because `ClipPPOLoss` calls an actor
+    to compute them; `snakes_and_ladders.sandbox.torchrl_clip` says why that
+    is the level the substitution has to be stated at. The extra work that
+    difference implies is part of what an adoption would have cost, so it is
+    inside what is timed.
+    """
+    torchrl_clip = pytest.importorskip("snakes_and_ladders.sandbox.torchrl_clip")
+    landscape = _landscape()
+    policy = LinearPolicy(2)
+    critic = _critic(landscape)
+    rng = np.random.default_rng(0)
+    episodes = [rollout(landscape, policy, rng, _HORIZON) for _ in range(_BATCH)]
+    neighbourhoods = _neighbourhoods(landscape, episodes)
+    advantages = episode_advantages(landscape, episodes, critic, lam=_LAM)
+    old = [t.detach() for t in _log_probabilities(policy, neighbourhoods)]
+
+    loss = benchmark(
+        torchrl_clip.clipped_objective,
+        policy,
+        neighbourhoods,
+        old,
+        advantages,
+        clip=_CLIP,
+    )
+
+    assert loss.requires_grad
+
+
+def _prepared(
+    landscape: PottsLandscape, critic: Critic
+) -> tuple[list[list[float]], list[list[float]], list[bool]]:
+    """One batch's rewards, critic values and termination flags, per episode."""
+    policy = LinearPolicy(2)
+    rng = np.random.default_rng(0)
+    episodes = [rollout(landscape, policy, rng, _HORIZON) for _ in range(_BATCH)]
+    with torch.no_grad():
+        values = [
+            [
+                float(critic(state_features(landscape, state)[None, :])[0])
+                for state in episode.states
+            ]
+            for episode in episodes
+        ]
+    return (
+        [list(episode.rewards) for episode in episodes],
+        values,
+        [episode.terminated for episode in episodes],
+    )
+
+
+def test_the_batch_s_advantages_benchmark(benchmark: BenchmarkFixture) -> None:
+    """`eq:gae` over a whole batch, the critic already read.
+
+    The critic is outside the timing on both sides: it is the same call for
+    either implementation of the recursion, and leaving it in would divide
+    the ratio #391 asked for by a term neither owns.
+    """
+    landscape = _landscape()
+    rewards, values, terminated = _prepared(landscape, _critic(landscape))
+
+    def estimate() -> list[list[float]]:
+        return [
+            generalized_advantages(r, v, lam=_LAM, terminated=t)
+            for r, v, t in zip(rewards, values, terminated, strict=True)
+        ]
+
+    advantages = benchmark(estimate)
+
+    assert len(advantages) == _BATCH
+
+
+def test_the_batch_s_advantages_through_torchrl_benchmark(
+    benchmark: BenchmarkFixture,
+) -> None:
+    """The declined `GAE` front, on the same batch and the same critic values."""
+    torchrl_advantage = pytest.importorskip(
+        "snakes_and_ladders.sandbox.torchrl_advantage"
+    )
+    landscape = _landscape()
+    rewards, values, terminated = _prepared(landscape, _critic(landscape))
+
+    advantages = benchmark(
+        torchrl_advantage.episode_advantages, rewards, values, terminated, lam=_LAM
+    )
+
+    assert len(advantages) == _BATCH

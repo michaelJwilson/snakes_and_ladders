@@ -11,6 +11,13 @@ counters: ``TimeLimit`` truncates on the decision the adapter's own counter
 truncates on, and ``RecordEpisodeStatistics`` reports the return and length
 the assembled :class:`Episode` carries.
 
+The batched rollout was measured against the sequential one and declined
+(``sandbox/CLAUDE.md``), so it is
+:mod:`snakes_and_ladders.sandbox.gym_vector` that is pinned here rather than
+anything on a hot path. The pin is what keeps the decline re-checkable: a
+Gymnasium release that changes the batched draws breaks this before it
+reaches the benchmark that would re-measure the ratio.
+
 Skips without the ``frameworks`` extra; the core suite does not install
 ``gymnasium``.
 """
@@ -34,7 +41,7 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 from tests._fixtures import FIXTURES_DIR
 
 gymnasium = pytest.importorskip("gymnasium")
-from snakes_and_ladders.search.gym import (  # noqa: E402
+from snakes_and_ladders.sandbox.gym_vector import (  # noqa: E402
     rollout_batch,
     vector_environment,
 )

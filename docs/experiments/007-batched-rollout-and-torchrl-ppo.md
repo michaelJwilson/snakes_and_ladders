@@ -40,7 +40,8 @@ Every timing was taken under the host's exclusive lock at one thread.
 `tests/regression/search/test_search_gym_vector.py` referees the batched path:
 at one copy it equals the sequential rollout draw for draw.
 `tests/regression/learn/test_learn_ppo_torchrl.py` referees the two equations
-against TorchRL's at 1e-10 and needed no code to move to do it.
+against TorchRL's at 1e-10. Both pin the fronts where they now live, in
+`snakes_and_ladders.sandbox`.
 
 ## Results
 
@@ -101,15 +102,18 @@ the concatenated batch rather than episode by episode. Both are changes to
 
 ## Conclusion and actions
 
-#392 — the batched rollout lands as `search.gym.rollout_batch`, refereed and
-not adopted anywhere: no training loop calls it, because it is slower than what
-they call now. A `SyncVectorEnv` cannot deliver Milestone 2.2's "a budget at
+#392 — the batched rollout lands as `sandbox.gym_vector.rollout_batch`,
+refereed and not adopted anywhere: no training loop calls it, because it is
+slower than what they call now. The `GymnasiumEnvironment` adapter it is built
+from was not measured against anything and stays in `search.gym`. A `SyncVectorEnv` cannot deliver Milestone 2.2's "a budget at
 `n = 200` is affordable"; only a collector with real parallelism could, which
 is `AsyncVectorEnv` or a process pool and is its own measurement.
 
-#391 — neither `generalized_advantages` nor `ppo_loss` moves to `sandbox/`, and
-TorchRL stays what it already was here: the second implementation that referees
-ours at 1e-10. The two improvements the comparison exposed land in `learn.ppo`.
+#391 — neither `generalized_advantages` nor `ppo_loss` moves to `sandbox/`,
+because neither was replaced; the TorchRL fronts of them move there instead, as
+the side that lost, and stay what TorchRL already was here: the second
+implementation that referees ours at 1e-10, now as code the benchmarks re-time.
+The two improvements the comparison exposed land in `learn.ppo`.
 
 ## What is not claimed
 
