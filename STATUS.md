@@ -210,15 +210,15 @@ lists after these — the candidate fits of `search.infer`, `learn.rollout`
 batches, tempering replicas, `qa.build`, `check_notebooks` and `pytest-xdist`
 — are measured on the same matrix before any is switched on (`TICKETS.md`).
 
-**The committed figures are the render of the tree, with two exceptions
+**The committed figures are the render of the tree, with one exception
 ([#477](https://github.com/michaelJwilson/snakes_and_ladders/issues/477)).**
 `snakes_and_ladders.qa.build --all --check` had never been run at `main`, so
 the false-positive rates #476 reports were measured against a baseline nothing
 had confirmed. This pass renders every manifest entry at `main` (`3c8ab8e`),
 one stem per invocation so each carries its own wall clock, and compares the
-rebuilt bytes against the committed ones. Load is the 1-minute average taken
-as each render finished; the host was **not** quiet, so every wall clock here
-is an upper bound.
+rebuilt bytes against the committed ones. **18 of 22 reproduce byte-identically.
+Three more reproduce in figure and caption and differ only in the `.inputs`
+stamp. One figure's bytes moved.**
 
 | Figure | declared (s) | this pass (s) | ratio | load (1 min) | `--check` verdict |
 | --- | --- | --- | --- | --- | --- |
@@ -231,8 +231,69 @@ is an upper bound.
 | `opt_recovery` | 5.0 | 42.4 | 8.5 | 7.26 | byte-identical |
 | `opt_coverage` | 27.3 | 664.7 | 24.3 | 6.88 | byte-identical |
 | `opt_branch_recovery` | 5.0 | 39.9 | 8.0 | 6.09 | byte-identical |
+| `opt_model_recovery` | 7.5 | 592.8 | 79.0 | 10.09 | byte-identical |
+| `search_trajectory` | 39.6 | 47.4 | 1.2 | 9.53 | byte-identical |
+| `search_topologies` | 29.6 | 38.5 | 1.3 | 9.00 | byte-identical |
+| `rl_reward_surface` | 28.4 | 37.5 | 1.3 | 8.63 | byte-identical |
+| `rl_tree_policy` | 101.4 | 119.8 | 1.2 | 8.75 | byte-identical |
+| `topology_accuracy` | 124.0 | 151.0 | 1.2 | 9.01 | figure and caption identical; `topology_accuracy.inputs` differs |
+| `tropical_relaxation` | 5.4 | 15.5 | 2.9 | 8.81 | figure and caption identical; `tropical_relaxation.inputs` differs |
+| `parsimony_zones` | 4.6 | 5.9 | 1.3 | 8.45 | byte-identical |
+| `frustrated_lattices` | 3.9 | 4.5 | 1.2 | 8.34 | byte-identical |
+| `mixture_seeding` | 27.4 | 39.7 | 1.4 | 10.00 | byte-identical |
+| `optimizer_landscapes` | 6.6 | 9.2 | 1.4 | 10.00 | byte-identical |
+| `tanner_graph` | 2.7 | 3.3 | 1.2 | 9.84 | byte-identical |
+| `coupled_labelling` | 3.0 | 4.0 | 1.3 | 9.61 | byte-identical |
 
-_The sweep is still running; the remaining rows land in a following commit._
+**The one figure whose bytes moved is `backend_agreement.pdf`,** and it is not
+metadata. Its stamp matches the tree and its caption reproduces exactly; the
+page content stream differs at 15 positions, all of them one polyline's last
+vertex and the marker on it — `364.214641 131.828809` committed against
+`364.214641 161.945429` rebuilt. The series is `#D55E00`, dash-dot, marker
+`^`: palette index 2, which is the `rust` backend, and the vertex is the
+3000-site column. The other three streams in the file decompress identically
+and differ only in how `zlib` packed them. Nothing else in the figure moved.
+
+The quantity plotted is `abs(value - oracle) / abs(oracle)`, a cancellation
+residual at the 1e-16 level, and it is therefore *not continuous in its
+inputs* — one unit in the last place of the Rust kernel's log-likelihood moves
+the point a visible distance on a logarithmic axis. `docs/CLAUDE.md` admits
+only a continuous quantity into a byte-compared artifact, so this figure was
+outside that rule before this pass and the render only made it visible. What
+distinguishes the two renders — a differently built extension, a different
+reduction order under the threading `qa.build` deliberately does not pin, or a
+genuine drift — is not settled here, and fixing it would destroy the baseline
+this measurement exists to establish. It is its own ticket.
+
+**Three stamps are stale and their figures are not.** `sim_problem_sizes` and
+`topology_accuracy` were already known (#476 §5); **`tropical_relaxation` was
+not, and unlike those two it is cited**, so every pull request re-renders it
+and the removed stamp gate would have failed on it. In all three the figure
+and the caption are byte-identical and only the digest recorded beside them
+differs, which is the case `DEV.md` describes as reported so the stamp can be
+committed.
+
+**Cost, and what the host did to it.** The declared totals hold. Eighteen of
+the 22 figures render within 1.1–1.4x of the `seconds` the manifest declares,
+even at a 1-minute load of 8–10 on 4 cores, so those declared values and the
+`CITED_RENDER_CAP` enforced against them are sound. The four `opt_*` figures
+are the exception and are unusable from this pass — 8.0x, 8.5x, 24.3x and
+79.0x — because `qa.build` strips `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`
+and `MKL_NUM_THREADS`, so they alone run a multi-threaded reduction and
+degrade superlinearly on an oversubscribed host; they were observed at 140–250%
+CPU. Excluding them, the 18 remaining cost **495.0 s measured against 392.9 s
+declared**. A full pass is therefore on the order of **500 s of render**, not
+the "~6 minutes per figure" that had been quoted: that number was #445's cost
+for a whole re-stamp pass.
+
+**The host was not quiet, and the exclusive lock could not be had.** A
+`with_lock measure` request queued for the full `SAL_LOCK_WAIT` of 1800 s and
+timed out without ever acquiring the lock, so the pass ran unlocked; the byte
+comparison does not depend on load and is the deliverable, and every wall
+clock above is an upper bound. Throughout, `infra/release.sh` on another
+worktree held the exclusive lock while running `pytest --cov` at 97% of a core
+inside it, and a third worktree rendered figures concurrently — 2 to 2.5
+foreign cores of 4 at every sample.
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
