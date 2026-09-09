@@ -18,8 +18,8 @@ removed is a claim with no way back to it (``sandbox/CLAUDE.md``). Only
 :mod:`snakes_and_ladders.qa.tropical_relaxation` keeps reporting the figure
 the paper cites.
 
-**The coordinates are a dissimilarity, not a topology.** :cite:`speyer2004`
-identify the tropical Grassmannian ``Gr(2, n)`` with the space of trees: a
+**The coordinates are a dissimilarity, not a topology.** Speyer and
+Sturmfels (2004) identify the tropical Grassmannian ``Gr(2, n)`` with the space of trees: a
 point is a vector of ``n (n - 1) / 2`` pairwise distances, and it is the
 metric of some tree exactly when every quartet satisfies the tropical
 Plücker relation --- of the three pairings ``d_ij + d_kl``, ``d_ik + d_jl``,
@@ -72,7 +72,7 @@ between a corner's smallest and second-smallest pairing sum and ``R_Q`` the
 range of ``l[Q, .]``, the softmin puts at most ``2 exp(-g_Q / tau)`` weight
 off the corner's own resolution, so
 
-    |F_tau(d) - D(T)|  <=  sum_Q 2 exp(-g_Q / tau) R_Q,
+    ``|F_tau(d) - D(T)|  <=  sum_Q 2 exp(-g_Q / tau) R_Q``,
 
 which is ``eq:tropical-corner`` and :func:`corner_bound`; :func:`temperature_for` inverts it for the
 ``tau`` that buys a requested tolerance. The 1e-11 the Gumbel-softmax half
