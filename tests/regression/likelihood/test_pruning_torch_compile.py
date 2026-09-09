@@ -21,10 +21,11 @@ The timings are not re-run here. Experiment 007 took them under
 suite would be a different claim on different hardware (`DEV.md`); what this
 module holds is the correctness the ratio was read against.
 
-Not `critical`, and measured rather than assumed: the module costs 9.3 s on
-the reference host with a warm `TORCHINDUCTOR_CACHE_DIR` and about 14 s with
-a fresh one, of which every call is 0.01--0.42 s and the rest is the one
-compile, in a module-scoped fixture the three tests share. It stays in the
+Not `critical`, and measured rather than assumed: under `with_lock measure`
+on the reference host the module costs 9.2 s with a warm
+`TORCHINDUCTOR_CACHE_DIR` and 20.5 s with a fresh one, of which every call is
+0.01--0.04 s and the rest is the one compile, in a module-scoped fixture the
+three tests share. It stays in the
 per-PR tier rather than moving to `release` because what it catches is a
 torch upgrade that breaks the graph, and an upgrade arrives in a pull
 request's lockfile; `release` would report it a version late. One compile
