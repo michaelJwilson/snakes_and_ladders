@@ -178,12 +178,13 @@ All three declined fronts are kept as code in
 `python/snakes_and_ladders/sandbox/` --- `gym_vector`, `torchrl_advantage` and
 `torchrl_clip` --- rather than as numbers in a merged pull request, because the
 sandbox is the home of whichever side of a measurement is not on the hot path
-(`sandbox/CLAUDE.md`). Each is still pinned against ours at 1e-10 by
-`tests/regression/learn/test_learn_ppo_torchrl.py` and
-`tests/regression/search/test_search_gym_vector.py`, and still timed beside ours
-by `tests/benchmarks/test_learn_ppo_bench.py` and
-`tests/benchmarks/test_search_gym_bench.py`, so a library release that moves a
-ratio fails or re-measures rather than going unnoticed. The
+(`sandbox/CLAUDE.md`). Each is still pinned against ours ---
+`tests/regression/learn/test_learn_ppo_torchrl.py` at 1e-10 on both value and
+gradient, `tests/regression/search/test_search_gym_vector.py` at draw-for-draw
+equality --- and still timed beside ours by
+`tests/benchmarks/test_learn_ppo_bench.py` and
+`tests/benchmarks/test_search_gym_bench.py`, so a library release that changes
+an answer fails and one that moves a ratio is re-measured. The
 `GymnasiumEnvironment` adapter the batched rollout is built from was not
 declined and stays in `search.gym`.
 
