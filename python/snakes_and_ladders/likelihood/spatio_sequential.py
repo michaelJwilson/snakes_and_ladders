@@ -16,6 +16,7 @@ the forward recursion of :mod:`snakes_and_ladders.opt.hmm`.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from itertools import product
 
@@ -252,6 +253,23 @@ def log_evidence_by_forward(
 # --- the E step, the field and the joint given a labelling (issue #306) ----
 
 
+#: Vertices whose emission scores are evaluated at once. The table
+#: :func:`gated_log_density` returns is ``(n_nodes, S, M, K)``, which at the
+#: declared 5,041-vertex instance is 1.0e10 entries and 80 GB: the E step and
+#: the field therefore never build it, and walk the vertices in blocks whose
+#: largest intermediate, ``(S, block, K)``, stays in the tens of megabytes at
+#: every declared size. The answer does not depend on the block --- only the
+#: order the members' scores are summed in, which moves the result by less
+#: than the tolerance the Rust backend is pinned at.
+VERTEX_BLOCK = 256
+
+
+def _blocks(members: np.ndarray) -> Iterator[np.ndarray]:
+    """``members`` in contiguous blocks of at most :data:`VERTEX_BLOCK`."""
+    for start in range(0, members.size, VERTEX_BLOCK):
+        yield members[start : start + VERTEX_BLOCK]
+
+
 def class_log_density(
     params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
 ) -> np.ndarray:
@@ -260,14 +278,19 @@ def class_log_density(
     Given the labels the classes decouple, and each class's chain sees the
     product of its members' emissions -- a class with no members sees a flat
     score and its posterior is its prior.
+
+    The sum is accumulated over blocks of members rather than over
+    :func:`gated_log_density`'s whole table, which is what keeps it usable at
+    the sizes `ROADMAP.md` declares; see :data:`VERTEX_BLOCK`.
     """
-    gated = gated_log_density(params, observations)  # (n_nodes, S, M, K)
     labels = np.asarray(labels, dtype=np.int64)
     density = np.zeros((params.n_classes, params.n_positions, params.n_states))
-    for m in range(params.n_classes):
-        members = np.flatnonzero(labels == m)
-        if members.size:
-            density[m] = gated[members, :, m, :].sum(axis=0)
+    for m, family in enumerate(params.emissions):
+        for block in _blocks(np.flatnonzero(labels == m)):
+            scores = family.log_density(
+                torch.as_tensor(observations[:, block], dtype=family.observation_dtype)
+            )  # (S, block, K)
+            density[m] += scores.detach().numpy().sum(axis=1)
     return density
 
 
@@ -327,8 +350,21 @@ def external_field(
     """
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
-    gated = gated_log_density(params, observations)  # (n_nodes, S, M, K)
-    return -np.asarray(np.einsum("nsmk,msk->nm", gated, posterior))
+    # The vertices the observations carry, not the graph's: a slice of a
+    # declared instance is scored against the same parameters, and the field
+    # is over what was observed.
+    n_nodes = int(observations.shape[1])
+    field = np.empty((n_nodes, params.n_classes))
+    every = np.arange(n_nodes)
+    for m, family in enumerate(params.emissions):
+        for block in _blocks(every):
+            scores = family.log_density(
+                torch.as_tensor(observations[:, block], dtype=family.observation_dtype)
+            )  # (S, block, K)
+            field[block, m] = -np.einsum(
+                "sbk,sk->b", scores.detach().numpy(), posterior[m]
+            )
+    return field
 
 
 def labelled_log_likelihood(
@@ -345,6 +381,50 @@ def labelled_log_likelihood(
     own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
     evidence = class_posteriors(params, observations, labels).log_evidence
     return own + float(evidence.sum())
+
+
+@dataclass(frozen=True)
+class CoupledBackend:
+    """The three quantities a block ascent asks of an E step, as one value.
+
+    `search.spatio_sequential.fit_spatio_sequential` needs a class posterior,
+    a field and a labelled log-likelihood, and there is more than one
+    implementation of them: the NumPy path here, and the tabulated Rust kernel
+    of :mod:`snakes_and_ladders.likelihood.spatio_sequential_rust`. Passing
+    them as one value rather than three keeps a caller from mixing the two,
+    which would read as a slow fit or a wrong one depending on which pair it
+    mixed.
+
+    Parameters
+    ----------
+    class_posteriors : Callable
+        ``(params, observations, labels) -> ClassPosteriors``.
+    external_field : Callable
+        ``(params, observations, labels, posterior) -> (n_nodes, M)``, the
+        posterior positional and ``None`` meaning "compute it".
+    labelled_log_likelihood : Callable
+        ``(params, observations, labels) -> float``.
+    """
+
+    class_posteriors: Callable[
+        [SpatioSequentialParams, np.ndarray, np.ndarray], ClassPosteriors
+    ]
+    external_field: Callable[
+        [SpatioSequentialParams, np.ndarray, np.ndarray, np.ndarray | None],
+        np.ndarray,
+    ]
+    labelled_log_likelihood: Callable[
+        [SpatioSequentialParams, np.ndarray, np.ndarray], float
+    ]
+
+
+#: The default backend: the implementations in this module, which are the
+#: oracle every other one is pinned to (`likelihood/CLAUDE.md`).
+NUMPY_BACKEND = CoupledBackend(
+    class_posteriors=class_posteriors,
+    external_field=external_field,
+    labelled_log_likelihood=labelled_log_likelihood,
+)
 
 
 def map_labelling(

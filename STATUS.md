@@ -944,6 +944,82 @@ two as the textbook expects. Sizes, memory, the profile that decides a Rust
 kernel, and the optimization framing against the samplers are parts 2 and 3
 of the ticket.
 
+**The coupled model at 5,041 vertices, and the Rust E step that makes it
+affordable** ([#399](https://github.com/michaelJwilson/snakes_and_ladders/issues/399)).
+`sim.count_pairs` declares the coupled spatio-sequential model with a
+two-channel count emission — a negative-binomial total and a beta-binomial
+success count per hidden state — on a 71x71 triangular lattice, `M = 10`
+classes, `K = 10` states, `S = 20,000` positions: 1.008e8 count pairs,
+**384.6 MiB** as `uint16`, drawn once from the seed in
+`tests/regression/fixtures/spatio_sequential_counts/stress.yaml` and binned by
+1, 5 and 10, so the three instances are one draw. Aggregation is exact for the
+first channel and a declared misspecification for the second, both pinned
+against the f-fold convolution of the base mass: `BetaBinomial(f n, a, b)`
+keeps the mean, carries more than four times the variance and sits at total
+variation above 0.3 from the truth.
+
+The NumPy E step at that size was profiled before anything was ported
+(`CLAUDE.md`, Profile first), at bin factor 10 on the 4-core reference host:
+one `class_posteriors` is **20.1 s**, of which `torch.lgamma` is **10.4 s** of
+self time (51.5%) and the two emission `log_density` bodies 18.9 s cumulative
+(94.3%); one `external_field` is **191.3 s**, `torch.lgamma` 102.8 s (53.7%)
+and the emission densities 188.1 s (98.3%). Forward–backward is 0.72 s (3.6%)
+and the `einsum` 1.1 s (0.6%), so the port is the emission density and nothing
+else. Both counts are integers in a range of a few thousand, so
+`oxi_snakes_and_ladders::coupled` tabulates the log-density by count —
+`[count, M, K]`, count-major, because the field wants every class and state at
+one count — and reads two doubles where the oracle calls `lgamma` three times.
+NumPy against Rust through the binding, one thread:
+
+| bin factor | positions | `class_posteriors` NumPy | Rust | | `external_field` NumPy | Rust | |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 10 | 2,000 | 20.1 s | **0.55 s** | 36.6x | 191.3 s | **1.10 s** | 174x |
+| 5 | 4,000 | 39.2 s | **0.82 s** | 47.8x | 378.1 s | **2.13 s** | 177x |
+| 1 | 20,000 | 278.5 s | **4.89 s** | 57.0x | ~2,690 s (extrapolated) | **12.59 s** | ~214x |
+
+The bin-1 NumPy field is the one number not measured: at the ratio the two
+coarser factors set it is three quarters of an hour on a host four agents
+share, past the 20-minute cap a single measurement is allowed, so it is
+extrapolated from the bin-5 measurement and marked as such. Criterion times
+the kernel without the tables or the boundary at `S = 200`: 21.32 ms and
+84.04 ms, which scaled to bin 10's 2,000 positions is 213 ms and 840 ms
+against the 0.55 s and 1.10 s above — the tables' construction and the
+crossing are 0.34 s and 0.26 s of each call, the boundary term
+`likelihood/CLAUDE.md` requires measuring separately.
+
+The kernel is pinned to the NumPy oracle at the ci instance and on a
+64-vertex slice of the 5K one: the log evidence and the field agree to
+**3.1e-15** and **3.8e-15** relative, against a stated bound of 1e-12; the
+state and pairwise posteriors agree to **1.3e-9** absolute, against 1e-8, and
+that residual is the *oracle's* own departure from summing to one — the
+kernel's rows sum to one exactly, because the scaled recursion normalizes at
+every position and the log-domain one does not.
+
+Recovery at the declared size, from a labelling with 30% of its vertices
+redrawn: the label block returns the planted labelling **exactly** at bin
+factors 10 and 5 --- 0.734 to 1.000 up to a permutation of the ten class
+names --- in one round, 22.8 s and 27.2 s of which the alpha-expansion is
+about 20. The full test, simulate through assertion, is **59 s at factor 10
+and 62 s at factor 5**, so factor 5 is the key fixture and factor 1 stays
+`release` as the plan assigns it. The plan expected factor 1 to be out of
+reach; it is not. It recovers the labelling exactly in **98 s**, inside the
+same 120 s budget, because the port took one E sweep there from 278.5 s to
+4.89 s. That the whole declared instance now fits a per-test budget is the
+finding, and moving the key fixture onto it is the maintainer's call rather
+than this ticket's. Two further measurements
+are recorded because they are findings rather than passing numbers. From a
+*uniform* start at `M = 10` the first E step's class densities are ten
+mixtures of the same data and the field is at chance, so the ascent does not
+move: which start drives this block is issue #306's question, not this
+fixture's, and the test corrects a labelling rather than searching for one.
+And the fixture's first draft declared a beta-binomial trial count per hidden
+state, which puts a count drawn under one state outside another's support,
+where the log-density is `lgamma` of a negative argument: two of ten classes
+lost their evidence to `NaN` and the field argmin fell to 0.113, the fraction
+of vertices in the first class. The loader now refuses a trials ladder that
+varies, the trial count being a property of the observation and not of the
+state, and the fixture's digest is what made the correction visible.
+
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
