@@ -93,14 +93,12 @@ application to infrastructure, never back.
   computes one and reports the other survives a suite with no case where they
   diverge; the fixture that separates them is the test.
 
-- **Rescaling must stay differentiable, and the scaling factor is a
-  constant.** Partial likelihoods underflow, so they are rescaled with the log
-  of the scaling accumulated separately, and that transformation sits inside
-  the autodiff graph. The factor itself does not: it cancels between the
-  division and the log it is added to, so it carries no derivative, and
-  differentiating it buys a backward pass that computes zero. What referees
-  this is the gradient of the rescaled path against the unrescaled one, not an
-  inspection of the graph.
+- **Rescaling must stay differentiable; its factor must not be.** Partial
+  likelihoods underflow, so they are rescaled with the log of the scaling
+  accumulated separately, and that transformation sits inside the autodiff
+  graph. The factor cancels between the division and the log, so
+  differentiating it buys a backward pass that computes zero. The referee is
+  the rescaled path's gradient against the unrescaled path's.
 
 - **Memoize on the canonical form.** A topology has many spellings; keying a
   cache on a raw string silently recomputes what has already been scored.
