@@ -2120,11 +2120,14 @@ and the code, and fixed in the same pull request. Its baseline is
 
 **Duplicated machinery.** The two seams the 0.4.0 audit recorded --- one
 annealing driver behind eight entry points, one weighted enumeration behind
-eight enumerators --- are unchanged and are not refactored here. Each is a
-ticket, with the oracle that would pin a merge stated in that audit's tables
-above; folding either into a release audit would put an untested rewrite of
-the sampler and the enumerator inside the pull request that is meant to check
-everything else.
+eight enumerators --- were unchanged at this audit and were not refactored
+here. Each was a ticket, with the oracle that would pin a merge stated in that
+audit's tables above; folding either into a release audit would have put an
+untested rewrite of the sampler and the enumerator inside the pull request
+that is meant to check everything else. Both have since closed on those
+oracles, recorded against the 0.4.0 tables below:
+[#386](https://github.com/michaelJwilson/snakes_and_ladders/issues/386) and
+[#387](https://github.com/michaelJwilson/snakes_and_ladders/issues/387).
 
 **What the audit checked and found true.** The ten required checks are the ten
 jobs `ci.yml` defines; the manifest holds nineteen figures and the documents
@@ -2197,6 +2200,21 @@ The fix is one driver — a schedule, a transition and a generator in, the
 best state and the trajectory out — and one exchange step over
 `(state, energy, beta)` triples, with the eight entry points as adapters.
 
+**Closed ([#386](https://github.com/michaelJwilson/snakes_and_ladders/issues/386)).**
+`opt.anneal.drive` and `opt.anneal.exchange` carry the two loops, on the one
+`swap_log_ratio` that had been written three times; `learn.relaxed.anneal` is
+`opt.schedule.Exponential` under its own bounds. All eight entry points equal
+the loop each replaced draw for draw --- the labelling, the final state, the
+trajectory, the recorded sweeps and the exchange acceptances compared element
+by element rather than distributionally --- across 28 assertions in 5.02 s
+(`tests/regression/opt/test_opt_anneal.py`). The relaxed schedule is
+value-for-value within 4.2e-16 of the expression it replaced, both endpoints
+exact. Two differences the merge kept rather than settled:
+`opt.hmc.parallel_tempering` draws its exchange uniform before testing the
+ratio where the other three short-circuit, which is a `draw_first` flag on
+`exchange`; and the driver takes no generator, because three of the four
+annealers draw from `numpy.random.Generator` and one from `torch.Generator`.
+
 | enumerator | what it enumerates | classification | oracle for a merge |
 | --- | --- | --- | --- |
 | `search.topology.enumerate_topologies` | every unrooted topology by stepwise insertion | distinct, and stays | the `(2n-5)!!` count |
@@ -2213,6 +2231,26 @@ function in, assignments and log weights out, the cap of #230 applied once —
 with marginalization and argmax as two helpers over it; the four `learn` and
 `search` copies become calls, and the three `likelihood` enumerators keep
 their result types over the shared kernel.
+
+**Closed ([#387](https://github.com/michaelJwilson/snakes_and_ladders/issues/387)).**
+`snakes_and_ladders.enumeration` --- beside the cap, not under `likelihood/`,
+because `learn/CLAUDE.md` forbids importing `likelihood` and a seam there
+could not have served the copies it exists to remove. Eleven call sites, three
+beyond the ticket's eight: the torch configuration table of `opt.potts`,
+`likelihood.parsimony` and `likelihood.brute_force` fold in so the guard over
+`itertools.product(range(k), repeat=n)` can be enforced with no exception but
+the seam itself. Every adapter is bitwise or value-for-value equal to the
+expression it replaced, over 29 assertions in 2.46 s
+(`tests/regression/test_enumeration.py`), and the fifteen measurements in the
+five committed baseline files recomputed with every value byte-identical. The
+two `learn` enumerators gain the cap they lacked. The shared table is built
+from the base-`k` digits of the assignment index rather than a materialized
+`itertools.product`: identical arrays at `3**4`, `3**8`, `2**16`, `4**8` and
+`2**17`, and 2.8x to 6.6x faster --- 50.4 ms against 11.9 ms at `2**16`, the
+vectorization [#420](https://github.com/michaelJwilson/snakes_and_ladders/pull/420)
+needed, taken here so its `enumerate_mixture_assignments` lands on the seam
+rather than beside it. `accumulate` is bitwise identical to that branch's
+`np.bincount` form at all four shapes, within 25% either way on wall time.
 
 **Methods refereed by the simulated truth alone, or by neither kind.** Read
 from the suite by `infra/problems_tables.py` and typeset in the textbook's
