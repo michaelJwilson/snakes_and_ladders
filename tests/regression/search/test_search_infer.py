@@ -430,3 +430,100 @@ def test_a_non_positive_lazy_top_is_refused() -> None:
     alignment, k = _alignment()
     with pytest.raises(ValueError, match="lazy_top must be at least 1"):
         infer(alignment, k, rng=np.random.default_rng(0), lazy_top=0)
+
+
+# --- the bounded regraft and the partial refit (issue #408) ---------------
+
+
+@pytest.mark.structural
+def test_a_radius_at_the_leaf_count_reproduces_the_unbounded_search() -> None:
+    # The equivalence the bound is worth having, at the level a caller sees:
+    # not merely the same tree, but the same trajectory at the same cost, so
+    # a radius that quietly reordered the neighbourhood would fail here.
+    alignment, k = _alignment()
+
+    unbounded = infer(alignment, k, rng=np.random.default_rng(0), moves=MoveSet.SPR)
+    bounded = infer(
+        alignment,
+        k,
+        rng=np.random.default_rng(0),
+        moves=MoveSet.SPR,
+        radius=len(alignment),
+    )
+
+    assert leaf_bipartitions(bounded.topology) == leaf_bipartitions(unbounded.topology)
+    assert bounded.log_likelihood == unbounded.log_likelihood
+    assert bounded.trace == unbounded.trace
+    assert bounded.evaluations == unbounded.evaluations
+    assert bounded.fits == unbounded.fits
+    assert bounded.likelihood_evaluations == unbounded.likelihood_evaluations
+
+
+@pytest.mark.edge_case
+def test_a_radius_with_nni_moves_is_refused() -> None:
+    # NNI has no pruning point to measure from, so a radius is meaningless
+    # there; ignoring it would report a bounded search that was not one.
+    alignment, k = _alignment()
+    with pytest.raises(ValueError, match="no pruning point"):
+        infer(alignment, k, rng=np.random.default_rng(0), moves=MoveSet.NNI, radius=2)
+
+
+@pytest.mark.edge_case
+def test_partial_reoptimization_without_warm_start_is_refused() -> None:
+    alignment, k = _alignment()
+    with pytest.raises(ValueError, match="warm_start is where they come from"):
+        infer(
+            alignment,
+            k,
+            rng=np.random.default_rng(0),
+            warm_start=False,
+            partial_reoptimization=True,
+        )
+
+
+@pytest.mark.structural
+def test_a_partial_fit_moves_only_the_branches_the_move_created() -> None:
+    # What `_Restricted` claims: every coordinate outside the disturbed set
+    # comes back at the value it went in with, exactly. A scatter that
+    # dropped or transposed an index would still fit and still improve, and
+    # only this catches it.
+    alignment, k = _alignment()
+    start = random_topology(sorted(alignment), np.random.default_rng(0))
+    parent = infer_module._score(Model.JC, start, k, alignment)
+    neighbour = next(iter(nni_neighbours(start)))
+
+    fitted = infer_module._score(
+        Model.JC, neighbour, k, alignment, parent, partial=True
+    )
+
+    disturbed = infer_module._disturbed(neighbour, parent).tolist()
+    assert len(disturbed) == 1  # an NNI creates exactly one split
+    kept = [
+        split
+        for index, split in enumerate(branch_splits(neighbour))
+        if index not in disturbed
+    ]
+    assert kept
+    for split in kept:
+        assert fitted.lengths_by_split[split] == parent.lengths_by_split[split]
+
+
+@pytest.mark.structural
+def test_partial_reoptimization_reports_a_full_fit() -> None:
+    # A partial fit is a lower bound, so the accepted move is refitted over
+    # every branch before it is reported. Dropping that refit would leave
+    # `log_likelihood` below the topology's maximum, and this pins it
+    # against the same fit taken from scratch.
+    alignment, k = _alignment()
+
+    result = infer(
+        alignment,
+        k,
+        rng=np.random.default_rng(0),
+        moves=MoveSet.SPR,
+        partial_reoptimization=True,
+    )
+
+    assert result.log_likelihood == pytest.approx(
+        score_topology(result.topology, alignment, k), rel=1e-8
+    )

@@ -97,16 +97,34 @@ def _eight_taxa() -> tuple[dict[str, np.ndarray], int]:
     return dict(dataset.alignment), params.k
 
 
-@pytest.mark.parametrize("warm", [False, True], ids=["cold", "warm"])
-def test_one_neighbour_fit_benchmark(benchmark: BenchmarkFixture, warm: bool) -> None:
-    """One SPR neighbour fitted cold, and from its parent's lengths."""
+@pytest.mark.parametrize(
+    ("warm", "partial"),
+    [(False, False), (True, False), (True, True)],
+    ids=["cold", "warm", "warm-partial"],
+)
+def test_one_neighbour_fit_benchmark(
+    benchmark: BenchmarkFixture, warm: bool, partial: bool
+) -> None:
+    """One SPR neighbour fitted cold, from its parent's lengths, and partially.
+
+    The third case is issue #408's partial re-optimization: the same warm
+    start, but only the branches the move created are varied. It is the
+    per-candidate unit the whole-search numbers below are built from, and
+    ``likelihood_evaluations`` is the unit to read, not the wall clock.
+    """
     alignment, k = _eight_taxa()
     start = random_topology(sorted(alignment), np.random.default_rng(1))
     parent = infer_module._score(Model.JC, start, k, alignment)
     neighbour = next(iter(spr_neighbours(start)))
 
     fitted = benchmark(
-        infer_module._score, Model.JC, neighbour, k, alignment, parent if warm else None
+        infer_module._score,
+        Model.JC,
+        neighbour,
+        k,
+        alignment,
+        parent if warm else None,
+        partial=partial,
     )
 
     benchmark.extra_info["likelihood_evaluations"] = fitted.evaluations
