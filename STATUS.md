@@ -210,6 +210,30 @@ lists after these — the candidate fits of `search.infer`, `learn.rollout`
 batches, tempering replicas, `qa.build`, `check_notebooks` and `pytest-xdist`
 — are measured on the same matrix before any is switched on (`TICKETS.md`).
 
+**The committed figures are the render of the tree, with two exceptions
+([#477](https://github.com/michaelJwilson/snakes_and_ladders/issues/477)).**
+`snakes_and_ladders.qa.build --all --check` had never been run at `main`, so
+the false-positive rates #476 reports were measured against a baseline nothing
+had confirmed. This pass renders every manifest entry at `main` (`3c8ab8e`),
+one stem per invocation so each carries its own wall clock, and compares the
+rebuilt bytes against the committed ones. Load is the 1-minute average taken
+as each render finished; the host was **not** quiet, so every wall clock here
+is an upper bound.
+
+| Figure | declared (s) | this pass (s) | ratio | load (1 min) | `--check` verdict |
+| --- | --- | --- | --- | --- | --- |
+| `sim_tree` | 2.7 | 3.0 | 1.1 | 5.06 | byte-identical |
+| `sim_example` | 2.7 | 3.3 | 1.2 | 5.06 | byte-identical |
+| `jc_transition` | 2.7 | 3.3 | 1.2 | 5.13 | byte-identical |
+| `backend_agreement` | 3.1 | 3.5 | 1.1 | 5.20 | **differs: `backend_agreement.pdf`** |
+| `likelihood_footprint` | 2.6 | 2.8 | 1.1 | 5.20 | byte-identical |
+| `sim_problem_sizes` | 2.5 | 2.8 | 1.1 | 5.27 | figure and caption identical; `sim_problem_sizes.inputs` differs |
+| `opt_recovery` | 5.0 | 42.4 | 8.5 | 7.26 | byte-identical |
+| `opt_coverage` | 27.3 | 664.7 | 24.3 | 6.88 | byte-identical |
+| `opt_branch_recovery` | 5.0 | 39.9 | 8.0 | 6.09 | byte-identical |
+
+_The sweep is still running; the remaining rows land in a following commit._
+
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
