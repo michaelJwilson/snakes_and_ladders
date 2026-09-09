@@ -4,10 +4,22 @@ Issue #469. The policy -- which tests a gate selects, what it may cost, what
 the markers mean -- is spread over twelve files, and they had already drifted:
 `DEV.md` described `infra/review_gates.sh` as nine rows after issue #456
 demoted one of them, and no check could see it. `infra/gates.py` writes the
-policy down once; this reads the seven of those files that state a value it
-carries -- `pyproject.toml`, `.github/workflows/ci.yml`, `infra/validate.sh`,
-`infra/review_gates.sh`, `infra/release.sh`, `infra/test_kinds.py`, `DEV.md` --
-back out of its own source text and asserts it matches.
+policy down once; this reads the files that state a value it carries --
+`.github/workflows/ci.yml`, `infra/validate.sh`, `infra/review_gates.sh`,
+`infra/release.sh`, `infra/test_kinds.py`, `DEV.md` -- back out of their own
+source text and asserts they match.
+
+**Two of those copies no longer exist.** Issue #470 generates `pyproject.toml`'s
+marker list and `DEV.md`'s tier table from `infra/gates.py`, so the assertions
+that held them are retired: a test that read a generated file and compared it
+against its own generator would assert nothing. What replaces them is the
+regeneration itself -- `test_the_derived_blocks_are_current` fails a tree whose
+blocks were edited where they are read, and `test_the_writer_restores_a_block`
+moves a value in each and requires the writer to put it back. The copies that
+remain are the ones a generator cannot take: a workflow condition GitHub
+evaluates, a shell export `tests/conftest.py` reads from the environment, a
+sentence a reviewer reads. Each is consumed by something that cannot import
+Python at the point it needs the value.
 
 Two rules make that worth its seconds. **Each copy is read from the file that
 carries it**, never from the module under test: a test that imports a constant
@@ -17,9 +29,9 @@ parsed, never executed**: the assertion is about the text a reader and a runner
 both see, and running `review_gates.sh` to count its rows would cost 30 s to
 learn something a regex has in a millisecond.
 
-`infra/gates.py` is descriptive at this step, so a failure here does not say
-which side is wrong -- only that the tree no longer agrees with itself. The
-file that runs the gate wins; the module is corrected to match it.
+For the copies that remain, `infra/gates.py` is descriptive: a failure here
+does not say which side is wrong, only that the tree no longer agrees with
+itself. The file that runs the gate wins; the module is corrected to match it.
 """
 
 from __future__ import annotations
@@ -171,21 +183,6 @@ def _seconds(budget: str) -> int | None:
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_pyproject_registers_the_markers_and_their_text() -> None:
-    """Read from `pyproject.toml`: the nine markers and what each one claims.
-
-    The text as well as the names, because the text is where a marker's meaning
-    is written for anyone applying one, and `tests/regression/test_test_kinds.py`
-    already holds the names against `infra/test_kinds.py`.
-    """
-    registered = _registered_markers(PYPROJECT)
-    described = {**gates.KIND_MARKERS, **gates.SCHEDULING_MARKERS}
-
-    assert registered == described
-
-
-@pytest.mark.critical
-@pytest.mark.structural
 def test_the_kind_module_names_the_same_markers() -> None:
     """Read from `infra/test_kinds.py`: the two axes, and the exempt directory."""
     assert tuple(gates.KIND_MARKERS) == test_kinds.KINDS
@@ -295,23 +292,69 @@ def test_dev_md_counts_the_review_gate_rows() -> None:
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_dev_md_states_the_tier_budgets() -> None:
-    """Read from `DEV.md`: the tier table's budget column.
+def test_the_derived_blocks_are_current() -> None:
+    """Regenerating the marker list and the tier table rewrites neither file.
 
-    The CI tier's budget is the budget both CI gates are held to, and the key
-    tier's is `SAL_KEY_DURATION_CAP` written in a second place.
+    The gate that generation buys, in milliseconds rather than in the second
+    `infra/ledgers.sh --check` spends starting interpreters. It compares
+    against the committed files -- what `pytest` and a reviewer actually read
+    -- and never against `infra/gates.py`, which would be the generator
+    restating itself.
     """
-    budgets = _tier_budgets(DEV)
-    caps = {cap.variable: cap.seconds for cap in gates.CAPS}
-    ci, key, release = (
-        _seconds(budgets["CI"]),
-        _seconds(budgets["key"]),
-        _seconds(budgets["release"]),
-    )
+    stale = [
+        block.path
+        for block in gates.DERIVED
+        if (REPO_ROOT / block.path).read_text() != gates.regenerated(block)
+    ]
 
-    assert [gate.budget_seconds for gate in gates.GATES] == [ci, ci, release]
-    assert key == caps["SAL_KEY_DURATION_CAP"]
-    assert "`SAL_KEY_DURATION_CAP`" in budgets["key"]
+    assert stale == [], f"edited where read rather than where written: {stale}"
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_the_writer_restores_a_block_that_drifted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One value moved in each generated block, and the writer puts both back.
+
+    The mirror of the test above: that one says the tree is current, this says
+    the writer is what makes it so. The restored blocks are then read back
+    through the parsers the retired assertions used -- `tomllib` for the marker
+    list, the table reader for the tier table -- so a rendering that happens to
+    produce the right bytes today and unparseable TOML on the next marker text
+    added fails here rather than at collection.
+    """
+    edits = {
+        "pyproject.toml": (
+            "edge_case: checked at a boundary",
+            "edge_case: checked somewhere",
+        ),
+        "DEV.md": ("**120 s per test**", "**121 s per test**"),
+    }
+    monkeypatch.setattr(gates, "REPO_ROOT", tmp_path)
+    for block in gates.DERIVED:
+        source = (REPO_ROOT / block.path).read_text()
+        carried, moved = edits[block.path]
+        drifted = source.replace(carried, moved, 1)
+        assert drifted != source, f"{block.path} no longer carries {carried!r}"
+        (tmp_path / block.path).write_text(drifted)
+
+    for block in gates.DERIVED:
+        (tmp_path / block.path).write_text(gates.regenerated(block))
+
+    assert (tmp_path / "pyproject.toml").read_text() == PYPROJECT.read_text()
+    assert (tmp_path / "DEV.md").read_text() == DEV.read_text()
+    assert _registered_markers(tmp_path / "pyproject.toml") == {
+        **gates.KIND_MARKERS,
+        **gates.SCHEDULING_MARKERS,
+    }
+    budgets = _tier_budgets(tmp_path / "DEV.md")
+    assert _seconds(budgets["key"]) == gates.KEY_DURATION_CAP.seconds
+    assert [gate.budget_seconds for gate in gates.GATES] == [
+        _seconds(budgets["CI"]),
+        _seconds(budgets["CI"]),
+        _seconds(budgets["release"]),
+    ]
 
 
 @pytest.mark.critical

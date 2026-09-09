@@ -5,13 +5,21 @@
 # committed becomes a merge participant, and a conflict between two machine
 # writings carries no information to resolve.
 #
+# And two blocks of files that *are* committed: pyproject.toml's marker list
+# and DEV.md's tier table, written from infra/gates.py between marker comments
+# (issue #470). These are not ledgers of the tree and do not conflict -- they
+# are short, and each is derived from one table a person edits -- so they are
+# generated in place and the check below is that regenerating did not move
+# them. Only the block is written; the prose around it is hand-written, since
+# DEV.md is followed step by step.
+#
 # The guarantee the committed copy used to give -- the ledger matches the
 # tree -- is not weakened by that, because it is now checked rather than
 # remembered: `--check` regenerates and fails if a *tracked* file moved, so a
 # stale copy that reaches the index fails CI wherever it came from.
 #
 # Usage: infra/ledgers.sh [--check]
-#   (default)  regenerate the three files in place
+#   (default)  regenerate the three files and the two derived blocks in place
 #   --check    regenerate, then fail if regenerating changed a tracked file
 set -euo pipefail
 
@@ -32,20 +40,25 @@ esac
 uv run python infra/checks_ledger.py --write
 uv run python infra/seams_survey.py --write
 uv run python infra/problems_tables.py --write
+uv run python infra/gates.py --write
 
 if [ "$check" = 0 ]; then
   exit 0
 fi
 
 LEDGERS=(CHECKS.md SEAMS.md docs/tex/generated/problems_tables.tex)
+# The files carrying a generated block. Tracked, and required to be: the block
+# is part of a file a person reads and edits around.
+DERIVED=(pyproject.toml DEV.md)
 
 # Two failures, and the second is the first one's cause. `git diff HEAD` and
 # not `git status`: an untracked ledger is the expected state and says
 # nothing, while a tracked one that regeneration rewrote is exactly the
-# staleness this replaces.
-moved="$(git diff --name-only HEAD -- "${LEDGERS[@]}")"
+# staleness this replaces. A derived block fails the same way and for the same
+# reason -- it was edited where it is read rather than where it is written.
+moved="$(git diff --name-only HEAD -- "${LEDGERS[@]}" "${DERIVED[@]}")"
 if [ -n "$moved" ]; then
-  echo "::error::regenerating rewrote a committed ledger: $moved" >&2
+  echo "::error::regenerating rewrote a committed file: $moved" >&2
   git --no-pager diff --stat HEAD -- $moved >&2
   exit 1
 fi
@@ -58,4 +71,4 @@ if [ -n "$tracked" ]; then
   echo "these are written from the tree and must not be tracked (.gitignore, issue #425)" >&2
   exit 1
 fi
-echo "generated ledgers: regeneration changed no tracked file, and none is tracked"
+echo "generated: regeneration changed no tracked file, and no ledger is tracked"

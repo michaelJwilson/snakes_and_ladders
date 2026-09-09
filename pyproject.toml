@@ -248,8 +248,10 @@ testpaths = ["tests"]
 # *and* an oracle test, never instead of one, so folding them into one flat set
 # would force a choice the scheme has no basis for. `release` is a third,
 # older axis and says when a test runs. `CLAUDE.md`'s Testing section states
-# the principle; this list is where the names live.
+# the principle; the list below is written from `infra/gates.py`, where the
+# names and their text live, by `infra/ledgers.sh` (issue #470).
 addopts = "--strict-markers"
+# BEGIN GENERATED markers (infra/gates.py, via infra/ledgers.sh)
 markers = [
     "release: long-running scientific validity test, run on release rather than per PR (DEV.md CI & Performance Budget)",
     "oracle: checked against an independent exact answer -- enumeration, brute force, a closed form, or a published value",
@@ -261,6 +263,7 @@ markers = [
     "stress: same claim at a size the 5-minute CI budget cannot hold; run with `-m stress` inside the 10-minute developer budget (DEV.md CI & Performance Budget)",
     "key: the key fixture's full test -- the largest declared instance whose simulate-fit-assert run fits SAL_KEY_DURATION_CAP, 120 s; run in CI's full tier and selected locally only when its inputs change (DEV.md CI & Performance Budget)",
 ]
+# END GENERATED markers
 
 [tool.coverage.run]
 source = ["snakes_and_ladders"]
