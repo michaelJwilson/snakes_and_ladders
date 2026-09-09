@@ -922,7 +922,7 @@ it.
 
 | question | measurement | verdict |
 | --- | --- | --- |
-| `torch.compile` on the pruning forward | forward and backward **1.21x** eager at 8 taxa, **1.09x** at 20; 0 graph breaks, 1.8e-16 relative agreement; the graph falls 105 to 94 nodes; the compile is 42.8 s cold and 3.7 s on a warm cache, and one artifact serves 12 distinct random topologies without recompiling | does not close the gap; amortization is not the obstacle, there is no win to amortize |
+| `torch.compile` on the pruning forward | forward and backward **1.21x** eager at 8 taxa, **1.09x** at 20; 0 graph breaks, 1.8e-16 relative agreement; the graph falls 105 to 94 nodes; the compile is 13.6 s on a fresh inductor cache and 3.7 s on a warm one, and one artifact serves 12 distinct random topologies without recompiling | does not close the gap; amortization is not the obstacle, there is no win to amortize |
 | autograd graph nodes per fit | **7 x (tree nodes) + 9** exactly at every size, four per branch and five per internal node; 1,020 at 4 taxa, 12,925 at 20 | the mechanism #443 predicts, at 7x the constant it assumed |
 | the L-BFGS step against #341's 10% bar | **6.63%** of an 8-taxon SPR search, **3.57%** of a 20-taxon one; 3.18% and 2.08% of a bare fit | under the bar at both sizes and falling with size; **closed** |
 | the FFI boundary, decomposed | argument marshalling **1.1--4.9%** of a through-binding call, the binding call **90--100%**, the return **under 0.03%**; the residual is the wrapper's own validation at 0.018--0.097 ms, constant in sites. Per-crossing floor 0.0497 ms at 8 taxa, 0.0855 ms at 20 | the boundary is not most of the call; #436's kernel win did not go there |

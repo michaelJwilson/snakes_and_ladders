@@ -80,12 +80,12 @@ Whole fits agree: 8 taxa 0.104--0.113 s eager against 0.117--0.184 s
 compiled; 20 taxa 0.505--0.584 s against 0.494--0.560 s. Dynamo compiles 4
 frames with **0 graph breaks** and the value agrees with eager to 1.8e-16
 relative, so this is a compiled recursion and not a silent fallback --- it is
-simply not faster. The compile costs **42.8 s** on a cold inductor cache and
-**3.7--3.8 s** in a later process on the warm one, and it **is** amortized:
-12 distinct random topologies at 8 and at 20 taxa were served by the same 4
-frames, no recompilation, the first call 3.77 s and every later one
-3.5--4.6 ms. Amortization is therefore not what stops it; there is no
-steady-state win to amortize.
+simply not faster. The compile costs **13.6 s** with a fresh
+`TORCHINDUCTOR_CACHE_DIR` and **3.7--3.8 s** in a later process on the warm
+one, and it **is** amortized: 12 distinct random topologies at 8 and at 20
+taxa were served by the same 4 frames, no recompilation, the first call
+3.77 s and every later one 3.5--4.6 ms. Amortization is therefore not what
+stops it; there is no steady-state win to amortize.
 
 **(2) The autograd graph carries 7 nodes per tree node, not 1, and it tracks
 the tree exactly.** Nodes reachable from the loss of one
@@ -198,9 +198,8 @@ none
 it: the compiled recursion is **1.21x and 1.09x slower** than eager at 8 and
 20 taxa, with 0 graph breaks and a 1.8e-16 relative agreement, and the
 autograd graph falls only 105 to 94 nodes. The compile is cached across 12
-distinct random topologies at both sizes, so the 42.8 s cold compile is paid
-once per process and is not the obstacle; there is no steady-state win to
-amortize.
+distinct random topologies at both sizes, so the 13.6 s cold compile is paid
+once and is not the obstacle; there is no steady-state win to amortize.
 
 The graph-node count tracks the tree exactly, at **7 x (tree nodes) + 9** and
 not the 1 the ticket assumed, so the diagnosis in #443's body holds in
