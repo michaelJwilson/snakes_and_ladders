@@ -22,18 +22,27 @@ says.
 ``STATUS.md``): three weighted enumerations that are one algorithm under
 three result types, two uncapped ``itertools.product`` copies in
 :mod:`snakes_and_ladders.learn`, and three copies of an argmax over the product with a
-lexicographic tie rule. The pieces they share are here --- the product
-itself, the shift-and-normalize, the accumulation into per-site bins, and the
-argmax --- and each consumer keeps its own log-weight and its own result type
-over them. What each function's consumers are is stated in its docstring,
-because a seam with one implementer is a function that has been moved rather
-than shared.
+lexicographic tie rule. Three more sites the audit did not list write the
+same product and fold in here too, so that the guard in
+``tests/regression/test_duplication_guards.py`` can be enforced with no
+exception but this module: the torch configuration table of
+:mod:`snakes_and_ladders.opt.potts`, and the ancestral-state loops of
+:mod:`snakes_and_ladders.likelihood.parsimony` and
+:mod:`snakes_and_ladders.likelihood.brute_force`.
 
-Two enumerations stay distinct and are not adapters here, as that audit
+The pieces the eleven share are here --- the product itself, the
+shift-and-normalize, the accumulation into per-site bins, and the argmax ---
+and each consumer keeps its own log-weight and its own result type over them.
+What each function's consumers are is stated in its docstring, because a seam
+with one implementer is a function that has been moved rather than shared.
+
+Three enumerations stay distinct and are not adapters here, as that audit
 classified them: :func:`snakes_and_ladders.search.topology.enumerate_topologies` walks
-unrooted topologies by stepwise insertion rather than a product, and
+unrooted topologies by stepwise insertion rather than a product,
 :func:`snakes_and_ladders.likelihood.ldpc.enumerate_codewords` enumerates information
-bits and maps them through a generator matrix.
+bits and maps them through a generator matrix, and
+:func:`snakes_and_ladders.search.max_cut.enumerate_max_cut` is a product with one side
+fixed, which is a smaller space than this one builds.
 
 The module names no model, so anything may import it, on the same terms as
 :mod:`snakes_and_ladders.numerics`. That is what makes it the home of the seam:
