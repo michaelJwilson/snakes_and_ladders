@@ -219,9 +219,9 @@ def decode_turbo(
     """
     posterior = np.zeros(code.message_length)
     agree, residual, ran = False, np.inf, 0
-    for ran, (posterior, agree, residual) in enumerate(
-        _iterate(code, llr, iterations), start=1
-    ):
+    for step, state in enumerate(_iterate(code, llr, iterations), start=1):
+        posterior, agree, residual = state
+        ran = step
         if early_stop and agree:
             break
     return Decoding(

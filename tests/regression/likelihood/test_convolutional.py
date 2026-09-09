@@ -310,7 +310,9 @@ def test_an_impossible_edge_is_a_finite_floor_and_not_minus_infinity() -> None:
             Factor(
                 factor.name,
                 factor.variables,
-                np.where(factor.log_table <= IMPOSSIBLE_EDGE, -np.inf, factor.log_table),
+                np.where(
+                    factor.log_table <= IMPOSSIBLE_EDGE, -np.inf, factor.log_table
+                ),
             )
             for factor in graph.factors
         ],
