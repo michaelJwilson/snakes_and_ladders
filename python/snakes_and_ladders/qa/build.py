@@ -5,10 +5,13 @@ rebuilding: those are the ones a change could make stale in the committed
 document, and regenerating the rest cost most of the ``documents`` job
 while proving nothing about it (issue #154).
 
-The figures the document does not cite are still checked, at the release gate,
-where ``infra/release.sh`` runs ``--all --check``. That is the trade this
-module implements: the check moves rather than disappearing, so a figure the
-document has stopped citing cannot rot unnoticed.
+Every figure is rendered and compared at the release gate, where
+``infra/release.sh`` runs ``--all --check`` (issue #484): cited and uncited
+alike, with the stamps ignored. The stamps' false-positive rate is 100% over
+476 decisions (issue #476), so the guarantee --- a figure whose rendered bytes
+would change cannot reach a release claiming to be current --- is enforced by
+rendering every figure rather than predicted for any of them. The selection
+below is a cost decision under that gate, not a substitute for it.
 
 ``--check`` regenerates into a temporary directory and compares bytes instead
 of overwriting, so a verification run cannot itself produce the state it was
@@ -19,7 +22,7 @@ figure has a stamp beside it, ``<stem>.inputs``, recording the digest of the
 renderer's source, its import closure, the fixtures it reads and the drawing
 libraries (``snakes_and_ladders.inputs``) at the render that produced it.
 A cited figure whose stamp equals the digest of the current tree is skipped;
-``--all`` ignores the stamps, so the release gate still renders everything.
+``--all`` ignores the stamps, so the release gate renders everything.
 A pull request that changed only ``docs/tex/`` therefore renders nothing and
 its build is LaTeX alone.
 """
