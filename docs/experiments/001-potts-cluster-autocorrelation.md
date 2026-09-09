@@ -17,54 +17,18 @@ status: confirmed
 
 # Do cluster updates decorrelate faster than single-site heat bath at the transition?
 
-## Feature under test
+## Question
 
-Swendsen–Wang and Wolff cluster moves, beside the single-site heat bath behind
-one interface, decorrelate the energy in fewer sites touched than the
-single-site sweep at the critical coupling, and the gap widens with the lattice.
+Do Swendsen-Wang and Wolff cluster moves decorrelate the energy in fewer sites touched than the single-site heat bath at the exact transition `J_c = ln(1 + sqrt(q))`, by a margin that widens with the lattice?
 
-## Setup
+## Numbers
 
-Open square lattices of extent 8, 12, 16 and 24 with `q = 3` states at the
-exact transition `J_c = ln(1 + sqrt(q))`. Each sampler runs from the same
-seed and the energy autocorrelation time is measured in units of sites touched,
-so a cluster move that touches many sites is charged for them. The budget is
-the autocorrelation measurement itself rather than a fixed count of
-evaluations, which the `0` above records. Correctness of all three samplers
-is pinned separately by a chi-square against the exact Boltzmann distribution
-at an enumerable size (36 runs, six seeds, significance 0.001, worst
-`p = 0.0145`), which is what licenses comparing their speed.
-
-## Results
-
-Energy autocorrelation time, normalized to sites touched, from
-`tests/regression/search/test_potts_mcmc.py` at the commit above:
-
-| extent | single-site | Swendsen–Wang | Wolff |
-| --- | --- | --- | --- |
-| 8 | 3.27 | 2.56 | 2.71 |
-| 12 | 6.89 | 3.91 | 3.04 |
-| 16 | 9.74 | 4.33 | 3.68 |
-| 24 | 10.37 | 4.86 | 5.01 |
-
-## Figures
-
-none
+| autocorrelation time, sites touched | extent 8 | 12 | 16 | 24 |
+| --- | --- | --- | --- | --- |
+| single-site | 3.27 | 6.89 | 9.74 | 10.37 |
+| Swendsen-Wang | 2.56 | 3.91 | 4.33 | 4.86 |
+| Wolff | 2.71 | 3.04 | 3.68 | 5.01 |
 
 ## Finding
 
-Single-site slows by 3.2× between extent 8 and 24 while both cluster
-algorithms slow by roughly 1.9×, so the gap is 2.1× at extent 24 and widening.
-The separation understates the asymptotic one: the lattices are small and the
-boundary is open, both of which soften the transition.
-
-## Conclusion and actions
-
-#231 — support the other lattice types, so the comparison runs on a periodic
-lattice where the transition is sharper.
-
-## What is not claimed
-
-Nothing about the dynamic critical exponents: four extents on an open lattice
-do not fit a power law, and no exponent is stated. Nothing about performance
-away from `J_c`, where single-site updates are not slow.
+Single-site slows 3.2x between extent 8 and 24 against roughly 1.9x for both cluster algorithms, a 2.1x gap at extent 24 and widening, understated by lattices this small with an open boundary; from `pytest tests/regression/search/test_potts_mcmc.py`, whose chi-square against the exact Boltzmann distribution licenses the comparison. Action #231.
