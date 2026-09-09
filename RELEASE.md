@@ -45,9 +45,9 @@ sides *deleted* a line, as `TICKETS.md`'s branches do, the union is of the
 deletions. Two hazards a merge carries that the tree does not otherwise show:
 a textual merge of two branches' bibliography entries can leave an entry's
 closing brace missing, which `infra/check_citations.py` now walks for (issue
-#503) and a reader caught by hand before it did; and concurrent branches write colliding experiment numbers that
-`git` cannot see, three branches having written `docs/experiments/007` (issue
-#491).
+#503) and a reader caught by hand before it did; and concurrent branches write
+colliding experiment numbers that `git` cannot see, three branches having
+written `docs/experiments/007` (issue #491).
 
 ## Who does what
 
