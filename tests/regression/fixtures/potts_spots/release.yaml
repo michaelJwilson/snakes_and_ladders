@@ -1,0 +1,60 @@
+model: potts-spots
+oracle: none
+
+# The same construction as `ci` on the geometry ROADMAP.md's Stage 1 asks
+# for and `spatio_sequential_counts/stress` already declares: a 71 x 71 open
+# triangular lattice, 5,041 vertices, M = 10 classes. The two instances then
+# differ in exactly one thing -- whether the labels are observed through
+# gated emissions or scored directly -- which is the point of removing the
+# chains.
+#
+# 3**5041 configurations and no strip narrow enough to transfer, so the
+# stated oracle is none. What referees a result here is the property the
+# covariate is in the model for: a class whose alpha is positive is favoured
+# where the site is large, so the mean alpha of a site's label rises with
+# the site's size. Enumeration referees that claim exactly at `ci`; this
+# instance says it survives 5,041 sites, where a field indexed by the wrong
+# site would leave no tilt at all.
+geometry: triangular
+shape: [71, 71]
+boundary: open
+n_classes: 10
+
+# NOT the coupled fixture's J = 1.0, and the difference is measured rather
+# than preferred. The q-state Potts model on a triangular lattice orders
+# above the coupling solving `v**3 + 3 v**2 = q` for `v = exp(J) - 1`
+# (Baxter, ch. 12), which at q = 10 is J_c = 0.913. At J = 1.0 the lattice
+# is on the ordered side: a seeded draw put 3,991 of 5,041 sites into the
+# two extreme classes after 200 sweeps and the counts were still moving, so
+# the draw is a coarsening front rather than an equilibrium sample and the
+# field is swamped by it. At J = 0.7 the ten classes hold 415 to 593 sites
+# each and the tilt below is stable. The instance is declared where its own
+# claim is measurable; the swamped case is a finding, in STATUS.md.
+coupling: 0.7
+
+# A ladder over the ten classes with one exact zero, which is the null the
+# other nine are read against, as `ci`'s flat class is.
+alpha: [-0.9, -0.7, -0.5, -0.3, 0.0, 0.1, 0.3, 0.5, 0.7, 0.9]
+
+# 5,041 sizes, so a seed and a shape parameter rather than a list, on
+# `spatio_sequential_counts/stress`'s rule: the file is the seed and the
+# parameters, and the sizes are what they imply.
+sizes:
+  form: lognormal
+  seed: 4130910
+  log_sigma: 0.6
+
+# Eight independent chains, each run 60 sweeps of the whole lattice from its
+# own random start. The lattice is disordered at this coupling, so 60 sweeps
+# is past the point the tilt stops moving; the eight chains are what give it
+# an interval rather than a single number.
+seed: 20260909
+n_samples: 8
+burn_in: 60
+
+# Tolerance on the size tilt --- the mean alpha of a label in the largest
+# size quartile less the mean in the smallest --- as three standard errors
+# over the eight chains, measured at 3 x 0.0101 = 0.030 and rounded up. The
+# tilt itself measured 0.4935, against 0.0 for a field that reached the
+# wrong site.
+tolerance: 0.05
