@@ -911,6 +911,61 @@ kind and measured at **3.4e-15** and **1.5e-15** relative, inside
 rescale divide becoming a reciprocal and a multiply, which is why the pin is a
 relative tolerance and not bitwise.
 
+**The perimeter is not the cost either, and that closes the hypothesis**
+([#444](https://github.com/michaelJwilson/snakes_and_ladders/issues/444), PR 1).
+#436 left the FFI boundary as where a further port should look. It was
+measured two ways and it is not where the time is. Decomposing one
+through-binding call ([#443](https://github.com/michaelJwilson/snakes_and_ladders/issues/443))
+puts **marshalling at 1-5%** of it and the kernel at 90-100%: 0.0170 ms of
+0.3443 at 8 taxa by 1,000 sites, 0.0433 of 3.8828 at 8 by 10,000, 0.0397 of
+0.9609 at 20 by 1,000, 0.1674 of 11.6924 at 20 by 10,000. Marshalling grows
+at 1.6e-5 ms per site against the kernel's 1.1e-3, a factor of 68.
+Amortizing **every** crossing a fit would make is worth **1.34%** at 8 taxa
+and **0.79%** at 20 — a calculation from that decomposition, under the 10%
+bar the table above records ports against.
+
+The independent measurement agrees on the term. A `#[pyclass]`
+(`sandbox.pruning_problem.PruningProblem`) holding the alignment, `k` and
+`pi` and taking the branch lengths, a flat parent-index array and `leaf_row`
+as three borrowed buffers cuts the bytes a caller materialises per pass from
+**64,352 to 360** at 8 taxa by 1,000 sites and from **1,760,928 to 936** at
+20 by 11,000 — 179x and 1,881x — and cuts the argument construction it was
+built to remove from **0.173 ms to 0.023 ms** of a 5.606 ms call, which is
+the same 3% #443 decomposed. Per pass, medians over 81 interleaved repeats
+with the interquartile range, one thread under the exclusive lock: 0.157 to
+0.145 ms (**-7.9%**) at 8 by 1,000, 1.881 to 1.925 (**+2.3%**, the
+interquartile ranges overlapping, so **no change**) at 8 by 11,000, 0.434 to
+0.397 (**-8.4%**) at 20 by 1,000, and 5.606 to 5.271 (**-6.0%**) at 20 by
+11,000. **The bytes fell by three orders of magnitude and the time did not
+follow**, which is the result.
+
+One measurement does not fit that and is reported rather than dropped: 20
+candidates against one 20-taxon, 11,000-site alignment, each arm in its own
+process, reads **124.09** and **127.06 ms** through the function against
+**96.27** and **94.26 ms** through the handle (**-22.4%**, **-25.8%**), with
+a handle rebuilt per candidate at **142.54** and **129.15 ms** — a control
+that gives the held alignment back and lands at or above the function.
+`pytest-benchmark` on the same sweep under the same lock reads **91.02**
+against **88.06 ms**, **-3.3%**, and the gap between the two instruments is
+not explained by the allocator's `mmap` threshold: forcing either extreme
+made the function arm slower (156.17 ms and 192.43 ms against 121.44 default).
+So a 22-26% figure exists at one shape and is unattributed, while the
+decomposition that *is* attributed says 1-5%. The decomposition decides,
+because #436's lesson is that a figure without a mechanism does not survive
+the boundary.
+
+**And nothing crosses the boundary in the fit path today.** A search's fits
+run `likelihood.pruning_torch`; `likelihood.pruning_rust` is reached only by
+`qa.backend_agreement` and the tests, so the 18,955 forward passes above are
+on the PyTorch path. The handle therefore has no caller and would earn 1.34%
+if it had one. It is a declined implementation: it moves to
+`snakes_and_ladders.sandbox.pruning_problem` with its regression tests, which
+keep it pinned bitwise against `pruning_rust.log_likelihood`, and
+`likelihood/` is unchanged. `src/pruning.rs` keeps one kernel behind both
+bindings — `pruning_log_likelihood_core` over a topology in offsets form,
+with the existing `#[pyfunction]` an adapter from the children-lists shape —
+so nothing here is a second implementation to hold to the oracle.
+
 **The LDPC decoder, specialised from the general sum-product and held to it**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
 `likelihood.ldpc.decode` runs the log-domain `tanh` rule or min-sum under a

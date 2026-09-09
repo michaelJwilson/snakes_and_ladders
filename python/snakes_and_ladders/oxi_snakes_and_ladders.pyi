@@ -20,6 +20,7 @@ def pruning_log_likelihood(
     pi: np.ndarray,
     rescale: bool,
 ) -> float: ...
+
 class PruningProblem:
     def __init__(self, leaf_states: np.ndarray, k: int, pi: np.ndarray) -> None: ...
     def log_likelihood(

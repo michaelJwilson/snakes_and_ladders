@@ -33,9 +33,17 @@
 //! `pi` and takes only what changes. Both run
 //! `pruning_log_likelihood_core`, so there is one implementation held to the
 //! NumPy oracle, and the free function is what pins the class: the two
-//! return the same `f64`, not two values within a tolerance. Which one a
-//! caller wants is a byte count -- issue #444 carries it -- and nothing here
+//! return the same `f64`, not two values within a tolerance. Nothing here
 //! selects between them.
+//!
+//! `PruningProblem` fronts a **declined** implementation and has no caller
+//! on a hot path: `snakes_and_ladders.likelihood.pruning_rust` is the live
+//! backend, and the handle is held in
+//! `snakes_and_ladders.sandbox.pruning_problem` with the measurement that
+//! refused it -- the marshalling it removes is 1-5% of the call (issues #443
+//! and #444, and `STATUS.md`). The kernel's split into a core over a
+//! `Topology` in offsets form is kept because both bindings run it, not
+//! because the class needs it.
 //!
 //! The recursion itself (`pruning_log_likelihood_impl`) is plain Rust with
 //! no PyO3 types, returning `Result<f64, String>`; `pruning_log_likelihood`
@@ -223,14 +231,14 @@ impl Topology {
 /// An alignment, `k` and `pi` held across many pruning passes: the state
 /// behind the `PruningProblem` binding, PyO3-free so `cargo test` reaches it.
 ///
-/// **What this holds and why.** Of the seven arguments
-/// `pruning_log_likelihood` takes, one -- the branch lengths -- changes
-/// between the forward passes of a fit, and the topology changes between
-/// candidates of a search. The alignment changes for neither: issue #436's
-/// profile is 301 fits and 18,955 forward passes over one alignment, so it
-/// crossed the boundary about 63 times more often than it changed. Holding
-/// it here is a byte count, not a convenience, and issue #444's pull request
-/// carries the count.
+/// **What this holds, and the measurement that declined it.** Of the seven
+/// arguments `pruning_log_likelihood` takes, one -- the branch lengths --
+/// changes between the forward passes of a fit, and the topology changes
+/// between candidates of a search; the alignment changes for neither.
+/// Holding it cuts the bytes a caller materialises per pass by 179x to
+/// 1,881x. It does not cut the time with them: marshalling is 1-5% of the
+/// call, so amortizing every crossing a fit would make is worth 1.34% at 8
+/// taxa and 0.79% at 20 (issues #443 and #444). `STATUS.md` carries both.
 ///
 /// **A problem handle is not a generator.** `src/sampling.rs` states that
 /// Rust holds no random generator, because a chain's reproducibility must
@@ -646,7 +654,8 @@ pub fn pruning_log_likelihood(
 
 /// PyO3 boundary for [`PruningProblemCore`]: an alignment held across many
 /// pruning passes, so it crosses the FFI boundary once per alignment rather
-/// than once per pass.
+/// than once per pass. Declined, and consumed only by
+/// `snakes_and_ladders.sandbox.pruning_problem` -- see the module docs.
 ///
 /// ```text
 /// PruningProblem(leaf_states, k, pi)             # crosses once
