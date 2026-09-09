@@ -17,6 +17,12 @@ from itertools import product
 
 import numpy as np
 import pytest
+from snakes_and_ladders.likelihood.hmm_paths import (
+    PathEnumeration,
+    emission_log_density,
+    enumerate_hidden_paths,
+    path_log_probability,
+)
 from snakes_and_ladders.likelihood.message_passing import sum_product
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.likelihood.spatio_sequential import enumerate_spatio_sequential
@@ -56,6 +62,7 @@ from snakes_and_ladders.sim.factor_graph import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.hmm import simulate_sequences
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -154,19 +161,95 @@ def test_the_generic_sweep_samples_the_hidden_path_posterior() -> None:
     assert chi_square_p_value(counts, len(chain.states) * posterior) > SIGNIFICANCE
 
 
-@pytest.mark.simulated_truth
-def test_the_block_move_draws_the_whole_chain_exactly() -> None:
-    # Every block draw is an independent sample from the posterior, so no
-    # thinning is needed: that is what "exact" buys.
-    graph, paths, posterior = _chain()
-    state = np.zeros(5, dtype=np.int64)
-    rng = np.random.default_rng(4)
-    counts = np.zeros(len(paths))
-    for _ in range(3000):
-        chain_block_sweep(graph, state, rng, [f"z{t}" for t in range(5)])
-        counts[paths.index(tuple(int(v) for v in state))] += 1
+BLOCK_LENGTH = 8
+BLOCK_DRAWS = 4000
+#: Paths are lumped, most probable first, until a cell expects at least this
+#: many draws: a chi-square over all 3**8 cells is invalid at any sample size
+#: the CI budget holds, since almost every cell would expect far under one.
+CELL_FLOOR = 25.0
 
-    assert chi_square_p_value(counts, 3000 * posterior) > SIGNIFICANCE
+
+def _enumerated_chain() -> tuple[FactorGraph, np.ndarray, PathEnumeration, np.ndarray]:
+    """The declared HMM instance, its factor graph, and both enumerations of it.
+
+    The observations are the fixture's own first sequence, truncated to a
+    length the path enumeration reaches; the posterior the block move is held
+    to is :mod:`snakes_and_ladders.likelihood.hmm_paths`', which shares no
+    code with the sampler.
+    """
+    params = fixture("hmm", "ci").params
+    observations = simulate_sequences(params).observations[0][:BLOCK_LENGTH]
+    density = emission_log_density(params, observations)
+    graph = from_hmm(np.log(params.initial), np.log(params.transition), density)
+    joint = np.array(
+        [
+            path_log_probability(params, np.array(path), observations)
+            for path in product(range(params.n_states), repeat=BLOCK_LENGTH)
+        ]
+    )
+    posterior = np.exp(joint - joint.max())
+    return (
+        graph,
+        observations,
+        enumerate_hidden_paths(params, observations),
+        posterior / posterior.sum(),
+    )
+
+
+def _lumped(posterior: np.ndarray, n_draws: int) -> list[list[int]]:
+    """Paths in descending posterior order, cut wherever a cell expects ``CELL_FLOOR``."""
+    cells: list[list[int]] = []
+    current: list[int] = []
+    mass = 0.0
+    for index in np.argsort(-posterior):
+        current.append(int(index))
+        mass += float(posterior[index])
+        if mass * n_draws >= CELL_FLOOR:
+            cells.append(current)
+            current, mass = [], 0.0
+    cells[-1].extend(current)
+    return cells
+
+
+@pytest.mark.oracle
+def test_the_block_move_draws_the_whole_chain_from_the_enumerated_path_posterior() -> (
+    None
+):
+    # Every block draw is an independent sample from the posterior, so no
+    # thinning is needed: that is what "exact" buys. Held to the 3**8 = 6,561
+    # enumerated paths of the declared instance, both marginally and jointly.
+    # Over 4,000 draws the largest per-site deviation from the enumerated
+    # marginal is 0.0146, the smallest per-site chi-square p-value 0.062, and
+    # the p-value of the joint over 36 lumped cells 0.251; over seeds 0 to 5
+    # the smallest of either was 0.062.
+    graph, _, enumerated, posterior = _enumerated_chain()
+    names = [f"z{t}" for t in range(BLOCK_LENGTH)]
+    paths = list(product(range(enumerated.posterior.shape[1]), repeat=BLOCK_LENGTH))
+    index = {path: position for position, path in enumerate(paths)}
+    state = np.zeros(BLOCK_LENGTH, dtype=np.int64)
+    rng = np.random.default_rng(0)
+
+    drawn = np.zeros(len(paths))
+    marginal = np.zeros_like(enumerated.posterior)
+    for _ in range(BLOCK_DRAWS):
+        chain_block_sweep(graph, state, rng, names)
+        drawn[index[tuple(int(value) for value in state)]] += 1
+        marginal[np.arange(BLOCK_LENGTH), state] += 1
+
+    assert np.abs(marginal / BLOCK_DRAWS - enumerated.posterior).max() < 0.03
+    for site in range(BLOCK_LENGTH):
+        assert (
+            chi_square_p_value(marginal[site], BLOCK_DRAWS * enumerated.posterior[site])
+            > SIGNIFICANCE
+        )
+    cells = _lumped(posterior, BLOCK_DRAWS)
+    assert (
+        chi_square_p_value(
+            np.array([drawn[cell].sum() for cell in cells]),
+            np.array([posterior[cell].sum() for cell in cells]) * BLOCK_DRAWS,
+        )
+        > SIGNIFICANCE
+    )
 
 
 @pytest.mark.oracle

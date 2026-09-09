@@ -141,6 +141,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.hmm_paths
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.mixture_assignments
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.surrogate
    :members:
 

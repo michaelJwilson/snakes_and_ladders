@@ -2272,6 +2272,7 @@ best state and the trajectory out — and one exchange step over
 | `likelihood.potts.enumerate_potts` | log weights over the product, then marginals | one algorithm, graph type | its own pin: the transfer matrix on a chain to machine precision |
 | `likelihood.hmm_paths.enumerate_hidden_paths` | log joints over the product, then the evidence, posteriors and both decodings | one algorithm, chain type | its own pin: the forward recursion to 1e-12 |
 | `likelihood.spatio_sequential.enumerate_spatio_sequential` | log joints over labellings times paths, then three posteriors | one algorithm, coupled type | its own pin: the per-class forward recursion at a relative gap of 0.0 |
+| `likelihood.mixture_assignments.enumerate_mixture_assignments` (#393) | log joints over every component assignment, then the evidence, the responsibilities and the argmax | one algorithm, independent-observation type | its own pin: the factorized E step at 1.2e-16 relative |
 | `likelihood.ldpc.enumerate_codewords` (#356) | every codeword from the generator matrix | product enumeration over the information bits | `H c = 0` on every word and the `2^k` count |
 
 The fix is one weighted enumeration — cardinalities and a log-weight
@@ -2284,11 +2285,21 @@ their result types over the shared kernel.
 from the suite by `infra/problems_tables.py` and typeset in the textbook's
 applicability tables; each is a cell where an oracle is wanted:
 
-| problem | method | referee today | the oracle it would need |
+Five of the six closed at 0.5.0 ([#393](https://github.com/michaelJwilson/snakes_and_ladders/issues/393)),
+each at the CI size and each with the agreement it realized:
+
+| problem | method | what now referees it | agreement | tolerance |
+| --- | --- | --- | --- | --- |
+| hidden Markov model | sampling (`chain_block_sweep`) | the enumerated path posterior over `3**8` paths, by chi-square | 0.0146 largest per-site deviation; smallest per-site p-value 0.062; joint p-value 0.251 over 36 lumped cells | p > 0.01 |
+| hidden Markov model | expectation–maximization (`baum_welch_family`) | the enumerated path evidence at the start, at three iterates, and at the fixed point | 0.0 relative at the start; 8.5e-13 at convergence; 2.2e-12 on the initial distribution against the enumerated first-site posterior | 1e-11 and 1e-10 |
+| coupled model | the annealed initializer (`graph_burn_in`) | the enumerated maximum-posterior labelling under the parameters it fitted | the mode on 9 of 12 instances, within 1.05 nats on the other 3, against a uniform start's 2 of 12 and a mean 1,020.8 nats | 8 of 12, 1.5 nats |
+| Gaussian mixture | the evaluator, the gradient fit and k-means++ | `enumerate_mixture_assignments` over `2**16` assignments | evidence 1.2e-16 relative, responsibilities 4.4e-16; the seeded start in the maximum-posterior assignment on 20 of 20 seeds against uniform seeding's 10 | 1e-12; 20 of 20 |
+| continuous test functions | the initializers (`RandomRestart`) | the published Himmelblau minimizers, since a continuous surface has nothing to enumerate | every fit within 6.2e-07 of a published minimizer, value 7.9e-31 | 1e-5, and 1e-12 on the value |
+
+Two remain, and neither is an enumeration that was not attempted:
+
+| problem | method | referee today | why it is not #393's to close |
 | --- | --- | --- | --- |
-| hidden Markov model | expectation–maximization (`baum_welch_family`) | monotonicity and agreement with the gradient fit, neither an oracle kind | the path enumeration's fixed point, or recovery marked as simulated truth |
-| hidden Markov model | sampling (`chain_block_sweep`) | simulated truth only | the enumerated path posterior by chi-square, as the Potts sweeps have |
-| coupled model | the annealed initializer (`graph_burn_in`) | simulated truth only (planted labels) | the enumerated MAP labelling on the canonical instance |
-| Gaussian mixture | the evaluator, the gradient fit and k-means++ | simulated truth, or a mathematical property | the enumerated responsibilities on a tiny instance; the closed-form seeding cost against the dynamic programme is the one oracle the row has |
-| continuous test functions | the initializers | simulated truth only | the analytic minimizers the fit is already held to |
-| any problem at the release tier | the HMM, the mixture, the test functions, the lattice and the code | simulated truth only at that tier | a branch-and-bound bound for trees past eight taxa (#329); a boundary contraction for lattices past the transfer-matrix width; density evolution beyond the erasure channel for the code (#340 part 2) |
+| phylogenetic tree, general time-reversible | the distance start (`FromDistances` on `log_det_distance`) | no test of either significant kind names it as a start | a missing test rather than a missing oracle: `enumerate_topologies` is already the oracle the row would use, and what is absent is a test that starts a GTR fit from the log-det distance at all (#364) |
+| phylogenetic tree, Jukes–Cantor | the learned surrogate (`fit_surrogate`) | simulated truth: the maximized likelihood of each enumerated topology | the target a surrogate is trained and scored against is itself a fit, so there is no exact answer to hold it to; the enumeration supplies the topology set, not the number |
+| any problem at the release tier | the HMM, the mixture, the test functions, the lattice and the code | simulated truth only at that tier | out of #393's scope by its own statement: a branch-and-bound bound for trees past eight taxa (#329); a boundary contraction for lattices past the transfer-matrix width; density evolution beyond the erasure channel for the code (#340 part 2) |
