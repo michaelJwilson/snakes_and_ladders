@@ -1,6 +1,8 @@
 """Regression tests for the two search QA figures.
 
-The sweeps behind these figures are 105 candidate fits apiece, which belongs
+The sweeps behind these figures are a candidate fit per topology --- 105 for
+the trajectory figure and, since issue #498 moved it to the 5-taxon fixture,
+15 for the comparison --- which belongs
 in the document build rather than the per-PR suite. What runs per
 PR is what can be wrong cheaply: the caption, which must report the numbers
 it was handed rather than numbers somebody typed, and the shape of what the
@@ -19,12 +21,19 @@ from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
 
-FIXTURE = FIXTURES_DIR / "tree_search/stress.yaml"
+# The instances the manifest renders each figure from. They differ since
+# issue #498: the comparison draws two trees and needs only an exhaustive
+# enumeration to pick the runner-up, which 5 taxa gives; the trajectory figure
+# needs a climb to draw, and at 5 taxa hill climbing terminates on the first
+# evaluation and there is none.
+TRAJECTORY_FIXTURE = FIXTURES_DIR / "tree_search/stress.yaml"
+COMPARISON_FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 
 # A 5-taxon tree is 15 unrooted topologies against the 6-taxon fixture's 105,
-# so the same sweep runs in a few seconds. Written per test rather than added
-# as a fixture file: nothing is asserted against its truth, and the
-# repository's fixtures are for data that is.
+# and a third of the sites either rendered fixture carries, so a render that
+# only has to produce a file and a caption is cheap for both. Written per test
+# rather than added as a fixture file: nothing is asserted against its truth,
+# and the repository's fixtures are for data that is.
 _SMALL_PARAMS = """
 seed: 20260906
 n_sites: 400
@@ -59,8 +68,8 @@ def _small_fixture(tmp_path: Path) -> Path:
     return path
 
 
-def _params() -> SimulationParams:
-    return load_simulation_params(FIXTURE)
+def _params(path: Path) -> SimulationParams:
+    return load_simulation_params(path)
 
 
 # --- the trajectory figure ----------------------------------------------
@@ -68,7 +77,7 @@ def _params() -> SimulationParams:
 
 @pytest.mark.structural
 def test_trajectory_caption_reports_the_landscape_it_was_given() -> None:
-    params = _params()
+    params = _params(TRAJECTORY_FIXTURE)
     trajectories = {
         "nni": [(0, -9000.0), (14, -8775.5)],
         "spr": [(0, -9000.0), (48, -8775.5)],
@@ -86,7 +95,7 @@ def test_trajectory_caption_reports_the_landscape_it_was_given() -> None:
 
 @pytest.mark.structural
 def test_trajectory_caption_is_latex_safe() -> None:
-    params = _params()
+    params = _params(TRAJECTORY_FIXTURE)
     _, caption = search_trajectory.build_figure(
         {"nni": [(0, -1.0), (2, -0.5)]}, -0.5, np.array([-1.0, -0.5]), -0.5, params
     )
@@ -122,7 +131,9 @@ def test_trajectory_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
 def test_the_landscape_is_every_topology_sorted_ascending() -> None:
     # The oracle the figure rests on: 6 taxa is 105 unrooted topologies, and
     # the panel is meaningless if the sweep missed any.
-    _, truth, landscape, reached = search_trajectory.search_trajectories(_params())
+    _, truth, landscape, reached = search_trajectory.search_trajectories(
+        _params(TRAJECTORY_FIXTURE)
+    )
 
     assert landscape.size == 105
     assert list(landscape) == sorted(landscape)
@@ -135,7 +146,7 @@ def test_the_landscape_is_every_topology_sorted_ascending() -> None:
 
 @pytest.mark.structural
 def test_comparison_caption_reports_both_scores_and_the_split() -> None:
-    params = _params()
+    params = _params(COMPARISON_FIXTURE)
     found = Node(
         name="root",
         branch_length=None,
@@ -171,7 +182,7 @@ def test_comparison_caption_reports_both_scores_and_the_split() -> None:
 @pytest.mark.structural
 def test_comparison_caption_says_so_when_the_truth_was_not_found() -> None:
     # The flag has to be able to read both ways, or it is decoration.
-    params = _params()
+    params = _params(COMPARISON_FIXTURE)
     tree = Node(
         name="root",
         branch_length=None,
@@ -209,7 +220,7 @@ def test_comparison_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
 @pytest.mark.release
 def test_the_search_finds_the_generating_tree_and_rejects_a_worse_one() -> None:
     found, found_score, other, other_score, difference, recovered = (
-        search_topologies.found_and_runner_up(_params())
+        search_topologies.found_and_runner_up(_params(COMPARISON_FIXTURE))
     )
 
     assert recovered

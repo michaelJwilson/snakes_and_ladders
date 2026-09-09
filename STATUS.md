@@ -29,7 +29,7 @@ from the suite by `infra/ledgers.sh` and not committed (issue #425);
 | 2.1 RL formulation & deployment | The estimator, the Potts, hidden-path and tree environments, a critic, an actor–critic, PPO and a PUCT planner landed, each pinned to enumeration; a tree policy trained on the fixture hill climbing fails, a tie over one feature and ahead of greedy over the seven-column set (#349); not yet measured against restarts | Enumerated gradient against finite differences at 1.5e-11 relative; on the Potts chain REINFORCE 86.6%, PPO 96.3% and the planner 92.6% at 8.3 evaluations per episode against greedy's 80.2% at 48; on the 7-taxon fixture the single feature reaches 0.487 against greedy's 0.480 (sign test `p = 0.79`) and the full set 0.796, ahead on 16 of 16 seeds (`p = 3.05e-5`), while restarts reach 1.000 at the same budget | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139), [#192](https://github.com/michaelJwilson/snakes_and_ladders/pull/192), [#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193), [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#320](https://github.com/michaelJwilson/snakes_and_ladders/pull/320), [#349](https://github.com/michaelJwilson/snakes_and_ladders/pull/349), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355) |
 | 2.2 Curriculum learning | Started: the surrogate curriculum from 5 to 6 taxa and from 3x3 to 4x6 lattices; weight transfer for a policy and batched rollout not started | Zero-shot at six taxa the set surrogate falls to `R^2` 0.68 and recovers to 0.94 after transfer, the MLP holds 0.92 and reaches 0.95; lattice surrogates transfer zero-shot at 0.99 | [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 | 2.3 Empirical validation | The budget utility and the exact paired test landed, and six budget-matched comparisons are recorded; no empirical alignment and no external tool ([#126](https://github.com/michaelJwilson/snakes_and_ladders/issues/126)) | Every comparison at one budget over shared seeds with McNemar's exact test: the glass, Rastrigin, the mixture, the relaxation against greedy, the cluster updates at the transition, and the tree's starts at equal evaluations | [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348) |
-| 2.4 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded; the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
+| 2.4 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded, each capped at a ten-line body (#458); the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template and the cap per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
 | Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half landed, refereed by enumeration and the Hadamard closed form, and not shown to beat a classical baseline, so it is conserved in `sandbox/`; learned surrogates rank a neighbourhood with exact re-scoring of the top candidates; stochastic escape by epsilon-greedy landed | Gumbel-softmax exact at every corner to 1e-11 and deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098`; the tropical relaxation exact at every corner to 3.8e-16 relative, four-point violation of the Hadamard metric under 1e-12, ascent 8/8 at five and six taxa and 7/8 at eight against the enumerated maximum, and neighbor joining reaching it at no gradient steps; a surrogate-ranked SPR search reaches its optimum from 4/4 starts at 5 fits against 312; escape from a local optimum rises from 0.111 at `epsilon = 0` to 0.883 at 0.4 | [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 
 ## Progress Since the 0.4.0 Audit
@@ -398,6 +398,29 @@ chi-square at 0.001 over 400 draws — labellings against the enumerated Potts
 prior, transitions against `t`, first states against `Pi_m`, and symbol
 counts per (class, state) against the families' tables — and the label
 posterior recovers planted labels on 42 of 48 nodes at `S = 6`.
+
+**A turbo code, the second member of the fourth problem class**
+([#233](https://github.com/michaelJwilson/snakes_and_ladders/issues/233)).
+`sim.convolutional` builds a recursive systematic convolutional encoder from
+two octal generator polynomials and holds its trellis as `(state, input)`
+arrays: `2 ** m` states, two edges leaving each, the parity bit per edge and
+the tail input that empties the register. The default register is the
+memory-2 `(7, 5)`, and LTE's `(13, 15)` is carried as the second. Two of
+them fed the same message in two orders through a seeded random interleaver
+make the rate-1/3 unpunctured turbo code: both encoders terminated, so a
+`K`-bit message transmits `3 K + 4 m` bits and both ends of both trellises
+are pinned. Pins, none sharing code with the arrays: the parity stream
+equals an explicit `b(D)/a(D)` long division over GF(2) on 40 random inputs
+for both registers; encoding is linear (`c(u + v) = c(u) + c(v)` on 10 pairs
+at `K = 12` and `K = 40`) and systematic; the tail returns the register to
+the zero state from every state it reaches and is not a string of zeros; the
+interleaver's inverse composes to the identity at `K = 12`, `256` and
+`1,024`; and `parity_check` turns the code into a `ParityCheck` by GF(2)
+nullspace at `n <= 512`, whose `2 ** 10` codewords under #340's
+`enumerate_codewords` are exactly the `2 ** 10` words the shift register
+produces at `K = 10`. Three instances are declared: `K = 12` (4,096
+messages, enumerable), `K = 256` (the figure's) and `K = 1,024` (the
+waterfall's).
 
 **A low-density parity-check code, the fourth problem class**
 ([#340](https://github.com/michaelJwilson/snakes_and_ladders/issues/340), part 1).
@@ -841,6 +864,77 @@ against a 3.65 ms interval, which is what the ranked search's 2 fits against
 13 buys. Making the interval itself cheap is a separate decision against a
 profile and is not taken here.
 
+**BCJR, Viterbi and the turbo iteration, held to enumeration and to the
+general sum-product**
+([#233](https://github.com/michaelJwilson/snakes_and_ladders/issues/233)).
+`likelihood.convolutional.bcjr` runs the log-MAP forward and backward
+recursions with the observation on the *edge* rather than the state, since
+the bits transmitted at a step are a function of the transition taken, and
+returns the extrinsic ratio a turbo iteration exchanges;
+`viterbi` is max-product over the same branch metrics.
+`sim.factor_graph.from_trellis` presents the chain to the general
+implementation, extending #340's seam rather than adding a second.
+Pins at the enumerable size, on the `(7, 5)` register: the BCJR bit
+posteriors equal the sum over all `2 ** K` messages to **2.8e-14** in
+log-odds and the evidence to **1.4e-14** at `K = 10`, `sigma = 0.9`; the
+tree schedule of `message_passing.sum_product` on `from_trellis` gives the
+same posteriors to **2.7e-15** and the same `log Z` to **3.6e-15** at
+`K = 8`; `max_product` returns the Viterbi path on five draws; and a
+received word at `sigma = 1.6` separates the bitwise from the blockwise MAP,
+so the two decodings are pinned as different answers rather than assumed
+alike. An a priori ratio is pinned by enumerating with it folded into the
+systematic stream, which is the same posterior by definition.
+
+`likelihood.turbo.decode_turbo` runs the serial extrinsic exchange and
+returns #340's `Decoding` unchanged, with `decoded` reading the two
+constituent decoders' agreement in place of a syndrome. The joint graph has
+cycles, so equality against the exact bitwise MAP is not asserted and the
+gap is measured on the declared instance: at `K = 12`, 100 frames and 1,200
+message bits per point, the bit error rate at 8 iterations is 0.115, 0.061,
+0.033 and 0.013 at 0, 1, 2 and 3 dB against the exact MAP's 0.092, 0.037,
+0.019 and 0.004 — a factor of 1.26, 1.66, 1.74 and 3.20, which a `K = 12`
+interleaver does not close. Per point the iteration is asserted only *no
+worse* than its first iteration, because at 2 dB the two tie at 40 errors
+and 1,200 bits cannot separate them; the strict improvement is asserted over
+the four points together, 267 errors against 306. At `K = 1,024`, 200 frames
+per point over six points (182 s), the waterfall turns between 0.4 and 1.2
+dB.
+
+*The one optimization, ranked before it was written.* `cProfile` over five
+`K = 1024` decodings at 8 iterations put **21.9%** of self time in
+`numpy.ufunc.at` and 7.3% in the `numpy.full` allocations feeding it --- the
+scatter the forward recursion used to carry `alpha[t, s] + gamma` into
+`next_state[s, u]`. But `next_state[:, u]` is a permutation, which a test
+already pinned, so the scatter is a *gather* through its inverse; `Trellis`
+now carries that inverse and the recursion reads it. Measured on
+`pytest-benchmark`, single-threaded, exclusive host: one BCJR pass at
+`K = 1024` **12.42 ms to 9.83 ms (20.9% faster)** and at `K = 256`
+**3.29 ms to 2.56 ms (22.2%)**; eight turbo iterations **221.7 ms to
+151.1 ms (31.8%)** and **53.9 ms to 38.7 ms (28.3%)**. The release waterfall
+fell from 239 s to 182 s with it. Agreement with the enumeration oracle is
+unchanged at 2.8e-14 in log-odds and 1.4e-14 on the evidence, which is what
+says the reassociation moved nothing. After the change 95.1% of self time is
+`bcjr`'s own bytecode --- the Python loop over `K + m` steps --- which is the
+shape a compiled backend would take next; no port is proposed here, because
+none has been measured through its binding.
+
+*The departure, reported rather than asserted.* The ensemble bit error rate
+is **not** monotone in the iteration count. Over the six declared points at
+`K = 256` it rises between consecutive iterations at four of them, the
+largest rise 2.3e-3 at 0 dB between iterations 7 and 8, and every rise is
+inside one binomial interval of the 12,800 message bits the point rests on.
+The suite therefore asserts only that the last iteration beats the first and
+that no rise exceeds twice that interval. At `K = 12` with a shorter
+interleaver the same non-monotonicity is larger relative to the rate. It is
+a property of loopy sum-product on a serial schedule, not a defect here.
+
+*A second negative result.* At `K = 12` the code buys nothing at 0 dB: the
+exact bitwise MAP's bit error rate, 0.092, is the uncoded antipodal closed
+form's 0.079 to within the sample, and the iteration's 0.115 is above it. Short-block turbo codes are worse than
+uncoded below the turn, which is why the closed-form pin is stated at
+`K = 256` and above, where the coded curve is under it at every declared
+point.
+
 **A cheaper climb, and a kernel the compiler can vectorize**
 ([#408](https://github.com/michaelJwilson/snakes_and_ladders/issues/408)).
 Each change was ranked before it was written. `cProfile` over an eight-taxon
@@ -1265,7 +1359,13 @@ returns every fixture and random trees at 20 and 50 taxa from their path
 lengths with every branch to `1e-12`, and on the six-taxon fixture recovers the
 topology on every replicate inside Atteson's radius of 0.030 — recovery
 **0.72, 0.96, 1.00 and 1.00** over 50 seeds at 100, 300, 1,500 and 10,000 sites, with
-**0, 0, 2 and 46** replicates inside the radius. `likelihood.hadamard` is the
+**0, 0, 2 and 46** replicates inside the radius. The guarantee is narrower than
+the recovery: against the largest distance standard error and the largest
+realized error at each fixture's declared sites and seed, the radius is
+**0.035** against **0.040** and **0.046** at five taxa, **0.030** against
+**0.039** and **0.056** at six, and **0.025** against **0.0035** and
+**0.0065** at eight, so neighbor joining recovers all three topologies and
+only the eight-taxon fixture sits inside the theorem. `likelihood.hadamard` is the
 two-state Hadamard conjugation at up to 12 taxa, exact to `1e-12` against the
 pruning likelihood evaluated on every pattern, with the four-state alignment
 reduced to it at `2/3` of every branch; the Kimura three-parameter conjugation
@@ -2067,9 +2167,21 @@ and this file now cites them. Six are recorded at 0.5.0: the mixture at 3,000
 evaluations (004), the tree policy's feature set (005), and the tree's starts
 at equal evaluations (006). The applicability tables of §1.3 cite a file by
 its number, and a citation naming one that does not exist fails the
-generation, so a retraction cannot leave the textbook pointing at nothing. The Aim run store (#75) is part 2, behind the
-dependency's approval; until then the Results section is typed from the
-measurement and names the script that produced it.
+generation, so a retraction cannot leave the textbook pointing at nothing.
+
+**The record is capped at one screen, so what it holds is chosen**
+([#458](https://github.com/michaelJwilson/snakes_and_ladders/issues/458)).
+Seven prose sections collapse to three — question, numbers, finding — and the
+body is at most ten non-blank content lines after the front matter, neither the
+title nor a section heading among them; the front matter is untouched, since it
+is the reproducibility record. The six files fall from **70, 69, 69, 114, 82
+and 141** lines to **34, 34, 33, 34, 34 and 34**, bodies of **7, 7, 6, 7, 7 and
+7** content lines, every one of them a question, a table and a finding. No number
+was deleted to fit: each one displaced was already evidence in this file or an
+argument in the pull request that carried it, and the guard that validates the
+files now fails an eleventh content line. The Aim run store (#75) is part 2, behind the
+dependency's approval; until then the numbers are typed from the
+measurement and the file names the command that produced them.
 
 ## Stage 3 — Research Extensions
 
