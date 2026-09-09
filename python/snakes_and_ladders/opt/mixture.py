@@ -40,7 +40,11 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders.emissions import GaussianEmission, pooled_variance_floor
+from snakes_and_ladders.emissions import (
+    EmissionFamily,
+    GaussianEmission,
+    pooled_variance_floor,
+)
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
 from snakes_and_ladders.opt.objective import Objective
 
@@ -239,7 +243,7 @@ class GaussianMixtureObjective:
 def mixture_log_likelihood(
     observations: torch.Tensor,
     log_weight: torch.Tensor,
-    components: GaussianEmission,
+    components: EmissionFamily,
 ) -> torch.Tensor:
     """``sum_i log sum_k w_k N(y_i; mu_k, s_k)``, in log space throughout (``eq:mixture``).
 
@@ -249,14 +253,19 @@ def mixture_log_likelihood(
         Observations, shape ``(n_samples,)``.
     log_weight : torch.Tensor
         Log mixing weights, shape ``(n_components,)``.
-    components : GaussianEmission
-        The component densities.
+    components : EmissionFamily
+        The component densities. Any family, not only a Gaussian one: the
+        mixture asks its components for a log-density and for nothing else,
+        which is what lets :mod:`snakes_and_ladders.opt.emission_mixture` fit
+        a mixture of count emissions through this function unchanged.
 
     Returns
     -------
     torch.Tensor
-        Scalar, differentiable with respect to every parameter. A **density**,
-        so it may be positive; the mixture inherits that from its components.
+        Scalar, differentiable with respect to every parameter. A **density**
+        where the components are continuous, so it may be positive; a
+        probability where they are discrete. The mixture inherits which from
+        its components.
     """
     return torch.logsumexp(
         log_weight + components.log_density(observations), dim=-1
@@ -266,7 +275,7 @@ def mixture_log_likelihood(
 def responsibilities(
     observations: torch.Tensor,
     log_weight: torch.Tensor,
-    components: GaussianEmission,
+    components: EmissionFamily,
 ) -> torch.Tensor:
     """``P(component | observation)``, shape ``(n_samples, n_components)`` (``eq:responsibilities``).
 
