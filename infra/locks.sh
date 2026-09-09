@@ -34,6 +34,19 @@
 # and 3.3 s of a queued validation's wait was spent behind a measurement that
 # had not started.
 #
+# WRITER STARVATION IS OPEN, and measured rather than assumed (#431). `flock`
+# promises no writer preference: a fresh shared request is granted while an
+# exclusive one waits. Three validation loops running 0.5 s jobs back to back
+# starved a measurement for the whole 18 s stream, 5 runs of 5; the same stream
+# against the implementation this replaces let it in within 0.06 s, because
+# that one collected slots incrementally and so made progress. Nothing is added
+# here to prevent it: the smallest fix is a turnstile -- a measurement holding
+# a second lock exclusively while it waits for this one, a validation passing
+# through that lock before asking for this one -- measured at 0.08 s against
+# 4.99 s over a 6 s stream, and it costs the guarantee directly above, since a
+# queued measurement then does block a validation that could have run. That
+# trade is #431's to make.
+#
 # THREADS. Holding the machine is not using it. A measurement runs at whatever
 # thread count the caller set -- one, per `tests/conftest.py` -- because every
 # baseline in `STATUS.md` and `DEV.md` was taken at one thread and a four-thread
@@ -80,8 +93,7 @@ with_lock() {
   local dir host slot fd status
   dir="$(_lock_dir)"
 
-  # The one wait a measurement does. Each descriptor closes when this shell
-  # exits, so a killed job leaks nothing.
+  # The one wait a measurement does. Each descriptor closes when this shell exits, so a killed job leaks nothing.
   exec {host}>"$dir/host.lock"
   if ! flock -w "$SAL_LOCK_WAIT" "$mode" "$host"; then
     exec {host}>&-
