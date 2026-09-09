@@ -67,6 +67,18 @@ their fixtures through; and `max_flow` with `ising_ground_state`, the
 minimum-cut kernels behind `snakes_and_ladders.search.maxflow_rust`. Reinstall after
 editing anything under `src/`; the compiled module does not rebuild itself.
 
+One binding is not in that build. `pruning_gradient`, the `burn` taped
+gradient issue #449 measured and declined, sits behind the `sandbox` Cargo
+feature so the default install compiles no `burn` (34 crates in 37 s against
+102 in 86 s; `DEV.md`, Build System). Nothing needs it: the module in front of
+it, `snakes_and_ladders.sandbox.pruning_burn`, imports either way and refuses
+to run without it, and its tests skip. To run them, build with the feature:
+
+```
+maturin develop --release --features sandbox
+pytest tests/regression/likelihood/test_pruning_burn.py
+```
+
 ## Running the tests
 
 ```
@@ -77,6 +89,10 @@ pytest      # Python: regression tests (tests/regression), a pytest-benchmark
 cargo test  # Rust: unit tests for the PyO3 bindings (src/lib.rs)
 cargo bench # Rust: Criterion benchmarks (benches/)
 ```
+
+Add `--features sandbox` to either `cargo` command for the conserved route's
+own tests and bench; `infra/release.sh` runs both that way, and nothing else
+does.
 
 `pytest` reads its configuration from `pyproject.toml`. To reproduce the CI
 gate, including coverage:

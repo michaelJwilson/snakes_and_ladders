@@ -48,4 +48,9 @@ says so first, and names the experiment, the ratio and the host.
 again: crossing the FFI boundary once per search rather than once per pass
 (issue #444), which cut bytes per pass 1,881x and left wall time within 8.4%
 at every size measured.
+:mod:`~snakes_and_ladders.sandbox.pruning_burn` is here on the same rule once
+more: ``burn``'s taped gradient over the Felsenstein recursion (issue #449),
+at 46.80 ms against the route that replaced it at 16.36. Its Rust half is
+behind the ``sandbox`` Cargo feature and absent from the default build, so the
+module imports either way and refuses to run without it.
 """

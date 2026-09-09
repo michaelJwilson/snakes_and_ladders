@@ -38,6 +38,14 @@ and is principle.
   numbers that declined it. So its tests and its benchmark move in with it
   and keep running beside the winner's: a decline nothing re-measures has
   become an assertion about a version nobody is holding.
+- **What it costs the default build, it does not cost.** A conserved route
+  carries its own dependencies behind a build flag, off by default, so the
+  wheel, the per-pull-request jobs and a developer's install pay nothing for a
+  route that lost. `DEV.md` names the flag and where it is compiled.
+- **Something has to build it on a schedule.** A route nothing compiles stops
+  compiling the first time a neighbouring API moves, and the conserved
+  comparison is then unrunnable exactly when someone wants to re-run it. A
+  flag no gate turns on is a deletion with extra steps.
 - **Only `tests/` and `snakes_and_ladders.qa` import from here.** Never
   `sim/`, `likelihood/`, `opt/`, `search/` or `learn/`, asserted by
   `tests/regression/test_sandbox.py`. A hot path that reaches back into its
@@ -61,7 +69,7 @@ says so where it is written. Each module's docstring names the experiment
 that declined it, the ratio and the host, and each arrives with the test that
 referees it.
 
-Three further declines against no framework at all. `tropical` is the
+Four further declines against no framework at all. `tropical` is the
 tropical Grassmannian relaxation of topology search, declined against
 neighbor joining (#408). `compiled_pruning` is `likelihood.pruning_torch`'s
 recursion through `torch.compile`, declined at 1.21x and 1.09x
@@ -84,3 +92,8 @@ they are checked against, TorchRL and PyTorch Geometric as unit oracles — and
 those stay where they are used. Every candidate the ticket named has now been
 measured and declined; a further one arrives here with the measurement that
 settles it, whichever way it settles.
+`pruning_burn` is `burn`'s taped gradient over the Felsenstein recursion
+(issue #449), whose Rust half is behind the `sandbox` Cargo feature and is
+compiled by `infra/release.sh`;
+[experiment 010](../../../docs/experiments/010-pruning-gradient-routes.md)
+carries its numbers.

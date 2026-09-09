@@ -21,7 +21,7 @@ carries the domain; `CLAUDE.md` states why keeping it liftable matters.
 | `python/snakes_and_ladders/learn/` | Model-agnostic reinforcement learning: the `Environment` interface, the policies, REINFORCE, the critic, actor–critic, PPO and the planner, an exact trajectory-enumeration oracle, the relaxations and the learned surrogates, with the Potts-landscape and hidden-path reference instances. Imports nothing from `sim/`, `likelihood/` or `search/`, asserted by test. |
 | `python/snakes_and_ladders/search/` | Move sets, the hill-climbing and large-parsimony searches (`infer.py`) that join them to `opt/`, the samplers, annealers and tempered ensembles, the exact ground states, and the coupled model's block ascent. The phylogenetic RL environment (`rl.py`) lives here too, for the reason the phylogenetic `Objective` lives in `likelihood/`: `learn/` may import no application module. |
 | `python/snakes_and_ladders/qa/` | QA figures/tables for the documents; renders, doesn't recompute. |
-| `python/snakes_and_ladders/sandbox/` | The conserved home: an implementation a framework replaced on a hot path, or one a measurement declined, kept with the tests that referee it. Imported by `tests/` and `qa/` only, asserted by test. Carries `tropical.py`, the tropical Grassmannian relaxation of topology search (issue #408), and the three framework fronts issues #391 and #392 declined. |
+| `python/snakes_and_ladders/sandbox/` | The conserved home: an implementation a framework replaced on a hot path, or one a measurement declined, kept with the tests that referee it. Imported by `tests/` and `qa/` only, asserted by test. Carries `tropical.py`, the tropical Grassmannian relaxation of topology search (issue #408), the six framework fronts issues #388, #389, #390, #391 and #392 declined, `compiled_pruning.py` (#443), `pruning_problem.py` (#444), and `pruning_burn.py`, `burn`'s taped gradient (issue #449), whose Rust half is behind the `sandbox` Cargo feature (see Build System). |
 | `src/lib.rs` | Rust extension (`oxi_snakes_and_ladders`), exposed through PyO3. |
 | `docs/tex/` | LaTeX source for the paper and the textbook, with the notation and preamble both share. |
 | `infra/build_documents.sh` | Regenerates QA figures, then builds `docs/paper.pdf` and `docs/textbook.pdf` (both committed, rebuilt only by a "Rebuild the documents" pull request; the `.aux`, `.bbl`, `.log` and other files `latexmk` leaves beside them are ignored, never committed). |
@@ -76,6 +76,7 @@ New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are
 
 * **Requirement:** A Rust toolchain is required for consumers.
 * **Known Gap:** The typed stub `python/snakes_and_ladders/oxi_snakes_and_ladders.pyi` is hand-written. Run `python -m mypy.stubtest snakes_and_ladders.oxi_snakes_and_ladders` periodically to prevent drift.
+* **The `sandbox` Cargo feature is off by default and compiled at the release gate.** It turns on `src/pruning_burn.rs` and the `burn-ndarray` / `burn-autodiff` / `burn-tensor` dependencies behind it — the declined route `python/snakes_and_ladders/sandbox/` conserves (issue #449, `sandbox/CLAUDE.md`). The build cost is the whole reason it is a feature: a clean `maturin develop --release` compiles 34 crates in 37 s and links no `burn`, and the same build `--features sandbox` compiles 102 in 86 s. Neither CI nor `pip install .` passes the flag, so the wheel and every per-pull-request job pay nothing. `infra/release.sh` compiles it, and is the only thing that does, because a `#[cfg(feature)]` route nothing builds rots unnoticed: the conserved file needed three `clippy` fixes and a `cargo fmt` to build under the current toolchain when it came back. It runs two passes with the feature, and neither is redundant — `cargo test` does not build a `[[bench]]` target and `clippy` runs no test, so the gated criterion bench is compiled by one and the gated unit tests are run by the other (40 against the default 34). From a clean checkout that adds 33 s of `clippy --all-targets` and 34 s of `cargo test` to the gate's 34 s and 38 s for the same two without the feature. The Python half imports without the feature and refuses to run, so `tests/regression/likelihood/test_pruning_burn.py` skips (11 tests) against a default build and passes against `maturin develop --release --features sandbox`.
 
 ### Documents
 
@@ -406,9 +407,10 @@ consistency, duplicated machinery, suggested follow-up tickets) and gates on
 1. **Run the gate.** `infra/release.sh` runs every per-PR CI check
    (`ruff check`, `ruff format --check`, `mypy --strict`, `cargo clippy -D
    warnings`, `cargo fmt --check`, `cargo test --locked`) plus what CI skips
-   per PR: the full `pytest` suite including `@pytest.mark.release` tests
-   (see "Release-Gated" above), `sphinx-build -W`, and
-   `infra/build_documents.sh`. It runs every check regardless of earlier
+   per PR: `cargo test --locked --features sandbox` (see "Build System"
+   above, the only thing that compiles the `sandbox` feature), the full
+   `pytest` suite including `@pytest.mark.release` tests (see "Release-Gated"
+   above), `sphinx-build -W`, and `infra/build_documents.sh`. It runs every check regardless of earlier
    failures and prints a pass/fail summary at the end; a non-zero exit means
    at least one check failed.
 2. **Bump the version.** Edit `[package].version` in `Cargo.toml` — the
