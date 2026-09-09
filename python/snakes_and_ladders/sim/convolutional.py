@@ -141,9 +141,9 @@ class Trellis:
         return int(self.next_state.shape[0])
 
 
-def recursive_systematic_trellis(feedback: int, feedforward: int, memory: int) -> (
-    Trellis
-):
+def recursive_systematic_trellis(
+    feedback: int, feedforward: int, memory: int
+) -> Trellis:
     """The trellis of the rate-1/2 RSC encoder ``[1, feedforward / feedback]``.
 
     With register contents ``s_1 .. s_m`` (most recent first), feedback
@@ -203,7 +203,9 @@ def recursive_systematic_trellis(feedback: int, feedforward: int, memory: int) -
     )
 
 
-def encode_stream(trellis: Trellis, inputs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def encode_stream(
+    trellis: Trellis, inputs: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """Run the register over ``inputs`` from the zero state.
 
     Parameters
@@ -449,21 +451,6 @@ def turbo_encode(code: TurboCode, message: np.ndarray) -> np.ndarray:
             second_parity,
         ]
     )
-
-
-def turbo_message_positions(code: TurboCode) -> np.ndarray:
-    """Where each message bit sits in the transmitted word.
-
-    The code is systematic, so a bit error rate on the message is read off
-    the transmitted word directly; the tail inputs are not message bits and
-    are excluded.
-
-    Returns
-    -------
-    np.ndarray
-        ``int64`` of shape ``(K,)``.
-    """
-    return np.arange(code.message_length, dtype=np.int64)
 
 
 # --- the same code as a parity-check matrix -------------------------------------

@@ -144,9 +144,7 @@ def bcjr(
         if apriori_llr is None
         else np.asarray(apriori_llr, dtype=float)
     )
-    if systematic.ndim != 1 or not (
-        systematic.shape == parity.shape == apriori.shape
-    ):
+    if systematic.ndim != 1 or not (systematic.shape == parity.shape == apriori.shape):
         msg = (
             f"systematic {systematic.shape}, parity {parity.shape} and a priori "
             f"{apriori.shape} must be the same one-dimensional shape"

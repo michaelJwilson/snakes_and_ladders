@@ -1,0 +1,31 @@
+model: turbo
+oracle: enumeration
+
+# The memory-2 (7, 5) turbo code at the message length exact decoding
+# reaches (docs/nb/turbo.ipynb). Every field is required -- see
+# python/snakes_and_ladders/sim/convolutional.py and sim/CLAUDE.md.
+#
+# K = 12 gives 4,096 messages, so `likelihood.turbo.exact_turbo_posterior`
+# enumerates the code and the iterative decoder's bit posteriors are checked
+# against the exact bitwise MAP rather than against a second run of
+# themselves. The interleaver is the seed's rather than a permutation
+# written out here, because a written-out permutation at the larger tiers is
+# a file no reader could check.
+seed: 233
+message_length: 12
+memory: 2
+
+# Octal, as every reference states them, and read with base 8: feedback
+# first. (7, 5) is 1 + D + D**2 over 1 + D**2 -- the memory-2 register the
+# textbook's sec:turbo states.
+feedback: "7"
+feedforward: "5"
+
+iterations: 8
+
+# The points the small ensemble is measured at. 0 dB is well inside the
+# waterfall for a K = 12 interleaver, so the iteration has errors left to
+# remove and the comparison against the exact posterior has something to
+# compare; 3 dB is where the exact bit error rate falls below 1 in 300.
+eb_n0_db: [0.0, 1.0, 2.0, 3.0]
+frames: 200
