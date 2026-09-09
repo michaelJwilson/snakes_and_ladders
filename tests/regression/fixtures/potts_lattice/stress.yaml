@@ -1,0 +1,40 @@
+model: potts-lattice
+oracle: none
+
+# The lattice at the transition (issue #413). A 12x12 open square at 3 states
+# in zero field, at the exact q-state Potts transition on a square lattice,
+# `J_c = ln(1 + sqrt(q)) = 1.005`.
+#
+# `coupling: critical` is resolved by `snakes_and_ladders.sim.potts`'s closed
+# form from this file's own `n_states`, not stored as a rounded float: an
+# instance declared *at* the transition cannot drift off it, and a fixture at
+# a different state count is at its own transition rather than at this one.
+#
+# 144 sites is past enumeration (3**144), so the stated oracle is none. What
+# referees a result here is the property the instance exists for: at J_c the
+# correlation length is longer than the lattice, single-site updates slow
+# critically, and the cluster moves that remove that slowing decorrelate the
+# energy in fewer site updates. `tests/regression/search/test_potts_mcmc.py`
+# and section 9 of `docs/nb/potts_chain.ipynb` both read this file, so the
+# number the notebook prints and the number the test asserts are one
+# instance rather than two literals that agree.
+seed: 7
+shape: [12, 12]
+boundary: open
+n_states: 3
+coupling: critical
+field: [0.0, 0.0, 0.0]
+
+# The sweep budget the autocorrelation is measured over, and the burn-in
+# before it: 1,500 sweeps at 144 sites, 300 discarded. A Wolff sweep flips
+# one cluster while the other two move every site, so the measurement runs
+# Wolff for eight times these sweeps to give the three chains comparable
+# work; that factor is a property of the measurement rather than of the
+# instance, and lives with it.
+n_samples: 1500
+burn_in: 300
+
+# Relative tolerance the measured autocorrelation times are pinned within.
+# The chains are seeded, so the three numbers are reproducible rather than
+# noisy, and 0.10 covers the last bits of a floating-point reduction.
+tolerance: 0.10

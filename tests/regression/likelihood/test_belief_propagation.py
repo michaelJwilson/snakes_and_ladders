@@ -29,6 +29,7 @@ from snakes_and_ladders.likelihood.belief_propagation import (
 from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_partition
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import critical_coupling
 
 RELATIVE_TOLERANCE = 1e-11
 
@@ -200,7 +201,7 @@ def test_the_deviation_peaks_in_the_neighbourhood_of_the_transition() -> None:
     # form, pinned here rather than chosen: the peak is a prediction this
     # test checks, not a coupling picked because it flattered the result.
     shape = (6, 4)
-    transition = math.log(1.0 + math.sqrt(3.0))
+    transition = critical_coupling(3)
     couplings = [round(0.125 * step, 3) for step in range(17)]
 
     peak = max(

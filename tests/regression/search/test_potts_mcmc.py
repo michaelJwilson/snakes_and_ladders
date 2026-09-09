@@ -60,6 +60,7 @@ from snakes_and_ladders.sim.canonical import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import critical_coupling
 
 from tests._scale import at_scale
 
@@ -187,26 +188,43 @@ def test_single_site_still_runs_on_a_negative_coupling() -> None:
     assert chain.states.shape == (10, graph.n_nodes)
 
 
-# The exact q-state Potts transition on a square lattice, where the
-# correlation length diverges and single-site updates slow critically. Pinned
-# as a closed form so the comparison happens where the physics says it is
-# interesting, not at a coupling that flatters cluster updates.
-TRANSITION = math.log(1.0 + math.sqrt(3.0))
+# The instance at the transition, declared rather than built here (issue
+# #413). `potts_lattice/stress` is the 12x12 open square at the exact
+# 3-state transition in zero field, and section 9 of
+# `docs/nb/potts_chain.ipynb` reads the same file: the number the notebook
+# prints and the number this module asserts are one instance rather than two
+# literals that happen to agree.
+CRITICAL = fixture("potts_lattice", "stress").params
+
+#: A Wolff sweep flips one cluster while the other two move every site, so
+#: Wolff runs this many times the declared sweeps and burn-in to give the
+#: three chains comparable work. A property of the measurement, not of the
+#: instance, which is why it is here and not in the file.
+WOLFF_SWEEPS = 8
 
 
-def _autocorrelation_in_site_updates(move: PottsMove, extent: int) -> float:
+def _critical_lattice() -> PottsGraph:
+    """The declared lattice at the transition."""
+    return lattice_graph(CRITICAL.shape, CRITICAL.boundary, CRITICAL.coupling)
+
+
+def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> float:
     """Energy autocorrelation time, normalized to the work a sweep costs.
 
     A Wolff sweep flips one cluster; the other two touch every site. Reporting
     all three in sweeps would make Wolff look free, so each is scaled by the
     sites its sweep actually touched.
     """
-    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, TRANSITION)
-    field = np.zeros(3)
-    n_sweeps = 12_000 if move is PottsMove.WOLFF else 1_500
+    field = CRITICAL.field
+    factor = WOLFF_SWEEPS if move is PottsMove.WOLFF else 1
 
     chain: PottsChain = sample_potts(
-        graph, field, move, np.random.default_rng(7), n_sweeps, burn_in=n_sweeps // 5
+        graph,
+        field,
+        move,
+        np.random.default_rng(CRITICAL.seed),
+        CRITICAL.n_samples * factor,
+        burn_in=CRITICAL.burn_in * factor,
     )
     tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
     return tau * chain.mean_cluster_size / graph.n_nodes
@@ -214,15 +232,24 @@ def _autocorrelation_in_site_updates(move: PottsMove, extent: int) -> float:
 
 @pytest.mark.mathematical
 def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
-    # The reason for having them, as a number rather than an assertion. At
-    # 12x12 the measured times are roughly 6.7, 4.2 and 2.3 site-updates for
-    # single-site, Swendsen-Wang and Wolff. Asserted as an ordering rather
-    # than as values: the gap widens with lattice extent, so pinning a ratio
-    # here would pin a finite-size effect.
-    single = _autocorrelation_in_site_updates(PottsMove.SINGLE_SITE, 12)
-    swendsen_wang = _autocorrelation_in_site_updates(PottsMove.SWENDSEN_WANG, 12)
-    wolff = _autocorrelation_in_site_updates(PottsMove.WOLFF, 12)
+    # The reason for having them, as numbers rather than an assertion, at the
+    # instance the registry declares for it. The ordering is the claim; the
+    # values are pinned beside it because the chains are seeded and so
+    # reproducible, and because the sibling test below is worth nothing
+    # unless both halves of the comparison are pinned the same way.
+    #
+    # What is *not* claimed is the ratio: it widens with lattice extent
+    # (docs/experiments/001-potts-cluster-autocorrelation.md), so a ratio
+    # pinned here would pin a finite-size effect.
+    graph = _critical_lattice()
 
+    single = _autocorrelation_in_site_updates(PottsMove.SINGLE_SITE, graph)
+    swendsen_wang = _autocorrelation_in_site_updates(PottsMove.SWENDSEN_WANG, graph)
+    wolff = _autocorrelation_in_site_updates(PottsMove.WOLFF, graph)
+
+    assert single == pytest.approx(6.70, rel=CRITICAL.tolerance)
+    assert swendsen_wang == pytest.approx(4.17, rel=CRITICAL.tolerance)
+    assert wolff == pytest.approx(2.34, rel=CRITICAL.tolerance)
     assert swendsen_wang < single
     assert wolff < single
 
@@ -262,7 +289,10 @@ def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() ->
     # What makes the normalization above necessary, pinned so a change that
     # made every cluster a single site -- which would silently turn Wolff into
     # an expensive single-site sampler -- is visible.
-    graph = lattice_graph((8, 8), BoundaryCondition.OPEN, TRANSITION)
+    # Extent 8 rather than the declared 12: the claim is about the cluster
+    # construction and not about the instance, and a smaller lattice makes
+    # it in a quarter of the sweeps.
+    graph = lattice_graph((8, 8), BoundaryCondition.OPEN, critical_coupling(3))
 
     chain = sample_potts(
         graph,

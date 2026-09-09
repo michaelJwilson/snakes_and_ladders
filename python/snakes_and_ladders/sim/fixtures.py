@@ -58,7 +58,10 @@ from snakes_and_ladders.sim.hmm import load_hmm_params
 from snakes_and_ladders.sim.ldpc import load_ldpc_params
 from snakes_and_ladders.sim.mixture import load_mixture_params
 from snakes_and_ladders.sim.params import load_simulation_params
-from snakes_and_ladders.sim.potts import load_potts_lattice_params
+from snakes_and_ladders.sim.potts import (
+    load_potts_lattice_params,
+    load_potts_spots_params,
+)
 from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
 
 #: The repository root, from this file rather than from a working directory:
@@ -77,6 +80,7 @@ LOADERS: dict[str, Callable[[Path], Any]] = {
     "jukes-cantor": load_simulation_params,
     "potts-chain": load_potts_params,
     "potts-lattice": load_potts_lattice_params,
+    "potts-spots": load_potts_spots_params,
     "hidden-markov": load_hmm_params,
     "gaussian-mixture": load_mixture_params,
     "emission-mixture": load_emission_mixture_params,

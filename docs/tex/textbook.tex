@@ -1021,13 +1021,16 @@ normalizer sums over $q^{|V|}$ configurations.
 The exact referee is the $q^{|V|}$ enumeration, refused past 200,000
 configurations, which puts the ceiling at eleven nodes at three states and
 seventeen at two. The fixtures sit under it: a chain of twelve sites at three
-states over 400 replicates, and an open $3 \times 3$ lattice at three states,
-whose $3^9 = 19{,}683$ configurations give the exact normalizer and every
-marginal. Above it the transfer matrix referees a strip of any length at a
-width that fits, belief propagation is compared on the $8 \times 8$ lattice
-where nothing is exact, the minimum cut is checked at extents 8, 12 and 16,
-and the cluster moves are separated from single-site sweeps at extents 8 and
-24. The general graph carries $G(n, p)$ instances to a thousand nodes,
+states over 400 replicates, and two open $3 \times 3$ lattices at three
+states, one in a shared field and one in a per-site field, whose
+$3^9 = 19{,}683$ configurations give the exact normalizer and every marginal.
+Above it the transfer matrix referees a strip of any length at a width that
+fits --- which is where the $12 \times 6$ per-site-field instance sits, at
+$3^{72}$ configurations --- belief propagation is compared on the
+$8 \times 8$ lattice where nothing is exact, the minimum cut is checked at
+extents 8, 12 and 16, and the cluster moves are separated from single-site
+sweeps at extents 8 and 24, the $12 \times 12$ of them at the square-lattice
+transition of Section~\ref{sec:potts-sampling} being a declared instance. The general graph carries $G(n, p)$ instances to a thousand nodes,
 refereed by the planted energy of Section~\ref{sec:frustrated} rather than by
 any enumeration.
 
@@ -1185,7 +1188,11 @@ The single-site heat bath draws each spin from its conditional,
 one site at a time; a \emph{sweep} is one update of every site,
 Algorithm~\ref{alg:heat-bath}. Near a
 critical coupling correlated regions span the lattice and single-site moves
-decorrelate slowly. Cluster moves flip such regions together
+decorrelate slowly. On the square lattice that coupling is the self-dual
+point $J_c = \ln(1 + \sqrt{q})$, and on the triangular lattice it is
+$\ln(1 + v)$ for the positive root of $v^3 + 3v^2 = q$ \citep{baxter1982};
+both are closed forms, so an instance meant to sit at one is placed there
+rather than near it. Cluster moves flip such regions together
 \citep{swendsen1987, wolff1989, newman1999}: in the Edwards--Sokal
 representation \citep{edwards1988} a bond is placed between equal neighbours
 with probability $1 - e^{-\beta J_{ij}}$, and each bond-connected cluster is
