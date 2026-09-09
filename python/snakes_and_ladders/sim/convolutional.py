@@ -34,7 +34,7 @@ from pathlib import Path
 import numpy as np
 
 from snakes_and_ladders.fixtures import load_declared
-from snakes_and_ladders.sim.ldpc import ParityCheck
+from snakes_and_ladders.sim.ldpc import ParityCheck, null_space
 
 #: The log weight of an edge the trellis does not have. Finite rather than
 #: ``-inf``: the general message passing shifts by a row maximum before
@@ -463,9 +463,11 @@ def parity_check(code: TurboCode) -> ParityCheck:
     is a :class:`~snakes_and_ladders.sim.ldpc.ParityCheck` and issue #340's
     decoders and enumeration oracle apply to it unchanged. The matrix is
     built by encoding the ``K`` unit messages into the generator matrix and
-    taking the null space of that; it is dense and has nothing to do with
-    the low-density ensemble, which is the point -- it referees this
-    encoder against a construction sharing no code with it.
+    taking :func:`snakes_and_ladders.sim.ldpc.null_space` of that -- the same
+    GF(2) elimination the parity-check encoder runs, not a second copy of
+    it. The result is dense and has nothing to do with the low-density
+    ensemble, which is the point: it referees this encoder against a
+    construction sharing no code with it.
 
     Parameters
     ----------
@@ -488,9 +490,7 @@ def parity_check(code: TurboCode) -> ParityCheck:
             f"{MAX_PARITY_CHECK_BITS}; the trellis decoders are the path at length"
         )
         raise ValueError(msg)
-    generator = turbo_generator_matrix(code)
-    checks = _nullspace(generator)
-    return ParityCheck.from_dense(checks)
+    return ParityCheck.from_dense(null_space(turbo_generator_matrix(code)))
 
 
 def turbo_generator_matrix(code: TurboCode) -> np.ndarray:
@@ -513,38 +513,6 @@ def turbo_generator_matrix(code: TurboCode) -> np.ndarray:
         generator[i] = turbo_encode(code, unit)
         unit[i] = 0
     return generator
-
-
-def _nullspace(generator: np.ndarray) -> np.ndarray:
-    """A basis of ``{h : G h = 0}`` over GF(2), as rows.
-
-    Gauss--Jordan on ``G`` to reduced row echelon form; each free column
-    gives one null vector, with the pivot entries the reduction forces.
-    """
-    reduced = np.array(generator, dtype=np.uint8)
-    n_columns = reduced.shape[1]
-    pivots: list[int] = []
-    row = 0
-    for column in range(n_columns):
-        if row == reduced.shape[0]:
-            break
-        candidates = np.nonzero(reduced[row:, column])[0]
-        if candidates.size == 0:
-            continue
-        pivot = row + int(candidates[0])
-        if pivot != row:
-            reduced[[row, pivot]] = reduced[[pivot, row]]
-        others = np.nonzero(reduced[:, column])[0]
-        others = others[others != row]
-        reduced[others] ^= reduced[row]
-        pivots.append(column)
-        row += 1
-    free = [column for column in range(n_columns) if column not in set(pivots)]
-    basis = np.zeros((len(free), n_columns), dtype=np.uint8)
-    for r, column in enumerate(free):
-        basis[r, column] = 1
-        basis[r, pivots] = reduced[: len(pivots), column]
-    return basis
 
 
 # --- the declared instance ------------------------------------------------------

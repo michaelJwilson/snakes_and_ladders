@@ -31,12 +31,13 @@ from snakes_and_ladders.likelihood.message_passing import (
     sum_product,
 )
 from snakes_and_ladders.sim.convolutional import (
+    IMPOSSIBLE_EDGE,
     Trellis,
     encode_stream,
     recursive_systematic_trellis,
     terminate,
 )
-from snakes_and_ladders.sim.factor_graph import from_trellis
+from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, from_trellis
 from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
 
 #: Agreement with an exact answer on a log-odds ratio. Measured at 2.8e-14
@@ -281,3 +282,40 @@ def test_streams_of_disagreeing_length_are_refused() -> None:
         bcjr(trellis, np.zeros(6), np.zeros(5))
     with pytest.raises(ValueError, match="one-dimensional"):
         from_trellis(trellis, np.zeros(6), np.zeros(5))
+
+
+@pytest.mark.edge_case
+def test_an_impossible_edge_is_a_finite_floor_and_not_minus_infinity() -> None:
+    """A hard zero would make the general sum-product return `nan`, not a number.
+
+    The failure the floor prevents, asserted rather than described. At the
+    first steps of a terminated trellis most states are unreachable, so their
+    incoming edges are all impossible; the general implementation shifts a row
+    by its maximum before exponentiating, and a row that is entirely `-inf`
+    becomes `-inf - (-inf)`. Rebuilding the same graph with `-inf` in place of
+    `IMPOSSIBLE_EDGE` is what this asserts against, so the constant is pinned
+    by the thing it exists for.
+    """
+    trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
+    rng = np.random.default_rng(43)
+    message = rng.integers(0, 2, 8).astype(np.uint8)
+    systematic, parity = _received(trellis, message, 1.0, rng)
+    graph = from_trellis(trellis, systematic, parity)
+
+    assert np.isfinite(sum_product(graph, schedule=MessageSchedule.TREE).log_partition)
+
+    hard = FactorGraph(
+        graph.variables,
+        [
+            Factor(
+                factor.name,
+                factor.variables,
+                np.where(factor.log_table <= IMPOSSIBLE_EDGE, -np.inf, factor.log_table),
+            )
+            for factor in graph.factors
+        ],
+    )
+
+    assert not np.isfinite(
+        sum_product(hard, schedule=MessageSchedule.TREE).log_partition
+    )

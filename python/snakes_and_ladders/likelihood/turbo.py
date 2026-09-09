@@ -38,6 +38,7 @@ ratio at the last iteration.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 import numpy as np
@@ -126,6 +127,59 @@ def _second_systematic(code: TurboCode, streams: TurboStreams) -> np.ndarray:
     )
 
 
+def _iterate(
+    code: TurboCode, llr: np.ndarray, iterations: int
+) -> Iterator[tuple[np.ndarray, bool, float]]:
+    """One extrinsic exchange per step: the message posterior, agreement, residual.
+
+    The single loop both public decoders read, so a waterfall at four
+    iteration counts costs the deepest one rather than their sum -- 8
+    passes against 36 at the release tier's cap -- and there is one
+    implementation of the schedule rather than two to keep in step.
+
+    Yields
+    ------
+    tuple[np.ndarray, bool, float]
+        After each iteration: the ``K`` message posterior ratios, whether the
+        two constituent decoders' hard decisions agree, and the largest
+        change in an extrinsic ratio since the previous iteration.
+    """
+    if iterations < 1:
+        msg = f"iterations must be at least 1, got {iterations}"
+        raise ValueError(msg)
+    streams = split_streams(code, llr)
+    trellis, order = code.trellis, code.interleaver
+    inverse = inverse_permutation(order)
+    k, steps = code.message_length, code.steps
+    second_systematic = _second_systematic(code, streams)
+
+    apriori_first = np.zeros(steps)
+    extrinsic_second = np.zeros(steps)
+    for _ in range(iterations):
+        first = bcjr(trellis, streams.systematic, streams.parity_first, apriori_first)
+        # Only the K message positions cross the interleaver: the tails
+        # belong to their own encoder, and a decoder given another's tail
+        # extrinsic would be given evidence about a different bit.
+        apriori_second = np.zeros(steps)
+        apriori_second[:k] = np.clip(first.extrinsic_llr[:k], -LLR_CAP, LLR_CAP)[order]
+        second = bcjr(trellis, second_systematic, streams.parity_second, apriori_second)
+        previous = extrinsic_second
+        extrinsic_second = np.zeros(steps)
+        extrinsic_second[:k] = np.clip(second.extrinsic_llr[:k], -LLR_CAP, LLR_CAP)[
+            inverse
+        ]
+        apriori_first = extrinsic_second
+        # The joint posterior of a message bit: the channel's systematic
+        # ratio plus what each chain's own parity said about it, which is
+        # the second decoder's posterior deinterleaved.
+        posterior = second.posterior_llr[:k][inverse]
+        yield (
+            posterior,
+            bool(np.array_equal(first.posterior_llr[:k] < 0.0, posterior < 0.0)),
+            float(np.abs(extrinsic_second - previous).max()),
+        )
+
+
 def decode_turbo(
     code: TurboCode,
     llr: np.ndarray,
@@ -163,48 +217,17 @@ def decode_turbo(
     ValueError
         If ``iterations`` is below one, or ``llr`` is the wrong length.
     """
-    if iterations < 1:
-        msg = f"iterations must be at least 1, got {iterations}"
-        raise ValueError(msg)
-    streams = split_streams(code, llr)
-    trellis, order = code.trellis, code.interleaver
-    inverse = inverse_permutation(order)
-    k, steps = code.message_length, code.steps
-    second_systematic = _second_systematic(code, streams)
-
-    apriori_first = np.zeros(steps)
-    extrinsic_second = np.zeros(steps)
-    posterior = np.zeros(k)
-    agree = False
-    residual = np.inf
-    iteration = 0
-    while iteration < iterations:
-        iteration += 1
-        first = bcjr(trellis, streams.systematic, streams.parity_first, apriori_first)
-        # Only the K message positions cross the interleaver: the tails
-        # belong to their own encoder, and a decoder given another's tail
-        # extrinsic would be given evidence about a different bit.
-        apriori_second = np.zeros(steps)
-        apriori_second[:k] = np.clip(first.extrinsic_llr[:k], -LLR_CAP, LLR_CAP)[order]
-        second = bcjr(trellis, second_systematic, streams.parity_second, apriori_second)
-        previous = extrinsic_second
-        extrinsic_second = np.zeros(steps)
-        extrinsic_second[:k] = np.clip(second.extrinsic_llr[:k], -LLR_CAP, LLR_CAP)[
-            inverse
-        ]
-        residual = float(np.abs(extrinsic_second - previous).max())
-        apriori_first = extrinsic_second
-        # The joint posterior of a message bit: the channel's systematic
-        # ratio plus what each chain's own parity said about it, which is
-        # the second decoder's posterior deinterleaved.
-        posterior = second.posterior_llr[:k][inverse]
-        agree = bool(np.array_equal(first.posterior_llr[:k] < 0.0, posterior < 0.0))
+    posterior = np.zeros(code.message_length)
+    agree, residual, ran = False, np.inf, 0
+    for ran, (posterior, agree, residual) in enumerate(
+        _iterate(code, llr, iterations), start=1
+    ):
         if early_stop and agree:
             break
     return Decoding(
         bits=(posterior < 0.0).astype(np.uint8),
         posterior_llr=posterior,
-        iterations=iteration,
+        iterations=ran,
         decoded=agree,
         residual=residual,
         estimate=MapEstimate.BITWISE,
@@ -216,39 +239,22 @@ def decode_turbo_per_iteration(
 ) -> np.ndarray:
     """The message decision after each of ``1 .. iterations`` iterations.
 
-    One run rather than ``iterations`` runs of :func:`decode_turbo`: a
-    waterfall at four iteration counts costs the deepest one, not their sum,
-    which is what makes the release-tier curve affordable. The rows are the
-    decisions :func:`decode_turbo` returns at each cap, and a test asserts
-    so rather than trusting the duplication.
+    The rows are what :func:`decode_turbo` returns at each cap -- both read
+    :func:`_iterate`, and a test asserts the two agree at every cap rather
+    than trusting that they must.
 
     Returns
     -------
     np.ndarray
         ``uint8`` of shape ``(iterations, K)``.
     """
-    if iterations < 1:
-        msg = f"iterations must be at least 1, got {iterations}"
-        raise ValueError(msg)
-    streams = split_streams(code, llr)
-    trellis, order = code.trellis, code.interleaver
-    inverse = inverse_permutation(order)
-    k, steps = code.message_length, code.steps
-    second_systematic = _second_systematic(code, streams)
-    apriori_first = np.zeros(steps)
-    decisions = np.empty((iterations, k), dtype=np.uint8)
-    for iteration in range(iterations):
-        first = bcjr(trellis, streams.systematic, streams.parity_first, apriori_first)
-        apriori_second = np.zeros(steps)
-        apriori_second[:k] = np.clip(first.extrinsic_llr[:k], -LLR_CAP, LLR_CAP)[order]
-        second = bcjr(trellis, second_systematic, streams.parity_second, apriori_second)
-        extrinsic = np.zeros(steps)
-        extrinsic[:k] = np.clip(second.extrinsic_llr[:k], -LLR_CAP, LLR_CAP)[inverse]
-        apriori_first = extrinsic
-        decisions[iteration] = (second.posterior_llr[:k][inverse] < 0.0).astype(
-            np.uint8
-        )
-    return decisions
+    return np.array(
+        [
+            (posterior < 0.0).astype(np.uint8)
+            for posterior, _, _ in _iterate(code, llr, iterations)
+        ],
+        dtype=np.uint8,
+    )
 
 
 # --- the exact oracle -------------------------------------------------------------
