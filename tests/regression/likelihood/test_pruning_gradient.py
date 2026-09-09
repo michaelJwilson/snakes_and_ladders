@@ -22,7 +22,7 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood import objective as objective_module
-from snakes_and_ladders.likelihood import pruning_analytic, pruning_burn, pruning_torch
+from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.search.infer import infer
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -30,7 +30,6 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
 
 _ROUTES: dict[str, Callable[..., torch.Tensor]] = {
-    "burn": pruning_burn.log_likelihood,
     "analytic": pruning_analytic.log_likelihood,
 }
 

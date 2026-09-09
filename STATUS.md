@@ -433,6 +433,31 @@ spanning a factor of 30
 ([#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148)). The pulley
 principle and rescaled/unrescaled agreement are checked besides.
 
+**A fourth backend, and two routes to the gradient that were not taken**
+([#449](https://github.com/michaelJwilson/snakes_and_ladders/issues/449)).
+`pruning_analytic` computes the same log-likelihood behind one
+`torch.autograd.Function` whose backward is the closed form of
+`alg:pruning-backward`, so the autograd graph is 2 nodes at every tree size
+against the taped path's 59, 115 and 227 at 4, 8 and 16 taxa. One gradient at
+8 taxa by 20,000 sites: **16.36 ms (IQR 1.37) against the taped 33.06 (3.56)**,
+and one L-BFGS fit **454.2 ms (38.7) against 694.5 (52.3)**, both converging to
+148940.229159. Half the saving is in the forward pass, which builds no graph:
+12.38 ms taped against 8.10 under `no_grad`. The gradient agrees with the taped
+one to 2.1e-13 relative, passes `gradcheck` in `float64`, and leaves
+`search.infer`'s topology, trace, evaluations and fits unchanged.
+
+A `burn` `Autodiff<NdArray<f64>>` port of the same recursion was measured
+beside it and **declined**: 46.80 ms (3.86) per gradient and 1179.1 (144.1) per
+fit, with a tape of 66, 134 and 270 nodes at 4, 8 and 16 taxa — larger than the
+tape it was meant to replace. The boundary is not the reason; the kernel alone
+is 48.01 ms [46.94, 49.27] by Criterion against 47.06 (6.09) for the same call
+from Python, so the crossing is inside the spread and the kernel by itself
+already costs 1.45x PyTorch's whole evaluation. The dependency left
+`Cargo.toml` in the pull request that added it, and its `f64` path was sound —
+5.9e-13 against the taped `float64` gradient — so precision is not why it lost.
+`docs/experiments/007-pruning-gradient-routes.md` carries every number and the
+prediction they were taken to test.
+
 **The Rust backend returned nothing at the declared scale, and now returns
 2.5x.** Measured against the NumPy oracle end to end, it was **1.8x** at 10
 taxa by 1,000 sites and **1.00x** at 200 by 11,000 — the top of the range

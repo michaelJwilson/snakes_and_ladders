@@ -1,15 +1,16 @@
-"""Three routes to the gradient of the pruning recursion, timed against each other.
+"""The two surviving routes to the gradient of the pruning recursion, timed.
 
-The comparison issue #449 asks for: PyTorch's taped backward (the oracle),
-``burn``'s tape in Rust, and the analytic two-pass backward behind one
-``torch.autograd.Function``. One evaluation is a forward pass and a
-``backward()``, which is what a fitting step costs.
+Issue #449 compared three: PyTorch's taped backward (the oracle), a `burn`
+tape in Rust, and the analytic two-pass backward behind one
+``torch.autograd.Function``. The `burn` route lost and left the tree with its
+dependency; ``docs/experiments/007-pruning-gradient-routes.md`` carries its
+numbers. One evaluation here is a forward pass and a ``backward()``, which is
+what a fitting step costs.
 
-Correctness is pinned in ``tests/regression/likelihood/test_pruning_analytic.py``
-and ``test_pruning_burn.py``; these assert only that the value is finite, per
-`DEV.md`'s rule for this directory. The through-the-binding numbers are these;
-the `burn` kernel alone is `benches/oxi_snakes_and_ladders_bench.rs`, and the
-difference between the two is the FFI boundary.
+Correctness is pinned in
+``tests/regression/likelihood/test_pruning_analytic.py`` and
+``test_pruning_gradient.py``; this module asserts only that the value is
+finite, per `DEV.md`'s rule for this directory.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood import pruning_analytic, pruning_burn, pruning_torch
+from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
@@ -30,7 +31,6 @@ from tests._fixtures import FIXTURES_DIR
 
 _ROUTES: dict[str, Callable[..., torch.Tensor]] = {
     "taped": pruning_torch.log_likelihood,
-    "burn": pruning_burn.log_likelihood,
     "analytic": pruning_analytic.log_likelihood,
 }
 

@@ -114,6 +114,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.pruning_rust
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.pruning_analytic
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.brute_force
    :members:
 
