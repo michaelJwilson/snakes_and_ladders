@@ -2017,14 +2017,14 @@ generation, so a retraction cannot leave the textbook pointing at nothing.
 **The record is capped at one screen, so what it holds is chosen**
 ([#458](https://github.com/michaelJwilson/snakes_and_ladders/issues/458)).
 Seven prose sections collapse to three — question, numbers, finding — and the
-body is at most ten non-blank lines after the front matter, section headings
-counted and the `# ` title not; the front matter is untouched, since it is the
-reproducibility record. The six files fall from **70, 69, 69, 114, 82 and 141**
-lines to **34, 34, 33, 34, 34 and 34**, bodies of **10, 10, 9, 10, 10 and 10**
-counted lines, every one of them a question, a table and a finding. No number
+body is at most ten non-blank content lines after the front matter, neither the
+title nor a section heading among them; the front matter is untouched, since it
+is the reproducibility record. The six files fall from **70, 69, 69, 114, 82
+and 141** lines to **34, 34, 33, 34, 34 and 34**, bodies of **7, 7, 6, 7, 7 and
+7** content lines, every one of them a question, a table and a finding. No number
 was deleted to fit: each one displaced was already evidence in this file or an
 argument in the pull request that carried it, and the guard that validates the
-files now fails an eleven-line body. The Aim run store (#75) is part 2, behind the
+files now fails an eleventh content line. The Aim run store (#75) is part 2, behind the
 dependency's approval; until then the numbers are typed from the
 measurement and the file names the command that produced them.
 

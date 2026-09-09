@@ -2,9 +2,9 @@
 
 Structural guards: every file under ``docs/experiments/`` parses, carries
 every field and section the template names with the vocabularies it fixes,
-names a ticket for every action, and keeps its body inside the ten-line cap
-(issue #458); the generated index matches what the generator would write; and
-the guard itself catches a file that drifted or ran over.
+names a ticket for every action, and keeps its body inside the cap of ten
+content lines (issue #458); the generated index matches what the generator
+would write; and the guard itself catches a file that drifted or ran over.
 """
 
 from __future__ import annotations
@@ -25,8 +25,9 @@ VALID = (
 #: 001's front matter, reused by the cases below: the cap is a claim about
 #: the body, so the record above it is held fixed rather than invented.
 FRONT_MATTER = VALID[: VALID.index("\n---\n") + len("\n---\n")]
-#: A body of exactly the cap: three headings, a question, a five-line table
-#: and a finding, under a title the cap does not charge for.
+#: A body of exactly the cap: a question, an eight-line table and a finding.
+#: Fourteen non-blank lines, four of them a title and its section headings,
+#: which the cap charges for none of; ten of them content.
 AT_THE_CAP = """
 # A title, which is not one of the ten
 
@@ -41,6 +42,9 @@ One line.
 | the instance | 1 | 2 |
 | a second | 3 | 4 |
 | a third | 5 | 6 |
+| a fourth | 7 | 8 |
+| a fifth | 9 | 10 |
+| a sixth | 11 | 12 |
 
 ## Finding
 
@@ -71,7 +75,7 @@ def test_the_template_names_every_section_and_field() -> None:
 
 
 @pytest.mark.edge_case
-def test_a_body_over_ten_lines_fails_and_the_title_is_not_one_of_them(
+def test_a_body_over_ten_lines_fails_and_no_heading_is_one_of_them(
     tmp_path: Path,
 ) -> None:
     at_the_cap = tmp_path / "001-at-the-cap.md"
@@ -79,17 +83,18 @@ def test_a_body_over_ten_lines_fails_and_the_title_is_not_one_of_them(
     experiment = experiments.load(at_the_cap)
     assert experiment.body_lines == experiments.BODY_LINE_CAP == 10
     non_blank = [line for line in AT_THE_CAP.splitlines() if line.strip()]
-    assert len(non_blank) == 11, "eleven non-blank lines, the title one of them"
+    headings = [line for line in non_blank if line.startswith("#")]
+    assert (len(non_blank), len(headings)) == (14, 4), "a title and three headings"
     assert experiments.problems(experiment) == []
     over = tmp_path / "001-over-the-cap.md"
     over.write_text(
         FRONT_MATTER
         + AT_THE_CAP.replace(
-            "| a third | 5 | 6 |", "| a third | 5 | 6 |\n| a fourth | 7 | 8 |"
+            "| a sixth | 11 | 12 |", "| a sixth | 11 | 12 |\n| a seventh | 13 | 14 |"
         )
     )
     found = experiments.problems(experiments.load(over))
-    assert found == ["body is 11 non-blank lines, over the cap of 10 (issue #458)"]
+    assert found == ["body is 11 content lines, over the cap of 10 (issue #458)"]
     assert experiments.main(["--check", "--directory", str(tmp_path)]) == 1
 
 

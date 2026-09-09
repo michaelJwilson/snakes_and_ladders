@@ -5,15 +5,16 @@ matter carrying the commit, the fixture and its size tier, the methods
 compared at one budget over shared seeds, the hardware and the status; then
 three sections --- Question, Numbers, Finding (issue #314).
 
-**The body is capped at ten non-blank lines** after the front matter's closing
-`---`, section headings counted and the `# ` title not (issue #458). The front
-matter is the reproducibility record and is not counted. What survives the cap
-is chosen, in this order: key metrics, motivation, reproducibility. A number
-displaced by it moves to `STATUS.md` where it is evidence for a milestone, or
-to the pull-request body where it is the argument for a change; a number that
-fits neither was never evidence. `STATUS.md` cites an experiment rather than
-restating its table, and `tests/regression/test_experiments.py` holds every
-file to the template, the cap, and this index to the files.
+**The body is capped at ten non-blank content lines** after the front matter's
+closing `---` (issue #458). Neither the title nor a section heading is one of
+them, and the front matter is not counted at all: it is the reproducibility
+record. What survives the cap is chosen, in this order: key metrics,
+motivation, reproducibility. A number displaced by it moves to `STATUS.md`
+where it is evidence for a milestone, or to the pull-request body where it is
+the argument for a change; a number that fits neither was never evidence.
+`STATUS.md` cites an experiment rather than restating its table, and
+`tests/regression/test_experiments.py` holds every file to the template, the
+cap, and this index to the files.
 
 **This index is generated.** Rewrite it with `python infra/experiments.py`;
 `--check` fails when a file is invalid, over the cap, or the index is stale.

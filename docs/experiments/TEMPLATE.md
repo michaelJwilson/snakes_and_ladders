@@ -29,4 +29,4 @@ One line, falsifiable: what the results could contradict.
 
 ## Finding
 
-One line: what the numbers say, the command that reproduces them, and each action as `#NNN` or `no actions`. Ten non-blank lines, this title excluded (issue #458).
+One line: what the numbers say, the command that reproduces them, and each action as `#NNN` or `no actions`. Ten content lines, this title and the headings excluded (issue #458).

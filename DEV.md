@@ -359,9 +359,10 @@ written from `TEMPLATE.md` (issue #314): YAML front matter with the commit,
 branch and pull request, the tickets it tests and files, the problem, fixture
 and size tier, the methods compared, the budget and its unit, the shared
 seeds, the hardware and a status; then three sections — question, numbers,
-finding. **The body is at most ten non-blank lines** after the front matter's
-closing `---`, section headings counted and the `# ` title not (issue #458);
-the front matter is the reproducibility record and is not counted. What
+finding. **The body is at most ten non-blank content lines** after the front
+matter's closing `---` (issue #458). Neither the title nor a section heading
+is one of them — they are the format rather than lines anyone wrote — and the
+front matter is not counted at all, being the reproducibility record. What
 survives is chosen, in this order: key metrics, motivation, reproducibility.
 A number the cap displaces moves to `STATUS.md` where it is evidence for a
 milestone, or to the pull-request body where it is the argument for a change;

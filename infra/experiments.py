@@ -1,8 +1,8 @@
 """The experiment ledger: validate every experiment file, and generate the index (issue #314).
 
 An experiment under ``docs/experiments/`` is a Markdown file with YAML front
-matter, three fixed sections and a body of at most ten non-blank lines
-(issue #458), written from ``TEMPLATE.md``. This module is the
+matter, three fixed sections and a body of at most ten non-blank content
+lines (issue #458), written from ``TEMPLATE.md``. This module is the
 one reading of that format: :func:`load` parses a file, :func:`problems`
 lists what it gets wrong, and :func:`render_index` writes the table
 ``README.md`` shows -- problem, size, methods, status, the best-known result
@@ -51,10 +51,10 @@ PROBLEMS = ("potts-lattice", "hmm-path", "coupled", "tree", "mixture")
 SIZES = ("ci", "stress", "release")
 STATUSES = ("open", "confirmed", "retracted", "superseded")
 SECTIONS = ("Question", "Numbers", "Finding")
-#: The body's budget: non-blank lines after the front matter's closing
-#: ``---``, section headings included (issue #458). Ten holds a four-line
-#: table with a one-line question and a one-line finding, which is the shape
-#: the ticket asks for; what survives is chosen rather than what fits.
+#: The body's budget: non-blank *content* lines after the front matter's
+#: closing ``---`` (issue #458). Ten holds a six-line table with a one-line
+#: question and a one-line finding, which is the shape the ticket asks for;
+#: what survives is chosen rather than what fits.
 BODY_LINE_CAP = 10
 #: What a ``fixture`` field must name: a fixture file, or the problem
 #: directory holding one where the experiment swept sizes around it rather
@@ -63,10 +63,12 @@ BODY_LINE_CAP = 10
 _FIXTURE_REFERENCE = re.compile(
     r"tests/regression/fixtures/[a-z0-9_]+(?:/[a-z]+\.yaml)?"
 )
-#: The ``# `` title, which the cap does not count: it is the file's identity,
-#: repeated by the front matter's ``id`` and linked by the index, and
-#: counting it would put the ticket's own shape over the cap.
-_TITLE = re.compile(r"\A# ")
+#: A heading, which the cap does not count. The title is the file's identity,
+#: repeated by the front matter's ``id`` and linked by the index; the three
+#: section headings are the format itself, fixed by :data:`SECTIONS` and
+#: written by nobody. Charging for structure would make the cap dictate a
+#: table's orientation rather than its content, which is not what it is for.
+_HEADING = re.compile(r"\A#{1,6} ")
 _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _TICKET = re.compile(r"#\d+")
 _COMMIT = re.compile(r"\A[0-9a-f]{40}\Z")
@@ -84,14 +86,15 @@ class Experiment:
 
 
 def body_lines(body: str) -> int:
-    """The lines the cap counts: non-blank, the ``# `` title excluded.
+    """The lines the cap counts: non-blank, and neither title nor heading.
 
-    Blank lines carry nothing and the title is the file's identity rather
-    than its body, so neither is charged; a section heading is charged,
-    because three headings are what the format costs to read.
+    What a reader reads is what is charged. A blank line carries nothing, a
+    title names the file, and a section heading is the format rather than a
+    line anyone wrote, so the ten are ten lines of content --- typically a
+    question, a table and a finding.
     """
     return sum(
-        1 for line in body.splitlines() if line.strip() and not _TITLE.match(line)
+        1 for line in body.splitlines() if line.strip() and not _HEADING.match(line)
     )
 
 
@@ -156,7 +159,7 @@ def problems(experiment: Experiment) -> list[str]:
             found.append(f"section {section!r} is empty")
     if experiment.body_lines > BODY_LINE_CAP:
         found.append(
-            f"body is {experiment.body_lines} non-blank lines, over the cap of "
+            f"body is {experiment.body_lines} content lines, over the cap of "
             f"{BODY_LINE_CAP} (issue #458)"
         )
     finding = experiment.sections.get("Finding", "")
@@ -233,15 +236,16 @@ def render_index(found: list[Experiment]) -> str:
         "matter carrying the commit, the fixture and its size tier, the methods\n"
         "compared at one budget over shared seeds, the hardware and the status; then\n"
         "three sections --- Question, Numbers, Finding (issue #314).\n\n"
-        "**The body is capped at ten non-blank lines** after the front matter's closing\n"
-        "`---`, section headings counted and the `# ` title not (issue #458). The front\n"
-        "matter is the reproducibility record and is not counted. What survives the cap\n"
-        "is chosen, in this order: key metrics, motivation, reproducibility. A number\n"
-        "displaced by it moves to `STATUS.md` where it is evidence for a milestone, or\n"
-        "to the pull-request body where it is the argument for a change; a number that\n"
-        "fits neither was never evidence. `STATUS.md` cites an experiment rather than\n"
-        "restating its table, and `tests/regression/test_experiments.py` holds every\n"
-        "file to the template, the cap, and this index to the files.\n\n"
+        "**The body is capped at ten non-blank content lines** after the front matter's\n"
+        "closing `---` (issue #458). Neither the title nor a section heading is one of\n"
+        "them, and the front matter is not counted at all: it is the reproducibility\n"
+        "record. What survives the cap is chosen, in this order: key metrics,\n"
+        "motivation, reproducibility. A number displaced by it moves to `STATUS.md`\n"
+        "where it is evidence for a milestone, or to the pull-request body where it is\n"
+        "the argument for a change; a number that fits neither was never evidence.\n"
+        "`STATUS.md` cites an experiment rather than restating its table, and\n"
+        "`tests/regression/test_experiments.py` holds every file to the template, the\n"
+        "cap, and this index to the files.\n\n"
         "**This index is generated.** Rewrite it with `python infra/experiments.py`;\n"
         "`--check` fails when a file is invalid, over the cap, or the index is stale.\n\n"
     )
