@@ -328,15 +328,25 @@ discrete structural search and minimizing expensive exact evaluations.
     exact optimum, the exact expected score and the exact gradient are all
     computable and "does the relaxation find what discrete search finds" is
     falsifiable. Tree topologies at any interesting size are not. The
-    Gumbel-softmax half is therefore built first and the tropical Grassmannian
-    waits on an oracle rather than on effort.
+    Gumbel-softmax half was therefore built first. *The block on the tropical
+    Grassmannian half is lifted (#408):* below nine taxa every topology
+    enumerates, so the relaxation has an exact maximum to be held to, and the
+    Hadamard conjugation of a two-state spectrum is a closed form for the
+    coordinates themselves. Both referee it, and what remains unrefereed is
+    the size past enumeration, where simulated truth is the standard.
   - *Validation:* the relaxation must reduce to the discrete objective exactly
     at the corners of the simplex; the gradient estimator's bias and variance
     are measured against the exact gradient rather than assumed small; and any
     claim to beat a classical baseline needs the budget-matched paired test
     §2.4 requires.
   - *Landed:* the Gumbel-softmax half (#225); the tropical Grassmannian half
-    waits on an oracle (#211).
+    as a softmin over quartet resolutions in tree-metric coordinates, refereed
+    by enumeration at 5 to 8 taxa and by the Hadamard closed form (#408). It
+    is not measured to beat the bounded-radius search: on the fixtures where
+    both are affordable neighbor joining already reaches the same optimum at
+    no gradient steps, so no budget-matched claim is made. The module is
+    conserved as `snakes_and_ladders.sandbox.tropical` on that measurement,
+    with the tests and the figure that referee it.
 - **Neural Surrogate Modeling:** train lightweight graph neural networks (GNNs)
   or transformers to directly approximate the Felsenstein likelihood, Potts
   energy, or HMM likelihood. The RL agent queries the surrogate 10,000× faster

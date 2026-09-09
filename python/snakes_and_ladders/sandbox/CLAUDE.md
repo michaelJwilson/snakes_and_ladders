@@ -58,6 +58,12 @@ declined it, the ratio and the host, and each arrives with the test that
 referees it, so the comparison is re-runnable when a library's next version
 moves the numbers rather than settled by a paragraph.
 
+`tropical` is the same rule against no framework at all: the tropical
+Grassmannian relaxation of topology search, declined against neighbor joining
+(#408). A method declined against a simpler method is the case the header
+above names, and it is why the rule is stated over two solutions rather than
+over a library and our own code.
+
 The frameworks issue #322 adopted arrived instead as adapters and as referees
 on paths nobody proposed replacing — a Gymnasium adapter over the unchanged
 `learn.Environment` protocol, `rustworkx` conversions beside the generators

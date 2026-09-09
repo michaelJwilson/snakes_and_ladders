@@ -225,6 +225,8 @@ ALGORITHMS: dict[str, str] = {
     "search.max_cut.goemans_williamson": "relaxation",
     "learn.relaxed.RelaxedPotts": "relaxation",
     "learn.relaxed.RelaxedHmmPath": "relaxation",
+    "sandbox.tropical.optimize": "relaxation",
+    "sandbox.tropical.quartet_table": "relaxation",
     "search.rl.TopologyEnvironment": "policy learning",
     "learn.potts.PottsLandscape": "policy learning",
     "learn.hmm.StatePathLandscape": "policy learning",

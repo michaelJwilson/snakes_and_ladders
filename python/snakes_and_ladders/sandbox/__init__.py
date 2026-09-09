@@ -5,14 +5,15 @@ implementations of one equation, and one of them belongs here: the
 implementation a framework replaced on a hot path, kept as the referee root
 ``CLAUDE.md``'s oracle rule requires, or the framework front that lost, kept
 so the decline stays re-checkable when the library's next version moves the
-numbers. Only ``tests/`` and ``snakes_and_ladders.qa`` import from here, never
-``sim``, ``likelihood``, ``opt``, ``search`` or ``learn``; nothing is deleted
-from it; and nothing is re-exported from the package root. ``CLAUDE.md`` in
-this directory states the rules and ``tests/regression/test_sandbox.py``
-asserts them.
+numbers. The two need not be a library and our own code -- a method declined
+against a simpler method is the same case. Only ``tests/`` and
+``snakes_and_ladders.qa`` import from here, never ``sim``, ``likelihood``,
+``opt``, ``search`` or ``learn``; nothing is deleted from it; and nothing is
+re-exported from the package root. ``CLAUDE.md`` in this directory states the
+rules and ``tests/regression/test_sandbox.py`` asserts them.
 
-Three framework fronts so far, all declined on their numbers (issues #388,
-#389, #390): :mod:`~snakes_and_ladders.sandbox.pyg_surrogate` computes
+Three framework fronts, all declined on their numbers (issues #388, #389,
+#390): :mod:`~snakes_and_ladders.sandbox.pyg_surrogate` computes
 ``GraphSurrogate``'s forward through PyTorch Geometric's ``GINConv``,
 :mod:`~snakes_and_ladders.sandbox.rustworkx_clusters` labels the
 Swendsen-Wang bond graph through ``rustworkx.connected_components``, and
@@ -22,4 +23,9 @@ docstring carries the ratio it was declined at and the host that produced it.
 The first two import the ``frameworks`` extra at module scope, so a caller
 without it fails rather than silently falling back to what the front referees;
 scipy is a core dependency and the third imports it directly.
+
+:mod:`~snakes_and_ladders.sandbox.tropical` is a decline of the same kind
+against no framework at all: the tropical Grassmannian relaxation of topology
+search (issue #408), which neighbor joining matched at no gradient steps at
+every size enumeration referees.
 """
