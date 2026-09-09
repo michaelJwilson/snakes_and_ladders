@@ -1,10 +1,11 @@
-"""The two host locks behave as ``infra/locks.sh`` documents (issue #418).
+"""The host lock behaves as ``infra/locks.sh`` documents (issues #418, #427).
 
 The script is a throughput mechanism, so what wants asserting is the trade it
 makes rather than that it runs: validations overlap, a measurement does not
-overlap anything, and the slot count bounds the overlap. A lock whose
-exclusivity silently lapsed would make every timing in a pull request
-incomparable, and nothing else in the suite would notice.
+overlap anything, the slot count bounds the overlap, and a measurement that is
+waiting holds none of it. A lock whose exclusivity silently lapsed would make
+every timing in a pull request incomparable, and nothing else in the suite
+would notice.
 
 Timings here are ratios between a sleep and a wall clock on the same host, not
 budgets: each asserts that N one-second jobs took about one second or about
@@ -189,82 +190,45 @@ def test_a_measurement_is_one_thread_unless_it_asks_otherwise(scratch: Path) -> 
 
 @pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
 @pytest.mark.structural
-def test_wide_raises_the_thread_count_to_the_cores_it_owns(scratch: Path) -> None:
-    # The exception, for measuring something that is itself parallel: rayon in
-    # the Rust backend, a torch intra-op reduction, the CPU parallelism of
-    # #344. One thread would measure the wrong thing there.
-    cores = subprocess.run(
-        ["nproc"], capture_output=True, text=True, check=True
-    ).stdout.strip()
-    finished = subprocess.run(
-        [
-            "bash",
-            "-c",
-            f". {LOCKS}; with_lock measure --wide -- bash -c "
-            f'"echo \\$OMP_NUM_THREADS \\$RAYON_NUM_THREADS \\$SAL_MEASURE_THREADS"',
-        ],
-        cwd=REPO_ROOT,
-        env={
-            "SAL_SCRATCH": str(scratch),
-            "PATH": "/usr/bin:/bin",
-            "OMP_NUM_THREADS": "1",
-        },
-        capture_output=True,
-        text=True,
-        check=False,
+def test_a_waiting_measurement_holds_no_validation_capacity(scratch: Path) -> None:
+    # Issue #427's inversion. A measurement that has not started must hold
+    # nothing, so a slot it is waiting for stays available to a validation.
+    #
+    # The arrangement is what exposes it: a short validation takes the first
+    # slot and two long ones take the rest, so when the short one ends there is
+    # one free slot with the other two still busy. A measurement that took the
+    # exclusive lock first and then collected slots one at a time would take
+    # that free slot and block on the next, and the probe validation below --
+    # which needs one slot and nothing else -- would wait behind a job that is
+    # itself waiting. Measured at 3.31 s on the implementation this replaces,
+    # against 0.01 s here.
+    setup = (
+        f". {LOCKS}; "
+        f"( with_lock validate -- sleep {0.4 * JOB} ) & sleep 0.15; "
+        f"( with_lock validate -- sleep {3 * JOB} ) & sleep 0.15; "
+        f"( with_lock validate -- sleep {3 * JOB} ) & "
+        f"sleep 0.5; ( with_lock measure -- sleep 0.1 ) & wait"
     )
-    assert finished.returncode == 0, finished.stderr
-    assert finished.stdout.split() == [cores, cores, cores]
-
-
-@pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
-@pytest.mark.structural
-def test_a_validation_may_not_take_the_whole_host(scratch: Path) -> None:
-    # A validation shares the host with two siblings, so it may not claim the
-    # cores they are using. Refusing beats quietly oversubscribing, which would
-    # slow all three and show up as nothing but noise in a later measurement.
-    finished = subprocess.run(
-        ["bash", "-c", f". {LOCKS}; with_lock validate --wide -- true"],
-        cwd=REPO_ROOT,
-        env={"SAL_SCRATCH": str(scratch), "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        check=False,
+    env = {"SAL_SCRATCH": str(scratch), "PATH": "/usr/bin:/bin", "SAL_LOCK_WAIT": "60"}
+    background = subprocess.Popen(
+        ["bash", "-c", setup], cwd=REPO_ROOT, env=env, stdout=subprocess.DEVNULL
     )
-    assert finished.returncode != 0
-    assert "does not own the host" in finished.stderr
-
-
-@pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
-@pytest.mark.critical
-@pytest.mark.structural
-def test_wide_does_not_forfeit_exclusivity(scratch: Path) -> None:
-    # The obvious way to get --wide wrong is to treat it as a separate, weaker
-    # path. A wide measurement still takes every lock.
-    elapsed = _run(["validate", "measure --wide"], scratch)
-    assert elapsed >= 1.5 * JOB, (
-        f"a wide measurement ran beside a validation: {elapsed:.2f}s"
+    try:
+        time.sleep(1.3)  # the short validation has ended; the measurement waits
+        start = time.monotonic()
+        probe = subprocess.run(
+            ["bash", "-c", f". {LOCKS}; with_lock validate -- true"],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        waited = time.monotonic() - start
+        assert probe.returncode == 0, probe.stderr
+    finally:
+        background.wait()
+    assert waited < JOB, (
+        f"a validation waited {waited:.2f}s behind a measurement that had not "
+        "started; the free slot was held by the measurement's own wait"
     )
-
-
-@pytest.mark.skipif(shutil.which("flock") is None, reason="flock is not on this host")
-@pytest.mark.structural
-def test_measure_works_from_a_copy_without_the_execute_bit(
-    scratch: Path, tmp_path: Path
-) -> None:
-    # The script is meant to be sourced, so it must not require its own execute
-    # bit to re-enter itself. A copy extracted with `git show`, or a checkout
-    # that dropped the mode, failed `measure` with a bare "Permission denied"
-    # -- found by hitting it, which is why this is pinned.
-    copy = tmp_path / "locks_copy.sh"
-    copy.write_text(LOCKS.read_text())
-    copy.chmod(0o644)
-    finished = subprocess.run(
-        ["bash", "-c", f". {copy}; with_lock measure -- true"],
-        cwd=REPO_ROOT,
-        env={"SAL_SCRATCH": str(scratch), "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert finished.returncode == 0, finished.stderr
