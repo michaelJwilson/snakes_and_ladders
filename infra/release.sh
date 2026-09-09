@@ -30,6 +30,15 @@ run_check "mypy --strict" uv run mypy
 run_check "cargo clippy" cargo clippy --locked --all-targets -- -D warnings
 run_check "cargo fmt --check" cargo fmt --check
 run_check "cargo test" cargo test --locked
+# The one thing that compiles the `sandbox` feature. A `#[cfg(feature)]` route
+# nothing builds stops compiling the first time a neighbouring API moves and
+# nobody learns for months, which is the rot `sandbox/CLAUDE.md`'s conservation
+# rule exists to prevent -- so the conserved route is compiled and its Rust
+# unit tests run here, and the Python route it fronts is refereed by
+# `tests/regression/likelihood/test_pruning_burn.py`, which skips against a
+# default build and runs against the extension this gate would need rebuilt
+# with `--features sandbox`.
+run_check "cargo test --features sandbox" cargo test --locked --features sandbox
 # Plain `pytest`, not `-m release`: the latter marker-filters down to only
 # release-marked tests, dropping everything `python-tests`' `-m "not
 # release"` already covers. DEV.md's "Run the full suite ... with `pytest -m
