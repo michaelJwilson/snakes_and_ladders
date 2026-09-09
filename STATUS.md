@@ -930,9 +930,15 @@ The independent measurement agrees on the term. A `#[pyclass]`
 as three borrowed buffers cuts the bytes a caller materialises per pass from
 **64,352 to 360** at 8 taxa by 1,000 sites and from **1,760,928 to 936** at
 20 by 11,000 — 179x and 1,881x — and cuts the argument construction it was
-built to remove from **0.173 ms to 0.023 ms** of a 5.606 ms call, which is
-the same 3% #443 decomposed. Per pass, medians over 81 interleaved repeats
-with the interquartile range, one thread under the exclusive lock: 0.157 to
+built to remove from **0.173 ms to 0.023 ms** of a 5.606 ms call. The two
+measurements agree on the term and disagree on the denominator: the
+marshalling times are 0.173 ms here and **0.1674 ms** there at nearly the
+same size, while the whole call is 5.606 ms here against **11.6924 ms**
+there and 10.28 ms in #436, on fixtures built differently. So the fraction
+reads 3.1% against 1.43% through the denominator and not the numerator, and
+the conclusion is the same either way: marshalling is single digits.
+
+Per pass, medians over 81 interleaved repeats with the interquartile range, one thread under the exclusive lock: 0.157 to
 0.145 ms (**-7.9%**) at 8 by 1,000, 1.881 to 1.925 (**+2.3%**, the
 interquartile ranges overlapping, so **no change**) at 8 by 11,000, 0.434 to
 0.397 (**-8.4%**) at 20 by 1,000, and 5.606 to 5.271 (**-6.0%**) at 20 by
