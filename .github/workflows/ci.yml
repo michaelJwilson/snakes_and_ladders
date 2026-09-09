@@ -296,6 +296,27 @@ jobs:
           echo "changed files:"; echo "$changed" | sed 's/^/  /'
           echo "$changed" | python3 infra/select_tests.py >> "$GITHUB_OUTPUT"
           echo "$changed" | python3 infra/select_tests.py | sed 's/^/::notice::/'
+      # ON a pull request, unlike the tier below. A baseline record holds a
+      # number a test reads instead of recomputing, and until issue #460 the
+      # record carried a digest of the tree it was written from, which every
+      # reader compared with the current tree's. That digest moved 54 times
+      # over the five records' history and carried a moved number 0 times,
+      # while making 8 of the 38 conflicts across the eight open branches --
+      # it re-keyed on any edit inside a closure spanning 66 of the 145
+      # tracked source files, and said only that the tree had moved. This is
+      # what replaced it, and it is the stronger check: it recomputes the
+      # records whose fixture or import closure the change actually touched
+      # and reports a number that moved, not a hash that did. Measured on the
+      # reference host: 3 s for the cheapest record, 31 s for all five, so it
+      # is affordable on the pull request the change is made in.
+      - name: Recompute the baselines the change reaches
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            uv run python infra/baselines.py
+            exit 0
+          fi
+          git diff --name-only "origin/${{ github.base_ref }}"...HEAD \
+            | uv run python infra/baselines.py --changed -
       # NOT on a pull request (issue #455). A pull request is judged by the
       # critical gate above; the tier below runs on the push to `main`, where
       # nobody waits for it, and at the release gate. The pytest job took 17

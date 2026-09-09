@@ -48,7 +48,7 @@ from pathlib import Path
 
 import numpy as np
 from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.inputs import library_versions
+from snakes_and_ladders.inputs import library_versions, module_closure
 from snakes_and_ladders.learn.exact import exact_expected_return
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
@@ -69,7 +69,7 @@ from snakes_and_ladders.sim.fixtures import (
     Baseline,
     Fixture,
     Measurement,
-    baseline_digest,
+    StaleBaselineError,
     baseline_path,
     fixture,
     path_of,
@@ -539,12 +539,6 @@ def compute(spec: BaselineSpec, root: Path = REPO_ROOT) -> Baseline:
         path=baseline_path(spec.problem, spec.tier, directory),
         modules=spec.modules,
         libraries=tuple(library_versions(BASELINE_LIBRARIES)),
-        digest=baseline_digest(
-            path_of(spec.problem, spec.tier, directory),
-            spec.modules,
-            measurements,
-            root,
-        ),
         measurements=measurements,
     )
 
@@ -562,9 +556,10 @@ def differences(computed: Baseline, committed: Baseline) -> list[str]:
     Returns
     -------
     list[str]
-        One line per disagreement, empty when they match. The digest is
-        reported too: a record whose numbers still hold but whose digest has
-        moved makes every reader raise until it is rewritten.
+        One line per disagreement, empty when they match. A budget, a seed or
+        an algorithm is reported like a value: the record is then describing a
+        measurement other than the one it holds, which is the way a
+        hand-edited record goes wrong.
     """
     found = []
     for name in sorted(set(computed.measurements) | set(committed.measurements)):
@@ -574,13 +569,25 @@ def differences(computed: Baseline, committed: Baseline) -> list[str]:
             found.append(
                 f"{name}: {'only computed' if stored is None else 'only committed'}"
             )
-        elif fresh.value != stored.value:
+            continue
+        if fresh.value != stored.value:
             found.append(
                 f"{name}: computed {fresh.value!r}, committed {stored.value!r}"
             )
-    if computed.digest != committed.digest:
+        if (fresh.algorithm, fresh.seed, dict(fresh.budget)) != (
+            stored.algorithm,
+            stored.seed,
+            dict(stored.budget),
+        ):
+            found.append(
+                f"{name}: computed under seed {fresh.seed!r} and budget "
+                f"{dict(fresh.budget)!r}, committed under seed {stored.seed!r} "
+                f"and budget {dict(stored.budget)!r}"
+            )
+    if computed.libraries != committed.libraries:
         found.append(
-            f"digest: computed {computed.digest[:12]}, committed {committed.digest[:12]}"
+            f"libraries: computed under {list(computed.libraries)}, "
+            f"committed under {list(committed.libraries)}"
         )
     return found
 
@@ -608,8 +615,97 @@ def selected(only: Sequence[str]) -> tuple[BaselineSpec, ...]:
     return tuple(known[name] for name in only)
 
 
+#: Changes outside a record's import closure that can still move its numbers:
+#: this script holds the reference algorithms, and the environment decides the
+#: arithmetic. Everything else that matters is in the closure, which is exact.
+GLOBAL_TRIGGERS: tuple[str, ...] = (
+    "infra/baselines.py",
+    "pyproject.toml",
+    "uv.lock",
+    "Cargo.lock",
+    "Cargo.toml",
+    "rust-toolchain.toml",
+    "src/",
+)
+
+
+def reached_by(
+    changed: Sequence[str], root: Path = REPO_ROOT
+) -> tuple[BaselineSpec, ...]:
+    """The specs whose numbers ``changed`` could have moved (issue #460).
+
+    A record's numbers are a function of its fixture, the transitive import
+    closure of its computing modules, this script and the environment. A
+    change outside all four provably cannot move them, so recomputing then
+    would measure nothing --- which is the whole reason the numbers are
+    committed. This is the selection the committed digest used to stand in
+    for: the digest re-keyed on the same changes, but said only that the tree
+    had moved, where recomputing says whether the number did.
+
+    Parameters
+    ----------
+    changed : Sequence[str]
+        Paths relative to the repository root, as ``git diff --name-only``
+        gives them.
+    root : Path
+        The repository root the closures are taken relative to.
+
+    Returns
+    -------
+    tuple[BaselineSpec, ...]
+        In :data:`SPECS` order, so a run is reproducible.
+    """
+    paths = {path.strip() for path in changed if path.strip()}
+    if any(path.startswith(trigger) for path in paths for trigger in GLOBAL_TRIGGERS):
+        return SPECS
+    directory = root / "tests" / "regression" / "fixtures"
+    found = []
+    for spec in SPECS:
+        closure = {
+            str(path.relative_to(root)) for path in module_closure(spec.modules, root)
+        }
+        closure.add(str(path_of(spec.problem, spec.tier, directory).relative_to(root)))
+        closure.add(
+            str(baseline_path(spec.problem, spec.tier, directory).relative_to(root))
+        )
+        if paths & closure:
+            found.append(spec)
+    return tuple(found)
+
+
+def check(specs: Sequence[BaselineSpec]) -> None:
+    """Recompute ``specs`` and raise if a record no longer holds.
+
+    Raises
+    ------
+    StaleBaselineError
+        If a recomputed value, budget, seed or algorithm disagrees with what
+        is committed, or a record is missing or unreadable. This is the
+        referee the removed digest stood in for, and it is stronger: the
+        digest said the tree had moved, this says the number has.
+    """
+    log = get_logger(__name__, start_time=time.time())
+    stale: list[str] = []
+    for spec in specs:
+        name = f"{spec.problem}/{spec.tier}"
+        with phase(f"measure {name}"):
+            computed = compute(spec)
+        try:
+            committed = read_baseline(computed.path)
+        except (FileNotFoundError, ValueError) as error:
+            stale.append(f"{name}: {error}")
+            continue
+        stale += [f"{name}: {line}" for line in differences(computed, committed)]
+    if stale:
+        msg = "; ".join(stale) + (
+            "; recompute with: uv run python infra/baselines.py --write"
+        )
+        raise StaleBaselineError(msg)
+    log.info("%d baseline records match a recomputation", len(specs))
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Write or check every baseline record.
+    """Write or check the baseline records.
 
     Returns
     -------
@@ -629,35 +725,56 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PROBLEM/TIER",
         help="act on this record alone; repeatable",
     )
+    parser.add_argument(
+        "--changed",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help=(
+            "act on the records these changed paths could have moved; "
+            "repeatable, and reads one path per line from stdin when given "
+            "as '-'"
+        ),
+    )
     arguments = parser.parse_args(argv)
     log = get_logger(__name__, start_time=time.time())
 
-    stale: list[str] = []
-    for spec in selected(arguments.only):
-        name = f"{spec.problem}/{spec.tier}"
-        with phase(f"measure {name}"):
-            computed = compute(spec)
-        if arguments.write:
+    if arguments.changed and arguments.only:
+        log.error("--changed and --only name the records two different ways")
+        return 2
+    if arguments.changed:
+        changed = [
+            line
+            for item in arguments.changed
+            for line in (sys.stdin.read().splitlines() if item == "-" else [item])
+        ]
+        specs = reached_by(changed)
+        if not specs:
+            log.info(
+                "no baseline record reaches any of the %d changed paths", len(changed)
+            )
+            return 0
+        log.info(
+            "%d of %d records reached: %s",
+            len(specs),
+            len(SPECS),
+            ", ".join(f"{spec.problem}/{spec.tier}" for spec in specs),
+        )
+    else:
+        specs = selected(arguments.only)
+
+    if arguments.write:
+        for spec in specs:
+            with phase(f"measure {spec.problem}/{spec.tier}"):
+                computed = compute(spec)
             write_baseline(computed)
             log.info("wrote %s", computed.path)
-            continue
-        try:
-            committed = read_baseline(computed.path)
-        except (FileNotFoundError, ValueError) as error:
-            stale.append(f"{name}: {error}")
-            continue
-        stale += [f"{name}: {line}" for line in differences(computed, committed)]
-
-    if stale:
-        for line in stale:
-            log.error("%s", line)
-        log.error(
-            "baseline records are stale; recompute with: "
-            "uv run python infra/baselines.py --write"
-        )
+        return 0
+    try:
+        check(specs)
+    except StaleBaselineError as error:
+        log.error("%s", error)
         return 1
-    if not arguments.write:
-        log.info("%d baseline records match a recomputation", len(SPECS))
     return 0
 
 
