@@ -123,7 +123,7 @@ Ten checks run via GitHub Actions (`.github/workflows/ci.yml`). Nine run on a pu
 | Job | Execution |
 | --- | --- |
 | `lint` | `ruff check`, `ruff format --check`, strict `mypy`, `towncrier check`, and the rule that a pull request changes a committed PDF only to rebuild it (see Documents) --- here rather than in `documents` because this is the required job a pull request still runs, and it already checks out the history the diff needs |
-| `rust-lint` | `cargo clippy -D warnings`, `cargo fmt --check` |
+| `rust-lint` | `cargo clippy --locked --all-targets -- -D warnings`, `cargo fmt --check` |
 | `rust-tests` | `cargo test --locked`, `cargo bench` (informational) |
 | `build` | `pip install .` (no lockfile, mimics fresh consumer), smoke import |
 | `python-tests` | `pytest -m "not release"`, gated on minimum coverage; benchmarks skipped unless computational code changed. Also `infra/ledgers.sh --check`, which writes `CHECKS.md`, `SEAMS.md`, the applicability tables, and the two blocks generated from `infra/gates.py` (`pyproject.toml`'s marker list and this file's tier table), and fails if regenerating rewrote a tracked file — here rather than in `lint` because the seams survey imports the package with the `frameworks` extra, and this is the job that has it. The two Markdown ledgers are written to the run summary, which is where a reader browses them now that the tree does not carry them |

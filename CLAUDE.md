@@ -52,8 +52,8 @@ Every `CLAUDE.md`, this one included, is the exception, on rule 6: it carries th
 *   **Python (3.12):** Manage via `uv`. Run `uv sync --locked --all-extras`. Regenerate locks with `uv lock` and commit `uv.lock` in the same PR.
 *   **Rust:** Compiler pinned via `rust-toolchain.toml`. Lockfile is `Cargo.lock`. Update with `cargo update` and commit.
 *   **Lint/Format (Python):** `ruff check .` and `ruff format --check .`
-*   **Type Check (Python):** `mypy --strict`, over the paths in `pyproject.toml`'s `files` (`python/`, `tests/`).
-*   **Lint/Format (Rust):** `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`.
+*   **Type Check (Python):** `mypy --strict`, over the paths in `pyproject.toml`'s `files` (`python/`, `tests/`, `infra/`).
+*   **Lint/Format (Rust):** `cargo clippy --locked --all-targets -- -D warnings` and `cargo fmt --check`.
 *   **Audit:** `pip-audit` (Python) and `cargo audit` (Rust).
 *   **Docs:** Build with `sphinx-build -W` in `docs/source/`.
 
