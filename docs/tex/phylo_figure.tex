@@ -4,33 +4,28 @@
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
-    scale=1.0,
-    latent/.style={circle, draw, minimum size=0.62cm, inner sep=0.5pt, font=\small, fill=white},
-    observed/.style={circle, draw, fill=black!12, minimum size=0.62cm, inner sep=0.5pt, font=\small},
-    factor/.style={rectangle, draw, fill=white, minimum size=0.16cm, inner sep=0pt},
-    indicator/.style={rectangle, draw, fill=black!55, minimum size=0.16cm, inner sep=0pt},
-    branch/.style={draw, thick}
+    scale=1.0
 ]
   % Internal states, drawn as variables of the factor graph.
-  \node[latent] (root) at (0, 3.6) {$x_\rootnode$};
-  \node[latent] (u)    at (-1.9, 2.1) {$x_u$};
-  \node[latent] (v)    at (1.9, 2.1) {$x_v$};
+  \node[fgvariable] (root) at (0, 3.6) {$x_\rootnode$};
+  \node[fgvariable] (u)    at (-1.9, 2.1) {$x_u$};
+  \node[fgvariable] (v)    at (1.9, 2.1) {$x_v$};
   % Leaves: the same variables, with the data folded in by an indicator.
   \foreach \name/\pos/\label in {a/-3.0/1, b/-0.8/2, c/0.8/3, d/3.0/4} {
-    \node[observed] (\name) at (\pos, 0.5) {$x_{\label}$};
-    \node[indicator] (i\name) at (\pos, -0.25) {};
-    \draw[branch] (\name) -- (i\name);
+    \node[fgobserved] (\name) at (\pos, 0.5) {$x_{\label}$};
+    \node[fgindicator] (i\name) at (\pos, -0.25) {};
+    \draw[fglink] (\name) -- (i\name);
   }
   % Branch factors: one per edge, carrying $\Pmat(\tau)$.
   \foreach \parent/\child in {root/u, root/v, u/a, u/b, v/c, v/d} {
-    \draw[branch] (\parent) -- node[factor, pos=0.5] {} (\child);
+    \draw[fglink] (\parent) -- node[fgfactor, pos=0.5] {} (\child);
   }
   % The root prior.
-  \node[factor] (prior) at (0, 4.35) {};
-  \draw[branch] (root) -- (prior);
-  \node[anchor=west, font=\footnotesize] at (0.25, 4.35) {$\psi_\rootnode = \bpi$};
-  \node[anchor=west, font=\footnotesize] at (0.85, 2.9) {$\psi_v = \Pmat(\tau_v)$};
-  \node[anchor=west, font=\footnotesize] at (3.35, -0.25) {$\mathbb{1}[x_4 = \data_{4}]$};
+  \node[fgfactor] (prior) at (0, 4.35) {};
+  \draw[fglink] (root) -- (prior);
+  \node[fgnote] at (0.25, 4.35) {$\psi_\rootnode = \bpi$};
+  \node[fgnote] at (0.85, 2.9) {$\psi_v = \Pmat(\tau_v)$};
+  \node[fgnote] at (3.35, -0.25) {$\mathbb{1}[x_4 = \data_{4}]$};
 \end{tikzpicture}
 \caption{One site of a four-taxon phylogeny as a factor graph. Open circles
 are the states of the internal nodes and shaded circles the states at the

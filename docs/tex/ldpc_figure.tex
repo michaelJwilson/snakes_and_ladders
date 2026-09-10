@@ -5,26 +5,24 @@
 \centering
 \begin{tikzpicture}[
     scale=1.0,
-    bit/.style={circle, draw, minimum size=0.55cm, inner sep=0.5pt, font=\footnotesize, fill=white},
-    check/.style={rectangle, draw, fill=white, minimum size=0.45cm, inner sep=1pt, font=\footnotesize},
-    channel/.style={rectangle, draw, fill=black!25, minimum size=0.16cm, inner sep=0pt},
-    link/.style={draw, thick}
+    check/.style={fgfactor, minimum size=0.45cm, inner sep=1pt,
+                  font=\footnotesize}
 ]
   \foreach \i in {1,...,6} {
-    \node[bit] (c\i) at (1.35*\i, 1.5) {$c_{\i}$};
-    \node[channel] (l\i) at (1.35*\i, 0.7) {};
-    \draw[link] (c\i) -- (l\i);
+    \node[fgvariable] (c\i) at (1.35*\i, 1.5) {$c_{\i}$};
+    \node[fgdata] (l\i) at (1.35*\i, 0.7) {};
+    \draw[fglink] (c\i) -- (l\i);
     \node[font=\footnotesize, anchor=north] at (1.35*\i, 0.55) {$L_{\i}$};
   }
   \node[check] (a) at (2.7, 3.1) {$+$};
   \node[check] (b) at (5.4, 3.1) {$+$};
   \node[check] (d) at (8.1, 3.1) {$+$};
-  \foreach \bit in {1,2,3,4} { \draw[link] (c\bit) -- (a); }
-  \foreach \bit in {2,4,5,6} { \draw[link] (c\bit) -- (b); }
-  \foreach \bit in {1,3,5,6} { \draw[link] (c\bit) -- (d); }
-  \node[anchor=west, font=\footnotesize] at (9.0, 3.1)
+  \foreach \bit in {1,2,3,4} { \draw[fglink] (c\bit) -- (a); }
+  \foreach \bit in {2,4,5,6} { \draw[fglink] (c\bit) -- (b); }
+  \foreach \bit in {1,3,5,6} { \draw[fglink] (c\bit) -- (d); }
+  \node[fgnote] at (9.0, 3.1)
     {$\psi_a = \mathbb{1}[\bigoplus_{i \in \partial a} c_i = 0]$};
-  \node[anchor=west, font=\footnotesize] at (9.0, 0.7)
+  \node[fgnote] at (9.0, 0.7)
     {$\psi_i = e^{-c_i L_i}$};
 \end{tikzpicture}
 \caption{A Tanner graph: bits $c_i \in \{0, 1\}$ as circles, the parity
