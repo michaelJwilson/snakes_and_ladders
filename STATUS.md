@@ -2526,6 +2526,126 @@ from the module that implements it, so the guard of #274 resolves them; the
 - Rate variation across sites, and GPU dispatch. Neither is built; both are
   ticketed (#323, #280).
 
+## Throughput audit at #525
+
+The first measurements this repository has taken on a host that was quiet
+rather than assumed quiet. Issue #521 removed the readers-writer lock and #526
+the last generated-file class, and nothing else ran: every reading below was
+taken with `ps` showing no process over 20% CPU but the run itself, the
+1-minute load recorded before and after, and each number repeated. Where two
+repeats are given, both are given.
+
+**The host.** Four cores. `pytest`'s own clock is quoted, not wall clock, so
+`uv` startup is out of every figure.
+
+### Variant A, the baseline every document now carries
+
+| Step | Reading | Repeat | Was |
+| --- | --- | --- | --- |
+| `pytest -m critical` | **15.9 s**, 168 tests | 15.85, 15.94 s at load 0.54, 0.57 | 177 tests in 16.6 s ([#524](https://github.com/michaelJwilson/snakes_and_ladders/pull/524)) |
+| `pytest -m "not release and not stress"` | **1,226 s**, 2,315 collected | 1,226.2, 1,234.2 s | 1,098 s over 2,121 |
+| the same, `--benchmark-disable` | **994 s** | see below | not previously measured |
+| `infra/review_gates.sh` | 26–27 s, eight rows | reused from [#524](https://github.com/michaelJwilson/snakes_and_ladders/pull/524) | — |
+
+The CI tier grew 12% and the critical tier shrank by nine tests, which went
+with the host lock and the figure stamps.
+
+### The grid: processes against BLAS threads
+
+`n` is `pytest-xdist -n`; `t` is `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and
+`MKL_NUM_THREADS` together. On four cores `n·t > 4` oversubscribes. CI tier,
+`pytest`'s clock, throughput against A:
+
+| | t = 1 | t = 2 | t = 4 |
+| --- | --- | --- | --- |
+| **n = 1** | 1,226.2 / 1,234.2 s — 1.00x | not taken | 1,227.4 s — **1.00x** |
+| **n = 2** | not taken | 541.1 s — 2.27x | — |
+| **n = 3** | 361.9 / 361.9 s — 3.39x | — | — |
+| **n = 4** | 330.4 s — 3.71x | — | — |
+
+Critical tier, two repeats per cell, `pytest`'s clock:
+
+| | t = 1 | t = 2 | t = 4 |
+| --- | --- | --- | --- |
+| **n = 1** | 15.94 / 16.79 | 15.91 / 16.53 | 15.65 / 15.49 |
+| **n = 2** | 14.56 / 12.87 | 13.56 / 12.56 | 13.64 / 12.86 |
+| **n = 3** | 12.48 / 11.75 | 11.91 / 11.62 | 12.03 / 12.20 |
+| **n = 4** | 11.46 / 12.09 | 11.27 / 10.53 | 11.50 / 11.02 |
+
+**The interaction is that there is none to trade.** Thread width contributes
+nothing at any process count, so `n = 2, t = 2` — exactly the core count — is
+2.27x where `n = 3, t = 1` is 3.39x: the second thread per worker is a worker
+not taken. The two axes do not compose; one of them is simply better.
+
+**Three is not the peak on this tier, and the prior that said so measured
+something else.** The 22.0 / 23.4 / 28.7 / 39.2 s series behind the ~2.30x
+prior was *n concurrent whole suites* — the throughput of n agents each running
+everything — on a tier of 16 s where process startup is most of the cost.
+`-n` splits one suite instead, and on a tier of twenty minutes the startup
+amortizes: the CI tier is still improving at four workers. On the critical tier,
+where the prior's conditions hold, xdist gives 1.31x at three workers and 1.37x
+at four, and startup is why.
+
+### The correctness checks, which are what decide this
+
+**1. Ordering and seeding under xdist: no change.** Every cell of the CI grid
+returned **2,302 passed, 13 skipped** — the same result set at one, two, three
+and four workers, and at one, two and four threads. Nothing in the suite
+depends on collection order, a module-scoped fixture or a shared temporary path
+in a way that distribution disturbs.
+
+**2. xdist silently stops benchmarking, and that is the real cost of C.**
+`pytest-benchmark` prints `Benchmarks are automatically disabled because xdist
+plugin is active` and the 212 benchmark tests then collect and pass while
+measuring nothing. **The 3.39x is therefore not like-for-like.** With
+benchmarks disabled on both sides the CI tier is **993.7 s** at `n = 1` against
+361.9 s at `n = 3`, which is **2.75x** — and the 232.6 s difference says the
+benchmarks are **19.0%** of the tier, not the 29.6% `DEV.md` carried from an
+older and much smaller measurement. A tier run under `-n` is a correctness run
+and no longer a benchmark run.
+
+**3. Numerical agreement under wider BLAS: nothing moved, and the tier could
+not have shown it.** The CI tier at `t = 4` returned the same 2,302 passed as
+at `t = 1`. That is weaker evidence than it looks: the bitwise pins in
+`tests/regression/` are almost all *within-run* comparisons — `workers=1`
+against `workers=4`, a decoder against its own sign-flipped input — and a
+global thread change moves both sides together. The pins that a reduction-order
+change could actually break are the ones against committed constants, and there
+are **59 float values across the five records under
+`tests/regression/fixtures/`**, compared by `infra/baselines.py` with
+`fresh.value != stored.value` — exact equality, no tolerance. Those are checked
+directly below rather than inferred from the tier.
+
+### What variant B would stale, which is the number that decides it
+
+**221 recorded timings**, all taken at one BLAS thread: `DEV.md` 84,
+`STATUS.md` 132, `INSTALL.md` 4, `TICKETS.md` 1, counting only numeric-workload
+timings and excluding the compile, LaTeX and I/O readings that thread width
+cannot touch. Plus the **59 committed baseline floats** above. The 23 declared
+render times in `snakes_and_ladders.qa.manifest` are *not* among them:
+`qa.build` strips the three variables from a render's environment, so every
+figure already renders at full width.
+
+### The decisions
+
+| | Verdict |
+| --- | --- |
+| **B, wider BLAS threads** | **Declined, on its own clock.** 1,227.4 s against A's 1,226.2 s is a 0.1% difference inside the repeat spread of A itself. It buys nothing on this suite and would stale 280 recorded numbers to buy it. `tests/conftest.py` keeps pinning one thread per process |
+| **C, `pytest-xdist`** | **Adopted for the correctness tiers, not for benchmarks.** 2.75x on the CI tier at `n = 3`, like-for-like; 1.31x on the critical tier, where startup dominates. Because xdist disables `pytest-benchmark`, a run that must produce benchmark numbers runs at `n = 1` |
+
+The prediction recorded on the ticket was C at `-n 3` for ~2.3x and B declined
+on cost rather than clock. C's like-for-like 2.75x is close to it. B is
+declined more cheaply than predicted: it never had to be weighed against 280
+staled numbers, because it is not faster.
+
+**Dependency clearance.** `pytest-xdist` is **MIT**, an OSI-approved licence,
+at **1.9k** GitHub stars — above the 1,000 the flag rule sets. Its one runtime
+dependency, `execnet`, is MIT as well. It is not declared in `pyproject.toml`
+today and adopting it means declaring it in the `test` extra and committing
+`uv.lock` in the same pull request, which this one does not do: the measurement
+is the deliverable here and the adoption is #405's, where `TICKETS.md` already
+carries "`pytest-xdist` against the test budget".
+
 ## Consistency audit at 0.5.0
 
 What the release audit ([#376](https://github.com/michaelJwilson/snakes_and_ladders/issues/376)) found stale, contradictory or
