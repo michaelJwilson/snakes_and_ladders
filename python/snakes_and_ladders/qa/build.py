@@ -7,24 +7,25 @@ while proving nothing about it (issue #154).
 
 Every figure is rendered and compared at the release gate, where
 ``infra/release.sh`` runs ``--all --check`` (issue #484): cited and uncited
-alike, with the stamps ignored. The stamps' false-positive rate is 100% over
-476 decisions (issue #476), so the guarantee --- a figure whose rendered bytes
-would change cannot reach a release claiming to be current --- is enforced by
-rendering every figure rather than predicted for any of them. The selection
-below is a cost decision under that gate, not a substitute for it.
+alike. The guarantee --- a figure whose rendered bytes would change cannot
+reach a release claiming to be current --- is enforced by rendering every
+figure rather than predicted for any of them. The selection below is a cost
+decision under that gate, not a substitute for it.
 
 ``--check`` regenerates into a temporary directory and compares bytes instead
 of overwriting, so a verification run cannot itself produce the state it was
 meant to detect.
 
-A figure is rendered only when its inputs changed (issue #372). Each committed
-figure has a stamp beside it, ``<stem>.inputs``, recording the digest of the
-renderer's source, its import closure, the fixtures it reads and the drawing
-libraries (``snakes_and_ladders.inputs``) at the render that produced it.
-A cited figure whose stamp equals the digest of the current tree is skipped;
-``--all`` ignores the stamps, so the release gate renders everything.
-A pull request that changed only ``docs/tex/`` therefore renders nothing and
-its build is LaTeX alone.
+**Every selected figure is rendered; nothing predicts which could have
+changed** (issue #490). A stamp beside each committed figure recorded a
+digest of the renderer's import closure, and a figure whose stamp matched
+the tree was skipped. Over 476 decisions the stamps never once skipped a
+figure whose bytes would have moved, and never once let one through: every
+stale call was a false positive, at ~48 minutes in one day. Rendering the
+selection unconditionally costs the cited set's declared time --- 305.3 s
+over the 21 entries `snakes_and_ladders.qa.manifest` states --- on the push
+to ``main`` where the documents job runs, and answers with the bytes rather
+than with a hash of their inputs.
 """
 
 from __future__ import annotations
@@ -39,7 +40,6 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from snakes_and_ladders.inputs import read_stamp, write_stamp
 from snakes_and_ladders.log import get_logger, phase
 from snakes_and_ladders.qa.manifest import (
     FIGURES,
@@ -136,35 +136,11 @@ def selected(
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 
 
-def stale(specs: Sequence[FigureSpec], output_dir: Path) -> tuple[FigureSpec, ...]:
-    """The specs whose committed stamp differs from the current inputs' digest.
-
-    Parameters
-    ----------
-    specs : Sequence[FigureSpec]
-        Candidates, in manifest order.
-    output_dir : Path
-        Where the committed figures and their stamps live.
-
-    Returns
-    -------
-    tuple[FigureSpec, ...]
-        Those with no stamp, or a stamp that does not match; order kept.
-    """
-    return tuple(
-        spec
-        for spec in specs
-        if read_stamp(spec.stamp(output_dir)) != spec.input_digest(REPO_ROOT)
-    )
-
-
 def render(spec: FigureSpec, output_dir: Path) -> None:
-    """Run one figure's script, writing into ``output_dir``, and stamp it.
+    """Run one figure's script, writing into ``output_dir``.
 
     Each figure renders in its own process, as it did when a shell script
     invoked them, so none inherits matplotlib state from the one before it.
-    The stamp is written after the script succeeds, so a failed render leaves
-    the figure marked stale.
 
     Raises
     ------
@@ -183,7 +159,6 @@ def render(spec: FigureSpec, output_dir: Path) -> None:
         check=True,
         env=environment,
     )
-    write_stamp(spec.stamp(output_dir), spec.input_digest(REPO_ROOT))
 
 
 def compare(rebuilt_dir: Path, committed_dir: Path) -> list[str]:
@@ -237,10 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         "--all",
         action="store_true",
         dest="every",
-        help=(
-            "render every manifest entry, not only what the document cites, "
-            "and ignore the stamps"
-        ),
+        help="render every manifest entry, not only what the document cites",
     )
     parser.add_argument(
         "--check",
@@ -264,10 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     log = get_logger(__name__, start_time=time.time())
 
     specs = selected(args.documents or list(DEFAULT_DOCUMENTS), args.every, args.only)
-    if not args.every and not args.only:
-        fresh = len(specs)
-        specs = stale(specs, args.output_dir)
-        log.info("%d of %d cited figures have changed inputs", len(specs), fresh)
+    log.info("%d figures selected", len(specs))
 
     if args.list_only:
         # Output, not a log line: the release script reads the stems.
@@ -287,9 +256,6 @@ def main(argv: list[str] | None = None) -> int:
             with phase(f"render {spec.stem}"):
                 render(spec, rebuilt_dir)
         with phase("compare"):
-            # The stamps the renders wrote are compared too: a figure whose
-            # bytes still match but whose stamp does not is reported, so the
-            # next build stops re-rendering it once the stamp is committed.
             differing = compare(rebuilt_dir, args.output_dir)
 
     if differing:

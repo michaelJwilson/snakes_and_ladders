@@ -88,29 +88,6 @@ pdfs_are_the_base_s() {
 
 fragment_exists() { uv run towncrier check --compare-with "$base" >/dev/null; }
 
-# NOT A GATE (issue #455). Kept because `infra/release.sh` is where the claim
-# is now checked, through `qa.build --all --check`, and because a developer
-# may still want the answer before pushing. It stopped being a per-pull-request
-# gate because the check is cheap and the fix is not: a merge of `main` moves
-# a module in a figure's closure, the stamp goes stale, and the branch pays a
-# six-minute render for a figure that re-renders to identical bytes. That was
-# eight renders across four branches in one day, and no figure byte moved on
-# any of them.
-stamps_match_the_tree() {
-  # Digest-only: nothing is rendered. A stale cited figure means the branch
-  # changed an input and did not re-render, or re-rendered and did not
-  # commit the stamp.
-  uv run python - <<'PY'
-import sys
-from snakes_and_ladders.qa.build import DEFAULT_DOCUMENTS, DEFAULT_OUTPUT_DIR, selected, stale
-specs = selected(list(DEFAULT_DOCUMENTS), every=False)
-out = stale(specs, DEFAULT_OUTPUT_DIR)
-for spec in out:
-    print(f"  stale: {spec.stem}", file=sys.stderr)
-sys.exit(1 if out else 0)
-PY
-}
-
 critical_tier_passes() {
   uv run pytest -m critical -q -p no:cacheprovider >"$log" 2>&1 || { tail -n 15 "$log" >&2; return 1; }
 }

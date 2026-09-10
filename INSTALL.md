@@ -182,13 +182,12 @@ The rest of what the build writes needs no such care, and the two cases are
 different: the `.aux`, `.log`, `.fdb_latexmk` and other files `latexmk` leaves
 in `docs/`, and the applicability tables under `docs/tex/generated/`, are
 ignored and cannot be committed, while a re-rendered figure under
-`docs/tex/figures/` — its `.pdf` or `.tex`, its `_caption.txt` and its `.inputs`
-stamp — is committed by the pull request that changed it. `DEV.md` lists every
-path, and gives the wall clock on the 4-core reference host: **15.8 s** from a
-clean checkout when every figure stamp is current, **3.7 s** for a second run
-that finds nothing to do, and **230.7 s** on a checkout where nine of the
-nineteen cited stamps were stale — the stamps decide the cost, not the
-documents.
+`docs/tex/figures/` — its `.pdf` or `.tex` and its `_caption.txt` — is
+committed by the pull request that changed it. `DEV.md` lists every path, and
+gives the wall clock on the 4-core reference host: **15.8 s** for the LaTeX,
+**3.7 s** for a second run that finds nothing to do, and **305.3 s** for the
+figures, which are all 21 of the cited ones on every build since issue #490
+deleted the stamps that used to select them.
 
 ## Benchmarking locally
 
