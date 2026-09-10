@@ -5,6 +5,11 @@ for a link in a chain.
 
 This template mirrors CLAUDE.md's "Definition of Done" and "Documentation
 Sync" rules. Fill in every section; delete none of them.
+
+The body carries at most 40 content lines (DEV.md, issue #521); blank lines,
+these comments and the headings below are not charged, and the `pr-title` job
+refuses a body over it. What does not fit belongs where it is refereed --- a
+measurement in STATUS.md, a sweep in an experiment file.
 -->
 
 ### Description

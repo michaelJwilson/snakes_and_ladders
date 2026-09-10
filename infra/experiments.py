@@ -23,8 +23,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENTS_DIR = REPO_ROOT / "docs" / "experiments"
 FIXTURES_DIR = REPO_ROOT / "tests" / "regression" / "fixtures"
@@ -69,6 +67,9 @@ _FIXTURE_REFERENCE = re.compile(
 #: written by nobody. Charging for structure would make the cap dictate a
 #: table's orientation rather than its content, which is not what it is for.
 _HEADING = re.compile(r"\A#{1,6} ")
+#: An HTML comment, which the cap does not count: GitHub renders none of it,
+#: so it is instruction to the author rather than text a reader sees.
+_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _TICKET = re.compile(r"#\d+")
 _COMMIT = re.compile(r"\A[0-9a-f]{40}\Z")
@@ -86,20 +87,34 @@ class Experiment:
 
 
 def body_lines(body: str) -> int:
-    """The lines the cap counts: non-blank, and neither title nor heading.
+    """The lines a cap counts: non-blank, and neither title, heading nor comment.
 
     What a reader reads is what is charged. A blank line carries nothing, a
-    title names the file, and a section heading is the format rather than a
-    line anyone wrote, so the ten are ten lines of content --- typically a
-    question, a table and a finding.
+    title names the file, a section heading is the format rather than a line
+    anyone wrote, and an HTML comment is rendered by nobody, so the ten are
+    ten lines of content --- typically a question, a table and a finding.
+
+    Comments are excused for the same reason headings are, and it decides a
+    real case: ``.github/pull_request_template.md`` is 64 charged lines with
+    its instructions counted and 24 without, so charging them would refuse
+    every pull request that started from the template before a word of it was
+    written (issue #521). No experiment file carries one, so the experiment
+    ledger's cap is unchanged.
     """
+    visible = _COMMENT.sub("", body)
     return sum(
-        1 for line in body.splitlines() if line.strip() and not _HEADING.match(line)
+        1 for line in visible.splitlines() if line.strip() and not _HEADING.match(line)
     )
 
 
 def load(path: Path) -> Experiment:
     """Parse ``path``: front matter, the ``#`` title, and the ``##`` sections."""
+    # Imported here rather than at the top so :func:`body_lines` --- the
+    # repository's one reading of "how long is this text", charged against a
+    # different cap by ``infra/check_pr_body.py`` --- imports under a bare
+    # standard library, which is what the workflow job running it has.
+    import yaml
+
     text = path.read_text()
     match = _FRONT_MATTER.match(text)
     if match is None:
