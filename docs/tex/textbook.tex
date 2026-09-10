@@ -343,6 +343,53 @@ gradient varies by orders of magnitude between instances. The comparison
 against the greedy baseline is at a matched budget of objective evaluations per
 decision, never in wall-clock time.
 
+\paragraph{The scorer, and what is identifiable in it.}
+The score $f(s, a)$ is a function of the action's features, and two
+parameterizations serve. A \emph{linear} scorer, $f = w^{\top} x(s, a)$, is
+the reference, because its weights are what a recovery test can state a truth
+against: on the lattice environment the improvement a move buys decomposes
+exactly into two features, so the greedy searcher \emph{is} a particular $w$
+and sits inside the policy class rather than beside it, and ``did the agent
+learn the landscape'' becomes a statement about $w$ rather than about a loss
+curve. A \emph{multilayer-perceptron} scorer --- two hidden layers over the
+same features, one output per action --- is the parameterization for a reward
+that is not linear in them. It is measured against the linear one at a matched
+budget and never assumed better: a wider class that is not needed costs sample
+efficiency and gives up the recovery statement, so the burden is on it.
+Both share the softmax's gauge. Adding a constant to every score in a state
+changes nothing, so a feature constant over the neighbourhood carries no
+identifiable weight and is excluded rather than fitted, and neither scorer has
+a bias term. The critic of Section~\ref{sec:actor-critic} is the case that
+shows the rule is about the softmax and not about features: a value is not a
+softmax, a constant there \emph{is} identifiable, and the critic carries one.
+
+\paragraph{Exploration is declared, not learned.}
+A softmax over improvements ends its episode at the first state no move
+improves, so an agent chooses which local optimum to enter and can never
+leave one. The remedy is to collect episodes under a \emph{behaviour} policy
+that takes the trained policy's best action except with probability
+$\epsilon$, where it draws uniformly from the neighbourhood --- which is the
+only way a \emph{worsening} move is ever taken.
+It is deliberately not trainable and exposes no weights, so a measured escape
+rate is attributable to $\epsilon$ and not to a training run that happened
+alongside it; $\epsilon$ follows a declared schedule over the iterations,
+exactly as a temperature does in Section~\ref{sec:tempering}. At $\epsilon =
+0$ the agent still walks, and deterministically: past a local optimum the best
+available action is the least-bad move, which is not the same object as a
+climb that would have stopped.
+
+Two consequences for the accounting, and both are easy to get wrong in a
+direction that flatters the agent. An episode allowed to continue past a local
+optimum is scored on the \emph{best} state it saw and not on its last, or a
+better searcher looks worse the longer it runs. And the matched baseline is
+then greedy \emph{with restarts}: a single greedy run stops after a few
+decisions and leaves the rest of the budget unspent, so a result stated
+against it overstates itself. One failure is worth naming because it produces
+plausible numbers rather than an error --- wrapping an \emph{untrained} policy
+is not hill climbing, since with equal scores the best action is whichever the
+neighbourhood happens to list first, and what is then measured is exploration
+around a fixed arbitrary move.
+
 \paragraph{What pins it.}
 Equation~\ref{eq:return} is an identity and is asserted exactly on every
 recorded episode. Equation~\ref{eq:reinforce} is an expectation, so its
@@ -397,6 +444,46 @@ $\epsilon$-greedy wrapper of the policy being trained, on an $\epsilon$
 schedule, the search can leave a local optimum the softmax would settle
 into, and the estimator is corrected by $\pi / \beta$.
 
+\paragraph{What the critic reads, and what it may not.}
+$V$ is a function of the state, while the decision process supplies features
+of \emph{actions}. The state's features are therefore aggregates over its
+neighbourhood --- the mean and the maximum of the action features, and the
+logarithm of the neighbourhood's size --- which covers every instance without
+widening the interface, a terminal state having no actions and so the zero
+vector. The rule that makes the baseline legitimate is the one in
+Appendix~\ref{app:rl}: the critic may read the state and never the action
+sampled at that step. Where the return is exact by enumeration $V^\pi$ is
+exact too, and the critic is scored against \emph{that}; a critic scored
+against its own training loss can fit its targets, miss $V^\pi$, and leave an
+estimator that is unbiased and useless.
+
+\paragraph{Off-policy, and what the ratio costs.}
+Equation~\ref{eq:ppo-clip} is one case of a general correction. For any
+behaviour policy $\beta$ with $\beta(a \mid s) > 0$ wherever $\pi(a \mid s) >
+0$, weighting each decision by $\rho_t = \pi(a_t \mid s_t) / \beta(a_t \mid
+s_t)$ makes the estimator of Equation~\ref{eq:reinforce} unbiased for $\pi$
+on episodes that $\beta$ collected \citep{suttonbarto2018}. The support condition
+is not a technicality: an action $\beta$ never samples contributes nothing and
+its weight under $\pi$ is never corrected, so a \emph{deterministic} behaviour
+policy corrects nothing at all. That is the second reason the exploring
+wrapper's uniform draw is there, and the reason its mixture must be available
+as a distribution and not only as a sampler --- $(1 - \epsilon)$ on the best
+action and $\epsilon / |\neighbourhood(s)|$ everywhere is what the ratio
+divides by. That $\epsilon$ is the exploration rate; the one in
+Equation~\ref{eq:ppo-clip} is a clip width, and the two are unrelated.
+
+What the correction costs is variance, and the cost has a shape. A ratio is
+unbounded above, so one decision the behaviour policy made rarely can dominate
+a batch; and a weight formed as the \emph{product} of ratios along a
+trajectory is worse, its variance growing with the episode length. Two answers
+are carried, and they are not the same answer. The per-decision form of
+Equation~\ref{eq:ppo-clip} weights each step by its own ratio rather than by
+the trajectory's product, which removes the growth with episode length. The clip
+bounds the ratio's effect on the objective, and therefore the size of an
+update, while leaving the estimator's variance exactly where it was: it is a
+trust region and not a variance reduction, and reading it as the second is the
+standing error about it.
+
 \subsection{Planning with a Learned Prior and Value}
 \label{sec:planning}
 A policy answers ``which move'' from what it has seen; a planner looks
@@ -417,6 +504,87 @@ answers become the policy's. Every expansion evaluates a successor, so the
 search is counted in the unit the rest of this document counts, and the
 comparison with greedy states the rate and the evaluations together
 (Appendix~\ref{app:rl}).
+
+\paragraph{Compound moves.}
+A move set fixes the granularity of a decision, and a search whose
+neighbourhood holds one interchange must find a sacrifice and its payoff as
+two separate decisions --- which is exactly the credit assignment a truncated
+episode destroys. An \emph{option} is a policy over primitive moves with an
+initiation set and a termination rule, so a sequence that pays off only as a
+unit becomes one decision and is credited as one \citep{sutton1999}; the
+termination rule can be learned beside the policy that calls it
+\citep{bacon2017}. Nothing here builds one, and the budget rule says what it
+would have to survive: a compound move evaluates every primitive it composes,
+so an option reaching a better optimum by evaluating more candidates than
+hill climbing has not won.
+
+\paragraph{Planning with a learned model.}
+The planner above expands the \emph{true} successor and reads the true reward,
+which is affordable here only because a move's reward is a closed form at
+known parameters. It stops being affordable the moment the reward is a fit per
+candidate, which is the regime every problem in this document is actually in.
+The answer in that regime is to plan on a model that is learned rather than
+queried: a transition and a reward in a latent space, trained so that the
+values, policies and rewards the plan reads agree with the observed ones, and
+not so that the latent state reconstructs anything about the real one
+\citep{schrittwieser2020}. Requiring only the quantities the search reads to
+be right is what makes it a method rather than a reconstruction, and it is
+also what makes it checkable here: on an instance small enough to enumerate, a
+planner on a learned model must still return an optimal action wherever the
+planner on the true one does. It is not built.
+
+\subsection{Relaxing a Discrete Decision}
+\label{sec:relaxation}
+A third route past a discrete search is to make it continuous. Write a
+configuration over $L$ sites and $k$ states as a row-stochastic $q$, one
+simplex per site, and read the discrete score on it. Two demands separate a
+relaxation from a second model, and both are checkable.
+
+\emph{It must be an extension of what it relaxes.} At every vertex --- every
+one-hot $q$ --- the relaxed value must equal the discrete score exactly,
+asserted over every configuration of an enumerable instance. A relaxation
+merely close at the corners is optimizing a different problem and nothing
+measured on it transfers, which is the same demand Section~\ref{sec:tropical}
+makes of the tropical relaxation and the reason
+Equation~\ref{eq:tropical-corner} is a derived tolerance rather than a
+constant.
+
+\emph{Its boundary is multilinearity, not the shape of the graph.} If every
+term of the score involves at most one factor from each site, then under a
+factorized $q$ distinct sites are independent and each term's expectation is
+that term at the marginals:
+\begin{equation}
+  \mathbb{E}_{q}\big[\,\mathrm{score}(x)\,\big] = \mathrm{score}(q),
+  \label{eq:multilinear}
+\end{equation}
+exactly, so the form evaluated at the marginals \emph{is} the expected
+discrete score and not an approximation of it. The condition is easy to state
+wrongly. It is not that the model must be a chain --- a lattice is as
+multilinear --- and it is not that the terms must be pairwise, a term coupling
+three \emph{distinct} sites being still one factor per site. What breaks it is
+a term reading one site twice, since for an indicator $\mathbb{E}[X^2] =
+\mathbb{E}[X] \neq \mathbb{E}[X]^2$. Two things follow. A multilinear function
+on a product of simplices attains its maximum at a vertex, so the relaxation
+introduces no optimum the discrete problem lacks and everything a relaxed
+search loses is lost to the ascent rather than to the relaxation. And the
+deterministic relaxation needs no sampling at all, which makes the question
+about the stochastic one sharp: since Equation~\ref{eq:multilinear} is exact,
+whatever bias an estimator shows belongs to the estimator.
+
+Sampling a relaxed configuration is the Gumbel-softmax: perturb each site's
+log-probabilities by independent Gumbel noise and take a softmax at
+temperature $\tau$ where an $\arg\max$ would give a draw, which is
+reparameterized --- differentiable in the probabilities --- and biased at
+every $\tau > 0$, exact only in a limit where the gradient vanishes. The
+bias is measured against the exact gradient enumeration supplies and never
+assumed small, and the score-function estimator of
+Equation~\ref{eq:reinforce} is the unbiased alternative at higher variance,
+which is Section~\ref{sec:actor-critic}'s trade in a second place. Carrying
+the construction from one categorical variable to a \emph{structured} object,
+where the $\arg\max$ is a combinatorial solver rather than a coordinate, is
+the stochastic-softmax-trick family \citep{paulus2020} --- what a
+differentiable topology would need, and the direction
+Section~\ref{sec:tropical} approaches from the other side.
 
 \subsection{Surrogates and Bounds}
 \label{sec:surrogates}
@@ -1267,6 +1435,42 @@ check sits.
     reported.
 \end{itemize}
 
+\subsection{Extensions, and what is not attempted}
+\label{sec:phylo:extensions}
+\paragraph{What it would take to go further.}
+The gap is the one Table~\ref{tab:phylo:regimes}'s last row names: past the
+enumerable taxon count nothing says a climb found the optimum. What closes it
+is a \emph{bound}, not a faster climb --- a branch and bound over the topology
+space, with Equation~\ref{eq:parsimony-bound} or the plug-in of
+Equation~\ref{eq:plugin-bound} pruning a subtree of the search
+\citep{papadimitriou1998}. Three further directions each have a stated
+prerequisite. A posterior over topologies rather than a flat-prior weight over
+maximized likelihoods needs a chain that mixes over the move graph, whose
+mixing is the object studied rather than assumed \citep{whidden2015,
+altekar2004}; a differentiable topology needs a parameterization of the
+space itself, which the subsplit constructions supply and which would give
+Section~\ref{sec:tropical} an oracle it does not have \citep{zhang2018,
+zhang2019}; and a learned ranking of the regraft neighbourhood is the
+surrogate Section~\ref{sec:surrogates} ranks with, learned rather than derived
+\citep{azouri2021}. Richer substitution models --- rate heterogeneity across
+sites, a general time-reversible matrix fitted rather than fixed --- change
+the evaluator's parameter vector and nothing about its referees
+\citep{yang2014}. Established implementations are a comparison that could be
+made and is not one made here \citep{minh2020, kozlov2019}: they are surveyed,
+and admitting one is a decision on its own evidence.
+
+\paragraph{What is deliberately not attempted.}
+Empirical alignments, because there is no true tree behind one and a result on
+it can be reported but not refereed --- which is the reason every fixture is
+simulated. Model misspecification, since every recovery statement here is
+calibration on the model's own samples and says nothing about data the model
+does not describe. Insertions and deletions, which break the site
+independence every referee in Section~\ref{sec:phylo:validation} rests on and
+would need a different likelihood rather than a longer one. And the four-state
+Hadamard conjugation proper, over the Klein four-group: the two-state
+transform with the exact pairing reduction is carried, and the general one is
+stated and left unbuilt.
+
 \section{Problem Statement: Potts Models in an External Field}
 \label{sec:potts}
 
@@ -1669,6 +1873,38 @@ enumeration referee every replica of a tempered ensemble at once.
     never asserted in general.
 \end{itemize}
 
+\subsection{Extensions, and what is not attempted}
+\label{sec:potts:extensions}
+\paragraph{What it would take to go further.}
+The missing referee is an oracle for the normalizer of a lattice wider than
+the transfer matrix reaches. A boundary contraction supplies one: a strip's
+partition function is a product of transfer operators, and contracting it
+approximately with a controlled bond dimension turns the width from a hard
+ceiling into a stated accuracy \citep{schollwoeck2011}. Two bounds would
+extend what can be claimed without an oracle at all --- the tree-reweighted
+upper bound of Equation~\ref{eq:spanning-tree-bound} has a maximum-a-posteriori
+counterpart that bounds the ground state rather than $\log Z$
+\citep{wainwright2005map}, and the characterization of which energies a cut
+can minimize says exactly which multi-label instances reduce to the exact
+solver rather than to expansion \citep{kolmogorov2004}. For the search itself,
+population annealing carries a whole ensemble down a temperature schedule with
+resampling and is the natural comparison for the tempering of
+Section~\ref{sec:tempering} at equal sweeps \citep{machta2010}. A learned
+ground-state proposal is admissible on the same terms as any other: a graph
+network trained to output a configuration is a method \citep{schuetz2022}, and
+the objection that it must be measured against a competently tuned greedy
+baseline is part of the method rather than a criticism of it
+\citep{angelini2023}.
+
+\paragraph{What is deliberately not attempted.}
+Continuous spins, which change the enumeration from a sum to an integral and
+leave every exact referee in Section~\ref{sec:potts:validation} without a
+counterpart. A pairwise term that is not a metric on labels, since the
+expansion bound of Equation~\ref{eq:alpha-expansion} assumes one and an
+instance that violates it is refused rather than approximated. And the
+thermodynamic limit: the critical couplings are used to \emph{place} a finite
+instance, and no quantity here is claimed of the infinite lattice.
+
 \section{Problem Statement: Hidden Markov Models}
 \label{sec:hmm}
 
@@ -1887,6 +2123,32 @@ the fit would referee nothing.
     carries no such bound. A check written against the first is false under
     the second.
 \end{itemize}
+
+\subsection{Extensions, and what is not attempted}
+\label{sec:hmm:extensions}
+\paragraph{What it would take to go further.}
+The chain has no missing oracle inside its ceiling and no oracle at all past
+it, so the extensions are about the \emph{start} and the \emph{uncertainty}
+rather than about the recursion. A method-of-moments start would give the fit
+what the distance start gives the tree: the observable moments of short
+windows invert to the parameters with a consistency guarantee and no surface
+to climb \citep{hsu2012}, and the argument that carries it to a tree
+\citep{mossel2006} is already cited in Section~\ref{sec:spectral-start},
+which makes the chain the case where it is easiest to referee. A posterior
+over parameters rather than a point estimate --- variational, or sampled by
+Section~\ref{sec:hmc}'s chain --- would replace the delta-method interval
+whose asymptotics Section~\ref{sec:abstraction} is explicit about
+\citep{bishop2006, murphy2023}. And choosing the state count rather than
+declaring it is a model-selection problem this document does not pose.
+
+\paragraph{What is deliberately not attempted.}
+Continuous time, which replaces the transition matrix by a generator and the
+recursion's product by a matrix exponential --- the tree already carries that
+arithmetic, and duplicating it on the chain would buy no new referee. A
+semi-Markov duration model, whose state is not the position's alone, so the
+factor graph is no longer the chain of Section~\ref{sec:hmm} and the path
+enumeration that referees everything here does not apply. And an unbounded
+state space, since every oracle in this section counts $k^T$.
 
 \section{Problem Statement: The Coupled Spatio-Sequential Model}
 \label{sec:coupled}
@@ -2160,6 +2422,38 @@ Equation~\ref{eq:label-ground-state}.
     enumerated MAP labelling on the canonical instance would add.
 \end{itemize}
 
+\subsection{Extensions, and what is not attempted}
+\label{sec:coupled:extensions}
+\paragraph{What it would take to go further.}
+Section~\ref{sec:coupled:validation} names its own gap: the planted labelling
+is what a correct estimator recovers, and nothing establishes that it
+maximizes Equation~\ref{eq:label-ground-state}. An enumerated
+maximum-posterior labelling on the canonical instance would close that,
+turning a recovery statement into an optimality one at one size. Past it, a
+bound on the joint evidence would say how far a block ascent's fixed point
+sits from the best available --- the mean-field bound of
+Equation~\ref{eq:mean-field-bound} from below and the tree-reweighted bound
+of Equation~\ref{eq:spanning-tree-bound} from above, both stated for a
+lattice and neither yet carried on the coupled graph. Two further directions
+are model rather than referee. The spatial coupling is declared and could be
+fitted, which makes it a parameter of the same block ascent and its
+identifiability a question the enumerable instance can answer. And the label
+update is a discrete search over a neighbourhood with a computable
+improvement, which is exactly the decision process of
+Section~\ref{sec:policy-gradient}, so a learned proposal is admissible here on
+the same terms it is admissible for a topology.
+
+\paragraph{What is deliberately not attempted.}
+A gate over more than one chain state. The degree-two factor is what makes
+conditioning on the labels leave independent chains, so a wider gate would
+leave the block structure standing and the expectation step no longer the
+posterior --- the failure Table~\ref{tab:referee-assumptions} records for this
+row. Joint marginalization of labels and chains, which is intractable and is
+the reason the estimator is blocks at all. And a spatial prior that is not
+ferromagnetic: a negative coupling would put this model on the wrong side of
+Section~\ref{sec:frustrated}'s refusals and remove the cluster move the
+estimator relies on.
+
 \section{Problem Statement: Large Parsimony}
 \label{sec:parsimony}
 
@@ -2323,6 +2617,33 @@ asserting the code reproduces.
     unrooted topology differently and is refused rather than scored at an
     arbitrary root.
 \end{itemize}
+
+\subsection{Extensions, and what is not attempted}
+\label{sec:parsimony:extensions}
+\paragraph{What it would take to go further.}
+This is the one search in the document where an exact method past enumeration
+is plausibly affordable. The score is an integer and it decomposes over sites,
+so a partial tree admits a lower bound on every completion of it and a branch
+and bound can discard a whole subtree of the topology space without scoring
+it \citep{papadimitriou1998, clrs2022}; nothing about a likelihood offers the
+same, which is why the criterion is where an exact search would be built
+first. A weighted criterion is the other direction: the step matrix is
+declared here, and estimating one from the alignment --- subject to the metric
+condition the search needs --- would make the criterion a fitted model rather
+than a fixed one. Compound moves are the third, and they belong to
+Section~\ref{sec:policy-gradient}: a sacrifice and its payoff over this
+neighbourhood are two decisions whose credit an option would carry as one
+\citep{sutton1999}.
+
+\paragraph{What is deliberately not attempted.}
+A correction for the inconsistency of Figure~\ref{fig:parsimony-zones}. The
+Felsenstein zone is carried as a property of the criterion and asserted
+against, not repaired: the repair is the likelihood, which is
+Section~\ref{sec:phylo} and already here. Ancestral-state uncertainty, since
+the criterion returns a minimum and not a posterior, and the object that
+carries uncertainty over internal states is the marginalization the
+likelihood already does. And an asymmetric step matrix, which is refused
+rather than scored at an arbitrary root.
 
 \section{Problem Statement: Frustrated Lattices}
 \label{sec:frustrated}
@@ -2502,6 +2823,35 @@ finite lattice is not the limit.
     that budget, over shared seeds; it establishes nothing general about the
     algorithms, which is why the comparison is reported as an experiment.
 \end{itemize}
+
+\subsection{Extensions, and what is not attempted}
+\label{sec:frustrated:extensions}
+\paragraph{What it would take to go further.}
+These instances are where a search is scored with no oracle, so what would
+extend them is anything that turns a comparison into a certificate. The
+semidefinite relaxation of Equation~\ref{eq:gw} already computes one: its
+optimal value bounds the maximum cut from above on the instance in hand
+\citep{goemans1995, boyd2004}, so reporting it beside a search's result would
+convert ``the best energy found'' into a bracket, and the guarantee stops
+being a statement about the ensemble. Population annealing is the search-side
+extension --- an ensemble carried down a schedule with resampling, rather than
+replicas exchanged along one \citep{machta2010} --- and it is the comparison
+Section~\ref{sec:tempering} would be made against at equal sweeps. A learned
+proposal is admissible on the terms Section~\ref{sec:potts:extensions} states,
+and these instances are where it would have to be measured, since they are the
+ones with a known answer at every size.
+
+\paragraph{What is deliberately not attempted.}
+A disorder average. Every statement here is about one instance at one seed;
+averaging over the ensemble of couplings is a different quantity and would
+need a different accounting, and the inverted fraction is swept precisely so
+that a per-instance result is reported with the disorder it was measured at. A
+phase diagram, for the same reason the thermodynamic limit is out of
+Section~\ref{sec:potts}: the residual entropy is quoted for orientation and
+asserted at no finite size. And the exact ground state of the glass, which is
+not available at any size here --- Equation~\ref{eq:planted-energy} is an
+upper bound and the section is explicit that it can convict a search and never
+acquit one.
 
 \section{Problem Statement: The Gaussian Mixture}
 \label{sec:mixture}
@@ -2692,6 +3042,31 @@ the separation is declared with the instance rather than discovered from it.
     (Section~\ref{sec:properties}).
 \end{itemize}
 
+\subsection{Extensions, and what is not attempted}
+\label{sec:mixture:extensions}
+\paragraph{What it would take to go further.}
+Raising the dimension is the obvious extension and it costs the only oracle
+the initializer has, so it is not free: the exact clustering cost is a
+dynamic programme over cut positions in sorted observations and has no
+counterpart above one dimension. What would replace it is either a certified
+bound on the seeding cost that does not need the optimum, or a regime where
+the planted labels alone referee and the section says so --- the second is
+what Section~\ref{sec:emissionmixture} already does at ten components. The
+unbounded likelihood is the other direction: a prior on the scales, or a
+penalized objective, gives a maximum that exists rather than a floor that
+refuses, and turns a modelling decision into a stated one \citep{bishop2006,
+murphy2023}. Choosing $K$ rather than declaring it is model selection, and
+the enumerable instance is where a criterion for it could be refereed at all.
+
+\paragraph{What is deliberately not attempted.}
+A component count fitted from the data, a non-diagonal covariance, and any
+dimension above one --- each for the same reason, which is that this section
+exists to referee an emission family and an initializer against exact
+quantities, and each of the three removes one. The collapsing component is
+kept rather than removed: it is the standing example of a likelihood with no
+maximum, and a section that regularized it away would lose the case
+Section~\ref{sec:properties} needs.
+
 \section{Problem Statement: The Count-Emission Mixture}
 \label{sec:emissionmixture}
 
@@ -2870,6 +3245,32 @@ maximum.
     (Section~\ref{sec:properties}).
 \end{itemize}
 
+\subsection{Extensions, and what is not attempted}
+\label{sec:emissionmixture:extensions}
+\paragraph{What it would take to go further.}
+The flat directions are the sharpest gap. An estimate that reaches its
+identifiability bound is reported as a bound, and what would say more is a
+profile likelihood in that direction --- the curvature being absent, the
+interval has to come from the objective's own shape rather than from the
+observed information Section~\ref{sec:abstraction} pushes through the delta
+method. The M step is the second: both shape parameters are found by
+bisection, and a closed form for either would move the cost of an iterate by
+the factor Section~\ref{sec:emissionmixture:discussion} says the budget is
+spent on. The third is structural and already built one section over: putting
+a chain over the component labels is exactly the coupled model of
+Section~\ref{sec:coupled}, so what this section carries as an independent
+mixture is the same family with its sequential structure removed, and the two
+share a maximization step by construction.
+
+\paragraph{What is deliberately not attempted.}
+More than two channels, since the trial count is what ties the pair and a
+third observation would need its own statement of how it is tied rather than a
+default. A dispersion shared across components, which would make the flat
+directions a single one and change what an identifiability bound means. And
+the $K^N$ enumeration at the declared sizes: the prefix is the oracle, it
+establishes the factorization and nothing else, and extending it is not
+affordable at any size in this section.
+
 \section{Problem Statement: Continuous Test Functions}
 \label{sec:testfunctions}
 
@@ -3027,6 +3428,31 @@ carried at all.
     which wins on this surface at that budget, and, as with the frustrated
     lattices, nothing general about either method.
 \end{itemize}
+
+\subsection{Extensions, and what is not attempted}
+\label{sec:testfunctions:extensions}
+\paragraph{What it would take to go further.}
+The comparison here is restarts of a local fit against an annealed chain, and
+the method it has not been run against is a population one: an evolution
+strategy that adapts a covariance from its own samples is the standard
+baseline for a rugged continuous surface and would be scored at the same
+budget of objective evaluations \citep{hansen2001}. Two reporting extensions
+matter more than they sound. A rate over starts is a statistic with an
+interval, and stating it with the interval rather than as a number is what
+makes two methods separable at all \citep{agarwal2021}; and the seeds, the
+budget and the number of runs behind such a rate are part of the claim rather
+than of its provenance \citep{henderson2018}. Both apply to every
+equal-budget comparison in this document, and this is the surface where they
+can be checked against a known answer.
+
+\paragraph{What is deliberately not attempted.}
+Constraints, which would make the constraint map of
+Section~\ref{sec:abstraction} the thing under test rather than the optimizer.
+A noisy objective, since these functions are carried precisely because their
+value is exact and a fit that stopped early is distinguishable from a
+parameter that is not identified. And high dimension: what grows with $d$ is
+the number of basins, so a larger $d$ makes the rate smaller and the
+measurement no sharper.
 
 \section{The Problems, and What Applies to Each}
 \label{sec:applicability}
@@ -3314,6 +3740,36 @@ counts a different event and is not comparable with anything here.
     extension past the erasure channel would fill.
 \end{itemize}
 
+\subsection{Extensions, and what is not attempted}
+\label{sec:ldpc:extensions}
+\paragraph{What it would take to go further.}
+One extension is named by the validation itself: the threshold of
+Appendix~\ref{app:density-evolution} exists on the erasure channel alone, so
+the symmetric and Gaussian channels have no asymptotic referee at the length
+the roadmap names. Carrying the same fixed-point argument to them means
+tracking a message \emph{density} rather than a single erasure probability,
+either discretized or reduced to one parameter by a Gaussian approximation
+\citep{richardson2008}; that is the marked cell of
+Section~\ref{sec:applicability} and the single most valuable thing this
+section is missing. Two further directions are the code rather than the
+referee. An irregular ensemble, with a degree distribution optimized against
+the threshold, is what the modern construction does and what a regular
+$(3,6)$ code deliberately is not. And a decoder whose Tanner-graph edges
+carry learned weights is the same message passing with the update's
+parameters fitted \citep{nachmani2018}: it is admissible here because it
+changes nothing about the referees --- a short code still enumerates, and a
+learned decoder that beats the tanh rule on a loopy code must still equal it
+on a cycle-free one.
+
+\paragraph{What is deliberately not attempted.}
+Non-binary codes, since a binary variable's message being one number is what
+makes Equation~\ref{eq:tanh-rule} a closed form rather than a sum. A channel
+with memory, which breaks the per-bit factorization the unary factors rest on
+and with it the symmetry argument that licenses the all-zero word. And an
+encoder past the elimination's reach: past it the shortcut is used rather than
+extended, and the section's job is to say what that costs, which is that the
+symmetry is checked below the reach and assumed above it.
+
 \section{Problem Statement: Turbo Decoding}
 \label{sec:turbo}
 
@@ -3574,6 +4030,33 @@ implementation.
   \label{fig:turbo-waterfall}
 \end{figure}
 
+\subsection{Extensions, and what is not attempted}
+\label{sec:turbo:extensions}
+\paragraph{What it would take to go further.}
+The section's own statement is that no exact algorithm reaches the pair at the
+lengths it is used at, and the referee past $K \le 17$ is a bound from one
+side. What would give the pair an ensemble statement is the analogue of
+Appendix~\ref{app:density-evolution}: track how the extrinsic information one
+constituent decoder produces depends on what it is given, and read the
+iteration's convergence off the pair of such curves --- the same fixed-point
+reasoning as the erasure threshold, applied to two decoders in series rather
+than to one graph. That would turn the measured waterfall into a predicted
+one. Two code-side directions follow from Section~\ref{sec:turbo:discussion}'s
+observation that the cycles, not the length, are what cost the iteration: an
+interleaver designed to avoid short cycles rather than drawn at random, and
+puncturing, which raises the rate and is what the transmitted word of
+Equation~\ref{eq:turbo-word} deliberately does not do.
+
+\paragraph{What is deliberately not attempted.}
+Monotonicity in the iteration count, which is not an open question here but a
+refused claim --- the measurement contradicts it and the section states the
+weaker pair the sample supports. A blockwise decoding of the \emph{pair}: the
+maximum over messages is well defined and no algorithm reaches it, so what is
+carried is the constituent code's blockwise answer and the pair's bitwise one.
+And non-binary constituent codes, for the reason
+Section~\ref{sec:ldpc:extensions} gives: the channel and the ratio convention
+are binary throughout, and every referee here is stated in those terms.
+
 \section{The Properties That Referee Each Method}
 \label{sec:properties}
 
@@ -3685,6 +4168,46 @@ pinned to. Continuous optimization follows, since recovery is the acceptance
 test and needs both. Discrete search and learned proposals come last, because
 their acceptance criterion---reaching the optimum enumeration identifies---only
 exists once enumeration does.
+
+\subsection{Beyond the Roadmap}
+\label{sec:bluesky}
+Each problem statement above ends with what it would take to go further and
+what it deliberately does not attempt. Three directions recur across them, and
+they are worth stating once as a whole rather than eleven times in pieces.
+
+\emph{A bound where there is no oracle.} The recurring gap is not speed: it is
+that past a size, a search returns an answer nothing can score. Every section
+that names a missing referee names the same kind of object --- a branch and
+bound over topologies, a boundary contraction for a lattice, a density
+evolution past the erasure channel, an enumerated maximum-posterior labelling
+on one coupled instance. Each converts a reported optimum into a bracket, and
+a bracket is the difference between a result and a measurement.
+
+\emph{Learning as a proposal, never as an answer.} A learned policy, a learned
+surrogate, a learned ground state and a learned decoder all enter this
+document in the same position: they choose what to evaluate, and the thing
+evaluated is still the objective the section defines. That is what keeps them
+refereeable --- a proposal that fails is slower, where an answer that fails is
+wrong --- and it is the reading the field's own reviews take of the
+combinatorial case \citep{bengio2021, mazyavkina2021}. The architectures the
+proposals would use are settled elsewhere and are cited rather than restated:
+a graph network over the structure \citep{khalil2017}, an attention model over
+its parts \citep{kool2019}. The standing caution is the one
+Section~\ref{sec:potts:extensions} records --- such a method is measured
+against a competently tuned classical baseline at a matched budget, or it has
+not been measured \citep{angelini2023} --- and the standing requirement is
+that a rate is reported with the interval, the seeds and the budget behind it
+\citep{henderson2018, agarwal2021}.
+
+\emph{Structure that is differentiable.} Section~\ref{sec:relaxation} and
+Section~\ref{sec:tropical} approach one question from two sides: whether a
+discrete structure can be moved by a gradient without becoming a different
+problem. Both answer it the same way --- the relaxation must agree with what
+it relaxes at every corner --- and both are limited by the same thing, which
+is that the corner check needs an enumeration. Extending it to a space no
+enumeration reaches is where the structured relaxations \citep{paulus2020} and
+the parameterized topology spaces \citep{zhang2019} would have to meet.
+
 
 \bibliographystyle{plainnat}
 \bibliography{references}
