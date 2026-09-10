@@ -1,43 +1,11 @@
 # qa/
 
-High-level oversight scripts: the plots and tables that give scientific
-figures for `docs/tex/`, and that validate `sim/`, `likelihood/`, `opt/`,
-`search/` and `learn/` beyond what a unit test checks.
+Quality assurance scripts: the plots and tables that with scientific value for `docs/tex/`,
+and that validate the results expected of supported problems.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file too — and every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local,
-and is principle: the numbers behind each rule live with the code that
-produces them or in `STATUS.md`.
-
-## What lives here
-
-One script per figure or table, each taking a declarative parameters file and
-producing a rendered figure plus a caption that states the seed, sizes, and
-model used to generate it. The format is that model's own — the
-phylogenetic figures take a tree fixture, the optimization figures
-take the Potts and HMM fixtures `snakes_and_ladders.opt` defines — because the
-ground-truth-retention rule is about the caption matching what actually ran,
-not about one file layout. `figure.py` holds the shared
-figure/caption-writing helper every script uses, so output is named and
-formatted consistently rather than per script.
-
-`runner.py` holds the command line every script shares: `figure_main` and
-`table_main` parse the arguments, load the parameters files, write the output,
-report what they wrote, and close the figure. A script declares its stem, the
-parameters files it takes, and the builder that turns them into a figure or a
-`tabular` body — nothing else.
-
-`manifest.py` states which outputs exist and what renders each one — stem,
-module, and fixture arguments. `build.py` reads it and renders a selection:
-what the documents under `docs/tex/` cite, the whole manifest (`--all`, the release
-gate), or named stems (`--only`). It also pins the clock those figures are
-rendered against, because a committed figure that does not reproduce is
-indistinguishable from one that has rotted.
-
-`infra/build_documents.sh` calls `build.py` and feeds its output into the
-LaTeX build; this package does not itself invoke `latexmk` or know where
-`docs/tex/` figures ultimately land beyond the output directory it is given.
+section binds this file and related work — e.g. every docstring, comment and commit message
+in this module. It is referenced here, never restated. What follows is local.
 
 ## Local rules
 
@@ -45,11 +13,7 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
   the suite runs it.** The suite pins one thread per process; a render strips
   that pin, because the committed bytes were produced under the renderer's
   own threading and a reduction split differently can move a last bit.
-- **Every script takes its instance as a parameters file.** A figure whose
-  instance is declared in the module is a figure the manifest cannot name, so
-  it is rendered from something no other caller can reach. The instance is a
-  fixture (`sim/CLAUDE.md`), the manifest names the file, and a test refuses a
-  script that builds one for itself.
+- **Every script takes its problem fixture as defined in a parameters file.**
 - **A figure is rendered, never predicted.** What a build renders is what the
   documents cite, and what the release gate renders is the whole manifest;
   neither asks whether a figure could have changed. A digest beside each
@@ -73,28 +37,11 @@ LaTeX build; this package does not itself invoke `latexmk` or know where
   runner's, so a caption passes `figure.check_latex_safe` exactly once and a
   figure is closed even when the write refuses it.
 - **Render what the application already computed, never recompute it.**
-  A QA script calls into `sim`/`likelihood`/`opt`/`search` for topology,
-  probabilities, or trajectories; it does not reimplement the science it is
-  reporting on.
 - **A figure ships with its caption, and the caption ships with its
   generating parameters.** Seed, sizes, and model name are read from the same
   fixture the figure was rendered from, per
   `sim/CLAUDE.md`'s ground-truth-retention rule — never hand-written
   separately from what actually ran.
-- **A caption file is plain text, not LaTeX.** The document pulls it in
-  verbatim, so an unescaped special character breaks the build. The check
-  lives in the writer every script goes through rather than in a test per
-  caption: a contract every caller must satisfy belongs in the function every
-  caller passes.
-- **A table is typeset, not drawn.** A table ships as a fragment the document
-  includes. Saved as an image it does not match the surrounding type, does not
-  scale with the document, and cannot be selected or searched.
-- **Regression-test the layout, not the rendering.** matplotlib output isn't
-  numerically pinnable; the coordinates and text a script computes before
-  handing them to matplotlib are, and that is what a test pins.
-- **Series and states are two palettes with two rules, and a layout is
-  shared.** A series is traced across a plot and takes the four validated
-  hues with their markers; a state is read off a legend and takes the
-  eight-colour state palette; neither grows a hue, both facet. A composition
-  more than one figure needs — a spatial grid, grouped tracks, a joint
-  distribution — lives in `layout.py`, never in a script.
+- **A caption file is plain text, not LaTeX.**
+- **A table is typeset, not drawn.**
+- **Regression-test the layout, not the rendering.**
