@@ -30,7 +30,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CLAUDE_MD = REPO_ROOT / "CLAUDE.md"
+#: The reference routing table moved out of `CLAUDE.md` into its own
+#: document, which is where the appendix is now checked against.
+REFERENCES_MD = REPO_ROOT / "REFERENCES.md"
 TEXTBOOK = REPO_ROOT / "docs" / "tex" / "textbook.tex"
 BIBLIOGRAPHY = REPO_ROOT / "docs" / "tex" / "references.bib"
 
@@ -77,14 +79,17 @@ def appendix_keys() -> set[str]:
 
 
 def table_items() -> list[tuple[str, str]]:
-    """Every item in the `CLAUDE.md` table, as ``(author string, year or '')``.
+    """Every item in the `REFERENCES.md` table, as ``(author string, year or '')``.
 
     An item is one semicolon-separated cell of a row, with the parenthesized
     title or phrase removed and any leading `Review:`/`Papers:` label dropped.
     """
-    text = CLAUDE_MD.read_text()
+    text = REFERENCES_MD.read_text()
     start = text.index(TABLE_HEADING)
-    end = text.index("\n## ", start + 1)
+    # The table was a section of `CLAUDE.md` and is now a document of its own,
+    # so there need be no heading after it: the file's end bounds the table.
+    following = text.find("\n## ", start + 1)
+    end = len(text) if following == -1 else following
     items: list[tuple[str, str]] = []
     for line in text[start:end].splitlines():
         match = _ROW.match(line)

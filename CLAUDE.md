@@ -3,14 +3,14 @@
 Guidance for Claude Code when working in this repository.
 
 ## Writing Style
-1.  **(Reviewer) Time is money and context windows are finite and vital:** Be as concise as possible, use active voice, and lead with (only) the most important facts first.
+1.  **(Reviewer) Time is money and context windows are finite and vital:** Be as concise/succinct as possible, use active voice, and lead with (only) the most important facts first.  Limit tickets and normal PRs to 40 lines, limit PRs with extended discussion to 60 lines, e.g. on release.
 2.  **Be precise:** Use exact facts and numbers ("40% faster") instead of vague intensifiers ("much faster").
 3.  **Stay neutral and objective:** Avoid hype, subjective opinions, and weak qualifiers. Use nouns and verbs; avoid adjectives and adverbs.
 4.  **Provide evidence:** Back every claim in PRs/commits with benchmark numbers, test validated outputs, or reproductions.
 5.  **Maintain formatting:** Apply naming, terminology, and syntax consistently.
-6.  ***CLAUDE.md edits are rare* Do not add technical details to CLAUDE.md files, but principles.  These edits are rare, as principles become clear.
+6.  **CLAUDE.md edits are rare** Do not add technical details to CLAUDE.md files, but principles.  These edits are rare, as principles become clear.
 
-These rules govern everything written in this repository: every document, each module's `CLAUDE.md` included, and every docstring, comment, commit message, pull-request body, and plan or comment posted to a ticket thread. They are stated here once and referenced from the module files rather than copied into them, so there is one text to change and nothing to fall out of step with it.
+These rules govern all work for this repository: e.g. every document, each module's `CLAUDE.md` included, and every docstring, comment, commit message, PR, and plan or comment posted to a ticket thread. They are stated here once and referenced from the module files rather than copied into them, so there is one text to change and nothing to fall out of step with it.
 
 **Expected Reader:** a well-educated developer with scientific and performance-computing background, but not an application expert, e.g. phylogenetics. Keep the documents streamlined — hyperlinks and citations over inline derivation — and push required application background (e.g. NNI, other standard algorithms) into a dedicated appendix, cited from the point of use rather than re-derived there. Treat the main text as a high-level overview of the current best-known approach (simulation, models, results) in terms of the roadmap, not an exhaustive record; link out to supporting docs, with plots, and results for dedicated studies that informed them. Adopt the style of an academic paper, supported by a textbook on domain-specific material likely new to the developer — two documents rather than one file with appendices (issue #249), so the paper can report results without carrying the formulations that support them, and the textbook can state an algorithm without naming any code that implements it.
 
@@ -20,7 +20,7 @@ These rules govern everything written in this repository: every document, each m
 Two concerns are supported, and they must stay separable:
 
 *   **Infrastructure:** the build, the checks, the release process, the agentic workflow. None of it names an application.
-*   **Application:** phylogenetic substitution models, likelihoods, tree search, and the standards this science requires.
+*   **Applications:** inference on graphical models, e.g. phylogenetics, likelihoods, tree search, and the standards this science requires.
 
 An infrastructure rule that acquires an application reference has lost the separation. Structure enforces it: `README.md` and `DEV.md` put infrastructure before application, and the file layout keeps them apart (`infra/` against `python/snakes_and_ladders/*` and `docs/tex/`).
 
@@ -30,23 +30,21 @@ This file is authoritative. Each of the remainder has a defined task:
 | Document | Job |
 | --- | --- |
 | `README.md` | What the project is, and where everything else lives |
-| `INSTALL.md` | Installing, building, running the tests locally |
+| `INSTALL.md` | Installing, building, running locally |
 | `DEV.md` | Layout, the CI jobs, repository settings, the CI budget, how a change is reviewed |
 | `RELEASE.md` | Cutting a release: what it is cut against, the preconditions, the steps, who runs each, and what it costs |
-| `ROADMAP.md` | The development loop, the scientific goal, requirements, and milestones |
+| `ROADMAP.md` | The goals and a path to them |
+| `REFERENCES.md` | The texts and papers each part of the work is cited against |
 | `STATUS.md` | What has landed against each roadmap milestone, the evidence, and the PR carrying it |
 | `TICKETS.md` | The titles of the tickets that remain between `STATUS.md` and `ROADMAP.md` |
-| `PROBLEMS.md` | The supported problems, each with the code that simulates, evaluates, fits, searches and learns on it |
 | `CHECKS.md`, `SEAMS.md` | The checks the roadmap's claims rest on, and the seams the package has; both generated from the tree, neither committed |
 | `CHANGELOG.md` | What has landed, per dated release section; built from `changelog.d/` fragments by `towncrier` |
 | `docs/tex/` | Two documents: a paper reporting results, and a textbook of the problem statements, algorithms, and the properties that referee them |
 | `docs/nb/` | One worked notebook per problem class, from a fixture to a learned policy |
 
-`python/snakes_and_ladders/sim/`, `likelihood/`, `opt/`, `learn/`, `search/`, `qa/`, `sandbox/`, `infra/`, and `docs/` each carry their own `CLAUDE.md`. Those add what applies only inside one module; they never override this file except for the vital **writing style rules, which bind every one of them**. A rule that binds the whole repository belongs here, not in one of them.
+`python/snakes_and_ladders/sim/`, `likelihood/`, `opt/`, `learn/`, `search/`, `qa/`, `sandbox/`, `infra/`, and `docs/` each carry their own `CLAUDE.md`. Those add what applies only inside one module; they never override this file except for the vital **writing style rules, which binds everything**. A rule that binds the whole repository belongs here, not in one of them.
 
 **Altitude, and what may repeat.** `ROADMAP.md`, `STATUS.md` and `TICKETS.md` plan and track — what the project is doing, how far it has got, what remains — at a level a reader holds in their head. `DEV.md` and `INSTALL.md` are followed step by step, so they carry their detail in full rather than as pointers: someone working through one of them should not have to assemble the answer from three. Detail may therefore repeat between them, and where it repeats it must agree — a copy that has drifted is a defect, and this file settles which reading is right.
-
-Every `CLAUDE.md`, this one included, is the exception, on rule 6: it carries the principle and names where the detail lives, never the detail itself. A measurement belongs to the thing that produced it — `STATUS.md` where it is evidence for a milestone, the module that defines the constant where a caller must act on it — and a `CLAUDE.md` that restates it acquires a second copy to keep true. The Writing Style above is the one text referenced rather than copied, because it binds every file at once.
 
 ## Environment & Tooling
 *   **Python (3.12):** Manage via `uv`. Run `uv sync --locked --all-extras`. Regenerate locks with `uv lock` and commit `uv.lock` in the same PR.
@@ -58,22 +56,22 @@ Every `CLAUDE.md`, this one included, is the exception, on rule 6: it carries th
 *   **Docs:** Build with `sphinx-build -W` in `docs/source/`.
 
 ## Conventions
-*   **Documentation Sync:** Any change affecting behavior, CI, dev setup, or math models must update, in the same PR, whichever of these it makes untrue: `README.md`, `CLAUDE.md` (including a module's), `DEV.md`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md`, `TICKETS.md`, `docs/tex/`, `docs/nb/`. If the change is user-visible, add a fragment under `changelog.d/` (see `changelog.d/README.md`) rather than editing `CHANGELOG.md` directly — `towncrier` merges fragments into `CHANGELOG.md` at release time, and CI's `towncrier check` enforces one exists.
+*   **Documentation Sync:** Any change affecting behavior, CI, dev setup, or math models must update, in the same PR, whichever of the documents it makes untrue: e.g. `README.md`, `CLAUDE.md` (including the modules), `DEV.md`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md`, `TICKETS.md`, `docs/tex/`, `docs/nb/`. If the change is user-visible, add a fragment under `changelog.d/` (see `changelog.d/README.md`) rather than editing `CHANGELOG.md` directly — `towncrier` merges fragments into `CHANGELOG.md` at release time, and CI's `towncrier check` enforces one exists.
 *   **Single Version Source:** The package version lives exclusively in `Cargo.toml`'s `[package].version`.
-*   **Package Surface:** `python/snakes_and_ladders/__init__.py` re-exports nothing beyond the package's own top-level utilities (currently `double`); import submodule contents explicitly (`from snakes_and_ladders.likelihood import ...`), not through the top-level namespace.
+*   **Package Surface:** `python/snakes_and_ladders/__init__.py` re-exports nothing beyond the package's own top-level utilities (currently `double`);
 *   **Code Standards:** Use type hints on all Python functions. Do not introduce silent behavior changes (e.g., default parameters). Keep dependencies minimal and justify additions.
-*   **A seam earns its place by its consumers.** A `Protocol` or shared contract is added where three or more modules call through it; below that the operation is named consistently and the seam is not written, and an existing one is kept only for a reason stated where it is declared. `SEAMS.md`, generated from the package and not committed, is the inventory and the referee; `DEV.md` carries the rule's procedure.
-*   **Dev Standards:** The number of PRs should be minimized to limit the amount of review work and test runs, particularly given tickets are typically scoped to a work item. Tickets whose plans share a shape — the same seam behind several callers, the same profile-first exit against a framework — land as one pull request, because a pull request costs a review and a CI run whatever its size.
-*   **Throughput:** One agent works at a time, in its own worktree, and it has the whole host; there is no contention to arbitrate and nothing to serialize, so a job runs when it is started. What paces the work is review bandwidth, not the core count: an agent's wall clock is mostly model latency. A quiet host is not a wide one — the thread count a measurement runs at is fixed by the baselines already recorded, and changing it is a separate decision that stales them. Local validation before a push is what fails fast: the changed-file lint and type check and the critical tier; the pull request's CI is the final validation, and the pull request is watched until it is green. Review starts with a script: the Definition-of-Done gates run as `infra/review_gates.sh` before a reviewer reads a line, and reading covers what a script cannot. `DEV.md` carries the procedure and the numbers.
-*   **Model Routing:** Claude Fable carries the judgement: it plans tickets, implements the plans, writes the pull requests, reviews work before it is posted, and takes review tickets. Everything else is delegated to Claude Opus subagents: the mechanical steps such as merges and rebuilds, measurements, searches, and re-executions, each briefed with the plan and validated by Fable before it lands. When Fable is unavailable — its budget spent, or the model not served — Opus carries the judgement under the same rules until Fable returns, rather than the work waiting.
-*   **A release ticket reports as it goes:** the pull request for a Release-template ticket opens as a draft as soon as its branch exists, and its body is updated every 10 minutes with the work still to be completed and the estimated time to the finished pull request, so the maintainer reads the state of the release from the pull request rather than asking for it. The draft leaves that state when the plan's steps are all landed and validated.
+*   **A seam earns its place by its consumers.** A `Protocol` or shared contract is added where three or more modules call through it; below that the operation is named consistently and the seam is not written, and an existing one is kept only for a reason stated where it is declared.
+*   **Dev Standards:** The number of PRs should be minimized to limit the amount of review work and test runs, particularly given tickets are typically scoped to a work item.
+*   **A tickets report as they go:** PRs open as a draft with its branch exists when the work begins.
+*   **Throughput:** One agent works at a time, in its own worktree, and it has the whole host; there is no contention to arbitrate and nothing to serialize.
+*   **Model Routing:** Claude Fable carries the judgement: it plans tickets, implements the plans, writes the pull requests, reviews work before it is posted, and takes review tickets. Everything else is delegated to Claude Opus subagents.
 
 ## Performance
 *   **GPU (PyTorch, Triton, JAX):** Target if the hot path is data-parallel and earns $\ge 10\times$ speedup over vectorized NumPy at realistic problem sizes.
 *   **Rust Backend (`oxi_snakes_and_ladders`):** Target for CPU-bound hot paths (control flow, tree traversal, irregular memory access, small sizes).
 *   **Autodiff:** **PyTorch**, decided. Its MPS backend is the path on Apple Silicon, which `ROADMAP.md` targets alongside CUDA.
 *   **Measurement:** Benchmark candidates against the NumPy reference before committing to a port. Report both numbers in the PR.
-*   **The Oracle:** Every accelerated kernel keeps its pure Python/NumPy implementation as an oracle. Regression tests must pin the accelerated output against it within an explicit tolerance.
+*   **The Oracle:** Every accelerated kernel keeps its pure Python/NumPy implementation as an oracle. Regression tests must pin the accelerated output against it, and recover known values on sims.
 
 ### Runtime Optimization Opportunities
 Checked in this order when a hot path is proposed; `DEV.md` carries the procedure, `STATUS.md` the numbers.
@@ -84,10 +82,9 @@ Checked in this order when a hot path is proposed; `DEV.md` carries the procedur
 *   **Branch misprediction.** A data-dependent branch in an inner loop is free or a stall; the branchless form (mask, select, table) wins only where a measurement shows the branch does not predict (Bryant & O'Hallaron ch. 5).
 *   **Inlining and call overhead.** No Python-level call per site or per node; hoist it or vectorize it. In Rust, `#[inline]` the small hot helpers (Gorelick & Ozsvald ch. 4; Bryant & O'Hallaron ch. 5).
 *   **Allocation.** Preallocate and reuse buffers across sweeps; NumPy `out=` and in-place operators over temporaries (Gorelick & Ozsvald ch. 6).
-*   **Double buffering.** Reading and writing one array in a sweep is a *different Markov chain* from reading the previous buffer; the docstring says which and the oracle pins it before either is timed.
-*   **The FFI boundary.** Cross it once per call with contiguous arrays; time a kernel alone *and* through its binding, since the marshalling has been the dominant term here (Gorelick & Ozsvald ch. 7; Antão).
-*   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — runs through `snakes_and_ladders.parallel`, one seam and no pool of its own; `workers` is explicit and `1` is serial. A parallel run is bitwise the serial run or it is not a parallel run: one generator per task, spawned in item order, and one intra-op thread per worker, since a pool of multithreaded kernels oversubscribes the machine. A site under 2× at 4 workers stays serial and `STATUS.md` records why.
-*   **Compiled backends.** Two, each for a reason: Rust carries the sampling sweep, whose agreement with its oracle is distributional, so it stays opt-in; `numba`'s `njit` carries deterministic kernels whose pin against the oracle is bitwise, so it may be the default. Every backend is one more implementation held to the NumPy oracle, and a third joins only against a measurement on an existing hot path (Gorelick & Ozsvald ch. 7).
+*   **The FFI boundary.** Cross it once per call with contiguous arrays; minimize the perimeter.
+*   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — runs through `snakes_and_ladders.parallel`.
+*   **Compiled backends.** Two, each for a reason: Rust carries the load, so it stays opt-in; `numba`'s `njit` carries the ease.
 
 ## Testing & Quality Assurance
 *   **Simulate Component-Wise:** Build fixtures by simulating from a known generative model under an explicitly seeded generator. Test components individually and in combination.
@@ -101,27 +98,6 @@ Checked in this order when a hot path is proposed; `DEV.md` carries the procedur
 *   **Scientific Outputs:** The suite must emit plots and tables for the LaTeX documents. Update the LaTeX captions concurrently. Every figure is rendered from the code it reports on, ships with a caption naming the seed, sizes and model that produced it, and is committed under `docs/tex/figures/` so a changed plot is visible in review rather than only after a document build.
 *   **Time is money:** test and build frameworks should be justified, time/computationally, e.g. cached; a high priority is to standup a minimal implementation against the ROADMAP.md with corresponding ablation studies with a fast test-driven development cycle.  Rely on the tests run on a PR as final validation where appropriate (late in development), rather than duplicating the effort - you will monitor the PR and fix issues before merging. The pull request's gate is bounded and the whole suite runs after the merge, so what a merge waits for and what the repository checks are two different sets; `DEV.md` states which is which and what refuses the bound.
 *   **The per-PR tier is the fast gate; the release runs everything.** A test over the per-PR duration cap, or whose claim is not needed to gate a merge, carries the `release` marker and runs in the release process, which runs every tier; the duration guard in `tests/` enforces the cap, so a slow test is re-tiered rather than waited for. A claim moved to release keeps a fast small-size sibling per PR where one exists, and where none does the gap is a ticket, not a test. `DEV.md` states the cap and the tiers.
-
-## Documents & Reference Sources
-`docs/tex/` is treated as code. Cite these texts where they carry the material, and state any deviation from their standard algorithms explicitly. The core references are a routing table, grouped by what they inform:
-
-**Infrastructure (Build, Structure, and Speed)**
-*   **Software Craft:** Martin (*Clean Code*); Blandy et al. (*Programming Rust*); Ramalho (*Fluent Python*)
-*   **Systems & Hardware:** Bryant & O'Hallaron (*Computer Systems*); Hwu et al. (*Programming Massively Parallel Processors*)
-*   **Python Performance:** Gorelick & Ozsvald (*High Performance Python*); Antão (*Fast Python*)
-
-**Optimization (Discrete and Continuous)**
-*   **Algorithms & Math:** Cormen et al. (*Introduction to Algorithms*); Rosen (*Discrete Mathematics and Its Applications*); Papadimitriou & Steiglitz (*Combinatorial Optimization*, the exact baselines and their complexity). Papers: Kolmogorov & Zabih 2004 (which energies a cut minimizes, the minimum-cut and alpha-expansion solvers); Boykov & Kolmogorov 2004 (the max-flow those solvers run)
-*   **Numerical Optimization:** Nocedal & Wright (*Numerical Optimization*); Boyd & Vandenberghe (*Convex Optimization*, the Max-Cut SDP certificate). Papers: Hansen & Ostermeier 2001 (CMA-ES, the population baseline)
-*   **Probabilistic Inference:** MacKay (*Information Theory...*); Koller & Friedman (*Probabilistic Graphical Models*); Frey (*Graphical Models...*); Ortega (*Introduction to Graph Signal Processing*); Bishop (*Pattern Recognition and Machine Learning*, EM and variational inference); Murphy (*Probabilistic Machine Learning: Advanced Topics*). Review: Wainwright & Jordan 2008 (the exponential-family frame the bounds sit in). Papers: Wainwright, Jaakkola & Willsky 2005 (tree-reweighted bounds on `log Z` and on the MAP); Hsu, Kakade & Zhang 2012 (spectral HMM initialization)
-*   **Statistical Physics:** Mézard & Montanari (*Information, Physics, and Computation*); Newman & Barkema (*Monte Carlo Methods in Statistical Physics*); Krauth (*Statistical Mechanics: Algorithms and Computations*); Landau & Binder (*A Guide to Monte Carlo Simulations in Statistical Physics*). Reviews: Betancourt 2017 (Hamiltonian Monte Carlo); Schollwöck 2011 (matrix-product states, the contraction oracle). Papers: Machta 2010 (population annealing)
-*   **Information Theory & Geometry:** Amari (*Information Geometry and Its Applications*); Cover & Thomas (*Elements of Information Theory*)
-*   **Learning & RL:** Goodfellow et al. / Prince (*Deep Learning*); Sutton & Barto (*Reinforcement Learning*); Lapan (*Deep RL Hands-On*); Raschka (*Build a Large Language Model*). Papers: Sutton, Precup & Singh 1999 (options, the compound-moves item); Bacon, Harb & Precup 2017 (option-critic); Schrittwieser et al. 2020 (planning with a learned model)
-*   **Learning for Combinatorial Optimization:** Reviews: Bengio, Lodi & Prouvost 2021 (the field Stage 2 sits in); Mazyavkina et al. 2021 (reinforcement learning for combinatorial optimization). Papers: Khalil et al. 2017 (a graph-network policy); Kool, van Hoof & Welling 2019 (an attention policy); Paulus et al. 2020 (stochastic softmax tricks over structured spaces); Henderson et al. 2018 (seeds and reporting); Agarwal et al. 2021 (the interval statistics §2.4's paired test needs); Schuetz, Brubaker & Katzgraber 2022 (physics-inspired GNN ground states); Angelini & Ricci-Tersenghi 2023 (its greedy critique)
-
-**Application (The Science)**
-*   **Phylogenetics:** Felsenstein (*Inferring Phylogenies*); Durbin et al. (*Biological Sequence Analysis*); Compeau & Pevzner (*Bioinformatics Algorithms*); Pachter & Sturmfels (*Algebraic Statistics for Computational Biology*); Yang (*Molecular Evolution: A Statistical Approach*, the substitution models). Papers: Whidden & Matsen 2015 (mixing over the SPR graph); Azouri et al. 2021 (learned SPR ranking); Zhang & Matsen 2018 (subsplit networks); Zhang & Matsen 2019 (variational inference over topologies, the differentiable-topology oracle); Speyer & Sturmfels 2004 (the tropical Grassmannian); Altekar et al. 2004 (Metropolis-coupled MCMC over topologies); Minh et al. 2020 (IQ-TREE 2, external baseline); Kozlov et al. 2019 (RAxML-NG, external baseline); Saitou & Nei 1987 (neighbor joining); Atteson 1999 (its radius); Steel 1994 (the log-det distance); Hendy & Penny 1993 (the Hadamard conjugation); Mossel & Roch 2006 (spectral learning of a nonsingular phylogeny, the bridge from the HMM)
-*   **Information/Quantum:** Blahut (*Algebraic Codes for Data Transmission*); Richardson & Urbanke (*Modern Coding Theory*, the LDPC decoder and density evolution); Nielsen & Chuang (*Quantum Computation and Quantum Information* — background only). Papers: Gallager 1962 (low-density parity-check codes); Nachmani et al. 2018 (neural belief propagation, the learned decoder)
 
 ## Definition of Done
 1.  **Regression Test:** Asserts scientific validity (not just shape/execution/coverage theatre) and pins expected output.
