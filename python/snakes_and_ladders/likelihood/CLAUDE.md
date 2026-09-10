@@ -1,26 +1,12 @@
 # likelihood/
 
 Evaluators: what a model says about data, on a tree, a graph or a chain. This
-is the hottest path in the project, since every proposed move costs at least
+is a hot path in the project, since every proposed move costs at least
 one evaluation and search proposes many.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file too — and every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local,
-and is principle: the numbers behind each rule live with the code that
-produces them, and the module docstrings say which.
-
-## What lives here
-
-The pruning recursion and its backends, an exact and an approximate evaluator
-for the Potts MRF, Fitch and Sankoff parsimony as a second criterion over the
-same topology, path enumeration for the HMM, one sum-product over any factor graph
-that is pinned to each of those where they overlap, the enumeration oracle for
-the coupled model with its E step and field, forward–backward as an
-evaluator, a parity-check decoder specialised from that sum-product and
-held to it, and the adapter that presents any of them to `snakes_and_ladders.opt`'s fitting interface. That adapter lives here and not in
-`opt/`, because `opt/` may import no application module — the dependency runs
-application to infrastructure, never back.
+section binds this file and related work — e.g. every docstring, comment and commit message
+in this module. It is referenced here, never restated. What follows is local.
 
 ## Local rules
 
@@ -28,17 +14,11 @@ application to infrastructure, never back.
   accelerated backend is pinned against it. Deleting the slow path to "clean
   up" removes the only thing that says the fast path is right.
 
-- **Correctness comes from brute force, not from another backend.** Direct
-  marginalization over the hidden states is the test. Two backends agreeing
-  proves nothing if both are wrong.
+- **Correctness comes from a ladder of validation, starting brute force.** Direct
+  marginalization over the hidden states is the test.
 
 - **Cross-device agreement is a relative tolerance keyed on the lowest
-  precision in the comparison.** It is relative because a log-likelihood is a
-  sum over sites, so an absolute bound fixed at one problem size does not
-  transfer to another; it is keyed on the lowest precision because one bound
-  loose enough for `float32` would let a broken `float64` backend pass.
-  `device.py` states both tolerances and the measurements they are derived
-  from, and every comparison reads them from there rather than retyping them.
+  precision in the comparison.**
 
 - **A boundary cost hides behind the fixture's size, never behind the
   algorithm's.** A backend measured only where the existing fixtures sit
@@ -48,10 +28,9 @@ application to infrastructure, never back.
   path is therefore measured at both, because the two answer different
   questions and this repository has had them disagree.
 
-- **A backend is accepted or rejected against that tolerance, never adjusted
-  until it matches.** A discrepancy inside the bound is not a bug and must not
-  be "fixed"; one outside it is not a tolerance to loosen.
-
+- **A backend is accepted or rejected against that tolerance, but the code can be improved
+  to match, but not to cheat**
+  
 - **An approximate evaluator states which regime carries its correctness.**
   Where it is exact, equality against enumeration is asserted. Where it is
   approximate, the deviation is *reported*: asserting agreement would assert
@@ -89,9 +68,6 @@ application to infrastructure, never back.
 - **Two decodings of one model are different answers, not approximations of
   each other.** A maximum over paths and a per-site maximum of marginals
   differ, and the second can return something the model assigns no path to.
-  They agree on almost every fixture, which is exactly why a decoder that
-  computes one and reports the other survives a suite with no case where they
-  diverge; the fixture that separates them is the test.
 
 - **Rescaling must stay differentiable.** Partial likelihoods underflow, so
   they are rescaled with the log of the scaling accumulated separately, and
@@ -102,8 +78,7 @@ application to infrastructure, never back.
 
 - **Fit only what is estimable.** Where a model has an exactly flat direction,
   the parameters along it are confounded and the fit reports the combination
-  that is identified rather than the parts that are not. Recovering a part
-  afterwards is a drawing convention, never an estimate.
+  that is identified rather than the parts that are not.
 
 - **Differentiable backends keep structure and parameters apart.** Branch
   lengths reach the autodiff backend as a tensor, never read back off the
