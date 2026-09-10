@@ -6,16 +6,15 @@
 
 Mixed discrete-continuous optimization over graph-structured models —
 phylogenetic trees, Potts models in an external field, hidden Markov models,
-and low-density parity-check decoding. Autodiff fits the
-continuous half, learned proposals, a critic, a planner and surrogates
-propose the discrete half beside the classical baselines they are measured
-against, and a Rust backend (`snakes_and_ladders.oxi_snakes_and_ladders`, via
+and low-density parity-check decoding. Autodiff fits the continuous half;
+learned proposals, a critic, a planner and surrogates propose the discrete half
+beside the classical baselines they are measured against; a Rust backend
+(`snakes_and_ladders.oxi_snakes_and_ladders`, via
 [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs)) carries the
 CPU-bound recursions.
 
-Development is agent-assisted, and the repository is built so that claim is
-checkable: every result is pinned to an oracle that shares no code with what it
-checks.
+Development is agent-assisted, and every result is pinned to an oracle that
+shares no code with what it checks.
 
 Two concerns stay separate. **The infrastructure** — the build, the checks, the
 release process, the agentic workflow — names no application. **The
@@ -29,9 +28,8 @@ source .venv/bin/activate
 pytest -m "not release"
 ```
 
-[INSTALL.md](INSTALL.md) covers the full workflow: prerequisites, building the
-Rust extension, running both test suites, the checks CI enforces, dependency
-audits, and building the docs.
+[INSTALL.md](INSTALL.md) covers prerequisites, the Rust extension, both test
+suites, the checks CI enforces, dependency audits, and the doc builds.
 
 ---
 
@@ -39,19 +37,16 @@ audits, and building the docs.
 
 ## Development is agent-assisted
 
-An agent's output is reviewed on the same terms as a human's. The claim is not
-that an agent wrote the code; it is that the process establishes whether the
-code is right. The summary below names the stages;
-[ROADMAP.md](ROADMAP.md) §0 states each one as a deliverable and the gate that
-holds it.
+An agent's output is reviewed on the same terms as a human's: the claim is not
+that an agent wrote the code, but that the process establishes whether the code
+is right. [ROADMAP.md](ROADMAP.md) §0 states each stage as a deliverable and the
+gate that holds it.
 
 1. **A ticket is filed** through [`.github/ISSUE_TEMPLATE/task.yml`](.github/ISSUE_TEMPLATE/task.yml),
    which asks for the outcome, the non-goals, and — the field that does the
-   work — *how it will be validated*. Blank issues are disabled: a task that
-   cannot say what would falsify it does not get filed.
+   work — *how it will be validated*. Blank issues are disabled.
 2. **A plan is posted to the thread** and the issue is labelled `planned`.
-   Review happens before any code exists, the cheapest point to reject an
-   approach.
+   Review happens before any code exists.
 3. **A maintainer applies `approved`.** Only then may a pull request open, and
    it must implement the plan already in the thread. A plan that turns out to
    be flawed gets a revised plan posted, not a silent correction.
@@ -66,8 +61,7 @@ holds it.
 
 `CLAUDE.md` is authoritative: where it and any other document disagree, it
 wins. Each module carries its own, adding the rules local to it and never
-overriding the root. Read the root file, then the one for the directory you are
-working in.
+overriding the root.
 
 | Contract | Governs |
 | --- | --- |
@@ -91,15 +85,13 @@ Ten required checks run on every pull request: a title naming the base
 branch, `ruff` and `mypy --strict`, `clippy` and `cargo fmt`, the Rust and
 Python suites, the Sphinx build with warnings as errors, the build of the
 paper and the textbook, the re-execution of every committed notebook, and
-dependency audits.
-Three further rules constrain what the suite may contain:
+dependency audits. Three further rules constrain what the suite may contain:
 
 - **No coverage theatre.** A test asserting only shapes, or only that nothing
   raised, is forbidden. Gaps are left unwritten and tracked as issues.
 - **Every accelerated path keeps its reference implementation.** The
   vectorized NumPy version stays as the oracle the Rust, PyTorch and future
-  GPU backends are pinned against. Deleting the slow path removes the only
-  thing that says the fast path is right.
+  GPU backends are pinned against.
 - **Correctness comes from an independent source**, not from a second
   backend: analytic results, brute-force computation, or exhaustive
   enumeration.
@@ -122,20 +114,17 @@ Three further rules constrain what the suite may contain:
 The scientific problem is a search over discrete structure where scoring any
 one candidate requires a continuous fit. In phylogenetics it is a search over
 tree topologies — the large parsimony problem — scoring each candidate by its
-likelihood under a model of character substitution. The search is **discrete**
-over topologies, but scoring one requires a **continuous** fit of that tree's
-branch lengths, rate matrix and root distribution, and neither half separates
-from the other: a better topology scored with badly fitted parameters looks
-worse than a poor one scored well.
+likelihood under a model of character substitution. Neither half separates from
+the other: a better topology scored with badly fitted parameters looks worse
+than a poor one scored well.
 
-That shape is not unique to phylogenies. Felsenstein pruning, the HMM forward
-algorithm, the Potts transfer matrix and the decoder of a low-density
-parity-check code are the same sum-product recursion on different graphs — a
-tree, a chain, a lattice, a Tanner graph — so one discrete/continuous
-interface serves all four, and the coupled spatio-sequential model and the
-Gaussian mixture derived from them. The project treats that as a design constraint
-rather than a coincidence, and enforces it structurally: `snakes_and_ladders.opt` and
-`snakes_and_ladders.learn` may import no application module, asserted by test.
+Felsenstein pruning, the HMM forward algorithm, the Potts transfer matrix and
+the decoder of a low-density parity-check code are the same sum-product
+recursion on different graphs — a tree, a chain, a lattice, a Tanner graph — so
+one discrete/continuous interface serves all four, and the coupled
+spatio-sequential model and the Gaussian mixture derived from them. That is
+enforced structurally: `snakes_and_ladders.opt` and `snakes_and_ladders.learn`
+may import no application module, asserted by test.
 
 [ROADMAP.md](ROADMAP.md) states the goal, the accuracy and hardware
 requirements, and the milestones.
@@ -147,14 +136,14 @@ parameter vector, a differentiable scalar, and a map back to named constrained
 parameters. Eight likelihoods and three closed-form test functions run against
 it unchanged — the Potts chain and lattice, the HMM under six emission
 families, branch lengths on a fixed topology, the GTR substitution model, the
-Gaussian mixture, Rosenbrock, Rastrigin and Himmelblau — and none required a
+Gaussian mixture, Rosenbrock, Rastrigin and Himmelblau — none requiring a
 change to `snakes_and_ladders.opt`.
 
 **Fitting with intervals, not just convergence.** L-BFGS under a strong-Wolfe
 line search, with confidence intervals from the observed Fisher information
 pushed through the constraint map by the delta method, and convergence judged
 on the gradient relative to the objective's own magnitude. Validation is
-parameter recovery against known truth, not a falling loss curve.
+parameter recovery against known truth.
 
 **Three pruning backends against one oracle.** Vectorized NumPy is the
 reference; differentiable PyTorch keeps branch lengths in the autograd graph;
@@ -169,22 +158,20 @@ precision in the comparison — 1e-11 in `float64`, 1e-6 where either side is
 **Discrete move sets with closed-form checks.** NNI and SPR neighbourhoods
 behind one interface, verified exhaustively against `2(n-3)` and
 `2(n-3)(2n-7)` at `n = 5..8`, plus exhaustive enumeration of unrooted
-topologies as the oracle that makes "did the search find the best tree" a
-question with an answer.
+topologies as the oracle for "did the search find the best tree".
 
 **Reinforcement learning pinned to a closed form.** An `Environment`
 interface, a softmax-over-scored-actions policy, REINFORCE with a baseline, an
 actor–critic, PPO, a PUCT planner trained by expert iteration, and an exact
 trajectory-enumeration oracle for the expected return, its gradient, the
-action values and the optimal value. Claims rest on that oracle rather than on
-a training curve.
+action values and the optimal value. Claims rest on that oracle, not on a
+training curve.
 
 **A QA pipeline that is the evidence.** Every figure and table in the paper and
 the textbook is rendered by `snakes_and_ladders.qa` from the code it reports on,
-and CI rebuilds and compares them, so a plot cannot drift from what produced it;
-the textbook's tables of which algorithm and which referee applies to each
-problem are generated from `PROBLEMS.md` and the test suite by
-`infra/problems_tables.py`, at build time rather than from a committed copy.
+and CI rebuilds and compares them; the textbook's tables of which algorithm and
+which referee applies to each problem are generated from `PROBLEMS.md` and the
+test suite by `infra/problems_tables.py` at build time.
 
 ## What exists, measured
 
@@ -193,14 +180,14 @@ alongside the data and validated against the closed-form transition
 probabilities. Felsenstein pruning agreeing with brute-force marginalization to
 4.0e-14 relative across three backends. Parameters recovered inside intervals
 whose 95% coverage is measured at the nominal rate over 60 replicates. Hill
-climbing reaching the exhaustively enumerated maximum from all 12 starting
-points on a 6-taxon fixture. Normalized Robinson–Foulds distance meeting the
-0.05 requirement from 125 sites upward. On a Potts landscape, a learned policy
-reaching the optimum from 86.6% of starts against greedy's 80.2%, in 8 of 8
-seeds. A gradient update costing 203 ms at `n = 100`, `L = 1000`.
+climbing reaching the enumerated maximum from all 12 starts on a 6-taxon
+fixture. Normalized Robinson–Foulds distance meeting the 0.05 requirement from
+125 sites upward. On a Potts landscape, a learned policy reaching the optimum
+from 86.6% of starts against greedy's 80.2%, in 8 of 8 seeds. A gradient update
+costing 203 ms at `n = 100`, `L = 1000`.
 
 Not claimed: that a learned policy beats hill climbing on trees (measured as a
-tie, and the feature set that bounds it is ticketed), any comparison against
+tie, with the feature set that bounds it ticketed), any comparison against
 IQ-TREE 2 or RAxML-NG, GPU dispatch, or rate variation across sites.
 
 [STATUS.md](STATUS.md) records what has landed against each milestone, the
@@ -225,16 +212,15 @@ oracle that established it, and the pull request that carries it;
 | [`docs/external_tools.md`](docs/external_tools.md) | External phylogenetic software: what exists, its licence, and what it could referee if one were adopted |
 
 Every figure in the document is rendered from the code it reports on and ships
-with a caption naming the seed, the sizes, and the model that produced it. A
-figure that cannot say what generated it is not evidence.
+with a caption naming the seed, the sizes, and the model that produced it.
 
 ## References
 
-The literature this work is built against is a routing table rather than a
-bibliography: each group informs one concern, and `CLAUDE.md` holds the full
-list with the rule that a deviation from a standard algorithm is stated
-explicitly where it is taken. `docs/tex/textbook.tex` cites them at the point of use, and
-its Reference Taxonomy appendix groups them the same way.
+The literature is a routing table rather than a bibliography: each group
+informs one concern, and `CLAUDE.md` holds the full list with the rule that a
+deviation from a standard algorithm is stated explicitly where it is taken.
+`docs/tex/textbook.tex` cites them at the point of use, and its Reference
+Taxonomy appendix groups them the same way.
 
 | Concern | Anchor texts |
 | --- | --- |

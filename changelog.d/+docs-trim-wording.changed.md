@@ -1,0 +1,1 @@
+Trimmed the repository's documents by 8.4% (4,791 words) against `CLAUDE.md`'s Writing Style: narration around a fact, rationale restated in a second place, and transitional sentences are cut, while every measurement, unit, provenance, command, flag and recorded correction is kept.
