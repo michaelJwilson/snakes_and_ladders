@@ -18,6 +18,7 @@ use oxi_snakes_and_ladders::coupled::{
     class_posteriors_into, external_field_into, CoupledShape, EmissionTables,
 };
 use oxi_snakes_and_ladders::double;
+use oxi_snakes_and_ladders::maxflow::{max_flow_impl, FlowNetwork};
 use oxi_snakes_and_ladders::pruning::{pruning_log_likelihood_impl, LeafObservations};
 #[cfg(feature = "sandbox")]
 use oxi_snakes_and_ladders::pruning_burn::pruning_gradient_impl;
@@ -298,6 +299,65 @@ fn bench_class_posteriors(c: &mut Criterion) {
     });
 }
 
+/// The alpha-expansion network of a `extent x extent` open lattice with three
+/// labels, at the step where the labels disagree everywhere --- the worst
+/// case for the auxiliary nodes, and the shape `search.alpha_expansion`
+/// builds.
+///
+/// Capacities are the ones that expansion produces: a data term per node on
+/// both branches, an undirected pairwise arc per agreeing edge, and an
+/// auxiliary node with three arcs per disagreeing edge.
+fn expansion_network(extent: usize) -> FlowNetwork {
+    let n_nodes = extent * extent;
+    let mut edges = Vec::new();
+    for row in 0..extent {
+        for column in 0..extent {
+            let node = row * extent + column;
+            if column + 1 < extent {
+                edges.push((node, node + 1));
+            }
+            if row + 1 < extent {
+                edges.push((node, node + extent));
+            }
+        }
+    }
+    let (source, sink) = (n_nodes, n_nodes + 1);
+    let mut network = FlowNetwork::new(n_nodes + 2 + edges.len());
+    let mut random = SplitMix64::new(extent as u64);
+    for node in 0..n_nodes {
+        let switch = (random.next_u64() % 1000) as f64 / 1000.0;
+        let keep = (random.next_u64() % 1000) as f64 / 1000.0;
+        network.add_edge(source, node, switch, 0.0).unwrap();
+        network.add_edge(node, sink, keep, 0.0).unwrap();
+    }
+    let mut auxiliary = n_nodes + 2;
+    for &(first, second) in &edges {
+        network.add_edge(first, auxiliary, 1.2, 1.2).unwrap();
+        network.add_edge(second, auxiliary, 1.2, 1.2).unwrap();
+        network.add_edge(auxiliary, sink, 1.2, 0.0).unwrap();
+        auxiliary += 1;
+    }
+    network
+}
+
+/// The kernel alone, for the pair `DEV.md` step 3 asks for: this against the
+/// `pytest-benchmark` on `search.alpha_expansion` is the boundary, measured
+/// rather than presumed (#528).
+fn bench_max_flow(c: &mut Criterion) {
+    let mut group = c.benchmark_group("max_flow_expansion_network");
+    for extent in [8usize, 16, 32] {
+        let n_nodes = extent * extent;
+        group.bench_function(format!("{extent}x{extent}"), |b| {
+            b.iter_batched(
+                || expansion_network(extent),
+                |mut network| max_flow_impl(&mut network, n_nodes, n_nodes + 1).unwrap(),
+                criterion::BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
 #[cfg(feature = "sandbox")]
 criterion_group!(
     benches,
@@ -305,6 +365,7 @@ criterion_group!(
     bench_pruning_log_likelihood,
     bench_sample_rows,
     bench_class_posteriors,
+    bench_max_flow,
     bench_pruning_gradient
 );
 #[cfg(not(feature = "sandbox"))]
@@ -313,6 +374,7 @@ criterion_group!(
     bench_double,
     bench_pruning_log_likelihood,
     bench_sample_rows,
-    bench_class_posteriors
+    bench_class_posteriors,
+    bench_max_flow
 );
 criterion_main!(benches);

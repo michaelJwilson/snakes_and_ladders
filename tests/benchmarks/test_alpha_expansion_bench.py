@@ -32,17 +32,24 @@ def _problem(extent: int, n_states: int) -> tuple[object, np.ndarray]:
     return graph, rng.normal(size=(graph.n_nodes, n_states))
 
 
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
 @pytest.mark.parametrize("n_states", [3, 5])
 @pytest.mark.parametrize("extent", [8, 16])
 def test_alpha_expansion_benchmark(
-    benchmark: BenchmarkFixture, extent: int, n_states: int
+    benchmark: BenchmarkFixture, extent: int, n_states: int, backend: Backend
 ) -> None:
     # Cost is one minimum cut per label per cycle, so it scales in the label
     # count as well as the lattice -- which is the trade against single-site
     # descent, whose sweep is independent of how many labels there are.
+    #
+    # The two backends run the same expansions on the same networks and
+    # differ only in which solver cuts them, so the ratio here is the Rust
+    # minimum cut against the Python one *as a caller pays for it*, network
+    # construction included. The kernel alone is timed by Criterion in
+    # `benches/`, which is the pair `DEV.md` step 3 asks for (#528).
     graph, field_values = _problem(extent, n_states)
 
-    result = benchmark(alpha_expansion, graph, field_values, n_states)
+    result = benchmark(alpha_expansion, graph, field_values, n_states, backend=backend)
 
     assert result.cycles >= 1
 

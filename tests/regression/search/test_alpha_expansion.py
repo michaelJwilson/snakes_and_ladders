@@ -283,3 +283,32 @@ def test_descent_has_no_rust_backend() -> None:
         iterated_conditional_modes(
             graph, np.zeros(3), 3, np.random.default_rng(0), backend=Backend.RUST
         )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("n_states", [2, 4])
+def test_the_rust_cut_reproduces_the_python_expansion(seed: int, n_states: int) -> None:
+    # What issue #528 changed: the binding now returns the source side it
+    # already computed, so `expand` can reach it. The two solvers must agree
+    # on the *labelling*, not merely its energy -- the energy would also
+    # agree if a degenerate cut sent the two routes down different expansion
+    # sequences to different minima of equal value, and that is exactly the
+    # possibility this pin has to exclude. Realized: 12 of 12 cells agree.
+    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
+    field = np.random.default_rng(500 + seed).normal(size=(graph.n_nodes, n_states))
+
+    python = alpha_expansion(graph, field, n_states, backend=Backend.PYTHON)
+    compiled = alpha_expansion(graph, field, n_states, backend=Backend.RUST)
+
+    assert np.array_equal(python.labelling, compiled.labelling)
+    assert python.energy == compiled.energy
+    assert (python.cycles, python.moves) == (compiled.cycles, compiled.moves)
+
+
+@pytest.mark.edge_case
+def test_expansion_has_no_numba_backend() -> None:
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
+
+    with pytest.raises(ValueError, match="no numba minimum-cut backend"):
+        alpha_expansion(graph, np.zeros(3), 3, backend=Backend.NUMBA)
