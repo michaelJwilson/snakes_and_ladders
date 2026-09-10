@@ -11,6 +11,15 @@ Reporting it at a single site count would say little. A search that recovers
 the truth on a generous alignment has shown that the pipeline works, not that
 it works at the margin. Sweeping the site count finds the margin.
 
+The caption states the two ends of that sweep and not where it crosses.
+Issue #492 cited this figure into the paper, and a cited caption is held to
+``docs/CLAUDE.md``'s rule that a published number survive a rebuild on
+another machine: the smallest site count whose mean clears the requirement,
+and the count of replicates recovering the topology exactly at any one size,
+are both discontinuous in 48 L-BFGS fits taken at the margin, which is the
+class that rule refuses. What is quoted instead is the comparison the suite
+pins --- the mean at the longest alignment against the mean at the shortest.
+
 Renders what `snakes_and_ladders.search` computed; it reimplements no search
 (`qa/CLAUDE.md`).
 """
@@ -92,8 +101,6 @@ def build_figure(
     """
     sizes = sorted(measured)
     means = [float(np.mean(measured[n])) for n in sizes]
-    recovered = {n: sum(1 for d in measured[n] if d == 0.0) for n in sizes}
-    passing = [n for n in sizes if means[sizes.index(n)] <= REQUIREMENT]
 
     with letter_style():
         fig, axis = plt.subplots(figsize=ONE_COLUMN)
@@ -137,26 +144,22 @@ def build_figure(
         axis.legend(loc="upper right", frameon=False, fontsize="small")
         fig.tight_layout()
 
-    threshold = (
-        f"from {latex_integer(min(passing))} sites upward"
-        if passing
-        else "at no size swept here"
-    )
+    longest = "meets" if means[-1] <= REQUIREMENT else "misses"
+    shortest = "meets" if means[0] <= REQUIREMENT else "misses"
     caption = (
         f"How much alignment the search needs to recover the tree that "
         f"generated it. Each marker is one independent alignment drawn from "
         f"the {len(params.pi)}-state Jukes-Cantor fixture (seed "
-        f"{params.seed}, {REPLICATES} replicates per size), inferred by NNI "
-        f"hill climbing and scored against the generating topology by "
-        f"normalized Robinson-Foulds distance -- 0 for the same tree, 1 for "
-        f"no internal split in common. The dotted line is the accuracy "
-        f"requirement this project set itself, {REQUIREMENT}. It is met "
-        f"{threshold}: "
-        f"{recovered[max(sizes)]} of {REPLICATES} replicates recover the "
-        f"topology exactly at {latex_integer(max(sizes))} sites, against "
-        f"{recovered[min(sizes)]} of {REPLICATES} at "
-        f"{latex_integer(min(sizes))}. The distance is normalized by internal "
-        f"splits, so the bound means the same thing at any taxon count."
+        f"{params.seed}, {REPLICATES} replicates at each of {len(sizes)} "
+        f"site counts), inferred by NNI hill climbing and scored against the "
+        f"generating topology by normalized Robinson-Foulds distance -- 0 "
+        f"for the same tree, 1 for no internal split in common. The dotted "
+        f"line is the accuracy requirement this project set itself, "
+        f"{REQUIREMENT}. The mean over replicates {longest} the requirement "
+        f"at the longest alignment swept, {latex_integer(max(sizes))} sites, "
+        f"and {shortest} it at the shortest, {latex_integer(min(sizes))}. "
+        f"The distance is normalized by internal splits, so the bound means "
+        f"the same thing at any taxon count."
     )
     return fig, caption
 
