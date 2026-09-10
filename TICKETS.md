@@ -163,11 +163,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Cross-Cutting Infrastructure
 
-- Decide what the host lock does about writer starvation: `flock` grants a
-  fresh shared request while an exclusive one waits, so three validation
-  loops starved a measurement for a whole 18 s stream, 5 runs of 5. The
-  turnstile that fixes it costs #427's guarantee that a queued measurement
-  blocks no validation; the two are the same fact from either side (#431)
 - CPU parallelism past the first three sites: the candidate fits of
   `search.infer`, `learn.rollout` batches, tempering replicas (a `rayon`
   loop is the alternative, a dependency decision), `qa.build` and
@@ -214,8 +209,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Labels say what the pull requests say (#279)
 - Re-key the milestone references in code and `docs/tex/` to the roadmap's
   `N.M` numbering (#324)
-- Cite or retire the two QA figures the documents still do not cite,
-  `sim_problem_sizes` and `topology_accuracy` (#325)
+- Cut `topology_accuracy`'s 124 s render, 91.5% of which is L-BFGS
+  branch-length fitting (#509)
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
 - Abbreviate the package as `sal` (#301)

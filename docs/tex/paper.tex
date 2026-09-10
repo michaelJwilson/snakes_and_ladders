@@ -167,6 +167,24 @@ generated caption naming the seed, sizes, and model that produced it.
 \subsection{Simulation against its analytic truth}
 \label{sec:res-simulation}
 
+The simulator is held to the closed-form transition probabilities the
+companion textbook derives, rather than to the likelihood later fitted to its
+output: empirical substitution frequencies along a branch are compared against
+that form within a Monte Carlo tolerance.
+Table~\ref{tab:sim-problem-sizes} is the three instances that comparison runs
+on. The tolerance is bought with sites rather than chosen---the two
+200{,}000-site instances are validated at a third of the tolerance the
+20{,}000-site one is---and the set is tabulated rather than described because
+a seed and a tolerance are what make the comparison repeatable at all.
+
+\qacaptionread{figures/sim_problem_sizes_caption.txt}{\simProblemSizesCaption}
+\begin{table}[htbp]
+  \centering
+  \input{figures/sim_problem_sizes}
+  \caption{\simProblemSizesCaption}
+  \label{tab:sim-problem-sizes}
+\end{table}
+
 \qacaptionread{figures/sim_example_caption.txt}{\simExampleCaption}
 \begin{figure}[htbp]
   \centering
@@ -304,6 +322,25 @@ climbed; the second the tree it selected beside the best one it rejected.
   \includegraphics[width=0.8\linewidth]{figures/search_topologies}
   \caption{\searchTopologiesCaption}
   \label{fig:search-topologies}
+\end{figure}
+
+Enumeration referees whether the search found the best tree \emph{for the
+data}. Whether the best tree for the data is the tree that generated it is a
+different question, refereed by simulated truth rather than by enumeration and
+decided by how much signal the alignment carries---so it is asked against the
+site count. Figure~\ref{fig:topology-accuracy} sweeps it, at a low end
+deliberately below what the fixtures use, because a sweep confined to sizes
+already known to work locates no margin, and reads the result against the
+roadmap's accuracy requirement. Where the sweep first clears that requirement
+is not quoted: it is a threshold crossing over an optimizer's output, and one
+that moves in its last digits on another machine.
+
+\qacaptionread{figures/topology_accuracy_caption.txt}{\topologyAccuracyCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/topology_accuracy}
+  \caption{\topologyAccuracyCaption}
+  \label{fig:topology-accuracy}
 \end{figure}
 
 \subsection{Differentiable topology search}

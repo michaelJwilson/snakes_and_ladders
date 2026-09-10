@@ -11,6 +11,11 @@ body:
         (`DEV.md`, Documents). CI refuses a PDF change in any other
         pull request. File this when the lag matters: before a release, or
         when a reader needs the rendered document.
+
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. What does not fit belongs where it is
+        refereed — a measurement in `STATUS.md`, a sweep in an experiment
+        file — rather than in a longer ticket.
   - type: textarea
     id: since
     attributes:

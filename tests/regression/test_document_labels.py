@@ -43,17 +43,27 @@ def defined_labels(documents: tuple[Path, ...] = DOCUMENTS) -> set[str]:
     return labels
 
 
+#: Modules whose *content* is documents rather than references to one. Each
+#: writes a `\label` and a `\ref` into a document it builds in `tmp_path`,
+#: so the tokens in it name nothing under `docs/tex/` by design and scanning
+#: them reports a fixture as a defect. This file is one (its guard-the-guard
+#: test below cites a label that deliberately does not exist); the citation
+#: integrity checker's tests are the others, and were reported as three
+#: dangling labels from the day they landed.
+DOCUMENT_FIXTURES = (
+    Path(__file__).resolve(),
+    REPO_ROOT / "tests" / "regression" / "docs" / "test_citation_integrity.py",
+)
+
+
 def _source_files() -> list[Path]:
-    # This file is excluded: its guard-the-guard test below writes a label
-    # that deliberately does not exist, and scanning it would report that
-    # fixture as a defect.
     return [
         path
         for root in SOURCES
         for path in sorted((REPO_ROOT / root).rglob("*"))
         if path.suffix in SUFFIXES
         and "__pycache__" not in path.parts
-        and path != Path(__file__).resolve()
+        and path not in DOCUMENT_FIXTURES
     ]
 
 

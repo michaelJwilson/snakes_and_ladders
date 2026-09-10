@@ -33,11 +33,13 @@ open pull requests. It is not: 104 commits `main` does not have, and 270 of
 `main`'s it does not (2026-09-09, issue #489).
 
 **A merge into the release branch regenerates; it does not re-render.** Where the
-branch takes a merge, the figure stamps and the fixture baselines are rewritten
-from the merged tree (`infra/baselines.py --write`, `snakes_and_ladders.inputs`)
-rather than the figures re-rendered: at the 0.5.0 cut, 30 stamp and baseline
-conflicts across four merges resolved with no figure's bytes moving and no
-baseline's value changing — only the recorded digests. Where a file is a list
+branch takes a merge, the fixture baselines are rewritten from the merged tree
+(`infra/baselines.py --write`) rather than the figures re-rendered: at the 0.5.0
+cut, 30 stamp and baseline conflicts across four merges resolved with no
+figure's bytes moving and no baseline's value changing — only the recorded
+digests. Both of those file classes have since gone: issue #490 deleted every
+figure stamp and issue #460 the baseline digest, so a merge like that one now
+conflicts on prose alone. Where a file is a list
 rather than a generated artifact — a package `__init__`, a module `CLAUDE.md`,
 `STATUS.md` — both sides are kept in the file's existing order, and where both
 sides *deleted* a line, as `TICKETS.md`'s branches do, the union is of the
@@ -142,13 +144,14 @@ order, with what each costs:
 | `sphinx-build -E -a -W` over all 134 modules | **Under a minute** (issues #451, #485) |
 | `infra/ledgers.sh --check` | **Seconds** (issue #469) |
 | `qa.build --all --check`, every figure rendered and compared against the committed bytes | **~10 min** (issue #477). **The second sink**, and the one that grows with the manifest |
-| `infra/build_documents.sh` | **Under a minute** with the figure stamps current, **~6 min** with one stale (issue #433); the citation check inside it is **under a second** (issue #503) |
+| `infra/build_documents.sh` | **Under a minute**, the figure pass having already run above; it re-renders each cited figure, which was **~6 min** when a stamp could make it skip them (issues #433, #490). The citation check inside it is **under a second** (issue #503) |
 | `infra/baselines.py` | **Under a minute**; unmeasured at the gate, from what the same recomputation cost per pull request before it moved here (issue #401) |
 
 **Two steps rebuild in full rather than predicting what to rebuild**, and both
 predictions failed before they were removed. The figure step passes `--all`,
-which ignores the stamps — their false-positive rate is 100% over 476 decisions
-(issue #476) — and `--check`, which makes a mismatch a failure naming the figure
+which selects the whole manifest rather than what a document cites; the stamps
+that once narrowed it are deleted, on a false-positive rate of 100% over 476
+decisions (issues #476, #490). It also passes `--check`, which makes a mismatch a failure naming the figure
 rather than a silent refresh. It runs **before** `infra/build_documents.sh`,
 because that script renders a stale cited figure into `docs/tex/figures/` and
 would otherwise supply the very bytes the comparison is against. The Sphinx step
