@@ -172,9 +172,9 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   fixtures through simulation, optimization and learning (#405)
 - The targets the runtime-optimization audit left unmet: the tree schedule
   within 2x of the forward recursion on a chain, the reassociated
-  transfer-matrix product in the Potts chain objective, `maxflow_rust` as
-  alpha expansion's inner solver, and a compiled sweep for the factor-graph
-  Gibbs sampler (#405)
+  transfer-matrix product in the Potts chain objective, and a compiled sweep
+  for the factor-graph Gibbs sampler (#405). Alpha expansion's inner solver
+  is done (#528)
 - Adopt `rustworkx` on a hot path where a measurement says so —
   `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
   of the bound — moving the replaced implementation to `sandbox/`
