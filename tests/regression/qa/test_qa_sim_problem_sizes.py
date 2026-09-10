@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from snakes_and_ladders.qa.manifest import FIGURES
 from snakes_and_ladders.qa.sim_problem_sizes import (
     build_caption,
     main,
@@ -90,6 +91,24 @@ def test_underscores_in_fixture_names_are_escaped(tmp_path: Path) -> None:
     for line in body.splitlines():
         stripped = line.replace(r"\_", "")
         assert "_" not in stripped, line
+
+
+@pytest.mark.structural
+def test_the_manifest_tabulates_these_three_fixtures_in_this_order() -> None:
+    # The oracle below pins every cell against the yaml it is read from, but
+    # only for the fixtures *this module* names. The committed table is
+    # rendered from the manifest's arguments, and the caption's "3" counts
+    # them, so a fourth `--params` added there would change both while every
+    # assertion here still passed. Row order is part of it: the table is one
+    # row per flag, in the order the flags are given.
+    spec = next(spec for spec in FIGURES if spec.stem == "sim_problem_sizes")
+    flags = [
+        value
+        for flag, value in zip(spec.arguments[::2], spec.arguments[1::2], strict=True)
+        if flag == "--params"
+    ]
+
+    assert flags == [f"tests/regression/fixtures/{name}" for name in FIXTURE_NAMES]
 
 
 @pytest.mark.oracle

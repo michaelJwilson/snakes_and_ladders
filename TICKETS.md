@@ -209,8 +209,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Labels say what the pull requests say (#279)
 - Re-key the milestone references in code and `docs/tex/` to the roadmap's
   `N.M` numbering (#324)
-- Cite or retire the two QA figures the documents still do not cite,
-  `sim_problem_sizes` and `topology_accuracy` (#325)
+- Cut `topology_accuracy`'s 124 s render, 91.5% of which is L-BFGS
+  branch-length fitting (#509)
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
 - Abbreviate the package as `sal` (#301)

@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.qa import topology_accuracy
+from snakes_and_ladders.qa.manifest import FIGURES
 from snakes_and_ladders.qa.topology_accuracy import REPLICATES, REQUIREMENT, SITE_COUNTS
 from snakes_and_ladders.search.topology import (
     enumerate_topologies,
@@ -104,6 +105,34 @@ def test_the_sweep_covers_sizes_on_both_sides_of_the_requirement() -> None:
 
 
 @pytest.mark.structural
+def test_the_caption_states_the_sweep_this_module_declares() -> None:
+    # Every number the committed caption asserts, pinned. The caption reads
+    # them from the module and the fixture rather than restating them, so
+    # what this holds is the source they are read from: the replicate count,
+    # the six site counts, and their two ends, which the caption names.
+    assert REPLICATES == 8
+    assert SITE_COUNTS == (60, 125, 250, 500, 1000, 2000)
+    assert len(SITE_COUNTS) == 6
+
+
+@pytest.mark.oracle
+def test_the_manifest_renders_this_figure_from_the_fixture_the_caption_names() -> None:
+    # The caption's seed and state count come from the fixture the manifest
+    # names, so the committed caption's 20260905 and "4-state" are only
+    # pinned if that argument is. Read from the yaml independently of the
+    # renderer.
+    spec = next(spec for spec in FIGURES if spec.stem == "topology_accuracy")
+    assert spec.arguments == (
+        "--params",
+        "tests/regression/fixtures/tree_search/stress.yaml",
+    )
+
+    params = load_simulation_params(FIXTURE)
+    assert params.seed == 20260905
+    assert len(params.pi) == 4
+
+
+@pytest.mark.structural
 def test_main_writes_a_figure_and_caption(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -137,12 +166,22 @@ def test_main_writes_a_figure_and_caption(
 @pytest.mark.simulated_truth
 @pytest.mark.release
 def test_more_sites_recover_the_topology_more_often() -> None:
-    # The claim the figure makes. Asserted as a comparison between the ends of
-    # the sweep rather than as a threshold at any one size: the rate at a
-    # given site count is a property of this fixture, the monotone trend is a
-    # property of the method.
+    # The claim the figure makes, and since #492 the exact sentence its
+    # caption states: the mean over replicates meets the requirement at the
+    # longest alignment swept and misses it at the shortest. Asserted as a
+    # comparison between the ends of the sweep rather than as a threshold at
+    # any one size in between: the rate at a given site count is a property of
+    # this fixture, the two ends and the trend are properties of the method.
+    #
+    # The caption used to quote where the sweep first clears the requirement
+    # and how many of eight replicates recover the topology exactly at either
+    # end. Both are discontinuous in 48 L-BFGS fits taken at the margin ---
+    # `docs/CLAUDE.md`'s rule against publishing a number a rebuild on another
+    # machine can move --- so they left the caption rather than gaining a pin
+    # here that would itself be unstable.
     measured = topology_accuracy.accuracy(load_simulation_params(FIXTURE))
     smallest = float(np.mean(measured[min(SITE_COUNTS)]))
     largest = float(np.mean(measured[max(SITE_COUNTS)]))
     assert largest <= REQUIREMENT
+    assert smallest > REQUIREMENT
     assert largest < smallest
