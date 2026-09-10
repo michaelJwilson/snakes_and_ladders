@@ -15,7 +15,7 @@ the manifest and cited, a figure the documents stop citing, or a third document
 therefore fails here until `DEV.md` says so.
 
 Not checked here: that a build *run* writes these and no others. That is a
-render, which takes the host's exclusive lock (`DEV.md`, Throughput) and does
+render, which occupies every core it is given (`DEV.md`, Throughput) and does
 not belong in a test session. It was measured instead --- eight builds, the tree
 hashed before and after each --- and `DEV.md` records the result beside the wall
 times.

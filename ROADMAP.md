@@ -39,9 +39,9 @@ authoritative — where it and any other document disagree, it wins.
 - **Gate:** a maintainer applies `approved`, and only then may a pull request
   open. The pull request must implement the plan already in the thread. A plan
   that turns out to be flawed gets a revised plan posted to the same thread,
-  not a silent correction in the diff. Disjoint tickets run as parallel
-  worktrees and parallel pull requests; coupled changes run as a single
-  sequential chain.
+  not a silent correction in the diff. Disjoint tickets run one at a time, each
+  in its own worktree and its own pull request; coupled changes run as a
+  single sequential chain.
 - **Record the branch before the first commit.** Once a branch is created for
   an approved plan, the first thing posted is a single issue comment naming
   the branch (and, once opened, the PR number) — before any further commit is

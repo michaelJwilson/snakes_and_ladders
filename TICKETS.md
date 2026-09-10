@@ -163,11 +163,6 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 ## Cross-Cutting Infrastructure
 
-- Decide what the host lock does about writer starvation: `flock` grants a
-  fresh shared request while an exclusive one waits, so three validation
-  loops starved a measurement for a whole 18 s stream, 5 runs of 5. The
-  turnstile that fixes it costs #427's guarantee that a queued measurement
-  blocks no validation; the two are the same fact from either side (#431)
 - CPU parallelism past the first three sites: the candidate fits of
   `search.infer`, `learn.rollout` batches, tempering replicas (a `rayon`
   loop is the alternative, a dependency decision), `qa.build` and

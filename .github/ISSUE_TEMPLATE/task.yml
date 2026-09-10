@@ -7,6 +7,11 @@ body:
       value: |
         Priority defaults to `low`. Change the label after filing if the work
         should run sooner; `DEV.md` explains what each priority schedules.
+
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. What does not fit belongs where it is
+        refereed — a measurement in `STATUS.md`, a sweep in an experiment
+        file — rather than in a longer ticket.
   - type: textarea
     id: outcome
     attributes:
