@@ -63,12 +63,17 @@ tolerance table, and the deferred-work section
 from `.github/labels.yml` by a workflow, so the taxonomy cannot drift from the
 documents that describe it.
 
-Ten required checks gate a merge, and three of them do work no reviewer can
-do by inspection: the documents job rebuilds only the QA figures
-the documents under `docs/tex/` cite, comparing the rest at the release gate instead
-([#157](https://github.com/michaelJwilson/snakes_and_ladders/pull/157)), and fails a pull
-request whose rebuilt `docs/paper.pdf` or `docs/textbook.pdf` differs from the committed one
-([#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72)); the notebooks job
+Nine required checks gate a merge and a tenth, `documents`, runs on the push
+to `main` instead ([#488](https://github.com/michaelJwilson/snakes_and_ladders/issues/488));
+three of the ten do work no reviewer can do by inspection. The documents job
+renders every figure in `snakes_and_ladders.qa.manifest` — the two documents
+cite all 23 since [#492](https://github.com/michaelJwilson/snakes_and_ladders/issues/492),
+and the stamps that once narrowed the set are deleted
+([#490](https://github.com/michaelJwilson/snakes_and_ladders/issues/490)) — and the `lint`
+job fails a pull request that changes `docs/paper.pdf` or `docs/textbook.pdf`
+without being the rebuild a **Rebuild the documents** ticket asked for
+([#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72),
+[#483](https://github.com/michaelJwilson/snakes_and_ladders/issues/483)); the notebooks job
 re-executes every notebook under `docs/nb/`, fails one whose Further work
 section is missing or names no ticket
 ([#278](https://github.com/michaelJwilson/snakes_and_ladders/issues/278)), and fails one whose printed

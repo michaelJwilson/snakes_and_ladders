@@ -32,6 +32,7 @@ This file is authoritative. Each of the remainder has a defined task:
 | `README.md` | What the project is, and where everything else lives |
 | `INSTALL.md` | Installing, building, running the tests locally |
 | `DEV.md` | Layout, the CI jobs, repository settings, the CI budget, how a change is reviewed |
+| `RELEASE.md` | Cutting a release: what it is cut against, the preconditions, the steps, who runs each, and what it costs |
 | `ROADMAP.md` | The development loop, the scientific goal, requirements, and milestones |
 | `STATUS.md` | What has landed against each roadmap milestone, the evidence, and the PR carrying it |
 | `TICKETS.md` | The titles of the tickets that remain between `STATUS.md` and `ROADMAP.md` |

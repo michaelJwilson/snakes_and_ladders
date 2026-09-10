@@ -107,7 +107,8 @@ Three further rules constrain what the suite may contain:
 | Document | Contents |
 | --- | --- |
 | [INSTALL.md](INSTALL.md) | Installing, building, running the tests, working locally |
-| [DEV.md](DEV.md) | Repository layout, test layout, CI jobs, the CI budget, the release procedure |
+| [DEV.md](DEV.md) | Repository layout, test layout, CI jobs, the CI budget, how a change is reviewed |
+| [RELEASE.md](RELEASE.md) | Cutting a release: the preconditions, the steps, who runs each, what it costs |
 | [CHANGELOG.md](CHANGELOG.md) | What has landed, per dated release |
 | [`docs/source/`](docs/source) | Sphinx API documentation, built from the docstrings |
 | [`docs/nb/`](docs/nb) | Worked notebooks, one per problem class, fixture to learned policy |
