@@ -12,9 +12,11 @@ reader can judge the work and the hours a release commits them to before
 starting, and for nothing else. **None of them is a baseline**: no later run is
 measured against a figure in this file. A number that supports a claim lives in
 `STATUS.md` beside that claim, and a number that supports a decision lives on
-the ticket that measured it. Most of these were taken on a 4-core development
-host under contention, before issue #521 left one agent on a quiet machine, so
-round up again rather than down.
+the ticket that measured it. Most were taken on a 4-core development host while
+several agents shared it, which is no longer how it runs — one agent works at a
+time and has the whole machine (`DEV.md`), and issue #521 removed the lock that
+had tried and failed to arbitrate the old arrangement. They are upper bounds
+from the noisier regime, so round up again rather than down.
 
 ## What a release is cut against
 
@@ -136,9 +138,11 @@ gate holds the machine for as long as it runs.
 | Step | Rough upper bound |
 | --- | --- |
 | `pytest`, every tier, with the coverage gate | **Over an hour**, and never yet run to completion. **The largest sink** |
-| `qa.build --all --check`, every figure rendered and compared | **Around 15 minutes**. **The second sink**, and the one that grows with the manifest |
+| `qa.build --all --check`, every figure rendered and compared | **Around 15 minutes** |
+| `infra/build_documents.sh` | **Around 10 minutes**, renders included |
+| — the two above between them | **The second sink**: the figure work, paid twice, and the part that grows with the manifest |
 | `cargo clippy`, `cargo fmt`, `cargo test`, each also `--features sandbox` | **A few minutes** on a cold `cargo` cache |
-| `ruff`, `mypy --strict`, `sphinx-build -E -a -W`, `infra/ledgers.sh --check`, `infra/baselines.py`, `infra/build_documents.sh` | **Under a minute** each |
+| `ruff`, `mypy --strict`, `sphinx-build -E -a -W`, `infra/ledgers.sh --check`, `infra/baselines.py` | **Under a minute** each |
 
 The suite is the sink because the gate adds the `release`, `stress` and `key`
 tiers to a CI tier that is already over twenty minutes on its own. The one
@@ -164,6 +168,16 @@ autodoc records each module as a dependency, so an incremental build does
 re-read a *changed* docstring, is measured rather than assumed — with issue
 #448's `:cite:` role reintroduced, the incremental form failed too.
 `tests/regression/test_release_gate.py` pins both flags and the ordering.
+
+**The gate renders every figure twice, and both passes are in the table
+above.** `qa.build --all --check` compares a rebuild against the committed
+bytes without overwriting, and `infra/build_documents.sh` then renders every
+figure the two documents cite — which since issue #492 is the whole manifest —
+into `docs/tex/figures/` so `latexmk` has them. The stamps that used to let the
+second pass skip most of that work are deleted (issue #490), so a reader
+budgeting the gate counts the figure work twice rather than once. Whether the
+second pass can read the first's output is issue #484's ordering constraint in
+reverse and is not settled here.
 
 **The figure pass is minutes, and its cost is concentrated.** Two of the
 twenty-three figures are half of it and most of the rest are a few seconds each;
