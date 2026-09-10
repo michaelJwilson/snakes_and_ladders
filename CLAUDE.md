@@ -3,7 +3,7 @@
 Guidance for Claude Code when working in this repository.
 
 ## Writing Style
-1.  **(Reviewer) Time is money and context windows are finite and vital:** Be as concise/succinct as possible, use active voice, and lead with (only) the most important facts first.
+1.  **(Reviewer) Time is money and context windows are finite and vital:** Be as concise/succinct as possible, use active voice, and lead with (only) the most important facts first.  Limit tickets and normal PRs to 40 lines, limit PRs with extended discussion to 60 lines, e.g. on release.
 2.  **Be precise:** Use exact facts and numbers ("40% faster") instead of vague intensifiers ("much faster").
 3.  **Stay neutral and objective:** Avoid hype, subjective opinions, and weak qualifiers. Use nouns and verbs; avoid adjectives and adverbs.
 4.  **Provide evidence:** Back every claim in PRs/commits with benchmark numbers, test validated outputs, or reproductions.
