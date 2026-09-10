@@ -2544,8 +2544,20 @@ repeats are given, both are given.
 | --- | --- | --- | --- |
 | `pytest -m critical` | **15.9 s**, 168 tests | 15.85, 15.94 s at load 0.54, 0.57 | 177 tests in 16.6 s ([#524](https://github.com/michaelJwilson/snakes_and_ladders/pull/524)) |
 | `pytest -m "not release and not stress"` | **1,226 s**, 2,315 collected | 1,226.2, 1,234.2 s | 1,098 s over 2,121 |
-| the same, `--benchmark-disable` | **994 s** | see below | not previously measured |
+| the same, `--benchmark-disable` | **994 s** | 993.7, 998.3 s | not previously measured |
+| `infra/check_notebooks.py`, all six | **116 s** | 115.9, 115.2 s at load 0.94, 1.03 | 137 s at load 1.7 |
+| `qa.build --all --check`, all 23 figures | **387 s** | one reading | never measured as a pass |
+| `infra/baselines.py`, all five records | **28 s** | 28.4 s at one and at four threads | 31 s |
 | `infra/review_gates.sh` | 26–27 s, eight rows | reused from [#524](https://github.com/michaelJwilson/snakes_and_ladders/pull/524) | — |
+
+The figure pass is the first *measured* whole-manifest run: **387 s against the
+431.8 s the manifest declares between its 23 entries**, so the declared sum —
+each figure timed alone — is an upper bound on the pass rather than a floor, as
+`DEV.md` had assumed in the other direction. It returned non-zero. One
+committed figure, **`backend_agreement.pdf`, is stale on `main`** and
+reproducibly so over three renders; nothing here touched a renderer, and
+re-rendering is out of this ticket's scope, so it is reported rather than
+fixed.
 
 The CI tier grew 12% and the critical tier shrank by nine tests, which went
 with the host lock and the figure stamps.
@@ -2613,8 +2625,12 @@ global thread change moves both sides together. The pins that a reduction-order
 change could actually break are the ones against committed constants, and there
 are **59 float values across the five records under
 `tests/regression/fixtures/`**, compared by `infra/baselines.py` with
-`fresh.value != stored.value` — exact equality, no tolerance. Those are checked
-directly below rather than inferred from the tier.
+`fresh.value != stored.value` — exact equality, no tolerance. Running that
+recomputation at both widths settles it directly: **`infra/baselines.py`
+reports all five records matching at `t = 1` and again at `t = 4`**, 28.4 s
+each. Not one of the 59 moved. The reduction order these fits go through is
+insensitive to the thread count at this problem size, so B was never blocked on
+numerics — it is blocked on being no faster.
 
 ### What variant B would stale, which is the number that decides it
 
@@ -2630,13 +2646,15 @@ figure already renders at full width.
 
 | | Verdict |
 | --- | --- |
-| **B, wider BLAS threads** | **Declined, on its own clock.** 1,227.4 s against A's 1,226.2 s is a 0.1% difference inside the repeat spread of A itself. It buys nothing on this suite and would stale 280 recorded numbers to buy it. `tests/conftest.py` keeps pinning one thread per process |
+| **B, wider BLAS threads** | **Declined, on its own clock.** 1,227.4 s against A's 1,226.2 s is a 0.1% difference inside the repeat spread of A itself. It is numerically safe — the 59 committed floats are unmoved at four threads — and it is simply not faster, so the 221 timings it would have staled never had to be weighed. `tests/conftest.py` keeps pinning one thread per process |
 | **C, `pytest-xdist`** | **Adopted for the correctness tiers, not for benchmarks.** 2.75x on the CI tier at `n = 3`, like-for-like; 1.31x on the critical tier, where startup dominates. Because xdist disables `pytest-benchmark`, a run that must produce benchmark numbers runs at `n = 1` |
 
 The prediction recorded on the ticket was C at `-n 3` for ~2.3x and B declined
-on cost rather than clock. C's like-for-like 2.75x is close to it. B is
-declined more cheaply than predicted: it never had to be weighed against 280
-staled numbers, because it is not faster.
+on cost rather than clock. C's like-for-like 2.75x is close to it. **B is
+declined for the opposite reason to the predicted one**: the prediction
+expected a real speed-up outweighed by the re-measurement it forced, and there
+is no speed-up to outweigh. The staled-baseline count was the wrong thing to
+decide it on, and it took a measurement to find that out.
 
 **Dependency clearance.** `pytest-xdist` is **MIT**, an OSI-approved licence,
 at **1.9k** GitHub stars — above the 1,000 the flag rule sets. Its one runtime

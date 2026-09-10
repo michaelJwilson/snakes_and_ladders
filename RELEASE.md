@@ -138,7 +138,7 @@ gate holds the machine for as long as it runs.
 | Step | Rough upper bound |
 | --- | --- |
 | `pytest`, every tier, with the coverage gate | **Over an hour**, and never yet run to completion. **The largest sink** |
-| `qa.build --all --check`, every figure rendered and compared | **Around 15 minutes** |
+| `qa.build --all --check`, every figure rendered and compared | **Around 10 minutes** |
 | `infra/build_documents.sh` | **Around 10 minutes**, renders included |
 | — the two above between them | **The second sink**: the figure work, paid twice, and the part that grows with the manifest |
 | `cargo clippy`, `cargo fmt`, `cargo test`, each also `--features sandbox` | **A few minutes** on a cold `cargo` cache |
