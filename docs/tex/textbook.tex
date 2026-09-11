@@ -3440,7 +3440,53 @@ $n = 512$, past which the all-zero codeword is sent and the argument of
 Section~\ref{sec:ldpc} says nothing is lost; and past both, the referee is
 the density-evolution threshold of Appendix~\ref{app:density-evolution},
 which exists for the erasure channel alone. The three channels of
-Equation~\ref{eq:ldpc-llr} run at every length.
+Equation~\ref{eq:ldpc-llr} run at every length. The bicycle construction of
+Section~\ref{sec:ldpc:bicycle} is carried at $n = 12$, $96$ and $996$ with
+$w = 3$, matching the first three in length and degrees, and the same three
+ceilings apply to it unchanged.
+
+\subsection{A second construction: bicycle codes}
+\label{sec:ldpc:bicycle}
+Gallager's ensemble fixes the degrees and leaves the rest to a permutation. A
+bicycle code \citep{mackay2004} fixes the matrix instead. Let $A$ be the
+$n/2 \times n/2$ circulant whose first row carries $w$ ones and whose row $i$
+is that row shifted by $i$, and take
+\begin{equation}
+  \parity_0 = \begin{bmatrix} A & A^{\top} \end{bmatrix},
+  \label{eq:bicycle}
+\end{equation}
+of shape $(n/2) \times n$. A column of the left half is a column of $A$ and a
+column of the right half a row of it, and a circulant's rows and columns carry
+the same weight, so every column of $\parity_0$ has weight $w$ and every row
+$2w$: the $(3,6)$ degrees at $w = 3$, and a matrix determined by $w$ numbers
+rather than by $d_v - 1$ permutations. Rows are then deleted to reach $m <
+n/2$, which is how a rate above $1/2$ is set; \emph{which} rows is a choice,
+and levelling the column weights is the one taken here, a bit in fewer checks
+being the bit the decoder has least to say about.
+
+Two properties follow from the circulant and survive any deletion. First, $A$
+and $A^{\top}$ are both polynomials in the cyclic shift, so they commute and
+\begin{equation}
+  \parity_0 \parity_0^{\top} = A A^{\top} + A^{\top} A = 0 \pmod 2,
+  \label{eq:bicycle-css}
+\end{equation}
+which is the condition a Calderbank--Shor--Steane quantum code puts on its two
+parity-check matrices and the reason the construction was written down
+\citep{mackay2004}. Nothing in the classical problem needs
+Equation~\ref{eq:bicycle-css}; it is exact, and is checked as one.
+Second, every row has even weight $2w$, so the all-ones word satisfies
+$\parity c = 0$ and the minimum distance is at most $n$ whatever is drawn.
+
+\paragraph{What the structure costs.}
+The threshold of Appendix~\ref{app:density-evolution} is a property of the
+ensemble a code is drawn from, and a bicycle code is not drawn from Gallager's:
+it referees nothing here. The comparison at size is therefore against a
+Gallager draw of the same length, degrees and rate on shared channel
+realizations rather than against a limit, and at every setting measured the
+bicycle code is the weaker of the two under the decoder of
+Equation~\ref{eq:tanh-rule} --- structure paid for in cycles, and the reason
+the construction is carried for what Equation~\ref{eq:bicycle-css} opens
+rather than for its classical performance.
 
 \subsection{As a factor graph}
 The variables are the bits, $x_i \equiv c_i \in \{0, 1\}$. The factors are a
@@ -3632,6 +3678,20 @@ counts a different event and is not comparable with anything here.
     ensemble on one channel; it establishes nothing at finite length on the
     other two, which is the cell Section~\ref{sec:applicability} marks and the
     extension past the erasure channel would fill.
+  \item \emph{The algebra of Equation~\ref{eq:bicycle}} referees the second
+    construction, exactly and with no tolerance: the degrees against $w$, the
+    halves against a circulant built by rolling its own first row,
+    $k = n - \operatorname{rank} \parity$ against the rate each deletion
+    count asks for, Equation~\ref{eq:bicycle-css} against a dense product over
+    $\mathrm{GF}(2)$, and the minimum distance against an enumeration of the
+    code where one reaches. It establishes what the construction is and
+    nothing about how it decodes.
+  \item \emph{A Gallager draw of the same length, degrees and rate} referees
+    the bicycle code's decoding on shared channel realizations, and the two
+    enumerated decodings bound it where they reach. It establishes where one
+    construction sits against the other; it establishes nothing about either
+    against the best a decoder could do at that length, which no oracle here
+    reaches.
 \end{itemize}
 
 \subsection{Extensions, and what is not attempted}
@@ -3656,8 +3716,15 @@ learned decoder that beats the tanh rule on a loopy code must still equal it
 on a cycle-free one.
 
 \paragraph{What is deliberately not attempted.}
-Non-binary codes, since a binary variable's message being one number is what
-makes Equation~\ref{eq:tanh-rule} a closed form rather than a sum. A channel
+The quantum code Equation~\ref{eq:bicycle-css} opens. A pair of matrices
+satisfying it defines a Calderbank--Shor--Steane code, whose decoding problem
+is syndrome decoding with \emph{degeneracy}: distinct errors sharing a
+syndrome can act identically on the codespace, so the criterion refereeing
+every decode in this section --- agreement with the maximum-likelihood
+codeword --- is the wrong question there, and what replaces it has to be
+written down before any decoding claim is made. Non-binary codes, since a
+binary variable's message being one number is what makes
+Equation~\ref{eq:tanh-rule} a closed form rather than a sum. A channel
 with memory, which breaks the per-bit factorization the unary factors rest on
 and with it the symmetry argument that licenses the all-zero word. And an
 encoder past the elimination's reach: past it the shortcut is used rather than
@@ -4813,6 +4880,6 @@ Phylogenetics: \citet{felsenstein2004}, \citet{durbin1998},
 Information and coding:
 \citet{blahut2003}, \citet{richardson2008}, with \citet{nielsen2010} as
 background only; the papers
-\citet{gallager1962} and \citet{nachmani2018}.
+\citet{gallager1962}, \citet{mackay2004} and \citet{nachmani2018}.
 
 \end{document}

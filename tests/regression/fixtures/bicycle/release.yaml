@@ -1,0 +1,20 @@
+model: bicycle
+oracle: none
+
+# A bicycle code at the block length the waterfall is visible at, matched to
+# the Gallager fixture beside it in length, degree and rate. Every field is
+# required -- see python/snakes_and_ladders/sim/ldpc.py.
+#
+# The density-evolution threshold refereeing the Gallager code at this length
+# is a property of that ensemble and does not transfer to this construction,
+# so the oracle here is none and the claim is a curve: where the bicycle code
+# sits against a random construction of the same length, rate and degrees, on
+# the three channels at shared seeds.
+seed: 361
+n_bits: 996
+n_checks: 498
+circulant_weight: 3
+
+flip_probability: 0.05
+erasure_probability: 0.4
+noise_scale: 0.8

@@ -156,6 +156,7 @@ ALGORITHMS: dict[str, str] = {
     "sim.mixture.simulate_mixture": "simulation",
     "sim.emission_mixture.simulate_emission_mixture": "simulation",
     "sim.ldpc.gallager_code": "simulation",
+    "sim.ldpc.bicycle_code": "simulation",
     "sim.ldpc.BinarySymmetricChannel": "simulation",
     "sim.ldpc.BinaryErasureChannel": "simulation",
     "sim.ldpc.BinaryInputGaussianChannel": "simulation",

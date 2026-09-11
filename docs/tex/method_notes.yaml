@@ -104,6 +104,14 @@
     approximation on a loopy one, where min-sum is the cheaper and the weaker
     and the gap is measured.
 
+"Low-density parity-check code, bicycle":
+  optimizers: >-
+    The same two updates on a different matrix. What the construction changes
+    is the graph they run on: a circulant puts short cycles where a
+    permutation would have spread them, and the decoder is the weaker of the
+    two at every length and channel setting measured against a random draw of
+    the same degrees.
+
 "Turbo code, two (7,5) recursive systematic encoders":
   optimizers: >-
     BCJR is exact on one constituent code, since a terminated trellis is a
@@ -211,10 +219,6 @@
 # `tests/regression/docs/test_problems_tables.py` holds this block to that
 # list, so a pairing loses its reason only by gaining a test.
 untested pairings:
-  ldpc / optimizers: >-
-    The decoder's claim is about the (3,6) ensemble, so the tests draw codes
-    at several block lengths and seeds rather than decoding one member. The
-    declared members are what the notebook decodes.
   mixture / initializers: >-
     Seeding is refereed against the exact optimal k-means cost over a range of
     sample sizes; the declared instance is the one the seeding figure and

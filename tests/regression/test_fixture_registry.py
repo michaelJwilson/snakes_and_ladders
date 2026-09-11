@@ -486,6 +486,7 @@ FORBIDDEN = frozenset(
         "MixtureParams",
         "SpatioSequentialParams",
         "LdpcParams",
+        "BicycleParams",
         "FrustratedLatticeParams",
         "TestFunctionParams",
         "TestFunctionSuite",
