@@ -55,19 +55,32 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # The submodules with their own test directory. `snakes_and_ladders.numerics`,
 # `snakes_and_ladders.emissions` and the scaffolding hot path are covered by
 # the top-level regression modules, which are cheap and always run.
-MODULES = ("sim", "likelihood", "opt", "learn", "search", "qa")
+#
+# `sandbox` earned a row here with issue #516, and it is the row that shows
+# why the dependents are derived rather than listed. Nothing imports it, so a
+# change to it selects only its own tests, `qa`'s -- which render a figure
+# from it -- and its benchmark. It imports `likelihood`, `search` and `sim`,
+# so a change to any of those selects it, which is what
+# `tests/regression/sandbox/test_pruning_burn.py` needs now that it no longer
+# sits under `likelihood/`.
+MODULES = ("sim", "likelihood", "opt", "learn", "search", "qa", "sandbox")
 
 # The modules a benchmark measures. `qa` renders figures from what these
 # compute and is not itself timed, which is why issue #109's trigger excluded
-# it and why this does too.
-BENCHMARKED = ("sim", "likelihood", "opt", "learn", "search")
+# it and why this does too. `sandbox` is timed: a declined route is conserved
+# with the measurement that declined it.
+BENCHMARKED = ("sim", "likelihood", "opt", "learn", "search", "sandbox")
 
 # Always run: cheap, and they cover what belongs to no single module.
+# `test_sandbox.py` is here because what it asserts is an *absence* -- that
+# none of the five hot-path packages imports the oracle home -- and an absence
+# is not an import this module can follow (issue #516). It costs 1.9 s.
 ALWAYS = (
     "tests/regression/test_numerics.py",
     "tests/regression/test_emissions.py",
     "tests/regression/test_pairwise_distance.py",
     "tests/regression/test_claude_md_pointers.py",
+    "tests/regression/test_sandbox.py",
     "tests/test_run_snakes_and_ladders.py",
     "tests/test_oxi_snakes_and_ladders_bindings.py",
 )

@@ -14,9 +14,14 @@ The through-the-binding numbers are these; the `burn` kernel alone is
 two is the FFI boundary.
 
 Correctness is pinned in
-``tests/regression/likelihood/test_pruning_analytic.py``,
-``test_pruning_gradient.py`` and ``test_pruning_burn.py``; this module asserts
-only that the value is finite, per `DEV.md`'s rule for this directory.
+``tests/regression/likelihood/test_pruning_analytic.py`` and
+``test_pruning_gradient.py``, and the `burn` route's in
+``tests/regression/sandbox/test_pruning_burn.py``; this module asserts only
+that the value is finite, per `DEV.md`'s rule for this directory.
+
+It stays here and pairs with ``test_pruning_gradient.py`` rather than with
+the sandbox, because two of its three routes are `likelihood`'s and the third
+is present only against a `--features sandbox` build.
 """
 
 from __future__ import annotations

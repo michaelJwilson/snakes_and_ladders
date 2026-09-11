@@ -50,7 +50,7 @@ test below is an equality rather than a correlation.
 log-likelihood: it is a quartet decomposition of it, a *different surface*,
 and ``search/CLAUDE.md`` licenses substituting one for the other only by
 measuring that they agree at the argmax. That measurement is
-``tests/regression/test_sandbox_tropical.py``, at every size where
+``tests/regression/sandbox/test_sandbox_tropical.py``, at every size where
 enumeration reaches. And ``F`` is optimized over the whole ambient
 ``R^C(n,2)``, not over the Grassmannian: a general dissimilarity resolves
 each quartet, and the collection need not come from any tree. So ascent can

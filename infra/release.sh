@@ -38,7 +38,7 @@ run_check "cargo test" cargo test --locked
 # criterion bench is compiled and linted by the clippy pass, and clippy runs
 # no test, so the gated unit tests are run by the `cargo test` pass. The
 # Python route in front of it is refereed by
-# `tests/regression/likelihood/test_pruning_burn.py`, which skips against the
+# `tests/regression/sandbox/test_pruning_burn.py`, which skips against the
 # default extension the `pytest` line below runs against; a release build
 # rebuilds it with `maturin develop --release --features sandbox` to see it
 # pass (DEV.md, Build System).
