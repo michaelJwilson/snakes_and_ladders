@@ -1,0 +1,29 @@
+model: bicycle
+oracle: enumeration
+
+# A bicycle code at the block length codeword enumeration reaches, matched to
+# the Gallager fixture beside it in length and in degrees. Every field is
+# required -- see python/snakes_and_ladders/sim/ldpc.py and sim/CLAUDE.md.
+#
+# The circulant has order 6 and first-row weight 3, so H0 = [A | A^T] has
+# column weight 3 and row weight 6: the degrees of the (3,6) fixture at the
+# same 12 bits, which is what lets a comparison of the two constructions hold
+# everything but the construction fixed. No row is deleted at rate 1/2 --
+# n_checks is the circulant's order -- and the rate deletion buys is swept in
+# the suite rather than declared here.
+#
+# The seed matters at this length: some draws of the first row repeat a column
+# of H, which puts two bits in the same three checks and drops the minimum
+# distance to 2. Seed 361 does not, and the suite pins the distance it has.
+# The code is the seed's rather than a matrix written out, as the Gallager
+# fixtures are.
+seed: 361
+n_bits: 12
+n_checks: 6
+circulant_weight: 3
+
+# The three channels this instance is decoded on, at the Gallager fixture's
+# settings so the two constructions meet the same noise.
+flip_probability: 0.15
+erasure_probability: 0.4
+noise_scale: 1.0
