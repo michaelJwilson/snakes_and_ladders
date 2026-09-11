@@ -40,10 +40,21 @@ CI_DEGENERATE_RATE = 0.07029669
 CI_SINGLE_ERROR_RATE = 0.07273500
 
 
-def _code(tier: str) -> CssCode:
-    """The CSS code the registry declares at ``tier``."""
-    code: CssCode = fixture("bicycle_css", tier).params.code()
+def _ci_code() -> CssCode:
+    """The CSS code the registry declares at the CI tier."""
+    code: CssCode = fixture("bicycle_css", "ci").params.code()
     return code
+
+
+def _stress_code() -> CssCode:
+    """The CSS code the registry declares at the stress tier."""
+    code: CssCode = fixture("bicycle_css", "stress").params.code()
+    return code
+
+
+def _code(tier: str) -> CssCode:
+    """The CSS code of one tier, named so a parameterized test reads either."""
+    return {"ci": _ci_code, "stress": _stress_code}[tier]()
 
 
 def _stabilizers(code: CssCode) -> np.ndarray:
@@ -265,26 +276,49 @@ def test_the_correction_depends_on_the_error_only_through_its_syndrome() -> None
 
 @pytest.mark.oracle
 def test_belief_propagation_is_measured_against_the_degenerate_floor() -> None:
-    """BP's logical error rate at `ci`, against exact degenerate ML on the same code.
+    """BP's decode at `ci`, against the coset exact degenerate ML returns.
 
-    The floor is exact and the decoder's rate is a seeded run of 2,000 draws,
-    so what is asserted is the direction and a band: BP cannot beat the
-    optimum, and at this instance it is between two and three times it. The
-    measured value is 0.1705 against a floor of 0.0703, with the 30
-    four-cycles of the Tanner graph the structural reason ``sec:ldpc:css``
-    gives --- `H H^T = 0` forces even row overlaps, and an overlap of two is a
-    four-cycle.
+    Two comparisons on the same 2,000 seeded draws, and they are different
+    questions. Which coset: of the 1,732 decodes that converged, 1,674 return
+    the coset Equation~`eq:coset-ml` does and 58 do not. Whether it worked:
+    BP leaves the codespace fixed on 1,659 of the 2,000, a logical error rate
+    of 0.1705 against the exact floor of 0.070297. The two counts do not
+    agree, because the optimal decoder is not a correct one -- on 15 of these
+    draws BP returns the optimum's coset and fails with it.
+
+    The 30 four-cycles of the Tanner graph are the structural reason the gap
+    exists at all: `H H^T = 0` forces even row overlaps, and an overlap of two
+    is a four-cycle, so the condition making the code quantum puts short cycles
+    in the graph BP needs free of them.
     """
-    code = _code("ci")
-    floor = error_cosets(code, CI_FLIP).degenerate_logical_error_rate
+    code = _ci_code()
+    cosets = error_cosets(code, CI_FLIP)
+    channel = BinarySymmetricChannel(CI_FLIP)
+    rng = np.random.default_rng(2026)
+    check_weights = 1 << np.arange(code.checks.n_checks)
+    label_weights = 1 << np.arange(code.n_logical)
+    agreed = converged = succeeded = 0
 
-    measured = measure_logical_error_rate(
-        code, BinarySymmetricChannel(CI_FLIP), np.random.default_rng(2026), 2000
-    )
+    for _ in range(2000):
+        error, llr = sample_x_error(code, channel, rng)
+        result = decode_syndrome(code, error, llr)
+        succeeded += result.succeeded
+        if not result.converged:
+            continue
+        converged += 1
+        syndrome = int(code.checks.syndrome(result.correction) @ check_weights)
+        label = int(code.logical_label(result.correction) @ label_weights)
+        agreed += label == int(cosets.degenerate_label[syndrome])
 
     assert code.four_cycles() == 30
-    assert measured.rate == 0.1705
-    assert floor < measured.rate < 3.0 * floor
+    assert (converged, agreed, succeeded) == (1732, 1674, 1659)
+    rate = (2000 - succeeded) / 2000
+    assert rate == 0.1705
+    assert (
+        cosets.degenerate_logical_error_rate
+        < rate
+        < 3.0 * (cosets.degenerate_logical_error_rate)
+    )
 
 
 @pytest.mark.structural

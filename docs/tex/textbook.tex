@@ -3466,7 +3466,11 @@ which exists for the erasure channel alone. The three channels of
 Equation~\ref{eq:ldpc-llr} run at every length. The bicycle construction of
 Section~\ref{sec:ldpc:bicycle} is carried at $n = 12$, $96$ and $996$ with
 $w = 3$, matching the first three in length and degrees, and the same three
-ceilings apply to it unchanged.
+ceilings apply to it unchanged. The quantum code of
+Section~\ref{sec:ldpc:css} is carried at $n = 16$ and $96$, at $m = 7$ and
+$40$ rather than $n/2$, and replaces the first of the three ceilings: its
+oracle enumerates the $2^n$ errors rather than the $2^k$ codewords, so the
+same 200,000 configurations reach $n = 17$.
 
 \subsection{A second construction: bicycle codes}
 \label{sec:ldpc:bicycle}
@@ -3510,6 +3514,75 @@ bicycle code is the weaker of the two under the decoder of
 Equation~\ref{eq:tanh-rule} --- structure paid for in cycles, and the reason
 the construction is carried for what Equation~\ref{eq:bicycle-css} opens
 rather than for its classical performance.
+
+\subsection{The quantum code those matrices define}
+\label{sec:ldpc:css}
+Equation~\ref{eq:bicycle-css} is the condition a Calderbank--Shor--Steane code
+puts on its pair of parity-check matrices, so $\parity_X = \parity_Z = \parity$
+is a quantum code on $n$ qubits with
+\begin{equation}
+  k = n - 2 \operatorname{rank} \parity
+  \label{eq:css-dimension}
+\end{equation}
+logical qubits \citep{mackay2004}. Everything below is one sector of it: $X$
+errors against $Z$ checks, which is what a single matrix gives without a
+symplectic representation of the full Pauli group.
+
+\paragraph{The first thing to check is that there is anything to decode.}
+Equation~\ref{eq:css-dimension} is zero whenever $\parity$ has full row rank
+at $m = n/2$, which is the matrix Equation~\ref{eq:bicycle} gives before any
+deletion. At the two lengths Section~\ref{sec:ldpc:bicycle} carries at
+$m = n/2$ the rank is $m$ and $k = 0$: the code encodes nothing, every
+correction is trivially right, and a measured error rate on it would be a
+measurement of the zero. Deleting rows raises the rate \emph{and} the
+dimension, and the instances used here have $m < n/2$ strictly.
+
+\paragraph{What a decoder has to get right, and it is not the error.}
+The stabilizer group is the row space of $\parity$; the operators commuting
+with it are $\ker \parity$; and Equation~\ref{eq:bicycle-css} is exactly the
+statement that the first sits inside the second. A residual
+$r = e \oplus \hat e$ in the row space acts as the identity on the codespace,
+so the decode \emph{succeeds} although $\hat e \neq e$; a residual in
+$\ker \parity$ outside the row space is a logical operator and the decode
+fails. The criterion is therefore membership of the quotient
+$\ker \parity / \operatorname{rowspace} \parity$, of dimension $k$, and
+agreement with the error is neither necessary nor sufficient for it. This is
+\emph{degeneracy}, and it is why the referee of
+Section~\ref{sec:ldpc:validation} --- the maximum-likelihood codeword --- does
+not transfer: the quantity that replaces it is a coset.
+
+\paragraph{Maximum likelihood is a sum over a coset.}
+With a channel giving each error $e$ a probability $P(e)$, the decoder that
+minimizes the logical error rate returns
+\begin{equation}
+  \hat L(s) = \operatorname*{arg\,max}_{L}
+    \sum_{e \,:\, \parity e = s,\; [e] = L} P(e),
+  \label{eq:coset-ml}
+\end{equation}
+the coset $L$ of the quotient whose members carry the most probability between
+them, and not the single likeliest error. The two are different decoders, and
+the second is the one a classical intuition reaches for. Summing a coset is the
+optimum here, so its logical error rate is the floor any other decoder is
+measured against, and the gap between the two is a property of the code rather
+than of an implementation.
+
+\paragraph{Short cycles are forced, not drawn.}
+Equation~\ref{eq:bicycle-css} says every pair of rows of $\parity$ overlaps in
+an even number of positions. A pair overlapping in exactly two is two checks
+covering two common bits, which is a four-cycle of the Tanner graph. So the
+condition that makes the quantum code exist puts short cycles into the very
+graph Equation~\ref{eq:tanh-rule} needs free of them, and the count is reported
+beside every decoding result rather than cited: at the enumerable instance the
+graph carries thirty of them, and at the larger one a hundred and sixty.
+
+\paragraph{Three regimes again, and the ceiling has moved.}
+The oracle here enumerates \emph{errors} and not codewords, so its ceiling is
+$2^n$ rather than $2^k$: the two hundred thousand configurations of
+Section~\ref{sec:applicability} reach $n = 17$, where the classical oracle at
+rate one-half reached about thirty-four bits. The enumerable instance therefore
+carries an exact floor and a measured gap to it; past it the decoder's rate is
+reported with nothing exact behind it, which the fixture states by declaring no
+oracle.
 
 \subsection{As a factor graph}
 The variables are the bits, $x_i \equiv c_i \in \{0, 1\}$. The factors are a
@@ -3715,6 +3788,30 @@ counts a different event and is not comparable with anything here.
     construction sits against the other; it establishes nothing about either
     against the best a decoder could do at that length, which no oracle here
     reaches.
+  \item \emph{The rank of $\parity$} referees the quantum code's dimension,
+    Equation~\ref{eq:css-dimension}, and a basis of the quotient is built and
+    checked to lie in $\ker \parity$ and outside the row space, no combination
+    of it excepted. It establishes that there is a code to decode; at
+    $m = n/2$ it establishes the opposite, which is why those instances carry
+    no decoding claim.
+  \item \emph{The criterion is refereed from both sides before a decoder runs}:
+    a nonzero stabilizer added to a correct correction must read as a success
+    and a logical operator must read as a failure, since an implementation
+    that answers one way always passes one of the two. The membership test is
+    then pinned a second way, against a label map built from a different
+    computation, over every word of $\ker \parity$ at the enumerable instance.
+    It establishes that the quotient is the one Equation~\ref{eq:coset-ml} is
+    written in, which every number below depends on and none of which would
+    visibly break if it were wrong.
+  \item \emph{Enumeration of the $2^n$ errors} referees decoding under
+    degeneracy: the partition carries exactly $2^k$ cosets per reachable
+    syndrome and the whole probability, and Equation~\ref{eq:coset-ml} is
+    evaluated on it exactly. It establishes the floor at that length and
+    nothing past it, the ceiling being $n = 17$.
+  \item \emph{The coset symmetry} referees the decoder being a decoder of the
+    syndrome: two errors differing by a codeword are checked to give the same
+    correction, which is the same argument the all-zero word rests on rather
+    than a second assumption.
 \end{itemize}
 
 \subsection{Extensions, and what is not attempted}
@@ -3739,13 +3836,15 @@ learned decoder that beats the tanh rule on a loopy code must still equal it
 on a cycle-free one.
 
 \paragraph{What is deliberately not attempted.}
-The quantum code Equation~\ref{eq:bicycle-css} opens. A pair of matrices
-satisfying it defines a Calderbank--Shor--Steane code, whose decoding problem
-is syndrome decoding with \emph{degeneracy}: distinct errors sharing a
-syndrome can act identically on the codespace, so the criterion refereeing
-every decode in this section --- agreement with the maximum-likelihood
-codeword --- is the wrong question there, and what replaces it has to be
-written down before any decoding claim is made. Non-binary codes, since a
+The rest of the Pauli group. Section~\ref{sec:ldpc:css} carries one CSS
+sector, $X$ errors against $Z$ checks, which is what
+$\parity_X = \parity_Z = \parity$ gives without a symplectic representation;
+correlated $X$ and $Z$ errors --- a depolarizing channel rather than two
+independent ones --- couple the two sectors, and a decoder for them decodes a
+quaternary alphabet on one graph rather than a binary alphabet on two. Codes
+that are not CSS are further out again: there the stabilizer generators are
+not separable into two classical matrices at all, and nothing in this section
+transfers unchanged. Non-binary codes, since a
 binary variable's message being one number is what makes
 Equation~\ref{eq:tanh-rule} a closed form rather than a sum. A channel
 with memory, which breaks the per-bit factorization the unary factors rest on

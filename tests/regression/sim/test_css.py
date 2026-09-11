@@ -32,10 +32,21 @@ from snakes_and_ladders.sim.ldpc import (
 DECLARED = {"ci": (16, 7, 2, 30), "stress": (96, 40, 16, 160)}
 
 
-def _code(tier: str) -> CssCode:
-    """The CSS code the registry declares at ``tier``."""
-    code: CssCode = fixture("bicycle_css", tier).params.code()
+def _ci_code() -> CssCode:
+    """The CSS code the registry declares at the CI tier."""
+    code: CssCode = fixture("bicycle_css", "ci").params.code()
     return code
+
+
+def _stress_code() -> CssCode:
+    """The CSS code the registry declares at the stress tier."""
+    code: CssCode = fixture("bicycle_css", "stress").params.code()
+    return code
+
+
+def _code(tier: str) -> CssCode:
+    """The CSS code of one tier, named so a parameterized test reads either."""
+    return {"ci": _ci_code, "stress": _stress_code}[tier]()
 
 
 def _all_vectors(n_bits: int) -> np.ndarray:

@@ -195,8 +195,10 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *HMMs:* hidden state paths and emitted observation sequences.
     - *Codes:* Gallager's regular parity-check ensemble and the bicycle
       construction from a circulant, the binary symmetric, erasure and
-      Gaussian channels behind one log-likelihood interface, and an encoder
-      where elimination is affordable.
+      Gaussian channels behind one log-likelihood interface, an encoder
+      where elimination is affordable, and the Calderbank-Shor-Steane code
+      the bicycle matrices define, whose decoder is scored on the coset of
+      the error rather than on the error.
     - *Canonical cases:* instances whose answer is known from outside this
       repository — a closed form, a published result, or an enumeration
       sharing no code with what it tests — admitted only when more than one
