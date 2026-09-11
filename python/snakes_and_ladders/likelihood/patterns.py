@@ -14,13 +14,13 @@ by ``L``, so the win grows with the alignment and saturates once every
 distinct column has appeared: at the four-taxon fixtures ``P`` is at most 256
 whatever ``L`` is.
 
-**The compression lives here and each backend takes weights**, rather than
-each backend compressing its own input: the pattern table is a property of
-the alignment, and a backend that built its own would have to be checked
-against the others for agreeing on what a pattern is. ``pruning``,
-``pruning_torch`` and ``pruning_rust`` all take a ``weights`` argument of the
-shape :func:`compress` returns; :attr:`SitePatterns.alignment` is the
-compressed alignment they read alongside it.
+**The compression lives here and each backend takes weights**: the pattern
+table is a property of the alignment, and a backend that built its own would
+have to be checked against the others for agreeing on what a pattern is.
+``pruning``, ``pruning_torch`` and ``pruning_rust`` all take a ``weights``
+argument of the shape :func:`compress` returns;
+:attr:`SitePatterns.alignment` is the compressed alignment they read
+alongside it.
 
 Weights are exact counts, not a normalisation, so ``weights.sum()`` is the
 site count and a fractional weight is never introduced. The Rust binding

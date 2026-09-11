@@ -2,10 +2,10 @@
 
 The seam these test is a refactor of live code, so most of its evidence is
 elsewhere: every categorical HMM test in the suite passes against the
-categorical family without being rewritten, which is what says the
-abstraction did not alter a model already validated. What is pinned here is
-the part that has no such witness --- the second implementation, and the two
-properties that separate a density from a probability.
+categorical family without being rewritten, which says the abstraction did
+not alter a model already validated. Pinned here is what has no such witness
+--- the second implementation, and the two properties that separate a density
+from a probability.
 """
 
 from __future__ import annotations
@@ -59,8 +59,8 @@ def test_a_categorical_family_scores_a_symbol_as_its_matrix_entry() -> None:
 
 @pytest.mark.oracle
 def test_the_gaussian_density_matches_the_closed_form() -> None:
-    # Against the expression written out, not against another call into the
-    # same code: `1 / (sigma sqrt(2 pi)) exp(-(y - mu)^2 / 2 sigma^2)`.
+    # Against the expression written out, not another call into the same
+    # code: `1 / (sigma sqrt(2 pi)) exp(-(y - mu)^2 / 2 sigma^2)`.
     values = np.array([-3.0, -2.0, 0.0, 1.5, 4.0])
 
     scored = _gaussian().log_density(torch.as_tensor(values)).numpy()
@@ -83,11 +83,10 @@ def test_the_gaussian_density_matches_the_closed_form() -> None:
 @pytest.mark.structural
 def test_a_categorical_score_is_a_probability_and_a_gaussian_one_is_a_density() -> None:
     # The place the discrete assumption was load-bearing. A categorical score
-    # is bounded above by zero; a Gaussian one is not, and a test asserting
-    # otherwise would fail on correct code. Exhibited rather than asserted
-    # from `is_discrete` alone: at scale 0.5 the density at the mean is
-    # 1 / (0.5 sqrt(2 pi)) = 0.798 -- still below 1 -- so the fixture that
-    # shows it needs a narrower state than the one in this module.
+    # is bounded above by zero; a Gaussian one is not. Exhibited rather than
+    # asserted from `is_discrete` alone: at scale 0.5 the density at the mean
+    # is 1 / (0.5 sqrt(2 pi)) = 0.798 -- still below 1 -- so the fixture that
+    # shows it needs a narrower state than this module's.
     categorical = CategoricalEmission(MATRIX)
     assert categorical.is_discrete
     assert float(categorical.log_density(torch.tensor([0, 1, 2, 3])).max()) <= 0.0
@@ -114,16 +113,15 @@ def test_the_categorical_m_step_is_the_normalized_expected_counts() -> None:
         counts / counts.sum(axis=1, keepdims=True),
         rtol=1e-13,
     )
-    # A closed form has no convergence to report, and says so rather than
-    # leaving a caller to infer it.
+    # A closed form has no convergence to report.
     assert (step.at_boundary, step.iterations, step.residual) == (False, 0, 0.0)
 
 
 @pytest.mark.oracle
 def test_the_gaussian_m_step_is_the_posterior_weighted_mean_and_variance() -> None:
-    # Checked against the closed form directly rather than only by a
-    # monotonically increasing likelihood, which is a strictly stronger
-    # statement than the categorical M step gets from an EM run.
+    # Against the closed form directly rather than only by a monotonically
+    # increasing likelihood: stronger than the categorical M step gets from
+    # an EM run.
     rng = np.random.default_rng(12)
     observations = torch.as_tensor(rng.normal(size=(5, 7)))
     posterior = torch.as_tensor(rng.dirichlet(np.ones(2), size=(5, 7)))
@@ -157,11 +155,10 @@ def test_a_state_collapsed_onto_one_observation_is_refused_not_clamped() -> None
 
 @pytest.mark.mathematical
 def test_the_gaussian_likelihood_grows_without_bound_as_a_state_collapses() -> None:
-    # The pathology exhibited rather than described. With a mean sitting on an
-    # observation, the log-density at that observation is -log(sigma) plus a
-    # constant, so it grows without bound as sigma falls -- there is no
-    # maximum for a fit to find, and any fit that "converges" was stopped by
-    # its start or by a floor.
+    # With a mean sitting on an observation, the log-density there is
+    # -log(sigma) plus a constant, so it grows without bound as sigma falls:
+    # no maximum for a fit to find, and any fit that "converges" was stopped
+    # by its start or by a floor.
     scales = np.array([1e-1, 1e-2, 1e-3, 1e-4, 1e-5])
     scored = [
         float(
@@ -173,8 +170,8 @@ def test_the_gaussian_likelihood_grows_without_bound_as_a_state_collapses() -> N
     ]
 
     assert scored == sorted(scored)
-    # Each tenfold narrowing buys exactly log(10) nats, which is what makes
-    # the divergence a property of the model rather than a numerical artefact.
+    # Each tenfold narrowing buys exactly log(10) nats, so the divergence is a
+    # property of the model rather than a numerical artefact.
     steps = np.diff(scored)
     assert_allclose(steps, np.full(steps.shape, math.log(10.0)), rtol=1e-12)
 
@@ -219,8 +216,8 @@ def test_each_family_refuses_an_observation_outside_its_support() -> None:
 @pytest.mark.structural
 def test_each_family_says_what_distinguishes_its_states() -> None:
     # Aligning a Gaussian fit by anything but the mean would let two states
-    # with different means look identical; aligning a categorical one by a
-    # single number would throw away the alphabet.
+    # with different means look identical; a categorical one by a single
+    # number would throw away the alphabet.
     assert_allclose(CategoricalEmission(MATRIX).alignment_key().numpy(), MATRIX)
     assert_allclose(_gaussian().alignment_key().numpy(), MEAN.reshape(-1, 1))
 
@@ -267,9 +264,8 @@ def test_a_gaussian_family_refuses_parameters_it_cannot_be() -> None:
 # --- negative binomial ----------------------------------------------------
 #
 # The family whose M step is a solve rather than a formula, and whose
-# identifiability hazard is a *flat* likelihood where the Gaussian's is an
-# unbounded one. It has two exact limits, which is a stronger oracle than a
-# generic count model offers, and both are used below.
+# identifiability hazard is a *flat* likelihood where the Gaussian's is
+# unbounded. Its two exact limits are both used below.
 
 NB_DISPERSION = np.array([1.5, 10.0])
 NB_MEAN = np.array([6.0, 25.0])
@@ -278,8 +274,7 @@ NB_MEAN = np.array([6.0, 25.0])
 #: measured over 20 replicates of each fixture: 0.149 at ``(r, mu) = (1.5, 6)``
 #: and 0.197 at ``(10, 25)``. The bound below is four of the larger, so the
 #: tolerance comes from the sampling noise rather than from what happened to
-#: pass -- the discipline ``hmm/ci.yaml`` documents for the categorical
-#: fixture.
+#: pass (``hmm/ci.yaml``).
 NB_VARIANCE_TOLERANCE = 0.8
 NB_DRAWS = 200_000
 
@@ -297,8 +292,8 @@ def test_the_count_family_satisfies_the_emission_protocol() -> None:
 @pytest.mark.oracle
 def test_a_dispersion_of_one_is_the_geometric_distribution_exactly() -> None:
     # An equality, not a tolerance: at r = 1 the two lgamma terms cancel
-    # identically and what is left is log(p) + y log(1 - p). A tolerance here
-    # would hide an implementation that is merely close.
+    # identically, leaving log(p) + y log(1 - p). A tolerance would hide an
+    # implementation that is merely close.
     counts = torch.arange(0.0, 12.0, dtype=torch.float64)
     for mean in (3.0, 11.0):
         family = NegativeBinomialEmission([1.0], [mean])
@@ -313,11 +308,11 @@ def test_a_dispersion_of_one_is_the_geometric_distribution_exactly() -> None:
 @pytest.mark.structural
 def test_the_poisson_limit_is_approached_at_the_rate_the_expansion_predicts() -> None:
     # The tolerance is *derived* from the truncation rather than chosen. The
-    # deviation from the Poisson log-pmf is O(1 / r), so what is asserted is
-    # the order -- doubling r halves the deviation -- and the bound at any one
+    # deviation from the Poisson log-pmf is O(1 / r), so the order is what is
+    # asserted -- doubling r halves the deviation -- and the bound at any one
     # r follows from the constant that pins. Realized: r times the deviation
     # is 18.75, 18.88, 18.94, 18.97, 18.98 over r from 500 to 8000, converging
-    # rather than drifting, which is what makes the extrapolation legitimate.
+    # rather than drifting.
     counts = torch.arange(0.0, 12.0, dtype=torch.float64)
     mean = 4.0
     poisson = counts * math.log(mean) - mean - torch.lgamma(counts + 1.0)
@@ -348,7 +343,7 @@ def test_the_poisson_limit_is_approached_at_the_rate_the_expansion_predicts() ->
 def test_the_drawn_moments_match_the_mean_variance_relation() -> None:
     # `Var = mu + mu**2 / r` is what makes this a count model rather than a
     # Poisson with a free parameter, so it is checked against the relation
-    # itself and not against another call into the family.
+    # and not against another call into the family.
     rng = np.random.default_rng(31)
     family = _negative_binomial()
 
@@ -372,9 +367,8 @@ def test_the_drawn_moments_match_the_mean_variance_relation() -> None:
 def test_the_count_m_step_returns_a_stationary_point_of_the_weighted_likelihood() -> (
     None
 ):
-    # Validated as an *optimization*, not as a formula. A first-order check is
-    # what separates a solve that converged from one that stopped: an inner
-    # loop returning a non-stationary point would still give a monotone outer
+    # Validated as an *optimization*, not as a formula: an inner loop
+    # returning a non-stationary point still gives a monotone outer
     # likelihood for a while, so the outer likelihood cannot catch it.
     rng = np.random.default_rng(32)
     counts = torch.as_tensor(
@@ -394,9 +388,8 @@ def test_the_count_m_step_returns_a_stationary_point_of_the_weighted_likelihood(
 
 @pytest.mark.oracle
 def test_the_count_m_step_agrees_with_a_brute_force_grid_search() -> None:
-    # The second, independent check the ticket asks for: a grid search shares
-    # no root-finding with the solve, so agreement is evidence rather than the
-    # solve confirming itself.
+    # A grid search shares no root-finding with the solve, so agreement is
+    # evidence rather than the solve confirming itself.
     rng = np.random.default_rng(33)
     counts = torch.as_tensor(
         rng.negative_binomial(3.0, 3.0 / 12.0, size=(2, 90)).astype(float)
@@ -424,10 +417,9 @@ def test_the_count_m_step_agrees_with_a_brute_force_grid_search() -> None:
 
 @pytest.mark.mathematical
 def test_data_that_is_not_overdispersed_reaches_the_bound_and_says_so() -> None:
-    # The flat-likelihood hazard, exhibited. Poisson counts carry no
-    # overdispersion, so the maximum in `r` is at infinity; the solve returns
-    # the bound and flags it rather than running away or pretending to have
-    # found a maximum. Under-dispersed data are the same case, more so.
+    # The flat-likelihood hazard. Poisson counts carry no overdispersion, so
+    # the maximum in `r` is at infinity; the solve returns the bound and flags
+    # it. Under-dispersed data are the same case, more so.
     rng = np.random.default_rng(34)
     for drawn in (
         rng.poisson(5.0, size=4000),
@@ -449,8 +441,8 @@ def test_data_that_is_not_overdispersed_reaches_the_bound_and_says_so() -> None:
 
 @pytest.mark.simulated_truth
 def test_overdispersed_data_recovers_its_dispersion_and_does_not_flag() -> None:
-    # The paired half of the check above: a guard that flagged everything
-    # would pass that test and mean nothing.
+    # The paired half of the check above: a guard flagging everything would
+    # pass that test and mean nothing.
     rng = np.random.default_rng(35)
     drawn = rng.negative_binomial(3.0, 3.0 / 13.0, size=4000)
     counts = torch.as_tensor(drawn.astype(float)).reshape(1, -1)
@@ -466,7 +458,7 @@ def test_overdispersed_data_recovers_its_dispersion_and_does_not_flag() -> None:
 @pytest.mark.mathematical
 def test_the_dispersion_bound_is_derived_from_the_counts_and_the_sample() -> None:
     # `mu sqrt(W / 2)`: where the overdispersion `mu**2 / r` falls below the
-    # sampling noise on a variance. Both scalings are asserted, since a bound
+    # sampling noise on a variance. Both scalings are asserted; a bound
     # ignoring either would be a constant wearing a formula.
     assert_allclose(identifiable_dispersion_bound(5.0, 4000.0), 5.0 * 2000.0**0.5)
     assert_allclose(
@@ -483,9 +475,8 @@ def test_the_dispersion_bound_is_derived_from_the_counts_and_the_sample() -> Non
 
 @pytest.mark.structural
 def test_a_count_family_distinguishes_its_states_by_two_moments() -> None:
-    # Mean *and* variance, unlike the Gaussian family's mean alone. The
-    # dispersion is the parameter this family exists for, so two states
-    # sharing a mean and differing in dispersion are different states; both
+    # Mean *and* variance, unlike the Gaussian family's mean alone: two states
+    # sharing a mean and differing in dispersion are different states. Both
     # entries are in the units of the observations, so their absolute
     # differences may be summed.
     family = _negative_binomial()
@@ -527,9 +518,8 @@ def test_the_textbook_parameterization_is_accepted_at_the_boundary() -> None:
 # --- the rest of the dispersion axis (#260) -------------------------------
 #
 # Binomial below equidispersion, Poisson exactly at it, negative binomial and
-# beta-binomial above. The point of the set is the bracketing: an interface
-# exercised only by overdispersed families has not been asked whether it
-# assumes overdispersion somewhere.
+# beta-binomial above. An interface exercised only by overdispersed families
+# has not been asked whether it assumes overdispersion somewhere.
 
 TRIALS = np.array([12, 12])
 POISSON_MEAN = np.array([4.0, 9.0])
@@ -584,10 +574,10 @@ def test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform() -> None:
 
 @pytest.mark.structural
 def test_the_beta_binomial_approaches_the_binomial_as_it_concentrates() -> None:
-    # The second approached limit, and the tolerance is derived the same way
-    # the Poisson one is: the deviation is O(1 / (a + b)), so what is asserted
-    # is the order -- doubling the concentration halves it -- and the bound at
-    # any one concentration follows from the constant that pins.
+    # The second approached limit, its tolerance derived as the Poisson one
+    # is: the deviation is O(1 / (a + b)), so the order is asserted --
+    # doubling the concentration halves it -- and the bound at any one
+    # concentration follows from the constant that pins.
     trials, rate = 12, 0.35
     counts = torch.arange(0.0, trials + 1.0, dtype=torch.float64)
     binomial = BinomialEmission([trials], [rate]).log_density(counts)[:, 0]
@@ -618,11 +608,10 @@ def test_the_beta_binomial_approaches_the_binomial_as_it_concentrates() -> None:
 
 @pytest.mark.mathematical
 def test_each_count_family_reproduces_its_own_mean_variance_relation() -> None:
-    # Every one of these has a closed form for both moments, so the simulated
-    # draws are checked against the relation and not against another call.
-    # Standard error of a mean at 200000 draws is sqrt(Var / n); the variance
-    # bound is the one measured for the negative binomial, which is the widest
-    # of the four.
+    # Each has a closed form for both moments, so the draws are checked
+    # against the relation and not against another call. Standard error of a
+    # mean at 200000 draws is sqrt(Var / n); the variance bound is the
+    # negative binomial's, the widest of the four.
     rng = np.random.default_rng(36)
     families = (
         BinomialEmission(TRIALS, [0.3, 0.6]),
@@ -666,11 +655,10 @@ def test_the_closed_form_count_m_steps_are_the_weighted_mean() -> None:
 
 @pytest.mark.structural
 def test_the_beta_binomial_m_step_settles_and_is_a_stationary_point() -> None:
-    # Validated as an optimization. Minka's fixed point was tried first and
-    # rejected on measurement: monotone but linearly convergent, it was still
-    # moving in the third decimal place after 500 iterations at a true
-    # concentration of 120, and returned that as though it were an estimate.
-    # Alternating bisection settles in single-digit iterations.
+    # Validated as an optimization. Minka's fixed point was rejected on
+    # measurement: monotone but linearly convergent, it was still moving in
+    # the third decimal place after 500 iterations at a true concentration of
+    # 120. Alternating bisection settles in single-digit iterations.
     rng = np.random.default_rng(38)
     truth = BetaBinomialEmission([12], [2.0], [5.0])
     counts = torch.as_tensor(
@@ -703,18 +691,16 @@ def test_the_beta_binomial_m_step_settles_and_is_a_stationary_point() -> None:
 
 @pytest.mark.mathematical
 def test_data_with_no_overdispersion_drives_the_concentration_to_its_bound() -> None:
-    # The beta-binomial's flat-likelihood hazard is the negative binomial's,
-    # one family over: as `a + b` grows the family becomes a binomial, so
-    # binomial data has no concentration to find.
+    # The beta-binomial's flat-likelihood hazard, one family over: as `a + b`
+    # grows the family becomes a binomial, so binomial data has no
+    # concentration to find.
     #
-    # **The flag is a property of the sample, not of the population**, and
-    # asserting it on one draw would be asserting a coin flip. Binomial data
-    # is the boundary case itself, so a given draw is very slightly over- or
-    # under-dispersed with roughly equal chance, and only the under-dispersed
-    # half has its maximum at infinity. Measured over 12 seeds: 10 reach the
-    # bound and the other two stop at 0.40 and 0.45 of it -- deep in the
-    # unidentified region either way, which is the claim that survives the
-    # draw.
+    # **The flag is a property of the sample, not of the population.** A given
+    # draw from the boundary case is slightly over- or under-dispersed with
+    # roughly equal chance, and only the under-dispersed half has its maximum
+    # at infinity. Measured over 12 seeds: 10 reach the bound and the other
+    # two stop at 0.40 and 0.45 of it -- deep in the unidentified region
+    # either way, which is the claim that survives the draw.
     bound = identifiable_concentration_bound(12.0, 4000.0)
     reached = 0
     fractions = []

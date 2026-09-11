@@ -1,14 +1,12 @@
 """The two-channel count emission: a depth, and the successes within it.
 
-What a coverage-and-allele-count assay produces, and the first emission in
-this repository whose observation is not a scalar. Two claims carry the
-family. The first is that each form is a probability distribution: the
-log-density sums to one over the support, which is the check a two-channel
-density either passes or is not one. The second is that the forms are
-*different models* rather than a parameterization choice --- data simulated
-under the joint form is preferred by the joint fit on every seed, and data
-simulated under the independent form is not, so the preference measures the
-coupling and not the extra flexibility of one form over the other.
+What a coverage-and-allele-count assay produces, and the first emission here
+whose observation is not a scalar. Two claims carry the family. Each form is
+a probability distribution: the log-density sums to one over the support. And
+the forms are *different models* rather than a parameterization choice ---
+data simulated under the joint form is preferred by the joint fit on every
+seed, and data simulated under the independent form is not, so the preference
+measures the coupling and not one form's extra flexibility.
 
 Sizes and tolerances are stated where they are used, from the sampling noise
 at that size rather than from what happened to pass.
@@ -44,9 +42,9 @@ def _family(*, joint: bool) -> CountPairEmission:
 
 @pytest.mark.structural
 def test_the_count_pair_family_satisfies_both_protocols() -> None:
-    # `CountEmissionFamily` as well as `EmissionFamily`, which is what lets the
-    # coupled model and the mixture take it where they take a negative
-    # binomial; the moments it satisfies the second with are per channel.
+    # `CountEmissionFamily` as well as `EmissionFamily`, which lets the coupled
+    # model and the mixture take it where they take a negative binomial; the
+    # moments satisfying the second are per channel.
     for joint in (True, False):
         family = _family(joint=joint)
         assert isinstance(family, EmissionFamily)
@@ -59,14 +57,13 @@ def test_the_count_pair_family_satisfies_both_protocols() -> None:
 
 @pytest.mark.oracle
 def test_each_form_sums_to_one_over_the_support() -> None:
-    # The check a density either passes or is not one, summed over the pairs
-    # themselves rather than reduced analytically. The grid is square in both
-    # channels and the family scores an impossible pair at `-inf`, so one grid
-    # serves both forms: the joint form's `y > n` and the independent form's
-    # `y > trials` contribute exactly zero.
+    # Summed over the pairs rather than reduced analytically. The grid is
+    # square in both channels and the family scores an impossible pair at
+    # `-inf`, so one grid serves both forms: the joint form's `y > n` and the
+    # independent form's `y > trials` contribute exactly zero.
     #
-    # Truncation is at 900 rather than infinity, and the cap is measured
-    # rather than argued: the missing mass of the deeper state (mean 150,
+    # Truncation is at 900 rather than infinity, and the cap is measured: the
+    # missing mass of the deeper state (mean 150,
     # dispersion 12) is 2.8e-5 at a cap of 400, 4.0e-10 at 600 and 2.8e-14 at
     # 900, so at 900 the sums are at the round-off of the 1.6 million terms
     # they add and the tolerance below is not a truncation budget.
@@ -113,10 +110,10 @@ def test_the_m_step_recovers_the_planted_parameters_in_both_forms() -> None:
     # forward-backward recursion feeding it.
     #
     # The success channel is stated as `(rate, concentration)` rather than
-    # `(alpha, beta)`: the rate is what the data resolves -- it is a weighted
-    # mean of about 2,000 allele fractions -- and the concentration is the
+    # `(alpha, beta)`: the rate is what the data resolves -- a weighted mean
+    # of about 2,000 allele fractions -- and the concentration is the
     # parameter whose likelihood flattens as the family approaches a binomial,
-    # exactly as the beta-binomial's own recovery test finds at 3,000 draws.
+    # as the beta-binomial's own recovery test finds at 3,000 draws.
     # Measured relative errors per state --- joint form: mean 0.008 and 0.012,
     # dispersion 0.021 and 0.059, rate 0.002 and 0.005, concentration 0.117
     # and 0.038; independent form: mean 0.020 and 0.006, dispersion 0.048 and
@@ -164,9 +161,8 @@ LRT_SEEDS = range(1000, 1010)
 #: The single-state truth the comparison simulates from. The depth mean is
 #: 120 at dispersion 8, so `P(n < 10)` is 3.4e-6 and the independent form's
 #: 10-trial draws lie inside the joint form's support on every one of the
-#: 3,000 pairs -- which the test asserts, because a comparison in which one
-#: model scores a pair at `-inf` would be settled by the support rather than
-#: by the coupling.
+#: 3,000 pairs -- which the test asserts, since a comparison where one model
+#: scores a pair at `-inf` is settled by the support, not by the coupling.
 LRT_DISPERSION = [8.0]
 LRT_MEAN = [120.0]
 LRT_ALPHA = [3.0]
@@ -180,8 +176,8 @@ def _maximized_log_likelihood(
     """Fit one state by a single M step, and score the data at it.
 
     With one state and a posterior of ones the M step *is* the maximum
-    likelihood estimate, so no EM loop is needed and the comparison is between
-    two maxima rather than between two runs of an iteration.
+    likelihood estimate, so the comparison is between two maxima rather than
+    two runs of an iteration.
     """
     posterior = torch.ones((observations.shape[0], 1), dtype=torch.float64)
     fitted = start.reestimate(observations, posterior).emissions
@@ -192,13 +188,13 @@ def _preference(observations: torch.Tensor) -> float:
     """``2 (log L_joint - log L_independent)`` at each form's own maximum.
 
     The two forms have four free parameters each, so the difference of maxima
-    is also the difference of AICs and the comparison needs no penalty. It is
-    not a nested test, and no chi-squared quantile is read off it; what is
-    asserted is the sign, over seeds.
+    is the difference of AICs and the comparison needs no penalty. It is not a
+    nested test and no chi-squared quantile is read off it; the sign over
+    seeds is what is asserted.
 
     The independent form is given the most generous fixed trial count the data
-    admits --- the largest success count observed --- so that it is refuted on
-    its shape and not on a support that cannot hold the data.
+    admits --- the largest success count observed --- so it is refuted on its
+    shape and not on a support that cannot hold the data.
     """
     depth = float(observations[:, 0].mean())
     largest = float(observations[:, 1].max())
@@ -214,13 +210,12 @@ def _preference(observations: torch.Tensor) -> float:
 
 @pytest.mark.simulated_truth
 def test_the_likelihood_ratio_prefers_the_form_the_data_came_from() -> None:
-    # The claim that separates the two forms. On joint data the depth carries
-    # information about the allele count and the independent form throws it
-    # away; on independent data it carries none and the joint form's
-    # conditioning is a misspecification. Measured over the ten seeds:
+    # On joint data the depth carries information about the allele count and
+    # the independent form throws it away; on independent data it carries none
+    # and the joint form's conditioning is a misspecification. Over ten seeds
     # the statistic is 124 to 211 on joint data (joint preferred 10 of 10) and
-    # -133 to -77 on independent data (joint preferred 0 of 10), so the two
-    # populations do not overlap and neither margin is a coin flip.
+    # -133 to -77 on independent data (0 of 10), so the two populations do not
+    # overlap.
     outcome = {}
     for joint in (True, False):
         truth = CountPairEmission(

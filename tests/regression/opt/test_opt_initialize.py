@@ -6,11 +6,9 @@ constant through it. These tests pin the initializers and then *measure*
 whether multiple starts buy anything, on the two surfaces where the answer is
 known independently of this repository.
 
-The measurement is the part that matters. "Multi-start helps" is plausible
-enough to be assumed, and the numbers below say it is true of one surface and
-close to false of the other, at the same cost. Root `CLAUDE.md` asks for a
-benchmark against the reference before committing to a change; this is the
-same demand applied to a search strategy.
+The numbers below say multi-start is true of one surface and close to false
+of the other, at the same cost. Root `CLAUDE.md`'s demand for a benchmark
+before a change, applied to a search strategy.
 """
 
 from __future__ import annotations
@@ -42,8 +40,8 @@ def test_the_default_initializer_is_the_objective_s_own_start() -> None:
     """`FromObjective` is today's behaviour exactly, not an approximation.
 
     Every number `STATUS.md` pins was produced from the objective's own
-    `initial()`, so this has to stay reachable and stay identical -- otherwise
-    adopting the abstraction would silently move results.
+    `initial()`, so it must stay reachable and identical; otherwise the
+    abstraction silently moves results.
     """
     objective = Rosenbrock()
 
@@ -57,8 +55,8 @@ def test_the_default_initializer_is_the_objective_s_own_start() -> None:
 def test_a_single_start_makes_the_multi_start_fit_the_ordinary_one() -> None:
     """One start is the degenerate case of many, and the code agrees.
 
-    If `fit_from` with `FromObjective` differed from `fit`, the abstraction
-    would be a second code path rather than a generalization of the first.
+    `fit_from` with `FromObjective` differing from `fit` would make the
+    abstraction a second code path rather than a generalization.
     """
     objective = Rosenbrock()
 
@@ -78,10 +76,9 @@ def test_the_perturbed_start_leaves_the_stationary_point_the_uniform_hmm_sits_on
 
     `opt/hmm.py` records that a uniform HMM is a *stationary point*: with every
     hidden state identical, the gradient with respect to the initial and
-    transition parameters is exactly zero and an optimizer never leaves. That
-    was fixed once, by hand, inside that file. Here the same property is
-    checked of the model-free perturbation: the nudged start has a gradient
-    the symmetric one does not.
+    transition parameters is exactly zero and an optimizer never leaves. Fixed
+    there by hand; checked here of the model-free perturbation, whose nudged
+    start has a gradient the symmetric one does not.
     """
     observations = np.array([[0, 1, 0, 1, 0], [1, 0, 1, 0, 1]], dtype=np.int64)
     objective = HmmObjective(observations=observations, n_states=2, n_symbols=2)
@@ -108,10 +105,9 @@ def test_the_perturbed_start_leaves_the_stationary_point_the_uniform_hmm_sits_on
 def test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one() -> None:
     """The case multi-start is for, measured against four analytic minima.
 
-    Himmelblau has four equal global minima, so "the" optimum is not a
-    well-formed question and the start alone decides which one comes back. A
-    single fixed start reaches exactly one basin however many times it is run;
-    four random restarts reach all four.
+    Himmelblau has four equal global minima, so the start alone decides which
+    comes back. A single fixed start reaches one basin however often it is
+    run; four random restarts reach all four.
     """
     objective = Himmelblau()
 
@@ -145,10 +141,10 @@ def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
     not fix it: the same 2 in 30 at scale 4.0 as at 2.0, because the obstacle
     is the density of minima and not the reach of the proposal.
 
-    This is why the defaults do not change in this pull request. Multi-start is
-    a tool for a few well-separated basins, and asserting it as a general
-    improvement would be asserting something the measurement contradicts.
-    Through `opt.budget.compare` at eight fits it is 0 of 10 either way.
+    So the defaults do not change: multi-start is a tool for a few
+    well-separated basins, and a general improvement is what the measurement
+    contradicts. Through `opt.budget.compare` at eight fits it is 0 of 10
+    either way.
     """
     objective = Rastrigin()
 
@@ -195,9 +191,9 @@ def test_the_spread_reports_that_the_starts_disagreed() -> None:
     """A multi-start fit that returned only the best would hide the multimodality.
 
     On Himmelblau every basin has value 0, so the spread is ~0 even though the
-    *answers* differ -- which is itself worth knowing, and why the fits are
-    returned as well as the spread. On Rastrigin the values differ, and the
-    spread is what says a single fit could have been wrong by that much.
+    *answers* differ, which is why the fits are returned as well as the spread.
+    On Rastrigin the values differ, and the spread says how wrong a single fit
+    could have been.
     """
     flat = fit_from(
         Himmelblau(), RandomRestart(4, 3.0, np.random.default_rng(0)), workers=1
@@ -217,8 +213,8 @@ def test_two_generators_seeded_alike_give_the_same_restarts() -> None:
     """A declared seed still determines the run.
 
     `opt/hmm.py` rejected a jitter because it "would make the fit depend on a
-    second seed nobody declared". Taking the generator removes that objection
-    rather than ignoring it: the seed is the caller's and it is declared.
+    second seed nobody declared". Taking the generator removes that objection:
+    the seed is the caller's, and declared.
     """
     objective = Himmelblau()
 
@@ -260,8 +256,8 @@ def test_an_unusable_restart_specification_is_refused(
 ) -> None:
     """Zero starts and a non-positive scale are refused where they are stated.
 
-    A zero-start initializer would surface as an empty `min` inside `fit_from`,
-    and a zero scale is a restart set that is not one.
+    A zero-start initializer surfaces as an empty `min` inside `fit_from`, and
+    a zero scale is a restart set that is not one.
     """
     with pytest.raises(ValueError, match=match):
         RandomRestart(n_starts, scale, np.random.default_rng(0))
@@ -318,14 +314,12 @@ PUBLISHED_TOLERANCE = 1e-5
 @pytest.mark.oracle
 def test_every_restart_lands_on_a_published_himmelblau_minimizer() -> None:
     # The multi-start initializer was refereed by basin *coverage*: four
-    # restarts reach four distinct basins. Coverage is an identity check and
-    # passes whatever the fit converged to, so it says nothing about where in
-    # the basin the fit stopped. Himmelblau's minimizers are published to six
-    # decimals, which makes the stronger statement an exact one: every fit
-    # from every restart is within 6.2e-07 of one of them, against a
-    # tolerance of 1e-5, and its value is 7.9e-31 against an exact 0. The
-    # four together are still covered, so nothing the coverage test said is
-    # given up.
+    # restarts reach four distinct basins. Coverage passes whatever the fit
+    # converged to and says nothing about where in the basin it stopped.
+    # Himmelblau's minimizers are published to six decimals, which makes the
+    # stronger statement exact: every fit from every restart is within 6.2e-07
+    # of one of them, against a tolerance of 1e-5, and its value is 7.9e-31
+    # against an exact 0. The four together are still covered.
     objective = Himmelblau()
 
     reached, worst_distance, worst_value = set(), 0.0, 0.0

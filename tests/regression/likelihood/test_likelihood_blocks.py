@@ -1,17 +1,16 @@
 """The block-frequency bound, soundness first (issue #408).
 
-An unsound bound silently returns a wrong tree, and nothing else in the
-suite would catch it: a search ranked by an interval that does not contain
-the exact value discards the right candidate and reports a converged
-optimum. So the containment check is the first test in this file and the
-first thing that was written -- before the bound existed, and failing --
-and everything the bound is *for* comes after it.
+An unsound bound silently returns a wrong tree and nothing else in the suite
+would catch it: a search ranked by an interval that does not contain the exact
+value discards the right candidate and reports a converged optimum. So the
+containment check is the first test in this file and was written first --
+before the bound existed, and failing.
 
 Containment is checked wherever the exact value is computable: the `ci` and
-`stress` tree fixtures, over a grid of block sizes and frequency cutoffs,
-and on random alignments over several seeds. The random alignments matter
-more than the simulated ones: the bound must hold for an arbitrary column,
-not only for a column the generating model is likely to produce.
+`stress` tree fixtures, over a grid of block sizes and frequency cutoffs, and
+on random alignments over several seeds. The random alignments matter more:
+the bound must hold for an arbitrary column, not only one the generating
+model is likely to produce.
 """
 
 from __future__ import annotations
@@ -85,10 +84,10 @@ def _random_alignment(
 @pytest.mark.mathematical
 @pytest.mark.critical
 def test_the_interval_contains_the_exact_log_likelihood() -> None:
-    # The test that matters. Containment on every fixture, over the whole
-    # grid of block sizes and cutoffs, and on random alignments over several
-    # seeds. The tolerance is relative and one-sided: it admits the
-    # floating-point noise of two different summation orders, nothing more.
+    # Containment on every fixture, over the whole grid of block sizes and
+    # cutoffs, and on random alignments over several seeds. The tolerance is
+    # relative and one-sided: it admits the floating-point noise of two
+    # summation orders, nothing more.
     for name in FIXTURES:
         params, alignment, lengths = _instance(name)
         pi = np.asarray(params.pi)
@@ -161,9 +160,9 @@ def test_the_site_extremes_bracket_every_column() -> None:
 
 @pytest.mark.structural
 def test_the_containment_check_has_teeth() -> None:
-    # The guard's own trigger. Interval.contains is what the soundness test
-    # rests on, so an interval that excludes the value must be rejected --
-    # otherwise the test above would pass on an unsound bound.
+    # The soundness test rests on Interval.contains, so an interval excluding
+    # the value must be rejected; otherwise that test passes on an unsound
+    # bound.
     exact = -1000.0
     assert Interval(
         lower=torch.tensor(-1100.0),
@@ -191,9 +190,9 @@ def test_the_containment_check_has_teeth() -> None:
 
 @pytest.mark.mathematical
 def test_the_width_is_the_bounded_sites_times_the_per_site_range() -> None:
-    # The interval's shape, not a number: the exact half cancels, so the
-    # width is exactly what the tail costs. This is what makes the width
-    # table below a statement about the cutoff rather than about the tree.
+    # The interval's shape, not a number: the exact half cancels, so the width
+    # is what the tail costs, which makes the width table below a statement
+    # about the cutoff rather than about the tree.
     params, alignment, lengths = _instance("tree_search/ci.yaml", 400)
     pi = np.asarray(params.pi)
     lower, upper = site_log_likelihood_extremes(params.tau, params.k, pi, lengths)
@@ -254,12 +253,11 @@ def test_the_width_grows_with_the_cutoff_and_with_the_block_size() -> None:
 @pytest.mark.oracle
 def test_the_lower_end_is_a_bound_on_the_fitted_log_likelihood() -> None:
     # Certified in the sense bound.py defines, against a full fit of all 15
-    # five-taxon topologies: the lower end is a value at feasible lengths,
-    # so it cannot exceed the maximum over lengths, and one violation
-    # refuses the certificate. The fits are computed once and looked up,
-    # because certify calls the exact target per structure and six
-    # certificates over the same 15 topologies would fit each of them six
-    # times.
+    # five-taxon topologies: the lower end is a value at feasible lengths, so
+    # it cannot exceed the maximum over lengths, and one violation refuses the
+    # certificate. The fits are computed once and looked up, since certify
+    # calls the exact target per structure and six certificates would fit each
+    # topology six times.
     params, alignment, _ = _instance("tree_search/ci.yaml", 400)
     pi = np.asarray(params.pi)
     topologies = list(enumerate_topologies(sorted(alignment)))
@@ -287,12 +285,11 @@ def test_the_lower_end_is_a_bound_on_the_fitted_log_likelihood() -> None:
 
 @pytest.mark.oracle
 def test_neither_end_ranks_and_the_frequent_half_does() -> None:
-    # The measurement that shapes how the bound is used. The tail term is
-    # (bounded sites) x (per-site extreme); the extreme varies with the
-    # tree and is larger than the differences between neighbouring
+    # The tail term is (bounded sites) x (per-site extreme); the extreme
+    # varies with the tree and exceeds the differences between neighbouring
     # topologies, so an ordering by either end is an ordering by the tail's
     # looseness. Asserting that it ranks would assert something false
-    # (`likelihood/CLAUDE.md`); what is asserted is that the POINT claim,
+    # (`likelihood/CLAUDE.md`); asserted instead is that the POINT claim,
     # which drops the tail, puts the fitted best first.
     params, alignment, _ = _instance("tree_search/ci.yaml", 2000)
     pi = np.asarray(params.pi)
@@ -328,15 +325,14 @@ def _ranked_against_exact(
     """One row per start: the exact search's cost and the ranked search's.
 
     The search the ranking is for --- `infer`'s lazy seam, fitting one
-    candidate per neighbourhood instead of all of them --- against the
-    search that fits every candidate. Each row asserts the same topology and
-    the same fitted log-likelihood, and records the fits and forward passes
-    a budget-matched comparison counts (issue #289).
+    candidate per neighbourhood instead of all --- against the search that
+    fits every candidate. Each row asserts the same topology and the same
+    fitted log-likelihood, and records the fits and forward passes a
+    budget-matched comparison counts (issue #289).
 
-    The cutoff is 4 because it is a *count*, so what it means depends on the
-    alignment's length: at 1200 sites a cutoff of 8 keeps 6 of 12 starts and
-    loses the other 6, while at 2000 sites it keeps all 12. Stated as a
-    fraction of the sites it retains, 4 at 1200 and 8 at 2000 are the same
+    The cutoff is a *count*, so what it means depends on the alignment's
+    length: at 1200 sites a cutoff of 8 keeps 6 of 12 starts, at 2000 all 12.
+    As a fraction of the sites retained, 4 at 1200 and 8 at 2000 are the same
     setting.
     """
     params, alignment, _ = _instance(fixture, n_sites)
@@ -393,10 +389,8 @@ def test_a_ranked_search_reaches_what_the_exact_search_reaches() -> None:
 @pytest.mark.release
 def test_the_ranked_search_holds_over_starts_move_sets_and_taxa() -> None:
     # Six starts rather than two, and the six-taxon fixture as well as the
-    # five: an agreement that holds from one start is an agreement about
-    # that start, and one that holds at one size is an agreement about that
-    # size. Over the 10 s cap, so `release` per DEV.md's duration rule
-    # rather than waited for per pull request.
+    # five: an agreement holding from one start is an agreement about that
+    # start. Over the 10 s cap, so `release` per DEV.md's duration rule.
     rows = _ranked_against_exact(
         [(moves, seed) for moves in (MoveSet.NNI, MoveSet.SPR) for seed in range(3)]
     )

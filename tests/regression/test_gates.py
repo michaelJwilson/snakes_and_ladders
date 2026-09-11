@@ -11,23 +11,21 @@ source text and asserts they match.
 
 **Two of those copies no longer exist.** Issue #470 generates `pyproject.toml`'s
 marker list and `DEV.md`'s tier table from `infra/gates.py`, so the assertions
-that held them are retired: a test that read a generated file and compared it
-against its own generator would assert nothing. What replaces them is the
-regeneration itself -- `test_the_derived_blocks_are_current` fails a tree whose
-blocks were edited where they are read, and `test_the_writer_restores_a_block`
-moves a value in each and requires the writer to put it back. The copies that
-remain are the ones a generator cannot take: a workflow condition GitHub
-evaluates, a shell export `tests/conftest.py` reads from the environment, a
-sentence a reviewer reads. Each is consumed by something that cannot import
-Python at the point it needs the value.
+that held them are retired: a test reading a generated file and comparing it
+against its own generator asserts nothing. The regeneration replaces them --
+`test_the_derived_blocks_are_current` fails a tree whose blocks were edited
+where they are read, and `test_the_writer_restores_a_block` moves a value in
+each and requires the writer to put it back. What remains are the copies a
+generator cannot take: a workflow condition GitHub evaluates, a shell export
+`tests/conftest.py` reads from the environment, a sentence a reviewer reads.
 
 Two rules make that worth its seconds. **Each copy is read from the file that
 carries it**, never from the module under test: a test that imports a constant
-and asserts it equals that constant passes forever, which is the coverage
-theatre root `CLAUDE.md` forbids. And **a shell script or a workflow is
-parsed, never executed**: the assertion is about the text a reader and a runner
-both see, and running `review_gates.sh` to count its rows would cost 30 s to
-learn something a regex has in a millisecond.
+and asserts it equals that constant passes forever, the coverage theatre root
+`CLAUDE.md` forbids. And **a shell script or a workflow is parsed, never
+executed**: the assertion is about the text a reader and a runner both see,
+and running `review_gates.sh` to count its rows would cost 30 s for what a
+regex has in a millisecond.
 
 For the copies that remain, `infra/gates.py` is descriptive: a failure here
 does not say which side is wrong, only that the tree no longer agrees with
@@ -75,10 +73,10 @@ _MARKER_EXPRESSION = re.compile(r'-m\s+(?:"([^"]+)"|([^\s"$]+))')
 _COVERAGE_FLOOR = re.compile(r"--cov-fail-under=(\d+)")
 
 #: `**Eight rows in 39 to 43 s**` and `the other six rows`: the review table's
-#: size, and the count that has to follow from it. The seconds beside the first
-#: are a measurement and are deliberately not read -- they coincided with the
-#: budget at the nine-row reading, and reading them would make the budget
-#: whatever the host last managed.
+#: size, and the count that follows from it. The seconds beside the first are
+#: a measurement and are not read -- they coincided with the budget at the
+#: nine-row reading, and reading them would make the budget whatever the host
+#: last managed.
 _ROW_COUNT = re.compile(r"\*\*(\w+) rows\b")
 _REMAINING_ROWS = re.compile(r"the other (\w+) rows report")
 
@@ -122,7 +120,7 @@ def _review_rows(path: Path) -> tuple[str, ...]:
 def _pytest_command(path: Path, marker: str) -> str:
     """The one `uv run pytest` line in a shell script whose text holds ``marker``.
 
-    Comments are dropped first. `infra/release.sh` explains in prose why it
+    Comments are dropped first: `infra/release.sh` explains in prose why it
     runs the unfiltered suite rather than `-m release`, and a search over the
     raw text would read the explanation as the command.
     """
@@ -195,10 +193,9 @@ def test_the_kind_module_names_the_same_markers() -> None:
 def test_the_workflow_runs_the_pull_request_and_main_gates() -> None:
     """Read from `.github/workflows/ci.yml`: the two gates and the job's cap.
 
-    The condition on the second step is the whole of issue #455's trade: a pull
-    request is judged by `critical`, and the selected tier runs on the push to
-    `main`. A step that lost that condition would put 17 to 32 minutes back on
-    every pull request, which is the drift this row exists to catch.
+    The condition on the second step is issue #455's trade: a pull request is
+    judged by `critical`, and the selected tier runs on the push to `main`. A
+    step that lost it would put 17 to 32 minutes back on every pull request.
     """
     steps = _workflow_steps(WORKFLOW, "python-tests")
     pr, main = (gate for gate in gates.GATES if gate.name in {"pr", "main"})
@@ -243,8 +240,8 @@ def test_the_shell_scripts_export_the_caps() -> None:
 
     `infra/validate.sh` exports both; `infra/review_gates.sh` exports the first
     alone, because the row it caps is the critical tier and no key test is in
-    it. Both files are read, so a default changed in one and not the other is a
-    failure rather than a silent difference between two local runs.
+    it. Both files are read, so a default changed in one and not the other
+    fails rather than silently differing between two local runs.
     """
     described = {cap.variable: cap.seconds for cap in gates.CAPS}
     validate = _exported_caps(VALIDATE)
@@ -272,10 +269,8 @@ def test_dev_md_counts_the_review_gate_rows() -> None:
     run, and the sentence's own arithmetic -- two rows named, the rest counted
     -- had drifted with it. The budget is read from the sentence that states
     it, never from the measurement beside it: the two were the same number at
-    nine rows, and reading the measurement would have made the budget whatever
-    the host last managed. The measurement itself is not asserted at all --
-    it is a property of the machine, which the No CI Profiling rule keeps out
-    of the suite.
+    nine rows. The measurement is not asserted -- it is a property of the
+    machine, which the No CI Profiling rule keeps out of the suite.
     """
     text = DEV.read_text()
     stated = _ROW_COUNT.search(text)
@@ -295,11 +290,10 @@ def test_dev_md_counts_the_review_gate_rows() -> None:
 def test_the_derived_blocks_are_current() -> None:
     """Regenerating the marker list and the tier table rewrites neither file.
 
-    The gate that generation buys, in milliseconds rather than in the second
+    The gate that generation buys, in milliseconds rather than the second
     `infra/ledgers.sh --check` spends starting interpreters. It compares
-    against the committed files -- what `pytest` and a reviewer actually read
-    -- and never against `infra/gates.py`, which would be the generator
-    restating itself.
+    against the committed files -- what `pytest` and a reviewer read -- never
+    against `infra/gates.py`, which would be the generator restating itself.
     """
     stale = [
         block.path
@@ -318,11 +312,11 @@ def test_the_writer_restores_a_block_that_drifted(
     """One value moved in each generated block, and the writer puts both back.
 
     The mirror of the test above: that one says the tree is current, this says
-    the writer is what makes it so. The restored blocks are then read back
-    through the parsers the retired assertions used -- `tomllib` for the marker
-    list, the table reader for the tier table -- so a rendering that happens to
-    produce the right bytes today and unparseable TOML on the next marker text
-    added fails here rather than at collection.
+    the writer makes it so. The restored blocks are read back through the
+    parsers the retired assertions used -- `tomllib` for the marker list, the
+    table reader for the tier table -- so a rendering producing the right
+    bytes today and unparseable TOML on the next marker text added fails here
+    rather than at collection.
     """
     edits = {
         "pyproject.toml": (
@@ -362,11 +356,10 @@ def test_the_writer_restores_a_block_that_drifted(
 def test_the_guard_fails_on_a_copy_that_drifted(tmp_path: Path) -> None:
     """The guard rejects what it exists to reject.
 
-    A drift guard that has never fired has not been tested, and this one exists
-    only to fire. Each parser is given the source text with one value moved --
-    a row deleted, a cap raised, a marker reworded -- and must report the moved
-    value, which is what makes every assertion above a comparison rather than a
-    restatement.
+    A drift guard that has never fired has not been tested. Each parser is
+    given the source text with one value moved -- a row deleted, a cap raised,
+    a marker reworded -- and must report the moved value, which makes every
+    assertion above a comparison rather than a restatement.
     """
     without_a_row = tmp_path / "review_gates.sh"
     without_a_row.write_text(

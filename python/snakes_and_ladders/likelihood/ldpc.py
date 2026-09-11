@@ -1,39 +1,35 @@
 """Decoding a parity-check code: sum-product, min-sum, and the enumeration oracle.
 
 The general :func:`snakes_and_ladders.likelihood.message_passing.sum_product`
-already decodes a code through :func:`snakes_and_ladders.sim.factor_graph.from_parity_check`,
-one table per parity factor and one dictionary entry per message. At 60,000
-edges that is the wrong shape, so this module is the same algorithm
-specialised to binary variables and parity factors, where a message is one
-number -- a log-likelihood ratio -- and the factor update collapses to the
-``tanh`` rule, ``eq:tanh-rule`` (Gallager 1962; Richardson and Urbanke 2008).
-It is held to the general implementation on small codes: same fixed point, to a
-stated tolerance, reached in a different order.
+already decodes a code through
+:func:`snakes_and_ladders.sim.factor_graph.from_parity_check`, one table per
+parity factor and one dictionary entry per message. At 60,000 edges that is
+the wrong shape, so this module is the same algorithm specialised to binary
+variables and parity factors, where a message is one log-likelihood ratio and
+the factor update collapses to the ``tanh`` rule, ``eq:tanh-rule`` (Gallager
+1962; Richardson and Urbanke 2008). It is held to the general implementation
+on small codes: same fixed point, to a stated tolerance, reached in a
+different order.
 
 **Which Markov chain.** The schedule is flooding: every check reads the
-variable messages of the previous half-iteration and every variable reads
-the check messages just written, so an iteration is one Jacobi sweep over
-the checks followed by one over the variables. Two message buffers hold it,
-one per direction, each ``n_edges`` long in variable order and read in
-check order through the code's one permutation; both are allocated once and
-written in place. A layered (Gauss--Seidel) schedule, which updates a check
-from messages its predecessors in the same sweep have already changed, is
-a different iteration with a different transient, and is not what the
-general oracle runs either.
+variable messages of the previous half-iteration and every variable reads the
+check messages just written, so an iteration is one Jacobi sweep over the
+checks followed by one over the variables. Two message buffers hold it, one
+per direction, each ``n_edges`` long in variable order and read in check order
+through the code's one permutation; both are allocated once and written in
+place. A layered (Gauss--Seidel) schedule is a different iteration with a
+different transient, and is not what the general oracle runs either.
 
-**Two decodings, and they are different answers.** Sum-product's hard
-decision is the *bitwise* MAP -- each bit at the mode of its own marginal --
-and can be a word outside the code. Min-sum, ``eq:min-sum``, is max-product
-in the log domain: its decision is the *blockwise* MAP, the single most
-probable codeword, exact on a cycle-free code with a unique maximum.
-:class:`Decoding.estimate` names which one a result is.
+**Two decodings, and they are different answers.** Sum-product's hard decision
+is the *bitwise* MAP -- each bit at the mode of its own marginal -- and can be
+a word outside the code. Min-sum, ``eq:min-sum``, is max-product in the log
+domain: its decision is the *blockwise* MAP, exact on a cycle-free code with a
+unique maximum. :class:`Decoding.estimate` names which one a result is.
 
-**Refusing versus failing.** A decoder that reaches its iteration cap
-without a codeword has not failed to converge on an estimate; it has
-failed to decode, and that is the event a block error rate counts. The
-result says so through ``decoded`` rather than raising, and its bits are
-the beliefs at the last iteration, which is what an error rate is measured
-on.
+**Refusing versus failing.** A decoder that reaches its iteration cap without
+a codeword has not failed to converge; it has failed to decode, and that is
+the event a block error rate counts. The result says so through ``decoded``
+rather than raising, and its bits are the beliefs at the last iteration.
 """
 
 from __future__ import annotations
@@ -79,10 +75,10 @@ class Decoding:
     posterior_llr : np.ndarray
         Per bit, the channel ratio plus every incoming check message: the
         log-odds of the marginal (sum-product) or max-marginal (min-sum).
-        Exactly zero is an *erasure* -- a bit nothing has decided -- and
-        not a decision for zero, which is why the field below is not the
-        syndrome alone: sending the zero word through an erasure channel
-        would otherwise satisfy every check at the first iteration.
+        Exactly zero is an *erasure*, not a decision for zero, which is why
+        the field below is not the syndrome alone: the zero word through an
+        erasure channel would otherwise satisfy every check at the first
+        iteration.
     iterations : int
         Iterations run, including the one that produced ``bits``.
     decoded : bool
@@ -167,10 +163,10 @@ def decode(
 ) -> Decoding:
     """Iterative decoding from channel log-likelihood ratios.
 
-    Messages in both directions are clipped to ``+-LLR_CAP`` before the
-    check update, so ``tanh`` never saturates and a certain bit stays a
-    finite number; the posterior differs from the unclipped one by less than
-    ``exp(-LLR_CAP)``, inside every tolerance the suite states.
+    Messages in both directions are clipped to ``+-LLR_CAP`` before the check
+    update, so ``tanh`` never saturates; the posterior differs from the
+    unclipped one by less than ``exp(-LLR_CAP)``, inside every tolerance the
+    suite states.
 
     Parameters
     ----------
@@ -187,10 +183,9 @@ def decode(
     tolerance : float | None
         Also stop once no check-to-variable message moved by more than
         this; ``0.0`` stops at an exact fixed point, which the erasure
-        channel reaches. ``None``, the default, never stops on the
-        residual, so a run is a fixed number of iterations unless the
-        syndrome stops it. With ``early_stop`` off a tolerance is how a
-        fixed point is compared to the general implementation's.
+        channel reaches. ``None``, the default, never stops on the residual.
+        With ``early_stop`` off a tolerance is how a fixed point is compared
+        to the general implementation's.
 
     Raises
     ------
@@ -268,10 +263,11 @@ class ExactDecoding:
 def enumerate_codewords(code: ParityCheck) -> np.ndarray:
     """Every codeword, as a ``(2 ** k, n_bits)`` ``uint8`` array.
 
-    The words are the span of :func:`snakes_and_ladders.sim.ldpc.generator_matrix`,
-    and every one is checked against ``H c = 0`` here, so the set is the
-    code by definition and not by trust in the elimination. A (3,6) code at
-    ``n = 24`` has ``k >= 14``: ``16,384`` words.
+    The words are the span of
+    :func:`snakes_and_ladders.sim.ldpc.generator_matrix`, each checked against
+    ``H c = 0`` here, so the set is the code by definition rather than by
+    trust in the elimination. A (3,6) code at ``n = 24`` has ``k >= 14``:
+    ``16,384`` words.
 
     Raises
     ------

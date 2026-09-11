@@ -1,12 +1,11 @@
 """The phylogenetic environment: its rewards, its caching, and its boundaries.
 
-Two things are worth asserting here that neither `snakes_and_ladders.learn` nor
-`snakes_and_ladders.search.infer` can assert for itself. That the environment's reward is
-a difference of the log-likelihood it names -- both reward models, each
-against the scorer it claims to call -- and that the cheap model is cheap for
-the stated reason rather than by accident: it memoizes on a key that
-recognizes the same topology however it is spelled, and it evaluates a closed
-form rather than an optimization.
+Two things neither `snakes_and_ladders.learn` nor
+`snakes_and_ladders.search.infer` can assert for itself: that the environment's
+reward is a difference of the log-likelihood it names, both reward models each
+against the scorer it claims to call; and that the cheap model is cheap for the
+stated reason, memoizing on a key that recognizes the same topology however it
+is spelled and evaluating a closed form rather than an optimization.
 """
 
 from __future__ import annotations
@@ -164,9 +163,8 @@ def test_a_non_positive_branch_length_is_rejected(branch_length: float) -> None:
 
 @pytest.mark.oracle
 def test_the_known_score_is_the_likelihood_at_a_fixed_branch_length() -> None:
-    # Against a direct call to the pruning recursion, built independently
-    # here: the environment is a wrapper, and this is the claim that it wraps
-    # what it says it does.
+    # Against a direct call to the pruning recursion, built independently here:
+    # the environment is a wrapper, and this says it wraps what it claims to.
     environment, params, alignment = _environment(RewardModel.KNOWN)
     for topology in enumerate_topologies(sorted(alignment)):
         expected = log_likelihood(
@@ -191,10 +189,9 @@ def test_the_fitted_score_is_the_maximized_likelihood() -> None:
 
 @pytest.mark.mathematical
 def test_the_fitted_score_is_never_below_the_known_one() -> None:
-    # The known surface fixes the branch lengths the fitted one optimizes, so
-    # it can only do worse. This is the sense in which the cheap reward is a
-    # different surface rather than a noisy estimate of the same one, and it
-    # holds topology by topology.
+    # The known surface fixes the branch lengths the fitted one optimizes, so it
+    # can only do worse, topology by topology: the cheap reward is a different
+    # surface rather than a noisy estimate of the same one.
     _, params, alignment = _environment()
     known, fitted = (
         TopologyEnvironment(
@@ -236,9 +233,8 @@ def test_an_episode_return_telescopes_to_its_total_improvement() -> None:
 @pytest.mark.structural
 def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
     # One feature, so the policy is a Boltzmann distribution over moves whose
-    # single weight is an inverse temperature. This is the claim that makes
-    # the greedy searcher its zero-temperature limit, so it is pinned rather
-    # than left to the docstring.
+    # single weight is an inverse temperature --- the claim that makes the
+    # greedy searcher its zero-temperature limit.
     environment, _, alignment = _environment()
     state = next(iter(enumerate_topologies(sorted(alignment))))
     actions = environment.actions(state)
@@ -255,10 +251,9 @@ def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
 
 @pytest.mark.mathematical
 def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
-    # The environment exists to be driven by a policy, not only by the
-    # baseline; this is the path `snakes_and_ladders.learn.rollout.rollout` takes through
-    # it. At a large positive weight the policy is effectively greedy, so the
-    # two agree -- the same zero-temperature limit checked on the Potts
+    # The path `snakes_and_ladders.learn.rollout.rollout` takes through the
+    # environment. At a large positive weight the policy is effectively greedy,
+    # so the two agree -- the zero-temperature limit checked on the Potts
     # landscape, now on trees.
     environment, _, alignment = _environment()
     start = next(iter(enumerate_topologies(sorted(alignment))))
@@ -281,10 +276,9 @@ def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
 @pytest.mark.structural
 def test_a_topology_is_scored_once_however_it_is_spelled() -> None:
     # `leaf_bipartitions` is rooting- and child-order-independent, so a tree
-    # reached by two different move sequences costs one evaluation. Without
-    # this the cheap reward is not cheap: `is_terminal` alone scores the whole
-    # neighbourhood, and an SPR neighbourhood overlaps its predecessor
-    # heavily.
+    # reached by two move sequences costs one evaluation. Without it the cheap
+    # reward is not cheap: `is_terminal` alone scores the whole neighbourhood,
+    # and an SPR neighbourhood overlaps its predecessor heavily.
     environment, _, alignment = _environment()
     topology = next(iter(enumerate_topologies(sorted(alignment))))
     first = environment.score(topology)
@@ -324,11 +318,10 @@ def test_a_terminal_state_is_one_no_move_improves() -> None:
 
 @pytest.mark.oracle
 def test_greedy_search_reaches_the_enumerated_optimum() -> None:
-    # The exhaustive oracle, on the surface the agent actually sees. Measured:
-    # hill climbing reaches it from all 15 starts here and recovers the
-    # generating topology, which is the same saturation issue #128 found on
-    # the 6-taxon fitted surface -- so this fixture validates the environment,
-    # not any policy's advantage over the baseline.
+    # The exhaustive oracle, on the surface the agent sees. Hill climbing
+    # reaches it from all 15 starts and recovers the generating topology, the
+    # saturation issue #128 found on the 6-taxon fitted surface, so this fixture
+    # validates the environment and no policy's advantage over the baseline.
     environment, params, alignment = _environment()
     topologies = list(enumerate_topologies(sorted(alignment)))
     best = max(environment.score(topology) for topology in topologies)
@@ -362,9 +355,9 @@ def test_reset_is_reproducible_from_its_seed() -> None:
 
 @pytest.mark.edge_case
 def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
-    # A general model at known parameters is a Q and a pi, not a branch
-    # length alone. Refusing is better than silently scoring GTR as if it
-    # were Jukes-Cantor, which is what the environment did before #328.
+    # A general model at known parameters is a Q and a pi, not a branch length
+    # alone. Refused rather than silently scored as Jukes-Cantor, which is what
+    # the environment did before #328.
     params = _params()
     alignment = _alignment(params)
     with pytest.raises(ValueError, match="under gtr needs a rate_matrix"):
@@ -435,10 +428,10 @@ def test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length() -> N
 
 @pytest.mark.oracle
 def test_the_general_q_path_reduces_to_jukes_cantor_at_its_rate_matrix() -> None:
-    # The reduction `search/CLAUDE.md` asks of every general construction:
-    # with Jukes-Cantor's own Q and uniform pi, the matrix-exponential path
-    # must reproduce the closed-form path, topology by topology. The two
-    # share no transition-probability code.
+    # The reduction `search/CLAUDE.md` asks of every general construction: with
+    # Jukes-Cantor's own Q and uniform pi, the matrix-exponential path must
+    # reproduce the closed-form path, topology by topology, sharing no
+    # transition-probability code.
     environment, params, alignment = _environment(RewardModel.KNOWN)
     general = TopologyEnvironment(
         alignment,
@@ -547,11 +540,10 @@ def test_the_support_columns_are_the_pattern_support_of_the_split_broken_and_mad
 
 @pytest.mark.oracle
 def test_the_subtree_columns_are_the_sizes_of_the_exchanged_subtrees() -> None:
-    # Against `branch_splits`: each exchanged set is the leaf set below a
-    # branch of both topologies, the two are disjoint, and swapping them in
-    # the broken split yields the made split -- which is what "the subtrees
-    # an NNI move exchanges" means. The four blocks around the edge
-    # partition the leaves.
+    # Against `branch_splits`: each exchanged set is the leaf set below a branch
+    # of both topologies, the two are disjoint, and swapping them in the broken
+    # split yields the made split. The four blocks around the edge partition the
+    # leaves.
     environment, _, alignment = _environment(features=FeatureSet.FULL)
     leaves = frozenset(alignment)
     for state in enumerate_topologies(sorted(alignment)):

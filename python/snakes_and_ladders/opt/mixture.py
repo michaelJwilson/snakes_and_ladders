@@ -1,34 +1,29 @@
 """A Gaussian mixture: the reference instance whose start reads the data.
 
-The third instance of ``Objective`` beside the Potts chain and the HMM, and
-the one that exists to test two abstractions at once (issue #262); the
-problem is stated in ``sec:mixture``.
+The third instance of ``Objective`` beside the Potts chain and the HMM,
+testing two abstractions at once (issue #262); the problem is stated in
+``sec:mixture``.
 
 **It is the emission seam without the Markov chain.** Its M step for the
 components *is*
 :meth:`snakes_and_ladders.emissions.GaussianEmission.reestimate`, called with
-responsibilities where an HMM passes state posteriors. Nothing is
-reimplemented here, which is the evidence that the seam extracted from an HMM
-was not shaped by one.
+responsibilities where an HMM passes state posteriors --- the evidence that
+the seam extracted from an HMM was not shaped by one.
 
 **And it is the model a data-dependent initializer was waiting for.** Issue
-#251 built the ``Initializer`` protocol and recorded that it had nothing to
-initialize, since there was no mixture in the repository. :class:`KMeansPlusPlus`
-is that initializer, and it lives here rather than in
+#251 built the ``Initializer`` protocol with nothing to initialize.
+:class:`KMeansPlusPlus` lives here rather than in
 :mod:`snakes_and_ladders.opt.initialize` for the reason #251 gave: a strategy
-that reads the observations is specific to a model, and it belongs beside the
-objective it seeds. It refuses an objective it does not know rather than
-guessing what the parameter vector means.
+that reads the observations is specific to a model. It refuses an objective it
+does not know rather than guessing what the parameter vector means.
 
-**The likelihood is unbounded, exactly as the Gaussian HMM's is.** Put a
-component's mean on a single observation and let its scale go to zero and the
-density there diverges. The floor derived in
-:func:`snakes_and_ladders.emissions.pooled_variance_floor` transfers unchanged,
-and reaching it is a refusal rather than a clamp.
+**The likelihood is unbounded, exactly as the Gaussian HMM's is.** The floor
+derived in :func:`snakes_and_ladders.emissions.pooled_variance_floor`
+transfers unchanged, and reaching it is a refusal rather than a clamp.
 
 Ground truth and data generation live in
-:mod:`snakes_and_ladders.sim.mixture`; this module holds only the fitting
-objective, its independent EM oracle, and the seeding a start needs.
+:mod:`snakes_and_ladders.sim.mixture`; this module holds the fitting
+objective, its EM oracle, and the seeding a start needs.
 """
 
 from __future__ import annotations
@@ -126,12 +121,11 @@ class GaussianMixtureObjective:
     def initial(self) -> torch.Tensor:
         """Uniform weights, means at quantiles of the data, pooled scales.
 
-        The same construction the Gaussian HMM uses, and for the same two
-        reasons: equal means leave the components exchangeable and the
-        gradient in that block exactly zero, and a mean far from every
-        observation contributes a density that underflows, so the component
-        is invisible to the E step and the fit silently becomes one with
-        fewer components.
+        The Gaussian HMM's construction, for its two reasons: equal means
+        leave the components exchangeable and the gradient in that block
+        exactly zero, and a mean far from every observation contributes a
+        density that underflows, so the fit silently becomes one with fewer
+        components.
         """
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
         quantiles = (
@@ -145,8 +139,7 @@ class GaussianMixtureObjective:
         """A start whose component means are ``centres``.
 
         The seam an initializer that reads the data needs: it supplies
-        locations, and the objective — which alone knows what its parameter
-        vector means — places them.
+        locations, and the objective places them.
 
         Parameters
         ----------
@@ -189,10 +182,10 @@ class GaussianMixtureObjective:
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The unconstrained vector whose :meth:`constrain` is ``named``.
 
-        The inverse of the constraint map, keyed exactly as :meth:`constrain`
-        returns, so a fit produced by expectation-maximization — which works
-        in the mixture's own parameters and never builds a ``theta`` — can be
-        given an interval at the point it reached (issue #268).
+        The inverse of the constraint map, keyed as :meth:`constrain`
+        returns, so a fit produced by expectation-maximization — which never
+        builds a ``theta`` — can be given an interval at the point it reached
+        (issue #268).
 
         Parameters
         ----------
@@ -254,10 +247,10 @@ def mixture_log_likelihood(
     log_weight : torch.Tensor
         Log mixing weights, shape ``(n_components,)``.
     components : EmissionFamily
-        The component densities. Any family, not only a Gaussian one: the
-        mixture asks its components for a log-density and for nothing else,
-        which is what lets :mod:`snakes_and_ladders.opt.emission_mixture` fit
-        a mixture of count emissions through this function unchanged.
+        The component densities. Any family: the mixture asks its components
+        for a log-density and nothing else, which lets
+        :mod:`snakes_and_ladders.opt.emission_mixture` fit a mixture of count
+        emissions through this function unchanged.
 
     Returns
     -------
@@ -320,10 +313,9 @@ def expectation_maximization(
     """Fit a mixture by EM, with no autodiff involved.
 
     The independent oracle, on the footing ``baum_welch`` occupies for the
-    HMM: it shares no optimizer, no parameterization and no constraint map
-    with ``fit`` — only the model. **And it shares its component M step with
-    the HMM's**, since that step is the emission family's rather than this
-    module's.
+    HMM: no optimizer, parameterization or constraint map shared with ``fit``,
+    only the model. **And its component M step is the HMM's**, since that step
+    is the emission family's.
 
     Parameters
     ----------
@@ -397,11 +389,9 @@ def optimal_clustering_cost(observations: np.ndarray, n_centres: int) -> float:
 
     **Exact rather than approximate, and only in one dimension.** An optimal
     1-D k-means clustering partitions the *sorted* observations into
-    contiguous runs — a point cannot belong to a cluster whose centre is
-    further from it than another cluster's — so the search is over ``k - 1``
-    cut positions and a dynamic program solves it in ``O(n**2 k)``. In two or
-    more dimensions no such argument holds and the problem is NP-hard, which
-    is why the guarantee this referees is worth having at all.
+    contiguous runs, so the search is over ``k - 1`` cut positions and a
+    dynamic program solves it in ``O(n**2 k)``. In two or more dimensions no
+    such argument holds and the problem is NP-hard.
 
     Parameters
     ----------
@@ -451,12 +441,11 @@ def kmeans_plus_plus(
 ) -> np.ndarray:
     """Seed ``n_centres`` centres by D-squared sampling (Arthur & Vassilvitskii, 2007; ``eq:kmeanspp``).
 
-    The first centre is drawn uniformly from the observations; each subsequent
-    one is drawn with probability proportional to its squared distance from
-    the nearest centre already chosen. The expected cost of the result is
-    within ``8 (ln k + 2)`` of optimal *before any refinement*, which is the
-    published bound a test here checks against rather than against "it looks
-    better".
+    The first centre is drawn uniformly from the observations; each
+    subsequent one with probability proportional to its squared distance from
+    the nearest centre already chosen. The expected cost is within
+    ``8 (ln k + 2)`` of optimal *before any refinement* --- the published
+    bound a test here checks against.
 
     Parameters
     ----------
@@ -503,9 +492,8 @@ def uniform_seeds(
 ) -> np.ndarray:
     """Seed by drawing distinct observations uniformly.
 
-    The baseline k-means++ is measured against. Kept beside it rather than
-    written inside a test, since a comparison whose control lives only in the
-    test that wins it is not a comparison.
+    The baseline k-means++ is measured against, kept beside it rather than
+    inside the test that wins the comparison.
 
     Parameters
     ----------
@@ -556,14 +544,11 @@ def seeding_guarantee(n_centres: int) -> float:
 class KMeansPlusPlus:
     """Starting points seeded from the data by k-means++.
 
-    The initializer #251 could not write, because nothing in the repository
-    read its observations. It satisfies
-    :class:`snakes_and_ladders.opt.initialize.Initializer` on the nose --- it
-    takes an ``Objective`` --- and **refuses** an objective it cannot seed,
-    because a strategy that reads the data is specific to a model and
-    guessing what an unknown parameter vector means is how an initializer
-    silently returns nonsense. The protocol needed no change; the refusal is
-    where the model-specificity lives.
+    The initializer #251 could not write, because nothing then read its
+    observations. It satisfies
+    :class:`snakes_and_ladders.opt.initialize.Initializer` unchanged and
+    **refuses** an objective it cannot seed: guessing what an unknown
+    parameter vector means is how an initializer silently returns nonsense.
 
     Parameters
     ----------
@@ -628,13 +613,12 @@ def emission_mixture_plus_plus(
     """``Emission_Mixture++``: k-means++ with a family's negative log-density as the distance (issue #306).
 
     :func:`kmeans_plus_plus` draws each centre proportionally to squared
-    Euclidean distance from the nearest centre chosen so far, which assumes a
-    unit-normal emission. Here the distance is whatever the family says it
-    is: ``negative_log_density(seed, observations)`` scores every observation
-    under a family seeded at ``seed``, and the next seed is drawn
-    proportionally to the smallest such score across the seeds so far. With
-    ``0.5 * ((x - seed) / scale) ** 2`` it is k-means++ exactly, which is the
-    reduction the test pins.
+    Euclidean distance, which assumes a unit-normal emission. Here the
+    distance is the family's: ``negative_log_density(seed, observations)``
+    scores every observation under a family seeded at ``seed``, and the next
+    seed is drawn proportionally to the smallest such score so far. With
+    ``0.5 * ((x - seed) / scale) ** 2`` it is k-means++ exactly, the reduction
+    the test pins.
 
     Parameters
     ----------

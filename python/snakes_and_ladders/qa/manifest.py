@@ -1,27 +1,25 @@
 """Which QA figures exist, and what renders each one.
 
-This is the single statement of that. It used to be the sequence of thirteen
-invocations in ``infra/build_documents.sh``, which nothing connected to
-the document: when the document stopped citing eleven of the figures, the
-build kept regenerating all thirteen and no check noticed.
+The single statement of that. It used to be the thirteen invocations in
+``infra/build_documents.sh``, which nothing connected to the document: when the
+document stopped citing eleven of the figures, the build kept regenerating all
+thirteen and no check noticed.
 
-Two consumers read this. Per pull request, ``snakes_and_ladders.qa.build`` regenerates only
-what the documents under ``docs/tex/`` cite, so the cost tracks them rather than
-drifting from it. At release, ``infra/release.sh`` regenerates every entry, so
-a figure the document has stopped citing still cannot rot unnoticed -- the
-check moves rather than disappearing.
+Two consumers read this. Per pull request, ``snakes_and_ladders.qa.build``
+regenerates only what the documents under ``docs/tex/`` cite, so the cost
+tracks them. At release, ``infra/release.sh`` regenerates every entry, so a
+figure the document has stopped citing cannot rot unnoticed.
 
-Since issue #492 the two sets coincide: every entry here is cited by one of
-the documents, and a guard fails one that is not
-(``tests/regression/qa/test_qa_build.py``). The selection is kept because it
-is the mechanism rather than the current count --- a document that drops a
-citation narrows it again the same day --- and because the release gate is
-what the guarantee rests on either way. Adding an entry means citing it;
-``DEV.md`` states the path from the request to the citation.
+Since issue #492 the two sets coincide: every entry here is cited by one of the
+documents, and a guard fails one that is not
+(``tests/regression/qa/test_qa_build.py``). The selection is kept as the
+mechanism rather than the current count --- a document that drops a citation
+narrows it again the same day. Adding an entry means citing it; ``DEV.md``
+states the path from the request to the citation.
 
 The fixtures are named here rather than in the build script because which
-alignment a figure was rendered from is what its caption reports, and that is
-the application's knowledge, not the build's (``qa/CLAUDE.md``).
+alignment a figure was rendered from is what its caption reports, which is the
+application's knowledge and not the build's (``qa/CLAUDE.md``).
 """
 
 from __future__ import annotations
@@ -34,13 +32,12 @@ from pathlib import Path
 FIXTURES = "tests/regression/fixtures"
 
 #: The most a figure the documents cite may take to render, in seconds on the
-#: reference host (4 cores). A documents build is the sum of its cited
-#: figures --- every one of them since issue #490 removed the stamps that
-#: skipped some --- and one figure over this cap is a third of the 300 s
-#: budget `DEV.md` gives the whole validation (issue #372). "Cited by
-#: nothing" was once the other way out, and issue #492 closed it: every
-#: figure here is cited, so a figure over the cap is waived below with the
-#: ticket that will bring it under, or it is cut.
+#: reference host (4 cores). A documents build is the sum of its cited figures
+#: --- every one since issue #490 removed the stamps that skipped some --- and
+#: one figure over this cap is a third of the 300 s budget `DEV.md` gives the
+#: whole validation (issue #372). "Cited by nothing" was the other way out
+#: until issue #492 closed it, so a figure over the cap is waived below with
+#: the ticket that will bring it under, or it is cut.
 CITED_RENDER_CAP = 30.0
 
 #: Cited figures over the cap, each with the ticket that owns cutting it.
@@ -68,13 +65,11 @@ class FigureSpec:
     ----------
     stem : str
         Output basename, without extension. A document under ``docs/tex/``
-        refers to
-        the figure by this name, and the script writes ``<stem>.pdf`` (or
-        ``.tex``) and ``<stem>_caption.txt``.
+        refers to the figure by this name, and the script writes ``<stem>.pdf``
+        (or ``.tex``) and ``<stem>_caption.txt``.
     module : str
         Module run with ``python -m``. Each figure renders in its own process,
-        as it did when a shell script invoked them, so no figure inherits
-        matplotlib state from the one before it.
+        so none inherits matplotlib state from the one before it.
     arguments : tuple[str, ...]
         Everything but ``--output-dir``, which the runner supplies. Paths are
         relative to the repository root.
@@ -195,12 +190,11 @@ FIGURES: tuple[FigureSpec, ...] = (
     # Issue #498 asked whether these three could sweep the 5-taxon fixture's
     # 15 unrooted topologies instead of the 6-taxon fixture's 105. One can.
     #
-    # `search_trajectory` stays at 6 taxa: its panel (a) is the climb, and at
-    # 5 taxa there is none -- hill climbing starts at or beside the optimum,
-    # both move sets terminate on the first evaluation, and the panel is a
-    # single marker at zero fits while the caption still reports which move
-    # set reached the optimum in fewer. The sweep is 61% of its 41.7 s, so
-    # the saving was real and the figure was not.
+    # `search_trajectory` stays at 6 taxa: its panel (a) is the climb, and at 5
+    # taxa there is none -- hill climbing starts at or beside the optimum, both
+    # move sets terminate on the first evaluation, and the panel is a single
+    # marker at zero fits. The sweep is 61% of its 41.7 s, so the saving was
+    # real and the figure was not.
     FigureSpec(
         "search_trajectory",
         "snakes_and_ladders.qa.search_trajectory",
@@ -208,11 +202,11 @@ FIGURES: tuple[FigureSpec, ...] = (
         seconds=39.6,
     ),
     # `search_topologies` moves: it draws two trees and never the sweep, which
-    # only picks the runner-up, so exhaustiveness is the whole of what it
-    # needs from the enumeration and 15 topologies are exhaustive. Every claim
-    # its caption makes survives -- the search still recovers the generating
-    # topology, the runner-up still differs by one split, and that split is
-    # still only supportable by collapsing an internal edge to 0.000.
+    # only picks the runner-up, so exhaustiveness is all it needs from the
+    # enumeration and 15 topologies are exhaustive. Every claim its caption
+    # makes survives -- the search recovers the generating topology, the
+    # runner-up differs by one split, and that split is supportable only by
+    # collapsing an internal edge to 0.000.
     FigureSpec(
         "search_topologies",
         "snakes_and_ladders.qa.search_topologies",
@@ -220,9 +214,8 @@ FIGURES: tuple[FigureSpec, ...] = (
         seconds=7.7,
     ),
     # `rl_reward_surface` stays at 6 taxa: its panel (a) *is* a distribution
-    # over the topology space, a correlation between two scoring surfaces at
-    # every topology, and 15 points state it less precisely than 105.
-    # `tree_search/ci.yaml` already reserves the 6-taxon instance for it, the
+    # over the topology space, and 15 points state it less precisely than 105.
+    # `tree_search/ci.yaml` reserves the 6-taxon instance for it, the
     # resolution being what the release gate pays for.
     FigureSpec(
         "rl_reward_surface",
