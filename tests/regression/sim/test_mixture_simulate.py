@@ -17,7 +17,11 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
+from snakes_and_ladders.sim.mixture import (
+    BinInstance,
+    MixtureParams,
+    simulate_mixture,
+)
 
 WEIGHTS = np.array([0.3, 0.7])
 MEAN = np.array([-3.0, 3.0])
@@ -117,3 +121,56 @@ def test_weights_that_do_not_describe_a_mixture_are_refused() -> None:
     # undefined rather than merely uncertain.
     with pytest.raises(ValueError, match="weight must be positive"):
         MixtureParams(np.array([0.0, 1.0]), components, 10, 1, 1e-12)
+
+
+@pytest.mark.simulated_truth
+def test_a_multi_channel_component_draws_every_channel_of_one_observation_together() -> (
+    None
+):
+    # A component may emit several channels, independent given the label
+    # (issue #548). The label is drawn once and the row indexed whole, so the
+    # channels of one observation come from one component -- which is what a
+    # per-channel mean recovers.
+    params = MixtureParams(
+        weights=WEIGHTS,
+        components=GaussianEmission(
+            np.array([[-3.0, 5.0], [3.0, -5.0]]),
+            np.array([[1.0, 1.0], [1.5, 1.5]]),
+            FLOOR,
+        ),
+        n_samples=20000,
+        seed=20260911,
+        tolerance=0.05,
+    )
+    dataset = simulate_mixture(params)
+
+    assert dataset.observations.shape == (20000, 2)
+    assert params.n_channels == 2
+    for component in range(params.n_components):
+        drawn = dataset.observations[dataset.labels == component]
+        # Standard error of a mean over ~6,000 or ~14,000 draws at these
+        # scales is under 0.02; 0.05 is the fixture's declared tolerance.
+        assert_allclose(
+            drawn.mean(axis=0),
+            params.components.mean.numpy()[component],
+            atol=params.tolerance,
+        )
+
+
+@pytest.mark.edge_case
+def test_a_declared_instance_is_found_by_its_marker_and_refused_without_one() -> None:
+    params = MixtureParams(
+        WEIGHTS,
+        GaussianEmission(MEAN, SCALE, FLOOR),
+        1000,
+        1,
+        1e-12,
+        bins=(BinInstance(factor=10, marker="ci"),),
+    )
+
+    assert params.at("ci").n_samples == 100
+    assert params.at("ci").bins == ()
+    with pytest.raises(KeyError, match="no instance marked 'key'"):
+        params.at("key")
+    with pytest.raises(ValueError, match="a bin holds at least one draw"):
+        BinInstance(factor=0, marker="ci")
