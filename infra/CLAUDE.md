@@ -44,6 +44,17 @@ commit and its budget is an anecdote; the Markdown under `docs/experiments/`
 is the ledger, a run store is its source, and the index is generated from
 the files, never edited.
 
+A recorded number is compared to a recomputation of it at the precision the
+number has, never bitwise. A count, an enumeration and a rate over seeded
+draws reproduce exactly and are held to that; a quantity an iterative
+optimiser produced does not, because the ordering of its floating-point
+reduction belongs to the host, and holding it to exact equality fails a
+change that changed nothing --- whereupon the reflex is to rewrite the
+record, which accepts whatever ran that day. The tolerance is therefore
+stated beside the number, derived from a measurement of the spread and not
+chosen, relative and keyed to the lowest precision in the comparison (root
+`CLAUDE.md`), and tight enough that a change worth catching still fails.
+
 A framework is adopted the way a backend is: it fronts a hot path once a
 measurement says it beats the implementation there, and that implementation
 moves to `python/snakes_and_ladders/sandbox/` and referees it from there

@@ -27,6 +27,8 @@ from snakes_and_ladders.likelihood.message_passing import sum_product
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.likelihood.spatio_sequential import enumerate_spatio_sequential
 from snakes_and_ladders.opt.schedule import Constant, Exponential
+from snakes_and_ladders.search import gibbs
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.gibbs import (
     _Indexed,
     anneal_factor_graph,
@@ -122,6 +124,85 @@ def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
         state_b[:] = state_a
 
     assert agreed >= 1980, agreed
+
+
+def _lattice_graph(extent: int) -> FactorGraph:
+    lattice = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
+    return from_potts(lattice, np.array([0.3, -0.7, 0.15]))
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("extent", [16, 32])
+@pytest.mark.parametrize("seed", range(4))
+def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
+    extent: int, seed: int
+) -> None:
+    # What lets the kernels be the default (#561, #563): the same uniforms in
+    # the same order give the same states, exactly, not to a tolerance. The
+    # sweep kernel gathers the conditional from one array of tables and NumPy
+    # from a slice per factor, in the same order, so the sums are identical;
+    # the exponential is where the two could part, and the kernel declines any
+    # site whose draw comes within the last place of a cumulative boundary.
+    # The density kernel reads the same array and takes no exponential, so
+    # order is all it needs: it sums factors left to right in graph order, as
+    # the dictionary oracle does. Realized: 8 of 8 runs agree on every state
+    # and every log-density, 15,360 draws at 16x16 and 61,440 at 32x32, and
+    # every compiled density equals the dictionary one to the last bit.
+    graph = _lattice_graph(extent)
+
+    numpy_chain = sample_factor_graph(
+        graph, np.random.default_rng(seed), 15, backend=Backend.PYTHON
+    )
+    compiled = sample_factor_graph(
+        graph, np.random.default_rng(seed), 15, backend=Backend.NUMBA
+    )
+
+    assert np.array_equal(numpy_chain.states, compiled.states)
+    assert np.array_equal(numpy_chain.log_densities, compiled.log_densities)
+    oracle = [
+        graph.log_density(dict(zip(compiled.variables, map(int, state), strict=True)))
+        for state in compiled.states
+    ]
+    assert np.array_equal(compiled.log_densities, np.array(oracle))
+
+
+@pytest.mark.edge_case
+def test_the_log_density_has_no_rust_backend() -> None:
+    graph = _lattice_graph(4)
+    indexed = _Indexed(graph)
+
+    with pytest.raises(ValueError, match="no rust backend"):
+        indexed.log_density(np.zeros(len(indexed.names), dtype=np.int64), Backend.RUST)
+
+
+@pytest.mark.structural
+def test_a_site_the_kernel_declines_is_decided_by_numpy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The handing back is what makes the pin exact rather than probable, and
+    # no realistic draw reaches it -- so it is driven here instead, by a
+    # guard wide enough that every site falls to NumPy. The chain must be the
+    # same chain, which is a statement about resuming at the right position
+    # with the right draw, not about arithmetic.
+    graph = _lattice_graph(8)
+    monkeypatch.setattr(gibbs, "_GUARD", 1e12)
+
+    fallen_back = sample_factor_graph(
+        graph, np.random.default_rng(11), 10, backend=Backend.NUMBA
+    )
+
+    expected = sample_factor_graph(
+        graph, np.random.default_rng(11), 10, backend=Backend.PYTHON
+    )
+    assert np.array_equal(fallen_back.states, expected.states)
+
+
+@pytest.mark.edge_case
+def test_the_sweep_has_no_rust_backend() -> None:
+    graph = _lattice_graph(4)
+
+    with pytest.raises(ValueError, match="no rust backend"):
+        sample_factor_graph(graph, np.random.default_rng(0), 2, backend=Backend.RUST)
 
 
 def _chain() -> tuple[FactorGraph, list[tuple[int, ...]], np.ndarray]:
