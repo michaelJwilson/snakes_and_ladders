@@ -461,6 +461,55 @@ def _reduced_row_echelon(matrix: np.ndarray) -> tuple[np.ndarray, list[int]]:
     return reduced, pivots
 
 
+def gf2_rank(matrix: np.ndarray) -> int:
+    """The rank of a 0/1 array over GF(2).
+
+    The pivot count of the same elimination :func:`null_space` runs, so the
+    two never disagree about a matrix's rank. A vector ``r`` lies in the row
+    space of ``H`` exactly when ``gf2_rank([H; r]) == gf2_rank(H)``, which is
+    how :meth:`snakes_and_ladders.sim.css.CssCode.is_stabilizer` decides it.
+
+    Parameters
+    ----------
+    matrix : np.ndarray
+        A 0/1 array; it is not modified.
+    """
+    return len(_reduced_row_echelon(matrix)[1])
+
+
+def gf2_inverse(matrix: np.ndarray) -> np.ndarray:
+    """The inverse of a square 0/1 array over GF(2).
+
+    Gauss--Jordan on ``[matrix | I]``: the reduction reaches a pivot in every
+    column exactly when ``matrix`` is invertible, and the right half is then
+    the inverse.
+
+    Parameters
+    ----------
+    matrix : np.ndarray
+        A square 0/1 array; it is not modified.
+
+    Raises
+    ------
+    ValueError
+        If the array is not square, or is singular over GF(2) -- which is a
+        statement about the input and not a numerical near-miss, there being
+        no such thing in a field of two elements.
+    """
+    square = np.asarray(matrix, dtype=np.uint8)
+    if square.ndim != 2 or square.shape[0] != square.shape[1]:
+        msg = f"an inverse needs a square matrix, got shape {square.shape}"
+        raise ValueError(msg)
+    size = square.shape[0]
+    reduced, pivots = _reduced_row_echelon(
+        np.hstack([square, np.eye(size, dtype=np.uint8)])
+    )
+    if pivots != list(range(size)):
+        msg = f"the {size} x {size} matrix is singular over GF(2)"
+        raise ValueError(msg)
+    return np.asarray(reduced[:, size:])
+
+
 def null_space(matrix: np.ndarray) -> np.ndarray:
     """A basis of ``{x : matrix x = 0}`` over GF(2), as rows.
 
