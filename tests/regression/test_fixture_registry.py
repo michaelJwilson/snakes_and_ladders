@@ -34,7 +34,9 @@ import json
 import re
 import shutil
 import sys
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -45,6 +47,7 @@ from snakes_and_ladders.sim.fixtures import (
     FIXTURES_DIR,
     LOADERS,
     ORACLES,
+    Baseline,
     StaleBaselineError,
     baseline,
     baseline_path,
@@ -313,6 +316,153 @@ def test_the_same_baseline_computed_twice_is_the_same_record() -> None:
 
     assert baseline_script.differences(first, second) == []
     assert baseline_script.differences(first, read_baseline(first.path)) == []
+
+
+#: What the GitHub runner computed for `tree_search/ci`'s
+#: `maximized_log_likelihood` where the committed record is what this
+#: repository's 4-core host computes: the 45 fits of run 34549737349, job
+#: 103109927613, on a pull request that changed only docstrings, comments and
+#: LaTeX. Kept as data because it is the observation the tolerance is derived
+#: from --- a second host's arithmetic, which no single-host run reproduces.
+RUNNER_FITS = (
+    -963.7650335864475,
+    -963.9244927034631,
+    -963.9244927031195,
+    -951.5175416461561,
+    -963.7650335864462,
+    -961.263999074587,
+    -963.9244927031189,
+    -963.9244927037184,
+    -951.5175416455179,
+    -961.2639990750451,
+    -953.4215895855352,
+    -963.9244927033953,
+    -963.9244927032872,
+    -943.4779537057238,
+    -953.4215895854888,
+    -1009.5623583470353,
+    -1009.8274432207423,
+    -1009.8172093168685,
+    -996.7995751190404,
+    -1009.562358347034,
+    -1009.5384934704672,
+    -1009.8274432208141,
+    -1009.8172093168362,
+    -996.7995751177407,
+    -1009.5384934704649,
+    -994.0621025395212,
+    -1009.8131656429082,
+    -1009.8131656429207,
+    -987.2694223590945,
+    -994.0621025393559,
+    -1044.2960556364872,
+    -1044.2960556367857,
+    -1041.1823818576054,
+    -1031.2909204183081,
+    -1044.296055636489,
+    -1043.8788414559262,
+    -1044.2960556364903,
+    -1041.1823818574146,
+    -1031.290920418392,
+    -1043.878841454717,
+    -1021.277786372497,
+    -1043.2139003592315,
+    -1043.2139003601483,
+    -1016.6076660892631,
+    -1019.9514425628881,
+)
+
+#: A relative move the comparison has to catch, measured rather than picked:
+#: loosening the fit's own convergence test from 1e-8 to 1e-7 relative moves
+#: 14 of these 45 values, by 1.434e-11 relative at the widest. A bound that
+#: admitted that would hide a regression instead of admitting noise.
+REAL_CHANGE = 1e-11
+
+
+def _moved(record: Baseline, name: str, **fields: Any) -> Baseline:
+    """``record`` with one measurement's fields replaced.
+
+    Returns
+    -------
+    Baseline
+    """
+    held = dict(record.measurements)
+    held[name] = replace(record.measurement(name), **fields)
+    return replace(record, measurements=held)
+
+
+@pytest.mark.structural
+@pytest.mark.edge_case
+def test_a_fit_is_compared_within_its_declared_tolerance_and_not_bitwise() -> None:
+    # The comparison issue #527 is about, against the observation that raised
+    # it. A recorded maximum-likelihood fit is an iterative optimiser over a
+    # floating-point reduction, so a host whose BLAS orders that reduction
+    # differently reproduces it to a tolerance and not bit for bit: the
+    # runner moved 26 of these 45 values, by 4.365e-15 relative at the
+    # widest. The bound has to admit that and still catch a move three orders
+    # of magnitude above it, or it hides a regression rather than admitting
+    # noise.
+    committed = read_baseline(baseline_path("tree_search", Scale.CI))
+    recorded = committed.values("maximized_log_likelihood")
+    deviation = max(
+        abs(fresh - stored) / abs(stored)
+        for fresh, stored in zip(RUNNER_FITS, recorded, strict=True)
+    )
+    assert sum(a != b for a, b in zip(RUNNER_FITS, recorded, strict=True)) == 26
+    assert deviation == pytest.approx(4.365e-15, rel=1e-3)
+    assert deviation < baseline_script.FIT_RTOL < REAL_CHANGE
+
+    runner = _moved(committed, "maximized_log_likelihood", value=RUNNER_FITS)
+    assert baseline_script.differences(runner, committed) == []
+
+    moved = _moved(
+        committed,
+        "maximized_log_likelihood",
+        value=(recorded[0] * (1.0 + REAL_CHANGE), *recorded[1:]),
+    )
+    found = baseline_script.differences(moved, committed)
+    assert len(found) == 1, found
+    assert "maximized_log_likelihood: 1 of 45 values moved" in found[0], found[0]
+    assert "index 0" in found[0], found[0]
+
+
+@pytest.mark.structural
+@pytest.mark.edge_case
+def test_a_value_that_declares_no_tolerance_is_still_compared_exactly() -> None:
+    # The other half of the rule: an enumerated optimum, a ground-state
+    # energy and a rate over seeded rollouts are counted or enumerated, not
+    # fitted, so they reproduce bit for bit and a tolerance on them would
+    # admit a change nothing else catches. One ulp is the smallest move there
+    # is, and it fails.
+    committed = read_baseline(baseline_path("potts_chain", Scale.CI))
+    assert committed.measurement("enumerated_optimum").rtol is None
+
+    one_ulp = float(np.nextafter(committed.value("enumerated_optimum"), 0.0))
+    found = baseline_script.differences(
+        _moved(committed, "enumerated_optimum", value=one_ulp), committed
+    )
+    assert any("enumerated_optimum" in line for line in found), found
+
+
+@pytest.mark.edge_case
+def test_a_record_cannot_loosen_the_tolerance_it_is_checked_at() -> None:
+    # A tolerance is a declaration, and the record is not what gets to relax
+    # the check it is caught by --- the failure #527 names is a record edited
+    # to make a check pass. The comparison takes the stricter of the two
+    # declarations, so the edit reports the moved value *and* the edited
+    # tolerance.
+    original = read_baseline(baseline_path("tree_search", Scale.CI))
+    recorded = original.values("maximized_log_likelihood")
+    loosened = _moved(original, "maximized_log_likelihood", rtol=1e-3)
+    moved = _moved(
+        loosened,
+        "maximized_log_likelihood",
+        value=(recorded[0] * (1.0 + REAL_CHANGE), *recorded[1:]),
+    )
+
+    found = baseline_script.differences(moved, original)
+    assert any("maximized_log_likelihood: 1 of 45 values moved" in x for x in found)
+    assert any("rtol 0.001" in line for line in found), found
 
 
 @pytest.mark.edge_case

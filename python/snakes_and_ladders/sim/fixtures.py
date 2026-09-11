@@ -407,12 +407,26 @@ class Measurement:
         horizon, the sizes the reference was run at. Named here rather than
         left in the computing code, because a rate at a different budget is
         a different number under the same name.
+    rtol : float | None
+        How close a recomputation has to come. ``None`` is exact equality,
+        which is what a count, an enumerated extremum or a rate over seeded
+        rollouts reproduces; a float is the relative tolerance
+        ``abs(fresh - stored) <= rtol * abs(stored)``, for a value an
+        iterative optimiser produced, which a different BLAS ordering moves
+        in the last digits (issue #527). Relative and not absolute for the
+        reason ``likelihood/CLAUDE.md`` gives for devices: a log-likelihood
+        is a sum over sites, so a bound fixed at one problem size does not
+        transfer to another. Declared by the code that computes the value,
+        recorded beside it, and compared like the budget --- two records
+        disagreeing about how closely a number has to be reproduced disagree
+        about what the number is.
     """
 
     algorithm: str
     value: float | tuple[float, ...]
     seed: int | None
     budget: Mapping[str, Any]
+    rtol: float | None
 
 
 @dataclass(frozen=True)
@@ -528,7 +542,7 @@ def _as_measurement(name: str, raw: Mapping[str, Any], path: Path) -> Measuremen
         If the entry is missing a field, which a hand-edited record is the
         usual cause of.
     """
-    missing = {"algorithm", "value", "seed", "budget"} - raw.keys()
+    missing = {"algorithm", "value", "seed", "budget", "rtol"} - raw.keys()
     if missing:
         msg = f"{path}: measurement {name!r} is missing {sorted(missing)}"
         raise ValueError(msg)
@@ -540,6 +554,7 @@ def _as_measurement(name: str, raw: Mapping[str, Any], path: Path) -> Measuremen
         else float(value),
         seed=None if raw["seed"] is None else int(raw["seed"]),
         budget=dict(raw["budget"]),
+        rtol=None if raw["rtol"] is None else float(raw["rtol"]),
     )
 
 
@@ -607,6 +622,7 @@ def write_baseline(record: Baseline) -> None:
                 else measurement.value,
                 "seed": measurement.seed,
                 "budget": dict(measurement.budget),
+                "rtol": measurement.rtol,
             }
             for name, measurement in sorted(record.measurements.items())
         },
