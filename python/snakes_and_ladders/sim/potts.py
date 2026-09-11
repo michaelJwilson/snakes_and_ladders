@@ -417,14 +417,14 @@ def _softmax(values: np.ndarray, axis: int = -1) -> np.ndarray:
 
 # --- a Potts prior whose external field varies per site (issue #413) ---------
 
-#: The lattice constructors a spots fixture may name, so the geometry is a
+#: The lattice constructors a spatio_only fixture may name, so the geometry is a
 #: declared word rather than a loader that only ever builds a square.
 _GEOMETRIES: dict[str, Callable[[Any, BoundaryCondition, float], PottsGraph]] = {
     "square": lattice_graph,
     "triangular": triangular_lattice_graph,
 }
 
-_SPOTS_REQUIRED_FIELDS = frozenset(
+_SPATIO_ONLY_REQUIRED_FIELDS = frozenset(
     {
         "geometry",
         "shape",
@@ -442,7 +442,7 @@ _SPOTS_REQUIRED_FIELDS = frozenset(
 
 
 @dataclass(frozen=True)
-class PottsSpotsParams:
+class SpatioOnlyParams:
     """A Potts prior over class labels whose field is driven by a per-site covariate.
 
     The spatial half of the coupled model of
@@ -493,7 +493,7 @@ class PottsSpotsParams:
     tolerance: float
 
 
-def spots_field(alpha: np.ndarray, sizes: np.ndarray) -> np.ndarray:
+def spatio_only_field(alpha: np.ndarray, sizes: np.ndarray) -> np.ndarray:
     """``alpha[m] * log(size[n] / size_bar)`` as one row per site.
 
     Parameters
@@ -516,7 +516,7 @@ def spots_field(alpha: np.ndarray, sizes: np.ndarray) -> np.ndarray:
 
     Examples
     --------
-    >>> spots_field(np.array([1.0, 0.0]), np.array([1.0, 4.0])).round(4)
+    >>> spatio_only_field(np.array([1.0, 0.0]), np.array([1.0, 4.0])).round(4)
     array([[-0.6931,  0.    ],
            [ 0.6931,  0.    ]])
     """
@@ -527,7 +527,7 @@ def spots_field(alpha: np.ndarray, sizes: np.ndarray) -> np.ndarray:
     return np.asarray(centred[:, np.newaxis] * alpha[np.newaxis, :])
 
 
-def _spots_sizes(path: Path, declared: Any, n_nodes: int) -> np.ndarray:
+def _spatio_only_sizes(path: Path, declared: Any, n_nodes: int) -> np.ndarray:
     """The per-site covariate, declared outright or drawn from a declared law.
 
     Two forms, because the two sizes need different things of the file. At
@@ -536,7 +536,7 @@ def _spots_sizes(path: Path, declared: Any, n_nodes: int) -> np.ndarray:
     sizes are what they imply, as
     :mod:`snakes_and_ladders.sim.count_pairs` states its counts.
 
-    Only ``log_sigma`` is declared for the drawn form: ``spots_field``
+    Only ``log_sigma`` is declared for the drawn form: ``spatio_only_field``
     divides by the geometric mean, so a location parameter would cancel and
     a fixture carrying one would invite a reader to tune a number that
     changes nothing.
@@ -563,7 +563,7 @@ def _spots_sizes(path: Path, declared: Any, n_nodes: int) -> np.ndarray:
     raise ValueError(msg)
 
 
-def load_potts_spots_params(path: Path) -> PottsSpotsParams:
+def load_spatio_only_params(path: Path) -> SpatioOnlyParams:
     """Load and validate a per-site-field Potts fixture yaml.
 
     Parameters
@@ -573,7 +573,7 @@ def load_potts_spots_params(path: Path) -> PottsSpotsParams:
 
     Returns
     -------
-    PottsSpotsParams
+    SpatioOnlyParams
         The parsed, validated instance, its field already built.
 
     Raises
@@ -583,7 +583,7 @@ def load_potts_spots_params(path: Path) -> PottsSpotsParams:
         builds, ``alpha`` is not one entry per class, or a size is not
         positive.
     """
-    raw = load_declared(path, _SPOTS_REQUIRED_FIELDS)
+    raw = load_declared(path, _SPATIO_ONLY_REQUIRED_FIELDS)
 
     geometry = str(raw["geometry"])
     if geometry not in _GEOMETRIES:
@@ -603,13 +603,13 @@ def load_potts_spots_params(path: Path) -> PottsSpotsParams:
         msg = f"{path}: alpha has shape {alpha.shape}, expected ({n_classes},)"
         raise ValueError(msg)
 
-    sizes = _spots_sizes(path, raw["sizes"], graph.n_nodes)
-    return PottsSpotsParams(
+    sizes = _spatio_only_sizes(path, raw["sizes"], graph.n_nodes)
+    return SpatioOnlyParams(
         graph=graph,
         n_classes=n_classes,
         alpha=alpha,
         sizes=sizes,
-        field=spots_field(alpha, sizes),
+        field=spatio_only_field(alpha, sizes),
         seed=int(raw["seed"]),
         n_samples=int(raw["n_samples"]),
         burn_in=int(raw["burn_in"]),
