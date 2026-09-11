@@ -137,6 +137,21 @@ class IndependentCountPair:
             observations[..., TOTAL]
         ) + self._successes.log_density(observations[..., SUCCESSES])
 
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """The pair's divergence under every state: the two channels' sum.
+
+        The channels are independent given the state, so the divergences add
+        exactly as the log-densities do.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        return self._total.bregman_divergence(
+            observations[..., TOTAL]
+        ) + self._successes.bregman_divergence(observations[..., SUCCESSES])
+
     def validate(self, observations: np.ndarray) -> None:
         """Raise unless both channels are valid counts for their own family."""
         observations = np.asarray(observations)

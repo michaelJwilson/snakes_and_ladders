@@ -108,6 +108,11 @@ SEEDING_COST = "component passes / n_components; a gradient counts two"
 #: one seeding each would compare two draws rather than two rules.
 N_SEEDINGS = 200
 
+#: Seedings the exact identity is pinned over. Fewer than
+#: :data:`N_SEEDINGS`, because each is an equality rather than a mean and
+#: twenty already cover every draw the rule makes on this rung.
+N_IDENTICAL_SEEDINGS = 20
+
 METHODS = (
     "random-restart",
     "kmeans++",
@@ -220,11 +225,14 @@ def seed_kmeans_plus_plus(instance: Instance, rng: np.random.Generator) -> Seedi
 def seed_emission_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
     """Candidate 3: the same scheme under the family's own divergence.
 
-    For a Gaussian of common scale the Bregman divergence of the
-    log-partition is the squared Euclidean distance up to that scale, and
-    D-squared sampling normalizes its scores, so this draws from the same
-    distribution as :func:`seed_kmeans_plus_plus` --- the prediction the
-    control exists to check.
+    For a Gaussian of common scale the Bregman divergence of the log-partition
+    is the squared Euclidean distance up to that scale, and D-squared sampling
+    normalizes its scores, so on the one-channel rung this is
+    :func:`seed_kmeans_plus_plus` **draw for draw**, which
+    :func:`test_the_shipped_rule_is_k_means_plus_plus_on_a_gaussian` pins.
+    Where the channels carry different scales it is k-means++ on the channels
+    divided by theirs, which is a different rule and is measured as one
+    (issue #560).
     """
     family = plus_plus_start(
         instance.observations, instance.n_components, _family_at(instance), rng
@@ -693,13 +701,13 @@ def measure(instance: Instance, n_starts: int) -> Measurement:
 def bregman_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
     """D-squared sampling under the Gaussian's own Bregman divergence.
 
-    The divergence candidate 3 *names*: the Bregman divergence of the
-    log-partition of an isotropic Gaussian is
+    The divergence written out here rather than asked of the family: the
+    Bregman divergence of the log-partition of an isotropic Gaussian is
     ``||y - c|| ** 2 / (2 * scale ** 2)`` (Banerjee et al., 2005), with no
-    additive constant. It is not what
+    additive constant. It is what
     :func:`snakes_and_ladders.opt.emission_mixture.plus_plus_start` scores
-    with, and the difference is the subject of
-    :func:`test_the_divergence_ties_and_the_log_density_does_not`.
+    with since #560, and sharing no line with it is what makes it the
+    reference in :func:`test_the_divergence_ties_and_the_log_density_does_not`.
     """
     rows = _rows(instance.observations)
     scale = instance.pooled_scale
@@ -717,6 +725,34 @@ def bregman_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
     ).astype(np.int64)
     return Seeding(
         _family_at(instance)(canonical_order(rows[chosen])),
+        float(instance.n_components),
+    )
+
+
+def log_density_d2(instance: Instance, rng: np.random.Generator) -> Seeding:
+    """D-squared sampling under the family's negative log density.
+
+    What ``plus_plus_start`` scored with before #560: the divergence plus the
+    log normalizer. Kept because the comparison it loses is the evidence for
+    the correction, and a rule no longer in the package cannot be measured
+    from outside the test that measures it.
+    """
+    rows = np.asarray(instance.observations, dtype=np.float64)
+    at = _family_at(instance)
+
+    def score(seed: float, candidates: np.ndarray) -> np.ndarray:
+        family = at(rows[[int(seed)]])
+        scored = family.log_density(
+            torch.as_tensor(rows[candidates.astype(np.int64)], dtype=torch.float64)
+        )
+        return np.asarray(-scored[:, 0].numpy())
+
+    indices = np.arange(rows.shape[0], dtype=np.float64)
+    chosen = emission_mixture_plus_plus(
+        indices, instance.n_components, score, rng
+    ).astype(np.int64)
+    return Seeding(
+        _family_at(instance)(canonical_order(_rows(rows)[chosen])),
         float(instance.n_components),
     )
 
@@ -742,21 +778,46 @@ def _seeding_ratios(
 
 
 @pytest.mark.oracle
-def test_the_divergence_ties_and_the_log_density_does_not() -> None:
-    # **The control's result, where an exact oracle referees it.** For an
+def test_the_shipped_rule_is_k_means_plus_plus_on_a_gaussian() -> None:
+    # **The identity that referees the correction, and it is exact.** For an
     # isotropic Gaussian the Bregman divergence of the log-partition *is* the
-    # squared Euclidean distance over twice the variance, and D-squared
-    # sampling normalizes its scores, so a positive factor cancels: seeding
-    # under the divergence and under squared Euclidean is one rule, and their
-    # mean cost against `optimal_clustering_cost` agrees.
-    #
-    # `opt.emission_mixture.plus_plus_start` does not score with the
-    # divergence. It scores with the family's **negative log density**, which
-    # is the divergence plus the log normalizer, and an additive constant does
-    # *not* cancel under normalization: it dilutes the rule toward uniform in
-    # proportion to how large the constant is against a typical divergence.
-    # That is measured here rather than argued, against uniform seeding as the
-    # scale.
+    # squared Euclidean distance over twice the variance, so
+    # `plus_plus_start` and `kmeans_plus_plus` are one algorithm: D-squared
+    # sampling normalizes its scores, a factor shared by every candidate
+    # cancels, and `rng.choice` spends one integer whether it is handed the
+    # observations or their indices. Two generators started at the same seed
+    # therefore draw the same seeding, centre for centre, and an approximate
+    # agreement would not tell a corrected rule from a partly corrected one.
+    instance = instance_of(fixture("mixture", "ci").params)
+    at = _family_at(instance)
+    for index in range(N_IDENTICAL_SEEDINGS):
+        family = plus_plus_start(
+            instance.observations,
+            instance.n_components,
+            at,
+            np.random.default_rng([560, index]),
+        )
+        assert isinstance(family, GaussianEmission)
+        centres = kmeans_plus_plus(
+            instance.observations,
+            instance.n_components,
+            np.random.default_rng([560, index]),
+        )
+        assert np.array_equal(
+            canonical_order(family.mean.numpy()), canonical_order(centres)
+        ), index
+
+
+@pytest.mark.oracle
+def test_the_divergence_ties_and_the_log_density_does_not() -> None:
+    # **The control's result, where an exact oracle referees it.** The three
+    # rules are scored against `optimal_clustering_cost`, which is exact in
+    # one dimension: the divergence the package now seeds under, the same
+    # divergence written out from the closed form rather than asked of the
+    # family, and the negative log density it scored with until #560 --- which
+    # is the divergence plus the log normalizer, an additive term that does
+    # *not* cancel under normalization but dilutes the rule toward uniform in
+    # proportion to its size against a typical divergence.
     instance = instance_of(fixture("mixture", "ci").params)
     optimal = optimal_clustering_cost(instance.observations, instance.n_components)
     ratios = {
@@ -764,7 +825,8 @@ def test_the_divergence_ties_and_the_log_density_does_not() -> None:
         for name, seed in (
             ("euclidean", seed_kmeans_plus_plus),
             ("bregman", bregman_d2),
-            ("log-density", seed_emission_d2),
+            ("shipped", seed_emission_d2),
+            ("log-density", log_density_d2),
             ("uniform", seed_uniform),
         )
     }
@@ -773,15 +835,15 @@ def test_the_divergence_ties_and_the_log_density_does_not() -> None:
     # to it (Arthur & Vassilvitskii, 2007, theorem 1.1).
     guarantee = 8.0 * (math.log(instance.n_components) + 2.0)
     assert means["euclidean"] < guarantee, means
-    # One rule, two spellings, and the same *draws*: `rng.choice` spends one
-    # integer whether it is handed the observations or their indices, so the
-    # two seedings agree seeding for seeding and not merely in the mean.
+    # One rule, three spellings, and the same *draws*: not merely the same
+    # mean over 200 seedings but the same cost on each of them.
     assert np.array_equal(ratios["bregman"], ratios["euclidean"]), means
+    assert np.array_equal(ratios["shipped"], ratios["euclidean"]), means
     assert means["euclidean"] == pytest.approx(1.8496, abs=1e-4), means
     # The log density is a different rule, and a worse one here. Realized:
     # 3.9111 against the divergence's 1.8496 and uniform seeding's 4.3470, so
-    # it sits nine tenths of the way from the divergence to uniform, and its
-    # worst seeding of 200 is 33.80 against 6.21.
+    # it sat nine tenths of the way from the divergence to uniform, and its
+    # worst seeding of 200 was 33.80 against 6.21.
     assert means["log-density"] == pytest.approx(3.9111, abs=1e-3), means
     assert means["uniform"] == pytest.approx(4.3470, abs=1e-3), means
     assert float(ratios["log-density"].max()) > 5.0 * float(ratios["euclidean"].max())
@@ -870,17 +932,17 @@ def test_the_ordering_on_the_refereed_rung() -> None:
     assert measurement.paired_p("hmc") < 0.05
     assert measurement.ledger.best["hmc"].seeding > BUDGET.size
     assert measurement.ledger.best["tempering"].seeding > 2 * BUDGET.size
-    # The control's claim: the two D-squared rules are one rule on a Gaussian
-    # in the divergence, and the implementation's negative log density is a
-    # different rule. Neither reaches the referee, so the paired test between
-    # them has no discordant start and says nothing; the mean gap is where the
-    # difference shows, and squared Euclidean's is the smaller.
+    # The control's claim, decided: on a Gaussian of one scale the two
+    # D-squared rules are one rule, so candidate 3 does not merely tie
+    # k-means++ on average --- it is k-means++, and every start it is given
+    # lands where k-means++'s does.
     gaps = measurement.comparison.mean_gap()
     assert measurement.hits()["kmeans++"] == measurement.hits()["emission-d2"]
     assert measurement.comparison.paired_p(
         "kmeans++", "emission-d2", TOLERANCE, relative=True
     ) == pytest.approx(1.0)
-    assert gaps["kmeans++"] < gaps["emission-d2"] < gaps["random-restart"], gaps
+    assert gaps["emission-d2"] == gaps["kmeans++"], gaps
+    assert gaps["kmeans++"] < gaps["random-restart"], gaps
     # Spectral is k-means++ on this rung: the leading principal subspace of a
     # one-dimensional sample is the whole of it, so the route is a rotation by
     # the identity and the two agree exactly.
