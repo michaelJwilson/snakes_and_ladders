@@ -1982,8 +1982,8 @@ what the earlier number did not have to carry.
 At `release`, the first fits run at this size, the deep MLP explains 0.515 of
 the 2,066-to-2,200-nat gap and the linear model 0.332 over 12 held-out
 instances of 48. **Both token models fail there, and the cause of each is
-measured.** `GraphSurrogate` diverges --- `R^2` -47.5 over 150 epochs in 646 s
-and -976.7 over 30 --- because `_Batch.pool` sums over nodes, so the vector its
+measured.** `GraphSurrogate` diverges --- `R^2` -47.5 over 150 epochs and
+-976.7 over 30 --- because `_Batch.pool` sums over nodes, so the vector its
 decoder reads is three orders of magnitude larger at 5,041 sites than at the 9
 the architecture was fitted on. `AttentionSurrogate` does not run at all: one
 attention matrix is 5,041^2 `float64` = 203.3 MB, 24 training examples over two

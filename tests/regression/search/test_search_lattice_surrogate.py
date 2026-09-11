@@ -283,8 +283,8 @@ def test_the_surrogates_predict_the_ground_state_energy_at_five_thousand_sites()
     # prediction of both lies inside a bracket 1.03 per site wide.
     #
     # The two token models are the finding, and it inverts what the ticket
-    # expected. `GraphSurrogate` diverges here --- R^2 -47.5 over 150 epochs
-    # in 646 s, -976.7 over 30 --- because `_Batch.pool` sums over nodes, so
+    # expected. `GraphSurrogate` diverges here --- R^2 -47.5 over 150 epochs and
+    # -976.7 over 30 --- because `_Batch.pool` sums over nodes, so
     # the vector its decoder reads is three orders of magnitude larger at
     # 5,041 sites than at the 9 the same architecture was fitted on.
     # `AttentionSurrogate` does not run at all: one attention matrix is
