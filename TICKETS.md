@@ -62,6 +62,9 @@ parenthesis the only way a ticket is cited.
   could not run (#554)
 - Score the seedings on the coupled fit at the key instance, the second of
   #541's two scorings (#555)
+- Find where the projected likelihood stops disagreeing with the simulated
+  truth about which seeding is better, between 40 and 1,000 observations a
+  component (#559)
 - Seed `Emission_Mixture++` with the family's Bregman divergence rather than
   its negative log-density. #548 measured the two on a Gaussian, where the
   divergence is the squared distance exactly: 1.85 times the optimal

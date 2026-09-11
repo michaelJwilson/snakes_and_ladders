@@ -108,17 +108,23 @@ def bayes(instance: ProjectedCounts) -> dict[str, float]:
     }
 
 
-def _detail(task: tuple[ProjectedCounts, str, CountPairAt]) -> dict[str, object]:
+def _detail(task: tuple[ProjectedCounts, str, CountPairAt, int]) -> dict[str, object]:
     """One candidate's fit on one instance, with its curve and its recovery.
+
+    The seed is the one :func:`compare` gives that instance, so a recovery
+    reported here belongs to the same fit the objective comparison scored.
 
     Returns
     -------
     dict[str, object]
     """
-    instance, name, at = task
-    fitted = fit_projection(instance, name, at, BUDGET, np.random.default_rng([0, 0]))
+    instance, name, at, index = task
+    fitted = fit_projection(
+        instance, name, at, BUDGET, np.random.default_rng([0, index])
+    )
     return {
         "name": name,
+        "instance": index,
         "log_likelihoods": [float(value) for value in fitted.log_likelihoods],
         "iterations": fitted.iterations,
         "recovery": fitted.recovery,
@@ -133,6 +139,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument(
+        "--recovery",
+        nargs="*",
+        default=None,
+        help=(
+            "Run only the recovery pass, over every instance, for these "
+            "candidates. The objective comparison pairs on the likelihood; "
+            "this pairs on the simulated truth, which at 40 observations a "
+            "component is not the same ordering."
+        ),
+    )
     arguments = parser.parse_args()
 
     declared = fixture(PROBLEM, KEY).params
@@ -140,6 +157,31 @@ def main() -> None:
     at = seam(drawn[0], params)
 
     workers = int(arguments.workers)
+    if arguments.recovery is not None:
+        rows = map_tasks(
+            _detail,
+            [
+                (instance, name, at, index)
+                for name in arguments.recovery
+                for index, instance in enumerate(drawn)
+            ],
+            workers=workers,
+            backend="processes",
+            intra_op_threads=None,
+        )
+        arguments.out.write_text(
+            json.dumps(
+                {
+                    "n_instances": N_INSTANCES,
+                    "budget": {"unit": BUDGET.unit, "size": BUDGET.size},
+                    "bayes": [bayes(instance) for instance in drawn],
+                    "rows": list(rows),
+                },
+                indent=1,
+            )
+        )
+        return
+
     methods: dict[str, Method[ProjectedCounts]] = {
         name: SeededFit(name, at) for name in SEEDINGS
     }
@@ -149,7 +191,7 @@ def main() -> None:
     backend: Backend = "processes"
     detail = map_tasks(
         _detail,
-        [(drawn[0], name, at) for name in methods if name != "restart"],
+        [(drawn[0], name, at, 0) for name in methods if name != "restart"],
         workers=workers,
         backend=backend,
         intra_op_threads=None,
