@@ -26,11 +26,13 @@ a Metropolis move over tree topologies whose stationary distribution at
 temperature one is the flat-prior weight over fitted likelihoods that
 :mod:`snakes_and_ladders.search.support` enumerates.
 
-The generic sweep is Python over factor tables. Its cost against the numba
-and Rust Potts kernels is measured in ``tests/benchmarks/test_gibbs_bench.py``
-and recorded in ``STATUS.md``; the specialised kernels stay the default for
-the Potts lattice, and this sampler is the one for the model none of them
-can express.
+The sweep runs through a ``numba`` kernel over an edge layout -- every
+factor's table in one array, and offsets into it per variable (issue #561) --
+with the NumPy path beside it as the oracle it reproduces bitwise. Its cost
+against the Potts kernels is measured in
+``tests/benchmarks/test_gibbs_bench.py`` and recorded in ``STATUS.md``; the
+specialised kernels stay the default for the Potts lattice, and this sampler
+is the one for the model none of them can express.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ import numpy as np
 
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
 from snakes_and_ladders.search.topology import (
     Topology,
@@ -94,6 +97,56 @@ class Annealed:
     trajectory: np.ndarray
 
 
+# How far from a cumulative boundary a draw must land for the compiled sweep
+# to decide a site itself, in units of the last place per state. NumPy's
+# ``exp`` and ``libm``'s differ by at most one such unit, the cumulative sum
+# carries that difference across at most ``n_states`` additions, and the draw
+# is scaled by the last entry, which carries it once more: four units per
+# state bounds it, and this is four times that.
+_GUARD = 16.0
+
+
+@dataclass(frozen=True)
+class _EdgeLayout:
+    """Every factor's table in one array, and offsets into it per variable.
+
+    The layout root ``CLAUDE.md``'s memory rule asks for, replacing
+    :attr:`_Indexed.touching`: a list of lists of tables, walked per site per
+    sweep, becomes contiguous arrays walked in stride order. One *entry* is
+    one (factor, axis) pair that touches a variable, and one *term* is one of
+    that factor's other axes, which fixes a coordinate of the table.
+
+    A conditional is then a gather: for each entry of a variable, start at
+    ``entry_start``, add ``state[term_column] * term_stride`` over its terms,
+    and step by ``entry_stride`` through the variable's own states.
+
+    Parameters
+    ----------
+    tables : np.ndarray
+        Every factor's log table, flattened in C order and concatenated.
+    entry_offsets : np.ndarray
+        ``entry_offsets[v]:entry_offsets[v + 1]`` are variable ``v``'s
+        entries, in the order :attr:`_Indexed.touching` holds them, so the
+        conditional sums its factors in the order the NumPy path sums them.
+    entry_start : np.ndarray
+        Where each entry's factor begins in ``tables``.
+    entry_stride : np.ndarray
+        The stride, in elements, of the axis that entry varies.
+    term_offsets : np.ndarray
+        ``term_offsets[e]:term_offsets[e + 1]`` are entry ``e``'s terms.
+    term_column, term_stride : np.ndarray
+        The variable a term reads, and the stride of the axis it fixes.
+    """
+
+    tables: np.ndarray
+    entry_offsets: np.ndarray
+    entry_start: np.ndarray
+    entry_stride: np.ndarray
+    term_offsets: np.ndarray
+    term_column: np.ndarray
+    term_stride: np.ndarray
+
+
 class _Indexed:
     """A factor graph with its variables numbered and each variable's factors located."""
 
@@ -113,6 +166,63 @@ class _Indexed:
             )
             for axis, name in enumerate(factor.variables):
                 self.touching[self.index[name]].append((factor, axis, columns))
+        self._layout: _EdgeLayout | None = None
+
+    def layout(self) -> _EdgeLayout:
+        """The edge layout of this graph, built once and kept.
+
+        Built on demand because only the compiled sweep reads it, and kept
+        because a sampler builds one graph and runs thousands of sweeps over
+        it (the allocation rule).
+        """
+        if self._layout is not None:
+            return self._layout
+
+        flattened = []
+        table_start: dict[str, int] = {}
+        strides: dict[str, list[int]] = {}
+        total = 0
+        for factor in self.graph.factors:
+            table_start[factor.name] = total
+            flat = np.ascontiguousarray(factor.log_table, dtype=np.float64).ravel()
+            flattened.append(flat)
+            total += int(flat.shape[0])
+            shape = factor.log_table.shape
+            stride = [1] * len(shape)
+            for axis in range(len(shape) - 2, -1, -1):
+                stride[axis] = stride[axis + 1] * shape[axis + 1]
+            strides[factor.name] = stride
+
+        entry_offsets = [0]
+        entry_start: list[int] = []
+        entry_stride: list[int] = []
+        term_offsets = [0]
+        term_column: list[int] = []
+        term_stride: list[int] = []
+        for position in range(len(self.names)):
+            for factor, axis, columns in self.touching[position]:
+                stride = strides[factor.name]
+                entry_start.append(table_start[factor.name])
+                entry_stride.append(stride[axis])
+                term_column.extend(
+                    int(column) for other, column in enumerate(columns) if other != axis
+                )
+                term_stride.extend(
+                    step for other, step in enumerate(stride) if other != axis
+                )
+                term_offsets.append(len(term_column))
+            entry_offsets.append(len(entry_start))
+
+        self._layout = _EdgeLayout(
+            np.concatenate(flattened),
+            np.array(entry_offsets, dtype=np.int64),
+            np.array(entry_start, dtype=np.int64),
+            np.array(entry_stride, dtype=np.int64),
+            np.array(term_offsets, dtype=np.int64),
+            np.array(term_column, dtype=np.int64),
+            np.array(term_stride, dtype=np.int64),
+        )
+        return self._layout
 
     def conditional(self, state: np.ndarray, position: int) -> np.ndarray:
         """``sum_a log psi_a`` over the states of one variable, the others fixed."""
@@ -144,29 +254,93 @@ class _Indexed:
         return state.copy()
 
 
+def _site_update(
+    indexed: _Indexed,
+    state: np.ndarray,
+    position: int,
+    draw: float,
+    beta: float,
+) -> None:
+    """One variable's heat-bath update in NumPy, in place: the oracle's arithmetic.
+
+    Held in one function because two callers must perform it identically ---
+    :func:`gibbs_sweep`'s NumPy path, and the site the compiled kernel
+    declines to decide.
+    """
+    local = indexed.conditional(state, position)
+    local *= beta
+    local -= local.max()
+    cumulative = np.cumsum(np.exp(local))
+    state[position] = np.searchsorted(cumulative, draw * cumulative[-1])
+
+
 def gibbs_sweep(
     graph: FactorGraph | _Indexed,
     state: np.ndarray,
     rng: np.random.Generator,
     *,
     beta: float = 1.0,
+    backend: Backend = Backend.NUMBA,
 ) -> None:
     """One heat-bath update of every variable in graph order, in place.
 
     One uniform per variable drawn up front and a search of the cumulative
     conditional, the arithmetic of the Potts single-site sweep, so the two
     agree draw for draw on a Potts graph up to rounding.
+
+    ``backend`` chooses the implementation and nothing else. The
+    :data:`~snakes_and_ladders.search.backend.Backend.NUMBA` kernel
+    (:func:`snakes_and_ladders.search.kernels.gibbs_sweep_sites`) walks the edge
+    layout and returns the state the NumPy path returns **bitwise**, deciding
+    a site itself only where the last place of ``exp`` cannot reach the draw
+    and leaving the rest to NumPy, which is what lets it be the default: the
+    audit behind it (#341, #561) measured the conditional at 43.4% of a
+    32x32 run and the sweep around it at a further 18.0%, and no recorded
+    chain moves. :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` is the
+    oracle that pins it.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` is one this sweep has no implementation for.
     """
     indexed = graph if isinstance(graph, _Indexed) else _Indexed(graph)
     draws = np.asarray(rng.random(len(indexed.names)))
+
+    if backend is Backend.NUMBA:
+        from snakes_and_ladders.search.kernels import gibbs_sweep_sites
+
+        layout = indexed.layout()
+        local = np.empty(int(indexed.cardinality.max()), dtype=np.float64)
+        position = 0
+        while position < state.shape[0]:
+            position = gibbs_sweep_sites(
+                state,
+                draws,
+                indexed.cardinality,
+                layout.tables,
+                layout.entry_offsets,
+                layout.entry_start,
+                layout.entry_stride,
+                layout.term_offsets,
+                layout.term_column,
+                layout.term_stride,
+                local,
+                beta,
+                _GUARD,
+                position,
+            )
+            if position < state.shape[0]:
+                _site_update(indexed, state, position, float(draws[position]), beta)
+                position += 1
+        return
+
+    if backend is not Backend.PYTHON:
+        msg = f"the Gibbs sweep has no {backend} backend"
+        raise ValueError(msg)
+
     for position in range(len(indexed.names)):
-        local = indexed.conditional(state, position)
-        local *= beta
-        local -= local.max()
-        cumulative = np.cumsum(np.exp(local))
-        state[position] = np.searchsorted(
-            cumulative, float(draws[position]) * cumulative[-1]
-        )
+        _site_update(indexed, state, position, float(draws[position]), beta)
 
 
 def sample_factor_graph(
@@ -178,6 +352,7 @@ def sample_factor_graph(
     *,
     temperature: float = 1.0,
     start: np.ndarray | None = None,
+    backend: Backend = Backend.NUMBA,
 ) -> GibbsChain:
     """Run one chain of single-site sweeps and record its states.
 
@@ -196,6 +371,9 @@ def sample_factor_graph(
     start : np.ndarray | None
         A starting state in the graph's variable order; ``None`` draws one
         uniformly.
+    backend : Backend
+        Which sweep runs, as :func:`gibbs_sweep` states; the chain is the
+        same either way.
 
     Raises
     ------
@@ -213,11 +391,11 @@ def sample_factor_graph(
     beta = 1.0 / temperature
     state = indexed.start(rng, start)
     for _ in range(burn_in):
-        gibbs_sweep(indexed, state, rng, beta=beta)
+        gibbs_sweep(indexed, state, rng, beta=beta, backend=backend)
     states = []
     densities = []
     for sweep in range(n_sweeps):
-        gibbs_sweep(indexed, state, rng, beta=beta)
+        gibbs_sweep(indexed, state, rng, beta=beta, backend=backend)
         if sweep % thin == 0:
             states.append(state.copy())
             densities.append(indexed.log_density(state))
@@ -230,6 +408,7 @@ def anneal_factor_graph(
     rng: np.random.Generator,
     *,
     start: np.ndarray | None = None,
+    backend: Backend = Backend.NUMBA,
 ) -> Annealed:
     """Simulated annealing by heat-bath sweeps: one sweep per schedule step at that step's temperature.
 
@@ -244,7 +423,7 @@ def anneal_factor_graph(
     best = indexed.log_density(state)
     trajectory = [best]
     for step in range(schedule.n_steps):
-        gibbs_sweep(indexed, state, rng, beta=1.0 / schedule(step))
+        gibbs_sweep(indexed, state, rng, beta=1.0 / schedule(step), backend=backend)
         value = indexed.log_density(state)
         trajectory.append(value)
         if value > best:
