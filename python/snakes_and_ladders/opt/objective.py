@@ -1,11 +1,10 @@
 """The optimization interface, and nothing that knows what is being optimized.
 
 Root ``CLAUDE.md`` requires the fitting machinery to serve HMMs, the Potts
-model and phylogenetic trees alike (issue #63). That only holds if the
-interface is written without reference to any of them, so this module
-mentions no model, and ``snakes_and_ladders.opt`` imports nothing from ``snakes_and_ladders.sim``,
-``snakes_and_ladders.likelihood`` or ``snakes_and_ladders.search`` -- asserted by a test, not left to
-review.
+model and phylogenetic trees alike (issue #63), which holds only if the
+interface names none of them. ``snakes_and_ladders.opt`` therefore imports
+nothing from ``snakes_and_ladders.sim``, ``snakes_and_ladders.likelihood`` or
+``snakes_and_ladders.search`` -- asserted by a test, not left to review.
 
 Three pieces are enough:
 
@@ -16,13 +15,11 @@ Three pieces are enough:
   against the parameters a person named.
 
 **Discrete moves are deliberately outside this interface.** A discrete move
-changes the structure -- a different topology, chain length or state count --
-and therefore changes what ``theta`` means and how long it is. It cannot be
-a step inside a fit over a fixed-length vector; it constructs a *new*
-``Objective``. The loop that proposes such moves owns that construction and
-calls ``fit`` per candidate. An optimizer that tried to own the outer loop
-would have to know what a move is, which is exactly the model knowledge this
-interface exists to exclude.
+changes the structure -- topology, chain length, state count -- and so changes
+what ``theta`` means and how long it is. It constructs a *new* ``Objective``
+rather than stepping inside a fit, and the loop that proposes such moves owns
+that construction. An optimizer owning the outer loop would have to know what
+a move is.
 """
 
 from __future__ import annotations
@@ -72,18 +69,13 @@ class Objective(Protocol):
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The unconstrained vector whose :meth:`constrain` is ``named``.
 
-        The inverse of :meth:`constrain`, and required rather than optional.
-        Without it a fit is only as useful as the coordinates that produced
-        it: an expectation-maximization run works directly in the model's own
-        parameters and never builds a ``theta``, so its point estimate could
-        carry no interval at all, while the gradient fit's could (issue #268).
-        The observed information is a property of *this objective at a point*
-        and not of the route that reached it, so any route may ask for it.
-
-        A constraint map that cannot be inverted is one whose fitted
-        parameters cannot be stated in the model's own units, which is a
-        problem worth failing on rather than working around --- hence
-        required.
+        The inverse of :meth:`constrain`, required rather than optional.
+        Without it an expectation-maximization run, which works in the model's
+        own parameters and never builds a ``theta``, could carry no interval
+        while the gradient fit's could (issue #268). The observed information
+        is a property of *this objective at a point*, not of the route that
+        reached it, so any route may ask for it. A constraint map that cannot
+        be inverted is a problem worth failing on.
 
         Parameters
         ----------
