@@ -13,6 +13,7 @@
         "alignments": 3,
         "n_sites": 200
       },
+      "rtol": 1e-12,
       "seed": 1000,
       "value": [
         -963.7650335864518,

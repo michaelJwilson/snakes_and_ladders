@@ -1,12 +1,11 @@
 """Sum-product belief propagation on a Potts MRF, and the Bethe free energy.
 
-Exact on a tree, approximate on a loop. Both statements are load-bearing here:
-the tree case carries the correctness claim, because it is the only regime
-where equality against :func:`snakes_and_ladders.likelihood.potts.enumerate_potts` is the
-right assertion; the loopy case is *reported* against
-:func:`snakes_and_ladders.likelihood.potts.strip_log_partition` as a measured deviation,
-because asserting agreement there would assert something false and asserting
-only that it ran would be coverage theatre.
+Exact on a tree, approximate on a loop. The tree case carries the correctness
+claim, the only regime where equality against
+:func:`snakes_and_ladders.likelihood.potts.enumerate_potts` is the right
+assertion; the loopy case is *reported* against
+:func:`snakes_and_ladders.likelihood.potts.strip_log_partition` as a measured
+deviation, since asserting agreement there would assert something false.
 
 Messages are held in the log domain and normalized every sweep. A Potts
 coupling of ``J = 2`` on a 4x4 lattice puts ``exp(32)`` inside a product of
@@ -14,10 +13,9 @@ sixteen messages, and the linear-domain recursion loses it; the log domain
 costs a ``logsumexp`` per edge and does not.
 
 Non-convergence raises. A Bethe free energy computed from messages that never
-settled is not an estimate of anything, and the caller cannot tell it from one
-that is -- `docs/CLAUDE.md`'s rule that an unstable number is not a
-measurement, applied where the instability is in the algorithm rather than in
-the machine.
+settled estimates nothing, and the caller cannot tell it from one that does --
+`docs/CLAUDE.md`'s rule that an unstable number is not a measurement, applied
+to an instability in the algorithm rather than the machine.
 
 See ``eq:bp-message`` and ``eq:bethe`` of ``docs/tex/textbook.tex``
 (Yedidia, Freeman & Weiss for the free energy; Mezard & Montanari ch. 14;
@@ -35,7 +33,7 @@ from snakes_and_ladders.sim.graph import PottsGraph
 
 # Parallel (flooding) updates with damping. Sequential schedules converge on
 # more graphs, but the order then decides the answer, and a fixture that
-# reproduces only under one traversal is a worse oracle than one that refuses.
+# reproduces only under one traversal is a worse oracle than a refusal.
 DEFAULT_DAMPING = 0.5
 # 1e-12 rather than 1e-10 because the beliefs, not the messages, are what a
 # caller reads: on the tree fixture 1e-10 leaves the single-site marginals
@@ -48,8 +46,8 @@ DEFAULT_MAX_ITERATIONS = 2_000
 class ConvergenceError(RuntimeError):
     """Raised when the messages did not settle within the iteration cap.
 
-    Carries the residual so a caller tuning damping or the cap can see how
-    far off it was, rather than only that it failed.
+    Carries the residual, so a caller tuning damping or the cap sees how far
+    off it was.
     """
 
     def __init__(self, iterations: int, residual: float, tolerance: float) -> None:
@@ -78,8 +76,8 @@ class BeliefPropagationResult:
     bethe_log_partition : float
         ``-F_Bethe``, which equals ``log Z`` exactly on a tree.
     iterations : int
-        Sweeps taken to reach the tolerance. Reported beside every deviation
-        so a run that only just converged is visible rather than inferred.
+        Sweeps taken to reach the tolerance. Reported beside every deviation,
+        so a run that only just converged is visible.
     residual : float
         The largest message change on the final sweep.
     """
@@ -227,11 +225,11 @@ def _bethe_free_energy(
         F = sum_(ij) sum_ab b_ij(ab) log[ b_ij(ab) / (psi_ij(ab) psi_i(a) psi_j(b)) ]
           - sum_i (d_i - 1) sum_a b_i(a) log[ b_i(a) / psi_i(a) ]
 
-    The degree correction is what makes it a *Bethe* free energy rather than a
-    naive mean field: a node of degree ``d`` appears in ``d`` edge terms, so
+    The degree correction makes it a *Bethe* free energy rather than a naive
+    mean field: a node of degree ``d`` appears in ``d`` edge terms, so
     ``d - 1`` copies of its own entropy are subtracted back off. On a tree the
-    two terms telescope and ``-F`` is exactly ``log Z``; the tree test is what
-    pins that, and it would fail on a sign or an off-by-one here.
+    two terms telescope and ``-F`` is exactly ``log Z``, which the tree test
+    pins and a sign or an off-by-one here would fail.
     """
     identity = np.eye(field.shape[0])
     degree = np.zeros(graph.n_nodes)
@@ -251,10 +249,10 @@ def _bethe_free_energy(
 def _disconnected(graph: PottsGraph, field: np.ndarray) -> BeliefPropagationResult:
     """The edgeless case, where every site is independent and BP is trivial.
 
-    Handled separately rather than as a degenerate loop: with no edges there
-    are no messages, so the residual is undefined and the general path would
-    have to invent a convergence claim. ``log Z`` is ``n_nodes`` copies of the
-    single-site normalizer, exactly.
+    Separate rather than a degenerate loop: with no edges there are no
+    messages, so the residual is undefined and the general path would invent a
+    convergence claim. ``log Z`` is exactly ``n_nodes`` copies of the
+    single-site normalizer.
     """
     log_single = field - logsumexp(field[np.newaxis, :], axis=1)[0]
     single_site = np.tile(np.exp(log_single), (graph.n_nodes, 1))

@@ -4,20 +4,19 @@
 move changes the *structure* being fitted, so it changes what the parameter
 vector means and how long it is; it cannot be a step inside a fit over a
 fixed-length vector. It constructs a **new** objective, and something outside
-the optimizer has to own that construction. This is that something.
+the optimizer owns that construction. This is that something.
 
-The consequence is that nothing here needed to change `snakes_and_ladders.opt`. The same
-``fit`` that fits a Potts chain scores every candidate topology, which is the
-claim issue #63 made and could not itself test.
+So nothing here needed to change `snakes_and_ladders.opt`: the same ``fit``
+that fits a Potts chain scores every candidate topology, the claim issue #63
+made and could not itself test.
 
 **Budget is counted in candidates scored, not in seconds.** ``DEV.md`` forbids
-ranking performance on CI hardware, and a wall-clock budget would make a
-result depend on the machine that produced it, so a run would not be
-reproducible from the generator it was given. What scoring a candidate costs
-is reported beside it -- fits, and likelihood evaluations -- because since
-issue #289 the two are no longer one number: a fit warm-started from the
-parent's lengths converges in a fraction of the evaluations a cold one takes,
-and a lazily scored candidate costs one.
+ranking performance on CI hardware, and a wall-clock budget would make a run
+irreproducible from the generator it was given. What scoring a candidate costs
+is reported beside it -- fits, and likelihood evaluations -- since issue #289
+made the two different numbers: a fit warm-started from the parent's lengths
+converges in a fraction of the evaluations a cold one takes, and a lazily
+scored candidate costs one.
 
 **What carries from a topology to its neighbour.** A neighbour shares every
 branch but the few a move touched, and a branch is the split it induces
@@ -83,10 +82,9 @@ class MoveSet(StrEnum):
 class Model(StrEnum):
     """Which substitution model the continuous fit uses.
 
-    ``JC`` fits branch lengths alone: Jukes-Cantor has no free rate
-    parameters and its stationary distribution is uniform by construction, so
-    there is nothing else in it to fit. ``GTR`` additionally fits the
-    exchangeabilities and the stationary distribution.
+    ``JC`` fits branch lengths alone: Jukes-Cantor has no free rate parameters
+    and its stationary distribution is uniform by construction. ``GTR``
+    additionally fits the exchangeabilities and the stationary distribution.
     """
 
     JC = "jc"
@@ -113,11 +111,11 @@ class Inference:
         Log-likelihood after each accepted move, starting with the initial
         topology's. Its length minus one is the number of moves taken.
     converged : bool
-        Whether the search stopped because no neighbour improved, rather
-        than because the budget ran out. A search that ran out of budget has
-        not finished, and reporting its result as an optimum would be wrong.
-        A zero budget --- a fit with no search --- reports ``True``, since
-        there was no search to leave unfinished.
+        Whether the search stopped because no neighbour improved rather than
+        because the budget ran out. A search that ran out of budget has not
+        finished, so its result is not an optimum. A zero budget --- a fit with
+        no search --- reports ``True``, there being no search to leave
+        unfinished.
     fits : int
         Candidates fitted in full, the initial topology included.
     likelihood_evaluations : int
@@ -172,13 +170,12 @@ class _Counting:
 class _Restricted:
     """``inner`` on the coordinates ``free``, every other one held at ``base``.
 
-    Partial re-optimization (issue #408): a move changes a handful of
-    branches and leaves the rest of the tree alone, so a fit that varies
-    every coordinate spends most of its evaluations re-deriving lengths the
-    move did not touch. Holding those at the parent's fitted values makes
-    the fit ``len(free)``-dimensional, and the value it reaches is a lower
-    bound on the full fit's rather than equal to it --- which is why the
-    accepted move is refitted in full before it is reported.
+    Partial re-optimization (issue #408): a move changes a handful of branches,
+    so a fit varying every coordinate spends most of its evaluations re-deriving
+    lengths the move did not touch. Holding those at the parent's fitted values
+    makes the fit ``len(free)``-dimensional, and the value it reaches lower-
+    bounds the full fit's --- which is why the accepted move is refitted in
+    full before it is reported.
 
     The protocol is satisfied on the reduced vector: ``initial`` is
     ``base`` restricted to ``free``, ``constrain`` scatters back before
@@ -211,11 +208,11 @@ class _Restricted:
 def _disturbed(topology: Topology, warm: _Fitted) -> torch.Tensor:
     """Indices into ``theta`` of the branches the move to ``topology`` created.
 
-    A branch is the split it induces, so a branch the move left alone is one
-    whose split the parent also had and whose fitted length therefore
-    carries over (:func:`_warm_lengths`). What is left is the path between
-    the pruning point and the regraft point, which is where an SPR move
-    actually changes the tree, and it is one edge for an NNI.
+    A branch is the split it induces, so a branch the move left alone has a
+    split the parent also had and a fitted length that carries over
+    (:func:`_warm_lengths`). What is left is the path between the pruning point
+    and the regraft point, where an SPR move changes the tree; one edge for an
+    NNI.
     """
     return torch.tensor(
         [
@@ -348,9 +345,9 @@ def _neighbourhood(
     Raises
     ------
     ValueError
-        If ``radius`` is given with ``MoveSet.NNI``, whose neighbourhood is
-        the internal edges and has no pruning point to measure from ---
-        silently ignoring it would report a bounded search that was not one.
+        If ``radius`` is given with ``MoveSet.NNI``, whose neighbourhood is the
+        internal edges and has no pruning point to measure from; ignoring it
+        would report a bounded search that was not one.
     """
     if moves is MoveSet.NNI:
         if radius is not None:
@@ -389,10 +386,10 @@ def infer(
         Number of states.
     topology : Topology | None
         Where to start. ``None`` draws a random topology from ``rng``. A
-        parsimony start is this argument and not a mode of its own:
+        parsimony start is this argument rather than a mode of its own:
         ``parsimony_search(alignment, k, rng=rng).topology`` is the tree the
-        Fitch climb reaches, and it costs one post-order pass per candidate
-        against this loop's fit. What it buys is measured in
+        Fitch climb reaches, at one post-order pass per candidate against this
+        loop's fit. What it buys is measured in
         ``tests/benchmarks/test_search_infer_bench.py``.
     model : Model
         Substitution model for the continuous fit.
@@ -402,12 +399,11 @@ def infer(
         Maximum candidates scored. The initial topology's own fit is not
         counted against it.
     rng : np.random.Generator | None
-        Source of the starting topology, required when ``topology`` is
-        ``None`` and unused otherwise. Passed in rather than seeded here, so
-        a caller running an ensemble gets independent starts rather than the
-        same one repeatedly (`sim/CLAUDE.md`, issue #240). There is no
-        default: a generator made here would be either unseeded, and the run
-        irreproducible, or seeded from a constant nobody declared.
+        Source of the starting topology, required when ``topology`` is ``None``
+        and unused otherwise. Passed in rather than seeded here, so a caller
+        running an ensemble gets independent starts (`sim/CLAUDE.md`, issue
+        #240). There is no default: a generator made here would be unseeded, and
+        the run irreproducible, or seeded from a constant nobody declared.
     warm_start : bool
         Start each candidate's fit from the parent's fitted lengths on the
         branches it kept (issue #289). The optimum is the same; what changes
@@ -416,9 +412,9 @@ def infer(
         ``None`` fits every candidate. An integer scores every candidate with
         one likelihood evaluation at the parent's parameters, reusing the
         parent's subtree partials, then fits only the best that many; the
-        accepted move is always a full fit. Which candidates get fitted
-        changes, so this is opt-in, and its cost in missed optima is the
-        measurement the regression suite reports.
+        accepted move is always a full fit. It changes which candidates are
+        fitted, so it is opt-in, and its cost in missed optima is measured by
+        the regression suite.
     surrogate : Surrogate | None
         What ranks the neighbourhood when ``lazy_top`` is given: ``None``
         ranks by the one-evaluation lazy score, a surrogate ranks by its own
@@ -428,21 +424,21 @@ def infer(
         such; the fits it saves or costs are what ``fits`` reports.
     radius : int | None
         Bound an SPR regraft to within ``radius`` of the pruning point
-        (:func:`~snakes_and_ladders.search.topology.spr_neighbours`), which
-        makes the neighbourhood ``O(n * radius)`` rather than ``O(n ** 2)``.
-        ``None`` is unbounded, and so is any radius from the leaf count up:
-        the two are the same search, candidate for candidate. Rejected with
-        ``MoveSet.NNI``, which has no pruning point.
+        (:func:`~snakes_and_ladders.search.topology.spr_neighbours`), making the
+        neighbourhood ``O(n * radius)`` rather than ``O(n ** 2)``. ``None`` is
+        unbounded, as is any radius from the leaf count up: the two are the
+        same search, candidate for candidate. Rejected with ``MoveSet.NNI``,
+        which has no pruning point.
     partial_reoptimization : bool
-        Fit a candidate over only the branches the move created, holding
-        every other length at the parent's fitted value (:class:`_Restricted`,
-        issue #408, extending the warm starts of issue #289). A partial fit
-        reaches a value no higher than the full fit's, so it screens
-        candidates rather than scoring them: the accepted move is refitted in
-        full, and ``log_likelihood`` is a full fit's whatever this is set to.
-        Which candidate wins can change, so it is opt-in, and what it costs
-        in missed optima is measured rather than assumed zero. Needs
-        ``warm_start``, which is where the lengths it holds fixed come from.
+        Fit a candidate over only the branches the move created, holding every
+        other length at the parent's fitted value (:class:`_Restricted`, issue
+        #408, extending the warm starts of issue #289). A partial fit reaches a
+        value no higher than the full fit's, so it screens candidates rather
+        than scoring them: the accepted move is refitted in full, and
+        ``log_likelihood`` is a full fit's whatever this is set to. Which
+        candidate wins can change, so it is opt-in and its cost in missed
+        optima is measured. Needs ``warm_start``, the source of the lengths it
+        holds fixed.
 
     Returns
     -------
@@ -479,9 +475,9 @@ def infer(
     cache = PartialCache()
 
     evaluations, fits, likelihood_evaluations = 0, 1, best.evaluations
-    # A zero budget is a request to fit without searching, and that request
-    # is complete as soon as the initial topology is scored. Reporting it as
-    # unconverged would describe a search that was never asked for.
+    # A zero budget is a request to fit without searching, complete once the
+    # initial topology is scored. Reporting it as unconverged would describe a
+    # search that was never asked for.
     converged = max_evaluations == 0
     while evaluations < max_evaluations:
         warm = best if warm_start else None
@@ -493,9 +489,9 @@ def infer(
             if key in seen:
                 continue
             if evaluations >= max_evaluations:
-                # Marked seen only once actually scored: a candidate skipped
-                # for want of budget has not been ruled out, and recording it
-                # would hide it from a later, larger budget.
+                # Marked seen only once scored: a candidate skipped for want of
+                # budget has not been ruled out, and recording it would hide it
+                # from a later, larger budget.
                 break
             seen.add(key)
             evaluations += 1
@@ -567,7 +563,7 @@ def score_topology(
     """Maximized log-likelihood of one topology, with no search.
 
     Exposed because exhaustive enumeration needs exactly this and should not
-    have to reach into a private helper to get it.
+    reach into a private helper for it.
 
     Parameters
     ----------
@@ -620,12 +616,12 @@ class ParsimonyInference:
 def _metric_step_matrix(step_matrix: np.ndarray, k: int) -> np.ndarray:
     """``step_matrix`` if the unrooted score is well defined under it, else raise.
 
-    A search walks unrooted topologies and keys them on their bipartitions,
-    so every rooting of a candidate must score the same. That holds when the
-    matrix is a metric: symmetric with a zero diagonal, so an edge costs the
-    same read either way, and satisfying the triangle inequality, so a
-    degree-2 root cannot be labelled with an intermediate state cheaper than
-    the direct change on the edge it splits.
+    A search walks unrooted topologies and keys them on their bipartitions, so
+    every rooting of a candidate must score the same. That holds when the matrix
+    is a metric: symmetric with a zero diagonal, so an edge costs the same read
+    either way, and satisfying the triangle inequality, so a degree-2 root
+    cannot take an intermediate state cheaper than the direct change on the edge
+    it splits.
     """
     step = np.asarray(step_matrix, dtype=np.float64)
     if step.shape != (k, k):
@@ -660,11 +656,11 @@ def parsimony_search(
     """Hill-climb over topologies on the parsimony score: large parsimony (``eq:large-parsimony``).
 
     The loop of :func:`infer` with the fit replaced by one parsimony pass, and
-    the same accounting: a budget in candidates scored, each topology scored
-    at most once, keyed on its bipartitions, and a converged flag that means
-    no neighbour improved. Below eight taxa
-    :func:`~snakes_and_ladders.search.topology.enumerate_topologies` referees it,
-    which is how the regression suite pins it.
+    the same accounting: a budget in candidates scored, each topology scored at
+    most once and keyed on its bipartitions, and a converged flag meaning no
+    neighbour improved. Below eight taxa
+    :func:`~snakes_and_ladders.search.topology.enumerate_topologies` referees
+    it, which is how the regression suite pins it.
 
     Parameters
     ----------
@@ -675,10 +671,10 @@ def parsimony_search(
     step_matrix : np.ndarray | None
         ``None`` scores by :func:`~snakes_and_ladders.likelihood.parsimony.fitch_score`.
         A ``(k, k)`` matrix scores by
-        :func:`~snakes_and_ladders.likelihood.parsimony.sankoff_score`, and must
-        be a metric --- symmetric, zero on the diagonal, and satisfying the
-        triangle inequality --- because an unrooted topology has one score
-        only when every rooting of it scores the same.
+        :func:`~snakes_and_ladders.likelihood.parsimony.sankoff_score` and must
+        be a metric --- symmetric, zero on the diagonal, satisfying the triangle
+        inequality --- since an unrooted topology has one score only when every
+        rooting scores the same.
     topology : Topology | None
         Where to start. ``None`` draws a random topology from ``rng``.
     moves : MoveSet

@@ -12,6 +12,7 @@
         "reward": "known",
         "taxa": 6
       },
+      "rtol": null,
       "seed": null,
       "value": -8976.30625076864
     },
@@ -22,6 +23,7 @@
         "start_seed_offset": 1000,
         "starts": 50
       },
+      "rtol": null,
       "seed": 20260905,
       "value": 1.0
     },
@@ -33,6 +35,7 @@
         "start_seed_offset": 1000,
         "starts": 50
       },
+      "rtol": null,
       "seed": 99,
       "value": 0.17
     }

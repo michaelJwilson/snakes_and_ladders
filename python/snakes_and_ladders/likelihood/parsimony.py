@@ -2,18 +2,17 @@
 
 Parsimony scores a topology by the fewest state changes that explain the data,
 with no model, no branch lengths and no probabilities --- an integer where the
-likelihood is a float. It is here to be **wrong**, in the one region where the
+likelihood is a float. It is here to be **wrong**, in the region where the
 failure is a theorem rather than a defect.
 
 That region is the *Felsenstein zone*: four taxa, two long branches placed
-non-adjacently. Convergent change on the two long branches is cheaper to
-explain by grouping them than by the true topology, so as sites increase
-parsimony's error rate converges to 1 rather than 0 --- it is statistically
-**inconsistent** there, while maximum likelihood under the generating model is
-consistent (Felsenstein 1978). Moving the same two long branches to be
-adjacent gives the *Farris zone*, where parsimony is consistent and fast, and
-the pair together is what makes the first interpretable: an implementation
-that is merely broken fails both.
+non-adjacently. Convergent change on them is cheaper to explain by grouping
+them than by the true topology, so as sites increase parsimony's error rate
+converges to 1 rather than 0 --- statistically **inconsistent**, where
+maximum likelihood under the generating model is consistent (Felsenstein
+1978). The same two long branches made adjacent give the *Farris zone*, where
+parsimony is consistent and fast; the pair makes the first interpretable,
+since an implementation that is merely broken fails both.
 
 **Small parsimony only.** This scores a *given* topology. Searching for the
 most parsimonious tree is large parsimony (``sec:parsimony``) and belongs to
@@ -25,7 +24,7 @@ algorithm for unordered characters (``eq:fitch``): every change costs 1 and
 any state may follow any other. :func:`sankoff_score` is Sankoff's dynamic
 programme under a weighted step matrix (``eq:sankoff``), of which Fitch is
 the unit-cost case --- :func:`unit_step_matrix` recovers it, and the suite
-pins that they agree exactly.
+pins their exact agreement.
 
 See Fitch (1971); Sankoff (1975); Felsenstein, *Inferring Phylogenies*,
 ch. 2, 7 and 9.
@@ -72,17 +71,16 @@ def fitch_score(tau: Node, alignment: Mapping[str, np.ndarray], k: int) -> int:
     for the minimum cost so far, held as a bitmask per site so a whole
     alignment is one vectorized pass rather than a Python loop per column. At
     an internal node the children's sets are intersected; where the
-    intersection is empty the union is taken instead and one change is
-    counted. That the two cases are exactly "no change needed" and "one change
-    needed" is what makes the count minimal, and it is why the criterion needs
-    no model.
+    intersection is empty the union is taken and one change is counted. The
+    two cases are exactly "no change needed" and "one change needed", which
+    makes the count minimal without a model.
 
     Parameters
     ----------
     tau : Node
         The topology to score. Branch lengths are ignored --- parsimony does
         not use them, which is half of what makes it a different criterion
-        rather than an approximation to the likelihood.
+        rather than an approximation.
     alignment : Mapping[str, np.ndarray]
         Leaf name to integer states, shape ``(n_sites,)``, values in
         ``[0, k)``.
@@ -99,8 +97,8 @@ def fitch_score(tau: Node, alignment: Mapping[str, np.ndarray], k: int) -> int:
     ValueError
         If a leaf of ``tau`` is missing from ``alignment``, if the sequences
         differ in length, or if ``k`` exceeds what a bitmask holds. A missing
-        leaf would otherwise score a strict subtree and return a number that
-        is smaller for the wrong reason.
+        leaf would score a strict subtree, returning a number smaller for the
+        wrong reason.
     """
     if not 2 <= k <= 63:
         msg = f"k must be in [2, 63] to fit a bitmask, got {k}"
@@ -142,16 +140,16 @@ def sankoff_score(
     bitmask --- and a parent's cost at state ``i`` sums over its children the
     cheapest ``step_matrix[i, j]`` plus the child's cost at ``j``. A leaf costs
     0 at its observed state and infinity elsewhere; the site's score is the
-    minimum over the root's states. It is the min-plus form of the pruning
-    recursion, and with :func:`unit_step_matrix` it returns exactly
-    :func:`fitch_score`, which is the reduction the suite pins.
+    minimum over the root's states. The min-plus form of the pruning
+    recursion, returning exactly :func:`fitch_score` under
+    :func:`unit_step_matrix`, the reduction the suite pins.
 
-    The tree is scored as rooted: ``step_matrix[i, j]`` is the cost of a
-    change from the parent's state ``i`` to the child's ``j``, so an
-    asymmetric matrix scores each rooting of the same unrooted tree
-    differently. That is the definition and not a defect; the search, which
-    walks unrooted topologies, is what refuses a matrix whose score depends
-    on the rooting (:func:`snakes_and_ladders.search.infer.parsimony_search`).
+    The tree is scored as rooted: ``step_matrix[i, j]`` is the cost of a change
+    from the parent's state ``i`` to the child's ``j``, so an asymmetric matrix
+    scores each rooting of the same unrooted tree differently. That is the
+    definition; the search, which walks unrooted topologies, refuses a matrix
+    whose score depends on the rooting
+    (:func:`snakes_and_ladders.search.infer.parsimony_search`).
 
     Parameters
     ----------
@@ -217,11 +215,11 @@ def brute_force_parsimony_score(
 
     The oracle :func:`fitch_score` is pinned against, and deliberately
     exponential: ``k ** internal_nodes`` per site. It shares no traversal with
-    Fitch --- it assigns states to internal nodes directly and counts
-    disagreeing edges --- which is what makes it an independent check rather
-    than a second spelling of the same recursion. The same relationship
-    :func:`snakes_and_ladders.likelihood.brute_force.brute_force_log_likelihood` has to the
-    pruning recursion.
+    Fitch --- it assigns states to internal nodes and counts disagreeing edges
+    --- so it is an independent check rather than a second spelling of the
+    same recursion, the relationship
+    :func:`snakes_and_ladders.likelihood.brute_force.brute_force_log_likelihood`
+    has to the pruning recursion.
 
     Callers must keep the tree small: cost is
     ``O(n_sites * k ** internal_nodes)``.
@@ -249,8 +247,7 @@ def brute_force_parsimony_score(
     total = 0
     for site in range(n_sites):
         # The observed state at every leaf for this site, so the cost loop
-        # below reads one flat mapping and never closes over the loop
-        # variable.
+        # below reads one flat mapping and never closes over the loop variable.
         observed = {name: int(states[site]) for name, states in alignment.items()}
         best = min(
             sum(

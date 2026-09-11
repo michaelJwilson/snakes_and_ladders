@@ -1,9 +1,8 @@
 """A 1-D Potts chain in an external field: reference instance of ``Objective``.
 
-Not phylogenetics, and that is its job (issue #63). An interface justified by
-a single model is shaped by that model; this one exists so the abstraction is
-tested against something whose only similarity to a tree is that it is a
-factorized distribution over discrete states.
+Not phylogenetics, and that is its job (issue #63): an interface justified by
+a single model is shaped by it, so the abstraction is tested against something
+whose only similarity to a tree is that it factorizes over discrete states.
 
 The model, for ``q`` states on a chain of length ``L``::
 
@@ -20,16 +19,14 @@ one optimizer is expected to serve both.
 :func:`snakes_and_ladders.opt.constrain.log_simplex`. Without that the model is
 unidentifiable and a fitted field has no value to compare against truth.
 
-**Relationship to** :mod:`snakes_and_ladders.sim.potts`. That module generalizes
-``simulate_chains`` below to an arbitrary graph (N-D lattices included) and
-its own exact open-chain sampler is the general-per-edge-coupling form of the
-one here. The two are not consolidated into one: ``opt/CLAUDE.md``'s "no
-application imports" rule (enforced by
-``tests/regression/opt/test_opt_objective.py``) forbids this module
-importing anything under ``snakes_and_ladders.sim``, so ``simulate_chains`` keeps its own
-copy rather than delegating to it. Issue #186 tracks resolving the
-duplication, by moving ``PottsParams``/``load_potts_params`` out
-of ``snakes_and_ladders.opt`` the way issue #171 moved ``snakes_and_ladders.opt.hmm``'s truth type into
+**Relationship to** :mod:`snakes_and_ladders.sim.potts`. That module
+generalizes ``simulate_chains`` below to an arbitrary graph and its exact
+open-chain sampler is the general-per-edge-coupling form of the one here. They
+are not consolidated: ``opt/CLAUDE.md``'s "no application imports" rule,
+enforced by ``tests/regression/opt/test_opt_objective.py``, forbids importing
+``snakes_and_ladders.sim``. Issue #186 tracks the duplication, by moving
+``PottsParams``/``load_potts_params`` out of ``snakes_and_ladders.opt`` as
+issue #171 moved ``snakes_and_ladders.opt.hmm``'s truth type into
 ``snakes_and_ladders.sim.hmm``.
 """
 
@@ -202,18 +199,15 @@ def graph_statistics(
     """Enumerate every configuration's sufficient statistics for a Potts graph.
 
     The energy is ``J * agreement(s) + sum_i h[s_i]``, so a configuration
-    enters the partition function only through two numbers: how many edges
-    agree, and how many sites hold each state. Enumerating those once turns
-    ``log Z`` into a `logsumexp` over precomputed rows, which is what makes an
-    exact lattice fit affordable at all -- every gradient step would otherwise
-    re-walk the configuration space.
+    enters the partition function through two numbers: agreeing edges, and
+    sites per state. Enumerating those once turns ``log Z`` into a `logsumexp`
+    over precomputed rows, so a gradient step does not re-walk the
+    configuration space.
 
     **This is exact and exponential, and the caller owns that trade.**
-    ``n_states ** n_nodes`` rows: 19,683 for a 3-state 3x3 lattice, which is
-    the size #170's simulator validates against and the size a coverage study
-    can refit at. A 4x4 lattice at 3 states is 43 million and is not this
-    function's business -- an approximation would be, and it would have to
-    declare itself.
+    ``n_states ** n_nodes`` rows: 19,683 for a 3-state 3x3 lattice, the size
+    #170's simulator validates against. A 4x4 lattice at 3 states is 43
+    million and is not this function's business.
 
     Parameters
     ----------
@@ -256,8 +250,8 @@ def log_partition_graph(
 ) -> torch.Tensor:
     """Exact ``log Z`` for a Potts graph, from enumerated statistics.
 
-    Differentiable in ``coupling`` and ``field``, which is the point: the
-    normalizer is where every gradient of the likelihood comes from.
+    Differentiable in ``coupling`` and ``field``: the normalizer is where
+    every gradient of the likelihood comes from.
 
     Parameters
     ----------
@@ -279,11 +273,10 @@ def log_partition_graph(
 class PottsLatticeObjective:
     """Negative log-likelihood of Potts configurations on a graph.
 
-    The lattice counterpart of :class:`PottsObjective`, and deliberately the
-    same shape: an unconstrained vector, a differentiable scalar, and a map
-    back to named parameters. Nothing in ``snakes_and_ladders.opt.fit`` changes to carry
-    it, which is the claim `opt/CLAUDE.md` makes for the interface and the
-    reason a fourth instance is worth having.
+    The lattice counterpart of :class:`PottsObjective`, the same shape: an
+    unconstrained vector, a differentiable scalar, and a map back to named
+    parameters. Nothing in ``snakes_and_ladders.opt.fit`` changes to carry it,
+    which is `opt/CLAUDE.md`'s claim for the interface.
 
     The normalizer is **exact**, by enumeration, so a fitted optimum can be
     checked against a brute-force scan rather than against the optimizer's own

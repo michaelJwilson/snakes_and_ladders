@@ -4,16 +4,15 @@
 in two places --- tree topologies via the tropical Grassmannian, and the
 Gumbel-softmax relaxation of Potts and HMM states. Only the second has an
 oracle: the spaces it relaxes are enumerable, so "does gradient ascent on a
-relaxation find what discrete search finds" is a *falsifiable* question here
-and is not one for topologies at any interesting size. This module takes that
-half and nothing else.
+relaxation find what discrete search finds" is falsifiable here and is not for
+topologies at any interesting size. This module takes that half.
 
-**The relaxation is an extension, not a second model.** A configuration
-becomes an ``(L, k)`` row-stochastic matrix and each objective below is the
-same score its discrete counterpart computes, read on the simplex. At a
-one-hot the two agree to float64, pinned over every configuration of an
-enumerable chain. A relaxation that is not an extension of what it relaxes is
-optimizing a different problem, and nothing measured against it transfers.
+**The relaxation is an extension, not a second model.** A configuration becomes
+an ``(L, k)`` row-stochastic matrix and each objective below is the score its
+discrete counterpart computes, read on the simplex. At a one-hot the two agree
+to float64, pinned over every configuration of an enumerable chain. A
+relaxation that is not an extension optimizes a different problem, and nothing
+measured against it transfers.
 
 **One identity does a lot of work, and its boundary is multilinearity ---
 not the chain.** Both objectives are *multilinear*: every term involves at
@@ -35,27 +34,23 @@ not an approximation of it. Three things follow.
   a relaxed search can lose is lost to local optima of the ascent, never to
   the relaxation itself.
 
-The boundary is easy to state wrongly, and two plausible statements of it are
-false. It is *not* that the model must be a chain: a lattice, or any graph, is
-equally multilinear. It is *not* that the terms must be pairwise either --- a
-term coupling three **distinct** sites is still one factor per site, and the
-identity still holds, which a test checks.
+The boundary is easy to state wrongly. It is *not* that the model must be a
+chain: a lattice, or any graph, is equally multilinear. Nor that the terms must
+be pairwise --- a term coupling three **distinct** sites is one factor per site
+and the identity holds, which a test checks.
 
 What breaks it is a term using the *same* site twice, since ``E[X**2]`` is
-``E[X]`` for an indicator and not ``E[X]**2``. That is not hypothetical here:
-:class:`snakes_and_ladders.sim.graph.PottsGraph` deliberately permits a doubled bond,
-because a periodic lattice of extent 2 produces one legitimately, and such an
-edge would join a node to itself after wrapping. A test pins the failure on
-exactly that shape --- measured, the two sides read 1.000 against 0.557 --- so
-the limit is a checked boundary rather than a sentence.
+``E[X]`` for an indicator and not ``E[X]**2``. Not hypothetical:
+:class:`snakes_and_ladders.sim.graph.PottsGraph` permits a doubled bond, a
+periodic lattice of extent 2 producing one legitimately. A test pins the
+failure on that shape --- measured, the two sides read 1.000 against 0.557.
 
-Two estimators are provided because the choice between them is empirical.
+Two estimators, because the choice between them is empirical.
 :data:`RelaxationMode.SOFT` is differentiable throughout and optimizes a
 smoothed objective at any ``temperature > 0``;
 :data:`RelaxationMode.STRAIGHT_THROUGH` takes a discrete forward pass and a
-soft backward one, so its forward value is always a real configuration's score
-and its gradient is biased. Both are measured against the exact gradient
-rather than chosen on principle.
+soft backward one, so its forward value is a real configuration's score and its
+gradient is biased. Both are measured against the exact gradient.
 
 See Jang, Gu & Poole (2017); Maddison, Mnih & Teh (2017).
 """
@@ -82,9 +77,9 @@ class RelaxationMode(StrEnum):
     """Which Gumbel-softmax estimator to use.
 
     A ``StrEnum`` rather than a bare string for the reason
-    :class:`snakes_and_ladders.sim.graph.BoundaryCondition` is one: an unrecognized mode is
-    a type error at the call site, not a branch that silently does the wrong
-    thing.
+    :class:`snakes_and_ladders.sim.graph.BoundaryCondition` is one: an
+    unrecognized mode is a type error at the call site rather than a branch that
+    silently does the wrong thing.
     """
 
     #: Softmax of the perturbed logits, used as-is. Differentiable
@@ -99,10 +94,10 @@ class RelaxationMode(StrEnum):
 class RelaxedObjective(Protocol):
     """A discrete chain score and its extension to the simplex.
 
-    The seam this module is built on: everything below --- the estimators, the
-    exact gradient, the optimizer --- is written against this and never
-    against a Potts chain or an HMM in particular. Adding a third discrete
-    space means writing one of these, not a second optimizer.
+    The seam this module is built on: the estimators, the exact gradient and
+    the optimizer are written against this and never against a Potts chain or
+    an HMM. A third discrete space means writing one of these, not a second
+    optimizer.
     """
 
     @property

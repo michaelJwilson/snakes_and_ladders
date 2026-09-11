@@ -1,9 +1,8 @@
 """REINFORCE against an enumerated oracle, and against the baseline it must beat.
 
-Root ``CLAUDE.md`` forbids a test that asserts only that something ran, and
-"the return went up" is exactly that: a sampled return under a changing
-policy rises for reasons that include a broken estimator. So every claim here
-is pinned to something computed a different way.
+"The return went up" is the test root ``CLAUDE.md`` forbids: a sampled return
+under a changing policy rises for reasons that include a broken estimator. So
+every claim here is pinned to something computed a different way.
 
 * The gradient is checked twice -- autodiff against central finite
   differences of the same enumerated ``J``, and the sampled estimator against
@@ -76,10 +75,9 @@ def _relative_difference(actual: torch.Tensor, expected: torch.Tensor) -> float:
 @pytest.mark.mathematical
 @pytest.mark.oracle
 def test_the_enumerated_gradient_matches_finite_differences() -> None:
-    # Autodiff against numerical differentiation of the same closed form.
-    # This rules out an error in the enumeration's use of autograd; it says
-    # nothing yet about the sampled estimator, which the next test covers.
-    # Realized: 1.5e-11 relative.
+    # Autodiff against numerical differentiation of the same closed form, which
+    # rules out an error in the enumeration's use of autograd and says nothing
+    # about the sampled estimator. Realized: 1.5e-11 relative.
     landscape, policy = _landscape(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
     exact = exact_policy_gradient(landscape, policy, start, EXACT_HORIZON)
@@ -110,9 +108,8 @@ def test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient() -> None
 @pytest.mark.mathematical
 def test_the_score_function_has_zero_expectation() -> None:
     # Why subtracting a constant baseline leaves the estimator unbiased: it
-    # multiplies this, and this is exactly zero because the probabilities sum
-    # to one whatever the weights are. Stated as an identity rather than a
-    # tolerance, since it holds to rounding.
+    # multiplies this, which is exactly zero because the probabilities sum to
+    # one whatever the weights are. An identity, not a tolerance.
     landscape, policy = _landscape(), _policy([0.9, -0.4])
     state = (1, 2, 0, 1)
     actions = landscape.actions(state)
@@ -129,13 +126,11 @@ def test_the_score_function_has_zero_expectation() -> None:
 @pytest.mark.mathematical
 def test_the_baseline_reduces_the_estimator_variance() -> None:
     # sec:policy-gradient of docs/tex/textbook.tex gives variance, not bias, as
-    # the reason for a baseline, so
-    # the variance is what is measured. The reduction here is modest --
-    # realized ratio 0.90 -- because at this horizon the returns are all of
-    # similar size; the baseline earns its place on problems whose return
-    # scale varies, which is the case it is there for. Reported rather than
-    # asserted tightly: a threshold tuned to 0.90 would be tuned to this
-    # landscape.
+    # the reason for a baseline, so variance is what is measured. The reduction
+    # is modest -- realized ratio 0.90 -- because at this horizon the returns
+    # are of similar size; the baseline earns its place where the return scale
+    # varies. Reported rather than asserted tightly: a threshold tuned to 0.90
+    # would be tuned to this landscape.
     landscape, policy = _landscape(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
 
@@ -212,11 +207,10 @@ def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
     # mean final energy of 3.519-3.584 against greedy's 3.396, with the
     # optimum at 3.850. It beat greedy on both metrics in 8 of 8 seeds.
     #
-    # The assertion is deliberately weaker than that: "at least as good".
-    # A policy that merely matched hill climbing would still be a true
-    # result, and a threshold tuned to the margin measured here would hide
-    # the day it stopped holding -- the same reasoning issue #128 applied to
-    # the NNI-versus-SPR comparison.
+    # The assertion is weaker than that: "at least as good". A policy merely
+    # matching hill climbing is still a true result, and a threshold tuned to
+    # the margin measured here would hide the day it stopped holding --- the
+    # reasoning issue #128 applied to the NNI-versus-SPR comparison.
     landscape = _landscape()
     starts = list(enumerate_configurations(N_STATES, CHAIN_LENGTH))
     policy = LinearPolicy(2)
@@ -277,19 +271,17 @@ def test_training_is_reproducible_from_its_seed() -> None:
 @pytest.mark.structural
 def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
     # Guards the guard: a check that cannot fail reads as evidence while
-    # supplying none. The bias planted here is myopia -- weighting each step
-    # by its own reward instead of by everything that followed it, which
-    # discards precisely the credit assignment sec:policy-gradient says tree search
-    # makes sharp. Realized: 7.1e-01 relative, against 9.9e-03 for the
-    # correct estimator on the same episodes.
+    # supplying none. The planted bias is myopia -- weighting each step by its
+    # own reward instead of by everything that followed, which discards the
+    # credit assignment sec:policy-gradient says tree search makes sharp.
+    # Realized: 7.1e-01 relative, against 9.9e-03 for the correct estimator on
+    # the same episodes.
     #
-    # Worth recording what is *not* an error, since it looks like one.
-    # Weighting every step by the episode's total return rather than by its
-    # return-to-go is also unbiased -- the discarded past rewards are
-    # uncorrelated with the action, so they contribute zero in expectation.
-    # Measured at 1.4e-02 here, inside the sampling tolerance. Return-to-go
-    # buys variance, not correctness, and a test claiming otherwise would be
-    # asserting a falsehood.
+    # What is *not* an error, since it looks like one: weighting every step by
+    # the episode's total return rather than its return-to-go is also unbiased,
+    # the discarded past rewards being uncorrelated with the action. Measured
+    # at 1.4e-02 here, inside the sampling tolerance. Return-to-go buys
+    # variance, not correctness.
     landscape, policy = _landscape(), _policy([0.3, -0.6])
     start = (2, 1, 1, 0)
     exact = exact_policy_gradient(landscape, policy, start, EXACT_HORIZON)

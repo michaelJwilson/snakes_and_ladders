@@ -1,8 +1,8 @@
 """Shared QA figure/caption writing, so every QA script formats consistently.
 
-A figure without the parameters that generated it recorded alongside it is
-not QA-usable (see ``sim/CLAUDE.md``'s ground-truth-retention rule); this
-module is where that convention is enforced once, rather than per script.
+A figure without the parameters that generated it recorded alongside it is not
+QA-usable (``sim/CLAUDE.md``'s ground-truth-retention rule); this module
+enforces that once rather than per script.
 """
 
 from __future__ import annotations
@@ -48,11 +48,10 @@ def latex_integer(value: int) -> str:
 def check_latex_safe(text: str) -> None:
     """Raise if ``text`` contains an unescaped LaTeX special character.
 
-    ``qa/CLAUDE.md`` requires captions to be plain text that
-    a document under ``docs/tex/`` can ``\\input`` verbatim. Enforced here, at the
-    point of writing, rather than asserted separately in each caption test:
-    a contract every caller must satisfy belongs in the one function every
-    caller goes through.
+    ``qa/CLAUDE.md`` requires captions to be plain text a document under
+    ``docs/tex/`` can ``\\input`` verbatim. Enforced at the point of writing
+    rather than in each caption test: a contract every caller must satisfy
+    belongs in the one function every caller goes through.
 
     Parameters
     ----------
@@ -83,27 +82,20 @@ _NUCLEOTIDES = "ACGT"
 def pearson_correlation(first: np.ndarray, second: np.ndarray) -> float:
     """Linear correlation of two equal-length samples.
 
-    Used where a figure has to report how closely two scoring surfaces agree.
+    Used where a figure reports how closely two scoring surfaces agree.
 
-    **Why not a rank correlation**, which is the more obvious choice for
-    "do these order things the same way". A rank statistic is discontinuous
-    in its inputs: two values that differ by a rounding error can swap rank,
-    and the statistic jumps. That is fatal here, because the surfaces being
-    compared come from an optimizer, several of whose optima agree to within
-    its own convergence tolerance -- so their order is not a property of the
-    science, and on another machine it comes out differently. Measured on the
-    6-taxon comparison: perturbing the fitted scores by one part in ``1e9``
-    moves Spearman's rho by up to ``0.04``, and leaves this correlation
-    unchanged to four decimals.
+    **Why not a rank correlation.** A rank statistic is discontinuous in its
+    inputs: two values differing by a rounding error can swap rank, and the
+    statistic jumps. The surfaces compared here come from an optimizer, several
+    of whose optima agree to within its own convergence tolerance, so their
+    order is not a property of the science and comes out differently on another
+    machine. Measured on the 6-taxon comparison: perturbing the fitted scores by
+    one part in ``1e9`` moves Spearman's rho by up to ``0.04`` and leaves this
+    correlation unchanged to four decimals. An unstable number is not a
+    measurement, and the committed PDFs make it a build failure as well.
 
-    That matters beyond reproducibility. The rendered PDFs are committed and
-    CI rebuilds it, so a caption reporting an unstable number fails the build;
-    but the deeper point is that such a number is not a measurement of
-    anything.
-
-    Both surfaces here are log-likelihoods in the same units, and this is
-    invariant to the affine rescaling that separates them, so it answers the
-    question that is actually being asked.
+    Both surfaces are log-likelihoods in the same units, and this is invariant
+    to the affine rescaling separating them.
 
     Parameters
     ----------

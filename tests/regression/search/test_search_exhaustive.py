@@ -1,17 +1,11 @@
 """Search quality against exhaustive enumeration.
 
-This is the first independent oracle this project has for the *discrete*
-half. Everything else about search is checked against closed-form neighbour
-counts, which say the move sets are what they claim to be and nothing about
-whether hill climbing finds the best tree. Below `n = 8` every unrooted
-topology can be scored, so "did it find the maximum" has an answer rather
-than an opinion.
+The first independent oracle for the *discrete* half: below `n = 8` every
+unrooted topology can be scored, so "did it find the maximum" has an answer.
 
 The expensive study is release-gated: 105 topologies at 6 taxa is 50 s of
-fitting, and the per-PR suite should not pay that. What runs per PR is the
-same question at 5 taxa, where 15 topologies cost a few seconds, plus the
-enumeration's own correctness -- which is cheap and is what the study rests
-on.
+fitting. What runs per PR is the same question at 5 taxa, where 15 topologies
+cost a few seconds, plus the enumeration's own correctness.
 """
 
 from __future__ import annotations
@@ -78,8 +72,7 @@ def six_taxon() -> tuple[
 ]:
     """The full 6-taxon alignment and its 105 scored topologies, computed once.
 
-    50 s of fitting, which is why every release-gated test below shares one
-    sweep rather than repeating it.
+    50 s of fitting, shared by every release-gated test below.
     """
     alignment, k, truth = _alignment()
     best, scores = _exhaustive_maximum(alignment, k)
@@ -92,9 +85,8 @@ def five_taxon() -> tuple[
 ]:
     """The 5-taxon alignment and its 15 scored topologies, computed once.
 
-    Module-scoped because the sweep is the expensive part and every test
-    below asks the same question of it. Recomputing it per test tripled the
-    module's wall clock for no additional evidence.
+    Module-scoped: recomputing the sweep per test tripled the module's wall
+    clock.
     """
     full, k, _ = _alignment()
     alignment = {name: full[name] for name in sorted(full)[:5]}
@@ -159,9 +151,9 @@ def test_hill_climbing_reaches_the_enumerated_maximum(
         dict[str, np.ndarray], int, float, dict[frozenset[frozenset[str]], float]
     ],
 ) -> None:
-    # 15 topologies, so the maximum is known rather than assumed. One taxon
-    # is dropped from the fixture to reach 5: the question here is whether
-    # the search finds the best tree for an alignment, which needs no truth.
+    # 15 topologies, so the maximum is known. One taxon is dropped from the
+    # fixture to reach 5: the question is whether the search finds the best
+    # tree for an alignment, which needs no truth.
     alignment, k, best, _ = five_taxon
 
     for seed in range(2):
@@ -211,17 +203,16 @@ def test_hill_climbing_success_rate_at_six_taxa(
         dict[frozenset[frozenset[str]], float],
     ],
 ) -> None:
-    # The measured rate is the deliverable, not the pass. On this fixture
-    # both move sets reached the enumerated maximum from 12 of 12 starts and
-    # recovered the generating topology every time, at a median of 14 fits
-    # for NNI against 48 for SPR -- so SPR's larger neighbourhood costs 3.4
-    # times as much here and buys nothing. That is a statement about the
-    # problem, not about SPR: the optimum leads the runner-up by 41.6 log
-    # units, so hill climbing is not being challenged at this size.
+    # The measured rate is the deliverable, not the pass. Both move sets
+    # reached the enumerated maximum from 12 of 12 starts and recovered the
+    # generating topology every time, at a median of 14 fits for NNI against 48
+    # for SPR, so SPR's larger neighbourhood costs 3.4 times as much and buys
+    # nothing here: the optimum leads the runner-up by 41.6 log units, so hill
+    # climbing is not being challenged at this size.
     #
-    # The assertion is deliberately weaker than the observation. A move set
-    # that fails sometimes is a true result about a weak neighbourhood, and
-    # a threshold tuned to what was measured would hide exactly that.
+    # The assertion is weaker than the observation: a move set that fails
+    # sometimes is a true result about a weak neighbourhood, and a threshold
+    # tuned to what was measured would hide it.
     alignment, k, _, best, _ = six_taxon
 
     successes = 0
@@ -255,10 +246,8 @@ def test_the_maximum_likelihood_tree_is_the_generating_tree_here(
     ],
 ) -> None:
     # Not guaranteed in general -- at finite data the ML tree need not be the
-    # tree that generated the alignment, and treating that as a failure would
-    # measure the sample rather than the method. On this fixture at 1500
-    # sites they coincide, which is what makes it usable for a recovery
-    # study: a search that finds the ML tree has also found the truth.
+    # tree that generated the alignment. On this fixture at 1500 sites they
+    # coincide, which makes it usable for a recovery study.
     _, _, truth, best, scores = six_taxon
 
     assert abs(scores[leaf_bipartitions(truth)] - best) <= _LIKELIHOOD_TOLERANCE
@@ -347,9 +336,8 @@ def test_the_cheaper_searches_reach_the_enumerated_maximum(
     ],
 ) -> None:
     # Every way of making the search cheaper is held to the oracle the
-    # unbounded search is held to. A bound that loses the optimum is a
-    # different search rather than a faster one, and the point of pinning it
-    # at 5 taxa is that "the optimum" is enumerated rather than assumed.
+    # unbounded search is: a bound that loses the optimum is a different search
+    # rather than a faster one, and at 5 taxa "the optimum" is enumerated.
     alignment, k, best, _ = five_taxon
 
     for seed in range(2):
@@ -373,15 +361,13 @@ def test_what_the_cheaper_searches_cost_and_what_they_lose_at_six_taxa(
         dict[frozenset[frozenset[str]], float],
     ],
 ) -> None:
-    # The measured table is the deliverable, not the pass; the numbers are
-    # reported in `STATUS.md` against issue #408 and are quoted nowhere else.
-    # The assertion is that no change loses the optimum where the unbounded
-    # search finds it, which is the claim the cheaper searches actually make.
-    # Measured here: every configuration 8 of 8, at medians of 49 fits and
-    # 2,848 forward passes unbounded against 15 and 755 at radius 1 and 31 and
-    # 1,009 for all three. The assertion is deliberately weaker than that: a
-    # configuration that fails sometimes is a true result about a bound, and a
-    # threshold tuned to 8 of 8 would hide it.
+    # The measured table is the deliverable, reported in `STATUS.md` against
+    # issue #408. The assertion is that no change loses the optimum where the
+    # unbounded search finds it. Measured: every configuration 8 of 8, at
+    # medians of 49 fits and 2,848 forward passes unbounded against 15 and 755
+    # at radius 1 and 31 and 1,009 for all three. The assertion is weaker than
+    # that, since a threshold tuned to 8 of 8 would hide a bound that fails
+    # sometimes.
     alignment, k, _, best, _ = six_taxon
 
     trials = 8

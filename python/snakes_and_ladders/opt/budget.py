@@ -1,26 +1,21 @@
 """One budgeted comparison, so every equal-budget claim is the same comparison.
 
 Four pull requests measured "does the method beat restarts at the same cost"
-by hand, each with its own loop, its own accounting and its own derivation
-of the restart count (issue #281). This module is the one loop. A
-:class:`Budget` names its unit and its size; a method is a callable that
-takes an instance, the budget and a generator and reports what it spent in
-that unit; :func:`compare` runs every method on every instance over the
-seeds and reports hits against the best value any method found, or against
-a known optimum where the instance carries one; :func:`mcnemar` is the
-paired test on two methods' per-instance hits, so "beats restarts" carries a
-p-value from the same run rather than a second study.
+by hand, each with its own loop and its own derivation of the restart count
+(issue #281). This module is the one loop. A :class:`Budget` names its unit
+and its size; a method takes an instance, the budget and a generator and
+reports what it spent in that unit; :func:`compare` runs every method on
+every instance over the seeds and reports hits against a known optimum or
+against the best value any method found; :func:`mcnemar` is the paired test
+on two methods' per-instance hits.
 
 Two refusals carry the discipline. A method that spends more than its budget
-is refused, not rounded, because "wins by running longer" is the error the
-utility exists to make impossible. And a budget is in one unit: a sweep and a
-likelihood evaluation are not exchangeable, and a harness that converted
-between them would be asserting a cost model it has not measured. Two methods
-compared under one budget report in its unit, and a comparison across units
-is two comparisons.
+is refused rather than rounded, since "wins by running longer" is the error
+this exists to make impossible. And a budget is in one unit: a sweep and a
+likelihood evaluation are not exchangeable, so a comparison across units is
+two comparisons.
 
 Model-agnostic, per ``opt/CLAUDE.md``: nothing here knows what an instance is.
-The methods that do live beside the models they compare, in the tests.
 """
 
 from __future__ import annotations
@@ -101,9 +96,8 @@ def restarts(single: Method[InstanceT], cost: int) -> Method[InstanceT]:
 
     Runs ``single`` with a budget of ``cost`` as many times as the budget
     allows, ``size // cost``, each from the generator's next state, and keeps
-    the best. The count is derived from the declared cost rather than chosen,
-    which is what every hand-rolled study did with a number it then had to
-    justify.
+    the best. The count is derived from the declared cost rather than
+    chosen.
 
     Raises
     ------
@@ -160,9 +154,8 @@ class Comparison:
         Best value per method and instance over the seeds, shape
         ``(n_methods, n_instances)``.
     spent : np.ndarray
-        The largest spend per method and instance over the seeds, same shape;
-        every entry is at most ``budget.size`` or the comparison would have
-        been refused.
+        Largest spend per method and instance over the seeds, same shape; at
+        most ``budget.size``, or the comparison would have been refused.
     reference : np.ndarray
         Per instance, the value a hit is scored against: the known optimum
         where one was given, else the best any method found.
@@ -257,9 +250,9 @@ def compare(
     methods : Mapping[str, Method]
         Name to method. Each is called once per (instance, seed) with the
         generator ``np.random.default_rng([seed, index])``, so a method sees
-        the same stream whichever other methods run beside it. Under
-        ``workers > 1`` a method must be picklable: a module-level function,
-        or :func:`restarts` of one, not a closure.
+        the same stream whichever others run beside it. Under ``workers > 1``
+        a method must be picklable: a module-level function, or
+        :func:`restarts` of one, not a closure.
     instances : Sequence
         The instance set. What an instance is, the methods know.
     budget : Budget
@@ -335,12 +328,11 @@ def mcnemar(first: np.ndarray, second: np.ndarray) -> float:
     """Exact two-sided McNemar p-value for two methods' hits on the same instances.
 
     The paired test ``ROADMAP.md`` §2.4 requires before a method displaces a
-    baseline. Only the discordant instances carry evidence --- those one
-    method reached and the other did not --- and under the null they split
-    evenly, so the p-value is the two-sided binomial tail on the smaller
-    count (McNemar, 1947, in its exact form rather than the chi-square
-    approximation, which is what a run of 40 starts can support). No
-    discordant instance means no evidence either way, and the p-value is 1.
+    baseline. Only the discordant instances carry evidence, and under the null
+    they split evenly, so the p-value is the two-sided binomial tail on the
+    smaller count (McNemar, 1947, exact rather than the chi-square
+    approximation, which is what 40 starts support). No discordant instance
+    means no evidence either way, and the p-value is 1.
 
     Parameters
     ----------

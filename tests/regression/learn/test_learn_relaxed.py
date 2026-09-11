@@ -1,10 +1,9 @@
 """The Gumbel-softmax relaxation, against enumeration at every step.
 
 The claim under test is that gradient ascent on a relaxed discrete objective
-finds what discrete search finds. It is falsifiable here and only here,
-because both spaces relaxed are enumerable: the exact optimum, the exact
-expected score, and the exact gradient are all computable, so nothing has to
-be assumed small.
+finds what discrete search finds. It is falsifiable here because both spaces
+relaxed are enumerable: the exact optimum, the exact expected score and the
+exact gradient are computable, so nothing is assumed small.
 """
 
 from __future__ import annotations
@@ -86,9 +85,9 @@ def _mcnemar(first: np.ndarray, second: np.ndarray) -> tuple[int, int, float]:
 
 @pytest.mark.oracle
 def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
-    # The first thing that must be true. A relaxation that disagrees with the
-    # discrete score at a one-hot is a different model, and every measurement
-    # made against it transfers to nothing.
+    # A relaxation that disagrees with the discrete score at a one-hot is a
+    # different model, and every measurement made against it transfers to
+    # nothing.
     landscape = PottsLandscape(-0.9, np.array([0.4, 0.35, -0.6]), 5)
     objective = RelaxedPotts(landscape)
 
@@ -137,9 +136,9 @@ def test_the_expected_discrete_score_equals_the_score_at_the_marginals(
     seed: int,
 ) -> None:
     # `E_q[score] = score(q)` for a multilinear objective under a factorized
-    # `q`. Checked against enumeration over every configuration, which shares
-    # no algebra with the closed form. This is what licenses the deterministic
-    # relaxation: it approximates nothing.
+    # `q`, against enumeration over every configuration, which shares no
+    # algebra with the closed form. It licenses the deterministic relaxation:
+    # it approximates nothing.
     torch.manual_seed(seed)
     for objective in (RelaxedPotts(_landscape()), _hmm(length=7)[0]):
         logits = torch.randn(
@@ -206,9 +205,9 @@ def test_a_term_using_one_site_twice_does_break_the_identity() -> None:
 @pytest.mark.structural
 def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> None:
     # A multilinear function on a product of simplices attains its maximum at
-    # a vertex, so the relaxed optimum cannot exceed the discrete one. It
-    # follows that everything a relaxed search loses is lost to local optima
-    # of the ascent, never to the relaxation.
+    # a vertex, so the relaxed optimum cannot exceed the discrete one: what a
+    # relaxed search loses is lost to local optima of the ascent, never to the
+    # relaxation.
     objective = RelaxedPotts(_landscape())
     _, best = enumerate_optimum(objective)
     generator = torch.Generator().manual_seed(4)
@@ -225,9 +224,8 @@ def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> No
 
 @pytest.mark.structural
 def test_the_two_objectives_satisfy_the_protocol() -> None:
-    # The seam this module is built on. Everything -- estimators, exact
-    # gradient, optimizer -- is written against `RelaxedObjective` and never
-    # against a Potts chain or an HMM.
+    # Estimators, exact gradient and optimizer are written against
+    # `RelaxedObjective`, never against a Potts chain or an HMM.
     assert isinstance(RelaxedPotts(_landscape()), RelaxedObjective)
     assert isinstance(_hmm(length=4)[0], RelaxedObjective)
 
@@ -251,11 +249,10 @@ def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     #   0.20   0.0475 (0.0157)     2.220     0.0502 (0.0165)   2.340
     #   0.10   0.0356 (0.0240)     3.392     0.0380 (0.0246)   3.472
     #
-    # Two readings. The bias falls by a factor of 17 while the standard
-    # deviation rises by a factor of 21, so no temperature is good at both.
-    # And straight-through's bias matches the soft estimator's within error
-    # while its variance is higher at every temperature -- it buys nothing
-    # here, which is a result about this problem and not a general claim.
+    # The bias falls by a factor of 17 while the standard deviation rises by a
+    # factor of 21, so no temperature is good at both. Straight-through's bias
+    # matches the soft estimator's within error while its variance is higher
+    # at every temperature -- it buys nothing on this problem.
     #
     # The run below uses 2000 draws to stay inside the CI budget, so it
     # asserts the *ordering*, which is stable, rather than the numbers above.
@@ -358,18 +355,17 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     # converged: at 400 steps it is unchanged at 18/40 and the sampled runs
     # move by one instance.
     #
-    # The headline is that the *sampling* costs, not the relaxation. The
-    # deterministic ascent -- which the identity above licenses -- is
-    # significantly better than the baseline; adding Gumbel noise gives up
-    # that advantage and lands at a tie, and annealing does not recover it.
+    # The *sampling* costs, not the relaxation. The deterministic ascent --
+    # which the identity above licenses -- beats the baseline significantly;
+    # adding Gumbel noise gives up that advantage and lands at a tie, and
+    # annealing does not recover it.
     #
-    # The budgets are not the same unit and are not claimed to be: greedy
-    # terminates at a local maximum after 3.5 decisions on average, at 14
-    # discrete evaluations each, while the relaxation takes gradient steps and
-    # evaluates no discrete configuration until the end. What is matched is
-    # the restart count and the seeds. Measured separately, the relaxation
-    # already wins at 25 gradient steps (15/40, p = 0.0064), so the advantage
-    # is not bought with the larger budget.
+    # The budgets are not the same unit: greedy terminates at a local maximum
+    # after 3.5 decisions on average, at 14 discrete evaluations each, while
+    # the relaxation takes gradient steps and evaluates no discrete
+    # configuration until the end. Matched are the restart count and the
+    # seeds. The relaxation already wins at 25 gradient steps (15/40,
+    # p = 0.0064), so the advantage is not bought with the larger budget.
     landscape = _landscape()
     objective = RelaxedPotts(landscape)
     _, best = optimum(landscape)
@@ -407,9 +403,8 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
 
 @pytest.mark.structural
 def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
-    # Reported as a tie because it is one. #193 established that precedent for
-    # the tree policy, and a tie stated as a tie is worth more than a variant
-    # promoted on an unpaired difference.
+    # Reported as a tie because it is one, the precedent #193 set for the tree
+    # policy.
     landscape = _landscape()
     objective = RelaxedPotts(landscape)
     _, best = optimum(landscape)
@@ -447,9 +442,8 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
 @pytest.mark.simulated_truth
 def test_the_hmm_path_is_recovered_from_every_restart() -> None:
     # The HMM half validates correctness, not difficulty: Viterbi is exact in
-    # `O(T k**2)` and nothing here is hard. Recovering it from 20 of 20
-    # restarts is the check that the relaxation optimizes the right objective,
-    # and it would be a mistake to read it as a search result.
+    # `O(T k**2)`. Recovering it from 20 of 20 restarts checks that the
+    # relaxation optimizes the right objective; it is not a search result.
     objective, _, _ = _hmm(length=8)
     _, best = enumerate_optimum(objective)
 
@@ -505,8 +499,7 @@ def test_straight_through_is_one_hot_forward_and_soft_backward() -> None:
 @pytest.mark.structural
 def test_the_gumbel_draws_are_independent_across_calls() -> None:
     # The generator is passed in rather than seeded inside, so a batch is
-    # independent. Seeding per call silently makes every draw identical, and
-    # that mistake has been made in this repository before.
+    # independent. Seeding per call silently makes every draw identical.
     generator = torch.Generator().manual_seed(5)
     logits = torch.zeros((6, 3), dtype=torch.float64)
 
@@ -565,8 +558,8 @@ def test_an_invalid_schedule_is_refused(
 @pytest.mark.structural
 def test_annealing_reaches_the_final_temperature_during_optimization() -> None:
     # Both schedules are supported because the fixed-`tau` sweep is the
-    # measurement and annealing is the practice. This checks the annealed run
-    # actually anneals rather than silently holding `temperature`.
+    # measurement and annealing the practice. Checked here: the annealed run
+    # anneals rather than silently holding `temperature`.
     objective = RelaxedPotts(_landscape())
 
     fixed = optimize(

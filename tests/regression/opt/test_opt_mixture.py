@@ -2,9 +2,9 @@
 
 Two abstractions meet here (issue #262). The component M step is the emission
 family's, called with responsibilities where an HMM passes state posteriors,
-so what is pinned is that it is *the same step* rather than a similar one. And
-the initializer is the first that reads its objective's data, which is the
-case issue #251 built the protocol for and had nothing to exercise it with.
+so what is pinned is that it is *the same step*. And the initializer is the
+first that reads its objective's data, the case issue #251 built the protocol
+for and had nothing to exercise it with.
 
 The k-means++ guarantee is the reason this can be tested rather than admired:
 Arthur & Vassilvitskii (2007) bound the *expected* seeding cost at
@@ -127,10 +127,10 @@ def test_the_fit_recovers_the_generating_mixture_up_to_the_label_permutation() -
 
 @pytest.mark.oracle
 def test_the_component_m_step_is_the_emission_family_s_own() -> None:
-    # Asserted rather than assumed: the mixture's EM and a direct call into
-    # `GaussianEmission.reestimate` on the same responsibilities must produce
-    # the same numbers, because they *are* the same call. If this ever
-    # diverges, the seam has acquired a mixture-specific branch.
+    # The mixture's EM and a direct call into `GaussianEmission.reestimate` on
+    # the same responsibilities must produce the same numbers, because they
+    # *are* the same call. A divergence means the seam has acquired a
+    # mixture-specific branch.
     observations = _dataset(n_samples=200)
     values = torch.as_tensor(observations, dtype=torch.float64)
     components = GaussianEmission([-1.0, 1.0], [2.0, 2.0], 1e-9)
@@ -166,9 +166,9 @@ def test_the_responsibilities_are_a_distribution_over_components() -> None:
 @pytest.mark.edge_case
 def test_a_collapsing_component_is_refused_rather_than_returned() -> None:
     # The unbounded likelihood transfers from the Gaussian HMM unchanged,
-    # because it is the same family: a component's mean on one observation
-    # with its scale going to zero diverges, so EM is refused rather than
-    # allowed to report a converged fit at a degenerate optimum.
+    # being the same family: a component's mean on one observation with its
+    # scale going to zero diverges, so EM is refused rather than reporting a
+    # converged fit at a degenerate optimum.
     observations = _dataset(n_samples=200)
     objective = GaussianMixtureObjective(observations, 2)
     floor = objective.variance_floor
@@ -202,9 +202,9 @@ def test_the_mixture_evidence_is_a_density_and_may_exceed_one() -> None:
 
 @pytest.mark.oracle
 def test_the_optimal_clustering_is_exact_where_it_can_be_checked_by_hand() -> None:
-    # Two obvious clusters of three points each: the optimum splits them, and
-    # the cost is the within-run sum of squares, 2 * (1 + 0 + 1) / ... written
-    # out below rather than taken from the function under test.
+    # Two clusters of three points: the optimum splits them, and the cost is
+    # the within-run sum of squares, written out below rather than taken from
+    # the function under test.
     values = np.array([0.0, 1.0, 2.0, 10.0, 11.0, 12.0])
 
     assert_allclose(optimal_clustering_cost(values, 2), 2.0 + 2.0, rtol=1e-14)
@@ -248,9 +248,9 @@ def test_kmeans_plus_plus_stays_inside_its_published_guarantee() -> None:
 
 @pytest.mark.structural
 def test_kmeans_plus_plus_beats_uniform_seeding_on_the_cost_it_optimizes() -> None:
-    # The paired control, kept beside the strategy rather than written inside
-    # this test: a comparison whose baseline lives only in the test that wins
-    # it is not a comparison. Realized: mean ratio 2.91 against 11.03, and the
+    # The paired control, kept beside the strategy: a comparison whose baseline
+    # lives only in the test that wins it is not a comparison. Realized: mean
+    # ratio 2.91 against 11.03, and the
     # worst uniform draw (58.1x optimal) is outside the k-means++ guarantee
     # while the worst k-means++ draw (14.4x) is inside it.
     observations = _dataset(
@@ -277,8 +277,8 @@ def test_kmeans_plus_plus_beats_uniform_seeding_on_the_cost_it_optimizes() -> No
 
 @pytest.mark.structural
 def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
-    # **The negative result, and it is the one worth having.** k-means++ is
-    # 3.8x better on the cost it optimizes, and on this mixture that buys
+    # **The negative result.** k-means++ is 3.8x better on the cost it
+    # optimizes, and on this mixture that buys
     # nothing downstream: EM reaches the same optimum from either seeding, and
     # from the objective's own quantile start too. Measured over 200
     # replicates: 200/200 for k-means++, 195/200 for uniform.
@@ -367,8 +367,8 @@ def test_an_initializer_that_reads_the_data_refuses_an_objective_it_cannot_read(
     # The finding #251's Open Question 4 turns into: the protocol needed no
     # change, because a data-dependent strategy is model-*specific* rather
     # than protocol-incompatible. It takes an `Objective` like every other
-    # initializer, and refuses the ones whose parameter vector it cannot
-    # interpret -- which is why it lives beside the mixture rather than in
+    # initializer and refuses the ones whose parameter vector it cannot
+    # interpret, so it lives beside the mixture rather than in
     # `opt/initialize.py` with the model-free strategies.
     params = PottsParams(
         n_states=3,
@@ -432,15 +432,14 @@ def _enumerable_mixture() -> tuple[np.ndarray, GaussianEmission]:
 
 @pytest.mark.oracle
 def test_the_evidence_and_the_e_step_match_the_enumerated_assignments() -> None:
-    # The mixture's evidence and its responsibilities have a one-line
-    # factorized form because the observations are independent, and that form
-    # is what this module computes. Summing 65,536 whole assignments term by
-    # term uses none of it, so agreement is evidence rather than a
-    # restatement: it catches a normalization over the wrong axis, a weight
-    # broadcast against the components rather than along them, and a
-    # log-sum-exp shift shared where it may not be. Realized on this
-    # instance: evidence to 1.2e-16 relative, responsibilities to 4.4e-16
-    # absolute, at the generating parameters and at the EM fixed point alike.
+    # The mixture's evidence and responsibilities have a one-line factorized
+    # form because the observations are independent, and that form is what
+    # this module computes. Summing 65,536 whole assignments term by term uses
+    # none of it, so agreement catches a normalization over the wrong axis, a
+    # weight broadcast against the components rather than along them, and a
+    # log-sum-exp shift shared where it may not be. Realized: evidence to
+    # 1.2e-16 relative, responsibilities to 4.4e-16 absolute, at the
+    # generating parameters and at the EM fixed point alike.
     observations, components = _enumerable_mixture()
     values = torch.as_tensor(observations, dtype=torch.float64)
     objective = GaussianMixtureObjective(observations, 2)
@@ -482,10 +481,10 @@ def test_the_evidence_and_the_e_step_match_the_enumerated_assignments() -> None:
 def test_the_seeded_start_lands_in_the_enumerated_maximum_posterior_assignment() -> (
     None
 ):
-    # What a data-reading start is for is the basin, and over 65,536
-    # assignments the basin is an exact object rather than a comparison: the
-    # single assignment of highest posterior probability under the parameters
-    # the start encodes. k-means++ reaches the fitted mixture's enumerated
+    # A data-reading start is for the basin, and over 65,536 assignments the
+    # basin is an exact object: the single assignment of highest posterior
+    # probability under the parameters the start encodes. k-means++ reaches
+    # the fitted mixture's enumerated
     # maximum-posterior assignment on 20 of 20 seeds; uniform seeding, the
     # control that already lives beside it, reaches it on 10 of 20. The
     # responsibilities at each seeded start agree with the enumeration to

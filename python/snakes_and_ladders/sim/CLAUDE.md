@@ -33,6 +33,11 @@ in this module. It is referenced here, never restated. What follows is local.
   `<tier>.yaml`, carrying the seed and budget that produced each number and
   the library versions it was computed against, so a regenerated number never
   rewrites a hand-written instance and a diff says which of the two moved.
+  **How closely a recomputation has to agree is part of the measurement**, and
+  is recorded with it: a counted or enumerated number is reproduced exactly, a
+  number an iterative optimiser produced is held to a stated relative
+  tolerance, because the ordering of its floating-point reduction belongs to
+  the host and not to the tree (issue #527).
   
   **A record is refereed by recomputing it, never by a hash of the tree it
   came from**: a hash re-keys on every edit in a wide closure and says only

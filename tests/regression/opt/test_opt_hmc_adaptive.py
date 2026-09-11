@@ -9,12 +9,12 @@ statistics: the acceptance lands at its target, the adapted chain and the
 fixed one agree on the posterior within Monte Carlo error, and what a draw
 costs in gradients is reported for both (issue #333).
 
-The measurement that shaped the module is recorded on
-:class:`~snakes_and_ladders.opt.hmc.Adaptation`: on a locally quadratic target
-the acceptance is a cliff in the step size, and dual averaging at a
-single-proposal statistic oscillates across it. The step jitter and the
-dual-averaging gain are set from that measurement, and the tests below pin
-what they achieve rather than the constants themselves.
+:class:`~snakes_and_ladders.opt.hmc.Adaptation` records the measurement that
+shaped the module: on a locally quadratic target the acceptance is a cliff in
+the step size, and dual averaging at a single-proposal statistic oscillates
+across it. The step jitter and the dual-averaging gain are set from that
+measurement, and the tests below pin what they achieve rather than the
+constants.
 """
 
 from __future__ import annotations
@@ -82,8 +82,8 @@ def _ess_per_gradient(chain: HmcChain) -> np.ndarray:
 def test_the_dual_averaging_iteration_is_hoffman_and_gelmans() -> None:
     # Algorithm 5 of Hoffman & Gelman (2014), written out with their symbols
     # and stepped by hand for four acceptance statistics, against the class.
-    # Every quantity is compared, not only the step, so a wrong constant in
-    # the averaging that happened to leave the iterate right would be caught.
+    # Every quantity is compared, not only the step, so a wrong constant that
+    # left the iterate right is still caught.
     step0, target = 0.1, 0.65
     mu = math.log(10.0 * step0)
     h_bar, log_step_bar = 0.0, 0.0
@@ -143,11 +143,10 @@ def _mass_matrix_leapfrog(
 
 @pytest.mark.mathematical
 def test_a_diagonal_mass_matrix_is_a_change_of_coordinates() -> None:
-    # `_Scaled` is the whole implementation of the mass matrix, so this is
-    # the statement that it *is* one: the unit-mass leapfrog on the scaled
-    # objective, mapped back, equals the mass-matrix leapfrog on the
-    # original to round-off, and the Hamiltonian is the same number in
-    # both coordinate systems.
+    # `_Scaled` is the whole implementation of the mass matrix: the unit-mass
+    # leapfrog on the scaled objective, mapped back, equals the mass-matrix
+    # leapfrog on the original to round-off, and the Hamiltonian is the same
+    # number in both coordinate systems.
     inverse_mass = torch.tensor([2.5, 0.4], dtype=torch.float64)
     scale = inverse_mass.sqrt()
     theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
@@ -270,9 +269,8 @@ def test_a_warm_up_whose_chain_did_not_move_is_refused() -> None:
 def test_a_chain_without_adaptation_reports_no_warm_up_and_counts_its_gradients() -> (
     None
 ):
-    # The fixed path is the oracle for the adapted one, so it must be what
-    # it was: no report, and the cost is the trajectory count times what one
-    # trajectory costs.
+    # The fixed path is the oracle for the adapted one, so it must be what it
+    # was: no report, and the cost the trajectory count times one trajectory.
     chain = sample(
         GAUSSIAN,
         torch.Generator().manual_seed(3),
@@ -345,11 +343,11 @@ def _agreement(
 ) -> tuple[HmcChain, HmcChain]:
     """An adapted chain and a fixed-parameter chain of the same length, and their agreement.
 
-    Means must agree within three standard errors, each standard error from
-    the chain's own effective sample size; so must the spreads, whose
-    standard error is ``sd / sqrt(2 ESS)``. The fixed chain is the oracle:
-    it is the sampler every committed result used, and the adapted one may
-    be more efficient but not different.
+    Means must agree within three standard errors, each from the chain's own
+    effective sample size; so must the spreads, whose standard error is
+    ``sd / sqrt(2 ESS)``. The fixed chain is the oracle --- the sampler every
+    committed result used --- and the adapted one may be more efficient but
+    not different.
     """
     adapted = sample(
         objective,
@@ -429,10 +427,10 @@ def test_the_adapted_chain_agrees_with_the_fixed_chain_on_the_four_taxon_posteri
 ):
     # The fixed chain runs at unit mass with the step the stiffest branch
     # allows; the adapted one at the warm-up's metric. Same posterior, same
-    # Monte Carlo error bound as the Gaussian case, and the #268 interval
-    # -- the delta-method standard error of the branch lengths at the
-    # posterior mode -- reported beside both chains' spreads, since on a
-    # tree it is an approximation and the chain is what checks it.
+    # Monte Carlo error bound as the Gaussian case, and the #268 interval --
+    # the delta-method standard error at the posterior mode -- reported beside
+    # both chains' spreads, since on a tree it is an approximation the chain
+    # checks.
     #
     # Realized at 600 draws: means within 1.77 standard errors on every
     # branch, spreads within 2.84 -- the fixed chain's stiffest branch has
