@@ -670,6 +670,25 @@ $e^{-\beta E_{\min}} \le Z(\beta) \le k^N e^{-\beta E_{\min}}$,
   -\frac{U}{\beta} \;\le\; E_{\min} \;\le\; \frac{N \log k - L}{\beta} .
   \label{eq:ground-state-bounds}
 \end{equation}
+Both of those cost one exact tree pass per edge, which a lattice of thousands
+of sites does not admit. Two looser ones cost $O(N + |E|)$ and so reach any
+size. Write
+\begin{equation}
+  E_{\mathrm{dec}} \;=\; -\sum_i \max_\sigma h_i(\sigma)
+      \;-\; \sum_{\langle i,j \rangle} \max(J_{ij}, 0)
+  \;\le\; E_{\min}
+  \;\le\; \energy(\sigma) \quad \text{for every } \sigma ,
+  \label{eq:decoupled-energy-bound}
+\end{equation}
+each term of the energy being at least its own minimum, and any
+configuration's energy being at least the least. The same quantity carries a
+bracket on the partition function, the left end holding where every coupling
+is non-negative:
+\begin{equation}
+  \sum_i \log \sum_\sigma e^{h_i(\sigma)} \;\le\; \log Z
+    \;\le\; N \log k - E_{\mathrm{dec}} .
+  \label{eq:saturated-bound}
+\end{equation}
 
 \subsection{Reading a Comparison}
 \label{sec:comparisons}
@@ -4470,6 +4489,21 @@ $-\beta E_{\min} \le \log Z(\beta) \le N \log k - \beta E_{\min}$. Combining
 with $L \le \log Z(\beta) \le U$ and dividing by $\beta > 0$ gives the
 bracket; as $\beta$ grows the $N \log k$ term is divided away, until the
 bounds on $\log Z$ themselves loosen.
+
+\paragraph{The decoupled bounds, \eqref{eq:decoupled-energy-bound} and
+\eqref{eq:saturated-bound}.}
+$\energy(\sigma) = -\sum_i h_i(\sigma_i) - \sum_{\langle i,j \rangle} J_{ij}
+[\sigma_i = \sigma_j]$ is a sum of terms, each bounded below by its own
+minimum over the configuration, and those minima are attained termwise by
+$\max_\sigma h_i(\sigma)$ and by $\max(J_{ij}, 0)$; no configuration need
+attain all of them at once, which is the slack. Exponentiating,
+$Z \le k^N e^{-E_{\mathrm{dec}}}$ as in \eqref{eq:ground-state-bounds}, which
+is the right inequality. For the left, $J \ge 0$ makes every coupling term of
+each exponent non-negative, so dropping all of them lowers every summand of
+$Z$, and what remains factorizes over sites. Both are one pass over the sites
+and one over the edges, against one exact tree pass per edge for
+\eqref{eq:spanning-tree-bound}, which is why they are the bracket at the
+sizes that bound does not reach.
 
 \section{Algorithms Cited From the Text}
 \label{app:algorithms}

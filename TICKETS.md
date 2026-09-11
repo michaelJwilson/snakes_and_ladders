@@ -114,6 +114,16 @@ parenthesis the only way a ticket is cited.
 - Weight transfer across problem sizes for a policy, and the schedule from
   `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
   and from 3×3 to 4×6 lattices, and a policy does not yet (#414)
+- Block-spin renormalization as a Potts surrogate: coarse-graining maps the
+  model into its own family, so the coarse model is evaluated exactly at
+  `ci` and the surrogate's error is analysable rather than only measured
+  (#365)
+- A patched or transformer form at `potts_spots/release`, against the graph
+  surrogate at matched parameter count and training budget — conditional on
+  the graph form degrading with size, which it has not (#365)
+- Self-attention over 5,041 tokens, whose weight matrix is quadratic in the
+  site count and which the kernel kills at the release rung; either a
+  chunked or linear form, or the ticket records it declined (#365)
 - Batched episode rollout, so a budget at `n = 200` is affordable
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed

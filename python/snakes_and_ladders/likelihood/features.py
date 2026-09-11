@@ -5,8 +5,18 @@ analytic bounds already know, so the features here *are* those bounds and
 their by-products, at a cost the search can pay per candidate: for a
 topology, the plug-in and parsimony bounds of
 :mod:`snakes_and_ladders.likelihood.surrogate`, the Fitch score, and the
-least-squares residual; for a lattice, the mean-field and spanning-tree
-bounds, the Bethe free energy, and the energy alpha-expansion reaches.
+least-squares residual; for a lattice, the mean-field, decoupled and
+saturated bounds on ``log Z``.
+
+**Every lattice feature costs ``O(N + E)``, and that is a constraint rather
+than a preference** (issue #365). The spanning-tree bound is one exact tree
+pass per edge and does not reach the 5,041 sites of
+``potts_spots/release.yaml``; belief propagation takes a shared field only;
+and the energy alpha-expansion reaches *is* the target a release-size
+surrogate is fitted to, so reading it as a feature would predict the target
+from itself. All three were features here before that fixture existed, and
+none is a feature now. Each remains where it is computed, and the tests
+bracket every fitted value between the bounds that reach the size in hand.
 
 Two shapes, for two families of model. :func:`tree_features` and
 :func:`lattice_features` are one vector per structure, for a linear model or
@@ -24,21 +34,18 @@ from collections.abc import Mapping
 import numpy as np
 import torch
 
-from snakes_and_ladders.likelihood.belief_propagation import (
-    ConvergenceError,
-    belief_propagation,
-)
 from snakes_and_ladders.likelihood.surrogate import (
     ParsimonyUpperBound,
     PlugInLikelihood,
+    decoupled_log_partition,
     jc_distances,
     least_squares_lengths,
     least_squares_residual,
     mean_field_log_partition,
+    saturated_log_partition,
     site_fitch_scores,
-    spanning_tree_log_partition,
+    site_rows,
 )
-from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.topology import Topology, branch_splits
 from snakes_and_ladders.sim.graph import PottsGraph
 
@@ -54,15 +61,29 @@ TREE_FEATURE_NAMES = (
 TREE_TOKEN_NAMES = ("length", "balance", "across", "within")
 LATTICE_FEATURE_NAMES = (
     "mean_field_per_node",
-    "spanning_tree_per_node",
-    "bethe_per_node",
-    "expansion_energy_per_node",
+    "decoupled_per_node",
+    "saturated_per_node",
     "n_nodes",
     "edges_per_node",
     "mean_coupling",
     "field_spread",
+    "field_spread_sd",
 )
-LATTICE_TOKEN_NAMES = ("degree", "coupling_sum", "coupling_abs_sum")
+#: Unrolled mean-field iterations the lattice feature takes. The bound holds
+#: at every iterate, so this trades tightness for cost: measured against 400
+#: iterations on the three ``potts_spots`` instances, 80 leaves 2.1e-10 at
+#: 5,041 sites and nothing at 9 or 72, at two fifths of the 200 the bound's
+#: own default takes.
+MEAN_FIELD_ITERATIONS = 80
+
+LATTICE_TOKEN_NAMES = (
+    "degree",
+    "coupling_sum",
+    "coupling_abs_sum",
+    "field_max",
+    "field_min",
+    "field_mean",
+)
 
 
 def tree_features(
@@ -119,52 +140,58 @@ def tree_tokens(
 def lattice_features(graph: PottsGraph, field: np.ndarray) -> torch.Tensor:
     """One vector per lattice, in ``LATTICE_FEATURE_NAMES`` order, per node where it scales with size.
 
-    The Bethe free energy is belief propagation's estimate of ``log Z``,
-    exact on a tree and neither bound elsewhere; where sum-product does not
-    converge the mean-field value stands in, so the feature is always
-    defined. The expansion energy is what alpha-expansion from the uniform
-    labelling reaches, an upper bound on the ground-state energy.
+    Three bounds on ``log Z`` and five statistics of the instance. ``field``
+    is shared or per site, widened once by
+    :func:`~snakes_and_ladders.likelihood.surrogate.site_rows`; the last two
+    entries are the mean and the standard deviation across sites of the
+    field's per-site range, which are what tell a model how hard the
+    covariate pushes and how unevenly. A shared field makes the second of
+    them zero, which is the statement that there is no covariate.
     """
-    field = np.asarray(field, dtype=float)
-    field_tensor = torch.as_tensor(field)
-    mean_field = float(mean_field_log_partition(graph, field_tensor))
-    spanning = float(spanning_tree_log_partition(graph, field_tensor))
-    try:
-        bethe = float(belief_propagation(graph, field).bethe_log_partition)
-    except ConvergenceError:
-        bethe = mean_field
-    per_node_field = np.tile(field, (graph.n_nodes, 1))
-    expansion = alpha_expansion(
-        graph,
-        per_node_field,
-        field.shape[0],
-        start=np.zeros(graph.n_nodes, dtype=np.int64),
-    )
+    rows = site_rows(torch.as_tensor(np.asarray(field, dtype=float)), graph.n_nodes)
     n_nodes = float(graph.n_nodes)
+    span = (rows.max(dim=1).values - rows.min(dim=1).values).numpy()
     return torch.tensor(
         [
-            mean_field / n_nodes,
-            spanning / n_nodes,
-            bethe / n_nodes,
-            expansion.energy / n_nodes,
+            float(
+                mean_field_log_partition(
+                    graph, rows, n_iterations=MEAN_FIELD_ITERATIONS
+                )
+            )
+            / n_nodes,
+            float(decoupled_log_partition(graph, rows)) / n_nodes,
+            float(saturated_log_partition(graph, rows)) / n_nodes,
             n_nodes,
             len(graph.edges) / n_nodes,
             float(np.mean(graph.coupling)),
-            float(np.max(field) - np.min(field)),
+            float(np.mean(span)),
+            float(np.std(span)),
         ],
         dtype=torch.float64,
     )
 
 
-def lattice_tokens(graph: PottsGraph) -> torch.Tensor:
-    """One row per node, in ``LATTICE_TOKEN_NAMES`` order: its degree and the sum and absolute sum of its couplings."""
-    rows = np.zeros((graph.n_nodes, 3))
+def lattice_tokens(graph: PottsGraph, field: np.ndarray) -> torch.Tensor:
+    """One row per node, in ``LATTICE_TOKEN_NAMES`` order: its degree, the sum and absolute sum of its couplings, and three summaries of its own field.
+
+    The field enters as ``max``, ``min`` and ``mean`` over classes rather
+    than as the row itself, so a token is the same width at three classes
+    and at ten and one fitted model reads both. Under
+    ``h[n, m] = alpha[m] log(size_n / size_bar)`` the row is that scalar
+    covariate times a vector fixed across the lattice, so the three
+    summaries carry it exactly.
+    """
+    rows = site_rows(torch.as_tensor(np.asarray(field, dtype=float)), graph.n_nodes)
+    tokens = np.zeros((graph.n_nodes, len(LATTICE_TOKEN_NAMES)))
     for (first, second), coupling in graph.weighted_edges():
         for node in (first, second):
-            rows[node, 0] += 1.0
-            rows[node, 1] += coupling
-            rows[node, 2] += abs(coupling)
-    return torch.as_tensor(rows)
+            tokens[node, 0] += 1.0
+            tokens[node, 1] += coupling
+            tokens[node, 2] += abs(coupling)
+    tokens[:, 3] = rows.max(dim=1).values.numpy()
+    tokens[:, 4] = rows.min(dim=1).values.numpy()
+    tokens[:, 5] = rows.mean(dim=1).numpy()
+    return torch.as_tensor(tokens)
 
 
 def tree_adjacency(topology: Topology) -> tuple[list[str], np.ndarray]:
@@ -191,6 +218,7 @@ def tree_adjacency(topology: Topology) -> tuple[list[str], np.ndarray]:
 __all__ = [
     "LATTICE_FEATURE_NAMES",
     "LATTICE_TOKEN_NAMES",
+    "MEAN_FIELD_ITERATIONS",
     "TREE_FEATURE_NAMES",
     "TREE_TOKEN_NAMES",
     "lattice_features",
