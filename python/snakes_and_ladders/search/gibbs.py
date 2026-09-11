@@ -214,7 +214,7 @@ class _Indexed:
             entry_offsets.append(len(entry_start))
 
         self._layout = _EdgeLayout(
-            np.concatenate(flattened) if flattened else np.zeros(0),
+            np.concatenate(flattened),
             np.array(entry_offsets, dtype=np.int64),
             np.array(entry_start, dtype=np.int64),
             np.array(entry_stride, dtype=np.int64),
