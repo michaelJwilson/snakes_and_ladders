@@ -391,13 +391,20 @@ class GaussianEmission:
     by a floor, and which one has to be knowable: the floor is explicit,
     derived from the data, and reaching it is a refusal rather than a clamp.
 
+    **One state may emit several channels at once.** Give ``mean`` and
+    ``scale`` shape ``(n_states, n_channels)`` and an observation carries a
+    trailing channel axis, as :class:`CountPairEmission`'s does; the channels
+    are independent given the state, so the log-densities add and every M
+    step is the one-channel M step run per channel. A 1-D ``mean`` is the
+    single-channel family, unchanged in every value it returns --- the
+    channel axis is a widening, not a reparameterization (issue #548).
+
     Parameters
     ----------
     mean : Values
-        Per-state mean, shape ``(n_states,)``.
+        Per-state mean, shape ``(n_states,)`` or ``(n_states, n_channels)``.
     scale : Values
-        Per-state standard deviation, shape ``(n_states,)``, strictly
-        positive.
+        Per-state standard deviation, of ``mean``'s shape, strictly positive.
     variance_floor : float
         Variance at or below which :meth:`reestimate` refuses. Derive it from
         the data with :func:`pooled_variance_floor` rather than choosing a
@@ -406,8 +413,8 @@ class GaussianEmission:
     Raises
     ------
     ValueError
-        If the shapes disagree, a scale is not positive, or the floor is not
-        positive.
+        If the shapes disagree, either is neither 1- nor 2-D, a scale is not
+        positive, or the floor is not positive.
     """
 
     def __init__(
@@ -416,8 +423,14 @@ class GaussianEmission:
         scale: Values,
         variance_floor: float,
     ) -> None:
-        self._mean = torch.as_tensor(mean, dtype=torch.float64).reshape(-1)
-        self._scale = torch.as_tensor(scale, dtype=torch.float64).reshape(-1)
+        self._mean = _one_axis_at_least(torch.as_tensor(mean, dtype=torch.float64))
+        self._scale = _one_axis_at_least(torch.as_tensor(scale, dtype=torch.float64))
+        if self._mean.ndim > 2:
+            msg = (
+                f"mean is per state, or per state and channel; got shape "
+                f"{tuple(self._mean.shape)}"
+            )
+            raise ValueError(msg)
         if self._mean.shape != self._scale.shape:
             msg = (
                 f"mean and scale must have the same shape, got "
@@ -438,6 +451,11 @@ class GaussianEmission:
         return int(self._mean.shape[0])
 
     @property
+    def n_channels(self) -> int:
+        """Entries an observation carries; ``1`` for the single-channel family."""
+        return 1 if self._mean.ndim == 1 else int(self._mean.shape[1])
+
+    @property
     def is_discrete(self) -> bool:
         """False: the support is the real line, so the evidence is a density."""
         return False
@@ -449,12 +467,12 @@ class GaussianEmission:
 
     @property
     def mean(self) -> torch.Tensor:
-        """Per-state mean, shape ``(n_states,)``."""
+        """Per-state mean, of the shape it was given."""
         return self._mean
 
     @property
     def scale(self) -> torch.Tensor:
-        """Per-state standard deviation, shape ``(n_states,)``."""
+        """Per-state standard deviation, of :attr:`mean`'s shape."""
         return self._scale
 
     @property
@@ -463,7 +481,15 @@ class GaussianEmission:
         return self._variance_floor
 
     def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-        """Draw one real observation per entry of ``states``."""
+        """Draw one real observation per entry of ``states``.
+
+        Returns
+        -------
+        np.ndarray
+            Shape ``(n_draws,)`` for the single-channel family, and
+            ``(n_draws, n_channels)`` otherwise --- the per-state row is
+            indexed whole, so every channel of one draw is drawn together.
+        """
         return np.asarray(
             rng.normal(
                 loc=self._mean.numpy()[states], scale=self._scale.numpy()[states]
@@ -476,16 +502,53 @@ class GaussianEmission:
         Unbounded above: as a scale shrinks with its mean on an observation,
         the value there grows without bound. That is the model, not a defect,
         and a test exhibits it.
+
+        Parameters
+        ----------
+        observations : torch.Tensor
+            Shape ``(...)`` for the single-channel family, ``(..., n_channels)``
+            otherwise.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``. The channels are independent given the
+            state, so a multi-channel score is the sum over them.
         """
-        centred = observations.unsqueeze(-1).to(self._mean.dtype) - self._mean
-        return (
-            -0.5 * torch.log(torch.tensor(2.0 * torch.pi, dtype=self._mean.dtype))
-            - torch.log(self._scale)
-            - 0.5 * (centred / self._scale) ** 2
+        values = observations.to(self._mean.dtype)
+        if self._mean.ndim == 1:
+            return _normal_log_density(values.unsqueeze(-1) - self._mean, self._scale)
+        # Channel by channel, accumulating into one (..., n_states) array
+        # rather than the (..., n_states, n_channels) one a single expression
+        # would build: at the key rung that is 1.6 GB against 3.2 GB, and the
+        # sum is over a length the loop unrolls anyway.
+        scored = _normal_log_density(
+            values[..., 0].unsqueeze(-1) - self._mean[:, 0], self._scale[:, 0]
         )
+        for channel in range(1, self.n_channels):
+            scored = scored + _normal_log_density(
+                values[..., channel].unsqueeze(-1) - self._mean[:, channel],
+                self._scale[:, channel],
+            )
+        return scored
 
     def validate(self, observations: np.ndarray) -> None:
-        """Raise if an observation is not finite; the support is all of R."""
+        """Raise if an observation is not finite, or carries the wrong channels.
+
+        Raises
+        ------
+        ValueError
+            If an observation is not finite, or the trailing axis is not the
+            declared channel count.
+        """
+        if self._mean.ndim == 2 and (
+            observations.ndim < 1 or observations.shape[-1] != self.n_channels
+        ):
+            msg = (
+                f"an observation carries {self.n_channels} channels; got a "
+                f"trailing axis of shape {tuple(observations.shape)}"
+            )
+            raise ValueError(msg)
         if not bool(np.isfinite(observations).all()):
             msg = "observations must be finite"
             raise ValueError(msg)
@@ -503,14 +566,28 @@ class GaussianEmission:
             likelihood is unbounded in that direction, so a clamped fit would
             report a point estimate at a degenerate optimum (issue #122).
         """
-        values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
         mass = weights.sum(dim=0)
-        mean = (weights * values.unsqueeze(-1)).sum(dim=0) / mass
-        variance = (weights * (values.unsqueeze(-1) - mean) ** 2).sum(dim=0) / mass
+        values = observations.reshape(-1, self.n_channels).to(posterior.dtype)
+        # Channel by channel, so a channel's statistics never materialize the
+        # (n_samples, n_states, n_channels) array their product would: at the
+        # key rung that array is 3.2 GB against the 1.6 GB of one channel's.
+        located = [
+            _weighted_moments(weights, values[:, channel].unsqueeze(-1), mass)
+            for channel in range(self.n_channels)
+        ]
+        if self._mean.ndim == 1:
+            mean, variance = located[0]
+        else:
+            mean = torch.stack([moments[0] for moments in located], dim=1)
+            variance = torch.stack([moments[1] for moments in located], dim=1)
         collapsed = variance <= self._variance_floor
         if bool(collapsed.any()):
-            states = torch.nonzero(collapsed).reshape(-1).tolist()
+            states = (
+                torch.nonzero(collapsed.reshape(self.n_states, -1).any(dim=1))
+                .reshape(-1)
+                .tolist()
+            )
             msg = (
                 f"state(s) {states} re-estimated to variance "
                 f"{variance[collapsed].tolist()}, at or below the floor "
@@ -524,12 +601,34 @@ class GaussianEmission:
         )
 
     def alignment_key(self) -> torch.Tensor:
-        """The per-state means, as a column."""
-        return self._mean.reshape(-1, 1)
+        """The per-state means, one row per state and one column per channel."""
+        return self._mean.reshape(self.n_states, -1)
 
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """``mean`` and ``scale``, the parameters the model is stated in."""
         return {"mean": self._mean, "scale": self._scale}
+
+
+def _one_axis_at_least(values: torch.Tensor) -> torch.Tensor:
+    """``values`` with a state axis: a scalar becomes the one-state family."""
+    return values.reshape(1) if values.ndim == 0 else values
+
+
+def _normal_log_density(centred: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+    """``log N(y; mu, s)`` given ``y - mu`` and ``s``, broadcast over the states."""
+    return (
+        -0.5 * torch.log(torch.tensor(2.0 * torch.pi, dtype=scale.dtype))
+        - torch.log(scale)
+        - 0.5 * (centred / scale) ** 2
+    )
+
+
+def _weighted_moments(
+    weights: torch.Tensor, column: torch.Tensor, mass: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """One channel's posterior-weighted mean and variance, shape ``(n_states,)`` each."""
+    mean = (weights * column).sum(dim=0) / mass
+    return mean, (weights * (column - mean) ** 2).sum(dim=0) / mass
 
 
 class NegativeBinomialEmission:

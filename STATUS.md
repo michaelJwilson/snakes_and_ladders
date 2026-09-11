@@ -24,7 +24,7 @@ the code behind each problem class.
 | §0 Development loop | Landed, its record widened since 0.3.0: the problem catalogue and checks ledger, the experiment ledger, the run logger, kind markers on every test, one fixture API, citation-driven figure builds with label guards, notebook re-execution, the frameworks extra as referees, and the parallelism seam as a negative result | Ten required checks; committed PDFs byte-compared and every notebook re-executed on each PR; `0.3.0` was built into `CHANGELOG.md` on 2026-09-03 and never tagged, so `0.4.0` tags both (#358) | [#49](https://github.com/michaelJwilson/snakes_and_ladders/pull/49), [#57](https://github.com/michaelJwilson/snakes_and_ladders/pull/57), [#72](https://github.com/michaelJwilson/snakes_and_ladders/pull/72), [#92](https://github.com/michaelJwilson/snakes_and_ladders/pull/92), [#102](https://github.com/michaelJwilson/snakes_and_ladders/pull/102), [#151](https://github.com/michaelJwilson/snakes_and_ladders/pull/151), [#205](https://github.com/michaelJwilson/snakes_and_ladders/pull/205), [#243](https://github.com/michaelJwilson/snakes_and_ladders/pull/243), [#248](https://github.com/michaelJwilson/snakes_and_ladders/pull/248), [#285](https://github.com/michaelJwilson/snakes_and_ladders/pull/285), [#294](https://github.com/michaelJwilson/snakes_and_ladders/pull/294), [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318), [#353](https://github.com/michaelJwilson/snakes_and_ladders/pull/353), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355), [#375](https://github.com/michaelJwilson/snakes_and_ladders/pull/375), [#379](https://github.com/michaelJwilson/snakes_and_ladders/pull/379), [#380](https://github.com/michaelJwilson/snakes_and_ladders/pull/380) |
 | 1.1 Simulation & ground truth | Trees, the HMM under six emission families, Potts (1-D chain plus general N-D lattice/MRF and `G(n, p)`), the Gaussian mixture, the coupled spatio-sequential model, three canonical fixtures with outside answers, and two code constructions --- Gallager's ensemble and the bicycle code --- landed as first-class simulators | Simulated substitution frequencies against the closed-form JC probabilities; GTR reproduces JC to machine precision; HMM state and emission marginals against brute-force path enumeration; the count families reach their Poisson and binomial limits at the `O(1/x)` rate; Potts single-site and pair marginals against exhaustive enumeration at 3-state 3x3 and 2-state 4x4; the coupled simulator held to what it composes by chi-square at 0.001 over 400 draws; every encoded codeword satisfies `H c = 0` at `n = 24`, `96`, `510`, and a codeword's channel ratios are the zero word's up to sign on every realization; the bicycle construction's degrees, rank and self-orthogonality `H H^T = 0` exact over GF(2), and its 12-bit fixture at minimum distance 4 over 64 enumerated codewords | [#58](https://github.com/michaelJwilson/snakes_and_ladders/pull/58), [#64](https://github.com/michaelJwilson/snakes_and_ladders/pull/64), [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#182](https://github.com/michaelJwilson/snakes_and_ladders/pull/182), [#190](https://github.com/michaelJwilson/snakes_and_ladders/pull/190), [#223](https://github.com/michaelJwilson/snakes_and_ladders/pull/223), [#224](https://github.com/michaelJwilson/snakes_and_ladders/pull/224), [#259](https://github.com/michaelJwilson/snakes_and_ladders/pull/259), [#261](https://github.com/michaelJwilson/snakes_and_ladders/pull/261), [#263](https://github.com/michaelJwilson/snakes_and_ladders/pull/263), [#302](https://github.com/michaelJwilson/snakes_and_ladders/pull/302), [#356](https://github.com/michaelJwilson/snakes_and_ladders/pull/356), [#546](https://github.com/michaelJwilson/snakes_and_ladders/pull/546) |
 | 1.2 Likelihood & energy engine | CPU landed (NumPy, PyTorch, Rust at 2.5x the oracle at 200 taxa by 11,000 sites); belief propagation with two exact oracles; Fitch and Sankoff parsimony; one factor graph with sum-product and max-product over it, Viterbi included; forward–backward as an evaluator; certified bounds and learned surrogates; the LDPC decoder pinned to the general sum-product and to enumeration; two runtime audits; GPU dispatch not started (#280) | Worst relative deviation 4.0e-14 against brute-force marginalization across three backends and four site counts spanning a factor of 30; max-product returns the enumerated Viterbi path on four chains; flooding on the 8x8 lattice within 1.8x of belief propagation after the audit; decoder posteriors within 4.6e-11 of the general flooding on six loopy codes and 1.9e-13 of enumeration on a cycle-free one; the 19,998-bit (3,6) code brackets the erasure threshold 0.4294 between 0.42 and 0.44 | [#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66), [#74](https://github.com/michaelJwilson/snakes_and_ladders/pull/74), [#81](https://github.com/michaelJwilson/snakes_and_ladders/pull/81), [#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#219](https://github.com/michaelJwilson/snakes_and_ladders/pull/219), [#247](https://github.com/michaelJwilson/snakes_and_ladders/pull/247), [#296](https://github.com/michaelJwilson/snakes_and_ladders/pull/296), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317), [#343](https://github.com/michaelJwilson/snakes_and_ladders/pull/343), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#354](https://github.com/michaelJwilson/snakes_and_ladders/pull/354), [#356](https://github.com/michaelJwilson/snakes_and_ladders/pull/356) |
-| 1.3 Continuous optimization | Landed for trees, the HMM, the Potts chain and lattice, and the mixture; an interval at any fit, whatever produced it; posterior sampling by leapfrog and Yoshida, tempered and adapted; initializers, multi-start, k-means++ and, since #373, the tree's two data-driven starts — neighbor joining on pairwise distances and the closest tree of the Hadamard conjugation (#364); closed-form test functions; the mixture at equal evaluations through the budget utility | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates; the lattice fitted against an enumerated normalizer, coverage 157/160 at 100 samples and 153/160 at 400 and 1600; integrator orders realized at 4.000 and 16.001; the adapted chain's acceptance 0.650 pooled over 20 seeds at a target of 0.65; restarts reach the mixture's best-known optimum from 7/40 starts against tempering's 4/40 (`p = 0.549`) and annealing's 1/40 (`p = 0.031`); neighbor joining returns every branch of a known tree to 1e-12 at 20 and 50 taxa, and no start separates on the fit at five and six taxa, every one converging in 22 to 27 evaluations (experiment 006) | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#256](https://github.com/michaelJwilson/snakes_and_ladders/pull/256), [#263](https://github.com/michaelJwilson/snakes_and_ladders/pull/263), [#269](https://github.com/michaelJwilson/snakes_and_ladders/pull/269), [#271](https://github.com/michaelJwilson/snakes_and_ladders/pull/271), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#345](https://github.com/michaelJwilson/snakes_and_ladders/pull/345), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348), [#352](https://github.com/michaelJwilson/snakes_and_ladders/pull/352), [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373) |
+| 1.3 Continuous optimization | Landed for trees, the HMM, the Potts chain and lattice, and the mixture; an interval at any fit, whatever produced it; posterior sampling by leapfrog and Yoshida, tempered and adapted; initializers, multi-start, k-means++ and, since #373, the tree's two data-driven starts — neighbor joining on pairwise distances and the closest tree of the Hadamard conjugation (#364); since #541 three chain starts on a surrogate surface — `FromChain`, `FromAnnealing`, `FromTempering` — and eight seedings of the coupled model's emission parameters compared through them; closed-form test functions; the mixture at equal evaluations through the budget utility | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates; the lattice fitted against an enumerated normalizer, coverage 157/160 at 100 samples and 153/160 at 400 and 1600; integrator orders realized at 4.000 and 16.001; the adapted chain's acceptance 0.650 pooled over 20 seeds at a target of 0.65; restarts reach the mixture's best-known optimum from 7/40 starts against tempering's 4/40 (`p = 0.549`) and annealing's 1/40 (`p = 0.031`); neighbor joining returns every branch of a known tree to 1e-12 at 20 and 50 taxa, and no start separates on the fit at five and six taxa, every one converging in 22 to 27 evaluations (experiment 006); the coupled model's emission seedings split the two orderings at 100 components on 4,000 observations — the prior draw reaches the best projected value on 6 of 6 paired instances while `tempering` and `data` recover more of the generating component on 6 of 6, both at `p = 0.031`, so no default moves (experiment 009) | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#256](https://github.com/michaelJwilson/snakes_and_ladders/pull/256), [#263](https://github.com/michaelJwilson/snakes_and_ladders/pull/263), [#269](https://github.com/michaelJwilson/snakes_and_ladders/pull/269), [#271](https://github.com/michaelJwilson/snakes_and_ladders/pull/271), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#345](https://github.com/michaelJwilson/snakes_and_ladders/pull/345), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348), [#352](https://github.com/michaelJwilson/snakes_and_ladders/pull/352), [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373), [#553](https://github.com/michaelJwilson/snakes_and_ladders/pull/553) |
 | 1.4 Move sets & classical baselines | Trees landed, with warm starts, lazy scoring and support; large parsimony; Potts cluster updates; the exact-baseline family — minimum cut, alpha expansion with its proved bound, Max-Cut with a certificate; schedules, annealing and parallel tempering with an opt-in Rust sweep; one Gibbs sampler and annealer over any factor graph, and a tempered ensemble over labellings, decodings and topologies; the coupled model fitted; Viterbi and posterior decoding landed; iterated conditional modes over HMM paths not started (#176) | NNI and SPR neighbour counts exhaustively verified at `n = 5..8`; hill climbing reaches the enumerated optimum from 12 of 12 starts and large parsimony from every start at five and six taxa; the two-state ground state exact against enumeration over 36 shape-coupling-field combinations; on the planted glass at equal sweeps tempering 12/12 against annealing 10/12 and restarts 4/12; the tempered weight within 0.039 of enumeration on every seed of 20 | [#82](https://github.com/michaelJwilson/snakes_and_ladders/pull/82), [#127](https://github.com/michaelJwilson/snakes_and_ladders/pull/127), [#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#212](https://github.com/michaelJwilson/snakes_and_ladders/pull/212), [#220](https://github.com/michaelJwilson/snakes_and_ladders/pull/220), [#221](https://github.com/michaelJwilson/snakes_and_ladders/pull/221), [#222](https://github.com/michaelJwilson/snakes_and_ladders/pull/222), [#255](https://github.com/michaelJwilson/snakes_and_ladders/pull/255), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284), [#289](https://github.com/michaelJwilson/snakes_and_ladders/pull/289), [#304](https://github.com/michaelJwilson/snakes_and_ladders/pull/304), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#310](https://github.com/michaelJwilson/snakes_and_ladders/pull/310), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#350](https://github.com/michaelJwilson/snakes_and_ladders/pull/350) |
 | 2.1 RL formulation & deployment | The estimator, the Potts, hidden-path and tree environments, a critic, an actor–critic, PPO and a PUCT planner landed, each pinned to enumeration; a tree policy trained on the fixture hill climbing fails, a tie over one feature and ahead of greedy over the seven-column set (#349); not yet measured against restarts | Enumerated gradient against finite differences at 1.5e-11 relative; on the Potts chain REINFORCE 86.6%, PPO 96.3% and the planner 92.6% at 8.3 evaluations per episode against greedy's 80.2% at 48; on the 7-taxon fixture the single feature reaches 0.487 against greedy's 0.480 (sign test `p = 0.79`) and the full set 0.796, ahead on 16 of 16 seeds (`p = 3.05e-5`), while restarts reach 1.000 at the same budget | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139), [#192](https://github.com/michaelJwilson/snakes_and_ladders/pull/192), [#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193), [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#320](https://github.com/michaelJwilson/snakes_and_ladders/pull/320), [#349](https://github.com/michaelJwilson/snakes_and_ladders/pull/349), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355) |
 | 2.2 Curriculum learning | Started: the surrogate curriculum from 5 to 6 taxa and from 3x3 to 4x6 lattices; weight transfer for a policy and batched rollout not started | Zero-shot at six taxa the set surrogate falls to `R^2` 0.68 and recovers to 0.94 after transfer, the MLP holds 0.92 and reaches 0.95; lattice surrogates transfer zero-shot at 0.99 | [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
@@ -253,7 +253,7 @@ and the exact open-chain recursion, the Gibbs sweep, `enumerate_potts` and
 reproduces the shared-field `log Z` and marginals to 0.0, and the strip matches
 enumeration to 0.0 on a per-site field.
 
-`potts_spots` declares the spatial half with the chains and the gated
+`spatio_only` declares the spatial half with the chains and the gated
 emissions removed and the field `h[n, m] = alpha[m] * log(size[n] / size_bar)`
 added: 3x3 at `ci`, where enumeration over 19,683 configurations gives the
 exact marginals; a 12x6 strip at `stress`, where 3\*\*72 configurations are
@@ -802,7 +802,7 @@ sites) and the `qa`/`infra` row are recorded as not measured.
 | `learn` | `PottsLandscape.features`, 60 x 32 episodes on the length-8 chain: 23.5%, with 520,968 ufunc reductions from its loop over sites; `policy.sample` 4.0% | 23.5% | vectorization | under 20% of the run | `_deltas`, exact |
 | `search` | `maxflow.energy`, 32x32 x 64 configurations: the per-edge Python loop 91.6% (16x16: 93.0%) | 92% | vectorization | 5–10x on one configuration | `potts.log_weights`, 1e-12 relative |
 | `search` | `spr_neighbours` at 20 taxa: 128.7 ms for 1,122 candidates, `build` and its generator 44%, `visit` 28% | 10% of one `infer` step (1.28 s); 67% of one candidate fit (193 ms) | allocation (a `Node` tree per new key) | at most 2x on the neighbourhood, under 5% of a step | not ported: under the 10% rule per step |
-| `search` | `gibbs.sample_factor_graph`, 32x32: `conditional` 42.0%, `gibbs_sweep` 17.0%, `log_density` 9.7% (16x16: 40.8 / 18.6 / 9.2%) | 69% | compiled backend over the #341 edge layout | ~10x, from the Potts `numba` sweep's 7x | draw for draw on the same uniforms; not acted on |
+| `search` | `gibbs.sample_factor_graph`, 32x32: `conditional` 42.0%, `gibbs_sweep` 17.0%, `log_density` 9.7% (16x16: 40.8 / 18.6 / 9.2%) | 69% | compiled backend over the #341 edge layout | ~10x, from the Potts `numba` sweep's 7x | draw for draw on the same uniforms; **acted on by [#561](https://github.com/michaelJwilson/snakes_and_ladders/issues/561), below: 122x on the sweep, 7.1x on the run** |
 | `search` | `alpha_expansion`, 32x32: Python Dinic `_augment` 28.8%, `_levels` 18.8%, `expand` 24.0% | 72% | FFI: `maxflow_rust` as the inner solver | 3x or more on the expansion | its energies, exact; **acted on by [#528](https://github.com/michaelJwilson/snakes_and_ladders/issues/528), below** |
 | `search` | `potts_mcmc` single-site, 32x32: `_single_site_sweep` 45.8% | 46% | none: the Rust backend exists and is opt-in (#287) | — | not changed by default |
 | `opt` | `hmc.sample`, 1,000 draws on the length-64 chain: `torch.logsumexp` 32.0% (512,000 calls, one per position per evaluation), `log_partition` 9.6%; the fit at length 64: 26.6% | 42% | call overhead: reassociate the homogeneous transfer-matrix product by repeated squaring, 6 products for 64 positions | 1.5–2x on the run | the sequential recursion at 1e-12 relative and central differences for the gradient; not acted on |
@@ -862,7 +862,57 @@ cells at 8x8 with two and four labels agree on the labelling, the energy, the
 cycle count and the move count, and the pure implementation stays as the
 oracle. Nothing else in the mid-tier ranking is a candidate — every other
 module's first entry is a `torch` call, a NumPy ufunc or a Rust kernel, and
-`gibbs.conditional` at 44.8% is #341's open item, unchanged here.
+`gibbs.conditional` at 44.8% was #341's open item, unchanged there and
+carried by [#561](https://github.com/michaelJwilson/snakes_and_ladders/issues/561),
+below.
+
+**The Gibbs conditional compiled, and the exponential that could not cross
+with it** ([#561](https://github.com/michaelJwilson/snakes_and_ladders/issues/561)).
+`gibbs.conditional` re-profiled on this host at **43.4%** of a 32x32 run,
+`gibbs_sweep` at 18.0% and `log_density` at 9.0%, which holds #341's ranking.
+The sweep now runs through a `numba` kernel over an **edge layout** — every
+factor's log table flattened into one array, and offsets into it per
+variable — so the list of lists, the `np.zeros` per site and the tuple key
+built with a `slice` per factor are all gone.
+
+| 8x8, 3 states, 20 sweeps | NumPy | compiled | ratio |
+| --- | --- | --- | --- |
+| `gibbs_sweep` (min / median) | 23.50 / 24.53 ms | **0.193 / 0.202 ms** | **121.8x / 121.7x** |
+
+| `sample_factor_graph`, 20 sweeps | NumPy | compiled | ratio |
+| --- | --- | --- | --- |
+| 16x16 (min / median) | 101.7 / 103.3 ms | **14.4 / 14.6 ms** | **7.1x / 7.1x** |
+| 32x32 (min / median) | 423.6 / 430.0 ms | **59.9 / 60.5 ms** | **7.1x / 7.1x** |
+
+`pytest-benchmark` over 3,273 and 31 rounds for the sweep, five repeats for
+the run, one thread, on a host `ps` showed carrying nothing but the job
+(1-minute load 0.13 before the first reading). A second reading of the sweep
+gave 129.6x and 128.8x, so the sweep is 122–130x over two runs; the run's
+7.1x repeated to the decimal. The **7.1x** the run realizes is the audit's
+~10x missed and the Potts `numba` sweep's 7x met, and the sweep's 122x is
+what Amdahl's law then leaves: what the ticket priced at 69% of the run is
+now 2.1% of it. Peak traced memory at 32x32 rises from 1.12 MiB to 2.40 MiB,
+of which the layout is 351 KiB, built once per graph in 14.1 ms.
+
+**The pin is exact, and a bound is what makes it exact.** A heat-bath draw
+exponentiates, and NumPy's `exp` and `libm`'s disagree in the last place on
+**4.6%** of `float64` inputs (2e6 draws, three ranges), so the arithmetic
+alone would make this a distributional port like the Rust Potts sweep. The
+kernel instead decides a site only where the draw clears every cumulative
+boundary by more than the two exponentials can move it, and hands any other
+site back to NumPy: 16 units of the last place per state, against the 4 the
+error analysis needs. So the compiled sweep is the *same chain*, not a chain
+of the same law — 8 of 8 runs at 16x16 and 32x32 over four seeds agree on
+every state and every log-density, 76,800 draws, and the handing back is
+pinned by driving it with a guard wide enough to take every site. That is
+what lets the kernel be the default, where the Rust sampling sweep is opt-in.
+
+**Re-profiled after, the ranking inverts.** At 32x32 `log_density` carries
+**47.8%** of the compiled run and its generator expression a further 12.0%,
+`layout` 13.2% — paid once per graph — and `gibbs_sweep` **2.1%**, down from
+18.0%. `conditional` does not appear: no call reaches it. `log_density` is
+the loop that clears the 10% bar now, a Python sum over factors with a tuple
+key built per factor; it is carried by [#563](https://github.com/michaelJwilson/snakes_and_ladders/issues/563) rather than here.
 
 **Bounds with proofs, certified rather than trusted**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
@@ -1346,6 +1396,45 @@ moves**; k-means++ lands as a strategy a caller may choose, at a cost of one
 objective evaluation (271 us of seeding against 260 us per evaluation at 4000
 points).
 
+**Eight seedings of the coupled model's emission parameters, through the seam
+that already existed**
+([#541](https://github.com/michaelJwilson/snakes_and_ladders/issues/541)). The `M x K`
+parameters are seeded a prior draw, the data's own quantiles, `kmeans++`, the
+same construction scored under the family's negative log-density, a short
+burn-in fit, and three chains on a Gaussian surrogate --- Hamiltonian,
+annealed and tempered. **The `Initializer` protocol needed no change** for the
+last three, as it needed none for `kmeans++` at
+[#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262); they land
+as `FromChain`, `FromAnnealing` and `FromTempering`, and `SEAMS.md` lists them
+as its consumers. Cost is counted in passes over the data rather than seconds,
+which is what makes a 144-pass seeding comparable to a 6-pass fit.
+
+**At 100 components on 4,000 observations the likelihood prefers the seeding
+that read nothing, and the truth prefers the one that cost most.** Over six
+paired instances at a six-pass budget, the prior draw reaches the best
+projected value on **6 of 6** and no candidate beats it: `data`, `hmc`,
+`tempering` and a two-restart baseline sit behind it at McNemar **p = 0.031**,
+and `kmeans++`, `emission++`, `burn-in` and `anneal` do not separate (0.50,
+0.25, 0.06, 0.06). The same fits reverse on the simulated truth --- recovery of
+the generating component **0.089** for `tempering` and **0.082** for `data`
+against `prior`'s **0.060**, each 6 of 6 at **p = 0.031**, against the
+generating parameters' own 0.109, with mean relative error in a component's
+negative-binomial mean 0.303 and 0.691 against 0.884. A seeding cannot be
+chosen on the projected likelihood at this size, so **no default moves**; the
+disagreement is [#559](https://github.com/michaelJwilson/snakes_and_ladders/issues/559),
+and experiment 009 carries the table.
+
+**What the chains charge, and what the free baseline is worth.** The three
+chain seedings cost **144 passes against the fit's 6** and buy 0.007 of
+recovery over `data`, which costs none. Their acceptance is 1.00 at both sizes
+and the tempered ladder's lowest swap acceptance is 0.00 at the key model: at
+4,000 observations the surrogate posterior is sharp, so a chain on it descends
+rather than mixes and what the bill buys is an optimizer of a Gaussian
+surrogate, not a draw from it. At the notebook's four-component size the two
+orderings agree and the chains win both --- best value reached, recovery 0.75
+to 0.76 against the generating parameters' 0.78 --- so the disagreement is a
+property of 40 observations a component rather than of the candidates.
+
 **The tree's data-driven start, and what it buys at equal evaluations.**
 Mossel and Roch carry the HMM's spectral method of moments to a phylogeny,
 where it becomes a distance per pair and a tree from the distances
@@ -1418,6 +1507,113 @@ the same test runs per pull request and pins the ordering. The paired test
 `ROADMAP.md` §2.4 asks for is now in the utility: `opt.budget.mcnemar` on the
 per-start hits, exact rather than chi-square, because 40 starts cannot support
 the approximation.
+
+**Eight ways to seed a Gaussian mixture, and the control that named the
+difference.**
+[#548](https://github.com/michaelJwilson/snakes_and_ladders/issues/548) ran
+[#541](https://github.com/michaelJwilson/snakes_and_ladders/issues/541)'s
+seeding comparison on a Gaussian instead of on counts, because a Gaussian is
+where #541's candidate 3 predicts no gain: the Bregman divergence of an
+isotropic Gaussian's log-partition *is* the squared Euclidean distance
+([`docs/experiments/010`](docs/experiments/010-gaussian-mixture-seeding-control.md)).
+**It wins on neither rung, and the reason is that candidate 3 never ran the
+divergence.**
+Over 200 seedings of `mixture/ci.yaml`, scored against the exact optimal
+k-means cost: the divergence and squared Euclidean produce **identical
+seedings, draw for draw**, at **1.8496** times the optimum (worst 6.21), while
+the rule `opt.emission_mixture.plus_plus_start` actually applies — the family's
+**negative log density** — costs **3.9111** (worst 33.80) against uniform
+seeding's **4.3470**, nine tenths of the way from the divergence to uniform.
+The cause is arithmetic and not statistical: the negative log density is the
+divergence plus the log normalizer, D-squared sampling normalizes its scores
+rather than shifting them, and an additive constant therefore dilutes the rule
+toward uniform. #541's candidate 3 is measuring a normalizer as well as a
+divergence, and what that costs a count family is #541's measurement to make.
+The two-channel rung this was sized against —
+`tests/regression/fixtures/mixture/release.yaml`, ten components over
+5,041 x 4,000 = 20,164,000 observations, mirroring
+`spatio_sequential_counts/stress.yaml` at bin factor 5 — **is declared and not
+run**: one expectation-maximization iteration over it holds four
+(20,164,000 x 10) float64 arrays, 1.613 GB for the responsibilities alone, and
+peak resident set measured 2,169 MiB at 5,041,000 observations against 682 MiB
+at 500,000, so 328 MiB per million above a 518 MiB floor and 7.0 GiB at the
+full size, against 8 GiB free on the 15 GiB host. One iteration takes 9.473 s
+and 0.917 s at those two sizes, so 38 s at the full size and 25 min for one
+40-evaluation fit. The comparison runs at bin factor 40, 504,100 observations,
+the largest whose simulate-fit-assert run fits the 120 s key cap, at **36.7 s**.
+Those four numbers were taken on the 4-core host at a 1-minute load of 0.90
+with one BLAS thread and no other job; the comparison's own wall clock, 79 min
+57 s and 60 min 29 s over two runs, was not, and is an upper bound.
+
+**The nine seedings, at 40 evaluations of expectation-maximization each.**
+Every candidate is #541's, unchanged, so the two studies are comparable. The
+fit is budget-matched through `opt.budget.compare` and the seeding is not, so
+each seeding's own cost is reported in the fit's unit and as a fraction of it.
+Left, `mixture/ci.yaml` over 40 shared starts; right, the two-channel rung over
+8, which is what nine fits over 504,100 observations allow — the run took
+79 min 57 s and 60 min 29 s on a contended host, so 40 starts would be the
+whole release tier and the paired test is correspondingly weak there.
+
+| seeding | ci hits of 40 | ci mean gap | ci recovery | key hits of 8 | key mean gap | key recovery | seeding cost, evaluations |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| random-restart | 0 | 5.30 | 0.6800 | 0 | 3,030 | 0.4116 | 0.00, 0% |
+| kmeans++ | 0 | 0.723 | 0.6240 | 0 | 424 | 0.4632 | 0.90, 2.2% |
+| emission-d2 | 0 | 1.38 | 0.6140 | 0 | 668 | 0.4562 | 1.00, 2.5% |
+| burn-in | 0 | 19.1 | 0.6240 | 0 | 30,700 | 0.2968 | 7.00, 17.5% |
+| family-sample | 0 | 1.87 | 0.5980 | 0 | 717 | 0.4093 | 0.00, 0% |
+| spectral | 0 | 0.723 | 0.6240 | 0 | 424 | 0.4632 | 1.00, 2.5% |
+| hmc | 6 | 0.785 | 0.5260 | 0 | 595 | 0.4370 | 48.00, 120% |
+| tempering | 2 | 1.06 | 0.5620 | 0 | 595 | 0.4370 | 88.00, 220% |
+| anneal | 0 | 1.39 | 0.6220 | 0 | 595 | 0.4370 | 44.00, 110% |
+
+Gaps are nats against the fit started from the generating parameters; recovery
+is the fraction of observations assigned their planted component, against a
+Bayes ceiling of **0.688** on the ci rung and **0.5509** on the key rung, which
+1.5 standard deviations of separation fixes. **Nothing but a chain reaches the
+referee, and no chain reaches it cheaply**: `hmc` reaches it from 6 of 40 ci
+starts (McNemar p = 0.031 against restarts) at 120% of the fit budget, and
+parallel tempering from 2 at 220%. **And on the key rung the chains did not
+mix at all** — acceptance 0.000 at the step that accepted every proposal on
+the ci rung, so all three returned their own starting point and are one
+uniform-seeded fit bought at 110 to 220% of the fit, which is what
+`STATUS.md` reports rather than averages in. Spectral is k-means++ on both
+rungs, and for the reason the route predicts: the leading principal subspace
+of a one- or two-channel sample is the whole of it, so the projection is a
+rotation. The burn-in initializer is last on both rungs by an order of
+magnitude, at 17.5% of the fit budget.
+
+**The two orderings, #541's and this one.** #541 scores on the projected count
+mixture of `spatio_sequential_counts/ci` — four components, 4,000
+observations, 6 passes — in nats below the best value any candidate reached;
+this experiment scores in nats below the fit started from the generating
+parameters. The units differ, the ranks are what is compared.
+
+| candidate | #541, counts | here, Gaussian ci | here, Gaussian key |
+| --- | --- | --- | --- |
+| tempering | 0.0 | 1.06 | 595 |
+| hmc | 2.2 | 0.785 | 595 |
+| anneal | 2.2 | 1.39 | 595 |
+| burn-in | 7.0 | 19.1 | 30,700 |
+| random-restart (#541's `data`) | 12.0 | 5.30 | 3,030 |
+| kmeans++ | 20.4 | 0.723 | 424 |
+| emission-d2 (#541's `emission++`) | 20.5 | 1.38 | 668 |
+| family-sample (#541's `prior`) | 114.2 | 1.87 | 717 |
+| spectral | not run (#554) | 0.723 | 424 |
+
+**Which of #548's three outcomes.** Not the first: emission-aware D-squared
+does not win on counts — 20.5 nats against squared Euclidean's 20.4 at equal
+budget, a difference no ordering rests on — and it does not tie on a Gaussian,
+where it is 1.6x further from the truth-started fit at the key rung. Not the
+second. The third, **it wins on neither**, with the cause named: the rule is
+not the divergence it is described as. #541's own reading — that
+`emission++` seeds closer (1,303 nats against 2,729) and recovers more labels
+(0.56 against 0.48) while ending level — is consistent with that: the
+normalizer moves where the seeding lands without moving which basin the fit
+reaches. The two studies agree on the chains as well, from opposite
+directions: #541 measured acceptance 1.00 at 4,000 observations with hmc and
+anneal returning the same seeding, and this one measured acceptance 0.000 at
+504,100, all three returning their starting points. One fixed step size does
+not serve two sample sizes, which is the `TICKETS.md` bullet.
 
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
@@ -1639,10 +1835,15 @@ the topology move's visits
 over the 15 five-taxon topologies match the flat-prior weight over fitted
 likelihoods, the quantity #270 enumerates, and annealed to 0.02 it reaches
 the enumerated best from 6 of 6 random starts with every topology fitted
-once. The price of generality is smaller than expected: twenty sweeps of an
-8x8 three-state lattice take 19.1 ms over factor tables against 15.0 ms for
-the Python Potts sweep and 5.9 ms for the Rust one, 1.3x and 3.2x. The
-specialised kernels stay the default.
+once. The price of generality was 1.3x against the Python Potts sweep and 3.2x
+against the Rust one; since #561 compiled the sweep it is a discount.
+Re-measured together on one quiet host, twenty sweeps of an 8x8 three-state
+lattice take 0.202 ms over the factor graph's edge layout and 24.53 ms over
+its factor tables in NumPy, against 20.52 ms and 7.90 ms for twenty steps of
+the Python and Rust Potts annealers, which carry an energy evaluation per
+step (medians, `tests/benchmarks/test_gibbs_bench.py`). The specialised
+kernels stay the default for the Potts lattice; whether they should is a
+measurement to take rather than a change made here.
 
 **What carries between neighbours, and what does not.** A branch is identified
 by the leaf split it induces rather than by a node name, so a neighbour sharing
