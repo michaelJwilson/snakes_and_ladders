@@ -247,6 +247,6 @@ parenthesis the only way a ticket is cited.
   field figures (#339)
 - Port the Rust heat-bath sweep to a per-site external field, which it
   refuses today (#551)
-- `potts_spots`' tilt, null class and per-class occupancy are thermal
+- `spatio_only`' tilt, null class and per-class occupancy are thermal
   statistics; record ground-state counterparts a minimizer can be held to
   (#551)

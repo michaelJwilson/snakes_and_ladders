@@ -1944,7 +1944,7 @@ and it was failing by up to 2.55.
 and refutes the fixture's simulated truth as a referee for a ground state**
 ([#552](https://github.com/michaelJwilson/snakes_and_ladders/pull/552),
 [`docs/experiments/009`](docs/experiments/011-potts-ground-state-recovery.md)).
-Ten entries on `potts_spots` over three rungs, budget-matched through
+Ten entries on `spatio_only` over three rungs, budget-matched through
 `opt.budget.compare` at **2,083,260 site visits** --- 60 heat-bath sweeps of
 `n_nodes + 2 |E|` --- over 8 independent starts. The unit is site visits and
 not sweeps: a Wolff step flips one cluster while a heat-bath sweep touches
@@ -2036,7 +2036,7 @@ reported at equal steps with its underspend stated, because stopping a sweep
 when a budget is exhausted is a stop on the state and `search/CLAUDE.md`
 refuses it.
 
-Rung 1, `potts_spots/ci` at 9 sites and q = 3, is a **correctness pin and not
+Rung 1, `spatio_only/ci` at 9 sites and q = 3, is a **correctness pin and not
 a comparison**: its enumerated ground state is 8 sites in one class and 1 in
 another, class 2 unused, and all ten entries reach it. `search/CLAUDE.md`'s
 "a fixture whose answer is trivial measures nothing" applies, and it is kept

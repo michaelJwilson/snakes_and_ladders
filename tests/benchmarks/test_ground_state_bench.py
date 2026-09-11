@@ -27,18 +27,18 @@ from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_exp
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import PottsMove, anneal_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
-from snakes_and_ladders.sim.potts import spots_field
+from snakes_and_ladders.sim.potts import spatio_only_field
 
 #: The schedule the comparison anneals on, at a length a benchmark affords.
 STEPS = 20
 
 
 def _problem(extent: int, n_states: int) -> tuple[object, np.ndarray]:
-    """`potts_spots`' construction at a benchmark size: triangular, lognormal sizes."""
+    """`spatio_only`' construction at a benchmark size: triangular, lognormal sizes."""
     graph = triangular_lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.7)
     rng = np.random.default_rng(extent * 10 + n_states)
     sizes = np.exp(rng.normal(0.0, 0.6, size=graph.n_nodes))
-    return graph, spots_field(np.linspace(-0.9, 0.9, n_states), sizes)
+    return graph, spatio_only_field(np.linspace(-0.9, 0.9, n_states), sizes)
 
 
 @pytest.mark.parametrize("n_states", [3, 10])

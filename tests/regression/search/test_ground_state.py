@@ -1,4 +1,4 @@
-"""Ground-state recovery on `potts_spots`, and the two referees it is scored by.
+"""Ground-state recovery on `spatio_only`, and the two referees it is scored by.
 
 Issue #551's rungs, each pinned where an exact answer reaches: enumeration at
 nine sites, a graph cut at 5,041 sites and two states. The structural referee
@@ -46,16 +46,16 @@ from snakes_and_ladders.search.potts_mcmc import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import PottsSpotsParams
+from snakes_and_ladders.sim.potts import SpatioOnlyParams
 
 #: Two exact routes sum the same weights in a different order, so they agree
 #: to the last bits of a float64 reduction rather than bitwise.
 _EXACT = 1e-9
 
-CI: PottsSpotsParams = fixture("potts_spots", "ci").params
-RELEASE: PottsSpotsParams = fixture("potts_spots", "release").params
+CI: SpatioOnlyParams = fixture("spatio_only", "ci").params
+RELEASE: SpatioOnlyParams = fixture("spatio_only", "release").params
 
-#: The exact ground state of `potts_spots/release` at q = 2, measured by graph
+#: The exact ground state of `spatio_only/release` at q = 2, measured by graph
 #: cut on this branch: energy, the field-only labelling's agreement with it,
 #: and its size tilt. The tilt is **below** the fixture's thermal 0.4935, and
 #: that is the physics rather than a defect --- a ferromagnet orders as the
@@ -66,7 +66,7 @@ RELEASE_Q2_GREEDY_AGREEMENT = 0.5376
 RELEASE_Q2_TILT = 0.2151
 
 
-def _rung(params: PottsSpotsParams, n_states: int) -> ground_state.Rung:
+def _rung(params: SpatioOnlyParams, n_states: int) -> ground_state.Rung:
     field, alpha = ground_state.rung_field(params, n_states)
     return ground_state.Rung(
         name=f"q{n_states}",
@@ -179,7 +179,7 @@ def test_the_bracket_contains_the_known_optimum() -> None:
 def test_the_field_accept_step_rejects(move: PottsMove) -> None:
     # A cluster move silently running without its accept step would look like
     # a fast winner, so the rejections are asserted before any timing is read.
-    # `potts_spots/ci`'s field is strong enough that some recolouring must be
+    # `spatio_only/ci`'s field is strong enough that some recolouring must be
     # refused; a run with no rejection at all is the failure this catches.
     rung = _rung(CI, 3)
 

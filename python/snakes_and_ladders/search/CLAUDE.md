@@ -61,7 +61,7 @@ in this module. It is referenced here, never restated. What follows is local.
   members rather than scaling one shared difference by `|C|` (#551).
 
 - **A structural statistic measured at finite temperature does not referee a
-  ground state.** `potts_spots` records a size tilt and a per-class occupancy
+  ground state.** `spatio_only` records a size tilt and a per-class occupancy
   from thermal draws; a ferromagnet's ground state matches neither, and the
   tilt is not even monotone in temperature. A minimizer is refereed by an
   exact optimum where one exists and by a bound where one does not, never by

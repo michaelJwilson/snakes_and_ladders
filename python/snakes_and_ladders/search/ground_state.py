@@ -1,7 +1,7 @@
 """Ground-state recovery on a Potts lattice in a per-site field, refereed twice.
 
 Issue #551 asks which sampler or minimizer recovers the ground state of
-`potts_spots/release` --- open triangular 71 x 71, q = 10, J = 0.7 --- and
+`spatio_only/release` --- open triangular 71 x 71, q = 10, J = 0.7 --- and
 answers it on three rungs that differ in what can referee an energy:
 enumeration at nine sites, a graph cut at 5,041 sites and two states, and a
 bracket at 5,041 sites and ten. Nothing here implements a method; it
@@ -17,7 +17,7 @@ fail the other, and a low energy that fails the structure is a low-energy
 state of a *different* model.
 
 **A ground state's tilt is not a thermal draw's tilt, and the difference has a
-sign.** `potts_spots/release.yaml` records a tilt of 0.4935 over eight chains
+sign.** `spatio_only/release.yaml` records a tilt of 0.4935 over eight chains
 of 60 sweeps at J = 0.7. That is a finite-temperature statistic. As the
 temperature falls a ferromagnet orders, domain walls stop being affordable,
 and the majority class takes sites whose own field points elsewhere --- so the
@@ -68,7 +68,7 @@ from snakes_and_ladders.search.potts_mcmc import (
 )
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import PottsSpotsParams, spots_field
+from snakes_and_ladders.sim.potts import SpatioOnlyParams, spatio_only_field
 
 #: The annealing schedule every annealed entry runs, so a difference between
 #: them is the move set. It starts above the ordering coupling's temperature
@@ -128,13 +128,13 @@ class Rung:
 
 
 def rung_field(
-    params: PottsSpotsParams, n_states: int
+    params: SpatioOnlyParams, n_states: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """The field and class ladder of a rung at ``n_states``, from one fixture.
 
     The ladder is taken from the fixture's own ``alpha`` --- its two extremes
     at q = 2, the whole of it at the declared q --- so every rung is built by
-    :func:`snakes_and_ladders.sim.potts.spots_field` from the same sizes and
+    :func:`snakes_and_ladders.sim.potts.spatio_only_field` from the same sizes and
     the rungs differ in the label count alone.
 
     Raises
@@ -149,7 +149,7 @@ def rung_field(
         return params.field, params.alpha
     if n_states == 2:
         alpha = np.array([params.alpha[0], params.alpha[-1]])
-        return spots_field(alpha, params.sizes), alpha
+        return spatio_only_field(alpha, params.sizes), alpha
     msg = (
         f"a rung is built at 2 states or the fixture's {params.n_classes}, "
         f"got {n_states}: any other truncation reads the structural checks "
@@ -198,7 +198,7 @@ def quartiles(sizes: np.ndarray) -> np.ndarray:
 def structure(alpha: np.ndarray, sizes: np.ndarray, labelling: np.ndarray) -> Structure:
     """Score a labelling against the parameters that built the field.
 
-    The tilt is `tests/regression/sim/test_potts_spots.py`'s, restated for a
+    The tilt is `tests/regression/sim/test_spatio_only.py`'s, restated for a
     single labelling rather than an ensemble of chains: that file measures a
     sampler and this one measures a minimizer, and both must read the same
     statistic or the two results cannot be compared.

@@ -1,5 +1,5 @@
 ---
-id: 11
+id: "011"
 date: 2026-09-11
 commit: 47292b4408fa5ab82ac033f97b2fbf17dc6f10d9
 branch: claude/search-551-ground-state

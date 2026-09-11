@@ -347,7 +347,7 @@ def anneal_potts(
 
     ``move`` names the move set. Single-site is the default and the fair
     annealed baseline. The two cluster move sets refuse a negative coupling,
-    so they anneal only a ferromagnet --- which `potts_spots` is, and which
+    so they anneal only a ferromagnet --- which `spatio_only` is, and which
     issue #551 anneals them on. They are **not** a faster route to the same
     answer there: the Fortuin-Kasteleyn bond construction is exact at zero
     field, so in a field every recolouring carries the accept step
@@ -865,7 +865,7 @@ def _recolour(
     together, so the cluster is exactly as likely to be built in the proposed
     configuration as in the current one. What does not cancel is the field.
     For a field shared by every site that difference is ``|C| * (h[new] -
-    h[old])``; for the per-site field of `potts_spots` it is the sum of that
+    h[old])``; for the per-site field of `spatio_only` it is the sum of that
     difference over the cluster's own members, which the shared case is the
     special case of.
 
