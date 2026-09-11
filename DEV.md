@@ -13,7 +13,7 @@ keeping the two liftable matters.
 | --- | --- |
 | `benches/`, `tests/` | Criterion benchmarks (Rust), pytest suite, and integration tests. |
 | `docs/source/` | Sphinx API documentation. |
-| `PROBLEMS.md` | The problem catalogue, hand-written and resolved by a test. `infra/problems_tables.py` reads it, the suite's markers and `docs/tex/method_notes.yaml` into the textbook's applicability tables (`docs/tex/generated/`). |
+| `PROBLEMS.md` | The problem catalogue, hand-written and resolved by a test. Its `Statement` column keys each row to the textbook section stating that model, and `infra/problem_join.py` joins the two, failing an orphan either way (issue #495). `infra/problems_tables.py` reads it, the suite's markers and `docs/tex/method_notes.yaml` into the textbook's applicability tables (`docs/tex/generated/`). |
 | `python/snakes_and_ladders/` | Python package: re-exports, typed extension stubs, stub CLI. |
 | `python/snakes_and_ladders/sim/` | Data generation and ground-truth retention. |
 | `python/snakes_and_ladders/likelihood/` | Felsenstein pruning; CPU dispatch landed (NumPy, PyTorch, Rust), CUDA and Metal not implemented. Also the phylogenetic `Objective` (`objective.py`), which adapts the recursion to `opt/`'s fitting interface — here because `opt/` may import no application module. |
