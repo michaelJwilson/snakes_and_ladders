@@ -1,10 +1,10 @@
 """What the test selection must guarantee before it is allowed to skip anything.
 
-Running fewer tests is only safe if the selection is right, so what is pinned
-here is not the saving but the three ways it could be wrong: missing a module
-that imports the changed one, mistaking a change it does not understand for a
-change that needs nothing, and skipping a run that would have measured
-different coverage (issue #161).
+Running fewer tests is safe only if the selection is right, so what is pinned
+is not the saving but the three ways it could be wrong: missing a module that
+imports the changed one, mistaking a change it does not understand for one that
+needs nothing, and skipping a run that would have measured different coverage
+(issue #161).
 """
 
 from __future__ import annotations
@@ -51,10 +51,10 @@ def _modules_of(chosen: dict[str, list[str]]) -> set[str]:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_a_documentation_only_change_selects_the_guards_and_measures_nothing() -> None:
-    # The case this exists for: the suite would run the same code over the
-    # same tests as the last run on main, so coverage cannot have moved and
-    # no module's tests run. What runs is the guards that read the changed
-    # prose -- a paragraph of the textbook can break a label (issue #372).
+    # The suite would run the same code over the same tests as the last run on
+    # main, so coverage cannot have moved and no module's tests run. What runs
+    # is the guards reading the changed prose -- a paragraph of the textbook
+    # can break a label (issue #372).
     chosen = select(
         ["docs/tex/paper.tex", "README.md", "changelog.d/161.changed.md", "DEV.md"]
     )
@@ -149,11 +149,10 @@ def test_a_change_selects_the_modules_that_import_it() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_a_leaf_module_selects_only_itself() -> None:
-    # A module nothing imports needs nothing else run, which is the case the
-    # whole mechanism is worth building for. The leaf is derived rather than
-    # named: `snakes_and_ladders.learn` was one until `snakes_and_ladders.qa.rl_tree_policy` imported it
-    # (issue #178), and a test naming a module goes stale the moment an import
-    # is added, which is the failure `select_tests` itself is built to avoid.
+    # A module nothing imports needs nothing else run. The leaf is derived
+    # rather than named: `snakes_and_ladders.learn` was one until
+    # `snakes_and_ladders.qa.rl_tree_policy` imported it (issue #178), and a
+    # test naming a module goes stale the moment an import is added.
     leaves = [module for module in MODULES if dependents({module}) == {module}]
     assert leaves, "no submodule is a leaf; the selection can save nothing"
     for leaf in leaves:
