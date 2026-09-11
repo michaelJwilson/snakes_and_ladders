@@ -802,7 +802,7 @@ sites) and the `qa`/`infra` row are recorded as not measured.
 | `search` | `maxflow.energy`, 32x32 x 64 configurations: the per-edge Python loop 91.6% (16x16: 93.0%) | 92% | vectorization | 5–10x on one configuration | `potts.log_weights`, 1e-12 relative |
 | `search` | `spr_neighbours` at 20 taxa: 128.7 ms for 1,122 candidates, `build` and its generator 44%, `visit` 28% | 10% of one `infer` step (1.28 s); 67% of one candidate fit (193 ms) | allocation (a `Node` tree per new key) | at most 2x on the neighbourhood, under 5% of a step | not ported: under the 10% rule per step |
 | `search` | `gibbs.sample_factor_graph`, 32x32: `conditional` 42.0%, `gibbs_sweep` 17.0%, `log_density` 9.7% (16x16: 40.8 / 18.6 / 9.2%) | 69% | compiled backend over the #341 edge layout | ~10x, from the Potts `numba` sweep's 7x | draw for draw on the same uniforms; not acted on |
-| `search` | `alpha_expansion`, 32x32: Python Dinic `_augment` 28.8%, `_levels` 18.8%, `expand` 24.0% | 72% | FFI: `maxflow_rust` as the inner solver | 3x or more on the expansion | its energies, exact; not acted on |
+| `search` | `alpha_expansion`, 32x32: Python Dinic `_augment` 28.8%, `_levels` 18.8%, `expand` 24.0% | 72% | FFI: `maxflow_rust` as the inner solver | 3x or more on the expansion | its energies, exact; **acted on by [#528](https://github.com/michaelJwilson/snakes_and_ladders/issues/528), below** |
 | `search` | `potts_mcmc` single-site, 32x32: `_single_site_sweep` 45.8% | 46% | none: the Rust backend exists and is opt-in (#287) | — | not changed by default |
 | `opt` | `hmc.sample`, 1,000 draws on the length-64 chain: `torch.logsumexp` 32.0% (512,000 calls, one per position per evaluation), `log_partition` 9.6%; the fit at length 64: 26.6% | 42% | call overhead: reassociate the homogeneous transfer-matrix product by repeated squaring, 6 products for 64 positions | 1.5–2x on the run | the sequential recursion at 1e-12 relative and central differences for the gradient; not acted on |
 | `opt` | `fit` on the tree, 20 taxa x 500 sites: `run_backward` 45.2%, `_post_order` 22.9%; no Python-level call per site | — | none: the objective is one torch pass over sites | — | met by construction |
@@ -821,6 +821,47 @@ computes:
 No `numba` or Rust port was reached: on every loop acted on the vectorized
 pass carried the gain, and the profile of what remains is dispatch per level
 (the chain) rather than a call-bound inner loop.
+
+**The minimum cut `alpha_expansion` could not reach, and the claim that
+looked like a boundary cost**
+([#528](https://github.com/michaelJwilson/snakes_and_ladders/issues/528),
+[`docs/experiments/008`](docs/experiments/008-ffi-profile-and-alpha-expansion.md)).
+Re-run on this host, the audit's ranking holds: `maxflow._augment` 28.4% and
+`_levels` 20.6%, **49.0%** of `alpha_expansion` at 32x32 in a Python Dinic
+solver beside a Rust one. The reason it was never taken was read as the FFI
+boundary and was not. `max_flow_impl` returns `(value, source_side)` and its
+docstring already says that side *is* a minimum cut; the PyO3 wrapper bound
+`(value, _)` and returned the value alone, so `expand`, which needs the cut
+and not the flow, had nothing to call. Returning the side — one `Vec<bool>`
+per call, no second traversal and no extra crossing — and hoisting a `set`
+construction out of a per-edge loop that made it quadratic in the edge count:
+
+| open lattice, labels | Python cut | + hoisted `set` | + Rust cut | overall |
+| --- | --- | --- | --- | --- |
+| 8x8, 3 | 17.10 ms | 16.54 ms | **3.54 ms** | **4.82x** |
+| 8x8, 5 | 19.54 ms | 18.71 ms | **4.16 ms** | **4.70x** |
+| 16x16, 3 | 94.24 ms | 90.07 ms | **14.15 ms** | **6.66x** |
+| 16x16, 5 | 194.37 ms | 178.77 ms | **25.52 ms** | **7.62x** |
+| 32x32, 3 | 648.47 ms | 583.02 ms | **60.29 ms** | **10.76x** |
+
+Medians over 21, 21, 11, 11 and 5 rounds, one thread, load 0.75–0.81 either
+side. The 3x the audit expected is met at every size and exceeded past 8x8,
+because the port removes the whole solver rather than one loop inside it.
+Criterion times the kernel alone at **15.2, 68.4 and 298.9 µs** per cut at
+extents 8, 16 and 32, against 3.5, 14.2 and 60.3 ms for a whole expansion
+through the binding, so the crossing is not the term here either — which is
+the third measurement behind root `CLAUDE.md`'s corrected FFI rule.
+
+The backend is **opt-in**, `Backend.PYTHON` by default. A minimum cut is a
+combinatorial minimum whose value both solvers must report exactly, but the
+cut attaining it need not be unique, and a degenerate network could hand back
+a different labelling of the same energy and send the two routes down
+different expansion sequences. On the seeded fixtures they do not: twelve
+cells at 8x8 with two and four labels agree on the labelling, the energy, the
+cycle count and the move count, and the pure implementation stays as the
+oracle. Nothing else in the mid-tier ranking is a candidate — every other
+module's first entry is a `torch` call, a NumPy ufunc or a Rust kernel, and
+`gibbs.conditional` at 44.8% is #341's open item, unchanged here.
 
 **Bounds with proofs, certified rather than trusted**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A

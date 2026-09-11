@@ -279,6 +279,51 @@ Every entry point — a QA script, `snakes_and_ladders.qa.build`,
 
 `cProfile` cannot see inside a NumPy call or a Rust kernel; `pytest-benchmark` reports wall clock and nothing about cache, branches or vector width; Criterion times a kernel with its inputs already in Rust. Each ranks or times, none explains.
 
+### Mitigating an FFI Cost
+
+Root `CLAUDE.md` used to say the marshalling had been the dominant term at
+this boundary. It has not been, on anything measured: issue #457 put the
+marshalling at 1.1–4.9% of a through-binding call against a kernel at
+90–100%, and the whole per-crossing tax at 1.34% of a fit at 8 taxa and 0.79%
+at 20; issue #452 cut the bytes crossing per pass by 179x and 1,881x and
+moved wall time between −7.9% and +2.3%; issue #453 measured `burn`'s tape
+*larger* than the PyTorch tape it was to replace, so the cost there was the
+tape and not the crossing. `STATUS.md` carries the tables.
+
+So the four mitigations below are answers to a cost this repository has not
+yet observed, and **each needs a profile at the size in question before it
+lands**, not a general argument that boundaries are expensive. At the sizes
+measured there is under 1.4% of a fit to win, which is under the 10% rule
+step 1 already applies.
+
+* **One crossing per call, with contiguous unaliased buffers.** The standing
+  rule, and the only one adopted without a further profile, because it costs
+  nothing to write that way and a NumPy view that is not C-contiguous is
+  refused by `as_slice` rather than copied silently. Every binding here
+  already holds it.
+* **A handle holding state across calls.** Licensed by a profile showing the
+  same buffer crossing on consecutive calls, *and* a caller making them.
+  Issue #452 built one, cut the bytes by the three orders of magnitude above,
+  moved the wall time by less than a tenth in either direction, and found no
+  caller on the binding to spend it on. It did not land, and the tree carries
+  no handle today.
+* **Releasing the GIL around a kernel.** Licensed by a profile showing Python
+  work that could run concurrently with the kernel — otherwise the release
+  buys an unlocked interpreter nothing is waiting for. Nothing here overlaps
+  a crossing today, since `snakes_and_ladders.parallel` parallelizes over
+  whole tasks and not inside one.
+* **Batching many small calls into one.** Licensed by a profile showing the
+  per-call fixed cost, not the per-element cost, at the top of the ranking.
+  A batched signature also fixes the shape a caller may pass, so it is the
+  most expensive of the four to retract.
+
+**Where the cost could still be, and is unmeasured.** Nothing has been
+profiled past 20 taxa or 10,000 sites. The 200-taxon claim of issue #436
+lives only in `tests/benchmarks/test_pruning_rust_bench.py` and is a
+benchmark, not a boundary measurement. If the boundary is ever the term it
+will be there, and a measurement at that size is the precondition for any of
+the above landing.
+
 ### Running With Workers
 
 `snakes_and_ladders.parallel.map_tasks` is the one seam for CPU parallelism over

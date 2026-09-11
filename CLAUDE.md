@@ -82,7 +82,7 @@ Checked in this order when a hot path is proposed; `DEV.md` carries the procedur
 *   **Branch misprediction.** A data-dependent branch in an inner loop is free or a stall; the branchless form (mask, select, table) wins only where a measurement shows the branch does not predict (Bryant & O'Hallaron ch. 5).
 *   **Inlining and call overhead.** No Python-level call per site or per node; hoist it or vectorize it. In Rust, `#[inline]` the small hot helpers (Gorelick & Ozsvald ch. 4; Bryant & O'Hallaron ch. 5).
 *   **Allocation.** Preallocate and reuse buffers across sweeps; NumPy `out=` and in-place operators over temporaries (Gorelick & Ozsvald ch. 6).
-*   **The FFI boundary.** Cross it once per call with contiguous arrays; minimize the perimeter.
+*   **The FFI boundary.** Cross it once per call with contiguous arrays; time a kernel alone *and* through its binding. The marshalling was assumed dominant and measured a few percent of a call, so the boundary is timed rather than presumed and `DEV.md` carries the mitigations.
 *   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — runs through `snakes_and_ladders.parallel`.
 *   **Compiled backends.** Two, each for a reason: Rust carries the load, so it stays opt-in; `numba`'s `njit` carries the ease.
 
