@@ -58,6 +58,9 @@ parenthesis the only way a ticket is cited.
   range (#405)
 - Trajectory-length adaptation (NUTS), only if the #268 comparison reaches a
   posterior #333's fixed trajectory length samples badly
+- Score a categorical class's `Emission_Mixture++` seeding with its Bregman
+  divergence rather than the divergence plus the smoothing constant its seeded
+  row carries, #560's defect one module over (#570)
 - Spectral seeding of the emission parameters, the candidate #541 named and
   could not run (#554)
 - Score the seedings on the coupled fit at the key instance, the second of

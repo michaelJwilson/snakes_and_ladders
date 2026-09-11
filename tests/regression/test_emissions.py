@@ -891,3 +891,60 @@ def test_every_family_scores_zero_divergence_at_its_own_mean() -> None:
         divergence = family.bregman_divergence(torch.as_tensor(at_mean)).numpy()
         assert_allclose(np.diagonal(divergence), np.zeros(family.n_states), atol=1e-12)
         assert float(divergence.min()) >= 0.0
+
+
+@pytest.mark.mathematical
+def test_a_categorical_divergence_is_its_negative_log_probability() -> None:
+    # The one family where the corrected rule and the rule it replaced agree,
+    # and the reason is that its ``log b_phi`` is zero: the member matched to
+    # a symbol is the point mass on that symbol, which scores it at
+    # probability one. Nothing is subtracted, so #560 moves nothing here --- a
+    # claim worth pinning, because a seeding of a categorical emission that
+    # changed under the correction would say the correction was wrong.
+    family = CategoricalEmission(MATRIX)
+    symbols = torch.arange(MATRIX.shape[1])
+    divergence = family.bregman_divergence(symbols)
+    assert_allclose(
+        divergence.numpy(), -family.log_density(symbols).numpy(), rtol=1e-12
+    )
+    assert float(divergence.min()) >= 0.0
+    certain = CategoricalEmission(np.eye(MATRIX.shape[1]))
+    assert_allclose(
+        np.diagonal(certain.bregman_divergence(symbols).numpy()),
+        np.zeros(MATRIX.shape[1]),
+        atol=1e-12,
+    )
+
+
+@pytest.mark.mathematical
+def test_a_multi_channel_gaussian_divergence_whitens_each_channel() -> None:
+    # Why the identity with `opt.mixture.kmeans_plus_plus` is a *one-scale*
+    # identity. Each channel enters divided by its own scale, so with equal
+    # scales the divergence is the squared Euclidean distance over twice the
+    # variance --- a factor D-squared sampling normalizes away --- and with
+    # unequal scales it is a different rule, which is what separates the two
+    # on the two-channel rung of `docs/experiments/010` (issue #560).
+    observations = torch.as_tensor([[1.0, 8.0], [-3.0, 0.0]])
+    located = np.array([[0.0, 0.0], [2.0, 5.0]])
+    equal = GaussianEmission(located, np.full((2, 2), 2.0), FLOOR)
+    squared = ((observations[:, None, :] - equal.mean) ** 2).sum(dim=-1)
+    assert_allclose(
+        equal.bregman_divergence(observations).numpy(),
+        (squared / (2.0 * 4.0)).numpy(),
+        rtol=1e-12,
+    )
+    unequal = GaussianEmission(located, np.array([[2.0, 0.5], [2.0, 0.5]]), FLOOR)
+    divergence = unequal.bregman_divergence(observations).numpy()
+    # Not the squared distance times any single factor: the second channel is
+    # sixteen times the first's weight here, so no rescaling reconciles them.
+    ratios = divergence / (squared / (2.0 * 4.0)).numpy()
+    assert ratios.max() > 4.0 * ratios.min(), ratios
+    assert_allclose(
+        divergence,
+        ((observations[:, None, :] - unequal.mean) / unequal.scale)
+        .pow(2)
+        .sum(dim=-1)
+        .numpy()
+        / 2.0,
+        rtol=1e-12,
+    )

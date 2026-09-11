@@ -368,6 +368,10 @@ class CategoricalEmission:
         """Draw one symbol per entry of ``states`` by inverse-CDF sampling."""
         return sample_rows(rng, self._matrix.numpy(), states)
 
+    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+        """Gather ``log B[:, symbol]`` for every observation."""
+        return self._log_matrix.t()[observations]
+
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """``-log P(symbol | state)``: the best member puts all its mass on the symbol.
 
@@ -382,10 +386,6 @@ class CategoricalEmission:
             Shape ``(..., n_states)``.
         """
         return -self.log_density(observations)
-
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
-        """Gather ``log B[:, symbol]`` for every observation."""
-        return self._log_matrix.t()[observations]
 
     def validate(self, observations: np.ndarray) -> None:
         """Raise if a symbol lies outside the alphabet."""
@@ -1835,7 +1835,7 @@ def _beta_binomial_saturated(
 ) -> torch.Tensor:
     """The largest beta-binomial log-probability of ``counts``, at this concentration.
 
-    ``-log b_phi(y)`` for a family that has no log-partition: a beta-binomial
+    ``log b_phi(y)`` for a family that has no log-partition: a beta-binomial
     at fixed concentration is a *compound* distribution and not an exponential
     family in its success count, so the divergence it seeds under is the
     **unit deviance** the Bregman divergence generalizes to --- the log-density
