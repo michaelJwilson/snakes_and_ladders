@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.budget import Budget, compare
+from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.initialize import (
     FromAnnealing,
     FromChain,
@@ -37,7 +37,6 @@ from snakes_and_ladders.search.projection import (
     SEEDINGS,
     CountPairAt,
     ProjectedCounts,
-    SeededFit,
     euclidean_seeding,
     fit_projection,
     flatten,
@@ -257,47 +256,55 @@ KEY_SAMPLES = 4000
 KEY_INSTANCES = 3
 KEY_BUDGET = Budget("passes", 6)
 
-#: The two candidates whose ordering is claimed here. `emission++` reads the
-#: data under the family's own divergence; `prior` reads none of it. Which of
-#: the eight wins overall is the experiment's business, over six instances;
-#: what a test can hold at this cost is that reading the data beats not
-#: reading it.
-KEY_STRUCTURED = "emission++"
+#: The two candidates the key model's finding is about. `tempering` samples a
+#: surrogate surface for 144 passes; `prior` reads none of the data for none.
+#: Experiment 009 records the rest of the eight.
+KEY_SAMPLED = "tempering"
 KEY_CONTROL = "prior"
 
 
 @pytest.mark.release
 @pytest.mark.simulated_truth
-def test_reading_the_data_beats_the_control_at_the_key_model() -> None:
-    # At the key model's 100 components and through the budgeted comparison,
-    # so neither candidate reaches its optimum by fitting longer than the
-    # other.
+def test_the_likelihood_and_the_truth_order_the_seedings_oppositely() -> None:
+    """The key model's finding, and the reason no default moves.
+
+    At 100 components on 4,000 observations --- 40 a component --- the
+    projected likelihood prefers the draw that read none of the data, and the
+    simulated truth prefers the one that spent 144 passes sampling a
+    surrogate. Both directions hold on every instance in experiment 009's six;
+    three are run here. A claim on one of the two alone would be a claim the
+    other contradicts, so both are asserted together or neither means
+    anything.
+    """
     declared = fixture(PROBLEM, KEY).params
     params = binned_model(declared.model, declared.key_factor)
-    instances = [
-        project(params, KEY_SAMPLES, np.random.default_rng([541, index]))
-        for index in range(KEY_INSTANCES)
-    ]
+    truth = flatten(params)
     at = CountPairAt(
-        float(flatten(params).total.dispersion.mean()),
-        float(flatten(params).successes.concentration.mean()),
-        instances[0].trials,
+        float(truth.total.dispersion.mean()),
+        float(truth.successes.concentration.mean()),
+        project(params, 1, np.random.default_rng([541, 0])).trials,
     )
 
-    comparison = compare(
-        {
-            KEY_STRUCTURED: SeededFit(KEY_STRUCTURED, at),
-            KEY_CONTROL: SeededFit(KEY_CONTROL, at),
-        },
-        instances,
-        KEY_BUDGET,
-        [0],
-        workers=1,
-    )
+    for index in range(KEY_INSTANCES):
+        instance = project(params, KEY_SAMPLES, np.random.default_rng([541, index]))
+        control, sampled = (
+            fit_projection(
+                instance, name, at, KEY_BUDGET, np.random.default_rng([0, index])
+            )
+            for name in (KEY_CONTROL, KEY_SAMPLED)
+        )
 
-    gaps = comparison.mean_gap()
-    assert gaps[KEY_STRUCTURED] < gaps[KEY_CONTROL], (
-        f"{KEY_STRUCTURED} left a mean gap of {gaps[KEY_STRUCTURED]:.1f} against "
-        f"{KEY_CONTROL}'s {gaps[KEY_CONTROL]:.1f}"
-    )
-    assert (comparison.spent <= KEY_BUDGET.size).all()
+        assert control.log_likelihood > sampled.log_likelihood, (
+            f"on instance {index} the likelihood did not prefer {KEY_CONTROL}: "
+            f"{control.log_likelihood:.1f} against {KEY_SAMPLED}'s "
+            f"{sampled.log_likelihood:.1f}"
+        )
+        assert sampled.recovery > control.recovery, (
+            f"on instance {index} the truth did not prefer {KEY_SAMPLED}: "
+            f"{sampled.recovery:.3f} against {KEY_CONTROL}'s "
+            f"{control.recovery:.3f}"
+        )
+        assert sampled.seeding.passes > KEY_BUDGET.size, (
+            f"{KEY_SAMPLED} charged {sampled.seeding.passes:.0f} passes, which "
+            f"is no longer the different proposition the finding turns on"
+        )
