@@ -42,8 +42,10 @@ N_SAMPLES = 4000
 #: so this count is the evidence a winner is declared against.
 N_INSTANCES = 5
 
-#: Iterations of the projected fit every candidate is held to.
-BUDGET = Budget("passes", 10)
+#: Iterations of the projected fit every candidate is held to. Six, because a
+#: seeding is a claim about where a fit starts and the key model's 100
+#: components cost ten seconds an iteration.
+BUDGET = Budget("passes", 6)
 
 #: Restarts the baseline spends its budget on.
 N_RESTARTS = 2

@@ -57,6 +57,10 @@ parenthesis the only way a ticket is cited.
   range (#405)
 - Trajectory-length adaptation (NUTS), only if the #268 comparison reaches a
   posterior #333's fixed trajectory length samples badly
+- Spectral seeding of the emission parameters, the candidate #541 named and
+  could not run (#554)
+- Score the seedings on the coupled fit at the key instance, the second of
+  #541's two scorings (#555)
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
