@@ -40,7 +40,7 @@ N_SAMPLES = 4000
 
 #: Instances the candidates are paired on. McNemar reads the discordant ones,
 #: so this count is the evidence a winner is declared against.
-N_INSTANCES = 5
+N_INSTANCES = 6
 
 #: Iterations of the projected fit every candidate is held to. Six, because a
 #: seeding is a claim about where a fit starts and the key model's 100
