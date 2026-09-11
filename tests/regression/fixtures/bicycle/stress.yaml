@@ -1,0 +1,19 @@
+model: bicycle
+oracle: none
+
+# A bicycle code at the block length the encoder reaches, matched to the
+# Gallager fixture beside it. Every field is required -- see
+# python/snakes_and_ladders/sim/ldpc.py.
+#
+# 2**48 codewords cannot be enumerated, so no oracle stands at this size: what
+# is checked here is the construction's algebra -- the weights, the rank, the
+# self-orthogonality H H^T = 0 -- and a decoded error rate against the
+# Gallager code on shared seeds, which is a comparison and not a truth.
+seed: 361
+n_bits: 96
+n_checks: 48
+circulant_weight: 3
+
+flip_probability: 0.05
+erasure_probability: 0.4
+noise_scale: 1.0
