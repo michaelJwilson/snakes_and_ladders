@@ -1,4 +1,4 @@
-model: potts-spots
+model: spatio-only
 oracle: transfer-matrix
 
 # The same construction as `ci` on a strip past enumeration: 12 columns of 6

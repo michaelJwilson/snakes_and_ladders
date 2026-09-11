@@ -17,7 +17,9 @@ parenthesis the only way a ticket is cited.
 - Support the different lattice types (#231)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code (#340)
-- Bicycle codes and quantum LDPC codes as a second code family (#362)
+- Quantum LDPC codes over the bicycle construction, whose classical half
+  landed: syndrome decoding with degeneracy, and the success criterion that
+  replaces agreement with the maximum-likelihood codeword (#362)
 - Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of its own copy
   of the exact open-chain recursion (#186)
@@ -131,6 +133,16 @@ parenthesis the only way a ticket is cited.
 - Weight transfer across problem sizes for a policy, and the schedule from
   `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
   and from 3×3 to 4×6 lattices, and a policy does not yet (#414)
+- Block-spin renormalization as a Potts surrogate: coarse-graining maps the
+  model into its own family, so the coarse model is evaluated exactly at
+  `ci` and the surrogate's error is analysable rather than only measured
+  (#365)
+- A patched or transformer form at `spatio_only/release`, against the graph
+  surrogate at matched parameter count and training budget. The condition is
+  met: the graph form degrades at 5,041 sites, to `R^2` -47.5 (#365)
+- Self-attention over 5,041 tokens, whose weight matrix is quadratic in the
+  site count and which the kernel kills at the release rung; either a
+  chunked or linear form, or the ticket records it declined (#365)
 - Batched episode rollout, so a budget at `n = 200` is affordable
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed
@@ -229,3 +241,8 @@ parenthesis the only way a ticket is cited.
   and give the entry points one shape (#338)
 - Adopt `qa.layout` in the surrogate joint-distribution and coupled-model
   field figures (#339)
+- Port the Rust heat-bath sweep to a per-site external field, which it
+  refuses today (#551)
+- `spatio_only`' tilt, null class and per-class occupancy are thermal
+  statistics; record ground-state counterparts a minimizer can be held to
+  (#551)

@@ -1,4 +1,4 @@
-"""Low-density parity-check codes: the ensemble, the channels, and an encoder.
+"""Low-density parity-check codes: two constructions, the channels, an encoder.
 
 A binary linear code is the null space of a parity-check matrix ``H`` over
 GF(2); a codeword ``c`` satisfies ``H c = 0``. Gallager's (1962) regular
@@ -10,6 +10,13 @@ textbook, ``eq:ldpc-code``). The ticket's instance is the ``10,000 x
 array in both orientations, the layout root ``CLAUDE.md`` asks for. No
 dense ``H`` exists at that size; :meth:`ParityCheck.dense` is for the small
 codes an oracle can reach.
+
+**A second construction.** A bicycle code (MacKay, Mitchison and McFadden
+2004) is ``H = [A | A^T]`` for a sparse circulant ``A``, with rows deleted
+to the target rate. The circulant makes ``A`` and ``A^T`` commute, so
+``H H^T = 0`` over GF(2) -- the CSS condition, which nothing classical needs
+and the quantum half of issue #362 rests on. Everything downstream is
+unchanged: the same channels, the same decoder, the same oracles.
 
 **Channels.** Every channel returns log-likelihood ratios in one
 convention, ``eq:ldpc-llr``: ``L_i = log p(y_i | x_i = 0) - log p(y_i | x_i
@@ -225,6 +232,87 @@ def gallager_code(
         msg = "the drawn matrix does not have the requested degrees"
         raise ValueError(msg)
     return code
+
+
+def bicycle_code(
+    n_bits: int, n_checks: int, circulant_weight: int, rng: np.random.Generator
+) -> ParityCheck:
+    """MacKay, Mitchison and McFadden's (2004) bicycle construction.
+
+    A circulant ``A`` of order ``n_bits / 2`` is drawn by choosing the
+    ``circulant_weight`` columns of its first row uniformly from ``rng``; row
+    ``i`` is that row shifted by ``i``. The parity-check matrix is
+    ``H0 = [A | A^T]``, so row ``i`` covers the shifted first row in the left
+    half and the same offsets shifted the other way in the right: before any
+    deletion every row has weight ``2 * circulant_weight`` and every column
+    ``circulant_weight``, since a column of the left half is a column of ``A``
+    and one of the right half a row of it, and a circulant's rows and columns
+    carry the same weight. Rows are then deleted down to ``n_checks``, which
+    is how the rate is set; the row covering the heaviest columns goes first,
+    since deleting it takes the sum of squared column weights down furthest,
+    and ties are broken from ``rng``.
+
+    Two properties come free and are what the construction is for. ``A`` and
+    ``A^T`` are both polynomials in the cyclic shift, so they commute and
+    ``H0 H0^T = A A^T + A^T A = 0`` over GF(2) -- the CSS condition a quantum
+    code needs, kept by every subset of the rows. And every row has even
+    weight, so the all-ones word is a codeword whatever the draw.
+
+    The matrix is built as edges rather than as an array: at the length
+    ``ROADMAP.md`` names a dense ``H0`` is 200 MB and its nonzeros are
+    120,000.
+
+    Parameters
+    ----------
+    n_bits : int
+        The block length ``n``, even.
+    n_checks : int
+        Rows after deletion, at most ``n_bits / 2``; the design rate is
+        ``1 - n_checks / n_bits``.
+    circulant_weight : int
+        Ones in the circulant's first row, so half a row weight of ``H``.
+    rng : np.random.Generator
+        The first row and the deletion tie-breaks are drawn from it.
+
+    Raises
+    ------
+    ValueError
+        If the length is odd, the weight does not fit the circulant, the
+        requested rows are out of range, or the deletion leaves a bit in no
+        check -- at which point the requested rate is past what this length
+        and weight support, rather than a matrix to decode on.
+    """
+    if n_bits <= 0 or n_bits % 2:
+        msg = f"n_bits = {n_bits} is not a positive even number"
+        raise ValueError(msg)
+    half = n_bits // 2
+    if not 2 <= circulant_weight <= half:
+        msg = f"need 2 <= circulant_weight <= {half}, got {circulant_weight}"
+        raise ValueError(msg)
+    if not 1 <= n_checks <= half:
+        msg = f"need 1 <= n_checks <= {half}, got {n_checks}"
+        raise ValueError(msg)
+    first_row = rng.choice(half, size=circulant_weight, replace=False)
+    rows = np.arange(half)[:, None]
+    columns = np.concatenate(
+        [(first_row + rows) % half, half + (rows - first_row) % half], axis=1
+    )
+    keep = np.ones(half, dtype=bool)
+    for _ in range(half - n_checks):
+        weights = np.bincount(columns[keep].ravel(), minlength=n_bits)
+        covered = np.where(keep, weights[columns].sum(axis=1), -1)
+        heaviest = np.flatnonzero(covered == covered.max())
+        keep[rng.choice(heaviest)] = False
+    columns = columns[keep]
+    if np.any(np.bincount(columns.ravel(), minlength=n_bits) == 0):
+        msg = (
+            f"deleting to {n_checks} rows left a bit in no check; the rate "
+            f"{1 - n_checks / n_bits:.3f} is past what n_bits = {n_bits} at "
+            f"circulant_weight = {circulant_weight} supports"
+        )
+        raise ValueError(msg)
+    checks = np.repeat(np.arange(n_checks), 2 * circulant_weight)
+    return ParityCheck.from_edges(n_bits, n_checks, columns.ravel(), checks)
 
 
 # --- channels -------------------------------------------------------------------
@@ -475,7 +563,42 @@ _REQUIRED_FIELDS = frozenset(
 
 
 @dataclass(frozen=True)
-class LdpcParams:
+class ChannelParams:
+    """The three channels a code fixture declares.
+
+    Every code here is decoded on the same three channels, so they are
+    declared once and inherited: a fixture states one parameter per channel
+    and the constructions differ in nothing else.
+
+    Parameters
+    ----------
+    flip_probability : float
+        Crossover of the binary symmetric channel this instance is decoded on.
+    erasure_probability : float
+        Erasure rate of the binary erasure channel.
+    noise_scale : float
+        Standard deviation of the binary-input Gaussian channel.
+    """
+
+    flip_probability: float
+    erasure_probability: float
+    noise_scale: float
+
+    def symmetric_channel(self) -> BinarySymmetricChannel:
+        """The declared binary symmetric channel."""
+        return BinarySymmetricChannel(self.flip_probability)
+
+    def erasure_channel(self) -> BinaryErasureChannel:
+        """The declared binary erasure channel."""
+        return BinaryErasureChannel(self.erasure_probability)
+
+    def gaussian_channel(self) -> BinaryInputGaussianChannel:
+        """The declared binary-input Gaussian channel."""
+        return BinaryInputGaussianChannel(self.noise_scale)
+
+
+@dataclass(frozen=True)
+class LdpcParams(ChannelParams):
     """Fully-specified truth for a Gallager-ensemble fixture.
 
     The ensemble member is the seed's, not the file's: an ensemble is
@@ -490,21 +613,12 @@ class LdpcParams:
         The regular degrees ``(j, k)`` of the ensemble.
     seed : int
         Seed the ensemble member is drawn under.
-    flip_probability : float
-        Crossover of the binary symmetric channel this instance is decoded on.
-    erasure_probability : float
-        Erasure rate of the binary erasure channel.
-    noise_scale : float
-        Standard deviation of the binary-input Gaussian channel.
     """
 
     n_bits: int
     column_weight: int
     row_weight: int
     seed: int
-    flip_probability: float
-    erasure_probability: float
-    noise_scale: float
 
     def code(self) -> ParityCheck:
         """Draw the ensemble member this fixture declares.
@@ -520,18 +634,6 @@ class LdpcParams:
             self.row_weight,
             np.random.default_rng(self.seed),
         )
-
-    def symmetric_channel(self) -> BinarySymmetricChannel:
-        """The declared binary symmetric channel."""
-        return BinarySymmetricChannel(self.flip_probability)
-
-    def erasure_channel(self) -> BinaryErasureChannel:
-        """The declared binary erasure channel."""
-        return BinaryErasureChannel(self.erasure_probability)
-
-    def gaussian_channel(self) -> BinaryInputGaussianChannel:
-        """The declared binary-input Gaussian channel."""
-        return BinaryInputGaussianChannel(self.noise_scale)
 
 
 def load_ldpc_params(path: Path) -> LdpcParams:
@@ -553,6 +655,87 @@ def load_ldpc_params(path: Path) -> LdpcParams:
         n_bits=int(raw["n_bits"]),
         column_weight=int(raw["column_weight"]),
         row_weight=int(raw["row_weight"]),
+        seed=int(raw["seed"]),
+        flip_probability=float(raw["flip_probability"]),
+        erasure_probability=float(raw["erasure_probability"]),
+        noise_scale=float(raw["noise_scale"]),
+    )
+
+
+_BICYCLE_FIELDS = frozenset(
+    {
+        "seed",
+        "n_bits",
+        "n_checks",
+        "circulant_weight",
+        "flip_probability",
+        "erasure_probability",
+        "noise_scale",
+    }
+)
+
+
+@dataclass(frozen=True)
+class BicycleParams(ChannelParams):
+    """Fully-specified truth for a bicycle-code fixture.
+
+    The circulant is the seed's, as the Gallager ensemble member is: the file
+    states the length, the rows kept and the circulant's weight, and
+    :func:`bicycle_code` draws the rest.
+
+    Parameters
+    ----------
+    n_bits : int
+        Block length ``n``.
+    n_checks : int
+        Rows kept after deletion, so the design rate ``1 - n_checks / n_bits``.
+    circulant_weight : int
+        Ones in the circulant's first row.
+    seed : int
+        Seed the circulant and the deletion tie-breaks are drawn under.
+    """
+
+    n_bits: int
+    n_checks: int
+    circulant_weight: int
+    seed: int
+
+    def code(self) -> ParityCheck:
+        """Draw the bicycle code this fixture declares.
+
+        Returns
+        -------
+        ParityCheck
+            :func:`bicycle_code` under this fixture's seed.
+        """
+        return bicycle_code(
+            self.n_bits,
+            self.n_checks,
+            self.circulant_weight,
+            np.random.default_rng(self.seed),
+        )
+
+
+def load_bicycle_params(path: Path) -> BicycleParams:
+    """Load and validate a bicycle-code fixture yaml.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the yaml file.
+
+    Returns
+    -------
+    BicycleParams
+        The parsed truth. The weight and rate checks are
+        :func:`bicycle_code`'s, run when the code is drawn, so one statement
+        of them serves both callers.
+    """
+    raw = load_declared(path, _BICYCLE_FIELDS)
+    return BicycleParams(
+        n_bits=int(raw["n_bits"]),
+        n_checks=int(raw["n_checks"]),
+        circulant_weight=int(raw["circulant_weight"]),
         seed=int(raw["seed"]),
         flip_probability=float(raw["flip_probability"]),
         erasure_probability=float(raw["erasure_probability"]),

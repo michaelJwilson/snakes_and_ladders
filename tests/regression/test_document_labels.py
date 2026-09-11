@@ -49,10 +49,15 @@ def defined_labels(documents: tuple[Path, ...] = DOCUMENTS) -> set[str]:
 #: them reports a fixture as a defect. This file is one (its guard-the-guard
 #: test below cites a label that deliberately does not exist); the citation
 #: integrity checker's tests are the others, and were reported as three
-#: dangling labels from the day they landed.
+#: dangling labels from the day they landed. The problem-join tests are the
+#: third, and were reported the same way from the day they landed: the list
+#: is edited when a module joins it, so a new one turns the guard red until
+#: someone does. `test_every_document_fixture_is_one` below holds the
+#: entries to the property that admits them.
 DOCUMENT_FIXTURES = (
     Path(__file__).resolve(),
     REPO_ROOT / "tests" / "regression" / "docs" / "test_citation_integrity.py",
+    REPO_ROOT / "tests" / "regression" / "docs" / "test_problem_join.py",
 )
 
 
@@ -89,6 +94,26 @@ def test_every_label_the_code_cites_is_defined_in_a_document() -> None:
             dangling[str(path.relative_to(REPO_ROOT))] = missing
 
     assert dangling == {}, f"labels cited in code that no document defines: {dangling}"
+
+
+@pytest.mark.structural
+def test_every_document_fixture_is_one() -> None:
+    # The exemption list is edited by hand, so it has gone stale twice: the
+    # citation checker's tests and then the problem-join tests each turned
+    # this file red on the day they landed. An entry earns its place by
+    # authoring document text -- writing a `\label{` into a document it
+    # builds -- so that property is checked rather than trusted, and an
+    # entry that stops authoring one is reported instead of silently
+    # exempting a module that now only cites.
+    for fixture in DOCUMENT_FIXTURES:
+        assert fixture.exists(), f"exempted path does not exist: {fixture}"
+        if fixture == Path(__file__).resolve():
+            continue
+        text = fixture.read_text()
+        assert "\\label{" in text, (
+            f"{fixture.relative_to(REPO_ROOT)} is exempted from the label "
+            "guard but writes no document text, so it should be scanned"
+        )
 
 
 @pytest.mark.structural

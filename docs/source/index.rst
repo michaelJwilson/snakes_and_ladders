@@ -283,6 +283,7 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.projection
+.. automodule:: snakes_and_ladders.search.ground_state
    :members:
 
 .. automodule:: snakes_and_ladders.search.gibbs

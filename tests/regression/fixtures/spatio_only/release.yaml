@@ -1,4 +1,4 @@
-model: potts-spots
+model: spatio-only
 oracle: none
 
 # The same construction as `ci` on the geometry ROADMAP.md's Stage 1 asks

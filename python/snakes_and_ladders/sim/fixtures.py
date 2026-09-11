@@ -65,12 +65,12 @@ from snakes_and_ladders.sim.convolutional import load_turbo_params
 from snakes_and_ladders.sim.count_pairs import load_spatio_sequential_counts_params
 from snakes_and_ladders.sim.emission_mixture import load_emission_mixture_params
 from snakes_and_ladders.sim.hmm import load_hmm_params
-from snakes_and_ladders.sim.ldpc import load_ldpc_params
+from snakes_and_ladders.sim.ldpc import load_bicycle_params, load_ldpc_params
 from snakes_and_ladders.sim.mixture import load_mixture_params
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.potts import (
     load_potts_lattice_params,
-    load_potts_spots_params,
+    load_spatio_only_params,
 )
 from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
 
@@ -91,13 +91,14 @@ LOADERS: dict[str, Callable[[Path], Any]] = {
     "jukes-cantor": load_simulation_params,
     "potts-chain": load_potts_params,
     "potts-lattice": load_potts_lattice_params,
-    "potts-spots": load_potts_spots_params,
+    "spatio-only": load_spatio_only_params,
     "hidden-markov": load_hmm_params,
     "gaussian-mixture": load_mixture_params,
     "emission-mixture": load_emission_mixture_params,
     "spatio-sequential": load_spatio_sequential_params,
     "spatio-sequential-counts": load_spatio_sequential_counts_params,
     "ldpc": load_ldpc_params,
+    "bicycle": load_bicycle_params,
     "frustrated-lattice": load_frustrated_lattice_params,
     "test-functions": load_test_function_params,
     "turbo": load_turbo_params,
@@ -407,12 +408,26 @@ class Measurement:
         horizon, the sizes the reference was run at. Named here rather than
         left in the computing code, because a rate at a different budget is
         a different number under the same name.
+    rtol : float | None
+        How close a recomputation has to come. ``None`` is exact equality,
+        which is what a count, an enumerated extremum or a rate over seeded
+        rollouts reproduces; a float is the relative tolerance
+        ``abs(fresh - stored) <= rtol * abs(stored)``, for a value an
+        iterative optimiser produced, which a different BLAS ordering moves
+        in the last digits (issue #527). Relative and not absolute for the
+        reason ``likelihood/CLAUDE.md`` gives for devices: a log-likelihood
+        is a sum over sites, so a bound fixed at one problem size does not
+        transfer to another. Declared by the code that computes the value,
+        recorded beside it, and compared like the budget --- two records
+        disagreeing about how closely a number has to be reproduced disagree
+        about what the number is.
     """
 
     algorithm: str
     value: float | tuple[float, ...]
     seed: int | None
     budget: Mapping[str, Any]
+    rtol: float | None
 
 
 @dataclass(frozen=True)
@@ -528,7 +543,7 @@ def _as_measurement(name: str, raw: Mapping[str, Any], path: Path) -> Measuremen
         If the entry is missing a field, which a hand-edited record is the
         usual cause of.
     """
-    missing = {"algorithm", "value", "seed", "budget"} - raw.keys()
+    missing = {"algorithm", "value", "seed", "budget", "rtol"} - raw.keys()
     if missing:
         msg = f"{path}: measurement {name!r} is missing {sorted(missing)}"
         raise ValueError(msg)
@@ -540,6 +555,7 @@ def _as_measurement(name: str, raw: Mapping[str, Any], path: Path) -> Measuremen
         else float(value),
         seed=None if raw["seed"] is None else int(raw["seed"]),
         budget=dict(raw["budget"]),
+        rtol=None if raw["rtol"] is None else float(raw["rtol"]),
     )
 
 
@@ -607,6 +623,7 @@ def write_baseline(record: Baseline) -> None:
                 else measurement.value,
                 "seed": measurement.seed,
                 "budget": dict(measurement.budget),
+                "rtol": measurement.rtol,
             }
             for name, measurement in sorted(record.measurements.items())
         },

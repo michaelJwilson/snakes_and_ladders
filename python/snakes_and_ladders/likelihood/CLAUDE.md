@@ -90,3 +90,12 @@ in this module. It is referenced here, never restated. What follows is local.
   structure an oracle scores, with no violation allowed; a learned predictor
   claims a coverage and is certified to it. A cheap value that claims nothing
   ranks, and is never reported as the evaluation it stands in for.
+
+- **A feature costs what the largest instance can pay, and a solver's own
+  answer is never one.** A quantity that is a feature at nine sites and
+  unaffordable at five thousand is not a feature of the model but of the
+  instance the model was first fitted on, and a feature that is the target a
+  larger rung learns predicts the target from itself. Both are why a
+  bracket's ends are stated with their cost class: a bound reaching one size
+  and not another is two bounds, and the suite says which one refereed a
+  number.
