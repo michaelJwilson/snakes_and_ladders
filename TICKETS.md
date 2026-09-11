@@ -65,6 +65,12 @@ parenthesis the only way a ticket is cited.
   normalizer is an additive constant, D-squared sampling normalizes rather
   than shifts, and what a count family's normalizer costs #541's candidate 3
   is the measurement that decides whether this is a defect or a difference
+- Adapt the leapfrog step size of a seeding chain to the instance. #548 ran
+  `opt.hmc.sample`, `anneal` and `parallel_tempering` at one fixed step across
+  two sample sizes: acceptance 1.000 over 500 observations and 0.000 over
+  504,100, so at the larger size all three returned their starting point and
+  cost 110 to 220% of the fit budget to do it. `opt.hmc.Adaptation` exists and
+  `anneal` and `parallel_tempering` do not take one
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 

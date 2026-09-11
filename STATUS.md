@@ -1450,6 +1450,43 @@ full size, against 8 GiB free on the 15 GiB host. The comparison runs at bin
 factor 40, 504,100 observations, which is the largest whose simulate-fit-assert
 run fits the 120 s key cap at 62.4 s.
 
+**The nine seedings, at 40 evaluations of expectation-maximization each.**
+Every candidate is #541's, unchanged, so the two studies are comparable. The
+fit is budget-matched through `opt.budget.compare` and the seeding is not, so
+each seeding's own cost is reported in the fit's unit and as a fraction of it.
+Left, `mixture/ci.yaml` over 40 shared starts; right, the two-channel rung over
+8, which is what nine fits over 504,100 observations allow — the run took
+79 min 57 s, so 40 starts would be the whole release tier and the paired test
+is correspondingly weak there.
+
+| seeding | ci hits of 40 | ci mean gap | ci recovery | key hits of 8 | key mean gap | key recovery | seeding cost, evaluations |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| random-restart | 0 | 5.30 | 0.6800 | 0 | 3,030 | 0.4116 | 0.00, 0% |
+| kmeans++ | 0 | 0.723 | 0.6240 | 0 | 424 | 0.4632 | 0.90, 2.2% |
+| emission-d2 | 0 | 1.38 | 0.6140 | 0 | 668 | 0.4562 | 1.00, 2.5% |
+| burn-in | 0 | 19.1 | 0.6240 | 0 | 30,700 | 0.2968 | 7.00, 17.5% |
+| family-sample | 0 | 1.87 | 0.5980 | 0 | 717 | 0.4093 | 0.00, 0% |
+| spectral | 0 | 0.723 | 0.6240 | 0 | 424 | 0.4632 | 1.00, 2.5% |
+| hmc | 6 | 0.785 | 0.5260 | 0 | 595 | 0.4370 | 48.00, 120% |
+| tempering | 2 | 1.06 | 0.5620 | 0 | 595 | 0.4370 | 88.00, 220% |
+| anneal | 0 | 1.39 | 0.6220 | 0 | 595 | 0.4370 | 44.00, 110% |
+
+Gaps are nats against the fit started from the generating parameters; recovery
+is the fraction of observations assigned their planted component, against a
+Bayes ceiling of **0.688** on the ci rung and **0.5509** on the key rung, which
+1.5 standard deviations of separation fixes. **Nothing but a chain reaches the
+referee, and no chain reaches it cheaply**: `hmc` reaches it from 6 of 40 ci
+starts (McNemar p = 0.031 against restarts) at 120% of the fit budget, and
+parallel tempering from 2 at 220%. **And on the key rung the chains did not
+mix at all** — acceptance 0.000 at the step that accepted every proposal on
+the ci rung, so all three returned their own starting point and are one
+uniform-seeded fit bought at 110 to 220% of the fit, which is what
+`STATUS.md` reports rather than averages in. Spectral is k-means++ on both
+rungs, and for the reason the route predicts: the leading principal subspace
+of a one- or two-channel sample is the whole of it, so the projection is a
+rotation. The burn-in initializer is last on both rungs by an order of
+magnitude, at 17.5% of the fit budget.
+
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
 but until now only a gradient fit could ask for one: expectation-maximization

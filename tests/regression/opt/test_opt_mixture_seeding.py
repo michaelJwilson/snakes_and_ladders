@@ -853,10 +853,38 @@ def test_the_ordering_on_the_refereed_rung() -> None:
     print(measurement.diagnostics())
     print("ordering:", " > ".join(measurement.ordering()))
     assert measurement.comparison.spent.max() <= BUDGET.size
-    # The control's claim: the two D-squared rules are one rule on a Gaussian,
-    # so they reach the referee from the same starts and the paired test
-    # between them finds nothing.
+    # Realized, and pinned because `docs/experiments/009` reports it: only the
+    # two chain candidates reach the referee at all, and each pays more than
+    # the whole fit budget to do it.
+    assert measurement.hits() == {
+        "random-restart": 0,
+        "kmeans++": 0,
+        "emission-d2": 0,
+        "burn-in": 0,
+        "family-sample": 0,
+        "spectral": 0,
+        "hmc": 6,
+        "tempering": 2,
+        "anneal": 0,
+    }, measurement.hits()
+    assert measurement.paired_p("hmc") < 0.05
+    assert measurement.ledger.best["hmc"].seeding > BUDGET.size
+    assert measurement.ledger.best["tempering"].seeding > 2 * BUDGET.size
+    # The control's claim: the two D-squared rules are one rule on a Gaussian
+    # in the divergence, and the implementation's negative log density is a
+    # different rule. Neither reaches the referee, so the paired test between
+    # them has no discordant start and says nothing; the mean gap is where the
+    # difference shows, and squared Euclidean's is the smaller.
+    gaps = measurement.comparison.mean_gap()
     assert measurement.hits()["kmeans++"] == measurement.hits()["emission-d2"]
+    assert measurement.comparison.paired_p(
+        "kmeans++", "emission-d2", TOLERANCE, relative=True
+    ) == pytest.approx(1.0)
+    assert gaps["kmeans++"] < gaps["emission-d2"] < gaps["random-restart"], gaps
+    # Spectral is k-means++ on this rung: the leading principal subspace of a
+    # one-dimensional sample is the whole of it, so the route is a rotation by
+    # the identity and the two agree exactly.
+    assert gaps["spectral"] == gaps["kmeans++"]
 
 
 @pytest.mark.release
@@ -871,4 +899,28 @@ def test_the_ordering_on_the_key_rung() -> None:
     print(measurement.diagnostics())
     print("ordering:", " > ".join(measurement.ordering()))
     assert measurement.comparison.spent.max() <= BUDGET.size
-    assert measurement.hits()["kmeans++"] == measurement.hits()["emission-d2"]
+    gaps = measurement.comparison.mean_gap()
+    # Nothing reaches the referee at 40 evaluations over half a million
+    # observations, so the mean gap is what separates the candidates and the
+    # paired test has nothing discordant to work with.
+    assert measurement.hits() == dict.fromkeys(METHODS, 0), measurement.hits()
+    # The control's pair, in the same order as on the refereed rung and by a
+    # wider margin: squared Euclidean 424 nats of 1.96e6, the negative log
+    # density 668.
+    assert gaps["kmeans++"] == pytest.approx(424.0, rel=0.02), gaps
+    assert gaps["emission-d2"] == pytest.approx(668.0, rel=0.02), gaps
+    assert gaps["kmeans++"] < gaps["emission-d2"] < gaps["family-sample"], gaps
+    assert gaps["random-restart"] < gaps["burn-in"], gaps
+    # Spectral is a rotation of k-means++ here: the leading principal subspace
+    # of a two-channel sample is the whole of it, so the two seed the same
+    # points up to the rounding of the map back.
+    assert gaps["spectral"] == pytest.approx(gaps["kmeans++"], rel=1e-4), gaps
+    # **The chains did not mix.** At the step that accepted every proposal on
+    # the refereed rung, none is accepted here, so all three returned their
+    # own starting point and are one uniform-seeded fit bought at 110% to 220%
+    # of the fit budget -- a random restart with a longer bill, which is what
+    # the diagnostics are reported for rather than averaged in.
+    for name in ("hmc", "tempering", "anneal"):
+        assert measurement.ledger.best[name].acceptance < 0.05, name
+        assert gaps[name] == pytest.approx(gaps["hmc"], rel=1e-9), name
+        assert measurement.ledger.best[name].seeding > BUDGET.size, name
