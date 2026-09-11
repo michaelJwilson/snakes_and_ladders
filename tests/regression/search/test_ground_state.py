@@ -85,9 +85,7 @@ def _enumerated(rung: ground_state.Rung) -> tuple[np.ndarray, float]:
         list(itertools.product(range(rung.n_states), repeat=rung.n_nodes)),
         dtype=np.int64,
     )
-    values = np.array(
-        [energy(rung.graph, rung.field, row) for row in configurations]
-    )
+    values = np.array([energy(rung.graph, rung.field, row) for row in configurations])
     best = int(np.argmin(values))
     return configurations[best], float(values[best])
 
@@ -222,7 +220,10 @@ def test_no_entry_spends_more_than_its_budget() -> None:
     # spent and `opt.budget.compare` refuses an overspend, so this asserts the
     # reports themselves are inside the ceiling.
     rung = _rung(CI, 3)
-    budget = Budget("site-visits", 30 * rung.visits_per_sweep)
+    # 60 sweep-equivalents, which is the comparison's own budget and enough
+    # for flooding to settle at nine sites -- so the converging branch of
+    # max-product is exercised here and the refusing one in the test below.
+    budget = Budget("site-visits", 60 * rung.visits_per_sweep)
 
     for name, method in ground_state.METHODS.items():
         run = method(rung, budget, np.random.default_rng(9))
@@ -332,3 +333,88 @@ def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None
     assert agreement < 0.95
     assert recovered.tilt == pytest.approx(RELEASE_Q2_TILT, abs=1e-3)
     assert 0.0 < recovered.tilt < 0.4935
+
+
+@pytest.mark.structural
+def test_the_comparison_records_the_labelling_each_entry_returned() -> None:
+    # `opt.budget.compare` returns an energy and a spend; the structural
+    # referee needs the labelling, and running every method twice to get it
+    # would double the experiment. The entries memo what they already
+    # computed, and this asserts the memo covers every cell rather than
+    # silently missing one -- which would show up as a structural column
+    # quietly read from the wrong run.
+    from snakes_and_ladders.opt.budget import compare
+
+    rung = _rung(CI, 3)
+    budget = Budget("site-visits", 20 * rung.visits_per_sweep)
+    ground_state.forget()
+
+    comparison = compare(ground_state.entries(), [rung] * 2, budget, [551], workers=1)
+    runs = ground_state.recorded()
+
+    assert len(runs) == len(ground_state.METHODS) * 2
+    assert {name for name, _, _ in runs} == set(ground_state.METHODS)
+    for name, _, run in runs:
+        assert ground_state.outcome(run).value == run.energy, name
+    assert set(comparison.methods) == set(ground_state.METHODS)
+    ground_state.forget()
+    assert ground_state.recorded() == ()
+
+
+@pytest.mark.edge_case
+def test_max_product_that_does_not_settle_reports_no_answer() -> None:
+    # Flooding is refused rather than truncated, and the refusal is carried
+    # through: an infinite energy and `converged=False`, never the field-only
+    # labelling's numbers entered under max-product's name.
+    rung = _rung(CI, 3)
+
+    run = ground_state.run_max_product(
+        rung, Budget("site-visits", 1), np.random.default_rng(1)
+    )
+
+    assert not run.converged
+    assert run.energy == float("inf")
+
+
+@pytest.mark.edge_case
+def test_the_swap_refuses_a_backend_it_has_no_cut_for() -> None:
+    rung = _rung(CI, 3)
+    labelling = np.zeros(rung.n_nodes, dtype=np.int64)
+
+    with pytest.raises(ValueError, match="no numba minimum-cut backend"):
+        swap(rung.graph, rung.field, labelling, 0, 1, backend=Backend.NUMBA)
+
+
+@pytest.mark.edge_case
+def test_a_swap_of_two_labels_no_site_carries_is_the_identity() -> None:
+    # Not an error: a cycle over every pair reaches pairs the labelling does
+    # not use, and the move is genuinely empty there.
+    rung = _rung(CI, 3)
+    labelling = np.zeros(rung.n_nodes, dtype=np.int64)
+
+    moved, value = swap(rung.graph, rung.field, labelling, 1, 2)
+
+    assert np.array_equal(moved, labelling)
+    assert value == pytest.approx(energy(rung.graph, rung.field, labelling))
+
+
+@pytest.mark.edge_case
+def test_the_swap_refuses_a_negative_coupling() -> None:
+    # The binary sub-problem is submodular only for a non-negative coupling,
+    # so this is the boundary rather than a slow case.
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, -0.5)
+
+    with pytest.raises(ValueError, match="submodular only then"):
+        alpha_beta_swap(graph, np.zeros((graph.n_nodes, 3)), 3)
+
+
+@pytest.mark.edge_case
+def test_the_swap_refuses_rather_than_looping_past_its_cycle_cap() -> None:
+    # Monotonicity over a finite state space makes reaching the cap
+    # impossible on a correct implementation, so it is a defect report and
+    # not a budget -- the same contract `alpha_expansion` states.
+    rung = _rung(CI, 3)
+    start = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2], dtype=np.int64)
+
+    with pytest.raises(ValueError, match="did not settle in 1 cycles"):
+        alpha_beta_swap(rung.graph, rung.field, 3, start=start, max_cycles=1)

@@ -52,9 +52,7 @@ def test_alpha_beta_swap_benchmark(
     # effects are in this number.
     graph, field = _problem(extent, n_states)
 
-    result = benchmark(
-        alpha_beta_swap, graph, field, n_states, backend=Backend.RUST
-    )
+    result = benchmark(alpha_beta_swap, graph, field, n_states, backend=Backend.RUST)
 
     assert result.cycles >= 1
 
@@ -68,9 +66,7 @@ def test_alpha_expansion_on_the_spots_construction_benchmark(
     # rather than against separate instances.
     graph, field = _problem(extent, n_states)
 
-    result = benchmark(
-        alpha_expansion, graph, field, n_states, backend=Backend.RUST
-    )
+    result = benchmark(alpha_expansion, graph, field, n_states, backend=Backend.RUST)
 
     assert result.cycles >= 1
 

@@ -1793,6 +1793,116 @@ enumeration test at `3x3`. The **reduction** caught them: at two labels one
 expansion is exact, so it must reproduce the minimum cut energy for energy,
 and it was failing by up to 2.55.
 
+**Ground-state recovery at 5,041 sites ranks the cut-based minimizers first,
+and refutes the fixture's simulated truth as a referee for a ground state**
+([#552](https://github.com/michaelJwilson/snakes_and_ladders/pull/552),
+[`docs/experiments/009`](docs/experiments/009-potts-ground-state-recovery.md)).
+Ten entries on `potts_spots` over three rungs, budget-matched through
+`opt.budget.compare` at **2,083,260 site visits** --- 60 heat-bath sweeps of
+`n_nodes + 2 |E|` --- over 8 independent starts. The unit is site visits and
+not sweeps: a Wolff step flips one cluster while a heat-bath sweep touches
+every site, and equal sweeps would hand the cluster moves a free lattice per
+move.
+
+Rung 2 is 5,041 sites at q = 2, where the ferromagnet in an arbitrary
+per-site field is submodular and `search.maxflow.ising_ground_state` is
+**exact**, so every gap below is a measured gap:
+
+| method | best of 8 | median | gap to exact | tilt | spend |
+| --- | --- | --- | --- | --- | --- |
+| alpha-expansion | **-10454.1563** | -10454.1563 | **0** | 0.2151 | 138,884 |
+| alpha-beta-swap | **-10454.1563** | -10454.1563 | **0** | 0.2151 | 69,442 |
+| anneal | -10235.13 | -10165.77 | 219.03 | 0.5334 | 2,083,260 |
+| tempering | -10012.21 | -9916.33 | 441.95 | 0.5848 | 2,083,260 |
+| icm / gibbs-T0 | -9794.98 / -9681.92 | -9723.81 / -9592.21 | 659.17 / 772.24 | 0.5619 / 0.6290 | 2,083,260 |
+| swendsen-wang | -9532.56 | -9465.97 | 921.59 | 0.7361 | 2,083,260 |
+| wolff | -7641.53 | -6898.83 | 2812.63 | 0.0082 | 317,358 |
+| greedy | -7418.10 | -7418.10 | 3036.06 | 1.8000 | 5,041 |
+| max-product | no convergence in 60 flooding iterations | --- | --- | --- | 2,083,260 |
+
+Both cut-based minimizers reach the exact optimum on every one of the 8
+starts, at 3.3% and 6.7% of the budget; no sampler comes within 219 of it at
+30x the spend. ICM and Gibbs at `T = 0` are reported on one axis because at
+`T -> 0` the heat bath is the argmin over each site's conditional, which is
+ICM's update: they differ in sweep order and the 112.9 between them is that
+order's whole effect.
+
+Rung 3 is the same lattice at q = 10, where there is no exact energy. The
+expansion's factor-2 bound is stated on the **non-negative** form of the
+energy, since this repository's is negative and the bound is false as
+written on a negative quantity: shifted by
+`sum_n max_m h[n, m] + J |E|` both terms are non-negative and the bound is
+carried back through the same shift. The bracket is
+**[-11521.58, -10454.16], width 1067.42**, against a winner-to-second gap of
+540.60 --- so **the bracket is wider than the differences being ranked and
+the energy ranks nothing at this rung**, which is the outcome, not a caveat.
+
+The structural referee does not rescue it; it refutes its own premise. The
+exact q = 2 ground state's size tilt is **0.2151**, *below* the fixture's
+thermal 0.4935 rather than above it, and its occupancy is **3286/1755**
+against the recorded 415-593. Both differences have one cause: a ferromagnet
+orders as `T` falls, domain walls stop being affordable, and the majority
+class takes sites whose own field points the other way. A temperature sweep
+of the same instance measures the tilt rising to 0.6255 at `T = 1` and then
+falling --- 0.5009 at 0.7, 0.4695 at 0.5, 0.2151 at zero --- so the tilt is
+not monotone in temperature and a ground state cannot be checked against a
+thermal constant at all. The cut that scores 0.2151 reproduces the
+enumerated ground state exactly at nine sites, so the referee is wrong here
+and the cut is not.
+
+At q = 10 the best labelling any method found uses **2 of the 10 classes**
+and is element-for-element the exact q = 2 ground state: only the ladder's
+extremes are ever field-optimal, so the middle eight classes buy field at no
+site and cost agreement at every one. The method that best matches the
+fixture's per-class occupancy is Wolff, at 484-567 against the recorded
+415-593 --- and Wolff is **last** on energy at -1141.56, because it barely
+moved. All three of the fixture's structural statistics are
+finite-temperature statistics of a sampler, and this experiment is the
+record that they do not transfer to a minimizer.
+
+**The cluster moves lose, and the instrumentation says exactly why**
+(issue #551, Step 3). Per schedule step over 60 steps from `T = 2.0` to
+`T = 0.05`, the Fortuin-Kasteleyn construction being exact only at zero
+field and this fixture having one:
+
+| `T` | SW mean / max cluster | SW accept | SW spanning | Wolff mean cluster | Wolff accept | Wolff spanning |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2.000 | 2.30 / 111 | 0.7266 | 0.000 | 3.67 | 1.0000 | 0.000 |
+| 0.944 | 12.42 / 1459 | 0.4171 | 0.001 | 11.67 | 0.7500 | 0.000 |
+| 0.446 | 46.60 / 1733 | 0.0878 | 0.009 | 58.50 | 0.2500 | 0.000 |
+| 0.211 | 62.23 / 1739 | 0.0043 | 0.012 | 770.17 | 0.2000 | 0.500 |
+| 0.068 | 64.63 / 1739 | **0.0000** | 0.013 | 1193.50 | **0.0000** | 0.833 |
+
+At q = 2 the prediction holds in full and compounds to a standstill: the mean
+cluster grows 28x for Swendsen-Wang and 325x for Wolff while both accept
+rates reach **exactly zero** below `T = 0.145`, so the cold sweeps that
+should be doing the optimizing propose global moves that are never taken.
+Wolff's clusters span the lattice in 83.3% of steps at the coldest
+temperature and none of them is accepted. At q = 10 the same shape is milder
+--- Swendsen-Wang's mean cluster grows 1.15 to 27.47 and its accept rate
+falls 0.893 to 0.057 --- and Wolff degenerates instead: its cluster stays at
+1.2 to 2.0 sites at every temperature, so a Wolff step is a single-site move
+with a bond construction's overhead and it spends **618 of 2,083,260** site
+visits. A Wolff run matched on visits rather than steps would need about
+29,000 steps at this rung, which the per-PR budget does not buy; the entry is
+reported at equal steps with its underspend stated, because stopping a sweep
+when a budget is exhausted is a stop on the state and `search/CLAUDE.md`
+refuses it.
+
+Rung 1, `potts_spots/ci` at 9 sites and q = 3, is a **correctness pin and not
+a comparison**: its enumerated ground state is 8 sites in one class and 1 in
+another, class 2 unused, and all ten entries reach it. `search/CLAUDE.md`'s
+"a fixture whose answer is trivial measures nothing" applies, and it is kept
+for what it does referee --- that the graph cut, both its implementations,
+alpha expansion and the new alpha-beta swap agree with exhaustive
+enumeration exactly.
+
+No wall clock is claimed. Every run was made with eight agents on a 4-core
+host, verified busy with `ps` rather than quiet, so the seconds column of
+`docs/experiments/009` is recorded and not used; the ranking rests on
+energies, spends and counts, none of which move with load.
+
+
 **Max-Cut landed as the other side of the same model.** Maximizing the weight
 of separated edges *is* minimizing the energy with every coupling negative,
 the NP-hard side of the boundary the exact cut refuses to cross. A

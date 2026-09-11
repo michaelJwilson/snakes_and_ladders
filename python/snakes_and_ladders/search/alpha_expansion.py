@@ -413,9 +413,10 @@ def swap(
     **no bound**, since the factor-2 guarantee of Boykov, Veksler & Zabih is a
     property of the expansion move and not of this one.
 
-    The source side takes ``alpha`` and the sink side ``beta``, and a held
-    neighbour outside the subset contributes a constant to whichever of the
-    two it agrees with, which enters as a data term on the moving site.
+    The source side takes ``alpha`` and the sink side ``beta``. A held
+    neighbour carries neither label --- those are exactly the ones that move
+    --- so it agrees with the moving site under neither choice and drops out
+    of the data term entirely.
 
     Returns
     -------
@@ -446,22 +447,14 @@ def swap(
     source, sink = moving.size, moving.size + 1
     network = FlowNetwork(n_nodes=moving.size + 2)
 
-    # The data term of a moving site: its own field, plus the coupling it
-    # would gain from every *held* neighbour that already carries the label.
+    # The data term of a moving site is its own field and nothing else. A
+    # *held* neighbour carries neither alpha nor beta --- those are exactly
+    # the labels that move --- so it agrees with the moving site under
+    # neither choice and contributes the same constant to both. That is why
+    # this move needs no auxiliary node and why the expansion does: there,
+    # a held neighbour can already be alpha.
     to_alpha = -values[moving, alpha].astype(float)
     to_beta = -values[moving, beta].astype(float)
-    for (first, second), coupling in graph.weighted_edges():
-        first_moves, second_moves = first in position, second in position
-        if first_moves and second_moves:
-            continue
-        if first_moves or second_moves:
-            inside, outside = (first, second) if first_moves else (second, first)
-            held = int(labelling[outside])
-            if held == alpha:
-                to_alpha[position[inside]] -= coupling
-            elif held == beta:
-                to_beta[position[inside]] -= coupling
-
     offsets = np.minimum(to_alpha, to_beta)
     for index in range(moving.size):
         # Cut source -> index when the site lands on the sink side, taking

@@ -448,13 +448,16 @@ def run_alpha_beta_swap(
 ) -> MethodRun:
     """Alpha-beta swap: the cheaper move, and the one with no bound.
 
-    A cycle is ``q (q - 1) / 2`` cuts against the expansion's ``q``, so the
-    cycle cap is set from the pair count and the two are compared at equal
-    site visits rather than at equal cycles.
+    A cycle is ``q (q - 1) / 2`` cuts against the expansion's ``q``, and each
+    cut covers only the sites carrying its two labels. Summed over a cycle
+    every site is therefore visited ``q - 1`` times, not once per pair, so a
+    cycle costs ``(q - 1)`` sweeps against the expansion's ``q`` --- the swap
+    is much cheaper per *cut* and barely cheaper per *cycle*, which is the
+    trade, and charging it by the pair count would have hidden it.
     """
     del rng
-    pairs = rung.n_states * (rung.n_states - 1) // 2
-    cycles = max(1, budget.size // (pairs * rung.visits_per_sweep))
+    per_cycle = (rung.n_states - 1) * rung.visits_per_sweep
+    cycles = max(1, budget.size // per_cycle)
     start = time.perf_counter()
     run = alpha_beta_swap(
         rung.graph,
@@ -466,7 +469,7 @@ def run_alpha_beta_swap(
     return MethodRun(
         labelling=run.labelling,
         energy=run.energy,
-        spent=run.cycles * pairs * rung.visits_per_sweep,
+        spent=run.cycles * per_cycle,
         seconds=time.perf_counter() - start,
     )
 
