@@ -258,6 +258,34 @@ def _edge_tensors(
     return pairs, couplings
 
 
+def site_rows(field: torch.Tensor, n_nodes: int) -> torch.Tensor:
+    """``field`` as one row per site, widened in ``torch`` so the gradient survives.
+
+    :func:`snakes_and_ladders.sim.potts.site_field` is the same widening over
+    NumPy, and the two agree on what a shape means; a bound differentiable in
+    its field cannot route through NumPy to get there, which is the whole of
+    why this exists beside it.
+
+    Raises
+    ------
+    ValueError
+        If ``field`` is neither ``(n_states,)`` nor ``(n_nodes, n_states)``,
+        refused for the reason ``site_field`` refuses it: a shared field on a
+        graph whose node count equals its state count would otherwise be read
+        as per-site and score a different model.
+    """
+    field = torch.as_tensor(field, dtype=torch.float64)
+    if field.dim() == 1:
+        return field.expand(n_nodes, field.shape[0])
+    if field.dim() == 2 and field.shape[0] == n_nodes:
+        return field
+    msg = (
+        f"field has shape {tuple(field.shape)}; expected (n_states,) or "
+        f"({n_nodes}, n_states)"
+    )
+    raise ValueError(msg)
+
+
 def mean_field_log_partition(
     graph: PottsGraph,
     field: torch.Tensor,
@@ -270,21 +298,21 @@ def mean_field_log_partition(
     Gibbs' inequality holds for every product distribution, so the bound is
     valid at any iterate and tightest at the fixed point; the iteration is
     unrolled, which is what makes the value differentiable in ``field`` and
-    ``couplings`` (the latter defaulting to the graph's own).
+    ``couplings`` (the latter defaulting to the graph's own). ``field`` is
+    shared or per site, widened once by :func:`site_rows`.
     """
     pairs, couplings = _edge_tensors(graph, couplings)
-    field = torch.as_tensor(field, dtype=torch.float64)
-    q = torch.full(
-        (graph.n_nodes, field.shape[0]), 1.0 / field.shape[0], dtype=torch.float64
-    )
+    rows = site_rows(field, graph.n_nodes)
+    n_states = rows.shape[1]
+    q = torch.full((graph.n_nodes, n_states), 1.0 / n_states, dtype=torch.float64)
     first = torch.as_tensor(pairs[:, 0])
     second = torch.as_tensor(pairs[:, 1])
     for _ in range(n_iterations):
-        local = field.expand(graph.n_nodes, -1).clone()
+        local = rows.clone()
         local = local.index_add(0, first, couplings[:, None] * q[second])
         local = local.index_add(0, second, couplings[:, None] * q[first])
         q = torch.softmax(local, dim=1)
-    energy = (q * field).sum() + (couplings * (q[first] * q[second]).sum(dim=1)).sum()
+    energy = (q * rows).sum() + (couplings * (q[first] * q[second]).sum(dim=1)).sum()
     entropy = -(q * torch.log(q.clamp_min(1e-300))).sum()
     return energy + entropy
 
@@ -325,16 +353,19 @@ def tree_log_partition(
     couplings: torch.Tensor,
     field: torch.Tensor,
 ) -> torch.Tensor:
-    """Exact ``log Z`` of a Potts model on a tree by one leaf-to-root pass, in the log domain."""
+    """Exact ``log Z`` of a Potts model on a tree by one leaf-to-root pass, in the log domain.
+
+    ``field`` is shared or per site, widened once by :func:`site_rows`.
+    """
     adjacency: list[list[tuple[int, torch.Tensor]]] = [[] for _ in range(n_nodes)]
     for (first, second), coupling in zip(tree_edges, couplings, strict=True):
         adjacency[first].append((second, coupling))
         adjacency[second].append((first, coupling))
-    q = field.shape[0]
-    identity = torch.eye(q, dtype=torch.float64)
+    rows = site_rows(field, n_nodes)
+    identity = torch.eye(rows.shape[1], dtype=torch.float64)
 
     def message(node: int, parent: int) -> torch.Tensor:
-        total = field.clone()
+        total = rows[node].clone()
         for child, coupling in adjacency[node]:
             if child == parent:
                 continue
@@ -364,7 +395,7 @@ def spanning_tree_log_partition(
     graph is a tree.
     """
     pairs, couplings = _edge_tensors(graph, couplings)
-    field = torch.as_tensor(field, dtype=torch.float64)
+    field = site_rows(field, graph.n_nodes)
     trees = _spanning_trees_covering_every_edge(graph)
     appearances = torch.zeros(len(graph.edges), dtype=torch.float64)
     for tree in trees:
@@ -382,6 +413,48 @@ def spanning_tree_log_partition(
     return total / len(trees)
 
 
+def decoupled_ground_energy(graph: PottsGraph, field: torch.Tensor) -> torch.Tensor:
+    """``-sum_n max_m h[n, m] - sum_e max(J_e, 0)``: no configuration's energy lies below it.
+
+    The energy is a sum of site terms and edge terms, so its minimum is at
+    least the sum of each term's own minimum; the labelling attaining every
+    minimum at once need not exist, which is the slack. ``O(N + E)``, which
+    is what makes it the bracket's lower end at sizes
+    :func:`spanning_tree_log_partition` does not reach
+    (``eq:decoupled-energy-bound``).
+    """
+    rows = site_rows(field, graph.n_nodes)
+    couplings = torch.as_tensor(np.asarray(graph.coupling, dtype=float))
+    return -rows.max(dim=1).values.sum() - couplings.clamp_min(0.0).sum()
+
+
+def decoupled_log_partition(graph: PottsGraph, field: torch.Tensor) -> torch.Tensor:
+    """``sum_n logsumexp_m h[n, m]``: ``log Z`` with every coupling dropped.
+
+    A lower bound wherever every coupling is non-negative, since dropping a
+    non-negative term from each configuration's exponent lowers every
+    summand of ``Z``. ``O(N)``, and looser than mean field, which recovers
+    it at zero coupling.
+    """
+    rows = site_rows(field, graph.n_nodes)
+    return torch.logsumexp(rows, dim=1).sum()
+
+
+def saturated_log_partition(graph: PottsGraph, field: torch.Tensor) -> torch.Tensor:
+    """``N log q - E_decoupled``: an upper bound on ``log Z`` at any size.
+
+    ``Z <= q^N exp(-E_min)`` and :func:`decoupled_ground_energy` bounds
+    ``E_min`` below, so the two compose. ``O(N + E)`` against
+    :func:`spanning_tree_log_partition`'s one exact tree pass per edge,
+    which is why this is the upper end of the bracket on a lattice of
+    thousands of sites and the spanning-tree bound the tighter one where it
+    runs (``eq:saturated-bound``).
+    """
+    rows = site_rows(field, graph.n_nodes)
+    n_states = torch.tensor(float(rows.shape[1]), dtype=torch.float64)
+    return graph.n_nodes * torch.log(n_states) - decoupled_ground_energy(graph, field)
+
+
 def ground_state_energy_bounds(
     graph: PottsGraph, field: np.ndarray, beta: float
 ) -> tuple[float, float]:
@@ -396,7 +469,9 @@ def ground_state_energy_bounds(
     if beta <= 0.0:
         msg = f"beta must be positive, got {beta}"
         raise ValueError(msg)
-    scaled_field = torch.as_tensor(np.asarray(field, dtype=float) * beta)
+    scaled_field = site_rows(
+        torch.as_tensor(np.asarray(field, dtype=float) * beta), graph.n_nodes
+    )
     scaled_couplings = torch.as_tensor(np.asarray(graph.coupling, dtype=float) * beta)
     lower_log_z = float(
         mean_field_log_partition(graph, scaled_field, couplings=scaled_couplings)
@@ -404,7 +479,7 @@ def ground_state_energy_bounds(
     upper_log_z = float(
         spanning_tree_log_partition(graph, scaled_field, couplings=scaled_couplings)
     )
-    q = int(scaled_field.shape[0])
+    q = int(scaled_field.shape[1])
     return -upper_log_z / beta, (graph.n_nodes * np.log(q) - lower_log_z) / beta
 
 
@@ -442,13 +517,17 @@ __all__ = [
     "ParsimonyUpperBound",
     "PlugInLikelihood",
     "SpanningTreeLogPartition",
+    "decoupled_ground_energy",
+    "decoupled_log_partition",
     "ground_state_energy_bounds",
     "jc_distances",
     "least_squares_lengths",
     "least_squares_residual",
     "mean_field_log_partition",
     "prune_with_matrices",
+    "saturated_log_partition",
     "site_fitch_scores",
+    "site_rows",
     "spanning_tree_log_partition",
     "tree_log_partition",
 ]

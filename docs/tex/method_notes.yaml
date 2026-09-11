@@ -74,6 +74,17 @@
     reach; on a loopy graph its error is reported and asserted against
     nothing.
 
+"Potts lattice in a per-site field":
+  surrogates: >-
+    The rung decides which surrogate is even defined. Enumeration and the
+    column transfer matrix give the exact normalizer at nine and at 72 sites,
+    so a fit is scored against it there; at 5{,}041 neither runs and the
+    target is the energy a discrete solver reaches. The mean-field and
+    spanning-tree bounds bracket the first two rungs and the spanning-tree
+    bound does not reach the third, where a decoupled pair costing one pass
+    over the sites and one over the edges brackets instead --- looser by an
+    order of magnitude, and the only bracket available.
+
 "Frustrated Potts: triangular antiferromagnet, planted spin glass":
   samplers: >-
     No sampler of its own: the lattice's samplers apply unchanged, and the
