@@ -6,6 +6,10 @@
 # Python
 __pycache__/
 *.pyc
+# Both forms: a worktree's `.venv` is a symlink, and `.venv/` matches only a
+# directory, so the slashless line is what keeps `git add -A` from staging it
+# (issue #556).
+.venv
 .venv/
 .pytest_cache/
 .benchmarks/
