@@ -1088,9 +1088,12 @@ $3^{72}$ configurations --- belief propagation is compared on the
 $8 \times 8$ lattice where nothing is exact, the minimum cut is checked at
 extents 8, 12 and 16, and the cluster moves are separated from single-site
 sweeps at extents 8 and 24, the $12 \times 12$ of them at the square-lattice
-transition of Section~\ref{sec:potts-sampling} being a declared instance. The general graph carries $G(n, p)$ instances to a thousand nodes,
-refereed by the planted energy of Section~\ref{sec:frustrated} rather than by
-any enumeration.
+transition of Section~\ref{sec:potts-sampling} being a declared instance. The
+largest per-site-field instance is a triangular $71 \times 71$ at ten states,
+5,041 nodes, where no normalizer is available at any cost and what is asserted
+is that the covariate still tilts the labels. The general graph carries
+$G(n, p)$ instances to a hundred nodes, refereed by the planted energy of
+Section~\ref{sec:frustrated} rather than by any enumeration.
 
 \subsection{As a factor graph}
 The variables are the spins, $x_i \equiv \sigma_i$. The factors are one unary
@@ -1574,10 +1577,16 @@ canonical one is a $2 \times 2$ open lattice at $M = K = 2$ over $S = 6$
 positions, $2^4 \cdot 2^{12} = 65{,}536$ joint states, inside the 200,000-state
 refusal and with its emissions separated far enough that a draw at $S = 6$
 identifies the classes. Past it the model runs on the lattices of
-Section~\ref{sec:potts} at the sizes stated there, with the number of classes
-and chain states in single figures and the number of positions in the tens,
-and is refereed by the planted labels alone --- which is the cell
-Section~\ref{sec:applicability} marks as wanting an oracle.
+Section~\ref{sec:potts} at the sizes stated there. Under a categorical
+emission the instance stays small --- a $10 \times 10$ lattice at $M = K = 2$
+over four positions --- and is refereed by the planted labels alone, which is
+the cell Section~\ref{sec:applicability} marks as wanting an oracle. Under
+the paired count emission of Section~\ref{sec:emissionmixture} the sequential
+extent is what grows: an $8 \times 8$ lattice at $M = K = 2$ over 1,000
+positions per pull request, and a triangular $71 \times 71$ at $M = K = 10$
+over 20,000 positions past it. There the reference implementation of the
+posterior is itself the oracle, an accelerated one being pinned to it, and the
+planted labels referee the fit on top of that.
 
 \subsection{As a factor graph}
 The variables are the $N$ labels and the $S M$ chain states. The factors are
@@ -1902,11 +1911,13 @@ near-optimal (Figure~\ref{fig:frustrated-lattices}).
 \label{par:frustrated:sizes}
 Both instances state their answer at every size, so unlike every other
 section here the size is not bounded by an oracle. The periodic triangular
-lattice is carried at $3 \times 3$, $4 \times 4$ and $9 \times 9$; the first
-two are inside the $2^{|V|}$ enumeration, which attains
-Equation~\ref{eq:triangular-ground-state} and measures its degeneracy, and
-the third is past it, where the same closed form still holds. The planted
-spin glass is carried from ten to a thousand nodes at mean connectivity
+lattice is carried at $3 \times 3$, $3 \times 4$, $4 \times 4$ and
+$9 \times 9$; the first three are inside the $2^{|V|}$ enumeration, which
+attains Equation~\ref{eq:triangular-ground-state} and measures its
+degeneracy --- 42 ground states at $3 \times 3$, 68 at $3 \times 4$ and 42
+again at $4 \times 4$, where neither extent divides by three --- and the
+fourth is past it, where the same closed form still holds. The planted
+spin glass is carried from ten to a hundred nodes at mean connectivity
 three and four, with the inverted fraction $f$ swept: at $f = 0$ the instance
 is a gauge transform of the ferromagnet and measures nothing, and the useful
 range is where the planted state stops being near-optimal.
@@ -2284,11 +2295,12 @@ Figure~\ref{fig:testfunctions:sketch} sketches the shape of each.
 \label{par:testfunctions:sizes}
 The size here is the dimension $d$, and it is the only problem in this
 document whose oracle costs nothing at any size, the minimizers being closed
-forms. Rosenbrock is fitted at $d = 2$, $3$, $4$ and $5$; Rastrigin at
-$d = 2$ and $3$, where the roughly $10^{d}$ local minima already make a single
-fit's success a rate rather than an outcome; Himmelblau is two-dimensional by
-definition, its four minima published points. There is no per-tier ceiling and
-no enumeration: what grows with $d$ is not the cost of the referee but the
+forms. Rosenbrock is fitted at $d = 2$, $3$ and $5$ and differentiated
+against the closed form at $4$; Rastrigin is fitted at $d = 2$ and carried to
+$3$ and $4$ by the checks that need no fit, the roughly $10^{d}$ local minima
+already making a single fit's success a rate rather than an outcome;
+Himmelblau is two-dimensional by definition, its four minima published
+points. There is no per-tier ceiling and no enumeration: what grows with $d$ is not the cost of the referee but the
 number of basins a multi-start has to find, which is why the fraction of
 starts reaching the global minimum is the quantity asserted.
 
@@ -2436,7 +2448,8 @@ is a test.
 
 \paragraph{Supported sizes.}
 \label{par:ldpc:sizes}
-Codes of length $n = 24$, $48$, $96$ and $996$ carry the refereed claims, and
+Codes of length $n = 12$, $24$, $48$, $96$ and $996$ carry the refereed
+claims, the first being the length the codeword enumeration reaches, and
 the instance the roadmap names is $(3, 6)$ at $n = 19{,}998$ with $m =
 9{,}999$ checks and 59,994 nonzeros. Three ceilings separate what is refereed
 by what. Enumerating the $2^{k}$ codewords is refused past 200,000 words, so
