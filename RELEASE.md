@@ -131,9 +131,8 @@ the machine for as long as it runs.
 | Step | Rough upper bound |
 | --- | --- |
 | `pytest`, every tier, with the coverage gate | **Over an hour**, and never yet run to completion. **The largest sink** |
-| `qa.build --all --check`, every figure rendered and compared | **Around 10 minutes** |
-| `infra/build_documents.sh` | **Around 10 minutes**, renders included |
-| — the two above between them | **The second sink**: the figure work, paid twice, and the part that grows with the manifest |
+| `qa.build --all --check`, every figure rendered and compared | **Around 10 minutes**. **The second sink**, and the part that grows with the manifest |
+| `infra/build_documents.sh --no-figures` | **Under a minute**: the tables, the citation check and `latexmk`, no renders |
 | `cargo clippy`, `cargo fmt`, `cargo test`, each also `--features sandbox` | **A few minutes** on a cold `cargo` cache |
 | `ruff`, `mypy --strict`, `sphinx-build -E -a -W`, `infra/ledgers.sh --check`, `infra/baselines.py` | **Under a minute** each |
 
@@ -162,15 +161,20 @@ measured rather than assumed — with issue #448's `:cite:` role reintroduced,
 the incremental form failed too. `tests/regression/test_release_gate.py` pins
 both flags and the ordering.
 
-**The gate renders every figure twice, and both passes are in the table
-above.** `qa.build --all --check` compares a rebuild against the committed
-bytes without overwriting, and `infra/build_documents.sh` then renders every
-figure the two documents cite — since issue #492 the whole manifest — into
-`docs/tex/figures/` so `latexmk` has them. The stamps that used to let the
-second pass skip most of that work are deleted (issue #490), so a reader
-budgeting the gate counts the figure work twice. Whether the second pass can
-read the first's output is issue #484's ordering constraint in reverse, not
-settled here.
+**The gate renders every figure once, and issue #530 is where the second pass
+went.** `qa.build --all --check` renders the whole manifest into a temporary
+directory and compares every byte against `docs/tex/figures/`; passing, it has
+proved those committed bytes are what a render produces, so
+`infra/build_documents.sh` is given `--no-figures` and `latexmk` typesets the
+figures already in the tree. Both passes rendered the same 23 entries until
+then — the stamps that once let the second skip most of that are deleted
+(issue #490) and issue #492 left every entry cited — so the gate paid the
+manifest's declared **431.8 s** twice, 863.6 s in all. That is issue #484's
+ordering constraint answered rather than reversed: the comparison still runs
+first, and the build after it now writes no figure at all. When the comparison
+*fails*, the remedy it names is to run `infra/build_documents.sh` with no
+arguments and commit what it renders; the gate does not do it for you, having
+already failed.
 
 **The figure pass is minutes, and its cost is concentrated.** Two of the
 twenty-three figures are half of it and most of the rest are a few seconds each;
