@@ -48,7 +48,7 @@ test below is an equality rather than a correlation.
 **Two things it is not.** ``D`` is not the tree's log-likelihood but a quartet
 decomposition of it, a *different surface*, and ``search/CLAUDE.md`` licenses
 substituting one for the other only by measuring that they agree at the argmax
---- ``tests/regression/test_sandbox_tropical.py``, at every size enumeration
+--- ``tests/regression/sandbox/test_sandbox_tropical.py``, at every size enumeration
 reaches. And ``F`` is optimized over the whole ambient ``R^C(n,2)`` rather than
 over the Grassmannian: a general dissimilarity resolves each quartet, and the
 collection need not come from any tree. So ascent can leave the tree locus, the
