@@ -306,7 +306,7 @@ class FromAnnealing:
 
         Returns
         -------
-        Annealed
+        snakes_and_ladders.opt.hmc.Annealed
         """
         return hmc.anneal(
             objective,
