@@ -3,25 +3,20 @@
 At an enumerable lattice size the exact Boltzmann distribution is available,
 so each move set is tested by whether the chain's realized visit frequencies
 are drawn from it --- a chi-square goodness-of-fit at a declared significance
-and chain length. A sampler with a broken accept step produces plausible
-configurations, runs to completion, and fails this; it passes any test that
-only checks the chain moved.
+and chain length.
 
-Two things this file also pins, because both were wrong while it was written
-and neither would have been caught by a test that only ran the sampler:
+Two things this file also pins, both wrong while it was written:
 
 The **field accept step**. `test_dropping_the_field_accept_step_is_caught`
 replaces it with an unconditional recolouring and asserts this same test
-rejects --- so the tests above are known to have the power they claim rather
-than assumed to.
+rejects, so the tests above are known to have the power they claim.
 
-The **thinning**. A chi-square assumes independent draws, and successive
+The **thinning**. A chi-square assumes independent draws and successive
 sweeps are not independent. Run on every sweep it rejects a *correct*
-sampler: measured here, single-site at `thin = 1` returned p = 0.038 and
-Swendsen-Wang p = 0.0024 on chains that are right. The thinning below is
-therefore part of the test, not a speed knob, and Wolff needs more of it
-because one Wolff sweep flips one cluster while the other two touch every
-site.
+sampler: single-site at `thin = 1` returned p = 0.038 and Swendsen-Wang
+p = 0.0024 on chains that are right. The thinning below is part of the test,
+not a speed knob, and Wolff needs more of it because one Wolff sweep flips
+one cluster while the other two touch every site.
 """
 
 from __future__ import annotations
@@ -137,9 +132,9 @@ def test_the_chain_is_drawn_from_the_exact_boltzmann_distribution(
 @pytest.mark.oracle
 @pytest.mark.parametrize("move", list(PottsMove))
 def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
-    # The case the ticket exists for. Wolff's cluster construction alone does
-    # not preserve detailed balance in a field, so this is where the accept
-    # step is doing work and the test above is not.
+    # Wolff's cluster construction alone does not preserve detailed balance in
+    # a field, so this is where the accept step does work and the test above
+    # does not.
     assert _goodness_of_fit(move, WITH_FIELD) > SIGNIFICANCE
 
 
@@ -148,9 +143,7 @@ def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
 def test_dropping_the_field_accept_step_is_caught(
     move: PottsMove, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Evidence that the two tests above have the power they claim. Without
-    # this, "the sampler passes a chi-square" and "the chi-square could not
-    # tell" are indistinguishable.
+    # Evidence that the two tests above have the power they claim.
     def unconditional(
         state: np.ndarray,
         members: np.ndarray,
@@ -168,8 +161,7 @@ def test_dropping_the_field_accept_step_is_caught(
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
     # `1 - exp(-J)` is above 1 for J < 0, so it is not a probability, and an
-    # antiferromagnet has no like-spin regions to flip. The algorithm does not
-    # apply rather than applying badly.
+    # antiferromagnet has no like-spin regions to flip.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
 
     with pytest.raises(ValueError, match="needs every coupling >= 0"):
@@ -191,15 +183,14 @@ def test_single_site_still_runs_on_a_negative_coupling() -> None:
 # The instance at the transition, declared rather than built here (issue
 # #413). `potts_lattice/stress` is the 12x12 open square at the exact
 # 3-state transition in zero field, and section 9 of
-# `docs/nb/potts_chain.ipynb` reads the same file: the number the notebook
-# prints and the number this module asserts are one instance rather than two
-# literals that happen to agree.
+# `docs/nb/potts_chain.ipynb` reads the same file, so the notebook and this
+# module share one instance rather than two literals that agree.
 CRITICAL = fixture("potts_lattice", "stress").params
 
 #: A Wolff sweep flips one cluster while the other two move every site, so
 #: Wolff runs this many times the declared sweeps and burn-in to give the
 #: three chains comparable work. A property of the measurement, not of the
-#: instance, which is why it is here and not in the file.
+#: instance.
 WOLFF_SWEEPS = 8
 
 
@@ -211,9 +202,9 @@ def _critical_lattice() -> PottsGraph:
 def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> float:
     """Energy autocorrelation time, normalized to the work a sweep costs.
 
-    A Wolff sweep flips one cluster; the other two touch every site. Reporting
-    all three in sweeps would make Wolff look free, so each is scaled by the
-    sites its sweep actually touched.
+    Reporting all three in sweeps would make Wolff look free --- one Wolff
+    sweep flips one cluster --- so each is scaled by the sites its sweep
+    touched.
     """
     field = CRITICAL.field
     factor = WOLFF_SWEEPS if move is PottsMove.WOLFF else 1
@@ -232,11 +223,9 @@ def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> floa
 
 @pytest.mark.mathematical
 def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
-    # The reason for having them, as numbers rather than an assertion, at the
-    # instance the registry declares for it. The ordering is the claim; the
-    # values are pinned beside it because the chains are seeded and so
-    # reproducible, and because the sibling test below is worth nothing
-    # unless both halves of the comparison are pinned the same way.
+    # The ordering is the claim; the seeded values are pinned beside it
+    # because the sibling test below is worth nothing unless both halves of
+    # the comparison are pinned the same way.
     #
     # What is *not* claimed is the ratio: it widens with lattice extent
     # (docs/experiments/001-potts-cluster-autocorrelation.md), so a ratio
@@ -256,9 +245,9 @@ def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
 
 @pytest.mark.mathematical
 def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
-    # The other half of the claim above, and the reason the comparison is run
-    # at the transition rather than wherever a fixture happens to sit. The
-    # registry's lattice is 9 sites at J = 0.6, well below J_c = 1.005: the
+    # The other half of the claim above, and why the comparison runs at the
+    # transition. The registry's lattice is 9 sites at J = 0.6, well below
+    # J_c = 1.005: the
     # correlation length is shorter than the lattice, there is no critical
     # slowing to remove, and the cluster moves buy nothing for the bonds they
     # cost. Pinned as the measurement `docs/nb/potts_chain.ipynb` reports, so
@@ -290,8 +279,7 @@ def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() ->
     # made every cluster a single site -- which would silently turn Wolff into
     # an expensive single-site sampler -- is visible.
     # Extent 8 rather than the declared 12: the claim is about the cluster
-    # construction and not about the instance, and a smaller lattice makes
-    # it in a quarter of the sweeps.
+    # construction, and a smaller lattice makes it in a quarter of the sweeps.
     graph = lattice_graph((8, 8), BoundaryCondition.OPEN, critical_coupling(3))
 
     chain = sample_potts(
@@ -317,9 +305,7 @@ def _tempered_exact_distribution(
     """``exp(-E / T)`` from the *unscaled* model: the oracle a tempered chain is held to.
 
     Computed from `log_weights` of the model as declared, divided by the
-    temperature, so it shares nothing with `tempered` -- a chain that ran the
-    scaled model wrongly would be caught here and not by a test that scaled
-    the oracle the same way.
+    temperature, so it shares nothing with `tempered`.
     """
     n_states = int(field.shape[0])
     configurations = np.array(
@@ -336,9 +322,9 @@ def _tempered_exact_distribution(
 @pytest.mark.oracle
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
-    # The consistency check the model itself provides: the coupling absorbs
-    # beta, so the energy of the scaled model is the energy over T, and the
-    # deviation is 0.0 rather than a tolerance -- a division on each term.
+    # The coupling absorbs beta, so the scaled model's energy is the energy
+    # over T and the deviation is 0.0 rather than a tolerance: one division
+    # per term.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
     configurations = np.array(
         list(itertools.product(range(2), repeat=graph.n_nodes)), dtype=np.int64
@@ -359,8 +345,8 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
 ) -> None:
     # Hot and cold, in a field, for every move set: the bond probabilities
     # and the field accept step are tempered by the same division as the heat
-    # bath, and this is what says so. Realized p-values over two seeds range
-    # 0.016 to 0.89 against the 0.001 significance the untempered tests use.
+    # bath. Realized p-values over two seeds range 0.016 to 0.89 against the
+    # 0.001 significance the untempered tests use.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
     index, probability = _tempered_exact_distribution(graph, WITH_FIELD, temperature)
 
@@ -405,19 +391,19 @@ def test_a_non_positive_temperature_is_refused() -> None:
 def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not() -> (
     None
 ):
-    # The optimizer built from the sampler, against the one frustrated
-    # instance with a ground-state energy known at every size: the periodic
-    # triangular antiferromagnet, where at least one edge in three is
-    # unsatisfied (`sim.canonical.minimum_frustrated_edges`). At 9x9 over 20
+    # The optimizer built from the sampler, against the frustrated instance
+    # with a ground-state energy known at every size: the periodic triangular
+    # antiferromagnet, where at least one edge in three is unsatisfied
+    # (`sim.canonical.minimum_frustrated_edges`). At 9x9 over 20
     # seeds and 200 sweeps: annealing 20/20, single-site descent (ICM) 2/20,
     # and the same 200 sweeps at a *constant* temperature of 1 -- the control
     # that separates the schedule from the wandering -- 7/20.
     #
     # What this does not say: that annealing beats descent at equal budget.
     # ICM converges in 2.6 sweeps here, so 200 sweeps buy 78 restarts, and
-    # the best of 78 also reaches the ground state 20/20. The instance is too
-    # easy for restarts to lose on; the comparison at equal evaluations on
-    # instances where they might is #267's second pull request.
+    # the best of 78 also reaches the ground state 20/20. The comparison at
+    # equal evaluations, on instances restarts can lose, is #267's second
+    # pull request.
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
     field = np.zeros(2)
     ground = float(minimum_frustrated_edges(graph))  # |J| = 1
@@ -475,14 +461,13 @@ def _replica_p_values(
 def test_every_replica_is_drawn_from_its_own_tempered_distribution(
     backend: Backend,
 ) -> None:
-    # The oracle the plan named: the joint target is a product of tempered
-    # marginals, so with exchanges *on* each replica must still pass the
-    # chi-square against exp(-E / T_r) enumerated from the unscaled model. A
-    # wrong exchange ratio contaminates the cold replica with hot
-    # configurations and this is what says so. Realized p-values over two
+    # The joint target is a product of tempered marginals, so with exchanges
+    # *on* each replica must still pass the chi-square against exp(-E / T_r)
+    # enumerated from the unscaled model; a wrong exchange ratio contaminates
+    # the cold replica with hot configurations. Realized p-values over two
     # seeds: 0.024 to 0.70 at the 0.001 significance; exchange acceptance
-    # 0.78 and 0.57 for the two pairs, so the exchanges are actually
-    # happening and the test has power.
+    # 0.78 and 0.57 for the two pairs, so the exchanges happen and the test
+    # has power.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     run = parallel_tempering(
@@ -503,11 +488,10 @@ def test_every_replica_is_drawn_from_its_own_tempered_distribution(
 
 @pytest.mark.edge_case
 def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The negative case, paired with the positive one above so the two are
-    # distinguishable. An exchange that ignores (beta_i - beta_j)(E_i - E_j)
-    # still runs and still mixes -- every exchange is accepted -- and every
-    # replica's marginal is the wrong distribution: realized p = 0.0 at all
-    # three temperatures.
+    # The negative case, paired with the positive one above. An exchange that
+    # ignores (beta_i - beta_j)(E_i - E_j) still runs and still mixes -- every
+    # exchange is accepted -- and every replica's marginal is the wrong
+    # distribution: realized p = 0.0 at all three temperatures.
     def always_exchange(*_: float) -> float:
         return 0.0
 
@@ -531,9 +515,9 @@ def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -
 @pytest.mark.mathematical
 def test_replicas_draw_from_separate_streams_and_one_seed_reproduces_them() -> None:
     # Two replicas at the *same* temperature with no field would be identical
-    # chains if they shared a stream, and the whole point would be lost while
-    # every diagnostic looked healthy. Spawned children differ; the parent
-    # seed still reproduces the run bitwise.
+    # chains if they shared a stream, while every diagnostic looked healthy.
+    # Spawned children differ; the parent seed still reproduces the run
+    # bitwise.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
     first = parallel_tempering(
@@ -574,24 +558,21 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
 
 @pytest.mark.structural
 def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
-    # The comparison the ticket asked for, on the instance where restarts can
-    # lose: the planted Viana-Bray spin glass, 60 sites at mean degree 4 and
-    # frustration 0.2, whose planted energy upper-bounds the ground state and
-    # whose ground state enumeration cannot reach. Budget: 400 heat-bath
-    # sweeps per method, held equal by `opt.budget.compare` (issue #281) --
-    # annealing spends them on one chain, tempering on four replicas of 100,
-    # and single-site descent on 100 restarts of at most 4 sweeps (it
+    # The instance where restarts can lose: the planted Viana-Bray spin
+    # glass, 60 sites at mean degree 4 and frustration 0.2, whose planted
+    # energy upper-bounds a ground state enumeration cannot reach. Budget:
+    # 400 heat-bath sweeps per method, held equal by `opt.budget.compare`
+    # (issue #281) -- annealing on one chain, tempering on four replicas of
+    # 100, single-site descent on 100 restarts of at most 4 sweeps (it
     # converges in 2 to 4). Realized over 12 instances, against the best
-    # energy any method found: annealing and tempering 12/12, restarts 5/12
-    # with a mean gap of 0.75 when first measured by hand; through the
-    # utility, with its own streams and the reference the best any method
-    # found, tempering 12/12, annealing 10/12 and restarts 4/12 with a mean
-    # gap of 0.75. The plan predicted tempering would be hard to justify at
-    # these sizes; it is not, and the prediction is retracted.
+    # energy any method found: tempering 12/12, annealing 10/12, restarts
+    # 4/12 with a mean gap of 0.75. The plan predicted tempering would be
+    # hard to justify at these sizes; it is not, and the prediction is
+    # retracted.
     #
-    # Asserted at the margin the measurement supports, not the measurement:
-    # restarts below both, and the two tempered methods at or below the
-    # planted energy on every instance.
+    # Asserted at the margin the measurement supports: restarts below both,
+    # and the two tempered methods at or below the planted energy on every
+    # instance.
     budget = Budget("sweeps", 400)
     ladder = (2.0, 1.2, 0.7, 0.4)
     instances = [
@@ -643,8 +624,8 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
 
 @pytest.mark.edge_case
 def test_the_sweep_has_no_numba_backend() -> None:
-    # The descent has one and the sampler does not, deliberately: a sampler's
-    # pin is distributional, and root CLAUDE.md admits one compiled path per
+    # The descent has one and the sampler does not: a sampler's pin is
+    # distributional, and root CLAUDE.md admits one compiled path per
     # measurement. Refused by name rather than falling back silently.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
@@ -675,12 +656,12 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
     n_seeds: int,
 ) -> None:
     # The 9x9 periodic triangular antiferromagnet, from the endpoints alone.
-    # Two things are asserted: the warm-up reports every pair inside the
-    # band, and a *fresh* run on the ladder it returned -- a different seed,
-    # four times the sweeps -- exchanges inside the band widened by the
-    # measurement's noise. The second is the one that matters: a warm-up
-    # that stopped on a lucky measurement would pass the first alone.
-    # Realized over 20 seeds: 5 to 8 rungs, fresh acceptances 0.16 to 0.72.
+    # The warm-up reports every pair inside the band, and a *fresh* run on
+    # the ladder it returned -- a different seed, four times the sweeps --
+    # exchanges inside the band widened by the measurement's noise. The
+    # second is what matters: a warm-up that stopped on a lucky measurement
+    # would pass the first alone. Realized over 20 seeds: 5 to 8 rungs,
+    # fresh acceptances 0.16 to 0.72.
     # The hand ladder's pairs, for comparison, exchange at 0.28, 0.15 and
     # 0.12 -- two of three below the band.
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
@@ -720,17 +701,14 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
 def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
     n_seeds: int,
 ) -> None:
-    # The comparison the ticket asked for, with the warm-up charged: 2400
-    # sweeps per seed, of which the adapted ladder spends its warm-up
-    # (895 on average, 500 to 1900) and splits the rest across its rungs,
-    # while the hand ladder spends 600 per replica on four. Realized over
-    # 20 seeds: adapted 20/20, hand 20/20; at 1600 sweeps 19/20 against
-    # 20/20, and the hand ladder hits 18/20 at 100 sweeps, so the instance
-    # does not separate them -- the closed-form ground state is what makes
-    # the rate a measurement at all. What the adapted ladder buys is the
-    # band, which the hand ladder is outside on two pairs, on an instance
-    # where that did not matter. Asserted at the margin the measurement
-    # supports.
+    # The warm-up is charged: 2400 sweeps per seed, of which the adapted
+    # ladder spends its warm-up (895 on average, 500 to 1900) and splits the
+    # rest across its rungs, while the hand ladder spends 600 per replica on
+    # four. Realized over 20 seeds: adapted 20/20, hand 20/20; at 1600 sweeps
+    # 19/20 against 20/20, and the hand ladder hits 18/20 at 100 sweeps, so
+    # the instance does not separate them. What the adapted ladder buys is
+    # the band, which the hand ladder is outside on two pairs. Asserted at
+    # the margin the measurement supports.
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
     field = np.zeros(2)
     ground = float(minimum_frustrated_edges(graph))

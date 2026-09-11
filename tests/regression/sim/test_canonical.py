@@ -2,17 +2,15 @@
 
 Each of the three is admitted under both clauses of ``sim/CLAUDE.md``'s rule:
 its answer is known independently of anything here, and more than one module
-consumes it. The tests below are where the second clause is visible ---
-``sim`` builds the instance, and ``likelihood`` and ``search`` supply the
-oracle.
+consumes it. The second clause is visible below --- ``sim`` builds the
+instance, ``likelihood`` and ``search`` supply the oracle.
 
-The instances here are built inline, and that is the exception
-``sim/CLAUDE.md`` allows: these are the tests *of* the constructors, run over
-a range of sizes and boundaries, so a fixture file would fix the one size the
-constructor must not be checked at alone. The declared instance of the
-frustrated problem is the fixture, and
-``tests/regression/test_fixture_registry.py`` pins the file to what these
-constructors build.
+The instances here are built inline, the exception ``sim/CLAUDE.md`` allows:
+these are the tests *of* the constructors, run over a range of sizes and
+boundaries, so a fixture file would fix the one size the constructor must not
+be checked at alone. The declared instance of the frustrated problem is the
+fixture, and ``tests/regression/test_fixture_registry.py`` pins the file to
+what these constructors build.
 """
 
 from __future__ import annotations
@@ -84,8 +82,8 @@ def test_the_ground_state_energy_is_known_without_enumerating(
     shape: tuple[int, int],
 ) -> None:
     # What the closed form buys: the ground-state *energy* at any size, in the
-    # convention `snakes_and_ladders.search.alpha_expansion.energy` uses. Every other
-    # discrete claim in this repository stops where enumeration does.
+    # convention `snakes_and_ladders.search.alpha_expansion.energy` uses.
+    # Every other discrete claim here stops where enumeration does.
     graph = frustrated_triangular_lattice(shape, coupling=-1.5)
     field = np.zeros((graph.n_nodes, 2))
 
@@ -101,10 +99,9 @@ def test_the_ground_state_energy_is_known_without_enumerating(
 
 @pytest.mark.mathematical
 def test_a_square_lattice_is_unfrustrated_and_a_triangular_one_is_not() -> None:
-    # The contrast that makes "frustration" mean something. A square lattice
-    # is bipartite, so every edge can disagree and the ground-state energy is
-    # exactly zero; adding the diagonal makes it non-bipartite and the ground
-    # state has to pay.
+    # A square lattice is bipartite, so every edge can disagree and the
+    # ground-state energy is exactly zero; adding the diagonal makes it
+    # non-bipartite and the ground state has to pay.
     square = lattice_graph((4, 4), BoundaryCondition.PERIODIC, -1.0)
     triangular = frustrated_triangular_lattice((4, 4))
 
@@ -129,11 +126,10 @@ def test_the_frustrated_optimum_is_the_maximum_cut(shape: tuple[int, int]) -> No
 @pytest.mark.edge_case
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_a_cluster_move_refuses_this_instance(move: PottsMove) -> None:
-    # The second job of this fixture, and the reason it is not merely a
-    # physics curiosity. `1 - exp(-J)` is not a probability at `J < 0` and an
-    # antiferromagnet has no like-spin clusters, so the refusal in
-    # `sample_potts` is correct -- but it was reachable only by a hand-written
-    # negative coupling until this fixture existed.
+    # `1 - exp(-J)` is not a probability at `J < 0` and an antiferromagnet has
+    # no like-spin clusters, so the refusal in `sample_potts` is correct --
+    # but it was reachable only by a hand-written negative coupling until this
+    # fixture existed.
     graph = frustrated_triangular_lattice((3, 3))
 
     with pytest.raises(ValueError, match="needs every coupling >= 0"):
@@ -176,8 +172,8 @@ def test_the_residual_entropy_is_reported_and_not_asserted() -> None:
     # incommensurate with the three-sublattice ground-state structure.
     #
     # So this asserts the degeneracies, which are exact, and reports the
-    # entropy. Asserting convergence to Wannier's constant at these sizes
-    # would be the mistake #214 already made once with a graph limit theorem.
+    # entropy. Asserting convergence to Wannier's constant at these sizes is
+    # the mistake #214 made with a graph limit theorem.
     degeneracies = {
         shape: _agreeing_edges(frustrated_triangular_lattice(shape))[1]
         for shape in [(3, 3), (3, 4), (4, 4)]
@@ -233,11 +229,10 @@ def test_a_periodic_extent_below_three_is_refused() -> None:
 @pytest.mark.edge_case
 @pytest.mark.mathematical
 def test_zero_frustration_is_a_gauge_transform_of_the_ferromagnet() -> None:
-    # Stated in the docstring as the reason not to use `frustration = 0` as a
-    # hard case, and checked here rather than trusted: with the gauge
-    # `sigma_i = +/-1` read off the planted state, every coupling becomes
-    # positive. An instance that is a relabelled ferromagnet is solved by any
-    # local search.
+    # The reason not to use `frustration = 0` as a hard case, checked rather
+    # than trusted: with the gauge `sigma_i = +/-1` read off the planted
+    # state, every coupling becomes positive, and a relabelled ferromagnet is
+    # solved by any local search.
     instance = planted_spin_glass(40, 4.0, 0.0, np.random.default_rng(1))
 
     sign = np.where(instance.planted == 0, 1.0, -1.0)
@@ -260,11 +255,9 @@ def test_zero_frustration_is_a_gauge_transform_of_the_ferromagnet() -> None:
 def test_the_planted_state_stops_being_the_ground_state_as_frustration_rises(
     frustration: float, expected_hits: int
 ) -> None:
-    # The honest limit of planting, measured against enumeration at `n = 10`.
-    # The planted state is a state of *known energy* and therefore an upper
-    # bound on the ground-state energy at any size. It is not the ground
-    # state, and pretending otherwise would make every claim built on it
-    # wrong.
+    # The limit of planting, measured against enumeration at `n = 10`. The
+    # planted state has *known energy* and so upper-bounds the ground-state
+    # energy at any size. It is not the ground state.
     rng = np.random.default_rng(7)
 
     hits = 0
@@ -288,8 +281,8 @@ def test_the_planted_state_stops_being_the_ground_state_as_frustration_rises(
 def test_the_planted_energy_matches_the_energy_of_the_planted_state() -> None:
     # The construction records its own answer, so a drift between the recorded
     # energy and the model's would make every comparison against it wrong.
-    # Checked against `snakes_and_ladders.search.alpha_expansion.energy`, which shares no
-    # code with the construction.
+    # Checked against `snakes_and_ladders.search.alpha_expansion.energy`,
+    # which shares no code with it.
     instance = planted_spin_glass(12, 4.0, 0.25, np.random.default_rng(3))
 
     assert instance.planted_energy == pytest.approx(
@@ -338,9 +331,9 @@ def test_an_out_of_range_parameter_is_refused(
 @pytest.mark.structural
 @pytest.mark.release
 def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> None:
-    # The claim this fixture was proposed to support, and the measurement that
-    # narrows it. At `n = 100` no enumeration is possible, so the planted
-    # energy is the only reference available -- that part holds.
+    # The claim this fixture was proposed to support, and the measurement
+    # narrowing it. At `n = 100` enumeration is impossible, so the planted
+    # energy is the only reference -- that part holds.
     #
     # What does *not* hold is that it defeats a baseline. Measured against
     # 20-restart iterated conditional modes at mean degree 4:
@@ -360,10 +353,10 @@ def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> 
     # degree 12 and frustration 0.05, descent matches the planted energy
     # exactly on every instance.
     #
-    # So this answers the ticket's open question in the negative: a planted
+    # So the ticket's open question is answered in the negative: a planted
     # Viana-Bray instance does not replace #177 as the case no baseline
     # solves. It supplies a known-energy reference past enumeration, which is
-    # a real and separate thing, and that is what it is used for.
+    # what it is used for.
     rng = np.random.default_rng(20260904)
     field = np.zeros((100, 2))
 
@@ -388,9 +381,9 @@ def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> 
 
 @pytest.mark.oracle
 def test_viterbi_and_posterior_decoding_disagree_on_this_fixture() -> None:
-    # The whole reason the fixture exists. A decoder that computes the single
-    # best path and reports it as the per-site maximum -- or the reverse --
-    # passes every fixture where the two agree, which is most of them.
+    # A decoder that computes the single best path and reports it as the
+    # per-site maximum -- or the reverse -- passes every fixture where the two
+    # agree, which is most of them.
     params = ambiguous_hmm()
 
     result = enumerate_hidden_paths(params, AMBIGUOUS_OBSERVATIONS)
@@ -441,10 +434,10 @@ def test_the_posterior_marginals_are_decisive_at_every_site() -> None:
 
 @pytest.mark.oracle
 def test_the_posterior_path_is_a_poor_path_and_that_is_the_point() -> None:
-    # Posterior decoding maximizes each site's marginal, which says nothing
-    # about the sequence as a whole: the path it returns here is the 5th most
-    # likely of 32, 0.6066 nats below the Viterbi path. Reporting it as "the
-    # most likely hidden path" is the error this fixture catches.
+    # Posterior decoding maximizes each site's marginal and says nothing about
+    # the sequence as a whole: the path it returns here is the 5th most likely
+    # of 32, 0.6066 nats below the Viterbi path. Reporting it as "the most
+    # likely hidden path" is the error this fixture catches.
     params = ambiguous_hmm()
     result = enumerate_hidden_paths(params, AMBIGUOUS_OBSERVATIONS)
 
@@ -470,8 +463,8 @@ def test_the_posterior_path_is_a_poor_path_and_that_is_the_point() -> None:
 
 @pytest.mark.structural
 def test_the_fixture_declares_the_length_its_observations_have() -> None:
-    # A mismatch would leave every consumer slicing or padding, and the
-    # simulated dataset would not be the sequence the decodings are pinned on.
+    # A mismatch would leave the simulated dataset something other than the
+    # sequence the decodings are pinned on.
     params = ambiguous_hmm()
 
     assert params.sequence_length == AMBIGUOUS_OBSERVATIONS.shape[0]
