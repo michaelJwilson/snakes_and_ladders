@@ -257,19 +257,21 @@ KEY_SAMPLES = 4000
 KEY_INSTANCES = 3
 KEY_BUDGET = Budget("passes", 6)
 
-#: The candidates whose ordering is claimed. `emission++` is the winner the
-#: experiment records; `prior` is the control it must beat, and beating the
-#: control is the claim a seeding that reads the data exists to support.
-KEY_WINNER = "emission++"
+#: The two candidates whose ordering is claimed here. `emission++` reads the
+#: data under the family's own divergence; `prior` reads none of it. Which of
+#: the eight wins overall is the experiment's business, over six instances;
+#: what a test can hold at this cost is that reading the data beats not
+#: reading it.
+KEY_STRUCTURED = "emission++"
 KEY_CONTROL = "prior"
 
 
 @pytest.mark.release
 @pytest.mark.simulated_truth
-def test_the_winning_seeding_beats_the_control_at_the_key_model() -> None:
-    # The ordering the notebook states, at the key model's 100 components and
-    # through the budgeted comparison, so no candidate reaches its optimum by
-    # fitting longer than another.
+def test_reading_the_data_beats_the_control_at_the_key_model() -> None:
+    # At the key model's 100 components and through the budgeted comparison,
+    # so neither candidate reaches its optimum by fitting longer than the
+    # other.
     declared = fixture(PROBLEM, KEY).params
     params = binned_model(declared.model, declared.key_factor)
     instances = [
@@ -284,7 +286,7 @@ def test_the_winning_seeding_beats_the_control_at_the_key_model() -> None:
 
     comparison = compare(
         {
-            KEY_WINNER: SeededFit(KEY_WINNER, at),
+            KEY_STRUCTURED: SeededFit(KEY_STRUCTURED, at),
             KEY_CONTROL: SeededFit(KEY_CONTROL, at),
         },
         instances,
@@ -294,8 +296,8 @@ def test_the_winning_seeding_beats_the_control_at_the_key_model() -> None:
     )
 
     gaps = comparison.mean_gap()
-    assert gaps[KEY_WINNER] < gaps[KEY_CONTROL], (
-        f"{KEY_WINNER} left a mean gap of {gaps[KEY_WINNER]:.1f} against "
+    assert gaps[KEY_STRUCTURED] < gaps[KEY_CONTROL], (
+        f"{KEY_STRUCTURED} left a mean gap of {gaps[KEY_STRUCTURED]:.1f} against "
         f"{KEY_CONTROL}'s {gaps[KEY_CONTROL]:.1f}"
     )
     assert (comparison.spent <= KEY_BUDGET.size).all()
