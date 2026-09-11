@@ -1,12 +1,12 @@
 ---
-id: 009
+id: 11
 date: 2026-09-11
 commit: 47292b4408fa5ab82ac033f97b2fbf17dc6f10d9
 branch: claude/search-551-ground-state
 pr: 552
 tickets: [551]
 problem: potts-lattice
-fixture: tests/regression/fixtures/potts_spots, at ci (9 sites, q = 3) and release (5,041 sites, q = 2 and q = 10)
+fixture: tests/regression/fixtures/spatio_only, at ci (9 sites, q = 3) and release (5,041 sites, q = 2 and q = 10)
 size: release
 methods: [greedy, icm, gibbs-T0, anneal, swendsen-wang, wolff, tempering, alpha-expansion, alpha-beta-swap, max-product]
 budget: 2083260

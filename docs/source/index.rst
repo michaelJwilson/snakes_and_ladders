@@ -282,6 +282,7 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.spatio_sequential
    :members:
 
+.. automodule:: snakes_and_ladders.search.projection
 .. automodule:: snakes_and_ladders.search.ground_state
    :members:
 
