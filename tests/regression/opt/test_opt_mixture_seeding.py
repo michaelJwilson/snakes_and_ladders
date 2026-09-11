@@ -966,12 +966,19 @@ def test_the_ordering_on_the_key_rung() -> None:
     # observations, so the mean gap is what separates the candidates and the
     # paired test has nothing discordant to work with.
     assert measurement.hits() == dict.fromkeys(METHODS, 0), measurement.hits()
-    # The control's pair, in the same order as on the refereed rung and by a
-    # wider margin: squared Euclidean 424 nats of 1.96e6, the negative log
-    # density 668.
+    # **The control's pair, and here the divergence does not tie.** The two
+    # channels carry different pooled scales, so the Gaussian's divergence
+    # divides each by its own and is k-means++ on whitened channels, which is
+    # a different rule from k-means++ on the raw ones --- the identity of the
+    # refereed rung is a one-scale identity. Squared Euclidean 424 nats of
+    # 1.96e6, the divergence 749, where the negative log density it replaced
+    # was 668 (issue #560).
     assert gaps["kmeans++"] == pytest.approx(424.0, rel=0.02), gaps
-    assert gaps["emission-d2"] == pytest.approx(668.0, rel=0.02), gaps
-    assert gaps["kmeans++"] < gaps["emission-d2"] < gaps["family-sample"], gaps
+    assert gaps["emission-d2"] == pytest.approx(749.0, rel=0.02), gaps
+    # Correcting the scoring moved candidate 3 *down* one place here, past
+    # the family-sample control it used to beat.
+    assert gaps["kmeans++"] < gaps["family-sample"] < gaps["emission-d2"], gaps
+    assert gaps["emission-d2"] < gaps["random-restart"], gaps
     assert gaps["random-restart"] < gaps["burn-in"], gaps
     # Spectral is a rotation of k-means++ here: the leading principal subspace
     # of a two-channel sample is the whole of it, so the two seed the same

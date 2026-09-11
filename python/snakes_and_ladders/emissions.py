@@ -1157,7 +1157,9 @@ class BinomialEmission:
         remaining = self._trials - counts
         return torch.xlogy(
             counts, counts / (self._trials * self._probability)
-        ) + torch.xlogy(remaining, remaining / (self._trials * (1.0 - self._probability)))
+        ) + torch.xlogy(
+            remaining, remaining / (self._trials * (1.0 - self._probability))
+        )
 
     def validate(self, observations: np.ndarray) -> None:
         """Raise if an observation is not an integer in ``[0, max(trials)]``."""
@@ -1800,9 +1802,7 @@ def _beta_binomial_log_density(
     )
 
 
-def _clamped_deviance(
-    saturated: torch.Tensor, scored: torch.Tensor
-) -> torch.Tensor:
+def _clamped_deviance(saturated: torch.Tensor, scored: torch.Tensor) -> torch.Tensor:
     """``saturated - scored``, floored at zero.
 
     The gap is non-negative by construction --- ``saturated`` maximizes over a
@@ -1865,9 +1865,11 @@ def _beta_binomial_saturated(
     torch.Tensor
         The broadcast shape of the arguments.
     """
-    shape = torch.broadcast_shapes(counts.shape, trials.shape, concentration.shape)
-    low = torch.zeros(shape, dtype=counts.dtype)
-    high = torch.ones(shape, dtype=counts.dtype)
+    # The broadcast shape, as an expression rather than as a shape: every
+    # argument enters the bisection anyway, so multiplying by zero is the
+    # cheapest way to give both brackets that shape.
+    low = 0.0 * counts * trials * concentration
+    high = low + 1.0
     for _ in range(_SATURATION_STEPS):
         rate = 0.5 * (low + high)
         # Strictly inside the bracket at every step, so neither `digamma`

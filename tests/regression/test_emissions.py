@@ -770,6 +770,16 @@ DIVERGENCE_TOLERANCE = 1e-7
 SATURATION_SLACK = 1e-12
 
 
+def _negative_binomial_natural(mean: np.ndarray, dispersion: float) -> np.ndarray:
+    """``theta = log(mu / (mu + r))``, the negative binomial's natural parameter."""
+    return np.asarray(np.log(mean / (mean + dispersion)))
+
+
+def _poisson_natural(mean: np.ndarray, _: float) -> np.ndarray:
+    """``theta = log(lambda)``."""
+    return np.asarray(np.log(mean))
+
+
 def _negative_binomial_log_partition(
     natural: np.ndarray, dispersion: float
 ) -> np.ndarray:
@@ -802,10 +812,10 @@ def test_a_count_divergence_is_the_finite_difference_bregman_of_its_log_partitio
         (
             NegativeBinomialEmission([4.0, 4.0], [2.0, 11.0]),
             _negative_binomial_log_partition,
-            lambda mean, r: np.log(mean / (mean + r)),
+            _negative_binomial_natural,
             4.0,
         ),
-        (PoissonEmission([2.0, 11.0]), _poisson_log_partition, lambda mean, _: np.log(mean), 0.0),
+        (PoissonEmission([2.0, 11.0]), _poisson_log_partition, _poisson_natural, 0.0),
     ):
         divergence = family.bregman_divergence(torch.as_tensor(counts)).numpy()
         at_count = natural_of(counts, shape)
@@ -824,9 +834,7 @@ def test_a_count_divergence_is_the_finite_difference_bregman_of_its_log_partitio
                 - log_partition(at_count, shape)
                 - slope * (at_state - at_count)
             )
-            assert_allclose(
-                divergence[:, state], expected, rtol=DIVERGENCE_TOLERANCE
-            )
+            assert_allclose(divergence[:, state], expected, rtol=DIVERGENCE_TOLERANCE)
 
 
 @pytest.mark.mathematical
@@ -862,9 +870,7 @@ def test_the_beta_binomial_divergence_is_the_gap_to_the_best_rate_it_admits() ->
     # At a count of zero or of every trial the best member puts all its mass
     # there, so the gap is the negative log probability itself.
     for edge in (0, -1):
-        assert_allclose(
-            divergence[edge].numpy(), -scored[edge].numpy(), rtol=1e-12
-        )
+        assert_allclose(divergence[edge].numpy(), -scored[edge].numpy(), rtol=1e-12)
 
 
 @pytest.mark.mathematical
