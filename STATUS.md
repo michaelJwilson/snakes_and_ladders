@@ -911,7 +911,7 @@ what lets the kernel be the default, where the Rust sampling sweep is opt-in.
 `layout` 13.2% — paid once per graph — and `gibbs_sweep` **2.1%**, down from
 18.0%. `conditional` does not appear: no call reaches it. `log_density` is
 the loop that clears the 10% bar now, a Python sum over factors with a tuple
-key built per factor, and it is ticketed rather than carried here.
+key built per factor; it is carried by [#563](https://github.com/michaelJwilson/snakes_and_ladders/issues/563) rather than here.
 
 **Bounds with proofs, certified rather than trusted**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
