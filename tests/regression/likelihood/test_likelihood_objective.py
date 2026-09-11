@@ -1,14 +1,14 @@
 """Regression tests for the phylogenetic instance of ``Objective``.
 
-Two things are pinned here that nothing else in the suite can pin. The
-optimizer is the same model-agnostic ``snakes_and_ladders.opt.fit`` the Potts chain and
-the HMM use, so this file is where issue #63's claim -- that the interface
-was not secretly shaped by one model -- is either confirmed or refuted.
+Two things nothing else in the suite can pin. The optimizer is the same
+model-agnostic ``snakes_and_ladders.opt.fit`` the Potts chain and the HMM use,
+so this file confirms or refutes issue #63's claim that the interface was not
+secretly shaped by one model.
 
-And the branch lengths below a rooted binary tree's root are shown to be
-confounded, by measurement rather than by citation. That fact decides the
-parameterization: fitting them separately leaves the observed information
-singular and every interval undefined.
+And the branch lengths below a rooted binary tree's root are shown confounded,
+by measurement rather than citation. That decides the parameterization: fitting
+them separately leaves the observed information singular and every interval
+undefined.
 """
 
 from __future__ import annotations

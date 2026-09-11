@@ -1,21 +1,16 @@
 """Alpha expansion, checked against an exact solver before a bound is claimed.
 
-The strongest test here is a *reduction*, not an enumeration. At two labels a
-single expansion offers every site the only other label, so alpha expansion is
-not an approximation at all --- it must reproduce `snakes_and_ladders.search.maxflow`'s
-exact minimum cut, energy for energy. That pins the multi-label construction
-against something independently validated, and it is what caught the two
-errors this module was written with: the terminal capacities were swapped, and
-the auxiliary-node capacities ignored the case where an endpoint's current
-label already equals alpha.
+The strongest test here is a *reduction*. At two labels a single expansion
+offers every site the only other label, so alpha expansion is no approximation
+--- it must reproduce `snakes_and_ladders.search.maxflow`'s exact minimum cut,
+energy for energy. That caught the two errors this module was written with: the
+terminal capacities were swapped, and the auxiliary-node capacities ignored the
+case where an endpoint's current label already equals alpha. Both produce a
+labelling that is merely *worse* --- the enumeration tests below passed while
+the reduction failed by up to 2.55 in energy.
 
-Neither error breaks loudly. Both produce a labelling that is merely *worse*,
-which is indistinguishable from the algorithm doing badly on a hard problem
---- the enumeration tests below passed while the reduction failed by up to
-2.55 in energy.
-
-Then the bound, measured rather than assumed, and two invariants that need no
-oracle at all: the energy never rises, and the loop terminates.
+Then the bound, measured rather than assumed, and two invariants needing no
+oracle: the energy never rises, and the loop terminates.
 """
 
 from __future__ import annotations
@@ -53,10 +48,9 @@ def _enumerated(graph: PottsGraph, field_values: np.ndarray, n_states: int) -> f
 def test_two_labels_reproduce_the_exact_minimum_cut(
     shape: tuple[int, int], coupling: float
 ) -> None:
-    # The test that matters. At k = 2 one expansion is exact, so this compares
-    # against an independently validated exact solver rather than against
-    # enumeration -- and it fails on a construction error that enumeration at
-    # these sizes does not notice.
+    # At k = 2 one expansion is exact, so this compares against an
+    # independently validated exact solver rather than enumeration, and fails
+    # on a construction error enumeration at these sizes does not notice.
     rng = np.random.default_rng(0)
     graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
 
@@ -87,9 +81,9 @@ def test_the_multi_state_energy_agrees_with_the_two_state_one() -> None:
 
 @pytest.mark.mathematical
 def test_the_energy_never_rises_across_an_expansion() -> None:
-    # An invariant that needs no oracle, and the one a sign error in the
-    # construction breaks immediately. Checked move by move rather than only
-    # end to end, so a rise followed by a larger fall cannot hide.
+    # An invariant needing no oracle, and the one a sign error breaks
+    # immediately. Checked move by move, so a rise followed by a larger fall
+    # cannot hide.
     rng = np.random.default_rng(9)
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 1.1)
     field_values = rng.normal(size=(graph.n_nodes, 3))
@@ -121,9 +115,9 @@ def test_the_cycle_terminates_well_inside_its_cap() -> None:
 @pytest.mark.mathematical
 @pytest.mark.parametrize("coupling", [0.3, 0.8, 1.5, 3.0])
 def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None:
-    # The bound is `2 c_max / c_min`, exactly 2 for a uniform coupling. It is
-    # the first claim in this repository that holds at *every* size rather
-    # than only where enumeration reaches, which is the reason for the ticket.
+    # The bound is `2 c_max / c_min`, exactly 2 for a uniform coupling --- the
+    # one claim here that holds at *every* size rather than where enumeration
+    # reaches.
     #
     # Measured at 3x3 over 40 runs: alpha expansion found the global optimum
     # 39 times, and recovered 99.554% of the achievable improvement in the
@@ -151,12 +145,11 @@ def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None
 
 @pytest.mark.simulated_truth
 def test_expansion_beats_single_site_descent_past_enumeration() -> None:
-    # Where the move set earns its complexity. At the sizes enumeration
-    # reaches, the two are indistinguishable -- 3x3 with three labels had both
-    # finding the optimum in 31 of 32 runs between them. The separation
-    # appears at 8x8 with four labels, past enumeration, where expansion beat
-    # the best of eight single-site descents on every trial by 1.8 to 11.0 in
-    # energy.
+    # Where the move set earns its complexity. At the sizes enumeration reaches
+    # the two are indistinguishable -- 3x3 with three labels, both finding the
+    # optimum in 31 of 32 runs. The separation appears at 8x8 with four labels,
+    # past enumeration, where expansion beat the best of eight single-site
+    # descents on every trial by 1.8 to 11.0 in energy.
     rng = np.random.default_rng(7)
     graph = lattice_graph((8, 8), BoundaryCondition.OPEN, 1.2)
 
@@ -176,9 +169,9 @@ def test_expansion_beats_single_site_descent_past_enumeration() -> None:
 
 @pytest.mark.mathematical
 def test_single_site_descent_settles_at_a_local_minimum() -> None:
-    # The baseline has to be a fair one: if it stopped early, beating it would
-    # say nothing. On termination no single site can improve, which is the
-    # definition of the move set it represents.
+    # A baseline that stopped early would make beating it say nothing. On
+    # termination no single site can improve, which defines the move set it
+    # represents.
     rng = np.random.default_rng(21)
     graph = lattice_graph((5, 5), BoundaryCondition.OPEN, 0.9)
     field_values = rng.normal(size=(graph.n_nodes, 3))
@@ -226,9 +219,9 @@ def test_a_dominant_coupling_drives_every_site_to_one_label() -> None:
 
 @pytest.mark.edge_case
 def test_a_negative_coupling_is_refused() -> None:
-    # The metric condition the bound rests on. Without it the pairwise term is
-    # not a metric, the binary sub-problem is not submodular, and the cut does
-    # not solve it -- so the guarantee this ticket exists for does not hold.
+    # The metric condition the bound rests on. Without it the binary
+    # sub-problem is not submodular, the cut does not solve it, and the
+    # guarantee does not hold.
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, -0.4)
 
     with pytest.raises(ValueError, match="metric only then"):
@@ -256,11 +249,11 @@ def test_an_already_optimal_start_makes_no_moves() -> None:
 @pytest.mark.oracle
 @pytest.mark.parametrize("seed", range(6))
 def test_the_numba_descent_reproduces_the_python_one_bitwise(seed: int) -> None:
-    # The pin that lets the kernel be the default (#264): same update, same
-    # index order, same first-minimum tie rule, so the labelling and the
-    # energy are identical, not close. A random per-node field against a
-    # coupling of the same order makes the surface rugged enough that the
-    # start decides the optimum -- realized: 20 of 20 starts agree at 32x32.
+    # What lets the kernel be the default (#264): same update, same index
+    # order, same first-minimum tie rule, so the labelling and the energy are
+    # identical rather than close. A random per-node field against a coupling
+    # of the same order makes the surface rugged enough that the start decides
+    # the optimum -- 20 of 20 starts agree at 32x32.
     graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
     field = np.random.default_rng(100 + seed).normal(size=(graph.n_nodes, 3))
 
@@ -289,12 +282,11 @@ def test_descent_has_no_rust_backend() -> None:
 @pytest.mark.parametrize("seed", range(6))
 @pytest.mark.parametrize("n_states", [2, 4])
 def test_the_rust_cut_reproduces_the_python_expansion(seed: int, n_states: int) -> None:
-    # What issue #528 changed: the binding now returns the source side it
-    # already computed, so `expand` can reach it. The two solvers must agree
-    # on the *labelling*, not merely its energy -- the energy would also
-    # agree if a degenerate cut sent the two routes down different expansion
-    # sequences to different minima of equal value, and that is exactly the
-    # possibility this pin has to exclude. Realized: 12 of 12 cells agree.
+    # What issue #528 changed: the binding returns the source side it already
+    # computed, so `expand` can reach it. The two solvers must agree on the
+    # *labelling* and not merely its energy, which would also agree if a
+    # degenerate cut sent the two routes to different minima of equal value.
+    # Realized: 12 of 12 cells agree.
     graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.5)
     field = np.random.default_rng(500 + seed).normal(size=(graph.n_nodes, n_states))
 

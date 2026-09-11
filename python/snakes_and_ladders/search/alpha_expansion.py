@@ -10,16 +10,14 @@ handles it unchanged.
 **The guarantee is the point.** The Potts pairwise term ``V(a, b) = J [a != b]``
 is a metric for ``J >= 0``, and for a metric the algorithm's local minimum is
 within ``2 * c_max / c_min`` of the *global* one --- exactly **2** for a
-uniform coupling (Boykov, Veksler & Zabih 2001). That is a bound this
-repository could not previously state about anything: belief propagation
-(issue #172) reports a measured deviation, the samplers (#174) report a
-distribution, and enumeration stops at nine sites. A bound holds at every
-size, so a result can be checked where the algorithm actually runs.
+uniform coupling (Boykov, Veksler & Zabih 2001). No other method here states a
+bound: belief propagation (issue #172) reports a measured deviation, the
+samplers (#174) a distribution, and enumeration stops at nine sites. A bound
+holds at every size, so a result can be checked where the algorithm runs.
 
 It is a local minimum with respect to moves that change *arbitrarily many*
-sites at once, which is what makes it beat single-site descent rather than
-merely differ from it: no sequence of single flips can cross a barrier that
-one expansion crosses in a step.
+sites at once, which is what makes it beat single-site descent: no sequence of
+single flips crosses a barrier that one expansion crosses in a step.
 
 See Boykov, Veksler & Zabih (2001); Kolmogorov & Zabih (2004) for which
 energies a cut can represent.

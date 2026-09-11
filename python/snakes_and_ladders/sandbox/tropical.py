@@ -4,19 +4,18 @@
 topologies and records the half as blocked on an oracle. It is not, once
 simulation truth and enumeration count as one: below nine taxa every unrooted
 topology can be scored, so "does gradient ascent on the relaxation find what
-discrete search finds" has an answer here rather than an opinion. This module
-takes that half; :mod:`snakes_and_ladders.learn.relaxed` took the
-Gumbel-softmax one and shares nothing with it.
+discrete search finds" has an answer here. This module takes that half;
+:mod:`snakes_and_ladders.learn.relaxed` took the Gumbel-softmax one.
 
 **It is here because the answer was no.** Neighbor joining reaches the same
 enumerated maximum at no gradient steps at 5, 6, 7 and 8 taxa, and the
 differentiable part is 3.2% of the run, so the relaxation buys nothing on any
 fixture measured and no search calls it. It is conserved rather than deleted,
-with the two oracles that referee it, because a measurement whose subject was
+with the two oracles that referee it, since a measurement whose subject was
 removed is a claim with no way back to it (``sandbox/CLAUDE.md``). Only
 ``tests/`` and :mod:`snakes_and_ladders.qa` import it, and
-:mod:`snakes_and_ladders.qa.tropical_relaxation` keeps reporting the figure
-the paper cites.
+:mod:`snakes_and_ladders.qa.tropical_relaxation` keeps reporting the figure the
+paper cites.
 
 **The coordinates are a dissimilarity, not a topology.** Speyer and
 Sturmfels (2004) identify the tropical Grassmannian ``Gr(2, n)`` with the space of trees: a
@@ -46,17 +45,15 @@ at a one-hot weight vector it is ``D`` exactly --- the same "extension, not a
 second model" the Gumbel-softmax half is built on, and the reason the corner
 test below is an equality rather than a correlation.
 
-**Two things it is not, and both matter.** ``D`` is not the tree's
-log-likelihood: it is a quartet decomposition of it, a *different surface*,
-and ``search/CLAUDE.md`` licenses substituting one for the other only by
-measuring that they agree at the argmax. That measurement is
-``tests/regression/sandbox/test_sandbox_tropical.py``, at every size where
-enumeration reaches. And ``F`` is optimized over the whole ambient
-``R^C(n,2)``, not over the Grassmannian: a general dissimilarity resolves
-each quartet, and the collection need not come from any tree. So ascent can
-leave the tree locus, the four-point violation of where it lands is
-reported, and the topology is read off by neighbor joining, which is exact on
-the locus and is the repository's existing, refereed projection back onto it.
+**Two things it is not.** ``D`` is not the tree's log-likelihood but a quartet
+decomposition of it, a *different surface*, and ``search/CLAUDE.md`` licenses
+substituting one for the other only by measuring that they agree at the argmax
+--- ``tests/regression/sandbox/test_sandbox_tropical.py``, at every size enumeration
+reaches. And ``F`` is optimized over the whole ambient ``R^C(n,2)`` rather than
+over the Grassmannian: a general dissimilarity resolves each quartet, and the
+collection need not come from any tree. So ascent can leave the tree locus, the
+four-point violation of where it lands is reported, and the topology is read off
+by neighbor joining, which is exact on the locus.
 
 **The scale of ``d`` is a gauge and is fixed here.** ``F_tau(c d) =
 F_{tau/c}(d)``: multiplying every distance by ``c > 0`` sharpens the softmin

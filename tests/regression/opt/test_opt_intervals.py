@@ -2,13 +2,12 @@
 
 The observed information is a property of an objective **at a point**, not of
 the route that reached it. Until now only a gradient fit could ask for one,
-because only a gradient fit had a ``theta``; expectation-maximization works in
-the model's own parameters and never builds one, so half the fits here — the
-half with an independent oracle — reported a point estimate and nothing else
-(issue #268).
+since only it had a ``theta``; expectation-maximization works in the model's
+own parameters, so half the fits here — the half with an independent oracle —
+reported a point estimate and nothing else (issue #268).
 
-What is pinned here is the seam that closes that, and the refusals that make
-an interval mean something: an interval from a Hessian is a statement about a
+Pinned here is the seam that closes that, and the refusals that make an
+interval mean something: an interval from a Hessian is a statement about a
 *maximum*, and this repository has three things that are not one.
 """
 
@@ -194,10 +193,9 @@ OBJECTIVE_IDS = [type(objective).__name__ for objective, _ in EVERY_OBJECTIVE]
 def test_every_objective_inverts_its_own_constraint_map(
     objective: Objective, theta: torch.Tensor
 ) -> None:
-    # The seam the whole change rests on, and a partial one is worse than
-    # none: a caller cannot tell which fits can be given intervals. Realized
-    # deviations across the eight objectives are 0 to 4.4e-16 -- the round
-    # trip is exact arithmetic, not a tolerance.
+    # A partial seam is worse than none: a caller cannot tell which fits can
+    # be given intervals. Realized deviations across the eight objectives are
+    # 0 to 4.4e-16 -- the round trip is exact arithmetic, not a tolerance.
     recovered = objective.theta_from(objective.constrain(theta))
 
     assert_allclose(recovered.numpy(), theta.numpy(), atol=1e-14)
@@ -226,8 +224,7 @@ def test_the_new_door_is_the_old_one(objective: Objective, theta: torch.Tensor) 
 
 @pytest.mark.mathematical
 def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -> None:
-    # **The check this ticket is really for, and it costs nothing.** The two
-    # algorithms share the model and nothing else -- no optimizer, no
+    # The two algorithms share the model and nothing else -- no optimizer, no
     # parameterization, no constraint map -- and converge to the same optimum.
     # The Hessian is a property of the objective at a point, so the intervals
     # must agree, and a broken round trip fails this loudly.
@@ -267,11 +264,10 @@ def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -
 
 @pytest.mark.edge_case
 def test_a_collapsing_component_is_refused_through_the_new_door_too() -> None:
-    # The refusal is the point. A Gaussian emission's likelihood is unbounded
-    # as a variance falls, so near a collapsing component there is no maximum
-    # to expand around and the information is not positive definite. Paired
-    # with the healthy point, because a guard that refused everything would
-    # pass a refusal-only test.
+    # A Gaussian emission's likelihood is unbounded as a variance falls, so
+    # near a collapsing component there is no maximum to expand around and the
+    # information is not positive definite. Paired with the healthy point,
+    # since a guard refusing everything would pass a refusal-only test.
     gaussian = GaussianEmission([-3.0, 3.0], [1.0, 1.0], 1e-12)
     observations = _two_state(gaussian, seed=3)
     objective = GaussianHmmObjective(observations, 2)
@@ -298,11 +294,9 @@ def test_a_collapsing_component_is_refused_through_the_new_door_too() -> None:
 
 @pytest.mark.structural
 def test_a_multi_start_interval_belongs_beside_the_spread_that_qualifies_it() -> None:
-    # An interval at the best of several starts is conditional on *that mode*.
-    # The spread across starts is what says whether that matters, so the two
-    # are reported together and this pins that they can be: the interval is
-    # taken at `best`, and `spread` is what a reader needs to know it is
-    # conditional.
+    # An interval at the best of several starts is conditional on *that mode*,
+    # and the spread across starts says whether that matters, so the two are
+    # reported together: the interval at `best`, and `spread` beside it.
     params = load_hmm_params(HMM_FIXTURE)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
@@ -401,12 +395,10 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
 
 @pytest.mark.structural
 def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
-    # The comparison `hmc.py`'s docstring promises, in the regime where the
-    # approximation is allowed to be one. A version already existed -- a raw
-    # Hessian in *unconstrained* coordinates against grid quadrature, at
-    # rtol=0.15. This is the missing half: the delta-method interval on the
-    # parameters a person names, against a chain. The exact regime is the
-    # analytic Gaussian above; here the deviation is the finding.
+    # The comparison `hmc.py`'s docstring promises, where the approximation is
+    # allowed to be one. A raw Hessian in *unconstrained* coordinates against
+    # grid quadrature already existed, at rtol=0.15; the missing half is the
+    # delta-method interval on the parameters a person names, against a chain.
     #
     # Realized: the sampled spread is 1.057, 1.031 and 1.036 times the Laplace
     # one across the three parameters. The Laplace approximation is slightly
@@ -501,9 +493,9 @@ def test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate() -> None:
 
 @pytest.mark.structural
 def test_the_categorical_family_is_still_what_the_fixture_declares() -> None:
-    # Guards the fixture the module leans on: every case above assumes the
-    # committed HMM fixture is categorical, and a fixture that changed family
-    # would make eight round-trip checks silently test something else.
+    # Every case above assumes the committed HMM fixture is categorical, and a
+    # fixture that changed family would make eight round-trip checks silently
+    # test something else.
     params = load_hmm_params(HMM_FIXTURE)
 
     assert isinstance(params.emissions, CategoricalEmission)

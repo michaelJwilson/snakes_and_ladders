@@ -12,9 +12,9 @@ per the module ``CLAUDE.md``'s "one interface" for move sets.
 
 Move definitions follow Felsenstein, *Inferring Phylogenies*, ch. 4. Both
 operate on an undirected adjacency view of the topology (each internal node
-degree 3, each leaf degree 1) rather than on the rooted ``Node`` directly,
-because NNI and SPR are edge operations and the trifurcating root is not
-otherwise a distinguished point of the tree.
+degree 3, each leaf degree 1) rather than on the rooted ``Node``: NNI and SPR
+are edge operations and the trifurcating root is not otherwise a distinguished
+point.
 
 **Completeness.** NNI is a strict subset of SPR (``nni_neighbours(t)`` is
 contained in ``spr_neighbours(t)`` as sets of topologies, checked by
@@ -29,12 +29,11 @@ adjacency, ``O(1)`` work per internal edge); ``spr_neighbours`` is
 ``O(n^2)`` (a prune-and-regraft candidate per (edge, edge) pair, before
 dedup), or ``O(n * radius)`` when the regraft is bounded.
 
-A bounded SPR is complete in the same sense and no weaker: at ``radius = 1``
-it *is* the NNI neighbourhood, whose transitive closure reaches every
-topology, and every larger radius contains it. What a radius costs is
-therefore steps rather than reachability -- a move the unbounded
-neighbourhood would take in one, a bounded one takes in several or does not
-find at all from where it stands, which is why the search that uses it is
+A bounded SPR is complete in the same sense: at ``radius = 1`` it *is* the NNI
+neighbourhood, whose transitive closure reaches every topology, and every
+larger radius contains it. A radius costs steps rather than reachability -- a
+move the unbounded neighbourhood takes in one, a bounded one takes in several
+or does not find from where it stands -- which is why the search using it is
 held to the enumerated optimum rather than to the count.
 """
 
@@ -56,14 +55,14 @@ def enumerate_topologies(leaf_names: Sequence[str]) -> Iterator[Topology]:
 
     The same stepwise insertion :func:`random_topology` samples from, taken
     exhaustively: three leaves meet at the root, then each remaining leaf is
-    inserted at every edge in turn. Each topology is produced once, so the
-    count is ``(2n-5)!!`` --- which is what pins this function, since a
-    generator that double-counted or missed trees would make a search look
-    better or worse than it is.
+    inserted at every edge in turn. Each topology is produced once, so the count
+    is ``(2n-5)!!`` --- what pins this function, since a generator that
+    double-counted or missed trees would make a search look better or worse
+    than it is.
 
-    This is the oracle for search quality. Below ``n = 8`` it is the only
-    independent statement available about whether hill climbing found the
-    best tree or merely a good one.
+    The oracle for search quality: below ``n = 8`` it is the only independent
+    statement about whether hill climbing found the best tree or merely a good
+    one.
 
     Parameters
     ----------
@@ -117,15 +116,14 @@ def enumerate_topologies(leaf_names: Sequence[str]) -> Iterator[Topology]:
 def random_topology(leaf_names: Sequence[str], rng: np.random.Generator) -> Topology:
     """Draw an unrooted binary topology on ``leaf_names``, uniformly by construction.
 
-    Stepwise insertion: three leaves meet at the root, then each remaining
-    leaf subdivides a uniformly chosen edge. Every topology is reachable, and
-    the construction is the standard one behind the ``(2n-5)!!`` count --- at
-    step ``i`` there are ``2i - 5`` edges to choose from, and the product of
-    those choices is that count, so no topology is favoured.
+    Stepwise insertion: three leaves meet at the root, then each remaining leaf
+    subdivides a uniformly chosen edge. Every topology is reachable, and the
+    construction is the standard one behind the ``(2n-5)!!`` count --- at step
+    ``i`` there are ``2i - 5`` edges to choose from, and the product of those
+    choices is that count, so no topology is favoured.
 
-    A search needs a starting point that is not the answer. Reading one from
-    a fixture would make every run start beside the truth and measure
-    nothing.
+    A search needs a start that is not the answer; reading one from a fixture
+    would make every run start beside the truth.
 
     Parameters
     ----------
@@ -177,17 +175,14 @@ def random_topology(leaf_names: Sequence[str], rng: np.random.Generator) -> Topo
 def leaf_bipartitions(topology: Topology) -> frozenset[frozenset[str]]:
     """The set of leaf-set bipartitions induced by every edge of ``topology``.
 
-    An unrooted binary topology is exactly determined, independent of
-    rooting and of child order, by the bipartitions its edges induce on the
-    leaf set (Felsenstein, *Inferring Phylogenies*, ch. 3). Two topologies
-    (possibly rooted at different points, possibly with children in a
-    different order) denote the same unrooted tree iff this set agrees.
+    An unrooted binary topology is determined, independent of rooting and of
+    child order, by the bipartitions its edges induce on the leaf set
+    (Felsenstein, *Inferring Phylogenies*, ch. 3): two topologies denote the
+    same unrooted tree iff this set agrees.
 
-    This is a search-internal equality/hash key for move-set validation and
-    deduplication (symmetry, containment, "differs from its parent",
-    enumeration cross-checks) -- not the canonical Newick key of issue #73,
-    which fixes a single serialization rather than an unordered set of
-    bipartitions, and is not exposed as such.
+    A search-internal equality and hash key for move-set validation and
+    deduplication -- not the canonical Newick key of issue #73, which fixes a
+    single serialization rather than an unordered set of bipartitions.
 
     Parameters
     ----------
@@ -211,13 +206,13 @@ def leaf_bipartitions(topology: Topology) -> frozenset[frozenset[str]]:
 def branch_splits(topology: Topology) -> list[frozenset[str]]:
     """The split each branch induces, in ``pruning_torch.branch_order`` order.
 
-    A branch *is* the bipartition of the leaf set it separates, canonicalized
-    as :func:`leaf_bipartitions` canonicalizes it, so a branch can be matched
-    between a topology and its neighbour by what it separates rather than by
-    the name of the node below it -- and the names are synthetic
-    (``_from_adjacency`` numbers them), so nothing else would match. This is
-    what lets a fitted length be carried from a parent topology to every
-    neighbour that still has the branch (issue #289).
+    A branch *is* the bipartition of the leaf set it separates, canonicalized as
+    :func:`leaf_bipartitions` canonicalizes it, so a branch matches between a
+    topology and its neighbour by what it separates rather than by the name of
+    the node below it -- and the names are synthetic (``_from_adjacency``
+    numbers them), so nothing else would match. This lets a fitted length carry
+    from a parent topology to every neighbour that still has the branch (issue
+    #289).
 
     Parameters
     ----------
@@ -282,18 +277,18 @@ def _split_key(
 ) -> frozenset[int]:
     """The bipartition set of an adjacency, as leaf bitmasks, without building a tree.
 
-    :func:`leaf_bipartitions` is the statement of what a topology *is*; this
-    is the same set computed the way a deduplicating generator needs it.
-    ``spr_neighbours`` used to build a ``Node`` tree for every one of the
-    ``O(n^2)`` regraft candidates and then take unions of ``frozenset`` leaf
-    names up every path, which the #264 profile put at 28 of 29 seconds for
-    twenty neighbourhoods at 30 taxa. A leaf set is an ``int`` here, a union
-    is ``|``, and the tree is built only for a candidate that turns out new.
+    :func:`leaf_bipartitions` states what a topology *is*; this is the same set
+    computed the way a deduplicating generator needs it. ``spr_neighbours`` used
+    to build a ``Node`` tree for every one of the ``O(n^2)`` regraft candidates
+    and take unions of ``frozenset`` leaf names up every path, which the #264
+    profile put at 28 of 29 seconds for twenty neighbourhoods at 30 taxa. A leaf
+    set is an ``int`` here, a union is ``|``, and the tree is built only for a
+    candidate that turns out new.
 
-    Each split is canonicalized to the side *not* containing the smallest
-    leaf name -- bit 0 -- so a split and its complement collapse to one entry,
-    exactly as :func:`leaf_bipartitions` does; a test asserts the two agree on
-    every topology of an enumerable leaf set.
+    Each split is canonicalized to the side *not* containing the smallest leaf
+    name -- bit 0 -- so a split and its complement collapse to one entry, as
+    :func:`leaf_bipartitions` does; a test asserts the two agree on every
+    topology of an enumerable leaf set.
     """
     full = (1 << len(bit_of)) - 1
     splits: set[int] = set()
@@ -440,14 +435,13 @@ def spr_neighbours(
     topology : Topology
         An unrooted binary topology with at least 4 leaves.
     radius : int | None
-        Regraft only onto edges within ``radius`` of the pruning point,
-        measured by :func:`_regraft_distances`; ``None`` is every edge. The
-        neighbourhood is then ``O(n * radius)`` rather than ``O(n ** 2)``,
-        which is the whole of what the bound buys, and a radius of at least
-        the leaf count is every edge again --- pinned as an identity, order
-        included, because a bounded search that does not reduce to the
-        unbounded one at full radius is a different search rather than a
-        cheaper one.
+        Regraft only onto edges within ``radius`` of the pruning point, measured
+        by :func:`_regraft_distances`; ``None`` is every edge. The neighbourhood
+        is then ``O(n * radius)`` rather than ``O(n ** 2)``, the whole of what
+        the bound buys, and a radius of at least the leaf count is every edge
+        again --- pinned as an identity, order included, since a bounded search
+        that does not reduce to the unbounded one at full radius is a different
+        search rather than a cheaper one.
 
     Returns
     -------
@@ -495,11 +489,11 @@ def _regraft_distances(
 ) -> dict[frozenset[NodeId], int]:
     """Edges of ``remainder`` keyed to their distance from the pruning point.
 
-    ``vacated`` is the edge the suppressed node left behind, and it is where
-    the pruned subtree came from, so it is distance 0. An edge's distance is
-    the larger of its endpoints' distances from that edge's endpoints, which
-    makes the edges sharing an endpoint with it distance 1, theirs 2, and so
-    on --- regrafting at radius 1 is the move that reinserts one node away.
+    ``vacated`` is the edge the suppressed node left behind, where the pruned
+    subtree came from, so it is distance 0. An edge's distance is the larger of
+    its endpoints' distances from that edge's endpoints, so edges sharing an
+    endpoint with it are distance 1, theirs 2, and so on --- regrafting at
+    radius 1 reinserts one node away.
     """
     x, y = vacated
     node_distance: dict[NodeId, int] = {x: 0, y: 0}
@@ -585,11 +579,10 @@ def _regraft(
 def robinson_foulds(first: Topology, second: Topology) -> int:
     """Robinson-Foulds distance: splits in one topology and not the other.
 
-    The symmetric difference of the two split sets, which is the standard
-    definition for unrooted trees (Robinson & Foulds 1981; Felsenstein,
-    *Inferring Phylogenies*, ch. 30). Zero exactly when the topologies are
-    the same tree, so it refines the equality `leaf_bipartitions` already
-    gives into a distance.
+    The symmetric difference of the two split sets, the standard definition for
+    unrooted trees (Robinson & Foulds 1981; Felsenstein, *Inferring
+    Phylogenies*, ch. 30). Zero exactly when the topologies are the same tree,
+    so it refines `leaf_bipartitions`' equality into a distance.
 
     Parameters
     ----------
@@ -619,17 +612,16 @@ def normalized_robinson_foulds(first: Topology, second: Topology) -> float:
     """Robinson-Foulds distance scaled to ``[0, 1]``.
 
     Divided by the number of **internal** splits the two trees hold between
-    them, so the figure is comparable across taxon counts -- which is what
-    makes a bound like ``ROADMAP.md``'s ``<= 0.05`` mean the same thing at 6
-    taxa and at 60.
+    them, so the figure is comparable across taxon counts -- which is what makes
+    a bound like ``ROADMAP.md``'s ``<= 0.05`` mean the same thing at 6 taxa and
+    at 60.
 
-    The trivial splits are excluded from the denominator deliberately. Every
-    tree over the same leaves induces all of them, so they never contribute
-    to the numerator; leaving them in the denominator would shrink every
-    distance by a factor that depends on the taxon count, and would weaken
-    the bound above without saying so. For two binary unrooted trees on ``n``
-    leaves the denominator is ``2(n - 3)``, and the distance reaches ``1.0``
-    when the trees share no internal split.
+    The trivial splits are excluded from the denominator deliberately: every
+    tree over the same leaves induces all of them, so they never contribute to
+    the numerator, and leaving them in would shrink every distance by a factor
+    depending on the taxon count. For two binary unrooted trees on ``n`` leaves
+    the denominator is ``2(n - 3)``, and the distance reaches ``1.0`` when the
+    trees share no internal split.
 
     Returns
     -------

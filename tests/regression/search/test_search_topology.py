@@ -14,16 +14,13 @@ sizes where brute-force enumeration is a feasible oracle (``n <= 10`` per
 * NNI-neighbour containment in the SPR neighbourhood.
 
 The exhaustive sweep runs at ``n = 5, 6, 7`` per PR; the same sweep at
-``n = 8`` (10395 topologies) is marked ``release`` (``DEV.md``'s
-Release-Gated budget line) since it takes ~2.5 minutes and is redundant
-evidence once ``n <= 7`` passes -- run it with ``pytest -m release``. The
-enumeration itself (no neighbour generation) is cheap even at ``n = 8``
-(~1s) and stays in the per-PR suite as a check on the brute-force oracle.
+``n = 8`` (10395 topologies) is marked ``release`` (``DEV.md``'s Release-Gated
+budget line), taking ~2.5 minutes. The enumeration itself is cheap even at
+``n = 8`` (~1s) and stays in the per-PR suite as a check on the brute-force
+oracle.
 
-A random-walk connectivity test (every topology reachable from a seeded
-NNI-only walk) is deferred: it needs #73's canonical Newick key to identify
-"every topology" visited, and lands once #73 merges (see issue #79's plan
-comment).
+A random-walk connectivity test is deferred: it needs #73's canonical Newick
+key to identify "every topology" visited (see issue #79's plan comment).
 """
 
 from __future__ import annotations
@@ -52,9 +49,8 @@ from snakes_and_ladders.sim.tree import Node
 
 # Sizes at which exhaustive enumeration is the oracle. The per-pull-request
 # budget holds 5 and 6; 7 costs about 8 s across the two neighbourhood tests
-# below and is the size that shows the count formula holding as the
-# neighbourhood grows, so it runs under `stress` (`DEV.md`, CI & Performance
-# Budget). The claim asserted is identical at every size.
+# below and runs under `stress` (`DEV.md`, CI & Performance Budget). The claim
+# is identical at every size.
 EXHAUSTIVE_SIZES = (5, 6)
 STRESS_SIZES = (7,)
 EXHAUSTIVE_PARAMS = [
@@ -67,9 +63,8 @@ def _enumerate_rooted(taxa: tuple[str, ...]) -> Iterator[Node]:
     """Brute-force-enumerate every rooted binary topology on ``taxa``.
 
     Identical construction to ``tests/regression/test_newick.py``'s
-    ``_enumerate_topologies``, duplicated locally to keep this test module
-    independent (root ``CLAUDE.md``'s test-isolation convention, implicit
-    in every other regression test file here).
+    ``_enumerate_topologies``, duplicated locally to keep this module
+    independent.
     """
     if len(taxa) == 1:
         yield Node(name=taxa[0], branch_length=None)
@@ -90,13 +85,12 @@ def _enumerate_rooted(taxa: tuple[str, ...]) -> Iterator[Node]:
 def _enumerate_unrooted(n_taxa: int) -> Iterator[Topology]:
     """Brute-force-enumerate every unrooted binary topology on ``n_taxa`` leaves.
 
-    Bijection with rooted binary topologies on ``n_taxa - 1`` leaves: root
-    a rooted tree's own root has no incoming edge, so grafting one more
-    leaf directly onto it as a 3rd child recreates exactly the
-    trifurcating-root convention, one-to-one with attaching that leaf via
-    every possible edge of the corresponding unrooted tree. This is why
-    ``count_topologies(n_taxa - 1)`` is the right oracle count (module
-    docstring of ``snakes_and_ladders.sim.newick``).
+    Bijection with rooted binary topologies on ``n_taxa - 1`` leaves: a rooted
+    tree's root has no incoming edge, so grafting one more leaf onto it as a
+    third child recreates the trifurcating-root convention, one-to-one with
+    attaching that leaf via every edge of the corresponding unrooted tree.
+    Hence ``count_topologies(n_taxa - 1)`` is the oracle count (module docstring
+    of ``snakes_and_ladders.sim.newick``).
     """
     taxa = tuple(f"t{i}" for i in range(n_taxa))
     rooted_taxa, outgroup = taxa[:-1], taxa[-1]
@@ -198,8 +192,8 @@ def test_nni_neighbours_are_spr_neighbours(n_taxa: int) -> None:
 def test_nni_and_spr_exhaustive_at_n8(n_taxa: int) -> None:
     """The same properties as the per-PR sweep, at the next size up.
 
-    Marked ``release`` (``DEV.md``'s CI & Performance Budget): ~2.5 minutes
-    for 10395 topologies, run on release rather than per PR.
+    Marked ``release`` (``DEV.md``'s CI & Performance Budget): ~2.5 minutes for
+    10395 topologies.
     """
     nni_expected = 2 * (n_taxa - 3)
     spr_expected = 2 * (n_taxa - 3) * (2 * n_taxa - 7)
@@ -227,10 +221,9 @@ def test_nni_and_spr_exhaustive_at_n8(n_taxa: int) -> None:
 
 @pytest.mark.oracle
 def test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology() -> None:
-    # `_split_key` is what `spr_neighbours` deduplicates on since #264; this
-    # asserts it names the same set of splits `leaf_bipartitions` does, on
-    # every one of the 105 six-leaf topologies, with the anchor convention
-    # (the smallest leaf's side is the complement) applied identically.
+    # `spr_neighbours` deduplicates on `_split_key` since #264; it must name the
+    # same splits `leaf_bipartitions` does, on every one of the 105 six-leaf
+    # topologies, with the anchor convention applied identically.
     names = [f"t{i}" for i in range(6)]
     checked = 0
     for candidate in enumerate_topologies(names):
@@ -297,10 +290,9 @@ def test_spr_neighbours_are_the_definition_in_the_definition_order(n_taxa: int) 
 def test_spr_radius_at_the_leaf_count_is_the_unbounded_neighbourhood(
     n_taxa: int,
 ) -> None:
-    # The equivalence the bound is worth having: at a radius no edge can
-    # exceed, a bounded search is the unbounded one candidate for candidate.
-    # Order is asserted as well as membership for the reason above -- a hill
-    # climb takes the first of equally good neighbours.
+    # At a radius no edge can exceed, a bounded search is the unbounded one
+    # candidate for candidate. Order is asserted as well as membership, a hill
+    # climb taking the first of equally good neighbours.
     start = random_topology(
         [f"x{i}" for i in range(n_taxa)], np.random.default_rng(n_taxa)
     )
@@ -321,8 +313,7 @@ def test_spr_radius_one_is_the_nni_neighbourhood(n_taxa: int) -> None:
     # The reduction the module CLAUDE.md asks for: at radius 1 the general
     # construction must reproduce the simpler one already validated. A
     # mis-measured radius yields a merely *smaller* neighbourhood, which no
-    # count test would catch on its own, and this pins it against a
-    # generator built a different way.
+    # count test catches on its own.
     start = random_topology(
         [f"x{i}" for i in range(n_taxa)], np.random.default_rng(n_taxa)
     )

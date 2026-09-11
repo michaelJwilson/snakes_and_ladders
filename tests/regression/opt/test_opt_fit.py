@@ -1,15 +1,14 @@
 """Regression tests for fitting, and for the intervals that make it falsifiable.
 
-`opt/CLAUDE.md` names recovery as the acceptance test: fit simulated data
-with known parameters and require the intervals to cover the truth at the
-nominal rate. That is what most of this module does, on both reference
-instances. Nothing here asserts that a likelihood increased.
+`opt/CLAUDE.md` names recovery as the acceptance test: fit simulated data with
+known parameters and require the intervals to cover the truth at the nominal
+rate, which is what most of this module does on both reference instances.
+Nothing here asserts that a likelihood increased.
 
-Two independent checks stand behind the fits. Every fit is verified to
-satisfy the first-order condition and to beat the truth on its own sample --
-a maximum-likelihood estimate that does not is not at a maximum. And the HMM
-fit is checked against Baum-Welch, which shares no optimizer, no
-parameterization and no constraint map with it.
+Two independent checks stand behind the fits. Every fit must satisfy the
+first-order condition and beat the truth on its own sample. And the HMM fit is
+checked against Baum-Welch, which shares no optimizer, no parameterization and
+no constraint map with it.
 """
 
 from __future__ import annotations
@@ -86,10 +85,10 @@ def test_the_fit_satisfies_the_first_order_condition(build) -> None:  # type: ig
 @pytest.mark.simulated_truth
 @pytest.mark.parametrize("build", [_potts_objective, _hmm_objective])
 def test_the_fit_beats_the_truth_on_its_own_sample(build) -> None:  # type: ignore[no-untyped-def]
-    # The defining property of a maximum-likelihood estimate. Not "the
+    # The defining property of a maximum-likelihood estimate, and not "the
     # likelihood increased": the comparison is against the generating
-    # parameters, which the optimizer never sees, so an optimizer that
-    # stopped early fails this even though its loss went down.
+    # parameters, which the optimizer never sees, so one that stopped early
+    # fails even though its loss went down.
     objective, truth = build()
     result = fit(objective)
     assert result.value < float(objective(truth))

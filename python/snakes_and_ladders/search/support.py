@@ -1,9 +1,9 @@
 """How sure a discrete search is of the structure it returns (issues #270, #331).
 
 A continuous fit reports an interval; a structure has no Hessian, so a search
-that returns a topology and nothing else leaves the tree it found
-indistinguishable from one it could equally have returned. Four quantities
-are stated here, each as what it is and never as another:
+returning a topology and nothing else leaves the tree it found
+indistinguishable from one it could equally have returned. Four quantities are
+stated here, each as what it is and never as another:
 
 * **neighbourhood support**: with a flat prior over structures, the weight
   of the returned one among itself and its neighbours under a move set,
@@ -32,19 +32,19 @@ are stated here, each as what it is and never as another:
   what it says about the bootstrap frequency is measured, not assumed.
 
 The first three serve every problem class through one score. For a
-**topology** the score is a *maximized* log-likelihood, not a marginal one,
-so the weight is the posterior under a flat prior over topologies with
-branch lengths at their optimum, and is named so rather than called a
-posterior. For a **labelling** of a factor graph -- a Potts configuration,
-or a hidden path, which is a labelling of the chain's graph -- the score is
-the unnormalized log-density at temperature one, so the enumerated weight is
-the Boltzmann weight :func:`snakes_and_ladders.likelihood.potts.enumerate_potts`
-normalizes at ``beta = 1`` and the path posterior
+**topology** the score is a *maximized* log-likelihood, not a marginal one, so
+the weight is the flat-prior weight over topologies with branch lengths at
+their optimum and is named so rather than called a posterior. For a
+**labelling** of a factor graph -- a Potts configuration, or a hidden path,
+which is a labelling of the chain's graph -- the score is the unnormalized
+log-density at temperature one, so the enumerated weight is the Boltzmann
+weight :func:`snakes_and_ladders.likelihood.potts.enumerate_potts` normalizes
+at ``beta = 1`` and the path posterior
 :func:`snakes_and_ladders.likelihood.hmm_paths.enumerate_hidden_paths` sums,
 and the neighbourhood is every single-site change. The bootstrap is a tree
 quantity alone: resampling sites is licensed by their exchangeability given
-the tree, which a chain's ordered sites do not have and a labelling has no
-sites to offer. Which of the four a result reports is part of the result
+the tree, which a chain's ordered sites lack and a labelling has no sites to
+offer. Which of the four a result reports is part of the result
 (``search/CLAUDE.md``).
 """
 
@@ -75,12 +75,11 @@ from snakes_and_ladders.search.topology import (
 )
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 
-# How bootstrap replicates run beside each other: processes, because a
-# replicate is a whole search -- Python control flow around small torch fits.
-# The intra-op thread count is left at the process default in workers and
-# serial alike, so the two runs reduce in the same order on one machine. No
-# pool reached 2x at 4 workers at the mid-size tier; STATUS.md carries the
-# measurement (issue #344).
+# Processes, because a replicate is a whole search -- Python control flow
+# around small torch fits. The intra-op thread count stays at the process
+# default in workers and serial alike, so the two runs reduce in the same order
+# on one machine. No pool reached 2x at 4 workers at the mid-size tier;
+# STATUS.md carries the measurement (issue #344).
 _BOOTSTRAP_BACKEND: Backend = "processes"
 _BOOTSTRAP_INTRA_OP_THREADS: int | None = None
 
@@ -106,11 +105,10 @@ class Support:
         ``log_score`` minus the best competing structure's; positive when
         the returned structure beats every competitor in the set.
     weight : float
-        ``exp(log_score)`` over the sum across the set, the returned
-        structure included: the flat-prior weight. For
-        :attr:`SupportKind.TEMPERED` a Monte Carlo estimate of that weight
-        over the whole space, the fraction of recorded sweeps at the
-        structure.
+        ``exp(log_score)`` over the sum across the set, the returned structure
+        included: the flat-prior weight. For :attr:`SupportKind.TEMPERED` a
+        Monte Carlo estimate of that weight over the whole space, the fraction
+        of recorded sweeps at the structure.
     n_candidates : int
         The size of the set, the returned structure included. For
         :attr:`SupportKind.TEMPERED` the structures the ensemble visited,
@@ -267,12 +265,11 @@ def neighbourhood_labelling_support(
 ) -> Support:
     """The flat-prior weight of ``labelling`` among itself and every single-site change.
 
-    A single-site flip of a Potts configuration and a single-state change
-    of a hidden path are the same move on the factor graph: one variable
-    set to one of its other states, ``sum (cardinality - 1)`` neighbours.
-    Exact where that is the whole space and a neighbourhood quantity
-    otherwise; a labelling a hard factor forbids scores ``-inf`` and carries
-    no weight.
+    A single-site flip of a Potts configuration and a single-state change of a
+    hidden path are the same move on the factor graph: one variable set to one
+    of its other states, ``sum (cardinality - 1)`` neighbours. Exact where that
+    is the whole space and a neighbourhood quantity otherwise; a labelling a
+    hard factor forbids scores ``-inf`` and carries no weight.
 
     Raises
     ------

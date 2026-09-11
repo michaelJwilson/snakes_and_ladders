@@ -1,41 +1,38 @@
 """Sum-product and max-product on a factor graph, exact on a tree.
 
 One algorithm for the three evaluators this package already has:
-``eq:sum-product`` of ``docs/tex/textbook.tex``. On a tree it
-is exact in one leaf-to-root and one root-to-leaf pass (``app:sum-product``
-derives both passes and their exactness): pruning is this on the
-tree's factor graph (``eq:pruning``), the forward recursion is this on a chain
-(``eq:forward``), and both are pinned here against the implementations that
-predate it. On a loopy graph it is the Bethe approximation
-:mod:`snakes_and_ladders.likelihood.belief_propagation` computes for the pairwise Potts
-case, and it is pinned against that too: same messages, same free energy
-(``eq:bethe-factor``, whose stationary point ``app:bethe`` identifies with the
-fixed point).
-Which regime a caller is in is a property of the graph, so :func:`sum_product`
-refuses a tree schedule on a loopy graph rather than returning a number that
-looks exact.
+``eq:sum-product`` of ``docs/tex/textbook.tex``. On a tree it is exact in one
+leaf-to-root and one root-to-leaf pass (``app:sum-product`` derives both):
+pruning is this on the tree's factor graph (``eq:pruning``), the forward
+recursion is this on a chain (``eq:forward``), and both are pinned here
+against the implementations that predate it. On a loopy graph it is the Bethe
+approximation :mod:`snakes_and_ladders.likelihood.belief_propagation` computes
+for the pairwise Potts case, and is pinned against that too: same messages,
+same free energy (``eq:bethe-factor``, whose stationary point ``app:bethe``
+identifies with the fixed point). The regime is a property of the graph, so
+:func:`sum_product` refuses a tree schedule on a loopy graph rather than
+returning a number that looks exact.
 
-Messages live in the log domain and are normalized every sweep, for the
-reason `belief_propagation.py` gives; a factor of any degree sums out its
-other variables by ``logsumexp`` over the axes it does not send along, so
-the code has no notion of "pairwise". Max-product replaces the sum by a max
-and reads the MAP assignment off the max-marginals, which is exact on a tree
-when the maximum is unique -- Viterbi, on a chain, and the test says so.
+Messages live in the log domain and are normalized every sweep, for the reason
+`belief_propagation.py` gives; a factor of any degree sums out its other
+variables by ``logsumexp`` over the axes it does not send along, so the code
+has no notion of "pairwise". Max-product replaces the sum by a max and reads
+the MAP assignment off the max-marginals, exact on a tree when the maximum is
+unique -- Viterbi, on a chain, and the test says so.
 
 **Layout.** Every (factor, variable) incidence is an edge, numbered in factor
 order; the two messages along it are rows of two preallocated ``(n_edges,
-width)`` arrays, ``width`` the largest cardinality, a row's unused columns
-held at zero and never read. A sweep is then one vectorized pass per group
-of edges that share a shape -- variables by (degree, cardinality), factors by
-(table shape, axis sent along) -- with the tables of a group stacked
-contiguously once. The tree schedule groups the same kernels by height and
-depth, so a wide level is one call and a chain is one call per position.
+width)`` arrays, ``width`` the largest cardinality, a row's unused columns held
+at zero and never read. A sweep is one vectorized pass per group of edges
+sharing a shape -- variables by (degree, cardinality), factors by (table
+shape, axis sent along) -- with the group's tables stacked contiguously once.
+The tree schedule groups the same kernels by height and depth, so a wide level
+is one call and a chain one call per position.
 :mod:`snakes_and_ladders.likelihood.message_passing_reference` is the
-dictionary-per-message implementation this replaced (issue #341); it is the
-oracle, the arithmetic per message is the same in the same order, and the
-regression suite pins the two bitwise on every schedule. Rooting at the first
-variable is shared with the reference, which is what makes the tree messages
-comparable edge for edge.
+dictionary-per-message implementation this replaced (issue #341): the oracle,
+with the same arithmetic per message in the same order, pinned bitwise on
+every schedule. Rooting at the first variable is shared with the reference, so
+the tree messages compare edge for edge.
 """
 
 from __future__ import annotations

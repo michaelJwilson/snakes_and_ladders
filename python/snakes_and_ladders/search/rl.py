@@ -1,34 +1,32 @@
 """The phylogenetic environment: tree search as the MDP ``sec:policy-gradient`` of ``docs/tex/textbook.tex`` states.
 
-This is the application instance of :class:`snakes_and_ladders.learn.environment.Environment`,
-and it lives here rather than in ``snakes_and_ladders.learn`` for the reason the
-phylogenetic ``Objective`` lives in ``snakes_and_ladders.likelihood``: ``learn/`` may
-import no application module, so the direction of the dependency has to run
-application to infrastructure. An agent developed inside ``learn/`` would be
-an agent shaped by trees, which is the thing that module exists to prevent.
+This is the application instance of
+:class:`snakes_and_ladders.learn.environment.Environment`, and it lives here
+rather than in ``snakes_and_ladders.learn`` for the reason the phylogenetic
+``Objective`` lives in ``snakes_and_ladders.likelihood``: ``learn/`` may import
+no application module, so the dependency runs application to infrastructure. An
+agent developed inside ``learn/`` would be an agent shaped by trees, which is
+what that module exists to prevent.
 
-The MDP is the one the paper specifies. A **state** is a
-topology; an **action** is a neighbour of it under NNI or SPR; the **reward**
-is the improvement in log-likelihood; an **episode** ends on a step budget or
-at a topology no move improves.
+The MDP is the paper's. A **state** is a topology; an **action** is a neighbour
+of it under NNI or SPR; the **reward** is the improvement in log-likelihood; an
+**episode** ends on a step budget or at a topology no move improves.
 
 **Two reward models, and the choice is the point.**
 
 ``RewardModel.FITTED`` is the honest quantity: the *maximized* log-likelihood,
-one L-BFGS solve per candidate. ``RewardModel.KNOWN`` evaluates the
-likelihood at fixed, known parameters instead --- issue #131's simplification,
-and the difference between a millisecond and a fifth of a second per
-candidate.
+one L-BFGS solve per candidate. ``RewardModel.KNOWN`` evaluates the likelihood
+at fixed, known parameters instead --- issue #131's simplification, and the
+difference between a millisecond and a fifth of a second per candidate.
 
-There is a wrinkle worth stating plainly, because it is the same wrinkle
-``opt/CLAUDE.md`` records about discrete moves. "The known parameters" do not
-transfer across topologies: a different topology has different branches, so a
-truth expressed as branch lengths on one tree means nothing on another. The
-only thing that does transfer is a single scalar, so ``KNOWN`` scores every
+One wrinkle, the one ``opt/CLAUDE.md`` records about discrete moves. "The known
+parameters" do not transfer across topologies: a different topology has
+different branches, so a truth expressed as branch lengths on one tree means
+nothing on another. Only a single scalar transfers, so ``KNOWN`` scores every
 candidate at one fixed branch length. That is a different surface from the
-fitted one, not an approximation of it that happens to be cheap, and
-:mod:`snakes_and_ladders.qa.rl_reward_surface` measures how far apart the two are rather
-than assuming the gap is benign.
+fitted one rather than a cheap approximation of it, and
+:mod:`snakes_and_ladders.qa.rl_reward_surface` measures how far apart the two
+are.
 
 **Two feature sets, and the second is issue #328.** With the improvement a
 move buys as the only feature, the policy is a Boltzmann distribution over
@@ -73,9 +71,9 @@ class RewardModel(StrEnum):
     """Which log-likelihood the reward is a difference of.
 
     ``KNOWN`` evaluates at a fixed branch length with no optimization.
-    ``FITTED`` maximizes over branch lengths per candidate, which is the
-    quantity a phylogenetic search cares about. Measured on the 5-taxon
-    fixture, it costs 113.7 ms against 352 us: a factor of 323.
+    ``FITTED`` maximizes over branch lengths per candidate, the quantity a
+    phylogenetic search cares about. Measured on the 5-taxon fixture, 113.7 ms
+    against 352 us: a factor of 323.
     """
 
     KNOWN = "known"
@@ -115,9 +113,9 @@ FEATURE_NAMES: dict[FeatureSet, tuple[str, ...]] = {
 def with_uniform_branch_lengths(topology: Topology, branch_length: float) -> Node:
     """``topology`` with every branch set to ``branch_length``.
 
-    The only form in which "known parameters" survives a change of topology:
-    a branch length is attached to an edge, and a different topology has
-    different edges, so a single scalar is all that carries over.
+    The only form in which "known parameters" survives a change of topology: a
+    branch length is attached to an edge, and a different topology has different
+    edges, so a single scalar is all that carries over.
 
     Parameters
     ----------
@@ -157,16 +155,14 @@ def exchanged_subtrees(
 ) -> tuple[frozenset[str], frozenset[str]]:
     """The leaf sets a move detaches and attaches, from the two topologies' splits.
 
-    A move breaks the splits in ``state_splits`` absent from
-    ``action_splits`` and makes the converse. The **detached** set is the
-    leaves in every broken split and no made one; the **attached** set is
-    the leaves in every made split and no broken one. For an NNI move,
-    which breaks one split ``S`` and makes one ``S'``, these are
-    ``S - S'`` and ``S' - S``: two of the four subtrees around the edge, and
-    the move is exactly their exchange (the other two exchanging is the same
-    move). Which two is fixed by the split canonicalization of
-    :func:`snakes_and_ladders.search.topology.leaf_bipartitions`: the anchor leaf's
-    subtree is the one in neither split.
+    A move breaks the splits in ``state_splits`` absent from ``action_splits``
+    and makes the converse. The **detached** set is the leaves in every broken
+    split and no made one; the **attached** set the converse. For an NNI move,
+    breaking one split ``S`` and making one ``S'``, these are ``S - S'`` and
+    ``S' - S``: two of the four subtrees around the edge, and the move is their
+    exchange. Which two is fixed by the split canonicalization of
+    :func:`snakes_and_ladders.search.topology.leaf_bipartitions`: the anchor
+    leaf's subtree is the one in neither split.
 
     Parameters
     ----------

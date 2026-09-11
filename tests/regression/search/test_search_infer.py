@@ -1,13 +1,13 @@
 """Regression tests for topology search.
 
-The claim this module carries is issue #63's, tested for the first time: the
-same model-agnostic ``snakes_and_ladders.opt.fit`` scores every candidate topology, with
-the discrete move sitting outside it as an operation that builds a new
-objective. Nothing in ``snakes_and_ladders.opt`` changed to make that work, and the
-import-graph test in ``test_opt_objective.py`` still holds.
+Issue #63's claim: the same model-agnostic ``snakes_and_ladders.opt.fit``
+scores every candidate topology, with the discrete move outside it as an
+operation that builds a new objective. Nothing in ``snakes_and_ladders.opt``
+changed to make that work, and the import-graph test in
+``test_opt_objective.py`` still holds.
 
-Exhaustive validation of *search quality* -- whether hill climbing finds the
-global optimum -- is separate and lives in ``test_search_exhaustive.py``.
+*Search quality* -- whether hill climbing finds the global optimum -- is
+validated in ``test_search_exhaustive.py``.
 """
 
 from __future__ import annotations
@@ -80,9 +80,9 @@ def test_random_topology_is_a_valid_unrooted_topology(n_taxa: int) -> None:
 
 @pytest.mark.oracle
 def test_random_topology_reaches_every_topology_and_only_those() -> None:
-    # The generator must be able to start anywhere, or a search seeded from
-    # it is quietly restricted to part of the space. Checked against the
-    # closed-form count rather than against a second enumeration.
+    # The generator must start anywhere, or a search seeded from it is quietly
+    # restricted to part of the space. Checked against the closed-form count
+    # rather than a second enumeration.
     names = list("ABCDE")
     rng = np.random.default_rng(7)
     found = {leaf_bipartitions(random_topology(names, rng)) for _ in range(4000)}
@@ -128,9 +128,9 @@ def test_random_topology_refuses_unusable_leaf_sets(
 
 @pytest.mark.oracle
 def test_a_fixed_topology_with_no_budget_is_exactly_the_continuous_fit() -> None:
-    # The API's two cases are one code path, not two: with the topology
-    # given and no budget, `infer` must agree with calling the objective and
-    # the optimizer directly.
+    # The API's two cases are one code path: with the topology given and no
+    # budget, `infer` must agree with calling the objective and the optimizer
+    # directly.
     alignment, k = _alignment()
     params = load_fixture(SMALL_SITES)
 
@@ -166,8 +166,8 @@ def test_score_topology_agrees_with_a_zero_budget_search() -> None:
 @pytest.mark.mathematical
 @pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
 def test_every_accepted_move_strictly_improves(moves: MoveSet) -> None:
-    # Guaranteed by construction, and worth pinning: a loop that accepted a
-    # non-improving move would still terminate and still look plausible.
+    # A loop that accepted a non-improving move would still terminate and
+    # still look plausible.
     alignment, k = _alignment()
 
     result = infer(alignment, k, rng=np.random.default_rng(1), moves=moves)
@@ -244,9 +244,9 @@ def test_the_general_model_is_searchable_too() -> None:
     assert isinstance(result, Inference)
     assert set(result.parameters) == {"branch_lengths", "exchangeabilities", "pi"}
     assert_allclose(result.parameters["pi"].sum(), 1.0, rtol=1e-9)
-    # The general model has more freedom, so it cannot fit worse than JC on
-    # the same topology -- a strictly larger model class always reaches at
-    # least the smaller one's optimum.
+    # A strictly larger model class reaches at least the smaller one's
+    # optimum, so the general model cannot fit worse than JC on the same
+    # topology.
     jc = score_topology(result.topology, alignment, k, model=Model.JC)
     assert result.log_likelihood >= jc - 1e-6
 
@@ -302,9 +302,9 @@ def test_an_nni_move_replaces_exactly_one_split() -> None:
 
 @pytest.mark.oracle
 def test_a_warm_start_reaches_the_cold_optimum_on_every_neighbour() -> None:
-    # The pin that lets warm starts be the default: where a fit starts moves,
-    # where it ends does not. Every SPR neighbour of a fitted topology is fitted
-    # cold and from the parent's lengths; the optima agree within the float64
+    # What lets warm starts be the default: where a fit starts moves, where it
+    # ends does not. Every SPR neighbour of a fitted topology is fitted cold
+    # and from the parent's lengths; the optima agree within the float64
     # agreement bound (realized worst 5.3e-12 relative over 90 neighbours at
     # eight taxa) and the parent refitted from its own lengths is the parent.
     alignment, k = _eight_taxa()
@@ -437,9 +437,9 @@ def test_a_non_positive_lazy_top_is_refused() -> None:
 
 @pytest.mark.structural
 def test_a_radius_at_the_leaf_count_reproduces_the_unbounded_search() -> None:
-    # The equivalence the bound is worth having, at the level a caller sees:
-    # not merely the same tree, but the same trajectory at the same cost, so
-    # a radius that quietly reordered the neighbourhood would fail here.
+    # The equivalence at the level a caller sees: not the same tree alone but
+    # the same trajectory at the same cost, so a radius that reordered the
+    # neighbourhood fails here.
     alignment, k = _alignment()
 
     unbounded = infer(alignment, k, rng=np.random.default_rng(0), moves=MoveSet.SPR)

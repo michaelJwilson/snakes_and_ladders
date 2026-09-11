@@ -12,6 +12,7 @@
         "chain_length": 4,
         "states": 81
       },
+      "rtol": null,
       "seed": null,
       "value": -0.723680148569239
     },
@@ -22,6 +23,7 @@
         "horizon": 3,
         "states": 81
       },
+      "rtol": null,
       "seed": null,
       "value": 0.14322916666666674
     },
@@ -32,6 +34,7 @@
         "horizon": 6,
         "states": 81
       },
+      "rtol": null,
       "seed": 1,
       "value": 0.12345679012345678
     }

@@ -1,17 +1,13 @@
 """Standard continuous test functions, as :class:`~snakes_and_ladders.opt.objective.Objective`.
 
-Every other test of :func:`snakes_and_ladders.opt.fit.fit` measures a *statistical*
-property of a likelihood surface --- the first-order condition, interval
-coverage at the nominal rate, agreement with Baum-Welch, distance to the
-generating truth. None of them checks that L-BFGS and the convergence
-criterion find a minimum that is known independently of the model being
-fitted, and the two failure modes are confounded: a fit that lands away from
-the truth reads as a weakly identified parameter, and an optimizer that stops
-early produces the same symptom.
+Every other test of :func:`snakes_and_ladders.opt.fit.fit` measures a
+*statistical* property of a likelihood surface, and there the two failure
+modes are confounded: a fit that lands away from the truth reads as a weakly
+identified parameter, and an optimizer that stops early produces the same
+symptom.
 
-These three functions separate them, because their minimizers are known in
-closed form and have nothing to do with phylogenetics (``sec:testfunctions``).
-Each targets a different failure:
+These three functions separate them: their minimizers are known in closed form
+(``sec:testfunctions``). Each targets a different failure:
 
 * :class:`Rosenbrock` --- a narrow curved valley, where a wrong line search
   shows up as slowness rather than as a wrong answer.
@@ -21,12 +17,11 @@ Each targets a different failure:
   that reports "the" optimum without saying which basin it found.
 
 **These are not likelihoods**, so the Hessian at the optimum is not an
-observed information matrix and :func:`snakes_and_ladders.opt.fit.constrained_standard_errors`
-must not be called on them: an interval built from it would be a number with
-no meaning attached (issue #122 covers the general case).
-:meth:`constrain` therefore returns the point itself, under the name each
-function's minimizer is stated in, rather than pretending to a parameter
-transformation there is none of.
+observed information matrix and
+:func:`snakes_and_ladders.opt.fit.constrained_standard_errors` must not be
+called on them (issue #122 covers the general case). :meth:`constrain`
+therefore returns the point itself, under the name each function's minimizer
+is stated in.
 
 Sources: Rosenbrock (1960); Rastrigin (1974); Himmelblau (1972). Nocedal &
 Wright use the first as the standing example for quasi-Newton methods.
@@ -49,11 +44,10 @@ class Rosenbrock:
     """``sum_i b (x_{i+1} - x_i^2)^2 + (a - x_i)^2``, minimized at ``(a, ..., a)`` (``eq:rosenbrock``).
 
     The valley is curved and its floor is nearly flat, so the gradient points
-    across it rather than along it and steepest descent zig-zags. What makes
-    it the standing quasi-Newton example is that the difficulty is entirely
-    conditioning: the function is smooth, unimodal in the relevant region, and
-    has an analytic minimizer, so a method that struggles here is struggling
-    for a reason that has nothing to do with the surface being hard to search.
+    across it and steepest descent zig-zags. The difficulty is entirely
+    conditioning --- the function is smooth, unimodal in the relevant region,
+    and has an analytic minimizer --- which is what makes it the standing
+    quasi-Newton example.
 
     Parameters
     ----------
@@ -111,12 +105,10 @@ class Rosenbrock:
 class Rastrigin:
     """``10 n + sum_i (x_i^2 - 10 cos(2 pi x_i))``, minimized at the origin (``eq:rastrigin``).
 
-    A quadratic bowl with a cosine ripple, so the global structure points at
-    the answer and the local structure does not: there are roughly ``10 ** n``
-    local minima, one per lattice cell, and every one of them satisfies the
-    first-order condition. A single fit from a single start is expected to
-    land in whichever cell it began in, which is why the test built on this
-    reports a *success rate* rather than asserting success.
+    A quadratic bowl with a cosine ripple: roughly ``10 ** n`` local minima,
+    one per lattice cell, each satisfying the first-order condition. A single
+    fit from a single start lands in whichever cell it began in, which is why
+    the test built on this reports a *success rate*.
     """
 
     dimension: int = 2
@@ -162,11 +154,9 @@ HIMMELBLAU_MINIMA = (
 class Himmelblau:
     """``(x^2 + y - 11)^2 + (x + y^2 - 7)^2``, with four equal global minima (``eq:himmelblau``).
 
-    Two dimensions only; the function is defined that way. The four minima all
-    have value 0, so no ordering distinguishes them and "the" optimum is not a
-    well-formed question. A method that always returns the same one regardless
-    of where it started is reading its own initialization, and nothing else in
-    this repository's suite would notice.
+    Two dimensions only. The four minima all have value 0, so "the" optimum
+    is not a well-formed question, and a method that always returns the same
+    one is reading its own initialization.
     """
 
     start: tuple[float, float] = (0.0, 0.0)
@@ -240,9 +230,8 @@ class TestFunctionParams:
         ``(x_min, x_max, y_min, y_max)``, the region a surface of it is drawn
         over.
     minimizers : tuple[tuple[float, ...], ...]
-        The published global minimizers. These are the oracle: they are
-        quoted from the sources the module docstring names, never computed
-        here.
+        The published global minimizers, the oracle: quoted from the sources
+        the module docstring names, never computed here.
     """
 
     name: str

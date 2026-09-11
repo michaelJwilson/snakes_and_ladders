@@ -1,14 +1,14 @@
 """The HMM whose observations are real, and whose likelihood has no maximum.
 
-The categorical instance is checked elsewhere and unchanged. What is pinned
-here is what the continuous case brings with it: an evidence that is a
-density and so may exceed 1, a fit whose supremum does not exist, and an
-identifiable regime that is a *measurement* rather than a fixture choice.
+The categorical instance is checked elsewhere. Pinned here is what the
+continuous case brings: an evidence that is a density and may exceed 1, a fit
+whose supremum does not exist, and an identifiable regime that is a
+*measurement* rather than a fixture choice.
 
-Two independent instruments referee the model, as for the categorical case
-and for the same reason. Direct enumeration over all ``k ** T`` hidden paths
-shares no recursion with the forward algorithm, and Baum-Welch shares no
-optimizer, no parameterization and no constraint map with the gradient fit.
+Two independent instruments referee the model. Direct enumeration over all
+``k ** T`` hidden paths shares no recursion with the forward algorithm, and
+Baum-Welch shares no optimizer, no parameterization and no constraint map with
+the gradient fit.
 """
 
 from __future__ import annotations
@@ -113,10 +113,9 @@ def _coverage(separation: float, replicates: int) -> tuple[int, int, int]:
 def test_the_forward_recursion_matches_enumeration_over_every_path(
     n_states: int, length: int, seed: int
 ) -> None:
-    # The forward algorithm against a sum over all `k ** T` paths, which
-    # shares no recursion with it. The generalization the continuous case
-    # needed is that the per-site term is a density rather than a table
-    # lookup; nothing else about the enumeration changes.
+    # The forward algorithm against a sum over all `k ** T` paths, sharing no
+    # recursion with it. The continuous case needed only that the per-site term
+    # be a density rather than a table lookup.
     rng = np.random.default_rng(seed)
     truth = GaussianEmission(
         rng.normal(scale=2.0, size=n_states),
@@ -149,10 +148,9 @@ def test_the_forward_recursion_matches_enumeration_over_every_path(
 
 @pytest.mark.mathematical
 def test_the_evidence_of_a_continuous_emission_can_exceed_one() -> None:
-    # The assertion the categorical case could make and this one cannot. A
+    # The assertion the categorical case could make and this one cannot: a
     # narrow state sitting on its observations makes the evidence a density
-    # above 1, so `log P(observations) <= 0` fails on correct code -- which is
-    # why nothing in the enumeration or the recursion asserts it.
+    # above 1, so `log P(observations) <= 0` fails on correct code.
     truth = GaussianEmission(np.array([0.0, 10.0]), np.array([0.02, 1.0]), INERT_FLOOR)
     params = HmmParams(
         n_states=2,
@@ -216,9 +214,9 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum() -> None:
 @pytest.mark.simulated_truth
 def test_the_alignment_recovers_a_known_permutation_of_the_states() -> None:
     # Label switching is unidentifiable, so a recovery comparison is stated up
-    # to a permutation and the aligner has to find it. For a Gaussian family
-    # the discriminating signal is the mean, not an emission matrix -- there
-    # is no matrix -- which is why the signature lives on the family.
+    # to a permutation and the aligner must find it. For a Gaussian family the
+    # discriminating signal is the mean and there is no emission matrix, which
+    # is why the signature lives on the family.
     truth = _truth(separation=6.0)
     permuted = GaussianEmission(
         truth.mean.numpy()[[1, 0]], truth.scale.numpy()[[1, 0]], INERT_FLOOR
@@ -270,9 +268,9 @@ def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> No
 @pytest.mark.edge_case
 def test_a_collapsing_fit_is_refused_rather_than_returned() -> None:
     # Started with one state's mean on a single observation and a scale far
-    # below the floor, EM drives that state's variance down rather than up.
-    # The refusal is the deliverable: a run that clamped and returned would
-    # report a converged fit at a point where the likelihood has no maximum.
+    # below the floor, EM drives that state's variance down. The refusal is the
+    # deliverable: a run that clamped and returned would report a converged fit
+    # where the likelihood has no maximum.
     observations = simulate_sequences(_params(_truth(), seed=25)).observations
     floor = GaussianHmmObjective(observations, 2).variance_floor
 
@@ -291,12 +289,11 @@ def test_a_collapsing_fit_is_refused_rather_than_returned() -> None:
 
 @pytest.mark.simulated_truth
 def test_coverage_reaches_nominal_only_where_the_states_are_separated() -> None:
-    # The identifiable regime, measured rather than assumed. At half a
-    # standard deviation of separation the two states are nearly the same
-    # state: most replicates produce an information matrix too ill-conditioned
-    # to invert, so there is no interval at all, and the intervals that do
-    # exist under-cover. The cheap two-point form of the sweep the release
-    # test tabulates.
+    # The identifiable regime, measured rather than assumed. At half a standard
+    # deviation of separation the two states are nearly one: most replicates
+    # produce an information matrix too ill-conditioned to invert, and the
+    # intervals that exist under-cover. The cheap two-point form of the sweep
+    # the release test tabulates.
     close_covered, close_total, close_boundary = _coverage(0.5, replicates=8)
     far_covered, far_total, far_boundary = _coverage(6.0, replicates=8)
 
@@ -311,8 +308,8 @@ def test_coverage_reaches_nominal_only_where_the_states_are_separated() -> None:
 @pytest.mark.release
 def test_coverage_against_the_separation_of_the_emitting_states() -> None:
     # The full sweep behind the table in `STATUS.md`. Marked release: 24
-    # replicates at six separations is ~16 s, which is not a per-pull-request
-    # cost for a measurement that moves only when the model does.
+    # replicates at six separations is ~16 s, for a measurement that moves only
+    # when the model does.
     sweep = {
         separation: _coverage(separation, replicates=24) for separation in SEPARATIONS
     }

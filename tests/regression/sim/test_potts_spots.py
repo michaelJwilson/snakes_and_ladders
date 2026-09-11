@@ -4,12 +4,11 @@ Two claims, refereed differently at each size.
 
 **That a per-site field is scored correctly.** The widened shape reaches four
 routines --- the exact open-chain sampler, the Gibbs sweep, enumeration and
-the strip transfer matrix --- and each is checked against one of the others.
-Enumeration shares no recursion with any of them, so it referees the two
-samplers; the strip shares no configuration walk with enumeration, so the two
-referee each other where both reach; and a field whose rows are all equal
-must reproduce the shared-field result exactly, which is the reduction that
-catches a broadcast applied to the wrong axis.
+the strip transfer matrix --- each checked against another. Enumeration shares
+no recursion with any of them, so it referees the two samplers; the strip
+shares no configuration walk with enumeration, so the two referee each other
+where both reach; and a field whose rows are all equal must reproduce the
+shared-field result exactly, catching a broadcast applied to the wrong axis.
 
 **That the covariate is identified.** ``h[n, m] = alpha[m] * log(size[n] /
 size_bar)`` is only a model if the sizes vary: with one size every row of the
@@ -72,10 +71,9 @@ def _marginals(configurations: np.ndarray, n_states: int) -> np.ndarray:
 
 @pytest.mark.mathematical
 def test_a_field_repeated_at_every_site_is_the_shared_field() -> None:
-    # The reduction the widening has to satisfy: a per-site field whose rows
-    # are equal is the same model as the shared field it was built from. A
-    # broadcast applied along the state axis rather than the site axis passes
-    # every shape check and fails this.
+    # A per-site field whose rows are equal is the same model as the shared
+    # field it was built from. A broadcast applied along the state axis rather
+    # than the site axis passes every shape check and fails this.
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.6)
     shared = np.array([0.30, -0.10, -0.20])
 
@@ -89,9 +87,9 @@ def test_a_field_repeated_at_every_site_is_the_shared_field() -> None:
 @pytest.mark.oracle
 def test_the_strip_transfer_matrix_matches_enumeration_on_a_per_site_field() -> None:
     # The two exact routes, on a lattice small enough for both. The strip
-    # walks columns and enumeration walks configurations, so they share only
-    # the model convention -- which is what makes the strip usable as the
-    # oracle at the stress instance, where enumeration cannot go.
+    # walks columns and enumeration walks configurations, sharing only the
+    # model convention, which is what makes the strip the oracle at the stress
+    # instance where enumeration cannot go.
     shape = (3, 3)
     graph = lattice_graph(shape, BoundaryCondition.OPEN, 0.6)
     field = np.random.default_rng(413).normal(size=(graph.n_nodes, 3))
@@ -125,8 +123,8 @@ def test_the_exact_open_chain_sampler_carries_the_field_of_each_site() -> None:
 @pytest.mark.edge_case
 def test_a_field_of_neither_shape_is_refused() -> None:
     # A field with one row per *state* on a graph whose node count differs is
-    # the mistake the two accepted shapes make possible; it is refused rather
-    # than broadcast into a different model.
+    # the mistake the two accepted shapes allow; refused rather than broadcast
+    # into a different model.
     with pytest.raises(ValueError, match="expected"):
         site_field(np.zeros((4, 3)), 9)
 
@@ -166,12 +164,11 @@ def test_gibbs_matches_enumeration_at_the_declared_spots_instance() -> None:
 
 @pytest.mark.mathematical
 def test_the_declared_sizes_move_the_marginals() -> None:
-    # The instance the ticket asks for rather than one where the field is a
-    # constant in disguise: replacing the per-site field by its site average
-    # has to change the exact marginals by more than the tolerance the
-    # sampler is checked within, or the fixture is a uniform-field instance
-    # under another name. The average is exactly zero here, because the
-    # covariate is centred, so the control is the uniform distribution.
+    # Replacing the per-site field by its site average must change the exact
+    # marginals by more than the tolerance the sampler is checked within, or
+    # the fixture is a uniform-field instance under another name. The average
+    # is exactly zero here, the covariate being centred, so the control is the
+    # uniform distribution.
     exact = enumerate_potts(CI.graph, CI.field)
     averaged = enumerate_potts(
         CI.graph, np.tile(CI.field.mean(axis=0), (CI.graph.n_nodes, 1))
@@ -192,10 +189,9 @@ def _fit_alpha(params: PottsSpotsParams, configurations: np.ndarray) -> np.ndarr
     the sample's. Both come from :func:`enumerate_potts`, which shares no
     code with the sampler that drew ``configurations``.
 
-    ``alpha`` and ``alpha + c`` give the same model --- a constant shifts
-    every class at a site by the same amount, which cancels --- so the
-    estimate is returned in the sum-zero gauge the fixture declares its own
-    ``alpha`` in.
+    ``alpha`` and ``alpha + c`` give the same model --- a constant shifts every
+    class at a site alike and cancels --- so the estimate is returned in the
+    sum-zero gauge the fixture declares its own ``alpha`` in.
     """
     covariate = np.log(params.sizes) - float(np.log(params.sizes).mean())
     indicator = configurations[:, :, np.newaxis] == np.arange(params.n_classes)
@@ -219,10 +215,10 @@ def _fit_alpha(params: PottsSpotsParams, configurations: np.ndarray) -> np.ndarr
 
 @pytest.mark.simulated_truth
 def test_the_covariate_coefficients_are_recovered_at_the_ci_instance() -> None:
-    # What makes the sizes part of the model rather than decoration: alpha is
-    # identified from a draw, and the flat class's interval covers zero. The
-    # interval is the maximum-likelihood one, 1.96 standard errors from the
-    # observed information of the sufficient statistic in the sum-zero gauge.
+    # What makes the sizes part of the model: alpha is identified from a draw,
+    # and the flat class's interval covers zero. The interval is the
+    # maximum-likelihood one, 1.96 standard errors from the observed
+    # information of the sufficient statistic in the sum-zero gauge.
     drawn = simulate_potts(
         CI.graph, CI.field, np.random.default_rng(CI.seed), CI.n_samples, CI.burn_in
     )
@@ -288,11 +284,10 @@ def test_the_sampler_matches_the_exact_normalizer_past_enumeration() -> None:
 @pytest.mark.simulated_truth
 @pytest.mark.release
 def test_the_covariate_still_tilts_the_labels_at_five_thousand_vertices() -> None:
-    # That the field survives the size. Nothing is exact at 5,041 vertices,
-    # so what is asserted is the property the covariate is in the model for:
-    # the mean alpha of a site's label rises with the site's size, monotonely
-    # across size quartiles. A field indexed by the wrong site leaves a tilt
-    # of zero, which is 49 standard errors from the measured 0.4935.
+    # Nothing is exact at 5,041 vertices, so what is asserted is the property
+    # the covariate is in the model for: the mean alpha of a site's label
+    # rises monotonely across size quartiles. A field indexed by the wrong
+    # site leaves a tilt of zero, 49 standard errors from the measured 0.4935.
     drawn = simulate_potts(
         RELEASE.graph,
         RELEASE.field,

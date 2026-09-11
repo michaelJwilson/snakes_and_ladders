@@ -1,18 +1,14 @@
 """A discrete HMM: the second reference instance of ``Objective``.
 
-Chosen over a second tree-like model for two reasons. It is one of issue
-#63's named cases, and unlike the Potts chain it has an *independent fitting
-algorithm* -- Baum-Welch -- so a gradient fit can be checked against
-something other than itself (that check lands with the optimizer; this module
-supplies the model it will be run on).
+One of issue #63's named cases, and unlike the Potts chain it has an
+*independent fitting algorithm* -- Baum-Welch -- so a gradient fit can be
+checked against something other than itself.
 
 The forward recursion here and Felsenstein pruning are the same sum-product
 computation on different graphs: a caterpillar tree carrying one observed
 leaf per internal node *is* an HMM (``eq:forward`` of ``docs/tex/textbook.tex``,
 derived in ``app:forward-backward``; Durbin et al., ch. 3; Koller & Friedman
-for the general framing). The abstraction is expected to hold because the
-three instances are one marginalization over three structures, not three
-unrelated models sharing an optimizer.
+for the general framing).
 
 **Label switching.** The likelihood is invariant to permuting the hidden
 states, so a fitted parameter set matches truth only up to a permutation. The
@@ -20,9 +16,9 @@ model is otherwise identifiable; every row is gauge-fixed by
 :func:`snakes_and_ladders.opt.constrain.log_simplex`. A recovery test must align the
 permutation before comparing.
 
-Ground truth and data generation live in :mod:`snakes_and_ladders.sim.hmm`; this module
-holds only the fitting objective, its independent EM oracle, and the
-state-alignment helper a recovery test needs.
+Ground truth and data generation live in :mod:`snakes_and_ladders.sim.hmm`; this
+module holds the fitting objective, its EM oracle, and the state-alignment
+helper a recovery test needs.
 """
 
 from __future__ import annotations
@@ -70,9 +66,8 @@ class _HmmObjective:
 
     The initial distribution and the transition matrix are simplex-valued
     whatever the observations are, and the forward recursion consumes a
-    ``(n_sequences, length, n_states)`` block of per-site scores without
-    caring how they were produced. Everything else is the emission family's,
-    and lives in the subclass that names one.
+    ``(n_sequences, length, n_states)`` block of per-site scores however they
+    were produced. Everything else lives in the subclass that names a family.
     """
 
     def __init__(
@@ -118,14 +113,11 @@ class _HmmObjective:
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The unconstrained vector whose :meth:`constrain` is ``named``.
 
-        The inverse of the constraint map, keyed exactly as :meth:`constrain`
-        returns. It is what lets a fit produced by *any* optimizer be given an
-        interval: the observed information is a property of the objective at a
-        point, and this is how a point stated in the model's own parameters
-        becomes one the Hessian can be taken at (issue #268).
-
-        Every instance shares the transition half and differs only in the
-        emission block, which is the same division :meth:`constrain` makes.
+        The inverse of the constraint map, keyed as :meth:`constrain`
+        returns. It lets a fit from *any* optimizer be given an interval: the
+        observed information is a property of the objective at a point, and
+        this turns a point stated in the model's own parameters into one the
+        Hessian can be taken at (issue #268).
 
         Parameters
         ----------
@@ -231,16 +223,15 @@ class HmmObjective(_HmmObjective):
     def initial(self) -> torch.Tensor:
         """A start that is uninformative but **not** symmetric.
 
-        The uniform point -- every distribution uniform -- is a stationary
-        point of the likelihood, not merely a poor guess: with all hidden
-        states identical, the gradient with respect to the initial and
-        transition parameters is exactly zero, and an optimizer started there
-        stays there forever while the emission rows converge to the pooled
-        symbol frequency. `tests/regression/test_opt_hmm.py` pins that.
+        The uniform point is a stationary point of the likelihood, not merely
+        a poor guess: with all hidden states identical the gradient in the
+        initial and transition parameters is exactly zero, and an optimizer
+        started there stays there while the emission rows converge to the
+        pooled symbol frequency (`tests/regression/test_opt_hmm.py` pins it).
 
-        So the emission rows are tilted apart by a fixed amount, each state
-        favouring a different symbol. Deterministic rather than random: a
-        seeded jitter would make the fit depend on a second seed nobody
+        The emission rows are therefore tilted apart by a fixed amount, each
+        state favouring a different symbol. Deterministic rather than random:
+        a seeded jitter would make the fit depend on a second seed nobody
         declared.
         """
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
@@ -292,22 +283,20 @@ class GaussianHmmObjective(_HmmObjective):
     """Negative log-likelihood of real-valued sequences from a Gaussian HMM.
 
     The same forward recursion over the same simplex-constrained transitions;
-    only what a state emits differs. Two things follow that the categorical
-    instance never had to face.
+    only what a state emits differs. Two consequences the categorical instance
+    never faced.
 
     **The objective may be negative for a *good* fit.** The emission term is a
-    density, so the evidence is a density and the negative log-likelihood this
-    returns can be below zero. Nothing about that is pathological.
+    density, so the negative log-likelihood can be below zero.
 
     **The likelihood has no maximum.** Put one state's mean on a single
-    observation and let its scale go to zero and the objective diverges to
-    minus infinity, so ``fit`` reporting convergence means it satisfied the
-    first-order condition somewhere, not that it found the supremum ---
-    ``opt/CLAUDE.md``'s rule about ``converged``, in a model where the
-    distinction is not a technicality. :class:`GaussianEmission`'s variance
-    floor is what makes an approach to that boundary visible in the EM oracle;
-    a gradient fit is protected only by where it starts, which is why
-    :meth:`initial` places the means on the data rather than at a point.
+    observation and let its scale go to zero and the objective diverges, so
+    ``fit`` reporting convergence means it satisfied the first-order condition
+    somewhere, not that it found the supremum (``opt/CLAUDE.md``'s rule about
+    ``converged``). :class:`GaussianEmission`'s variance floor makes an
+    approach to that boundary visible in the EM oracle; a gradient fit is
+    protected only by where it starts, which is why :meth:`initial` places the
+    means on the data.
 
     Parameters
     ----------
@@ -367,18 +356,17 @@ class GaussianHmmObjective(_HmmObjective):
     def initial(self) -> torch.Tensor:
         """A start that is uninformative but **not** symmetric.
 
-        Uniform transitions, as for the categorical instance and for the same
-        reason: the symmetric point is a stationary point, not a poor guess.
+        Uniform transitions, for the reason the categorical instance gives.
         The means are placed at evenly spaced quantiles of the pooled
-        observations, which breaks the exchangeability the way the categorical
-        tilt does while committing to nothing about which state is which.
+        observations, breaking exchangeability while committing to nothing
+        about which state is which.
 
         On the data rather than at a fixed point, because a Gaussian mean far
         from every observation contributes a density that underflows: the
         state is then invisible to the E step and the fit reduces to one with
         fewer states. The scales start at the pooled standard deviation, the
-        widest defensible value --- a start that is too *narrow* is the
-        direction the likelihood is unbounded in.
+        widest defensible value --- too *narrow* is the direction the
+        likelihood is unbounded in.
         """
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
         values = self._observations.reshape(-1).to(self._dtype)
@@ -441,11 +429,10 @@ class GaussianHmmObjective(_HmmObjective):
 class _CountHmmObjective(_HmmObjective):
     """Shared scaffolding for the count instances: a start on the data.
 
-    Every count family here places its per-state location at evenly spaced
-    quantiles of the pooled observations, for the reasons
-    :class:`GaussianHmmObjective` gives --- a shared location is the
-    stationary point ``opt/CLAUDE.md`` names, and a location far from every
-    observation makes a state invisible to the E step.
+    Every count family places its per-state location at evenly spaced
+    quantiles of the pooled observations, for :class:`GaussianHmmObjective`'s
+    reasons: a shared location is a stationary point, and a location far from
+    every observation makes a state invisible to the E step.
     """
 
     def __init__(
@@ -475,10 +462,9 @@ class _CountHmmObjective(_HmmObjective):
 class PoissonHmmObjective(_CountHmmObjective):
     """Negative log-likelihood of count sequences from a Poisson-emission HMM.
 
-    One parameter per state and no dispersion to argue about, which is what
-    makes it the control: whatever a richer count family's fit does that this
-    one does not is attributable to the dispersion parameter and not to the
-    recursion they share.
+    One parameter per state and no dispersion, which makes it the control:
+    whatever a richer count family's fit does that this one does not is the
+    dispersion parameter and not the shared recursion.
 
     Parameters
     ----------
@@ -526,8 +512,8 @@ class BinomialHmmObjective(_CountHmmObjective):
 
     The under-dispersed instance. The trial count is declared rather than
     fitted, so ``theta`` carries one free value per state and the constraint
-    map is a logit --- positivity is not enough here, since a probability has
-    two boundaries rather than one.
+    map is a logit: a probability has two boundaries, so positivity is not
+    enough.
 
     Parameters
     ----------
@@ -593,8 +579,8 @@ class BetaBinomialHmmObjective(_CountHmmObjective):
     The over-dispersed counterpart of :class:`BinomialHmmObjective` on the
     same support, and the second instance whose EM counterpart's M step is a
     solve rather than a formula. The gradient fit is not --- autograd
-    differentiates through ``lgamma`` --- which is exactly what makes the pair
-    worth running: the two share the model and nothing else.
+    differentiates through ``lgamma`` --- so the pair shares the model and
+    nothing else.
 
     Parameters
     ----------
@@ -698,22 +684,18 @@ class NegativeBinomialHmmObjective(_HmmObjective):
 
     The third emission family through the same recursion, and the one that
     says whether the seam is real: its EM counterpart's M step is a solve
-    rather than a formula. The *gradient* fit here is not --- autograd
-    differentiates through ``lgamma`` like anything else --- which is what
-    makes the pair worth having, since the two disagree only if one of them is
-    wrong.
+    rather than a formula, the gradient fit is not, and the two disagree only
+    if one is wrong.
 
     **The evidence is a probability again.** Counts are discrete, so
     ``log P(observations) <= 0`` holds here and does not for
-    :class:`GaussianHmmObjective`. The contrast is pinned rather than
-    remarked on: it is the assertion that had to be dropped for one family and
-    is available for this one.
+    :class:`GaussianHmmObjective`.
 
     **The identifiability hazard is flatness.** Both parameters reach the
     optimizer through a log map, so neither can leave its feasible set, but no
-    map fixes a likelihood that is flat in ``r`` past the point the data can
-    resolve it. :func:`snakes_and_ladders.emissions.identifiable_dispersion_bound`
-    says where that is, and the EM oracle reports reaching it.
+    map fixes a likelihood flat in ``r`` past the point the data resolves it.
+    :func:`snakes_and_ladders.emissions.identifiable_dispersion_bound` says
+    where, and the EM oracle reports reaching it.
 
     Parameters
     ----------
@@ -873,11 +855,9 @@ def forward_log_likelihood_from_density(
 ) -> torch.Tensor:
     """Total log-likelihood from per-site emission scores already computed.
 
-    The recursion that does not know what a state emits. Splitting it out is
-    what lets one forward algorithm serve a family over an alphabet and a
-    family over the reals: the categorical case gathers a row of the emission
-    matrix, a Gaussian case evaluates a density, and both arrive here as the
-    same block of numbers.
+    The recursion that does not know what a state emits, so one forward
+    algorithm serves a family over an alphabet and one over the reals: both
+    arrive here as the same block of numbers.
 
     Parameters
     ----------
@@ -910,11 +890,10 @@ def align_states(
 ) -> tuple[int, ...]:
     """Permutation of fitted hidden states best matching ``reference``.
 
-    The likelihood is invariant to relabelling the hidden states, so a fitted
-    parameter set matches truth only up to a permutation and a recovery test
-    has to choose one. Emissions are the discriminating signal -- two states
-    with the same emission distribution are genuinely the same state -- so
-    the permutation is the one minimizing total absolute emission
+    The likelihood is invariant to relabelling the hidden states, so a
+    recovery test has to choose a permutation. Emissions are the
+    discriminating signal -- two states with the same emission distribution
+    are the same state -- so it is the one minimizing total absolute emission
     difference, found by enumeration (``m!`` is small, and a greedy match can
     be wrong).
 
@@ -941,10 +920,8 @@ def align_families(
 
     The same enumeration as :func:`align_states`, over whatever signature each
     family says distinguishes its states --- symbol probabilities for a
-    categorical emission, means for a Gaussian one. Which is why the signature
-    is the family's to define: aligning a Gaussian fit by emission *matrix*
-    would compare two things that do not exist, and aligning it by anything
-    but the mean would let two states with different means look identical.
+    categorical emission, means for a Gaussian one. The signature is the
+    family's to define: a Gaussian fit has no emission matrix to align by.
 
     Parameters
     ----------
@@ -991,11 +968,10 @@ def align_by_key(fitted: torch.Tensor, reference: torch.Tensor) -> tuple[int, ..
 class EmFit:
     """What one Baum-Welch run produced, and what it had to report.
 
-    A tuple sufficed while every M step was a formula. It stopped sufficing
-    when one became a solve (issue #229): a fit whose dispersion sat at the
-    edge of what the data identifies is not an error and must not be raised,
-    but a caller that cannot see it will build a Wald interval around a bound
-    and call it an estimate.
+    A tuple sufficed while every M step was a formula, and stopped when one
+    became a solve (issue #229): a dispersion at the edge of what the data
+    identifies is not an error, but a caller that cannot see it will build a
+    Wald interval around a bound and call it an estimate.
 
     Parameters
     ----------
@@ -1028,12 +1004,10 @@ def baum_welch(
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, float]:
     """Fit an HMM by expectation-maximization, with no autodiff involved.
 
-    This is the point of having it: Baum-Welch is a genuinely independent
-    fitting algorithm for the same model, so a gradient fit checked against
-    it is checked against something other than itself. It shares no code with
-    ``fit`` -- not the optimizer, not the parameterization (EM works directly
-    in probabilities, with no unconstrained coordinates and no constraint
-    map), only the model.
+    Baum-Welch is an independent fitting algorithm for the same model, so a
+    gradient fit checked against it is checked against something other than
+    itself. It shares no code with ``fit`` -- not the optimizer, not the
+    parameterization (EM works directly in probabilities) -- only the model.
 
     Parameters
     ----------
@@ -1085,11 +1059,9 @@ def baum_welch_family(
     """Baum-Welch over any emission family, with no autodiff involved.
 
     The E step is the model: forward and backward messages in log space,
-    identical whatever a state emits. The M step for the initial distribution
-    and the transitions is likewise identical, since both are simplex-valued
-    for every family. Only the emission M step differs, and it is delegated to
-    the family rather than written here --- which is the seam this exists to
-    justify.
+    identical whatever a state emits, and so is the M step for the initial
+    distribution and the transitions, both simplex-valued for every family.
+    Only the emission M step differs, and it is delegated to the family.
 
     Parameters
     ----------

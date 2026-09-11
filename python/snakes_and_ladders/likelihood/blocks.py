@@ -1,51 +1,45 @@
 """The block-frequency bound: exact where blocks repeat, bounded where they do not (issue #408).
 
 Site-pattern compression (:mod:`snakes_and_ladders.likelihood.patterns`) is
-exact and saturates: once every distinct column has appeared, a longer
-alignment costs nothing more. Blocks of ``N > 1`` consecutive sites do not
-saturate --- there are ``k ** (N n)`` of them and they repeat rarely --- so
-exact block compression buys nothing. What it buys is a **bound**.
+exact and saturates. Blocks of ``N > 1`` consecutive sites do not --- there
+are ``k ** (N n)`` of them and they repeat rarely --- so exact block
+compression buys nothing. What it buys is a **bound**.
 
 Partition the alignment into blocks of ``N`` consecutive sites and count how
 often each distinct block occurs. Blocks occurring at least ``min_count``
 times are evaluated exactly, through the pattern compression of their
-columns. The rare tail is not evaluated at all: every one of its sites
-contributes a per-site log-likelihood lying between two numbers that depend
-on the tree and the branch lengths alone, so the tail contributes an
-interval of width ``(number of bounded sites) x (upper - lower)``. The
-result contains the exact log-likelihood by construction, at a cost the
-cutoff sets.
+columns. The rare tail is not evaluated: each of its sites contributes a
+per-site log-likelihood between two numbers depending on the tree and the
+branch lengths alone, so the tail contributes an interval of width
+``(bounded sites) x (upper - lower)``. The result contains the exact
+log-likelihood by construction, at a cost the cutoff sets.
 
 **The two numbers.** :func:`site_log_likelihood_extremes` brackets
 ``log Pr(x)`` over *every* column ``x``, in one pass over the tree and
-independently of the alignment's length. The recursion is the pruning
-recursion with the leaf messages replaced by their extremes: a leaf sends
-its parent ``P(s, x)`` for its observed state ``x``, so over all ``x`` that
-message lies in ``[min_j P(s, j), max_j P(s, j)]``, and the products and
-non-negative sums above it are monotone, so bounds propagate. It is a
-bound and not the exact extreme --- the maximum over each child is taken
-independently, which no single column need attain --- and that is what makes
-it sound and loose rather than tight and wrong.
+independently of the alignment's length. It is the pruning recursion with the
+leaf messages replaced by their extremes: a leaf's message lies in
+``[min_j P(s, j), max_j P(s, j)]``, and the products and non-negative sums
+above it are monotone. Each child's maximum is taken independently, which no
+single column need attain, so it is sound and loose rather than tight and
+wrong.
 
 **What the interval brackets.** ``block_frequency_interval`` brackets the
-log-likelihood **at the branch lengths it is given**. :class:`BlockFrequencyBound`
-presents that as a :class:`~snakes_and_ladders.bound.Surrogate` at
-least-squares lengths, as :class:`~snakes_and_ladders.likelihood.surrogate.PlugInLikelihood`
-does. Only the lower end is then a bound on the *maximized* log-likelihood
---- a value at feasible lengths is at most the maximum --- so only the lower
-end may be certified against a fit. The upper end bounds the evaluation, not
-the fit, and the class says so where it is constructed.
+log-likelihood **at the branch lengths it is given**.
+:class:`BlockFrequencyBound` presents that as a
+:class:`~snakes_and_ladders.bound.Surrogate` at least-squares lengths, as
+:class:`~snakes_and_ladders.likelihood.surrogate.PlugInLikelihood` does. Only
+the lower end then bounds the *maximized* log-likelihood --- a value at
+feasible lengths is at most the maximum --- so only it may be certified
+against a fit.
 
 **What it costs, which is more than the evaluation it replaces.** Measured,
 one thread: the interval is 4.0x the uncompressed evaluation at five taxa by
 2,000 sites and 5.8x at four taxa by 20,000, and the cutoff moves it by 17%
-and 2.5% because the block partition's sort dominates and does not depend on
-the cutoff. The saving is in *fits* --- a branch-length fit is 254 ms against
-a 3.65 ms interval --- and never in forward passes;
-``tests/benchmarks/test_likelihood_blocks_bench.py`` carries the table and
-`STATUS.md` the conclusion. A caller reaching for this to make an evaluation
-cheaper is reaching for the wrong thing, and
-:mod:`snakes_and_ladders.likelihood.patterns` is the right one.
+and 2.5% because the block partition's sort dominates. The saving is in
+*fits* --- a branch-length fit is 254 ms against a 3.65 ms interval --- never
+in forward passes; ``tests/benchmarks/test_likelihood_blocks_bench.py``
+carries the table and `STATUS.md` the conclusion. For a cheaper evaluation
+the right tool is :mod:`snakes_and_ladders.likelihood.patterns`.
 """
 
 from __future__ import annotations
@@ -81,10 +75,10 @@ class Interval:
         0-dimensional; at least it.
     exact : torch.Tensor
         0-dimensional; the frequent blocks' own log-likelihood, which both
-        ends are built from. It is a log-likelihood over a subset of the
-        sites and claims nothing about the whole, which is what makes it a
-        ranking signal rather than a bound (``likelihood/CLAUDE.md``, "A
-        cheap value that claims nothing ranks").
+        ends are built from. Over a subset of the sites, so it claims nothing
+        about the whole and is a ranking signal rather than a bound
+        (``likelihood/CLAUDE.md``, "A cheap value that claims nothing
+        ranks").
     exact_sites : int
         Sites inside a block frequent enough to evaluate.
     bounded_sites : int
@@ -113,10 +107,10 @@ class Interval:
     def extrapolated(self) -> torch.Tensor:
         """The exact half scaled to the whole alignment: a point estimate, not a bound.
 
-        The frequent blocks are the same sites for every topology, so this
-        is one subsample scored the same way each time, and it orders
-        topologies where the interval's ends -- dominated by a tail term
-        that varies with the tree and measures nothing about fit -- do not.
+        The frequent blocks are the same sites for every topology, so this is
+        one subsample scored the same way each time. It orders topologies
+        where the interval's ends -- dominated by a tail term varying with the
+        tree -- do not.
 
         Raises
         ------
@@ -162,10 +156,9 @@ def site_log_likelihood_extremes(
     """Bounds on ``log Pr(x)`` holding for every column ``x``, in one pass over the tree.
 
     The pruning recursion in the log domain with the leaf messages replaced
-    by their extremes over the leaf's state, which is what makes the result
-    independent of the data. Sound rather than tight: each child's extreme
-    is taken independently of the others, so no column need attain either
-    end.
+    by their extremes over the leaf's state, which makes the result
+    independent of the data. Sound rather than tight: each child's extreme is
+    taken independently, so no column need attain either end.
 
     Parameters
     ----------
@@ -402,36 +395,30 @@ class BlockFrequencyBound:
     Branch lengths come from the least-squares fit to the Jukes-Cantor
     pairwise distances, as
     :class:`~snakes_and_ladders.likelihood.surrogate.PlugInLikelihood`'s do,
-    so the surrogate is a function of the topology and the alignment alone
-    and plugs into ``search.infer``'s lazy ranking without a fit.
+    so the surrogate is a function of the topology and the alignment alone and
+    plugs into ``search.infer``'s lazy ranking without a fit.
 
     **Which end claims what.** Both ends bracket the log-likelihood at those
-    lengths. Only the lower end also bounds the *maximized* log-likelihood,
-    because a value at feasible lengths is at most the maximum; it is the
-    end that may be certified against a fit, and the default. The upper end
-    is declared ``Bound.UPPER`` against the evaluation at those lengths,
-    never against a fit.
+    lengths. Only the lower end also bounds the *maximized* log-likelihood, so
+    only it may be certified against a fit, and it is the default. The upper
+    end is declared ``Bound.UPPER`` against the evaluation, never against a
+    fit.
 
-    **The cutoff is a count, so it scales with the alignment.** How much of
-    the alignment stays exact is what a cutoff means, and that is
-    ``min_count`` against the length. On the five-taxon fixture a cutoff of
-    4 at 1200 sites and one of 8 at 2000 retain the same fraction and rank
-    the same way; a cutoff of 8 at 1200 sites loses the optimum from half
-    the starts. A caller choosing one for a new length scales it rather than
-    carrying the number across.
+    **The cutoff is a count, so it scales with the alignment.** On the
+    five-taxon fixture a cutoff of 4 at 1200 sites and one of 8 at 2000 retain
+    the same fraction and rank the same way; a cutoff of 8 at 1200 sites loses
+    the optimum from half the starts. A caller choosing one for a new length
+    scales it rather than carrying the number across.
 
     **Neither end ranks, and the measurement says so.** The tail term is
     ``(bounded sites) x (per-site extreme)``, the extreme varies with the
-    tree, and at any cutoff above one it is larger than the differences
-    between neighbouring topologies -- so an ordering by either end is an
-    ordering by the tail's looseness. Over the 15 five-taxon topologies at
-    2000 sites and cutoff 8, the lower end's best is topology 2 against the
-    fitted best 13; the upper end's happens to coincide, which is a fact
-    about that instance and not a property of the end. The ``POINT`` claim
-    exists for this: it drops the tail entirely and orders by the frequent
-    blocks alone, the same sites for every candidate. It refuses where the
-    cutoff leaves no frequent block, since it would otherwise rank every
-    topology by the same zero.
+    tree, and at any cutoff above one it exceeds the differences between
+    neighbouring topologies. Over the 15 five-taxon topologies at 2000 sites
+    and cutoff 8, the lower end's best is topology 2 against the fitted best
+    13; the upper end's coincidence is a fact about that instance. The
+    ``POINT`` claim drops the tail and orders by the frequent blocks alone,
+    the same sites for every candidate, and refuses where the cutoff leaves no
+    frequent block rather than ranking every topology by the same zero.
 
     Parameters
     ----------
