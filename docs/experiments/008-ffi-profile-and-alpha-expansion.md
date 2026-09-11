@@ -25,7 +25,7 @@ status: confirmed
 | self time, mid tier, top uncompiled loop | fraction | ported? |
 | --- | --- | --- |
 | `search.alpha_expansion` 32x32: `maxflow._augment` 28.4% + `_levels` 20.6% | **49.0%** | yes, this ticket |
-| `search.gibbs.sample_factor_graph` 32x32: `conditional` 44.8% | 44.8% | no: #341's, unchanged |
+| `search.gibbs.sample_factor_graph` 32x32: `conditional` 44.8% | 44.8% | not here: #341's, carried by [#561](https://github.com/michaelJwilson/snakes_and_ladders/issues/561) |
 | `search.maxflow.ising_ground_state` 32x32: `_augment` + `_levels` 65.5%; every other module's first entry is `torch`, `numpy` or a Rust kernel | --- | no: `maxflow_rust` already carries it, and nothing else ranks |
 | `alpha_expansion` median, 8x8 / 16x16 / 32x32 at 3 labels, Python -> Rust cut | 17.1 -> 3.5, 94.2 -> 14.2, 648.5 -> 60.3 ms | **4.82x, 6.66x, 10.76x** |
 
