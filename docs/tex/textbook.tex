@@ -2255,10 +2255,11 @@ early on the labels are nearly free and the chains and emission parameters are
 fitted to what the data alone supports, the spatial prior tightening as the
 classes separate. Its seeding step,
 \textsc{EmissionMixture++}, is $k$-means$++$ with the emission family's own
-negative log-density in place of squared Euclidean distance
-\citep{arthur2007}: candidates are drawn proportionally to how badly the
-current parameters explain them, constrained to the observations the current
-labels and states assign to the class being seeded. The $8(\ln K + 2)$
+Bregman divergence in place of squared Euclidean distance
+\citep{arthur2007,banerjee2005}: candidates are drawn proportionally to how
+badly the current parameters explain them \emph{relative to the best the
+family does at each}, constrained to the observations the current labels and
+states assign to the class being seeded. The $8(\ln K + 2)$
 expected-cost bound of $k$-means$++$ is a statement about squared distance and
 is not inherited; what is measured instead is recovery against a uniform start
 at an equal budget, over seeds, reported whether it wins or not.
@@ -3091,7 +3092,7 @@ solve several iterations later as a non-monotone outer likelihood, so it is
 propagated and refused on.
 
 The start is $\mathrm{Emission\_Mixture}{+}{+}$: Algorithm~\ref{alg:kmeanspp}
-with the family's own negative log-density in place of the squared distance of
+with the family's own Bregman divergence in place of the squared distance of
 Equation~\ref{eq:kmeanspp}. A component is placed \emph{on} an observation---
 its depth becomes the component's negative-binomial mean and its allele
 fraction, smoothed by a half-count, the beta-binomial's rate---and the two
@@ -3113,14 +3114,15 @@ Everything Section~\ref{sec:mixture} assumes is assumed here, with one
 difference that moves every cost in the section: the component's
 re-estimate is a bracketed solve rather than a formula
 (Algorithm~\ref{alg:baum-welch}, with the family's own maximization step).
-The seeding is Algorithm~\ref{alg:kmeanspp} with the family's negative
-log-density in place of the squared distance, which is not a refinement but
+The seeding is Algorithm~\ref{alg:kmeanspp} with the family's Bregman
+divergence in place of the squared distance, which is not a refinement but
 a necessity --- a squared distance between a depth and an allele count
-compares two quantities that share no units. It is the negative log-density
-and not the Bregman divergence, so the caution of
-Section~\ref{sec:mixture} applies: the two differ by the log normalizer, the
-sampling rule does not shift its scores, and which of the two a family is
-seeded under is a measurement rather than a detail.
+compares two quantities that share no units. The divergence and the negative
+log-density are different rules, on the terms Section~\ref{sec:mixture}
+states, and the beta-binomial is not an exponential family in its success
+count, so what stands in for the divergence there is the unit deviance it
+generalizes to: the log-density gap to the best rate the family admits at the
+observation, which is non-negative by construction.
 
 \paragraph{The cost is the family's, not the sample's.}
 Both shape parameters are found by bisection, at a few thousand score

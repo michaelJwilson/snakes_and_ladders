@@ -25,7 +25,7 @@ same blocks while the inverse temperature rises from zero, so the labels are
 nearly free while the chains and emissions are fitted to what the data alone
 supports, and the spatial prior tightens as the classes separate. Its
 seeding, ``Emission_Mixture++``, is k-means++ under the family's own
-negative log-density, in :mod:`snakes_and_ladders.opt.mixture`.
+Bregman divergence, in :mod:`snakes_and_ladders.opt.mixture`.
 """
 
 from __future__ import annotations
@@ -365,11 +365,17 @@ def label_accuracy(fitted: np.ndarray, planted: np.ndarray, n_classes: int) -> f
 def seed_emissions(
     params: SpatioSequentialParams, observations: np.ndarray, rng: np.random.Generator
 ) -> SpatioSequentialParams:
-    """``Emission_Mixture++`` for every class: seeds under the family's own negative log-density.
+    """``Emission_Mixture++`` for every class: seeds under the family's own divergence.
 
     A categorical family is seeded from symbols (a smoothed one-hot row per
     seed); a Gaussian one from values (the seed as the mean, the pooled scale).
     Other families keep their parameters, which the notebook records.
+
+    The Gaussian score is the Bregman divergence exactly. The categorical's
+    carries the smoothing constant its seeded row scores at the seed itself,
+    ``-log 0.9``, on top of the divergence; by #560's argument that does not
+    cancel, and it is left here because removing it moves the coupled model's
+    own start (issue #570).
     """
     emissions: list[EmissionFamily] = []
     flat = observations.reshape(-1)

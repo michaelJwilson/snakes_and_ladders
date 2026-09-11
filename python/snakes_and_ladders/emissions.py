@@ -219,6 +219,31 @@ class EmissionFamily(Protocol):
         """
         ...  # pragma: no cover
 
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """``D_phi(T(y), mu_state)``: the divergence of this family's log-partition.
+
+        The quantity ``Emission_Mixture++`` scores a candidate by
+        (``eq:kmeanspp``; Banerjee et al., 2005). An exponential family writes
+        ``p(y | theta) = exp(-D_phi(T(y), mu)) b_phi(T(y))``, so the divergence
+        is the negative log density **less** ``-log b_phi(T(y))``, the log
+        density's largest value over the family's own mean parameter, which
+        depends on the observation alone. D-squared sampling normalizes its
+        scores rather than shifting them, so that term is not a constant a
+        seeding absorbs (issue #560).
+
+        Parameters
+        ----------
+        observations : torch.Tensor
+            Observations, of the shape :meth:`log_density` takes.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``, non-negative, and zero at the state
+            whose mean parameter is the observation.
+        """
+        ...  # pragma: no cover
+
     def validate(self, observations: np.ndarray) -> None:
         """Raise if ``observations`` cannot have come from this family.
 
@@ -346,6 +371,21 @@ class CategoricalEmission:
     def log_density(self, observations: torch.Tensor) -> torch.Tensor:
         """Gather ``log B[:, symbol]`` for every observation."""
         return self._log_matrix.t()[observations]
+
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """``-log P(symbol | state)``: the best member puts all its mass on the symbol.
+
+        The categorical's mean parameter is its probability vector, and the
+        member matched to an observation is the point mass on that symbol,
+        which scores ``0``. The divergence is the negative log probability
+        itself --- the one family where the two rules agree.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        return -self.log_density(observations)
 
     def validate(self, observations: np.ndarray) -> None:
         """Raise if a symbol lies outside the alphabet."""
@@ -532,6 +572,40 @@ class GaussianEmission:
             )
         return scored
 
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """``((y - mu) / scale) ** 2 / 2``, summed over the channels.
+
+        A Gaussian of known scale has ``phi`` the squared norm over twice the
+        variance, so its divergence is the squared Euclidean distance up to
+        that positive factor, and D-squared sampling under it *is*
+        :func:`snakes_and_ladders.opt.mixture.kmeans_plus_plus`: normalizing
+        cancels a factor shared by every candidate. The identity is what pins
+        the rule exactly rather than approximately (issue #560).
+
+        Parameters
+        ----------
+        observations : torch.Tensor
+            Shape ``(...)`` for the single-channel family, ``(..., n_channels)``
+            otherwise.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        values = observations.to(self._mean.dtype)
+        if self._mean.ndim == 1:
+            return ((values.unsqueeze(-1) - self._mean) / self._scale) ** 2 / 2.0
+        divergence = _half_squared_z(
+            values[..., 0].unsqueeze(-1) - self._mean[:, 0], self._scale[:, 0]
+        )
+        for channel in range(1, self.n_channels):
+            divergence = divergence + _half_squared_z(
+                values[..., channel].unsqueeze(-1) - self._mean[:, channel],
+                self._scale[:, channel],
+            )
+        return divergence
+
     def validate(self, observations: np.ndarray) -> None:
         """Raise if an observation is not finite, or carries the wrong channels.
 
@@ -621,6 +695,11 @@ def _normal_log_density(centred: torch.Tensor, scale: torch.Tensor) -> torch.Ten
         - torch.log(scale)
         - 0.5 * (centred / scale) ** 2
     )
+
+
+def _half_squared_z(centred: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+    """``((y - mu) / s) ** 2 / 2``, the Gaussian's divergence in one channel."""
+    return (centred / scale) ** 2 / 2.0
 
 
 def _weighted_moments(
@@ -773,6 +852,30 @@ class NegativeBinomialEmission:
             + counts * torch.log(self._mean / total)
         )
 
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """``r log((r + mu) / (r + y)) + y log(y (r + mu) / (mu (r + y)))``.
+
+        At fixed dispersion the negative binomial is an exponential family in
+        its mean, and the ``lgamma`` terms of :meth:`log_density` are exactly
+        the ``log b_phi(y)`` the divergence drops: they depend on the count
+        and not on the state, so they cancel between the count's own member
+        and the state's. Zero at ``mu = y``, and ``r log((r + mu) / r)`` at
+        ``y = 0``.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        counts = observations.unsqueeze(-1).to(self._mean.dtype)
+        total = self._dispersion + self._mean
+        at_count = self._dispersion + counts
+        # `xlogy` rather than a product, so a count of zero contributes zero
+        # rather than the `0 * -inf` a bare `log` gives there.
+        return self._dispersion * torch.log(total / at_count) + torch.xlogy(
+            counts, counts * total / (self._mean * at_count)
+        )
+
     def validate(self, observations: np.ndarray) -> None:
         """Raise if an observation is not a non-negative integer."""
         _validate_counts(observations)
@@ -895,6 +998,20 @@ class PoissonEmission:
         """``y log(lambda) - lambda - log(y!)``."""
         counts = observations.unsqueeze(-1).to(self._mean.dtype)
         return counts * torch.log(self._mean) - self._mean - torch.lgamma(counts + 1.0)
+
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """``y log(y / lambda) - y + lambda``, the generalized I-divergence.
+
+        The ``log(y!)`` of :meth:`log_density` is ``log b_phi(y)`` and drops
+        out. Zero at ``lambda = y``, and ``lambda`` at ``y = 0``.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        counts = observations.unsqueeze(-1).to(self._mean.dtype)
+        return torch.xlogy(counts, counts / self._mean) - counts + self._mean
 
     def validate(self, observations: np.ndarray) -> None:
         """Raise if an observation is not a non-negative integer."""
@@ -1022,6 +1139,26 @@ class BinomialEmission:
             - torch.lgamma(self._trials - counts + 1.0)
             + counts * torch.log(self._probability)
             + (self._trials - counts) * torch.log1p(-self._probability)
+        )
+
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """``n`` times the Kullback-Leibler divergence of ``y / n`` from ``p``.
+
+        ``y log(y / (n p)) + (n - y) log((n - y) / (n (1 - p)))``: the
+        binomial coefficient is ``log b_phi(y)`` and drops out. Zero at
+        ``p = y / n``, and unbounded as ``p`` leaves the support's interior.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        counts = observations.unsqueeze(-1).to(self._trials.dtype)
+        remaining = self._trials - counts
+        return torch.xlogy(
+            counts, counts / (self._trials * self._probability)
+        ) + torch.xlogy(
+            remaining, remaining / (self._trials * (1.0 - self._probability))
         )
 
     def validate(self, observations: np.ndarray) -> None:
@@ -1172,6 +1309,23 @@ class BetaBinomialEmission:
         """``log C(n, y) + log B(y + a, n - y + b) - log B(a, b)``."""
         counts = observations.unsqueeze(-1).to(self._trials.dtype)
         return _beta_binomial_log_density(counts, self._trials, self._alpha, self._beta)
+
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """The log-density gap to the best rate at this concentration.
+
+        :func:`_beta_binomial_saturated` says why this is a deviance rather
+        than the divergence of a log-partition, and why it is non-negative.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        counts = observations.unsqueeze(-1).to(self._trials.dtype)
+        return _clamped_deviance(
+            _beta_binomial_saturated(counts, self._trials, self.concentration),
+            _beta_binomial_log_density(counts, self._trials, self._alpha, self._beta),
+        )
 
     def validate(self, observations: np.ndarray) -> None:
         """Raise if an observation is not an integer in ``[0, max(trials)]``."""
@@ -1458,6 +1612,40 @@ class CountPairEmission:
         )
         return torch.where(supported, scored, torch.full_like(scored, -float("inf")))
 
+    def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
+        """The two channels' divergences, summed as their log-densities are.
+
+        The channels are independent given the state, so the pair's divergence
+        is the total's negative-binomial divergence and the successes'
+        beta-binomial deviance added --- the same decomposition
+        :meth:`log_density` makes, with the same ``-inf`` on an unsupported
+        pair carried through as ``inf``, the divergence a pair no member of
+        the family can produce is at.
+
+        Parameters
+        ----------
+        observations : torch.Tensor
+            Shape ``(..., 2)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(..., n_states)``.
+        """
+        values = observations.to(self._alpha.dtype)
+        totals = values[..., 0].unsqueeze(-1)
+        successes = values[..., 1].unsqueeze(-1)
+        trials = totals if self._joint else self._success.trials
+        supported = successes <= trials
+        raised = torch.maximum(trials, successes)
+        divergence = self._total.bregman_divergence(values[..., 0]) + _clamped_deviance(
+            _beta_binomial_saturated(successes, raised, self.concentration),
+            _beta_binomial_log_density(successes, raised, self._alpha, self._beta),
+        )
+        return torch.where(
+            supported, divergence, torch.full_like(divergence, float("inf"))
+        )
+
     def validate(self, observations: np.ndarray) -> None:
         """Raise if the pairs are not counts, or a success count is impossible.
 
@@ -1611,6 +1799,89 @@ def _beta_binomial_log_density(
         + torch.lgamma(total)
         - torch.lgamma(alpha)
         - torch.lgamma(beta)
+    )
+
+
+def _clamped_deviance(saturated: torch.Tensor, scored: torch.Tensor) -> torch.Tensor:
+    """``saturated - scored``, floored at zero.
+
+    The gap is non-negative by construction --- ``saturated`` maximizes over a
+    family ``scored`` is a member of --- so the floor catches only the
+    bisection's own rounding at a state that is itself the best member, where
+    the difference of two equal numbers can land a few ulps below zero. A
+    negative score is not a small error to D-squared sampling: it is a
+    negative probability.
+    """
+    return torch.clamp(saturated - scored, min=0.0)
+
+
+#: How far inside the unit interval the saturated rate is held: one
+#: ``float64`` step, so that ``1 - rate`` is the step itself rather than zero.
+_RATE_FLOOR = 2.0**-52
+
+#: Bisection steps taken for the saturated rate. The bracket is the unit
+#: interval, so this halves it past ``float64``'s resolution on a rate and the
+#: root is found to the precision the search is carried in.
+_SATURATION_STEPS = 60
+
+
+def _rate_rise(shape: torch.Tensor, count: torch.Tensor) -> torch.Tensor:
+    """``psi(count + shape) - psi(shape)``, falling in ``shape`` for a positive count."""
+    return torch.digamma(count + shape) - torch.digamma(shape)
+
+
+def _beta_binomial_saturated(
+    counts: torch.Tensor, trials: torch.Tensor, concentration: torch.Tensor
+) -> torch.Tensor:
+    """The largest beta-binomial log-probability of ``counts``, at this concentration.
+
+    ``log b_phi(y)`` for a family that has no log-partition: a beta-binomial
+    at fixed concentration is a *compound* distribution and not an exponential
+    family in its success count, so the divergence it seeds under is the
+    **unit deviance** the Bregman divergence generalizes to --- the log-density
+    gap to the best member of the family at the observation, which for an
+    exponential family is the divergence of the log-partition exactly
+    (McCullagh & Nelder, 1989, ch. 2). Non-negativity, which D-squared
+    sampling needs, is by construction rather than by argument.
+
+    The rate attaining it solves ``psi(y + c p) - psi(c p) = psi(n - y + c (1 -
+    p)) - psi(c (1 - p))``, whose left side falls and whose right side rises in
+    ``p``, so the difference has one sign change and bisection converges on it.
+    At ``y = 0`` and ``y = n`` the root runs to the boundary, where the member
+    puts all its mass on the observation and the value is ``0``. The rate is
+    held one ``float64`` step inside the unit interval so that limit is
+    reached rather than stepped past: at a rate of exactly ``1`` the beta
+    parameter is ``0``, whose ``lgamma`` is infinite, and the difference of
+    two infinities is ``nan``.
+
+    Parameters
+    ----------
+    counts, trials, concentration : torch.Tensor
+        The successes, the trials they came from, and ``a + b``. Every
+        argument broadcasts, as :func:`_beta_binomial_log_density`'s do.
+
+    Returns
+    -------
+    torch.Tensor
+        The broadcast shape of the arguments.
+    """
+    # The broadcast shape, as an expression rather than as a shape: every
+    # argument enters the bisection anyway, so multiplying by zero is the
+    # cheapest way to give both brackets that shape.
+    low = 0.0 * counts * trials * concentration
+    high = low + 1.0
+    for _ in range(_SATURATION_STEPS):
+        rate = 0.5 * (low + high)
+        # Strictly inside the bracket at every step, so neither `digamma`
+        # argument reaches the pole at zero.
+        rising = _rate_rise(concentration * rate, counts) - _rate_rise(
+            concentration * (1.0 - rate), trials - counts
+        )
+        low = torch.where(rising > 0.0, rate, low)
+        high = torch.where(rising > 0.0, high, rate)
+    rate = torch.clamp(0.5 * (low + high), min=_RATE_FLOOR, max=1.0 - _RATE_FLOOR)
+    return _beta_binomial_log_density(
+        counts, trials, concentration * rate, concentration * (1.0 - rate)
     )
 
 

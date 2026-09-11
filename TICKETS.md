@@ -60,6 +60,9 @@ parenthesis the only way a ticket is cited.
   range (#405)
 - Trajectory-length adaptation (NUTS), only if the #268 comparison reaches a
   posterior #333's fixed trajectory length samples badly
+- Score a categorical class's `Emission_Mixture++` seeding with its Bregman
+  divergence rather than the divergence plus the smoothing constant its seeded
+  row carries, #560's defect one module over (#570)
 - Spectral seeding of the emission parameters, the candidate #541 named and
   could not run (#554)
 - Score the seedings on the coupled fit at the key instance, the second of
@@ -67,13 +70,6 @@ parenthesis the only way a ticket is cited.
 - Find where the projected likelihood stops disagreeing with the simulated
   truth about which seeding is better, between 40 and 1,000 observations a
   component (#559)
-- Seed `Emission_Mixture++` with the family's Bregman divergence rather than
-  its negative log-density. #548 measured the two on a Gaussian, where the
-  divergence is the squared distance exactly: 1.85 times the optimal
-  clustering cost against 3.91, uniform seeding being 4.35. The log
-  normalizer is an additive constant, D-squared sampling normalizes rather
-  than shifts, and what a count family's normalizer costs #541's candidate 3
-  is the measurement that decides whether this is a defect or a difference
 - Adapt the leapfrog step size of a seeding chain to the instance. #548 ran
   `opt.hmc.sample`, `anneal` and `parallel_tempering` at one fixed step across
   two sample sizes: acceptance 1.000 over 500 observations and 0.000 over

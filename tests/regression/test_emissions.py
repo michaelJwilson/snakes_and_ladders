@@ -750,3 +750,201 @@ def test_the_bounded_families_refuse_a_count_above_their_trials() -> None:
         BinomialEmission([2.5], [0.5])
     with pytest.raises(ValueError, match="mean must be positive"):
         PoissonEmission([0.0])
+
+
+#: Step the log-partition's derivative is taken over, in the natural
+#: parameter. A central difference, so the truncation error falls as the step
+#: squared --- 1.6e-7 relative at the largest count here at a step of 1e-4,
+#: and 1.6e-9 at this one --- while the cancellation in the subtraction grows
+#: as the step's reciprocal, which here is still 2e-12.
+DIFFERENCE_STEP = 1e-5
+
+#: Relative agreement required between a family's divergence and the finite
+#: difference. Relative, because the divergence grows with the count
+#: (``DEV.md``, issue #111), and set by the step above rather than by what
+#: passes.
+DIVERGENCE_TOLERANCE = 1e-7
+
+#: How far a rate may score above the saturated value before the beta-binomial
+#: deviance is wrong rather than rounded.
+SATURATION_SLACK = 1e-12
+
+
+def _negative_binomial_natural(mean: np.ndarray, dispersion: float) -> np.ndarray:
+    """``theta = log(mu / (mu + r))``, the negative binomial's natural parameter."""
+    return np.asarray(np.log(mean / (mean + dispersion)))
+
+
+def _poisson_natural(mean: np.ndarray, _: float) -> np.ndarray:
+    """``theta = log(lambda)``."""
+    return np.asarray(np.log(mean))
+
+
+def _negative_binomial_log_partition(
+    natural: np.ndarray, dispersion: float
+) -> np.ndarray:
+    """``A(theta) = -r log(1 - exp(theta))`` at fixed dispersion."""
+    return np.asarray(-dispersion * np.log1p(-np.exp(natural)))
+
+
+def _poisson_log_partition(natural: np.ndarray, _: float) -> np.ndarray:
+    """``A(theta) = exp(theta)``."""
+    return np.asarray(np.exp(natural))
+
+
+@pytest.mark.oracle
+def test_a_count_divergence_is_the_finite_difference_bregman_of_its_log_partition() -> (
+    None
+):
+    # The general case of issue #560's correction, refereed where the
+    # Gaussian's collapse to squared Euclidean says nothing. A count family at
+    # fixed shape is an exponential family in its mean, so the quantity
+    # `Emission_Mixture++` scores by is
+    #
+    #     D(y, mu) = A(theta(mu)) - A(theta(y)) - A'(theta(y)) (theta(mu) - theta(y)),
+    #
+    # the Bregman divergence of the log-partition between the state's natural
+    # parameter and the observation's. Here `A` is evaluated as a formula and
+    # `A'` by central difference, so nothing the family computes is reused:
+    # the oracle shares no line with `bregman_divergence`.
+    counts = np.array([1.0, 3.0, 8.0, 25.0])
+    for family, log_partition, natural_of, shape in (
+        (
+            NegativeBinomialEmission([4.0, 4.0], [2.0, 11.0]),
+            _negative_binomial_log_partition,
+            _negative_binomial_natural,
+            4.0,
+        ),
+        (PoissonEmission([2.0, 11.0]), _poisson_log_partition, _poisson_natural, 0.0),
+    ):
+        divergence = family.bregman_divergence(torch.as_tensor(counts)).numpy()
+        at_count = natural_of(counts, shape)
+        slope = (
+            log_partition(at_count + DIFFERENCE_STEP, shape)
+            - log_partition(at_count - DIFFERENCE_STEP, shape)
+        ) / (2.0 * DIFFERENCE_STEP)
+        # The derivative of the log-partition is the mean, and at the
+        # observation's own parameter that mean is the observation: the
+        # identity the seeding rests on, checked before it is used.
+        assert_allclose(slope, counts, rtol=DIVERGENCE_TOLERANCE)
+        for state, mean in enumerate(family.mean.numpy()):
+            at_state = natural_of(np.full_like(counts, float(mean)), shape)
+            expected = (
+                log_partition(at_state, shape)
+                - log_partition(at_count, shape)
+                - slope * (at_state - at_count)
+            )
+            assert_allclose(divergence[:, state], expected, rtol=DIVERGENCE_TOLERANCE)
+
+
+@pytest.mark.mathematical
+def test_the_beta_binomial_divergence_is_the_gap_to_the_best_rate_it_admits() -> None:
+    # The beta-binomial is a compound distribution, not an exponential family
+    # in its success count, so it has no log-partition and the test above has
+    # nothing to difference. What `bregman_divergence` returns there is the
+    # unit deviance the divergence generalizes to --- the log-density gap to
+    # the best member of the family at the observation --- and what that
+    # claims is checkable by search: no rate at the same concentration and
+    # trials scores the observation higher than the gap says.
+    family = BetaBinomialEmission(TRIALS, [2.0, 6.0], [6.0, 2.0])
+    counts = torch.arange(0.0, float(TRIALS[0]) + 1.0)
+    divergence = family.bregman_divergence(counts)
+    scored = family.log_density(counts)
+    assert float(divergence.min()) >= 0.0
+    concentration = family.concentration.numpy()
+    for state in range(family.n_states):
+        saturated = (scored[:, state] + divergence[:, state]).numpy()
+        total = float(concentration[state])
+        for rate in np.linspace(1e-6, 1.0 - 1e-6, 2001):
+            alternative = BetaBinomialEmission(
+                [TRIALS[state]], [total * rate], [total * (1.0 - rate)]
+            )
+            # `float64` rounding at the maximum itself, where the two
+            # numbers are the same number: the realized overshoot is 4.4e-16,
+            # and a strict inequality would pin the arithmetic rather than
+            # the claim.
+            assert np.all(
+                alternative.log_density(counts)[:, 0].numpy()
+                <= saturated + SATURATION_SLACK
+            )
+    # At a count of zero or of every trial the best member puts all its mass
+    # there, so the gap is the negative log probability itself.
+    for edge in (0, -1):
+        assert_allclose(divergence[edge].numpy(), -scored[edge].numpy(), rtol=1e-12)
+
+
+@pytest.mark.mathematical
+def test_every_family_scores_zero_divergence_at_its_own_mean() -> None:
+    # What makes the divergence a distance to a component rather than a
+    # likelihood: it vanishes where the state is the family's best member for
+    # the observation, so D-squared sampling never redraws a seed it has
+    # already taken. The Gaussian carries the same property at its mean, where
+    # the negative log density it replaced is `log(scale) + log(2 pi) / 2`
+    # instead --- the term that diluted the rule.
+    for family in (
+        GaussianEmission(MEAN, SCALE, FLOOR),
+        NegativeBinomialEmission([4.0, 9.0], MEAN + 6.0),
+        PoissonEmission(MEAN + 6.0),
+        BinomialEmission(TRIALS, [0.25, 0.5]),
+    ):
+        at_mean = family.mean.numpy()
+        divergence = family.bregman_divergence(torch.as_tensor(at_mean)).numpy()
+        assert_allclose(np.diagonal(divergence), np.zeros(family.n_states), atol=1e-12)
+        assert float(divergence.min()) >= 0.0
+
+
+@pytest.mark.mathematical
+def test_a_categorical_divergence_is_its_negative_log_probability() -> None:
+    # The one family where the corrected rule and the rule it replaced agree,
+    # and the reason is that its ``log b_phi`` is zero: the member matched to
+    # a symbol is the point mass on that symbol, which scores it at
+    # probability one. Nothing is subtracted, so #560 moves nothing here --- a
+    # claim worth pinning, because a seeding of a categorical emission that
+    # changed under the correction would say the correction was wrong.
+    family = CategoricalEmission(MATRIX)
+    symbols = torch.arange(MATRIX.shape[1])
+    divergence = family.bregman_divergence(symbols)
+    assert_allclose(
+        divergence.numpy(), -family.log_density(symbols).numpy(), rtol=1e-12
+    )
+    assert float(divergence.min()) >= 0.0
+    certain = CategoricalEmission(np.eye(MATRIX.shape[1]))
+    assert_allclose(
+        np.diagonal(certain.bregman_divergence(symbols).numpy()),
+        np.zeros(MATRIX.shape[1]),
+        atol=1e-12,
+    )
+
+
+@pytest.mark.mathematical
+def test_a_multi_channel_gaussian_divergence_whitens_each_channel() -> None:
+    # Why the identity with `opt.mixture.kmeans_plus_plus` is a *one-scale*
+    # identity. Each channel enters divided by its own scale, so with equal
+    # scales the divergence is the squared Euclidean distance over twice the
+    # variance --- a factor D-squared sampling normalizes away --- and with
+    # unequal scales it is a different rule, which is what separates the two
+    # on the two-channel rung of `docs/experiments/010` (issue #560).
+    observations = torch.as_tensor([[1.0, 8.0], [-3.0, 0.0]])
+    located = np.array([[0.0, 0.0], [2.0, 5.0]])
+    equal = GaussianEmission(located, np.full((2, 2), 2.0), FLOOR)
+    squared = ((observations[:, None, :] - equal.mean) ** 2).sum(dim=-1)
+    assert_allclose(
+        equal.bregman_divergence(observations).numpy(),
+        (squared / (2.0 * 4.0)).numpy(),
+        rtol=1e-12,
+    )
+    unequal = GaussianEmission(located, np.array([[2.0, 0.5], [2.0, 0.5]]), FLOOR)
+    divergence = unequal.bregman_divergence(observations).numpy()
+    # Not the squared distance times any single factor: the second channel is
+    # sixteen times the first's weight here, so no rescaling reconciles them.
+    ratios = divergence / (squared / (2.0 * 4.0)).numpy()
+    assert ratios.max() > 4.0 * ratios.min(), ratios
+    assert_allclose(
+        divergence,
+        ((observations[:, None, :] - unequal.mean) / unequal.scale)
+        .pow(2)
+        .sum(dim=-1)
+        .numpy()
+        / 2.0,
+        rtol=1e-12,
+    )
