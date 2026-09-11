@@ -14,6 +14,7 @@
         "restarts": 50,
         "seeds": 16
       },
+      "rtol": null,
       "seed": 20260908,
       "value": 0.07875000000000001
     },
@@ -25,6 +26,7 @@
         "restarts": 50,
         "seeds": 16
       },
+      "rtol": null,
       "seed": 20260908,
       "value": 0.022481336704030748
     },
@@ -34,6 +36,7 @@
         "nodes": 18,
         "states": 2
       },
+      "rtol": null,
       "seed": null,
       "value": -14.0
     },
@@ -43,6 +46,7 @@
         "frustration": 0.3,
         "nodes": 18
       },
+      "rtol": null,
       "seed": 20260908,
       "value": -7.0
     },
@@ -54,6 +58,7 @@
         "restarts": 50,
         "seeds": 16
       },
+      "rtol": null,
       "seed": 20260908,
       "value": 1.0
     }
