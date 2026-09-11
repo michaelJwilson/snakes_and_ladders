@@ -1445,11 +1445,15 @@ The two-channel rung this was sized against —
 `spatio_sequential_counts/stress.yaml` at bin factor 5 — **is declared and not
 run**: one expectation-maximization iteration over it holds four
 (20,164,000 x 10) float64 arrays, 1.613 GB for the responsibilities alone, and
-peak resident set measured 2,165 MiB at 5,041,000 observations against 695 MiB
-at 500,000, so 344 MiB per million above a 430 MiB floor and 7.4 GiB at the
-full size, against 8 GiB free on the 15 GiB host. The comparison runs at bin
-factor 40, 504,100 observations, which is the largest whose simulate-fit-assert
-run fits the 120 s key cap at 62.4 s.
+peak resident set measured 2,169 MiB at 5,041,000 observations against 682 MiB
+at 500,000, so 328 MiB per million above a 518 MiB floor and 7.0 GiB at the
+full size, against 8 GiB free on the 15 GiB host. One iteration takes 9.473 s
+and 0.917 s at those two sizes, so 38 s at the full size and 25 min for one
+40-evaluation fit. The comparison runs at bin factor 40, 504,100 observations,
+the largest whose simulate-fit-assert run fits the 120 s key cap, at **36.7 s**.
+Those four numbers were taken on the 4-core host at a 1-minute load of 0.90
+with one BLAS thread and no other job; the comparison's own wall clock, 79 min
+57 s and 60 min 29 s over two runs, was not, and is an upper bound.
 
 **The nine seedings, at 40 evaluations of expectation-maximization each.**
 Every candidate is #541's, unchanged, so the two studies are comparable. The
@@ -1457,8 +1461,8 @@ fit is budget-matched through `opt.budget.compare` and the seeding is not, so
 each seeding's own cost is reported in the fit's unit and as a fraction of it.
 Left, `mixture/ci.yaml` over 40 shared starts; right, the two-channel rung over
 8, which is what nine fits over 504,100 observations allow — the run took
-79 min 57 s, so 40 starts would be the whole release tier and the paired test
-is correspondingly weak there.
+79 min 57 s and 60 min 29 s on a contended host, so 40 starts would be the
+whole release tier and the paired test is correspondingly weak there.
 
 | seeding | ci hits of 40 | ci mean gap | ci recovery | key hits of 8 | key mean gap | key recovery | seeding cost, evaluations |
 | --- | --- | --- | --- | --- | --- | --- | --- |

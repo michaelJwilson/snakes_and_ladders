@@ -75,14 +75,15 @@ tolerance: 0.01
 # **The fine instance is declared and not run.** One expectation-maximization
 # iteration over 20,164,000 observations under ten components holds four
 # (n_samples, n_components) float64 arrays: the responsibilities alone are
-# 1.613 GB. Measured peak resident set for one iteration is 2,165 MiB at
-# 5,041,000 observations against 695 MiB at 500,000, which is 344 MiB per
-# million above a 430 MiB floor and so 7.4 GiB at the full size -- against the
-# 8 GiB free on the 15 GiB reference host. The cost per iteration scales with
-# it: the fine instance is 40x the `key` instance's, so the nine-row
-# comparison this fixture exists for is 40x its release-tier cost. The `key`
-# factor is the largest whose simulate-fit-assert run fits
-# SAL_KEY_DURATION_CAP.
+# 1.613 GB. Measured peak resident set for one iteration is 2,169 MiB at
+# 5,041,000 observations against 682 MiB at 500,000, which is 328 MiB per
+# million above a 518 MiB floor and so 7.0 GiB at the full size -- against the
+# 8 GiB free on the 15 GiB reference host. One iteration takes 9.473 s and
+# 0.917 s at those two sizes, so 38 s at the full size and 25 min for a
+# 40-evaluation fit; the nine-row comparison this fixture exists for is 40x
+# its release-tier cost. Measured on the 4-core host at a 1-minute load of
+# 0.90 with one BLAS thread. The `key` factor is the largest whose
+# simulate-fit-assert run fits SAL_KEY_DURATION_CAP, at 36.7 s of its 120 s.
 bin:
   - factor: 1000
     marker: ci
