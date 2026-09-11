@@ -90,7 +90,7 @@ LADDER = (1.0, 2.0, 4.0, 8.0)
 N_STEPS = 10
 #: The largest step at which every chain accepted at least 0.9 of proposals on
 #: the refereed rung: 0.05 accepted 0.25 and 0.03 diverged to a worse point,
-#: measured over the step decades in `docs/experiments/009`.
+#: measured over the step decades in `docs/experiments/010`.
 STEP_SIZE = 0.01
 #: Objective calls per Hamiltonian proposal: two Hamiltonians, the trajectory,
 #: and the value where the chain landed.
@@ -629,7 +629,7 @@ class Measurement:
         )
 
     def table(self) -> str:
-        """The rows `docs/experiments/009` and `STATUS.md` carry."""
+        """The rows `docs/experiments/010` and `STATUS.md` carry."""
         hits = self.hits()
         gaps = self.comparison.mean_gap()
         n_instances = self.comparison.reference.shape[0]
@@ -844,7 +844,7 @@ KEY_STARTS = 8
 @pytest.mark.release
 @pytest.mark.simulated_truth
 def test_the_ordering_on_the_refereed_rung() -> None:
-    # One of the two orderings `docs/experiments/009` reports: every candidate
+    # One of the two orderings `docs/experiments/010` reports: every candidate
     # on the rung where `optimal_clustering_cost` referees a seeding and forty
     # starts are affordable, so the paired test has power.
     measurement = measure(instance_of(fixture("mixture", "ci").params), CI_STARTS)
@@ -853,7 +853,7 @@ def test_the_ordering_on_the_refereed_rung() -> None:
     print(measurement.diagnostics())
     print("ordering:", " > ".join(measurement.ordering()))
     assert measurement.comparison.spent.max() <= BUDGET.size
-    # Realized, and pinned because `docs/experiments/009` reports it: only the
+    # Realized, and pinned because `docs/experiments/010` reports it: only the
     # two chain candidates reach the referee at all, and each pays more than
     # the whole fit budget to do it.
     assert measurement.hits() == {

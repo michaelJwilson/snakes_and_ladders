@@ -323,8 +323,10 @@ def _seed_scores(
     **1.85** times the exact optimum and under the negative log density
     **3.91**, against uniform seeding's 4.35
     (``tests/regression/opt/test_opt_mixture_seeding.py``,
-    ``docs/experiments/009``). Whether that costs a count mixture anything is
-    #541's measurement to make and is not assumed here.
+    ``docs/experiments/010``). On the count mixture #541 measures, the two end
+    level --- 20.5 nats against squared Euclidean's 20.4 at six passes --- so
+    the normalizer moves where a seeding lands without moving which basin the
+    fit reaches at that size.
     """
     rows = np.asarray(observations, dtype=np.float64)
 
