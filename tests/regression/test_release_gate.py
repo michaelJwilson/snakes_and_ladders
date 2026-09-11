@@ -12,12 +12,18 @@ tests are for.
 The ordering is checked as well as the flags. `infra/build_documents.sh`
 renders a stale cited figure *into* `docs/tex/figures/`, so a comparison run
 after it compares a rebuild against bytes that build had just written.
+
+The same two steps are also where the gate paid for the manifest twice
+(issue #530), so what the ordering allows and what the gate spends are
+pinned together: the comparison comes first, and because it did, the build
+after it is told not to render.
 """
 
 from __future__ import annotations
 
 import re
 import shlex
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -25,6 +31,7 @@ from snakes_and_ladders.qa.manifest import FIGURES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_GATE = REPO_ROOT / "infra" / "release.sh"
+BUILD_DOCUMENTS = REPO_ROOT / "infra" / "build_documents.sh"
 
 #: `RELEASE.md`'s rounded bound on the whole-manifest figure pass, in minutes.
 _FIGURE_PASS_BOUND = re.compile(
@@ -109,6 +116,55 @@ def test_the_figures_are_compared_before_the_document_build_rewrites_them() -> N
         "infra/release.sh compares the figures after infra/build_documents.sh "
         "has rendered them into docs/tex/figures/, so the comparison is "
         "against its own output (issue #484)"
+    )
+
+
+@pytest.mark.structural
+@pytest.mark.critical
+def test_the_gate_renders_each_figure_once() -> None:
+    """The document build is told not to render what the step before it did.
+
+    Both steps rendered the whole manifest until issue #530. The figure step
+    compares every entry against the committed bytes, so those bytes *are* a
+    fresh render; a second pass can only write them back. The stamps that once
+    let it skip most of that are deleted (issue #490) and issue #492 left
+    every entry cited, so the two selections are the same 23 entries and the
+    gate paid the manifest's declared total twice.
+    """
+    _, command = _step_named("documents")
+    assert "--no-figures" in command, (
+        "the release gate's document build renders every figure the step "
+        "before it has already rendered and compared (issue #530)"
+    )
+
+
+@pytest.mark.structural
+def test_the_build_script_renders_the_figures_unless_it_is_told_not_to() -> None:
+    """`--no-figures` is one caller's flag, not the script's default.
+
+    The `documents` job on the push to `main` runs the script with no
+    arguments and must still render; only the release gate, which has just
+    compared every figure, may skip. An unknown argument is refused rather
+    than ignored, so a typo cannot silently turn the render off.
+    """
+    script = BUILD_DOCUMENTS.read_text()
+    assert "--no-figures) figures=0" in script
+    assert 'if [ "$figures" -eq 1 ]; then' in script, (
+        "the figure pass in infra/build_documents.sh is unconditional, so "
+        "--no-figures does not reach it (issue #530)"
+    )
+
+    refused = subprocess.run(
+        ["bash", str(BUILD_DOCUMENTS), "--render-everything-twice"],
+        capture_output=True,
+        check=False,
+    )
+    assert refused.returncode == 2, refused.stderr.decode()
+
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "infra/build_documents.sh --no-figures" not in workflow, (
+        "the documents job skips the render, so nothing regenerates the "
+        "figures it typesets (issue #530)"
     )
 
 

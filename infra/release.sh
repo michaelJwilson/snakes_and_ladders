@@ -85,7 +85,20 @@ run_check "generated ledgers" infra/ledgers.sh --check
 # snakes_and_ladders.qa.build, so this needs no environment of its own.
 run_check "QA figures (every figure)" \
   uv run python -m snakes_and_ladders.qa.build --all --check
-run_check "documents" infra/build_documents.sh
+# `--no-figures`, because the step above just rendered the whole manifest and
+# compared every byte of it against `docs/tex/figures/`. A second render can
+# only write those same bytes back, and until issue #530 the gate paid for it:
+# the stamps that let this pass skip most of the work are deleted (issue
+# #490) and issue #492 left every manifest entry cited, so both passes were
+# the same 431.8 s over the same 23 entries. What is left here is the
+# applicability tables, the citation check and `latexmk`.
+#
+# When the comparison fails, the figures in the tree are *not* what a render
+# produces, and the remedy `--check` names is to run this script without the
+# flag and commit what it writes. The gate does not do that for you: it has
+# already failed, and a check that rewrites the tree on its way out leaves a
+# releaser unable to see what it found.
+run_check "documents" infra/build_documents.sh --no-figures
 # The baseline numbers beside each fixture are read per pull request and
 # recomputed here (issue #401), the same trade the figures make above: the
 # tests that used to compute an enumerated maximum or a hill-climbing rate
