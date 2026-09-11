@@ -114,12 +114,6 @@ FIGURES: tuple[FigureSpec, ...] = (
         ("--params", f"{FIXTURES}/tree_jc/stress.yaml"),
         seconds=2.7,
     ),
-    FigureSpec(
-        "jc_transition",
-        "snakes_and_ladders.qa.jc_transition",
-        ("--params", f"{FIXTURES}/tree_jc/stress.yaml"),
-        seconds=2.7,
-    ),
     # Brute-force marginalization costs k**m for m internal nodes, so this
     # runs on the 4-taxon fixture and nowhere larger.
     FigureSpec(
