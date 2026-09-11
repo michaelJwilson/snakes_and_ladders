@@ -226,6 +226,53 @@ def aggregate(family: IndependentCountPair, factor: int) -> IndependentCountPair
     )
 
 
+def binned_model(params: SpatioSequentialParams, factor: int) -> SpatioSequentialParams:
+    """The model a bin factor puts the data under, without drawing the data.
+
+    :func:`coarsen` needs the fine draw --- 384.6 MiB and 33 s at the declared
+    5,041-vertex instance --- and a caller that wants only the parameters
+    should not pay for it. :func:`aggregate` per class, and the position count
+    divided.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        The fine model, its emissions :class:`IndependentCountPair`.
+    factor : int
+        Positions per bin, dividing ``n_positions``.
+
+    Returns
+    -------
+    SpatioSequentialParams
+        The model at this factor.
+
+    Raises
+    ------
+    ValueError
+        If the factor does not divide the positions, or a family is not the
+        two-channel count emission :func:`aggregate` is defined for.
+    """
+    if factor < 1 or params.n_positions % factor:
+        msg = f"bin factor {factor} does not divide {params.n_positions} positions"
+        raise ValueError(msg)
+    for family in params.emissions:
+        if not isinstance(family, IndependentCountPair):
+            msg = (
+                f"binning is defined for the two-channel count emission, not for "
+                f"{type(family).__name__}"
+            )
+            raise ValueError(msg)
+    return replace(
+        params,
+        n_positions=params.n_positions // factor,
+        emissions=tuple(
+            aggregate(family, factor)
+            for family in params.emissions
+            if isinstance(family, IndependentCountPair)
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class BinInstance:
     """One of the instances a count-pair fixture declares.
