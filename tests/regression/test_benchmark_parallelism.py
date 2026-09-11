@@ -37,10 +37,19 @@ BENCHMARKS = REPO_ROOT / "tests" / "benchmarks"
 SUBJECT = BENCHMARKS / "test_numerics_rust_bench.py"
 
 
-def _pytest(*arguments: str, **environment: str) -> subprocess.CompletedProcess[bytes]:
-    """Run pytest in a subprocess, with the repository as its working directory."""
+def _distributed_pytest(
+    *arguments: str, **environment: str
+) -> subprocess.CompletedProcess[bytes]:
+    """Run a distributed pytest in a subprocess, rooted at the repository.
+
+    Skips where `pytest-xdist` is absent: it is in the `test` extra, which CI
+    installs, and an environment synced without that extra cannot start the
+    run these two tests are about. The three tests that read the tree do not
+    go through here and always run.
+    """
     import os
 
+    pytest.importorskip("xdist")
     return subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *arguments],
         cwd=REPO_ROOT,
@@ -55,7 +64,7 @@ def _pytest(*arguments: str, **environment: str) -> subprocess.CompletedProcess[
 def test_a_benchmark_under_xdist_fails_instead_of_measuring_nothing() -> None:
     """The guard fires, and says why, rather than passing 212 empty timings."""
     assert SUBJECT.is_file(), "the guard's subject moved; name another benchmark"
-    result = _pytest(str(SUBJECT.relative_to(REPO_ROOT)), "-n", "2")
+    result = _distributed_pytest(str(SUBJECT.relative_to(REPO_ROOT)), "-n", "2")
 
     assert result.returncode != 0, result.stdout.decode()
     assert DISTRIBUTED_BENCHMARK in result.stdout.decode()
@@ -64,7 +73,7 @@ def test_a_benchmark_under_xdist_fails_instead_of_measuring_nothing() -> None:
 @pytest.mark.structural
 def test_a_capped_run_under_xdist_fails_instead_of_passing_every_cap() -> None:
     """The cap is read where the durations are not, so a capped run refuses `-n`."""
-    result = _pytest(
+    result = _distributed_pytest(
         "tests/regression/test_numerics.py", "-n", "2", SAL_DURATION_CAP="10"
     )
 
