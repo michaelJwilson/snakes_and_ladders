@@ -21,13 +21,51 @@ type from here but draws no data itself.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
 
 from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.fixtures import load_declared
+
+
+@dataclass(frozen=True)
+class BinInstance:
+    """One declared instance of a fixture: a decimation factor and its tier.
+
+    The counterpart of :class:`snakes_and_ladders.sim.count_pairs.BinInstance`,
+    and it is the same declaration the registry reads to find a problem's key
+    instance. **What a coarse instance is differs with the model.** A
+    spatio-sequential fixture *sums* ``factor`` consecutive positions, because
+    the positions are coupled and a sum is the coarser observation. A mixture's
+    observations are independent, so there is nothing to sum: the coarse
+    instance is ``n_samples // factor`` draws from the same generating
+    parameters, which is distributed exactly as a subsample of the fine draw
+    and costs a fraction of it.
+
+    Parameters
+    ----------
+    factor : int
+        Draws of the fine instance per draw of this one, ``>= 1``. ``1`` is
+        the fine instance the file declares.
+    marker : str
+        The tier the full test at this factor runs in, measured rather than
+        assumed (``DEV.md``, CI & Performance Budget).
+
+    Raises
+    ------
+    ValueError
+        If the factor is below one.
+    """
+
+    factor: int
+    marker: str
+
+    def __post_init__(self) -> None:
+        if self.factor < 1:
+            msg = f"a bin holds at least one draw, got {self.factor}"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -42,7 +80,9 @@ class MixtureParams:
         of the model, and leaving it in would make the fitted parameter for it
         undefined rather than merely uncertain.
     components : GaussianEmission
-        The per-component mean and scale.
+        The per-component mean and scale. A family carrying a channel axis
+        makes every observation a vector, and the mixture is then over that
+        many dimensions (issue #548).
     n_samples : int
         Observations to draw.
     seed : int
@@ -50,6 +90,9 @@ class MixtureParams:
     tolerance : float
         Absolute tolerance a validation test checks simulated frequencies
         against their analytic counterpart within.
+    bins : tuple[BinInstance, ...]
+        The coarser instances the file declares, coarsest last; empty where
+        the file declares one size only.
 
     Raises
     ------
@@ -63,6 +106,7 @@ class MixtureParams:
     n_samples: int
     seed: int
     tolerance: float
+    bins: tuple[BinInstance, ...] = ()
 
     def __post_init__(self) -> None:
         weights = np.asarray(self.weights, dtype=np.float64)
@@ -84,6 +128,38 @@ class MixtureParams:
         """Components in the mixture."""
         return self.components.n_states
 
+    @property
+    def n_channels(self) -> int:
+        """Entries an observation carries; ``1`` for a scalar observation."""
+        return self.components.n_channels
+
+    def at(self, marker: str) -> MixtureParams:
+        """The declared instance carrying ``marker``, at its own sample count.
+
+        Parameters
+        ----------
+        marker : str
+            The tier the instance was declared for.
+
+        Returns
+        -------
+        MixtureParams
+            The same generating parameters over ``n_samples // factor`` draws.
+
+        Raises
+        ------
+        KeyError
+            If no declared instance carries the marker.
+        """
+        for instance in self.bins:
+            if instance.marker == marker:
+                return replace(
+                    self, n_samples=self.n_samples // instance.factor, bins=()
+                )
+        declared = [instance.marker for instance in self.bins]
+        msg = f"no instance marked {marker!r}; the file declares {declared}"
+        raise KeyError(msg)
+
 
 @dataclass(frozen=True)
 class SimulatedMixtureDataset:
@@ -94,7 +170,8 @@ class SimulatedMixtureDataset:
     labels : np.ndarray
         Component that produced each observation, shape ``(n_samples,)``.
     observations : np.ndarray
-        The observations, shape ``(n_samples,)``.
+        The observations, shape ``(n_samples,)``, or ``(n_samples, channels)``
+        where the components carry a channel axis.
     weights : np.ndarray
         The generating mixing weights.
     components : GaussianEmission
@@ -176,6 +253,10 @@ def load_mixture_params(path: Path) -> MixtureParams:
     if means.shape != scales.shape:
         msg = f"{path}: means have shape {means.shape}, scales {scales.shape}"
         raise ValueError(msg)
+    bins = tuple(
+        BinInstance(factor=int(entry["factor"]), marker=str(entry["marker"]))
+        for entry in raw.get("bin", ())
+    )
 
     return MixtureParams(
         weights=np.asarray(raw["weights"], dtype=np.float64),
@@ -183,4 +264,5 @@ def load_mixture_params(path: Path) -> MixtureParams:
         n_samples=int(raw["n_samples"]),
         seed=int(raw["seed"]),
         tolerance=float(raw["tolerance"]),
+        bins=bins,
     )

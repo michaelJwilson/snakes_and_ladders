@@ -311,6 +311,22 @@ def _seed_scores(
     seed a component on half of one. The scores are negative log-probabilities
     of a discrete family, so they are non-negative, as the sampling rule
     needs.
+
+    **The negative log density is not the family's Bregman divergence, and
+    the difference does not cancel** (issue #548). The divergence of the
+    log-partition is the log density less its value at the seed; what is
+    scored here carries the log normalizer as well, and D-squared sampling
+    normalizes its scores rather than shifting them, so an additive constant
+    dilutes the rule toward uniform in proportion to its size against a
+    typical divergence. Measured on a Gaussian, where the divergence is the
+    squared Euclidean distance exactly: seeding under the divergence costs
+    **1.85** times the exact optimum and under the negative log density
+    **3.91**, against uniform seeding's 4.35
+    (``tests/regression/opt/test_opt_mixture_seeding.py``,
+    ``docs/experiments/010``). On the count mixture #541 measures, the two end
+    level --- 20.5 nats against squared Euclidean's 20.4 at six passes --- so
+    the normalizer moves where a seeding lands without moving which basin the
+    fit reaches at that size.
     """
     rows = np.asarray(observations, dtype=np.float64)
 

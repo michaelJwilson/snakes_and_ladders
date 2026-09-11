@@ -1458,6 +1458,113 @@ the same test runs per pull request and pins the ordering. The paired test
 per-start hits, exact rather than chi-square, because 40 starts cannot support
 the approximation.
 
+**Eight ways to seed a Gaussian mixture, and the control that named the
+difference.**
+[#548](https://github.com/michaelJwilson/snakes_and_ladders/issues/548) ran
+[#541](https://github.com/michaelJwilson/snakes_and_ladders/issues/541)'s
+seeding comparison on a Gaussian instead of on counts, because a Gaussian is
+where #541's candidate 3 predicts no gain: the Bregman divergence of an
+isotropic Gaussian's log-partition *is* the squared Euclidean distance
+([`docs/experiments/010`](docs/experiments/010-gaussian-mixture-seeding-control.md)).
+**It wins on neither rung, and the reason is that candidate 3 never ran the
+divergence.**
+Over 200 seedings of `mixture/ci.yaml`, scored against the exact optimal
+k-means cost: the divergence and squared Euclidean produce **identical
+seedings, draw for draw**, at **1.8496** times the optimum (worst 6.21), while
+the rule `opt.emission_mixture.plus_plus_start` actually applies — the family's
+**negative log density** — costs **3.9111** (worst 33.80) against uniform
+seeding's **4.3470**, nine tenths of the way from the divergence to uniform.
+The cause is arithmetic and not statistical: the negative log density is the
+divergence plus the log normalizer, D-squared sampling normalizes its scores
+rather than shifting them, and an additive constant therefore dilutes the rule
+toward uniform. #541's candidate 3 is measuring a normalizer as well as a
+divergence, and what that costs a count family is #541's measurement to make.
+The two-channel rung this was sized against —
+`tests/regression/fixtures/mixture/release.yaml`, ten components over
+5,041 x 4,000 = 20,164,000 observations, mirroring
+`spatio_sequential_counts/stress.yaml` at bin factor 5 — **is declared and not
+run**: one expectation-maximization iteration over it holds four
+(20,164,000 x 10) float64 arrays, 1.613 GB for the responsibilities alone, and
+peak resident set measured 2,169 MiB at 5,041,000 observations against 682 MiB
+at 500,000, so 328 MiB per million above a 518 MiB floor and 7.0 GiB at the
+full size, against 8 GiB free on the 15 GiB host. One iteration takes 9.473 s
+and 0.917 s at those two sizes, so 38 s at the full size and 25 min for one
+40-evaluation fit. The comparison runs at bin factor 40, 504,100 observations,
+the largest whose simulate-fit-assert run fits the 120 s key cap, at **36.7 s**.
+Those four numbers were taken on the 4-core host at a 1-minute load of 0.90
+with one BLAS thread and no other job; the comparison's own wall clock, 79 min
+57 s and 60 min 29 s over two runs, was not, and is an upper bound.
+
+**The nine seedings, at 40 evaluations of expectation-maximization each.**
+Every candidate is #541's, unchanged, so the two studies are comparable. The
+fit is budget-matched through `opt.budget.compare` and the seeding is not, so
+each seeding's own cost is reported in the fit's unit and as a fraction of it.
+Left, `mixture/ci.yaml` over 40 shared starts; right, the two-channel rung over
+8, which is what nine fits over 504,100 observations allow — the run took
+79 min 57 s and 60 min 29 s on a contended host, so 40 starts would be the
+whole release tier and the paired test is correspondingly weak there.
+
+| seeding | ci hits of 40 | ci mean gap | ci recovery | key hits of 8 | key mean gap | key recovery | seeding cost, evaluations |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| random-restart | 0 | 5.30 | 0.6800 | 0 | 3,030 | 0.4116 | 0.00, 0% |
+| kmeans++ | 0 | 0.723 | 0.6240 | 0 | 424 | 0.4632 | 0.90, 2.2% |
+| emission-d2 | 0 | 1.38 | 0.6140 | 0 | 668 | 0.4562 | 1.00, 2.5% |
+| burn-in | 0 | 19.1 | 0.6240 | 0 | 30,700 | 0.2968 | 7.00, 17.5% |
+| family-sample | 0 | 1.87 | 0.5980 | 0 | 717 | 0.4093 | 0.00, 0% |
+| spectral | 0 | 0.723 | 0.6240 | 0 | 424 | 0.4632 | 1.00, 2.5% |
+| hmc | 6 | 0.785 | 0.5260 | 0 | 595 | 0.4370 | 48.00, 120% |
+| tempering | 2 | 1.06 | 0.5620 | 0 | 595 | 0.4370 | 88.00, 220% |
+| anneal | 0 | 1.39 | 0.6220 | 0 | 595 | 0.4370 | 44.00, 110% |
+
+Gaps are nats against the fit started from the generating parameters; recovery
+is the fraction of observations assigned their planted component, against a
+Bayes ceiling of **0.688** on the ci rung and **0.5509** on the key rung, which
+1.5 standard deviations of separation fixes. **Nothing but a chain reaches the
+referee, and no chain reaches it cheaply**: `hmc` reaches it from 6 of 40 ci
+starts (McNemar p = 0.031 against restarts) at 120% of the fit budget, and
+parallel tempering from 2 at 220%. **And on the key rung the chains did not
+mix at all** — acceptance 0.000 at the step that accepted every proposal on
+the ci rung, so all three returned their own starting point and are one
+uniform-seeded fit bought at 110 to 220% of the fit, which is what
+`STATUS.md` reports rather than averages in. Spectral is k-means++ on both
+rungs, and for the reason the route predicts: the leading principal subspace
+of a one- or two-channel sample is the whole of it, so the projection is a
+rotation. The burn-in initializer is last on both rungs by an order of
+magnitude, at 17.5% of the fit budget.
+
+**The two orderings, #541's and this one.** #541 scores on the projected count
+mixture of `spatio_sequential_counts/ci` — four components, 4,000
+observations, 6 passes — in nats below the best value any candidate reached;
+this experiment scores in nats below the fit started from the generating
+parameters. The units differ, the ranks are what is compared.
+
+| candidate | #541, counts | here, Gaussian ci | here, Gaussian key |
+| --- | --- | --- | --- |
+| tempering | 0.0 | 1.06 | 595 |
+| hmc | 2.2 | 0.785 | 595 |
+| anneal | 2.2 | 1.39 | 595 |
+| burn-in | 7.0 | 19.1 | 30,700 |
+| random-restart (#541's `data`) | 12.0 | 5.30 | 3,030 |
+| kmeans++ | 20.4 | 0.723 | 424 |
+| emission-d2 (#541's `emission++`) | 20.5 | 1.38 | 668 |
+| family-sample (#541's `prior`) | 114.2 | 1.87 | 717 |
+| spectral | not run (#554) | 0.723 | 424 |
+
+**Which of #548's three outcomes.** Not the first: emission-aware D-squared
+does not win on counts — 20.5 nats against squared Euclidean's 20.4 at equal
+budget, a difference no ordering rests on — and it does not tie on a Gaussian,
+where it is 1.6x further from the truth-started fit at the key rung. Not the
+second. The third, **it wins on neither**, with the cause named: the rule is
+not the divergence it is described as. #541's own reading — that
+`emission++` seeds closer (1,303 nats against 2,729) and recovers more labels
+(0.56 against 0.48) while ending level — is consistent with that: the
+normalizer moves where the seeding lands without moving which basin the fit
+reaches. The two studies agree on the chains as well, from opposite
+directions: #541 measured acceptance 1.00 at 4,000 observations with hmc and
+anneal returning the same seeding, and this one measured acceptance 0.000 at
+504,100, all three returning their starting points. One fixed step size does
+not serve two sample sizes, which is the `TICKETS.md` bullet.
+
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
 but until now only a gradient fit could ask for one: expectation-maximization

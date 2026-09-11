@@ -2792,15 +2792,20 @@ the same emission family, and the likelihood inherits its lack of a maximum
 
 \paragraph{Supported sizes.}
 \label{par:mixture:sizes}
-One dimension, $K$ components in single figures, $N$ observations from
-hundreds to hundreds of thousands. The simulator is checked at two components
-over 200,000 draws, where a component frequency's standard error is under
-0.0011; the budgeted comparison of methods runs five components at 1.5
+$K$ components in single figures, $N$ observations from hundreds to hundreds
+of thousands, and one or two channels. The simulator is checked at two
+components over 200,000 draws, where a component frequency's standard error is
+under 0.0011; the budgeted comparison of methods runs five components at 1.5
 standard deviations of separation over 500 observations at the release tier.
-The exact clustering cost that referees the seeding is a dynamic programme
-over cut positions in the sorted observations, which is why the model is
-carried in one dimension: in higher dimension the same problem is NP-hard and
+\textbf{The refereed size is one-dimensional and the largest is not.} The exact
+clustering cost that referees a seeding is a dynamic programme over cut
+positions in the sorted observations, so it exists only on the line: in higher
+dimension the same problem is NP-hard and
 Equation~\ref{eq:kmeanspp-bound} would have nothing to be checked against.
+A component may instead emit several channels, independent given the label, so
+that a mixture matched in shape to the projection of
+Section~\ref{sec:coupled} can be stated; that instance carries no oracle and
+is refereed by the planted labels and the generating parameters.
 Enumerating the $K^{N}$ labellings is out of reach at every size here, so the
 responsibilities are refereed by the hidden Markov model's own recursion
 instead.
@@ -2868,6 +2873,20 @@ checked against, which it does not in higher dimension where the problem is
 NP-hard. Seeding is a statement about the cost and not about the likelihood:
 whether a seeded start reaches a better optimum of Equation~\ref{eq:mixture}
 than a uniform one is measured over seeds and reported whichever way it falls.
+
+\paragraph{The divergence the squared distance stands for.}
+Equation~\ref{eq:kmeanspp} is stated with a squared distance because the
+components are isotropic Gaussians. The general rule replaces $D(y)^2$ by the
+Bregman divergence of the family's log-partition \citep{banerjee2005}, which
+for that family \emph{is} the squared distance over twice the variance---and
+the sampling rule normalizes its scores, so a positive factor cancels and the
+two are one rule. \textbf{An additive constant is not a positive factor.} The
+family's negative log-density is its Bregman divergence plus the log
+normalizer, and adding a constant to every score dilutes
+Equation~\ref{eq:kmeanspp} toward the uniform draw in proportion to the
+constant's size against a typical divergence. The two spellings are therefore
+different algorithms wherever the normalizer is not small, which is a property
+of the family and has to be measured per family rather than assumed.
 
 \paragraph{What pins it.}
 The component M step against the hidden Markov model's on the same
@@ -3078,7 +3097,11 @@ re-estimate is a bracketed solve rather than a formula
 The seeding is Algorithm~\ref{alg:kmeanspp} with the family's negative
 log-density in place of the squared distance, which is not a refinement but
 a necessity --- a squared distance between a depth and an allele count
-compares two quantities that share no units.
+compares two quantities that share no units. It is the negative log-density
+and not the Bregman divergence, so the caution of
+Section~\ref{sec:mixture} applies: the two differ by the log normalizer, the
+sampling rule does not shift its scores, and which of the two a family is
+seeded under is a measurement rather than a detail.
 
 \paragraph{The cost is the family's, not the sample's.}
 Both shape parameters are found by bisection, at a few thousand score
@@ -4854,8 +4877,9 @@ a population baseline. Probabilistic inference and message passing:
 \citet{mackay2003}, \citet{koller2009}, \citet{frey1998}, \citet{ortega2022},
 \citet{bishop2006}, \citet{murphy2023}; the review \citet{wainwright2008};
 the papers \citet{wainwright2005} and \citet{wainwright2005map} for the
-tree-reweighted bounds, and \citet{hsu2012} for spectral initialization of a
-hidden Markov model. Statistical physics and Monte Carlo: \citet{mezard2009},
+tree-reweighted bounds, \citet{hsu2012} for spectral initialization of a
+hidden Markov model, and \citet{banerjee2005} for the divergence a seeding of
+an exponential family draws under. Statistical physics and Monte Carlo: \citet{mezard2009},
 \citet{newman1999}, \citet{krauth2006}, \citet{landau2014}; the reviews
 \citet{betancourt2017} and \citet{schollwoeck2011}; the paper
 \citet{machta2010} for population annealing. Information theory and
