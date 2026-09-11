@@ -147,10 +147,13 @@ def test_dropping_the_field_accept_step_is_caught(
     def unconditional(
         state: np.ndarray,
         members: np.ndarray,
-        field: np.ndarray,
+        rows: np.ndarray,
         rng: np.random.Generator,
-    ) -> None:
-        state[members] = int(rng.integers(field.shape[0]))
+    ) -> potts_mcmc.Recolour:
+        # `rows` is the field widened to one row per site (issue #551), so the
+        # colour count is its column count.
+        state[members] = int(rng.integers(rows.shape[1]))
+        return potts_mcmc.Recolour(proposed=True, accepted=True)
 
     monkeypatch.setattr(potts_mcmc, "_recolour", unconditional)
 
