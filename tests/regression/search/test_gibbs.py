@@ -79,6 +79,12 @@ from tests._fixtures import FOUR_TAXA, fixture_path, load_fixture
 SIGNIFICANCE = 0.001
 FIELD = np.array([0.6, -0.4])
 
+#: The same field as one row per site, which is the shape
+#: `potts_mcmc._single_site_sweep` takes since issue #551 widened it. A shared
+#: field reaching it as equal rows is the identity, which
+#: `tests/regression/search/test_ground_state.py` pins.
+_ROWS = np.tile(FIELD, (4, 1))
+
 
 def _potts_pair() -> tuple[PottsGraph, FactorGraph]:
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.8)
@@ -119,7 +125,7 @@ def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
     agreed = 0
     for _ in range(2000):
         gibbs_sweep(indexed, state_a, generic)
-        _single_site_sweep(state_b, FIELD, adjacency, specialised)
+        _single_site_sweep(state_b, _ROWS, adjacency, specialised)
         agreed += int(np.array_equal(state_a, state_b))
         state_b[:] = state_a
 

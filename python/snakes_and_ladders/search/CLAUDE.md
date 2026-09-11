@@ -56,4 +56,13 @@ in this module. It is referenced here, never restated. What follows is local.
 
 - **A sweep must not stop on a state-dependent condition.**
 
-- **A cluster move in an external field needs an accept step.**
+- **A cluster move in an external field needs an accept step**, and in a
+  *per-site* field that step sums the difference over the cluster's own
+  members rather than scaling one shared difference by `|C|` (#551).
+
+- **A structural statistic measured at finite temperature does not referee a
+  ground state.** `spatio_only` records a size tilt and a per-class occupancy
+  from thermal draws; a ferromagnet's ground state matches neither, and the
+  tilt is not even monotone in temperature. A minimizer is refereed by an
+  exact optimum where one exists and by a bound where one does not, never by
+  a sampler's summary statistic.
