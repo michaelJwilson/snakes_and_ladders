@@ -15,14 +15,14 @@ Applications in Phylogenetics, Potts Models, and Hidden Markov Models}
 Inference over graph-structured models---phylogenetic trees, lattice-based
 Potts models, hidden Markov models, and the low-density parity-check codes
 that share their message passing---is a coupled discrete-continuous
-optimization problem. The structural search space is combinatorial, while
+optimization problem: the structural search space is combinatorial, while
 scoring each candidate structure requires continuously optimizing its
-parameters. We present a framework that strictly decouples differentiable
-continuous optimization from discrete structural search, so that one optimizer
-serves every model class and a structural move constructs a new objective
-rather than taking a step inside an existing one. Framing structural search
-as a Markov decision process admits learned proposal policies, a critic and
-a planner over exact, approximate, bounded or learned surrogate objectives.
+parameters. We present a framework decoupling differentiable continuous
+optimization from discrete structural search, so one optimizer serves every
+model class and a structural move constructs a new objective rather than taking
+a step inside an existing one. Framing structural search as a Markov decision
+process admits learned proposal policies, a critic and a planner over exact,
+approximate, bounded or learned surrogate objectives.
 We validate the engine against exact oracles---brute-force marginalization,
 path enumeration, and exhaustive topology enumeration---and report realized
 interval coverage rather than asserting it. Every comparison between methods
@@ -40,20 +40,19 @@ given in the companion textbook; this paper reports results.
 \section{Introduction}
 \label{sec:intro}
 
-The fundamental difficulty in high-dimensional probabilistic inference is the
-combinatorial size of the structural search space. In phylogenetics, the number
-of unrooted binary topologies over $n$ taxa is $(2n-5)!!$ \citep{rosen2019}. In
-statistical physics, the ground state of an $N$-dimensional Potts model
-requires traversing an exponentially large configuration space
-\citep{mezard2009}. Decoding a hidden Markov model poses the same coupled
-problem on a chain \citep{mackay2003}, and decoding a low-density parity-check
-code poses it on the sparse bipartite graph of a code's parity checks, where
-the sum-product algorithm was rediscovered as belief propagation
-\citep{kschischang2001}. The four are one marginalization over four
-structures, and two derived instances sit between them: a coupled
-spatio-sequential model, a Potts prior over class labels gating one hidden
-chain per class, and the Gaussian mixture, a hidden Markov model with the
-chain removed.
+The difficulty in high-dimensional probabilistic inference is the combinatorial
+size of the structural search space. In phylogenetics the number of unrooted
+binary topologies over $n$ taxa is $(2n-5)!!$ \citep{rosen2019}; in statistical
+physics the ground state of an $N$-dimensional Potts model requires traversing
+an exponentially large configuration space \citep{mezard2009}. Decoding a
+hidden Markov model poses the same coupled problem on a chain
+\citep{mackay2003}, and decoding a low-density parity-check code poses it on
+the sparse bipartite graph of a code's parity checks, where the sum-product
+algorithm was rediscovered as belief propagation \citep{kschischang2001}. The
+four are one marginalization over four structures, with two derived instances
+between them: a coupled spatio-sequential model, a Potts prior over class
+labels gating one hidden chain per class, and the Gaussian mixture, a hidden
+Markov model with the chain removed.
 
 Classical frameworks rely on fixed, hand-designed heuristics---nearest-neighbour
 interchange for trees, Swendsen--Wang cluster updates for lattices---applied
@@ -67,42 +66,40 @@ and a continuous relaxation of the discrete configurations. The continuous
 parameters are fitted by reverse-mode automatic differentiation throughout.
 
 \subsection{Scope}
-This paper reports what has been built and measured. The formulations it
-rests on---the substitution model, the Potts energy, the hidden Markov
-recursions, the discrete move sets, the decision process, the bounds, and the
-mathematical properties each algorithm is refereed by---are stated in the
-companion textbook rather than repeated here. Three things are outside it and
-are stated as such rather than left implicit. The low-density parity-check
-class has its simulator, decoder and oracles and no move set yet, so it
-appears in Section~\ref{sec:res-likelihood} and not in the search results.
-No comparison against IQ-TREE~2 or RAxML-NG has been run: no external solver
-is admitted, and adopting one is a deferred decision of its own (\#126). And
-no accelerator exists to measure on, so hardware scaling is reported for the
-CPU alone.
+This paper reports what has been built and measured. The formulations it rests
+on---the substitution model, the Potts energy, the hidden Markov recursions,
+the discrete move sets, the decision process, the bounds, and the mathematical
+properties each algorithm is refereed by---are stated in the companion
+textbook. Three things are outside it. The low-density parity-check class has
+its simulator, decoder and oracles and no move set yet, so it appears in
+Section~\ref{sec:res-likelihood} and not in the search results. No comparison
+against IQ-TREE~2 or RAxML-NG has been run: no external solver is admitted, and
+adopting one is a deferred decision (\#126). And no accelerator exists to
+measure on, so hardware scaling is reported for the CPU alone.
 
 \section{Methods}
 \label{sec:methods}
 
 The methodology rests on one division: continuous parameters are optimized by
 gradients on a fixed structure, while discrete structural moves are proposed by
-an external agent and construct an entirely new differentiable objective. A
-move changes what the parameter vector means and how long it is, so it cannot
-be a step inside a fit over a fixed-length vector.
+an external agent and construct a new differentiable objective. A move changes
+what the parameter vector means and how long it is, so it cannot be a step
+inside a fit over a fixed-length vector.
 
 \subsection{Continuous optimization}
 An objective is a differentiable scalar $\objective(\params)$ over an
 unconstrained vector $\params \in \mathbb{R}^d$, with an injective map
 $\constrained$ to the constrained parameters the model is stated in. The same
-quasi-Newton optimizer \citep{nocedal2006} therefore minimizes negative
-log-likelihoods of phylogenetic alignments, free energies of Potts models,
-sequence log-likelihoods of hidden Markov models, the mixture likelihood and
-three closed-form test functions without knowing which it has. Standard errors
-come from the observed information at the optimum, pushed through
-$\constrained$ by the delta method, at any fit whatever produced it---an
+quasi-Newton optimizer \citep{nocedal2006} minimizes negative log-likelihoods
+of phylogenetic alignments, free energies of Potts models, sequence
+log-likelihoods of hidden Markov models, the mixture likelihood and three
+closed-form test functions without knowing which it has. Standard errors come
+from the observed information at the optimum, pushed through $\constrained$ by
+the delta method, at any fit whatever produced it---an
 expectation--maximization fit inverts the same constraint map to be given the
 same interval---and are refused where the information is singular. A
 Hamiltonian sampler over the same interface gives an interval as a posterior
-quantile instead, with a warm-up that adapts its step and mass matrix and a
+quantile instead, with a warm-up adapting its step and mass matrix and a
 parallel-tempering ladder chosen from its measured exchange acceptance.
 
 \subsection{Differentiable likelihoods and energies}
@@ -118,19 +115,18 @@ expresses the coupled model, pinned to each specialized evaluator and slower
 than it, so the specialized evaluators stay.
 
 \subsection{Discrete search and its surrogates}
-Hill climbing over nearest-neighbour interchange or subtree
-prune-and-regraft fits the continuous parameters of every candidate, counts
-its budget in candidates scored, and scores each topology once. A neighbour
-starts its fit from its parent's branch lengths matched by leaf split, and a
-neighbourhood may be ranked by one cached evaluation, by a certified analytic
-bound, or by a learned predictor before only the top candidates are fitted;
-the accepted move is always fitted in full. Large parsimony runs the same
-climb on the Fitch or Sankoff score. Potts ground states are exact by minimum
-cut where the couplings are submodular, within a proved factor by alpha
-expansion above two states, and bounded by a semidefinite relaxation where
-the couplings are negative; samplers, annealing and parallel tempering run
-over one temperature schedule, and a Gibbs sampler and annealer over any
-factor graph.
+Hill climbing over nearest-neighbour interchange or subtree prune-and-regraft
+fits the continuous parameters of every candidate, counts its budget in
+candidates scored, and scores each topology once. A neighbour starts its fit
+from its parent's branch lengths matched by leaf split, and a neighbourhood may
+be ranked by one cached evaluation, a certified analytic bound, or a learned
+predictor before the top candidates are fitted; the accepted move is always
+fitted in full. Large parsimony runs the same climb on the Fitch or Sankoff
+score. Potts ground states are exact by minimum cut where the couplings are
+submodular, within a proved factor by alpha expansion above two states, and
+bounded by a semidefinite relaxation where the couplings are negative;
+samplers, annealing and parallel tempering run over one temperature schedule,
+and a Gibbs sampler and annealer over any factor graph.
 
 \subsection{Structural search as a Markov decision process}
 \label{sec:rl}
@@ -140,15 +136,15 @@ optimized continuous parameters, and observation summaries; an \textbf{action}
 is a structural perturbation from a classical neighbourhood; the
 \textbf{reward} is the improvement in the objective. Every learning claim is
 pinned to an oracle before it is measured: on an environment small enough to
-enumerate, the expected return, its gradient, the action values and the
-optimal value are exact. On that footing the score-function estimator with a
-baseline, an actor--critic with a fitted critic, proximal policy optimization
-with generalized advantage estimation and an optional epsilon-greedy
-behaviour policy, and a planner running PUCT search with the policy as prior
-and the critic as leaf value, trained by expert iteration, are compared at
-matched budgets. A Gumbel-softmax relaxation of Potts configurations and
-hidden state paths is the differentiable alternative, admitted where its
-optimum is enumerable so the claim is falsifiable.
+enumerate, the expected return, its gradient, the action values and the optimal
+value are exact. On that footing the score-function estimator with a baseline,
+an actor--critic with a fitted critic, proximal policy optimization with
+generalized advantage estimation and an optional epsilon-greedy behaviour
+policy, and a planner running PUCT search with the policy as prior and the
+critic as leaf value, trained by expert iteration, are compared at matched
+budgets. A Gumbel-softmax relaxation of Potts configurations and hidden state
+paths is the differentiable alternative, admitted where its optimum is
+enumerable so the claim is falsifiable.
 
 \subsection{Budgets and the ledger}
 Every comparison between methods spends an equal budget in one declared
@@ -174,8 +170,8 @@ that form within a Monte Carlo tolerance.
 Table~\ref{tab:sim-problem-sizes} is the three instances that comparison runs
 on. The tolerance is bought with sites rather than chosen---the two
 200{,}000-site instances are validated at a third of the tolerance the
-20{,}000-site one is---and the set is tabulated rather than described because
-a seed and a tolerance are what make the comparison repeatable at all.
+20{,}000-site one is---and the set is tabulated because a seed and a tolerance
+are what make the comparison repeatable.
 
 \qacaptionread{figures/sim_problem_sizes_caption.txt}{\simProblemSizesCaption}
 \begin{table}[htbp]
@@ -215,11 +211,11 @@ in log-odds, and the tree schedule of the general sum-product on the same
 chain, built as a factor graph, agrees to $2.7 \times 10^{-15}$ with the same
 $\log Z$. The pair is not: two chains sharing the message bits through an
 interleaver have cycles, and the iteration between them is the Bethe
-approximation. What is reported there is the gap rather than an equality. At
-$K = 12$, where enumeration reaches, eight iterations give a bit error rate
-1.26 to 3.20 times the exact bitwise MAP's over four operating points and
-1,200 message bits each; the code is worse than sending the bits uncoded at
-$0$~dB, which is a property of a 12-bit interleaver and not of the decoder.
+approximation, and the gap is reported rather than an equality. At $K = 12$,
+where enumeration reaches, eight iterations give a bit error rate 1.26 to 3.20
+times the exact bitwise MAP's over four operating points and 1,200 message bits
+each; the code is worse than sending the bits uncoded at $0$~dB, a property of
+a 12-bit interleaver and not of the decoder.
 At $K = 1{,}024$ over 200 frames per point the curve falls two orders of
 magnitude between $0$ and $1.2$~dB and stays below the uncoded
 $Q(\sqrt{2E_b/N_0})$ throughout (the companion textbook draws the $K = 256$
@@ -227,10 +223,10 @@ instance). Two negative results travel with it.
 The ensemble bit error rate is not monotone in the iteration count: it rises
 between consecutive iterations at four of six operating points, the largest
 rise $2.3 \times 10^{-3}$, and every rise is inside one binomial interval of
-the sample, so the strong claim is refused and the weak one---no worse, and
-better than the first iteration---is what the suite asserts. And a bit error
-rate is reported with the frame count behind it in every case, because a
-waterfall without one bounds nothing.
+the sample, so the strong claim is refused and the suite asserts the weak
+one---no worse, and better than the first iteration. And a bit error rate is
+reported with the frame count behind it, since a waterfall without one bounds
+nothing.
 
 Collapsing identical alignment columns to weighted site patterns leaves the
 log-likelihood unchanged and cuts the column work by 1.6 to 781 times across
@@ -260,13 +256,13 @@ against 5 to 15.
 \label{sec:res-recovery}
 
 Recovery is the acceptance test for a fit, and a Wald interval from the
-observed information is an \emph{asymptotic} claim. The figures below are
-the evidence for it rather than an assertion of it: the first shows each fitted
-parameter of the Potts chain and the hidden Markov model against the value
-that generated the data, the second the realized coverage against the amount
-of data each fit sees, and the third and fourth the phylogenetic instance,
-branch lengths and the general time-reversible model, where two directions
-of the parameter space are gauges and are fitted as such.
+observed information is an \emph{asymptotic} claim. The figures below are the
+evidence for it rather than an assertion: the first shows each fitted parameter
+of the Potts chain and the hidden Markov model against the value that generated
+the data, the second the realized coverage against the amount of data each fit
+sees, and the third and fourth the phylogenetic instance, branch lengths and
+the general time-reversible model, where two directions of the parameter space
+are gauges and are fitted as such.
 
 \qacaptionread{figures/opt_recovery_caption.txt}{\optRecoveryCaption}
 \begin{figure}[htbp]
@@ -304,9 +300,9 @@ of the parameter space are gauges and are fitted as such.
 \label{sec:res-search}
 
 Below the size at which every topology can be enumerated, enumeration is the
-only independent statement available about whether a search found the best tree
-or merely a good one. The first figure is the climb and the landscape it
-climbed; the second the tree it selected beside the best one it rejected.
+only independent statement about whether a search found the best tree or merely
+a good one. The first figure is the climb and the landscape it climbed; the
+second the tree it selected beside the best one it rejected.
 
 \qacaptionread{figures/search_trajectory_caption.txt}{\searchTrajectoryCaption}
 \begin{figure}[htbp]
@@ -325,15 +321,15 @@ climbed; the second the tree it selected beside the best one it rejected.
 \end{figure}
 
 Enumeration referees whether the search found the best tree \emph{for the
-data}. Whether the best tree for the data is the tree that generated it is a
-different question, refereed by simulated truth rather than by enumeration and
-decided by how much signal the alignment carries---so it is asked against the
-site count. Figure~\ref{fig:topology-accuracy} sweeps it, at a low end
-deliberately below what the fixtures use, because a sweep confined to sizes
-already known to work locates no margin, and reads the result against the
-roadmap's accuracy requirement. Where the sweep first clears that requirement
-is not quoted: it is a threshold crossing over an optimizer's output, and one
-that moves in its last digits on another machine.
+data}. Whether that tree is the one that generated it is a different question,
+refereed by simulated truth and decided by how much signal the alignment
+carries, so it is asked against the site count.
+Figure~\ref{fig:topology-accuracy} sweeps it, at a low end below what the
+fixtures use---a sweep confined to sizes already known to work locates no
+margin---and reads the result against the roadmap's accuracy requirement. Where
+the sweep first clears that requirement is not quoted: it is a threshold
+crossing over an optimizer's output, and moves in its last digits on another
+machine.
 
 \qacaptionread{figures/topology_accuracy_caption.txt}{\topologyAccuracyCaption}
 \begin{figure}[htbp]
@@ -349,10 +345,9 @@ that moves in its last digits on another machine.
 The space of trees on $n$ leaves is the tropical Grassmannian
 $\mathrm{Gr}(2,n)$ \citep{speyer2004}, a quartet's resolution is the
 $\arg\min$ of three linear forms in its coordinates, and softening that
-$\arg\min$ makes the topology differentiable
-(the companion textbook states the construction). What the roadmap
-recorded as missing was the referee, and enumeration supplies one below nine
-taxa.
+$\arg\min$ makes the topology differentiable (the companion textbook states the
+construction). What the roadmap recorded as missing was the referee, and
+enumeration supplies one below nine taxa.
 
 At the tree metric of every one of the 15, 105 and 945 topologies of the
 five-, six- and seven-taxon fixtures, and of 201 of the 10{,}395 at eight, the
@@ -400,12 +395,11 @@ separates the two on quality.
 \subsection{The reward an agent can afford}
 \label{sec:res-reward}
 
-Fitting branch lengths per candidate costs a full optimization where scoring
-at fixed parameters costs one pruning pass, and only the second makes an
-episode affordable. The substitution is validated rather than assumed: the
-two surfaces agree on the best topology and correlate at 0.9568 on the
-six-taxon fixture, and the agreement holds across a 50-fold range of the
-fixed branch length.
+Fitting branch lengths per candidate costs a full optimization where scoring at
+fixed parameters costs one pruning pass, and only the second makes an episode
+affordable. The substitution is validated rather than assumed: the two surfaces
+agree on the best topology and correlate at 0.9568 on the six-taxon fixture,
+across a 50-fold range of the fixed branch length.
 
 \qacaptionread{figures/rl_reward_surface_caption.txt}{\rlRewardSurfaceCaption}
 \begin{figure}[htbp]
@@ -429,25 +423,24 @@ score-function estimator's 32.1\%. A planner with a trained prior and critic
 reaches it from 92.6\% of starts at 8.3 successor evaluations per episode
 against greedy's 80.2\% at 48, and matches greedy at 6.3.
 
-Figure~\ref{fig:rl-convergence} poses the phylogenetic comparison on a
-topology landscape where hill climbing demonstrably fails, which is the
-condition that makes the comparison askable at all: on a landscape the
-baseline already solves from every start, a policy can be neither better nor
-worse than it. The answer is a tie. Every algorithm---the score-function
-estimator, the actor--critic, proximal policy optimization on and off
-policy---lands on greedy's 0.48 within the 0.014 standard deviation over
-seeds, because the environment exposes one feature, the improvement a move
-buys, so the policy is an inverse temperature and no algorithm can learn
-what that class cannot express. Random-restart hill climbing reaches the
-enumerated maximum from every start at the same 60-decision budget, so the
-baseline the next comparison has to beat is 1.000 and a fixture that
-separates anything from restarts is what it needs. Given something to learn
-the policy learns: with seven columns per move---the improvement, the
+Figure~\ref{fig:rl-convergence} poses the phylogenetic comparison on a topology
+landscape where hill climbing demonstrably fails, the condition that makes the
+comparison askable: on a landscape the baseline already solves from every
+start, a policy can be neither better nor worse. The answer is a tie. Every
+algorithm---the score-function estimator, the actor--critic, proximal policy
+optimization on and off policy---lands on greedy's 0.48 within the 0.014
+standard deviation over seeds, because the environment exposes one feature, the
+improvement a move buys, so the policy is an inverse temperature and no
+algorithm can learn what that class cannot express. Random-restart hill
+climbing reaches the enumerated maximum from every start at the same
+60-decision budget, so the baseline the next comparison must beat is 1.000 and
+it needs a fixture that separates anything from restarts. Given something to
+learn the policy learns: with seven columns per move---the improvement, the
 parsimony change, the pattern support of the split broken and of the split
-made, and the two exchanged subtree sizes---it reaches the maximum from
-0.796 of episodes at the same budget, ahead of greedy on 16 of 16 seeds
-($p = 3.05 \times 10^{-5}$, ledger entry 005), and is not yet measured
-against restarts.
+made, and the two exchanged subtree sizes---it reaches the maximum from 0.796
+of episodes at the same budget, ahead of greedy on 16 of 16 seeds
+($p = 3.05 \times 10^{-5}$, ledger entry 005), and is not yet measured against
+restarts.
 
 \qacaptionread{figures/rl_tree_policy_caption.txt}{\rlTreePolicyCaption}
 \begin{figure}[htbp]
@@ -477,15 +470,14 @@ climb are compared the same way, at a budget of 500 candidates over 8 seeds
 and refereed by enumeration: a parsimony start, a regraft bounded to radius
 $r$, and refitting only the branches a move changed each reach the enumerated
 maximum from every start at five and six taxa, at 1,902, 755 and 1,810 forward
-passes against the unbounded search's 2,848 at six taxa, and together at
-1,009. At eight taxa, past enumeration, all three together return the
-unbounded search's log-likelihood for 1,930 and 3,359 passes against 16,600
-and 24,493. Restarts are therefore not beaten
-on the continuous surfaces measured and are beaten on the frustrated
-lattice, the one instance class past enumeration the roadmap needs. On an
-antiferromagnetic chain whose optimum needs coordinated flips the
-deterministic relaxation reaches it from 18 of 40 seeds against greedy's 5
-($p = 0.00098$), and every sampled variant of it ties at 11 ($p = 0.18$).
+passes against the unbounded search's 2,848 at six taxa, and together at 1,009.
+At eight taxa, past enumeration, all three together return the unbounded
+search's log-likelihood for 1,930 and 3,359 passes against 16,600 and 24,493.
+Restarts are therefore not beaten on the continuous surfaces measured and are
+beaten on the frustrated lattice, the one instance class past enumeration the
+roadmap needs. On an antiferromagnetic chain whose optimum needs coordinated
+flips the deterministic relaxation reaches it from 18 of 40 seeds against
+greedy's 5 ($p = 0.00098$), and every sampled variant ties at 11 ($p = 0.18$).
 At the Potts critical coupling, single-site sampling slows by 3.2 times
 between lattice extents 8 and 24 while the cluster moves slow by 1.9
 (ledger entry 001). The comparison against classical phylogenetic software
@@ -494,32 +486,31 @@ is ticketed (\#126) and not run.
 \subsection{Hardware scaling}
 \label{sec:res-hardware}
 
-No accelerator exists in the environment, so what is measured is the CPU.
-The Rust pruning backend runs at 2.5 times the NumPy oracle at 200 taxa by
-11,000 sites, with peak memory 22.6\,MB, and the minimum-cut kernel at 26 to
-32 times the reference as a kernel and 6.3 to 10.7 times as a caller sees it,
-the difference being the Python energy evaluation and not the boundary copy.
-Laying the pruning kernel's partial likelihoods out with sites contiguous and
-walking them in tiles, so its inner loops are contiguous, unaliased and free of
-early exits, cuts the kernel by 28\% at four taxa by 200,000 sites and 35\% at
-eight; through the binding at 11,000 sites it changes nothing measurable, the
-call there being 199 internal nodes and a logarithm per site per node rather
-than the message pass. The layout was chosen by benchmark and no vector width
-is asserted anywhere.
+No accelerator exists in the environment, so what is measured is the CPU. The
+Rust pruning backend runs at 2.5 times the NumPy oracle at 200 taxa by 11,000
+sites, with peak memory 22.6\,MB, and the minimum-cut kernel at 26 to 32 times
+the reference as a kernel and 6.3 to 10.7 times as a caller sees it, the
+difference being the Python energy evaluation and not the boundary copy. Laying
+the pruning kernel's partial likelihoods out with sites contiguous and walking
+them in tiles, so its inner loops are contiguous, unaliased and free of early
+exits, cuts the kernel by 28\% at four taxa by 200,000 sites and 35\% at eight;
+through the binding at 11,000 sites it changes nothing measurable, the call
+there being 199 internal nodes and a logarithm per site per node rather than
+the message pass. The layout was chosen by benchmark and no vector width is
+asserted.
 Process parallelism over independent tasks---the multi-start fit, the
 budgeted comparison, the bootstrap---was measured on a four-core host at 1, 2
 and 4 workers with the intra-op thread count at 1 and at the default: no
 site reaches a two-fold speedup at 4 workers, the pool's spawn and import
 costing 1.81\,s, more than the multi-start fit does in total, while the
-serial fit at the default thread count runs 2.87 times the fit at one thread
-because the tensor library already parallelizes over sites. All three sites
-stay serial by recommendation, with the argument kept for a larger tier or
-machine. Table~\ref{tab:likelihood-footprint} settles the memory
-requirement: the roadmap bounds the working set to $O(n \times L \times k)$
-inside 16\,GB, the simulator retains every node's states and pruning retains
-a partial likelihood only for nodes whose parent has not yet consumed it,
-and both are reported on a caterpillar, the deepest tree on its leaves, so
-the bound is tight rather than loose.
+serial fit at the default thread count runs 2.87 times the fit at one thread,
+the tensor library already parallelizing over sites. All three sites stay
+serial by recommendation, with the argument kept for a larger tier or machine.
+Table~\ref{tab:likelihood-footprint} settles the memory requirement: the
+roadmap bounds the working set to $O(n \times L \times k)$ inside 16\,GB, the
+simulator retains every node's states and pruning retains a partial likelihood
+only for nodes whose parent has not yet consumed it, and both are reported on a
+caterpillar, the deepest tree on its leaves, so the bound is tight.
 
 \qacaptionread{figures/likelihood_footprint_caption.txt}{\likelihoodFootprintCaption}
 \begin{table}[htbp]
@@ -532,23 +523,22 @@ the bound is tight rather than loose.
 \section{Discussion}
 \label{sec:discussion}
 
-Three findings recur across the problem classes, and each is a statement
-about the instance rather than about the algorithms. First, most fixtures are
-too easy to separate methods: the six-taxon tree is solved from every start,
-the Potts chain's optimum is a constant, the triangular antiferromagnet is
-reached by restarts of descent as often as by annealing, and it took a
-planted glass past enumeration and a seven-taxon tree with short internal
-branches to make a comparison askable. The budgeted comparison is therefore
-run before any claim is made, and a fixture that fails to separate methods
-is recorded as such. Second, where a learned component loses or ties, the
-cause is named and measured rather than argued: the tree policy ties greedy
-because its feature set is one number, and the relaxation's sampled variants
-tie greedy because the sampling, not the relaxation, is what costs. Third,
-the negative engineering results are as load-bearing as the positive ones:
-the fourth-order integrator loses to leapfrog at equal gradient evaluations,
-k-means++ seeding buys nothing the likelihood can use, warm starts save less
-than lazy scoring, and process parallelism buys nothing at the mid-size tier.
-Each stays as a measured decision rather than a default that moved.
+Three findings recur across the problem classes, each a statement about the
+instance rather than the algorithms. First, most fixtures are too easy to
+separate methods: the six-taxon tree is solved from every start, the Potts
+chain's optimum is a constant, the triangular antiferromagnet is reached by
+restarts of descent as often as by annealing, and it took a planted glass past
+enumeration and a seven-taxon tree with short internal branches to make a
+comparison askable. The budgeted comparison therefore runs before any claim is
+made, and a fixture that fails to separate methods is recorded as such. Second,
+where a learned component loses or ties, the cause is measured rather than
+argued: the tree policy ties greedy because its feature set is one number, and
+the relaxation's sampled variants tie because the sampling, not the relaxation,
+is what costs. Third, the negative engineering results are as load-bearing as
+the positive: the fourth-order integrator loses to leapfrog at equal gradient
+evaluations, k-means++ seeding buys nothing the likelihood can use, warm starts
+save less than lazy scoring, and process parallelism buys nothing at the
+mid-size tier. Each stays a measured decision rather than a default that moved.
 
 What referees each method is read from the suite and typeset in the
 companion textbook: where an oracle is affordable at a size the method is
@@ -563,18 +553,18 @@ density evolution for codes past the enumerable length.
 \label{sec:conclusions}
 
 Decoupling structural exploration from continuous fitting yields a
-model-agnostic optimization engine that serves phylogenetics, Potts models,
-hidden Markov models, the parity-check and turbo codes, the coupled model
-and the mixture without encoding any of them. Every evaluator is pinned to
-an oracle that shares no code with it, every fit is judged by recovery at its
-nominal coverage, and every search by the enumeration that referees it where
-enumeration reaches. Formulating the search as a Markov decision process gave
-a critic, a policy-gradient family and a planner that beat hill climbing
-where the landscape can be enumerated and tie it on the tree fixture, for a
-reason that is measured and ticketed. What remains is stated as tickets
-rather than as future work: the feature set that would change the tree
-result, the code's move set and its error rates at size, the external tools
-the competitiveness claim needs, and the accelerator the scaling claim needs.
+model-agnostic optimization engine serving phylogenetics, Potts models, hidden
+Markov models, the parity-check and turbo codes, the coupled model and the
+mixture without encoding any of them. Every evaluator is pinned to an oracle
+sharing no code with it, every fit judged by recovery at its nominal coverage,
+and every search by the enumeration that referees it where enumeration reaches.
+Formulating the search as a Markov decision process gave a critic, a
+policy-gradient family and a planner that beat hill climbing where the
+landscape can be enumerated and tie it on the tree fixture, for a measured and
+ticketed reason. What remains is stated as tickets rather than future work: the
+feature set that would change the tree result, the code's move set and its
+error rates at size, the external tools the competitiveness claim needs, and
+the accelerator the scaling claim needs.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

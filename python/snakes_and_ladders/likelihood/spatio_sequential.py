@@ -2,9 +2,9 @@
 
 The oracle the rest of issue #290 is held to: the marginal likelihood, the
 label posterior, the per-class state posterior, and the state posterior given
-a labelling, each a sum over every joint assignment of ``eq:joint``. It is
-exponential and deliberately so (``likelihood/CLAUDE.md``): what makes it an
-oracle is that it shares no recursion with what it referees.
+a labelling, each a sum over every joint assignment of ``eq:joint``.
+Deliberately exponential (``likelihood/CLAUDE.md``): it is an oracle because
+it shares no recursion with what it referees.
 
 It is itself pinned two ways. Its unnormalized log-density is the factor
 graph's :meth:`~snakes_and_ladders.sim.factor_graph.FactorGraph.log_density`,

@@ -5,29 +5,29 @@ the register contents, so its two classical decoders are the two this
 repository already has on a chain: BCJR is forward--backward
 (``eq:forward``, ``eq:posterior``) and Viterbi is max-product. What the chain
 modules cannot be handed directly is the *edge*: the observation belongs to
-the transition and not to the state, since the bits transmitted at a step are
-a function of the edge taken. This module is therefore forward--backward with
-the emission on the edge, in the log domain, plus the *extrinsic* output a
-turbo iteration exchanges (``eq:bcjr``, ``eq:extrinsic``).
+the transition, since the bits transmitted at a step are a function of the
+edge taken. So this module is forward--backward with the emission on the edge,
+in the log domain, plus the *extrinsic* output a turbo iteration exchanges
+(``eq:bcjr``, ``eq:extrinsic``).
 
 **One convention throughout.** Every log-likelihood ratio is
 ``eq:ldpc-llr``'s, imported from issue #340 rather than restated: ``L =
 log p(y | bit = 0) - log p(y | bit = 1)``, positive when the channel favours
-zero. A bit's log-likelihood contribution is then ``-bit * L`` up to a
-constant shared by every path, which is what makes the branch metric a sum
-of three such terms and the posterior ratio decompose as ``eq:extrinsic``
-into channel, a priori and extrinsic parts.
+zero. A bit's log-likelihood contribution is ``-bit * L`` up to a constant
+shared by every path, which makes the branch metric a sum of three such terms
+and the posterior ratio decompose as ``eq:extrinsic`` into channel, a priori
+and extrinsic parts.
 
 **Which oracle referees which claim.** At ``K`` small enough to enumerate,
-:func:`exact_bitwise_posterior` sums over all ``2 ** K`` messages and is the
-referee for BCJR; the maximum of the same sum is the referee for Viterbi.
-Independently of size, :func:`snakes_and_ladders.sim.factor_graph.from_trellis`
-presents the same chain to the general
+:func:`exact_bitwise_posterior` sums over all ``2 ** K`` messages and referees
+BCJR; the maximum of the same sum referees Viterbi. At any size,
+:func:`snakes_and_ladders.sim.factor_graph.from_trellis` presents the same
+chain to the general
 :func:`snakes_and_ladders.likelihood.message_passing.sum_product`, whose tree
-schedule is exact on it and shares no recursion with the code here. Both are
-used: the first says the answer is right, the second says the specialization
-is the same computation as the general one, which is the pairing issue #340
-established for the parity-check decoder.
+schedule is exact on it and shares no recursion with the code here. The first
+says the answer is right, the second that the specialization is the same
+computation as the general one --- the pairing issue #340 established for the
+parity-check decoder.
 """
 
 from __future__ import annotations
@@ -58,9 +58,8 @@ class TrellisDecoding:
     extrinsic_llr : np.ndarray
         ``posterior_llr`` less the systematic channel ratio and the a priori
         ratio: what this decoder learned about ``u_t`` from every step but
-        ``t`` (``eq:extrinsic``). This is what a turbo iteration passes on,
-        and passing the posterior instead would feed a decoder its own
-        previous output.
+        ``t`` (``eq:extrinsic``). A turbo iteration passes this on; passing
+        the posterior would feed a decoder its own previous output.
     log_evidence : float
         ``log p(y)`` up to the constant ``sum_i log p(y_i | 0)`` every path
         shares: the forward recursion's normalizer.
@@ -106,9 +105,8 @@ def bcjr(
     log-sum-exp over edges with input zero less that over edges with input
     one. Exact log-MAP, not the max-log approximation: the sums are formed
     with :func:`snakes_and_ladders.numerics.logsumexp`, so nothing here is an
-    approximation to be reported under
-    ``likelihood/CLAUDE.md``'s rule and equality against enumeration may be
-    asserted.
+    approximation to report under ``likelihood/CLAUDE.md``'s rule and equality
+    against enumeration may be asserted.
 
     Parameters
     ----------
@@ -118,15 +116,13 @@ def bcjr(
         parity bit transmitted at each step.
     apriori_llr : np.ndarray | None
         Shape ``(T,)``: the ratio a previous decoder supplies for the input
-        bit. ``None`` is the uninformative ``0``, and is the whole
-        difference between a stand-alone convolutional decoding and a turbo
-        half-iteration.
+        bit. ``None`` is the uninformative ``0``, the whole difference between
+        a stand-alone convolutional decoding and a turbo half-iteration.
     terminated : bool
         Whether the register was driven back to the zero state, so the
         backward recursion starts concentrated there rather than uniform.
-        ``sim.convolutional.terminate`` is what makes this true, and a
-        decoder told the wrong thing computes a posterior for a different
-        model.
+        ``sim.convolutional.terminate`` makes it true; a decoder told
+        otherwise computes a posterior for a different model.
 
     Returns
     -------
@@ -207,9 +203,9 @@ def viterbi(
 ) -> np.ndarray:
     """The single most likely input sequence: max-product on the same trellis.
 
-    The blockwise MAP, against BCJR's bitwise one --- two decodings of one
-    model and different answers, as ``likelihood/CLAUDE.md`` states of the
-    chain. The arguments are :func:`bcjr`'s.
+    The blockwise MAP against BCJR's bitwise one --- two decodings of one
+    model, different answers, as ``likelihood/CLAUDE.md`` states of the chain.
+    The arguments are :func:`bcjr`'s.
 
     Returns
     -------
@@ -235,8 +231,8 @@ def viterbi(
             scores = metric[t] + gamma[t, :, u]
             target = trellis.next_state[:, u]
             # `maximum.at` keeps the largest of the (usually two) edges into
-            # each state; the argmax is recovered by the equality below,
-            # which costs one pass rather than a Python loop over states.
+            # each state; the equality below recovers the argmax in one pass
+            # rather than a Python loop over states.
             np.maximum.at(best, target, scores)
         for u in (0, 1):
             scores = metric[t] + gamma[t, :, u]

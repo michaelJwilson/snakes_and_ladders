@@ -4,18 +4,17 @@ The comparison #284 and #303 deferred, on the one problem class where restarts
 are the standard answer. Three methods spend the same number of likelihood
 evaluations per start, held equal by `opt.budget.compare`: multi-start EM,
 simulated annealing with Hamiltonian proposals, and parallel tempering. Every
-method ends with the same charged L-BFGS polish, because EM converges
-linearly on components 1.5 standard deviations apart and a raw EM value 500
-iterations in is still 4 to 6 nats above its own basin's optimum -- without
-the polish, "within 1e-6 relative" would measure convergence speed and not
-which basin a method found.
+method ends with the same charged L-BFGS polish: EM converges linearly on
+components 1.5 standard deviations apart and a raw EM value 500 iterations in
+is still 4 to 6 nats above its own basin's optimum, so without the polish
+"within 1e-6 relative" would measure convergence speed rather than which basin
+a method found.
 
 The referee is the best-known optimum: the polished simulated parameters and
 the best of 1,000 polished restarts, whichever is lower, with every method's
 own best checked against it so a stale referee fails loudly. The test at 8
-starts pins the direction per pull request; the release-gated test at 40
-starts is the measurement `docs/experiments/004` reports, McNemar p-value
-included, and `pytest -s -m release -k forty` reproduces its table.
+starts pins the direction per pull request; the release-gated test at 40 starts
+is the measurement `docs/experiments/004` reports, McNemar p-value included.
 """
 
 from __future__ import annotations
@@ -86,11 +85,11 @@ TOLERANCE = 1e-6
 #: Restarts behind the release referee, on the stream ``[REFEREE_SEED, i]``.
 REFEREE_RESTARTS = 1000
 REFEREE_SEED = 20260908
-#: The best-known negative log-likelihood, from the release run's referee:
-#: 16 of the 1,000 polished restarts reach it, and every method reaches it
-#: from at least one of the 40 starts. A method beating it by more than the
-#: tolerance means it is stale, and the 8-start test says so rather than
-#: scoring against a wrong number.
+#: The best-known negative log-likelihood, from the release run's referee: 16
+#: of the 1,000 polished restarts reach it, and every method reaches it from at
+#: least one of the 40 starts. A method beating it by more than the tolerance
+#: means it is stale, which the 8-start test says rather than scoring against a
+#: wrong number.
 BEST_KNOWN = 1111.596410
 
 METHODS = ("restarts", "anneal", "tempering")
@@ -151,9 +150,9 @@ def _theta_of(fixture: Fixture, em: MixtureFit) -> torch.Tensor:
 def _polish(fixture: Fixture, theta: torch.Tensor, value: float) -> tuple[float, int]:
     """L-BFGS from ``theta``: the lower of its value and ``value``, and the evaluations.
 
-    The objective refuses a scale of zero rather than clamping it, and the
-    line search probes one on roughly 1 start in 50; a refused polish keeps
-    the unpolished value and is charged what it spent before refusing.
+    The objective refuses a scale of zero rather than clamping it, and the line
+    search probes one on roughly 1 start in 50; a refused polish keeps the
+    unpolished value and is charged what it spent.
     """
     counted = Counted(fixture.objective)
     try:
@@ -320,10 +319,9 @@ def _assert_nothing_beats_the_referee(measurement: Measurement) -> None:
 
 @pytest.mark.simulated_truth
 def test_at_eight_starts_restarts_reach_the_optimum_from_the_most_starts() -> None:
-    # The per-pull-request tier of the release measurement below: the same
-    # code on its first 8 starts, pinning the direction and the referee's
-    # consistency. Realized: restarts 2/8, annealing 1/8, tempering 0/8,
-    # and the simulated parameters' basin (1116.43 polished) is not the
+    # The per-pull-request tier of the release measurement below: the same code
+    # on its first 8 starts. Realized: restarts 2/8, annealing 1/8, tempering
+    # 0/8, and the simulated parameters' basin (1116.43 polished) is not the
     # best-known optimum.
     fixture = _fixture()
     from_truth, _, at_truth = _referee(fixture, 0)

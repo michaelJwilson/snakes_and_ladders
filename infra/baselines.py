@@ -1,13 +1,13 @@
 """Compute the baseline numbers beside each fixture, or check the committed ones.
 
 A fixture's baseline is what a *reference* algorithm achieves on the instance
---- the enumerated maximum over its topologies, the rate at which random-restart
-hill climbing reaches that maximum, the rate an untrained policy reaches it,
-the exact target every learned surrogate is fitted against. Each is a
+--- the enumerated maximum over its topologies, the rate at which
+random-restart hill climbing reaches it, the rate an untrained policy reaches
+it, the exact target every learned surrogate is fitted against. Each is a
 deterministic function of the fixture, the code and a seed, and each is
 expensive: enumerating 945 topologies is 1.4 s and 200 uniform rollouts are
-8.3 s, paid before a test measures anything about the thing under test. That
-is most of why three claims left the per-pull-request tier (issue #401).
+8.3 s, paid before a test measures the thing under test. That is most of why
+three claims left the per-pull-request tier (issue #401).
 
 So the numbers are computed once and committed, and a test reads them:
 ``<problem>/<tier>.baseline.json`` beside the fixture, written here and read by
@@ -15,20 +15,27 @@ So the numbers are computed once and committed, and a test reads them:
 digest is not the current tree's.
 
 **Where the recomputation went.** Per pull request nothing here runs; the
-release gate runs ``infra/baselines.py`` with no flag, which recomputes every
-record and fails on any drift. That is the trade
-``snakes_and_ladders.qa.build`` states for figures --- the check moves to the
-release gate rather than disappearing --- and it is made for the same reason:
-a cached number no test ever recomputes is a claim with no referee, and one
-recomputed on every pull request costs the seconds the tier move removed. The
-digest closes the gap between the two: a change to the fixture, to the
-computing modules, or to a recorded budget makes every reader raise on the
-pull request that made it, without any of them recomputing.
+release gate runs ``infra/baselines.py`` with no flag, recomputing every record
+and failing on any drift --- the trade ``snakes_and_ladders.qa.build`` states
+for figures, for the same reason: a cached number no test recomputes is a claim
+with no referee, and one recomputed on every pull request costs the seconds the
+tier move removed. The digest closes the gap: a change to the fixture, to the
+computing modules, or to a recorded budget makes every reader raise on the pull
+request that made it, without recomputing.
 
-The record is a second file rather than a block in the fixture yaml. The
-fixture declares an instance and is written by hand; the record states a
-measurement and is written by this script, so a regeneration never rewrites a
-declaration.
+The record is a second file rather than a block in the fixture yaml. The fixture
+declares an instance and is written by hand; the record states a measurement and
+is written by this script, so a regeneration never rewrites a declaration.
+
+**How closely a recomputation has to agree is declared per measurement.** A
+count, an enumerated extremum and a rate over seeded rollouts are reproduced
+bit for bit and are compared exactly. A maximum-likelihood fit is not: it is
+an iterative optimiser over a floating-point reduction whose ordering the
+host's BLAS decides, so ``maximized_log_likelihood`` is compared within
+:data:`FIT_RTOL` relative and every other value exactly (issue #527). The
+tolerance is recorded beside the value and compared like the budget, and the
+comparison takes the stricter of the two declarations, so a record edited to
+loosen it does not loosen the check that catches the edit.
 
 Run::
 
@@ -83,10 +90,27 @@ from snakes_and_ladders.sim.tree import edges
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# The tree measurements' budget, which is `test_search_hard_fixture.py`'s and
-# issue #178's: 50 starting topologies drawn from `seed + 1000`, 30 decisions
-# per episode. A rate at another budget is a different number, so the numbers
-# and the names travel together into every record below.
+# The relative tolerance a recorded value from an iterative optimiser is
+# recomputed to (issue #527). `maximized_log_likelihood` is 45 L-BFGS fits, and
+# a fit is a reduction whose ordering the host's BLAS decides, so it is
+# reproducible to a tolerance and not bitwise. Measured: ten recomputations on
+# one 4-core host reproduce the committed record exactly, and the GitHub runner
+# that raised the issue differs from it in 26 of the 45 values, by at most
+# 4.206e-12 absolute, 4.365e-15 relative, 37 ulps. 1e-12 sits between that and
+# the smallest regression measured: loosening the fit's own convergence test
+# from 1e-8 to 1e-7 relative moves 14 of the 45 values, by 1.434e-11 relative
+# at the widest, of which this bound reports 9. So it is 229 times the noise
+# and 14 times inside the change it has to catch. Relative rather than
+# absolute for the reason `likelihood/CLAUDE.md` gives: the log-likelihood is a
+# sum over sites, so a bound fixed at 200 sites does not transfer. The other
+# four records recomputed on that same runner and matched exactly, so the exact
+# comparison every other value keeps is measured rather than assumed.
+FIT_RTOL = 1e-12
+
+# The tree measurements' budget, `test_search_hard_fixture.py`'s and issue
+# #178's: 50 starting topologies drawn from `seed + 1000`, 30 decisions per
+# episode. A rate at another budget is a different number, so the numbers and
+# the names travel together into every record below.
 STARTS = 50
 HORIZON = 30
 START_SEED_OFFSET = 1000
@@ -97,9 +121,9 @@ ROLLOUTS_PER_START = 4
 UNTRAINED_SEED = 99
 
 # The surrogate training set: every topology of each of the first three
-# alignments, fitted at 200 sites. Three rather than issue #308's six,
-# because the per-pull-request sibling splits one alignment to each of train,
-# validation and test and a fourth would only make the fit slower.
+# alignments, fitted at 200 sites. Three rather than issue #308's six: the
+# per-pull-request sibling splits one alignment to each of train, validation
+# and test, and a fourth would only make the fit slower.
 SURROGATE_ALIGNMENTS = 3
 SURROGATE_SITES = 200
 SURROGATE_SEED_OFFSET = 1000
@@ -210,12 +234,14 @@ def tree_policy_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=best,
             seed=None,
             budget={"taxa": len(taxa), "reward": str(RewardModel.KNOWN)},
+            rtol=None,
         ),
         "greedy_rate": Measurement(
             algorithm="NNI hill climbing from each seeded start, to a local optimum",
             value=greedy,
             seed=int(params.seed),
             budget=budget,
+            rtol=None,
         ),
         "untrained_rate": Measurement(
             algorithm=(
@@ -225,6 +251,7 @@ def tree_policy_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=untrained,
             seed=UNTRAINED_SEED,
             budget={**budget, "rollouts_per_start": ROLLOUTS_PER_START},
+            rtol=None,
         ),
     }
 
@@ -266,6 +293,7 @@ def tree_surrogate_baseline(loaded: Fixture) -> dict[str, Measurement]:
                 "n_sites": SURROGATE_SITES,
                 "alignment_seed_offset": SURROGATE_SEED_OFFSET,
             },
+            rtol=FIT_RTOL,
         )
     }
 
@@ -324,6 +352,7 @@ def potts_landscape_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=float(optimum(landscape)[1]),
             seed=None,
             budget=chain,
+            rtol=None,
         ),
         "untrained_expected_return": Measurement(
             algorithm=(
@@ -333,6 +362,7 @@ def potts_landscape_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=expected,
             seed=None,
             budget={**chain, "horizon": RL_RETURN_HORIZON},
+            rtol=None,
         ),
         "untrained_reached": Measurement(
             algorithm=(
@@ -342,6 +372,7 @@ def potts_landscape_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=reached,
             seed=1,
             budget={**chain, "horizon": RL_ROLLOUT_HORIZON},
+            rtol=None,
         ),
     }
 
@@ -405,6 +436,7 @@ def planted_glass_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=best,
             seed=None,
             budget={"nodes": params.glass_nodes, "states": 2},
+            rtol=None,
         ),
         "planted_energy": Measurement(
             algorithm=(
@@ -414,6 +446,7 @@ def planted_glass_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=float(glass.planted_energy),
             seed=int(params.seed),
             budget={"nodes": params.glass_nodes, "frustration": frustration},
+            rtol=None,
         ),
         "descent_rate": Measurement(
             algorithm=(
@@ -423,12 +456,14 @@ def planted_glass_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=float(np.mean(rates)),
             seed=int(params.seed),
             budget=budget,
+            rtol=None,
         ),
         "descent_rate_half_width": Measurement(
             algorithm="half the 95% normal interval of the per-seed rates",
             value=float(1.96 * np.std(rates, ddof=1) / math.sqrt(GLASS_RESTART_SEEDS)),
             seed=int(params.seed),
             budget=budget,
+            rtol=None,
         ),
         "restart_success": Measurement(
             algorithm=(
@@ -439,6 +474,7 @@ def planted_glass_baseline(loaded: Fixture) -> dict[str, Measurement]:
             value=float(np.mean(restarts)),
             seed=int(params.seed),
             budget=budget,
+            rtol=None,
         ),
     }
 
@@ -543,6 +579,86 @@ def compute(spec: BaselineSpec, root: Path = REPO_ROOT) -> Baseline:
     )
 
 
+def compared_rtol(fresh: Measurement, stored: Measurement) -> float:
+    """The relative tolerance the two values are held to: the stricter declared.
+
+    ``None`` is exact, and here it is ``0.0``, so a side declaring it holds
+    the comparison to exact equality. Taking the stricter of the two is what
+    stops a record edited to declare a loose tolerance from loosening the
+    check it is caught by --- the edit is still reported, beside the value,
+    the way an edited budget is.
+
+    Returns
+    -------
+    float
+        ``0.0`` where either side asks for exact equality.
+    """
+    if fresh.rtol is None or stored.rtol is None:
+        return 0.0
+    return min(fresh.rtol, stored.rtol)
+
+
+def _relative(fresh: float, stored: float) -> float:
+    """``fresh``'s deviation from ``stored`` as a fraction of it.
+
+    Returns
+    -------
+    float
+        Infinite where ``stored`` is zero and ``fresh`` is not, and where
+        either is NaN --- both are deviations no relative tolerance admits,
+        and a NaN compared as a number would pass every bound there is.
+    """
+    if math.isnan(fresh) or math.isnan(stored):
+        return math.inf
+    if fresh == stored:
+        return 0.0
+    return abs(fresh - stored) / abs(stored) if stored else math.inf
+
+
+def value_differences(name: str, fresh: Measurement, stored: Measurement) -> list[str]:
+    """How two recordings of ``name`` disagree, at the tolerance they declare.
+
+    A value is recomputed to ``abs(fresh - stored) <= rtol * abs(stored)``,
+    elementwise where it is a vector, and ``rtol`` is
+    :func:`compared_rtol`. A measurement declaring no tolerance is compared
+    exactly, which is every count, enumerated extremum and rate here; the one
+    declaring a tolerance is the maximum-likelihood fit, whose reduction
+    ordering the host's BLAS decides (issue #527).
+
+    Returns
+    -------
+    list[str]
+        One line, or none where the two agree. A vector reports how many of
+        its entries moved and the worst of them, rather than 45 numbers
+        against 45 numbers.
+    """
+    rtol = compared_rtol(fresh, stored)
+    left = fresh.value if isinstance(fresh.value, tuple) else (fresh.value,)
+    right = stored.value if isinstance(stored.value, tuple) else (stored.value,)
+    if isinstance(fresh.value, tuple) != isinstance(stored.value, tuple) or len(
+        left
+    ) != len(right):
+        return [f"{name}: computed {fresh.value!r}, committed {stored.value!r}"]
+    moved = [
+        (index, computed, recorded)
+        for index, (computed, recorded) in enumerate(zip(left, right, strict=True))
+        if _relative(computed, recorded) > rtol
+    ]
+    if not moved:
+        return []
+    index, computed, recorded = max(
+        moved, key=lambda entry: _relative(entry[1], entry[2])
+    )
+    held = f", tolerance {rtol:g} relative" if rtol else ""
+    if not isinstance(stored.value, tuple):
+        return [f"{name}: computed {computed!r}, committed {recorded!r}{held}"]
+    return [
+        f"{name}: {len(moved)} of {len(right)} values moved; worst at index "
+        f"{index}: computed {computed!r}, committed {recorded!r}, "
+        f"{_relative(computed, recorded):.3e} relative{held}"
+    ]
+
+
 def differences(computed: Baseline, committed: Baseline) -> list[str]:
     """Every way the two records disagree, in words.
 
@@ -556,10 +672,10 @@ def differences(computed: Baseline, committed: Baseline) -> list[str]:
     Returns
     -------
     list[str]
-        One line per disagreement, empty when they match. A budget, a seed or
-        an algorithm is reported like a value: the record is then describing a
-        measurement other than the one it holds, which is the way a
-        hand-edited record goes wrong.
+        One line per disagreement, empty when they match. A budget, a seed,
+        an algorithm or a declared tolerance is reported like a value: the
+        record is then describing a measurement other than the one it holds,
+        which is the way a hand-edited record goes wrong.
     """
     found = []
     for name in sorted(set(computed.measurements) | set(committed.measurements)):
@@ -570,19 +686,18 @@ def differences(computed: Baseline, committed: Baseline) -> list[str]:
                 f"{name}: {'only computed' if stored is None else 'only committed'}"
             )
             continue
-        if fresh.value != stored.value:
-            found.append(
-                f"{name}: computed {fresh.value!r}, committed {stored.value!r}"
-            )
-        if (fresh.algorithm, fresh.seed, dict(fresh.budget)) != (
+        found += value_differences(name, fresh, stored)
+        if (fresh.algorithm, fresh.seed, dict(fresh.budget), fresh.rtol) != (
             stored.algorithm,
             stored.seed,
             dict(stored.budget),
+            stored.rtol,
         ):
             found.append(
-                f"{name}: computed under seed {fresh.seed!r} and budget "
-                f"{dict(fresh.budget)!r}, committed under seed {stored.seed!r} "
-                f"and budget {dict(stored.budget)!r}"
+                f"{name}: computed under seed {fresh.seed!r}, budget "
+                f"{dict(fresh.budget)!r} and rtol {fresh.rtol!r}, committed "
+                f"under seed {stored.seed!r}, budget {dict(stored.budget)!r} "
+                f"and rtol {stored.rtol!r}"
             )
     if computed.libraries != committed.libraries:
         found.append(
@@ -679,10 +794,11 @@ def check(specs: Sequence[BaselineSpec]) -> None:
     Raises
     ------
     StaleBaselineError
-        If a recomputed value, budget, seed or algorithm disagrees with what
-        is committed, or a record is missing or unreadable. This is the
-        referee the removed digest stood in for, and it is stronger: the
-        digest said the tree had moved, this says the number has.
+        If a recomputed value moves past the tolerance it declares, or a
+        budget, seed, algorithm or that tolerance disagrees with what is
+        committed, or a record is missing or unreadable. This is the referee
+        the removed digest stood in for, and it is stronger: the digest said
+        the tree had moved, this says the number has.
     """
     log = get_logger(__name__, start_time=time.time())
     stale: list[str] = []

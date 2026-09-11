@@ -1,0 +1,1 @@
+Trimmed the docstrings, comments and LaTeX prose by 3.4% (8,300 words) against `CLAUDE.md`'s Writing Style: narration restating the code, rationale repeated in a second place, and transitional sentences are cut. Every numpydoc section, tolerance, seed, oracle, invariant, measured number and recorded retraction is kept.

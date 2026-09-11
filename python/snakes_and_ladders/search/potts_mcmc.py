@@ -1,38 +1,34 @@
 """Monte Carlo move sets on a Potts lattice: single-site, Swendsen-Wang, Wolff.
 
-`ROADMAP.md` §1.4 names both cluster algorithms. Single-site flips are the
-only Potts move set the repository had, and they slow critically near the
-transition --- the autocorrelation time of the energy diverges as the
-correlation length does, so no Potts result at a useful lattice size is
-reachable through them. Cluster updates flip whole correlated regions at once
-and do not.
+`ROADMAP.md` §1.4 names both cluster algorithms. Single-site flips slow
+critically near the transition --- the autocorrelation time of the energy
+diverges as the correlation length does --- so no Potts result at a useful
+lattice size is reachable through them. Cluster updates flip whole correlated
+regions at once and do not.
 
-**The field is the part that is easy to get silently wrong.** The reference
-instance is a Potts model *in an external field*, and the Fortuin-Kasteleyn
-construction both cluster algorithms rest on is exact only at zero field:
-recolouring a cluster changes the field term by ``|C| * (h[new] - h[old])``,
-which the bond construction knows nothing about. Left there, the sampler runs,
-produces plausible configurations, and converges to the wrong distribution. So
-a cluster recolouring carries a Metropolis accept step on exactly that
-difference, and the chi-square tests in
-`tests/regression/search/test_potts_mcmc.py` are run with and without a field
-because only the first of those catches its absence.
+**The field is easy to get silently wrong.** The reference instance is a Potts
+model *in an external field*, and the Fortuin-Kasteleyn construction both
+cluster algorithms rest on is exact only at zero field: recolouring a cluster
+changes the field term by ``|C| * (h[new] - h[old])``, which the bond
+construction knows nothing about. Left there, the sampler runs, produces
+plausible configurations, and converges to the wrong distribution. So a cluster
+recolouring carries a Metropolis accept step on that difference, and the
+chi-square tests in `tests/regression/search/test_potts_mcmc.py` are run with
+and without a field because only the first catches its absence.
 
-These are samplers, not optimizers. They are validated by the distribution
-they converge to, and nothing here claims to find a ground state; that belongs
-to the classical baseline suite, which has an oracle for it. The one
-exception is :func:`anneal_potts`, which is an optimizer built *from* the
-sampler: the same sweep on a schedule of falling temperatures (issue #267).
+These are samplers, not optimizers: they are validated by the distribution they
+converge to, and nothing here claims to find a ground state. The exception is
+:func:`anneal_potts`, an optimizer built *from* the sampler: the same sweep on
+a schedule of falling temperatures (issue #267).
 
-**Temperature is model scaling, and the model says so exactly.** The Potts
-coupling absorbs ``beta``: ``exp(-E / T)`` with ``E = -h[s] - J [s = s']`` is
-the Boltzmann weight of the model with ``(J / T, h / T)`` at temperature 1.
-So a tempered chain runs the untempered sweeps on the scaled model, and there
-is no second code path to get wrong --- what :func:`tempered` does is checked
-against the energies, and the chain it produces against ``exp(-E / T)``
-enumerated from the *unscaled* model, which is the oracle the samplers already
-have. Tempering a likelihood is a different object (`snakes_and_ladders.opt.schedule`
-says why); here the objective is an energy and the temperature is physical.
+**Temperature is model scaling.** The Potts coupling absorbs ``beta``:
+``exp(-E / T)`` with ``E = -h[s] - J [s = s']`` is the Boltzmann weight of the
+model with ``(J / T, h / T)`` at temperature 1. So a tempered chain runs the
+untempered sweeps on the scaled model and there is no second code path:
+:func:`tempered` is checked against the energies, and the chain it produces
+against ``exp(-E / T)`` enumerated from the *unscaled* model. Tempering a
+likelihood is a different object (`snakes_and_ladders.opt.schedule` says why);
+here the objective is an energy and the temperature is physical.
 
 See ``docs/tex/textbook.tex``, ``sec:potts`` (Newman &
 Barkema chs. 4 and 6 for both algorithms and for Sokal's windowing; Mezard &
@@ -75,11 +71,10 @@ class PottsChain:
     states : np.ndarray
         Integer states, shape ``(n_sweeps, n_nodes)``.
     mean_cluster_size : float
-        Sites per cluster flip, averaged over the run. Carried because a
-        Wolff sweep flips one cluster while the other two touch every site,
-        so an autocorrelation time in sweeps is not comparable across the
-        three without it. For the move sets that do not build clusters it is
-        ``n_nodes``, which is what they touch per sweep.
+        Sites per cluster flip, averaged over the run. A Wolff sweep flips one
+        cluster while the other two touch every site, so an autocorrelation
+        time in sweeps is not comparable across the three without it. For the
+        move sets that build no clusters it is ``n_nodes``.
     """
 
     states: np.ndarray
@@ -92,8 +87,8 @@ def tempered(
     """The model whose Boltzmann weight at temperature 1 is this one's at ``temperature``.
 
     ``(J, h) / T``. At ``T = 1`` the division is the identity bitwise, which
-    is what lets every untempered chain be the tempered one at the default
-    rather than a separate path.
+    lets every untempered chain be the tempered one at the default rather than
+    a separate path.
 
     Raises
     ------
@@ -149,9 +144,9 @@ def sample_potts(
     thin : int
         Record one sweep in every ``thin``. Successive sweeps are correlated,
         so a goodness-of-fit test run on every sweep rejects a *correct*
-        sampler: the chi-square statistic assumes independent draws and the
-        correlation inflates it. Thinning by several autocorrelation times is
-        what makes the test measure the sampler rather than the correlation.
+        sampler: the chi-square assumes independent draws and the correlation
+        inflates it. Thinning by several autocorrelation times makes the test
+        measure the sampler rather than the correlation.
     temperature : float
         The chain targets ``exp(-E / temperature)``; 1 is the model as
         declared. Implemented as :func:`tempered` model scaling, so the
@@ -167,10 +162,9 @@ def sample_potts(
     Raises
     ------
     ValueError
-        If a cluster move is asked for on a graph with a negative coupling.
-        The bond probability ``1 - exp(-J)`` is not a probability there, and
-        an antiferromagnet has no like-spin clusters to flip: the algorithm
-        does not apply, rather than applying badly.
+        If a cluster move is asked for on a graph with a negative coupling. The
+        bond probability ``1 - exp(-J)`` is not a probability there, and an
+        antiferromagnet has no like-spin clusters to flip.
     """
     if move is not PottsMove.SINGLE_SITE and min(graph.coupling, default=0.0) < 0.0:
         msg = (
@@ -240,12 +234,11 @@ def anneal_potts(
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
     One :func:`_single_site_sweep` per schedule step at that step's
-    temperature, tracking the lowest energy seen (Kirkpatrick, Gelatt &
-    Vecchi, 1983). It is :func:`iterated_conditional_modes` with a finite
-    temperature: at ``T -> 0`` the heat bath is the argmin over each site's
-    conditional, which is exactly ICM's update, so the two are the same
-    search separated by the schedule alone and a difference between them is a
-    statement about the schedule.
+    temperature, tracking the lowest energy seen (Kirkpatrick, Gelatt & Vecchi,
+    1983). It is :func:`iterated_conditional_modes` at finite temperature: at
+    ``T -> 0`` the heat bath is the argmin over each site's conditional, ICM's
+    update, so the two are one search separated by the schedule and a
+    difference between them is a statement about the schedule.
 
     Single-site moves only. The cluster moves are built for sampling near a
     ferromagnetic transition and refuse a negative coupling, and the instances
@@ -335,12 +328,12 @@ def _swap_log_ratio(
 ) -> float:
     """Log acceptance of exchanging the configurations at two temperatures.
 
-    The joint target is the product of the tempered marginals, so the ratio
-    is ``(beta_i - beta_j)(E_i - E_j)``: an exchange that hands the colder
-    replica the lower energy is always accepted. A version that omits this
-    term still runs, still mixes, and converges to the wrong distribution ---
-    `tests/regression/search/test_potts_mcmc.py` replaces this function with
-    that version and asserts the chi-square catches it.
+    The joint target is the product of the tempered marginals, so the ratio is
+    ``(beta_i - beta_j)(E_i - E_j)``: an exchange handing the colder replica
+    the lower energy is always accepted. A version omitting this term still
+    runs, still mixes, and converges to the wrong distribution ---
+    `tests/regression/search/test_potts_mcmc.py` replaces this function with it
+    and asserts the chi-square catches it.
     """
     return (beta_low - beta_high) * (energy_low - energy_high)
 
@@ -378,9 +371,9 @@ def parallel_tempering(
     field : np.ndarray
         External field, shape ``(n_states,)``.
     temperatures : tuple[float, ...]
-        The ladder, hottest to coldest or in any order; at least two, all
-        positive. The stationary distribution does not depend on the order,
-        only which pairs are adjacent for exchange.
+        The ladder, in any order; at least two, all positive. The stationary
+        distribution depends on which pairs are adjacent for exchange, not on
+        the order.
     rng : np.random.Generator
         The parent generator: it spawns one child per replica and then draws
         only the exchange uniforms, so one seeded generator reproduces the run.
@@ -472,12 +465,12 @@ def adapt_ladder_potts(
 ) -> AdaptedLadder:
     """A ladder for :func:`parallel_tempering`, from its own exchange acceptances.
 
-    :func:`snakes_and_ladders.opt.schedule.adapt_ladder` with the measurement
-    being a :func:`parallel_tempering` run of ``n_sweeps`` per replica on the
-    candidate ladder, drawn from ``rng`` in sequence so one seed reproduces
-    the warm-up. The result's ``replicas_measured * n_sweeps`` is what the
-    warm-up cost in sweeps, and a comparison against a hand ladder at equal
-    budget charges it (issue #333).
+    :func:`snakes_and_ladders.opt.schedule.adapt_ladder`, the measurement being
+    a :func:`parallel_tempering` run of ``n_sweeps`` per replica on the
+    candidate ladder, drawn from ``rng`` in sequence so one seed reproduces the
+    warm-up. ``replicas_measured * n_sweeps`` is the warm-up's cost in sweeps,
+    which a comparison against a hand ladder at equal budget charges (issue
+    #333).
 
     Parameters
     ----------
@@ -535,9 +528,9 @@ def _sweep_at(
     Both closures consume exactly ``n_nodes`` uniforms per sweep from the
     generator they are handed, so switching backend changes which arithmetic
     evaluates the conditional and nothing about the stream. Tempering reaches
-    the Rust kernel as the model scaling :func:`tempered` states -- the field
-    and couplings multiplied by ``beta`` -- which is the identity the Python
-    sweep applies to its local field.
+    the Rust kernel as the model scaling :func:`tempered` states -- field and
+    couplings multiplied by ``beta`` -- the identity the Python sweep applies
+    to its local field.
     """
     if backend is Backend.PYTHON:
 
@@ -581,10 +574,10 @@ def _single_site_sweep(
 ) -> None:
     """One heat-bath sweep: every site redrawn from its exact conditional.
 
-    The baseline the cluster algorithms are measured against, and the same
-    update `snakes_and_ladders.sim.potts._simulate_gibbs` uses --- restated here for a
-    single chain rather than shared, because that one is vectorized across
-    many independent chains and this one must step a single chain in time.
+    The baseline the cluster algorithms are measured against, and the update
+    `snakes_and_ladders.sim.potts._simulate_gibbs` uses --- restated for a
+    single chain rather than shared, since that one is vectorized across many
+    independent chains and this one steps a single chain in time.
 
     ``beta`` tempers the conditional in place, for :func:`anneal_potts`, whose
     temperature changes every sweep and would otherwise rebuild the adjacency
@@ -609,10 +602,9 @@ def _swendsen_wang_sweep(
 ) -> None:
     """Activate bonds, find clusters, recolour each one.
 
-    Every cluster is recoloured independently, so in a field every cluster
-    needs its own accept step --- Wolff flips one cluster and needs one. They
-    are different code for that reason rather than one rule assumed to cover
-    both.
+    Every cluster is recoloured independently, so in a field each needs its own
+    accept step --- Wolff flips one cluster and needs one. Hence two code paths
+    rather than one rule assumed to cover both.
     """
     first = np.fromiter(
         (edge[0] for edge in graph.edges), dtype=np.int64, count=len(graph.edges)
@@ -642,20 +634,19 @@ def _wolff_sweep(
 ) -> int:
     """Grow one cluster from a random seed, recolour it, and stop.
 
-    Exactly one cluster per sweep, and the "exactly" is load-bearing. An
-    earlier version ran clusters until their cumulative size reached
-    ``n_nodes``, to spend the same budget as the other two move sets. That is
-    a *state-dependent* stopping rule: an aligned configuration makes large
+    Exactly one cluster per sweep, and the "exactly" is load-bearing. An earlier
+    version ran clusters until their cumulative size reached ``n_nodes``, to
+    spend the same budget as the other two move sets. That is a
+    *state-dependent* stopping rule: an aligned configuration makes large
     clusters, so it reached the budget in fewer steps and received less
-    randomization than a disordered one. Each individual step is still
-    correct, but stopping on the outcome biases the composition --- measured
-    on a two-site chain at ``J = 0.7``, it put 0.384 on each aligned state
-    against an exact 0.334, and the chi-square rejected it outright.
+    randomization than a disordered one. Each step is correct, but stopping on
+    the outcome biases the composition --- measured on a two-site chain at
+    ``J = 0.7``, it put 0.384 on each aligned state against an exact 0.334, and
+    the chi-square rejected it.
 
-    One flip per sweep is therefore not the same amount of work as one
-    single-site sweep, and :func:`sample_potts` returns the mean cluster size
-    so a comparison can be normalized rather than left to imply that a Wolff
-    sweep and a heat-bath sweep cost the same.
+    One flip per sweep is therefore not one single-site sweep's work, and
+    :func:`sample_potts` returns the mean cluster size so a comparison can be
+    normalized.
 
     Returns
     -------
@@ -687,11 +678,9 @@ def _recolour(
     """Propose one colour for a whole cluster, accepting on the field alone.
 
     The proposal is uniform over every colour including the current one, which
-    makes it symmetric and leaves the acceptance ratio as the field term
-    alone. Drawing from the ``k - 1`` other colours would mix marginally
-    faster and would need the proposal ratio carried through the acceptance;
-    the symmetric version is the one whose correctness a reader can check
-    against the code in front of them.
+    makes it symmetric and leaves the acceptance ratio as the field term alone.
+    Drawing from the ``k - 1`` other colours would mix marginally faster and
+    would need the proposal ratio carried through the acceptance.
 
     The bond construction contributes nothing to the ratio: bonds live only
     between like-coloured sites, and every site in the cluster changes colour

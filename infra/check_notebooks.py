@@ -1,58 +1,54 @@
 """Re-execute the committed notebooks and compare what they print.
 
-`docs/nb/` ships notebooks with their outputs committed, and until now
-nothing re-ran them. That gap was not theoretical: `snakes_and_ladders.sim.hmm` landing in
-#182 broke `hmm.ipynb`'s import outright, and #187 switched three call sites
-to a Rust sampler that could have moved every simulated number. Both were
-caught by hand. A `docs/tex/` figure cannot rot that way because CI
-regenerates it and byte-compares the rebuilt PDF; this is the notebooks'
-equivalent (issue #203).
+`docs/nb/` ships notebooks with their outputs committed, and until now nothing
+re-ran them. The gap was not theoretical: `snakes_and_ladders.sim.hmm` landing
+in #182 broke `hmm.ipynb`'s import outright, and #187 switched three call sites
+to a Rust sampler that could have moved every simulated number. Both were caught
+by hand. A `docs/tex/` figure cannot rot that way because CI regenerates it and
+byte-compares the rebuilt PDF; this is the notebooks' equivalent (issue #203).
 
 **Text is compared; images are not.** Every number a notebook prints is
 deterministic given its seeds, so a re-executed stream output must match the
-committed one exactly. Rendered figures embed metadata that is not stable
-across matplotlib builds, and comparing them would reproduce the
-`SOURCE_DATE_EPOCH` problem `docs/CLAUDE.md` records for `docs/tex/` -- for a
-weaker payoff, since the printed numbers are what the notebooks assert with.
-What is checked for a figure is that the cell still produced one.
+committed one exactly. Rendered figures embed metadata that is not stable across
+matplotlib builds, and comparing them would reproduce the `SOURCE_DATE_EPOCH`
+problem `docs/CLAUDE.md` records for `docs/tex/`, for a weaker payoff. What is
+checked for a figure is that the cell still produced one.
 
-**The Further Work section is checked for shape, not only for presence.**
-Root `CLAUDE.md` makes it load-bearing: the last cell of every notebook names,
-with an issue number, what the notebook could not demonstrate. Every one of
-the three carried a sentence that had been false since this tool landed
-("no job re-runs it"), and nothing noticed, because re-execution compares
-outputs and a markdown cell has none (issue #278). So the last cell must be
-markdown headed ``## Further work``, and every bullet under it must name an
-issue (``#N``) or a ``TICKETS.md`` section. Whether the issue is still open is
-a question for the release gate, not this tool.
+**The Further Work section is checked for shape, not only presence.** Root
+`CLAUDE.md` makes it load-bearing: the last cell of every notebook names, with
+an issue number, what the notebook could not demonstrate. All three carried a
+sentence that had been false since this tool landed ("no job re-runs it") and
+nothing noticed, because re-execution compares outputs and a markdown cell has
+none (issue #278). So the last cell must be markdown headed
+``## Further work``, and every bullet under it must name an issue (``#N``) or a
+``TICKETS.md`` section. Whether the issue is still open is the release gate's
+question.
 
 Exits 0 when every notebook agrees, 1 on the first that does not, printing a
 unified diff of the cell's output.
 
 **Every notebook this is given is executed.** Which ones a run checks is a
-property of its arguments and nothing else: the notebooks named, or every one
-under ``docs/nb/`` when none is, listed before the first is run. A staleness
-digest used to decide it instead (issue #372), and skipped ``turbo.ipynb``
-until an unrelated merge moved the hash -- at which point the check ran and
-found a disagreement the notebook had been carrying for as long as it had
-been skipped (issues #480, #507). Whether an input changed and whether a
-correctness check runs are separate questions, and the second is not the
-first's to answer. A run too expensive to make unconditional is cut by a
-stated budget, never by a hash; ``DEV.md`` carries the budget and what it
-buys. The digest and the ``<name>.inputs`` stamps beside the notebooks are
-gone with issue #490; nothing had read them since #480.
+property of its arguments alone: the notebooks named, or every one under
+``docs/nb/`` when none is, listed before the first is run. A staleness digest
+used to decide it instead (issue #372) and skipped ``turbo.ipynb`` until an
+unrelated merge moved the hash --- at which point the check ran and found a
+disagreement the notebook had carried for as long as it had been skipped
+(issues #480, #507). Whether an input changed and whether a correctness check
+runs are separate questions. A run too expensive to make unconditional is cut
+by a stated budget, never by a hash; ``DEV.md`` carries the budget. The digest
+and the ``<name>.inputs`` stamps are gone with issue #490.
 
-``--write`` re-executes and saves instead of comparing, which is how a
-notebook is regenerated after a change moves what it prints. Both live here
-rather than in two tools because they must execute a notebook *identically* --
-a regenerator that differed from the checker in working directory, timeout or
-kernel would write a notebook the checker then rejects.
+``--write`` re-executes and saves instead of comparing, which regenerates a
+notebook after a change moves what it prints. Both live here rather than in two
+tools because they must execute a notebook *identically* --- a regenerator
+differing from the checker in working directory, timeout or kernel would write
+a notebook the checker then rejects.
 
 `nbformat` and `nbclient` are imported inside the functions that run a
-notebook, not at module scope. Comparing two runs is pure dict arithmetic and
-needs neither; importing them here would put the whole Jupyter stack behind
+notebook. Comparing two runs is dict arithmetic and needs neither; importing
+them at module scope would put the whole Jupyter stack behind
 `tests/regression/test_check_notebooks.py`, which the `python-tests` job does
-not install (`uv sync --extra test`) and does not need to.
+not install (`uv sync --extra test`).
 """
 
 from __future__ import annotations

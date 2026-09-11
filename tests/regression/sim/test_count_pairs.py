@@ -54,8 +54,8 @@ def _families(declared: SpatioSequentialCountsParams) -> list[IndependentCountPa
 @pytest.mark.parametrize("factor", [5, 10])
 def test_binning_is_the_sum_over_each_block_of_positions(factor: int) -> None:
     # Pinned against the sum written out position by position, in both
-    # channels. The reshape-and-sum is the whole of the coarsening, and it is
-    # what makes the three declared instances one draw rather than three.
+    # channels. The reshape-and-sum is the whole of the coarsening, and makes
+    # the three declared instances one draw rather than three.
     _, fine = _fine()
     binned = coarsen(fine, factor)
 
@@ -160,12 +160,11 @@ def test_the_negative_binomial_channel_aggregates_exactly(factor: int) -> None:
 
 @pytest.mark.simulated_truth
 def test_the_binned_counts_follow_the_aggregated_negative_binomial() -> None:
-    # The claim above, on the data rather than on the family: over the bins
-    # whose positions share a hidden state --- two states are two values of p,
-    # and only within one state are the summands identically distributed ---
-    # the binned totals' mean and variance are the aggregated family's. The
-    # tolerances are Monte Carlo bounds at the few thousand such draws the ci
-    # instance carries at factor 5.
+    # The claim above on the data rather than the family: over the bins whose
+    # positions share a hidden state --- only within one state are the summands
+    # identically distributed --- the binned totals' mean and variance are the
+    # aggregated family's. The tolerances are Monte Carlo bounds at the few
+    # thousand such draws the ci instance carries at factor 5.
     declared, fine = _fine()
     model = declared.model
     factor = 5
@@ -193,9 +192,8 @@ def test_the_binned_counts_follow_the_aggregated_negative_binomial() -> None:
 def test_the_beta_binomial_channel_is_misspecified_under_aggregation() -> None:
     # A sum of f beta-binomials is not beta-binomial. Against the same
     # convolution oracle: the mean of BetaBinomial(f n, a, b) --- the family
-    # `aggregate` returns, and the closest member of the family to the truth
-    # --- is right, its variance is several times too large, and the two
-    # distributions are far apart in total variation. That is why a coarse
+    # `aggregate` returns --- is right, its variance several times too large,
+    # and the two distributions far apart in total variation. Hence a coarse
     # instance's second channel is checked for label recovery and never for a
     # parameter.
     declared, _ = _fine()
@@ -259,8 +257,8 @@ def test_the_planted_labels_are_contiguous_bands_of_rows() -> None:
 @pytest.mark.structural
 def test_the_fine_draw_is_simulated_once_and_binned_from() -> None:
     # "Simulated once at load and held in memory" is the fixture's claim, and
-    # the cache is what makes it true: a second reader gets the same array,
-    # not a second 400 MB draw, and every coarse instance is a bin of it.
+    # the cache makes it true: a second reader gets the same array rather than
+    # a second 400 MB draw, and every coarse instance is a bin of it.
     entry = fixture(CI, "ci")
 
     assert fine_instance(entry.path) is fine_instance(entry.path)
@@ -326,10 +324,9 @@ def test_a_fixture_that_cannot_mean_what_it_says_is_refused(
 def test_a_shifted_beta_binomial_rate_outside_the_unit_interval_is_refused(
     tmp_path: Path,
 ) -> None:
-    # The per-class shift is what separates the classes in the second channel;
-    # a shift that takes a rate out of (0, 1) is a file that does not describe
-    # a beta-binomial, and clipping it would be the silent behaviour change
-    # `CLAUDE.md` forbids.
+    # The per-class shift separates the classes in the second channel; a shift
+    # taking a rate out of (0, 1) describes no beta-binomial, and clipping it
+    # would be the silent behaviour change `CLAUDE.md` forbids.
     raw = yaml.safe_load(fixture(CI, "ci").path.read_text())
     raw["emissions"]["class_rate_shift"] = [0.9, 0.1]
     path = tmp_path / "ci.yaml"

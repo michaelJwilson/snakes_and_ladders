@@ -1,39 +1,31 @@
 """Where an optimization starts, as something the caller can choose.
 
-Issue #251. `Objective.initial()` was already in the protocol and `fit` already
-took a `theta0` override, so the *seam* existed. What every implementation put
-through it was one fixed constant: a short branch length everywhere, zeros for
-the Potts chain and lattice, zeros with a hand-tuned tilt for the HMM, a fixed
-`start` for each test function.
+Issue #251. `Objective.initial()` and `fit`'s `theta0` override already made
+the *seam*; what every implementation put through it was one fixed constant.
 
-**The repository has been bitten by this once, and the scar is in the code.**
-`opt/hmm.py`'s `initial()` records that the uniform point is not a poor guess
-but a *stationary point*: with every hidden state identical the gradient with
-respect to the initial and transition parameters is exactly zero, so an
-optimizer started there never moves while the emission rows drift to the pooled
-symbol frequency. The fix was a fixed tilt, written into that one file.
-`perturbed` here is that idea with the model taken out of it.
+**The repository has been bitten by this once.** `opt/hmm.py`'s `initial()`
+records that the uniform point is a *stationary point*: with every hidden state
+identical the gradient in the initial and transition parameters is exactly
+zero, so an optimizer started there never moves. The fix was a fixed tilt in
+that one file; `perturbed` here is that idea with the model taken out.
 
 **And one start is known not to be enough.** `opt/testfunctions.py` keeps
-Himmelblau — four equal minima, the start picks one — and Rastrigin, whose
-docstring says a fit from a single start lands in whichever cell it began in.
-Meanwhile `search/` has restarted all along: `STATUS.md` records hill climbing
-reaching the enumerated optimum from 12 of 12 starts. The discrete side
-restarts and the continuous side does not.
+Himmelblau — four equal minima — and Rastrigin, where a fit from a single start
+lands in whichever cell it began in. `search/` has restarted all along:
+`STATUS.md` records hill climbing reaching the enumerated optimum from 12 of 12
+starts.
 
 **Randomness enters as a generator.** `opt/hmm.py` rejected a jitter because "a
-seeded jitter would make the fit depend on a second seed nobody declared" — and
-that is an argument against *seeding inside a call*, not against randomness.
-An initializer taking a generator is reproducible; one seeding itself is the
-defect `sim/CLAUDE.md` forbids and issue #240 removed elsewhere.
+seeded jitter would make the fit depend on a second seed nobody declared" —
+an argument against *seeding inside a call*, not against randomness. An
+initializer taking a generator is reproducible; one seeding itself is the
+defect `sim/CLAUDE.md` forbids (issue #240).
 
-**What is not here.** An initializer that reads the data — k-means++ for a
-mixture, or a warm start from a moment estimator — cannot live in this module:
-`opt/` may import no application module, and `test_opt_objective.py` asserts
-it. Those belong beside the objective they initialize, with this module holding
-the protocol and the model-free strategies only: `opt/mixture.py`'s k-means++
-for the mixture (issue #262), and `search/initialize.py`'s neighbor-joining
-and Hadamard starts for the tree (issue #364).
+**What is not here.** An initializer that reads the data cannot live in this
+module: `opt/` may import no application module, and `test_opt_objective.py`
+asserts it. Those belong beside the objective they initialize ---
+`opt/mixture.py`'s k-means++ (issue #262), `search/initialize.py`'s
+neighbor-joining and Hadamard starts (issue #364).
 """
 
 from __future__ import annotations
@@ -87,11 +79,9 @@ class FromObjective:
 class Perturbed:
     """The objective's start, tilted by a fixed amount along each coordinate.
 
-    Deterministic, and that is the point rather than a limitation. It exists
-    for a surface whose nominal start is *stationary* — the HMM's uniform
-    point, where the gradient is exactly zero and an optimizer never leaves —
-    and for that a reproducible nudge off the symmetry is enough. Randomness
-    would buy nothing and cost a declared generator.
+    Deterministic by design. It exists for a surface whose nominal start is
+    *stationary* — the HMM's uniform point — where a reproducible nudge off the
+    symmetry is enough and randomness would only cost a declared generator.
 
     The tilt alternates in sign so the perturbation does not translate every
     coordinate the same way, which on a symmetric objective would land on
@@ -131,9 +121,8 @@ class RandomRestart:
 
     For a surface with more than one local optimum, where the answer a single
     fit returns is a property of where it began. `search/CLAUDE.md`'s budget
-    rule applies: `n_starts` restarts cost `n_starts` fits, so the count is the
-    caller's to justify and this makes it visible rather than hiding it inside
-    a fit.
+    rule applies: `n_starts` restarts cost `n_starts` fits, so the count is
+    the caller's to justify.
 
     Parameters
     ----------
@@ -143,13 +132,13 @@ class RandomRestart:
         Standard deviation of the Gaussian displacement, in unconstrained
         coordinates.
     rng : np.random.Generator
-        Passed in rather than seeded here, so a caller running an ensemble gets
-        independent restarts rather than the same set repeatedly, and a
-        declared seed still determines the run (`sim/CLAUDE.md`, issue #240).
+        Passed in rather than seeded here, so an ensemble gets independent
+        restarts and a declared seed still determines the run
+        (`sim/CLAUDE.md`, issue #240).
     include_nominal : bool
         Whether the objective's own start is the first of them. Default
         ``True``: a restart set that cannot reproduce the single-start answer
-        can be worse than one fit, and nothing would say so.
+        can be worse than one fit.
     """
 
     def __init__(

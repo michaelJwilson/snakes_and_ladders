@@ -1,19 +1,18 @@
 """Belief propagation, asserted where it is exact and measured where it is not.
 
-Two regimes, two different kinds of test, and conflating them is the mistake
-this file exists to avoid.
+Two regimes, two kinds of test, and conflating them is the mistake this file
+avoids.
 
-On a tree BP is exact, so equality against exhaustive enumeration is the right
-assertion and carries the correctness claim: a wrong sign in the Bethe free
-energy, an off-by-one in the degree correction, or a message that failed to
-exclude its own reverse all fail here.
+On a tree BP is exact, so equality against exhaustive enumeration carries the
+correctness claim: a wrong sign in the Bethe free energy, an off-by-one in the
+degree correction, or a message that failed to exclude its own reverse all fail
+here.
 
-On a loopy lattice BP is approximate. Asserting agreement would assert
-something false, and asserting only that it ran would be coverage theatre
-(root `CLAUDE.md`). What is asserted instead is the structure the physics
-requires --- exact at zero coupling, and a deviation that grows away from it
---- with the size of the error reported as a measurement against the exact
-strip transfer matrix.
+On a loopy lattice BP is approximate, so asserting agreement would assert
+something false and asserting only that it ran would be coverage theatre (root
+`CLAUDE.md`). Asserted instead is the structure the physics requires --- exact
+at zero coupling, and a deviation that grows away from it --- with the error
+reported as a measurement against the exact strip transfer matrix.
 """
 
 from __future__ import annotations
@@ -74,8 +73,8 @@ def test_the_beliefs_are_the_exact_marginals_on_a_tree() -> None:
 @pytest.mark.mathematical
 def test_the_pairwise_beliefs_reduce_to_the_single_site_ones_on_a_tree() -> None:
     # A consistency the beliefs owe each other wherever BP is exact. On a loop
-    # it holds too, by construction of the pairwise belief, but there it is
-    # consistency between two approximations rather than evidence of either.
+    # it holds by construction of the pairwise belief, as consistency between
+    # two approximations rather than evidence of either.
     result = belief_propagation(TREE, FIELD)
 
     for position, (first, second) in enumerate(TREE.edges):
@@ -93,10 +92,9 @@ def test_the_pairwise_beliefs_reduce_to_the_single_site_ones_on_a_tree() -> None
 
 @pytest.mark.oracle
 def test_a_zero_coupling_lattice_is_exact_despite_its_loops() -> None:
-    # The loops are still there; what is gone is the coupling that makes them
-    # matter. Separating "loopy" from "approximate" this way is what shows the
-    # error measured below comes from the cycles carrying correlation, not
-    # from the lattice geometry alone.
+    # The loops are still there; the coupling that makes them matter is gone.
+    # Separating "loopy" from "approximate" shows the error measured below
+    # comes from the cycles carrying correlation, not the geometry alone.
     shape = (6, 4)
     graph = lattice_graph(shape, BoundaryCondition.OPEN, 0.0)
     exact = strip_log_partition(shape, BoundaryCondition.OPEN, 0.0, FIELD)
@@ -140,19 +138,19 @@ def test_the_bethe_deviation_is_the_measured_size(
     assert realized == pytest.approx(expected, rel=0.1) or (
         expected < 1e-12 and realized < 1e-12
     )
-    # Reported beside the deviation, per the ticket, so a point that only just
-    # converged is visible rather than inferred. Banded rather than pinned:
-    # the count is a threshold crossing on a float residual, so a machine
-    # summing the messages in a different order can land a sweep either side.
+    # Reported beside the deviation so a point that only just converged is
+    # visible. Banded rather than pinned: the count is a threshold crossing on
+    # a float residual, so a machine summing the messages in a different order
+    # can land a sweep either side.
     assert result.iterations == pytest.approx(sweeps, rel=0.2)
 
 
 @pytest.mark.oracle
 def test_the_bethe_deviation_on_the_registry_lattice_is_the_measured_size() -> None:
     # The instance the registry declares, refereed by enumeration rather than
-    # by the strip transfer matrix: 3x3 at 3 states is 19,683 configurations,
-    # so `log Z` and every marginal are summed exactly. This is the deviation
-    # `docs/nb/potts_chain.ipynb` reports, pinned here so the notebook states
+    # the strip transfer matrix: 3x3 at 3 states is 19,683 configurations, so
+    # `log Z` and every marginal are summed exactly. The deviation
+    # `docs/nb/potts_chain.ipynb` reports, pinned so the notebook states
     # nothing the suite does not.
     instance = fixture("potts_lattice", "ci").params
     graph = lattice_graph(instance.shape, instance.boundary, instance.coupling)
@@ -180,10 +178,9 @@ def test_the_bethe_deviation_on_the_registry_lattice_is_the_measured_size() -> N
 @pytest.mark.mathematical
 def test_the_deviation_grows_with_coupling_below_the_transition() -> None:
     # Monotone on the weak-coupling arm only. It is *not* monotone in J
-    # overall: the curve above peaks at J = 0.875 and falls away, because deep
-    # in the ordered phase the sites agree and the correlations the Bethe
-    # approximation neglects are short-ranged again. Asserting monotone growth
-    # across the whole range would be asserting something false.
+    # overall: the curve above peaks at J = 0.875 and falls away, since deep in
+    # the ordered phase the sites agree and the correlations Bethe neglects are
+    # short-ranged again.
     shape = (6, 4)
     deviations = []
     for coupling in (0.0, 0.125, 0.25, 0.5, 0.75):

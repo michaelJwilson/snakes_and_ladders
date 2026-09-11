@@ -1,9 +1,9 @@
 """HMC, checked where it is exact before it is checked where it is statistical.
 
 The integrator has two properties that are exact statements about arithmetic
-and need no sampling at all: it is reversible, and its energy error is second
-order in the step size. Those come first, because a distributional test says
-the chain is wrong while these say which half is wrong.
+and need no sampling: it is reversible, and its energy error is second order
+in the step size. Those come first, because a distributional test says the
+chain is wrong while these say which half is wrong.
 
 Then the distribution, against two references that are not another sampler: a
 Gaussian whose mean and covariance are analytic, and a real `Objective` whose
@@ -80,7 +80,7 @@ def test_the_integrator_is_reversible(
     # Run forward, negate the momentum, run forward again: the exact statement
     # that makes the Metropolis proposal symmetric. Without it the acceptance
     # ratio is not the energy difference alone and the chain targets the wrong
-    # distribution, which no amount of sampling would localize to here.
+    # distribution, which no sampling would localize to here.
     theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
     momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
 
@@ -100,8 +100,8 @@ def test_the_energy_error_is_second_order_in_the_step_size() -> None:
     # Halving the step must quarter the error. The *trajectory length* is held
     # fixed and the step count scaled with it: varying the step at a fixed
     # step count moves the endpoint around the orbit instead, and the errors
-    # then oscillate rather than converge -- which is what the first draft of
-    # this test measured.
+    # oscillate rather than converge, as the first draft of this test
+    # measured.
     theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
     momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
     reference = hamiltonian(GAUSSIAN, theta, momentum)
@@ -147,14 +147,13 @@ def test_the_chain_recovers_an_analytic_gaussian() -> None:
 )
 def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
     # The Potts chain's `theta` is two-dimensional at two states, so the
-    # posterior can be integrated on a grid and there is a reference that is
-    # not a sampler. The step size is deliberately small: see the test below
-    # for what a larger one does to the second moment.
+    # posterior integrates on a grid and the reference is not a sampler. The
+    # step size is deliberately small: see the test below for what a larger
+    # one does to the second moment.
     # Three independent chains, pooled. One chain of the same total length
-    # estimates the *mean* fine and the *spread* badly: a single 2000-draw
-    # chain came out 18% high, because the second moment needs far more
+    # estimates the *mean* fine and the *spread* badly -- a single 2000-draw
+    # chain came out 18% high -- because the second moment needs far more
     # effective samples than the first and this posterior mixes slowly.
-    # Pooling independent chains fixes that without lengthening any of them.
     posterior = _potts_posterior()
 
     draws = torch.cat(
@@ -224,11 +223,10 @@ def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
 
 @pytest.mark.mathematical
 def test_the_posterior_is_wider_than_the_laplace_approximation_predicts() -> None:
-    # The comparison this module exists to make. The Laplace standard error is
-    # the curvature at the mode; the HMC one is a quantile of the posterior.
-    # On this fixture they agree closely, which is the expected outcome for a
-    # well-identified two-parameter model and is what makes a *disagreement*
-    # elsewhere informative rather than ambiguous.
+    # The Laplace standard error is the curvature at the mode; the HMC one is
+    # a quantile of the posterior. They agree on this fixture, the expected
+    # outcome for a well-identified two-parameter model, which is what makes a
+    # *disagreement* elsewhere informative.
     posterior = _potts_posterior()
     mode = torch.tensor(QUADRATURE_MEAN, dtype=torch.float64)
 
@@ -273,9 +271,9 @@ def test_a_non_positive_prior_scale_is_refused() -> None:
 
 @pytest.mark.mathematical
 def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
-    # The wrapper is what turns a likelihood into something with a posterior;
-    # if it changed the likelihood term the chain would target a different
-    # model silently.
+    # The wrapper turns a likelihood into something with a posterior; if it
+    # changed the likelihood term the chain would silently target a different
+    # model.
     point = torch.tensor([0.3, -1.1], dtype=torch.float64)
     wrapped = WithGaussianPrior(GAUSSIAN, scale=2.0)
 
@@ -287,9 +285,8 @@ def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
 @pytest.mark.mathematical
 def test_the_prior_leaves_the_coordinates_it_is_stated_in_alone() -> None:
     # The prior is isotropic *in unconstrained coordinates*, so the wrapper
-    # adds a term and changes no coordinate. An inverse of its own would mean
-    # the posterior's parameters were not the likelihood's, and an interval
-    # read at a sampled point would then be in the wrong units.
+    # adds a term and changes no coordinate. An inverse of its own would put
+    # an interval read at a sampled point in the wrong units.
     point = torch.tensor([0.3, -1.1], dtype=torch.float64)
     wrapped = WithGaussianPrior(GAUSSIAN, scale=2.0)
 
@@ -328,10 +325,9 @@ def _hand_written_leapfrog(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Kick-drift-kick, written out, as `leapfrog` was before it was composed.
 
-    Kept as the reference the composition is pinned against. A general driver
-    that reduces to this for the trivial composition is one implementation
-    instead of two; that it *does* reduce is what the test below establishes,
-    and without the reference there would be nothing to establish it against.
+    Kept as the reference the composition is pinned against: a general driver
+    reducing to this for the trivial composition is one implementation instead
+    of two, and the test below establishes that it does.
     """
     position = theta.detach().clone()
     velocity = momentum.detach().clone()
@@ -352,8 +348,7 @@ def test_the_composition_reproduces_the_hand_written_leapfrog_exactly(
     n_steps: int, step_size: float
 ) -> None:
     # Bitwise, not to a tolerance. The composition driver replaced a
-    # hand-written loop, and "the chain is unchanged" is only a claim worth
-    # making if it is exact -- a tolerance here would hide a merged kick
+    # hand-written loop, and a tolerance here would hide a merged kick
     # computed in the wrong order.
     theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
     momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
@@ -390,15 +385,15 @@ def test_a_composition_that_integrates_the_wrong_interval_is_refused() -> None:
 
 @pytest.mark.mathematical
 def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
-    # The companion of the second-order test above, and it needs that one to
-    # be trustworthy: a slope estimator reporting 4 for both integrators is
-    # broken, and only the pair catches it.
+    # The companion of the second-order test above: a slope estimator
+    # reporting 4 for both integrators is broken, and only the pair catches
+    # it.
     #
     # Realized ratios, coarse to fine: 16.310, 16.077, 16.019, 16.005, 16.001
-    # -- converging on 16 rather than drifting, which is what makes the claim
-    # an order rather than a coincidence at one step size. The coarsest is
-    # excluded from the assertion and reported here: at 1/10 the higher-order
-    # terms have not yet died away.
+    # -- converging on 16 rather than drifting, so the claim is an order
+    # rather than a coincidence at one step size. The coarsest is excluded
+    # from the assertion and reported here: at 1/10 the higher-order terms
+    # have not yet died away.
     theta = torch.tensor([0.4, 0.9], dtype=torch.float64)
     momentum = torch.tensor([-0.3, 1.1], dtype=torch.float64)
     reference = hamiltonian(GAUSSIAN, theta, momentum)
@@ -423,9 +418,8 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
     integrator: Integrator, n_steps: int
 ) -> None:
     # The number a comparison between integrators rests on. Counted rather
-    # than derived, because a comparison at equal *steps* says nothing and one
-    # at equal evaluations says everything -- and an off-by-one here would
-    # quietly favour whichever method the arithmetic was written for.
+    # than derived: a comparison at equal *steps* says nothing, and an
+    # off-by-one here would quietly favour one method.
     counted = Counted(GAUSSIAN)
 
     integrator(
@@ -441,9 +435,8 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
 
 @pytest.mark.mathematical
 def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
-    # **The measurement the ticket is for, and it is negative.** A fourth-order
-    # method pays where the step is limited by *accuracy*; here it is limited
-    # by *stability*, and the two are different constraints.
+    # **The measurement is negative.** A fourth-order method pays where the
+    # step is limited by *accuracy*; here it is limited by *stability*.
     #
     # Yoshida's largest sub-step is |w0| = 1.70 times the nominal step, so its
     # stability limit in the step size is ~0.59 of leapfrog's -- measured at
@@ -505,14 +498,13 @@ def test_the_default_integrator_is_the_one_every_committed_result_used() -> None
 
 @pytest.mark.structural
 def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None:
-    # Where the approximation is exact. For a Gaussian target the dynamics
-    # are linear, so a chain at temperature T *is* the chain at 1 with its
+    # Where the approximation is exact. For a Gaussian target the dynamics are
+    # linear, so a chain at temperature T *is* the chain at 1 with its
     # deviations from the mean scaled by sqrt(T), draw for draw, once the
-    # start has been forgotten -- and its spread is sqrt(T) times the exact
-    # standard deviation. The first is the implementation check (momentum
-    # variance T, energy difference over T, and nothing else); the second is
-    # what tempering means. Realized: 1.0004 and 0.9953 of sqrt(T) sigma at
-    # both T = 2 and T = 0.5, the same digits at both because of the first.
+    # start has been forgotten. The first is the implementation check
+    # (momentum variance T, energy difference over T, nothing else); the
+    # second is what tempering means. Realized: 1.0004 and 0.9953 of
+    # sqrt(T) sigma at both T = 2 and T = 0.5.
     exact = GAUSSIAN.covariance.diagonal().sqrt()
     reference = sample(
         GAUSSIAN,
@@ -559,10 +551,10 @@ def test_a_non_positive_temperature_is_refused() -> None:
 
 @pytest.mark.oracle
 def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
-    # The refactor's guarantee, stated as the plan asked: annealing on a
-    # constant schedule at temperature 1 reproduces the untempered chain at
-    # generators seeded alike *bitwise*. Both go through one transition, so
-    # this is not two implementations agreeing but one implementation being one.
+    # Annealing on a constant schedule at temperature 1 reproduces the
+    # untempered chain at generators seeded alike, *bitwise*. Both go through
+    # one transition, so this is one implementation being one rather than two
+    # agreeing.
     chain = sample(
         GAUSSIAN,
         generator=torch.Generator().manual_seed(5),
@@ -609,10 +601,10 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
 @pytest.mark.mathematical
 def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() -> None:
     # With exchanges on, replica r targets exp(-U / T_r): on the analytic
-    # Gaussian that is the same mean and covariance scaled by T_r, which is
-    # what makes the exchange checkable rather than admired. The ladder is
-    # close enough that exchanges happen -- a swap rate of 0 would leave four
-    # independent chains, which would pass this test while exchanging nothing.
+    # Gaussian that is the same mean and covariance scaled by T_r. The ladder
+    # is close enough that exchanges happen -- a swap rate of 0 would leave
+    # four independent chains, which would pass this test while exchanging
+    # nothing.
     ladder = (1.0, 2.0, 4.0)
     run = parallel_tempering(
         GAUSSIAN,
