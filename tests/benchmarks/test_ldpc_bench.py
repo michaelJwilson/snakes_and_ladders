@@ -1,4 +1,4 @@
-"""Benchmarks for the vectorized decoder and the ensemble draw.
+"""Benchmarks for the vectorized decoder and the two constructions.
 
 See tests/regression/likelihood/test_ldpc.py for correctness. Each decoding
 cell runs a fixed 50 iterations with the syndrome stop off, so the number
@@ -15,6 +15,7 @@ from snakes_and_ladders.likelihood.ldpc import DecodingAlgorithm, decode
 from snakes_and_ladders.sim.ldpc import (
     BinarySymmetricChannel,
     all_zero_transmission,
+    bicycle_code,
     gallager_code,
 )
 
@@ -51,3 +52,18 @@ def test_gallager_code_benchmark(benchmark: BenchmarkFixture) -> None:
     result = benchmark(gallager_code, 19_998, 3, 6, np.random.default_rng(3))
 
     assert result.n_edges == 3 * 19_998
+
+
+def test_bicycle_code_benchmark(benchmark: BenchmarkFixture) -> None:
+    """Drawing the 19,998-bit bicycle code: one first row, two shifts, one sort."""
+    result = benchmark(bicycle_code, 19_998, 9_999, 3, np.random.default_rng(3))
+
+    assert result.n_edges == 3 * 19_998
+
+
+def test_bicycle_deletion_benchmark(benchmark: BenchmarkFixture) -> None:
+    """The same at rate 5/8, where 625 of 2,499 rows are deleted one at a time,
+    each scored over every remaining row."""
+    result = benchmark(bicycle_code, 4_998, 1_874, 3, np.random.default_rng(3))
+
+    assert result.n_checks == 1_874

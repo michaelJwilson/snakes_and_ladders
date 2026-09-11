@@ -193,9 +193,10 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
     - *Potts models:* N-D lattices and Markov random fields (MRFs) with
       specified coupling constants and external fields.
     - *HMMs:* hidden state paths and emitted observation sequences.
-    - *Codes:* Gallager's regular parity-check ensemble, the binary
-      symmetric, erasure and Gaussian channels behind one log-likelihood
-      interface, and an encoder where elimination is affordable.
+    - *Codes:* Gallager's regular parity-check ensemble and the bicycle
+      construction from a circulant, the binary symmetric, erasure and
+      Gaussian channels behind one log-likelihood interface, and an encoder
+      where elimination is affordable.
     - *Canonical cases:* instances whose answer is known from outside this
       repository — a closed form, a published result, or an enumeration
       sharing no code with what it tests — admitted only when more than one
