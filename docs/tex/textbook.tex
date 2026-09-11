@@ -13,13 +13,13 @@ and the Properties That Referee Them}
 \begin{abstract}
 \noindent
 A self-contained account of the problem classes this project supports---four
-primary ones and the instances derived from them---the algorithms that solve them, and---the part a methods section usually
-omits---the mathematical properties each algorithm is validated against, and
-why those properties are the right referees. Written for a reader with a
-scientific and performance-computing background but no background in
-phylogenetics or statistical physics. It describes \emph{algorithms}, not an
-implementation: no result here depends on how any of it is coded, and the
-companion paper carries the results themselves.
+primary ones and the instances derived from them---the algorithms that solve
+them, and---the part a methods section usually omits---the mathematical
+properties each algorithm is validated against, and why those properties are
+the right referees. Written for a reader with a scientific and
+performance-computing background but none in phylogenetics or statistical
+physics. It describes \emph{algorithms}, not an implementation: no result here
+depends on how any of it is coded, and the companion paper carries the results.
 \end{abstract}
 
 \tableofcontents
@@ -63,28 +63,27 @@ $T,\ \beta = 1/T$ & a temperature and its inverse; a schedule is $T(t)$ over a b
 \end{tabular}
 \end{center}
 
-Two conventions are worth stating because they are load-bearing later.
-Optimization is always \emph{minimization}, so a likelihood-based objective is
-a negative log-likelihood. And $\objective$ is a function of $\params$, the
-unconstrained vector, not of the parameters a person names---the two are
-connected by $\constrained$ and Section~\ref{sec:abstraction} explains why the
-distinction is not cosmetic.
+Two conventions are load-bearing later. Optimization is always
+\emph{minimization}, so a likelihood-based objective is a negative
+log-likelihood. And $\objective$ is a function of $\params$, the unconstrained
+vector, not of the parameters a person names---the two are connected by
+$\constrained$, and Section~\ref{sec:abstraction} says why the distinction is
+not cosmetic.
 
-A third convention governs the symbols the problem sections keep. Every model
-below is an instance of the factor graph of Section~\ref{sec:factor-graph}, and
-its variables are the $x_i$ of that section; but a spin is written $\sigma_i$
-and a hidden state $z_t$, because those are the names a reader arrives with.
-The identification is made once, where each model is stated as a factor graph,
-and not repeated: $x_i \equiv \sigma_i$ on a Potts graph, $x_t \equiv z_t$ on a
-chain, $x_u \equiv z_u$ at a node of a tree. Every section then carries the
-same five parts, in this order: the model; the sizes it is supported at,
-stated from the fixtures and the size tiers; the model as a factor graph,
-with a sketch of that structure; the algorithms as instances of
+A third governs the symbols the problem sections keep. Every model below is an
+instance of the factor graph of Section~\ref{sec:factor-graph}, and its
+variables are the $x_i$ of that section; but a spin is written $\sigma_i$ and a
+hidden state $z_t$, the names a reader arrives with. The identification is made
+once, where each model is stated as a factor graph: $x_i \equiv \sigma_i$ on a
+Potts graph, $x_t \equiv z_t$ on a chain, $x_u \equiv z_u$ at a node of a tree.
+Every section then carries the same five parts, in this order: the model; the
+sizes it is supported at, from the fixtures and the size tiers; the model as a
+factor graph, with a sketch of that structure; the algorithms as instances of
 Equation~\ref{eq:sum-product} or of the optimization each is, stated in the
-appendix and cited from the section; and the validation, one referee at a
-time with what it does and does not establish. What differs between the
-problems is then visible as content and not as presentation, and a section
-missing one of the five parts fails a guard rather than a review.
+appendix and cited from the section; and the validation, one referee at a time
+with what it does and does not establish. What differs between the problems is
+then visible as content rather than presentation, and a section missing one of
+the five parts fails a guard rather than a review.
 
 \section{The Shape All Four Problems Share}
 \label{sec:shape}
@@ -93,8 +92,8 @@ Each problem class below couples a \emph{combinatorial} search over a
 structure to a \emph{continuous} optimization of parameters given that
 structure. The two are not interleaved steps of one optimizer: a structural
 move changes what the parameter vector \emph{means} and how long it is, so it
-constructs a new objective rather than taking a step inside an existing one.
-Everything else in this document follows from that division.
+constructs a new objective rather than stepping inside an existing one.
+Everything else here follows from that division.
 
 \subsection{Factor Graphs: The One Structure}
 \label{sec:factor-graph}
@@ -112,12 +111,12 @@ $x_{\partial a}$, with
 The bipartite graph between variables and factors is the factor graph
 \citep{kschischang2001, koller2009}. In its \emph{normal} (Forney) form every
 variable is an edge between exactly two factors, a variable shared by more
-factors passing through an equality factor $\delta(x, x', \dots)$
-\citep{forney2001}; the form changes the drawing and not the distribution,
-which is checked by computing the same marginals on both. Observations enter
-as factors: a leaf's state is an indicator, an emission is a unary factor over
-the hidden state, so the graph is over latent variables only and a density and
-a probability are handled alike.
+passing through an equality factor $\delta(x, x', \dots)$ \citep{forney2001};
+the form changes the drawing and not the distribution, which is checked by
+computing the same marginals on both. Observations enter as factors: a leaf's
+state is an indicator, an emission a unary factor over the hidden state, so the
+graph is over latent variables alone and a density and a probability are
+handled alike.
 
 Sum-product sends, from factor $a$ to variable $i$,
 \begin{equation}
@@ -130,12 +129,11 @@ Sum-product sends, from factor $a$ to variable $i$,
 and on a tree one leaf-to-root and one root-to-leaf pass are exact
 (Appendix~\ref{app:sum-product}): on the tree's factor graph this is pruning, Equation~\ref{eq:pruning}; on a chain it
 is the forward recursion, Equation~\ref{eq:forward}; on a pairwise graph it
-is Equation~\ref{eq:bp-message}. On a loopy graph the fixed point is the
-Bethe approximation of Equation~\ref{eq:bethe}. Replacing the sum by a
-maximum gives max-product, whose max-marginals carry the MAP assignment---on
-a chain, Viterbi. One implementation of Equation~\ref{eq:sum-product}
-therefore serves every problem class, and each is pinned to the
-evaluator that predates it.
+is Equation~\ref{eq:bp-message}. On a loopy graph the fixed point is the Bethe
+approximation of Equation~\ref{eq:bethe}. Replacing the sum by a maximum gives
+max-product, whose max-marginals carry the MAP assignment---on a chain,
+Viterbi. One implementation of Equation~\ref{eq:sum-product} serves every
+problem class, each pinned to the evaluator that predates it.
 
 \paragraph{A coupled shape.}
 The coupled spatio-sequential model puts a Potts prior on spatial labels
@@ -147,19 +145,18 @@ $\ell_n \in \{1..M\}$, one hidden chain $k_{s,m}$ per class, and a
     + \sum_n \sum_s \log P(x_{sn} \mid k_{s,\ell_n}, \theta_{\ell_n}) - \log Z_{\mathrm{Potts}},
   \label{eq:joint}
 \end{equation}
-which is Equation~\ref{eq:factor-graph} with pairwise, chain and degree-two
-gated factors, and no fourth code path. Section~\ref{sec:coupled} states the
-model in full, with the estimator its structure dictates.
+Equation~\ref{eq:factor-graph} with pairwise, chain and degree-two gated
+factors, and no fourth code path. Section~\ref{sec:coupled} states the model
+in full, with the estimator its structure dictates.
 
 \paragraph{A parity-check code.}
 A low-density parity-check code is Equation~\ref{eq:factor-graph} with
 binary variables, a unary factor per bit carrying the channel's
 log-likelihood ratio, and a hard parity constraint per row of the check
-matrix (Section~\ref{sec:ldpc}). It is the problem message passing was
-invented for \citep{gallager1962}, and the fourth problem class: its
-decoder is Equation~\ref{eq:sum-product} specialised to one number per
-message, and is held to the general implementation on codes small enough
-for both.
+matrix (Section~\ref{sec:ldpc}). It is the problem message passing was invented
+for \citep{gallager1962}, and the fourth problem class: its decoder is
+Equation~\ref{eq:sum-product} specialised to one number per message, held to
+the general implementation on codes small enough for both.
 
 \paragraph{What pins the general algorithm.}
 Equation~\ref{eq:sum-product} is validated where each of its instances already
@@ -168,9 +165,9 @@ enumeration over $q^{|V|}$ configurations, on a chain against the sum over
 $k^T$ paths, on a tree at one site against pruning, and on a loopy graph
 against the pairwise belief propagation of Equation~\ref{eq:bp-message}---the
 same approximation reached by two codes, which is agreement and not truth. The
-Forney form is pinned by computing the same marginals on both drawings. A
-general algorithm that agreed only with itself would be a second opinion, not
-an evaluator (Section~\ref{sec:properties}).
+Forney form is pinned by computing the same marginals on both drawings. An
+algorithm agreeing only with itself is a second opinion, not an evaluator
+(Section~\ref{sec:properties}).
 
 \subsection{The Continuous Optimization Abstraction}
 \label{sec:abstraction}
@@ -183,25 +180,24 @@ through a softmax on $k-1$ free values, a positive scale through a logarithm.
 
 \paragraph{Why the map and not a projection.}
 An optimizer that must be \emph{stopped} from leaving the feasible set will
-eventually leave it, and a constrained parameter that reaches its boundary has
-no interval around it worth reporting. Constraining by construction removes
-both failures: every point in $\mathbb{R}^d$ is feasible, and the gradient
-$\nabla_{\params} \objective$ is defined everywhere.
+eventually leave it, and a constrained parameter at its boundary has no
+interval worth reporting. Constraining by construction removes both: every
+point in $\mathbb{R}^d$ is feasible, and $\nabla_{\params} \objective$ is
+defined everywhere.
 
 \paragraph{Why the map must be injective.}
 Where a reparameterization leaves $\objective$ unchanged, the direction along
-it is not estimable: the observed information is singular and an interval is
-undefined. A softmax on $k$ free values has exactly this flat direction---adding
-a constant to every value changes nothing---which is why $k-1$ are used.
+it is not estimable: the observed information is singular and an interval
+undefined. A softmax on $k$ free values has that flat direction---adding a
+constant to every value changes nothing---which is why $k-1$ are used.
 Removing the freedom is the constraint map's job, not the optimizer's.
 
 \paragraph{What follows for inference.}
 Standard errors come from the observed information at the optimum, pushed
 through $\constrained$ by the delta method: $\mathrm{Var}(\constrained(\params))
-\approx J \Sigma J^{\top}$ with $J$ the Jacobian of $\constrained$. This is an
+\approx J \Sigma J^{\top}$ with $J$ the Jacobian of $\constrained$. An
 \emph{asymptotic} statement, exact only in the large-sample limit, which is why
-Section~\ref{sec:properties} makes realized interval coverage a measurement
-rather than an assumption.
+Section~\ref{sec:properties} makes realized interval coverage a measurement.
 
 \subsection{Sampling the Posterior, and Adapting the Sampler}
 \label{sec:hmc}
@@ -212,24 +208,24 @@ sampled instead and an interval read as a quantile. Hamiltonian Monte Carlo
 $p \sim \mathcal{N}(0, M)$, and proposes by integrating the Hamiltonian
 $H(\params, p) = \objective(\params) + \tfrac{1}{2} p^{\top} M^{-1} p$ with a
 symplectic integrator for $L$ steps of size $\varepsilon$, accepting with
-probability $\alpha = \min\{1, \exp(-\Delta H)\}$. The integrator is
-reversible and volume-preserving, so $\Delta H$ is the whole of the acceptance
-ratio; it is exact on the flow it conserves, so $\Delta H$ is small and bounded
-rather than growing with $L$. A temperature enters as the momentum's variance,
-and a diagonal mass $M = \mathrm{diag}(1/\sigma_i^2)$ enters as a change of
-coordinates, $\phi_i = \params_i / \sigma_i$: the unit-mass dynamics on
+probability $\alpha = \min\{1, \exp(-\Delta H)\}$. The integrator is reversible
+and volume-preserving, so $\Delta H$ is the whole of the acceptance ratio, and
+exact on the flow it conserves, so $\Delta H$ is bounded rather than growing
+with $L$. A temperature enters as the momentum's variance, and a diagonal mass
+$M = \mathrm{diag}(1/\sigma_i^2)$ as a change of coordinates,
+$\phi_i = \params_i / \sigma_i$: the unit-mass dynamics on
 $\objective(\sigma \odot \phi)$ are the mass-$M$ dynamics on $\params$ term for
 term, so one integrator serves every metric and every temperature.
 
 \paragraph{Adaptation, as a warm-up.}
-The step $\varepsilon$ that is right for one posterior is wrong for the next,
-and the coordinates' scales $\sigma_i$ are the posterior's. Both are set in a
-warm-up whose draws are discarded, after which the chain runs at fixed values
-and is a Markov chain with the target as its stationary distribution; a chain
-that kept adapting would not be. The scales are the sample standard deviations
-of a warm-up window. The step is driven to a target acceptance $\delta$ by dual
-averaging \citep[Sec.~3.2]{hoffman2014}: after proposal $m$ with acceptance
-probability $\alpha_m$,
+The step $\varepsilon$ right for one posterior is wrong for the next, and the
+coordinates' scales $\sigma_i$ are the posterior's. Both are set in a warm-up
+whose draws are discarded, after which the chain runs at fixed values and has
+the target as its stationary distribution; a chain that kept adapting would
+not. The scales are the sample standard deviations of a warm-up window. The
+step is driven to a target acceptance $\delta$ by dual averaging
+\citep[Sec.~3.2]{hoffman2014}: after proposal $m$ with acceptance probability
+$\alpha_m$,
 \begin{equation}
   \bar h_m = \Big(1 - \frac{1}{m + t_0}\Big)\bar h_{m-1}
              + \frac{\delta - \alpha_m}{m + t_0}, \qquad
@@ -240,27 +236,27 @@ probability $\alpha_m$,
 \end{equation}
 with $\mu = \log(10\,\varepsilon_0)$ and the constants $\gamma$, $t_0$,
 $\kappa$ setting the rate; the iterates $\varepsilon_m$ do not converge, the
-averaged $\bar\varepsilon_m$ does, and the chain runs at the last of those.
-The same iteration is run twice, once at unit mass to estimate the scales and
-once on the metric they define, because a metric that has rescaled the
-coordinates has changed the step that is right for them.
+averaged $\bar\varepsilon_m$ does, and the chain runs at the last of those. The
+iteration runs twice, once at unit mass to estimate the scales and once on the
+metric they define, since rescaling the coordinates changes the step right for
+them.
 
 \paragraph{Regime.}
 On a target that is locally quadratic the leapfrog energy error is bounded
 and oscillatory, so $\alpha(\varepsilon)$ stays near one up to the stability
 limit $\varepsilon\,\omega_{\max} < 2$ on the stiffest direction and falls to
 zero past it: a target of $\delta = 0.65$ lies \emph{on} that cliff, and an
-iteration driven by a single Metropolis probability per proposal, whose
-standard deviation is a sizeable fraction of one, oscillates across it and
-averages to a step whose acceptance is not $\delta$. Two remedies, both
-measured rather than assumed: each proposal's step is drawn uniformly from
+iteration driven by a single Metropolis probability per proposal oscillates
+across it and averages to a step whose acceptance is not $\delta$. Two
+remedies, both measured rather than assumed: each proposal's step is drawn
+uniformly from
 $\bar\varepsilon\,(1 \pm j)$ \citep[Sec.~5.4.2.2]{neal2011}, which averages
 $\alpha$ over the band and turns the cliff into a slope with one root; and
 $\gamma$ is set larger than the value published for a trajectory-averaged
 statistic, since the iterates' spread in $\log\varepsilon$ scales as
-$1/(\gamma\sqrt{m})$. The chain after warm-up keeps the jitter, since that is
-the step its acceptance was adapted for, and every draw is still from a kernel
-with the right stationary distribution.
+$1/(\gamma\sqrt{m})$. The chain after warm-up keeps the jitter, the step its
+acceptance was adapted for, and every draw is still from a kernel with the
+right stationary distribution.
 
 \paragraph{A ladder from what it measures.}
 The same principle sets a tempering ladder for Section~\ref{sec:tempering}. What
@@ -272,9 +268,9 @@ rung both of whose pairs are above the band is removed, and a pair above the
 band beside one inside it has their shared rung moved geometrically halfway
 toward the far end of the pair inside. Geometric, because the exchange ratio
 depends on the temperatures through $\beta_i - \beta_j$, so for an energy whose
-spread is set by the temperature the acceptance is a function of the ratio of
-neighbours. The endpoints are the caller's and are never moved; the warm-up's
-cost in sweeps is charged to any comparison against a ladder set by hand.
+spread the temperature sets, the acceptance is a function of the ratio of
+neighbours. The endpoints are the caller's and never move; the warm-up's cost
+in sweeps is charged to any comparison against a ladder set by hand.
 
 \paragraph{What pins it.}
 Equation~\ref{eq:dual-averaging} is arithmetic and is stepped by hand against
@@ -283,13 +279,13 @@ a mass-matrix leapfrog written out, to round-off. What a draw costs is the
 effective sample size per gradient evaluation, with the size estimated by the
 initial positive sequence \citep{geyer1992} and that estimator held to an
 autoregressive chain whose integrated autocorrelation time is a closed form.
-The statistics are then three: the adapted chain's acceptance lands within a
-stated distance of $\delta$ over independent seeds; its posterior means and
-spreads agree with a fixed-parameter chain's within Monte Carlo error, on the
-analytic Gaussian and on a four-taxon tree; and the adapted ladder's
-exchanges lie inside the band on the frustrated lattice, with its ground-state
-hit rate at equal sweeps reported beside the hand ladder's. The
-fixed-parameter samplers are unchanged and remain the oracles.
+Three statistics follow: the adapted chain's acceptance lands within a stated
+distance of $\delta$ over independent seeds; its posterior means and spreads
+agree with a fixed-parameter chain's within Monte Carlo error, on the analytic
+Gaussian and on a four-taxon tree; and the adapted ladder's exchanges lie
+inside the band on the frustrated lattice, with its ground-state hit rate at
+equal sweeps reported beside the hand ladder's. The fixed-parameter samplers
+are unchanged and remain the oracles.
 
 \subsection{The Discrete Search as a Decision Process}
 \label{sec:policy-gradient}
@@ -298,9 +294,9 @@ The structural search is a Markov decision process \citep{suttonbarto2018}:
 the state is the current structure with its fitted parameters, an action is a
 move from the neighbourhood $\neighbourhood(\cdot)$, and the reward is the
 improvement in the objective. An episode ends on a step budget or when no move
-improves the score---a property of the state, and the same stopping rule the
-greedy baseline obeys, which is what makes the two comparable. Because the
-reward is a difference, the undiscounted return telescopes,
+improves the score---a property of the state, and the stopping rule the greedy
+baseline obeys, which is what makes the two comparable. The reward being a
+difference, the undiscounted return telescopes,
 \begin{equation}
   G = \sum_{t=0}^{T-1} R_t
     = \sum_{t=0}^{T-1} \big[\objective(s_t) - \objective(s_{t+1})\big]
@@ -308,28 +304,27 @@ reward is a difference, the undiscounted return telescopes,
   \label{eq:return}
 \end{equation}
 the improvement between the first and last state whatever path joined them.
-That is what licenses an undiscounted return---a discount would prefer
-improvement found early over the same improvement found late---and it is why a
-truncation landing between a sacrifice and its payoff teaches the opposite of
-the truth, so a truncated episode is recorded as one.
+That licenses an undiscounted return---a discount would prefer improvement
+found early over the same improvement found late---and it is why a truncation
+landing between a sacrifice and its payoff teaches the opposite of the truth,
+so a truncated episode is recorded as one.
 
 The policy is a softmax over the scores of the \emph{available} actions,
 $\pi(a \mid s) \propto \exp f(s, a)$ for $a \in \neighbourhood(s)$, so a
 neighbourhood of any size is admissible. A scorer with a single weight on the
 improvement a move buys is an inverse temperature, and greedy search is its
-zero-temperature limit; what such an agent can learn is exactly how much it
-should accept a worsening move to reach a better optimum, which is the
-credit-assignment question this search makes sharp. That class cannot rank
-two moves differently from hill climbing, so the tree environment also scores
-a move by what it computes without a fit: the change in parsimony score, the
-fraction of sites compatible with the split the move breaks and with the
-split it makes, and the sizes of the two subtrees it exchanges, each
-standardized within the neighbourhood. A feature constant over a
-neighbourhood is cancelled by the softmax and is excluded rather than
-carried; the Robinson--Foulds distance from the current tree, the same for
-every NNI neighbour, is the standing example. Whether the wider class learns
-more is measured at a matched budget, never inferred from its width. The
-policy is trained by the score-function estimator with a baseline,
+zero-temperature limit; such an agent can learn only how much to accept a
+worsening move to reach a better optimum, which is the credit-assignment
+question this search makes sharp. That class cannot rank two moves differently
+from hill climbing, so the tree environment also scores a move by what it
+computes without a fit: the change in parsimony score, the fraction of sites
+compatible with the split the move breaks and with the split it makes, and the
+sizes of the two subtrees it exchanges, each standardized within the
+neighbourhood. A feature constant over a neighbourhood is cancelled by the
+softmax and excluded; the Robinson--Foulds distance from the current tree, the
+same for every NNI neighbour, is the standing example. Whether the wider class
+learns more is measured at a matched budget, never inferred from its width.
+The policy is trained by the score-function estimator with a baseline,
 \begin{equation}
   \nabla J = \mathbb{E}\Big[\sum_{t} \nabla \log \pi(a_t \mid s_t)\,
              \big(G_t - b(s_t)\big)\Big],
@@ -337,68 +332,63 @@ policy is trained by the score-function estimator with a baseline,
   \label{eq:reinforce}
 \end{equation}
 where a baseline $b$ independent of the sample it is subtracted from leaves the
-estimator unbiased and is there to reduce its variance, not its bias: $G_t$ is
-a sum of objective differences whose scale is the problem's, so an uncentred
-gradient varies by orders of magnitude between instances. The comparison
-against the greedy baseline is at a matched budget of objective evaluations per
-decision, never in wall-clock time.
+estimator unbiased and reduces its variance, not its bias: $G_t$ is a sum of
+objective differences whose scale is the problem's, so an uncentred gradient
+varies by orders of magnitude between instances. The comparison against the
+greedy baseline is at a matched budget of objective evaluations per decision,
+never in wall-clock time.
 
 \paragraph{The scorer, and what is identifiable in it.}
 The score $f(s, a)$ is a function of the action's features, and two
-parameterizations serve. A \emph{linear} scorer, $f = w^{\top} x(s, a)$, is
-the reference, because its weights are what a recovery test can state a truth
+parameterizations serve. A \emph{linear} scorer, $f = w^{\top} x(s, a)$, is the
+reference, because its weights are what a recovery test can state a truth
 against: on the lattice environment the improvement a move buys decomposes
 exactly into two features, so the greedy searcher \emph{is} a particular $w$
-and sits inside the policy class rather than beside it, and ``did the agent
-learn the landscape'' becomes a statement about $w$ rather than about a loss
-curve. A \emph{multilayer-perceptron} scorer --- two hidden layers over the
-same features, one output per action --- is the parameterization for a reward
-that is not linear in them. It is measured against the linear one at a matched
-budget and never assumed better: a wider class that is not needed costs sample
-efficiency and gives up the recovery statement, so the burden is on it.
-Both share the softmax's gauge. Adding a constant to every score in a state
-changes nothing, so a feature constant over the neighbourhood carries no
-identifiable weight and is excluded rather than fitted, and neither scorer has
-a bias term. The critic of Section~\ref{sec:actor-critic} is the case that
-shows the rule is about the softmax and not about features: a value is not a
-softmax, a constant there \emph{is} identifiable, and the critic carries one.
+inside the policy class, and ``did the agent learn the landscape'' becomes a
+statement about $w$ rather than about a loss curve. A
+\emph{multilayer-perceptron} scorer --- two hidden layers over the same
+features, one output per action --- is for a reward not linear in them. It is
+measured against the linear one at a matched budget and never assumed better:
+a wider class that is not needed costs sample efficiency and gives up the
+recovery statement. Both share the softmax's gauge. Adding a constant to every
+score in a state changes nothing, so a feature constant over the neighbourhood
+carries no identifiable weight and is excluded, and neither scorer has a bias
+term. The critic of Section~\ref{sec:actor-critic} shows the rule is about the
+softmax and not about features: a value is not a softmax, a constant there
+\emph{is} identifiable, and the critic carries one.
 
 \paragraph{Exploration is declared, not learned.}
 A softmax over improvements ends its episode at the first state no move
 improves, so an agent chooses which local optimum to enter and can never
 leave one. The remedy is to collect episodes under a \emph{behaviour} policy
 that takes the trained policy's best action except with probability
-$\epsilon$, where it draws uniformly from the neighbourhood --- which is the
-only way a \emph{worsening} move is ever taken.
-It is deliberately not trainable and exposes no weights, so a measured escape
-rate is attributable to $\epsilon$ and not to a training run that happened
-alongside it; $\epsilon$ follows a declared schedule over the iterations,
-exactly as a temperature does in Section~\ref{sec:tempering}. At $\epsilon =
-0$ the agent still walks, and deterministically: past a local optimum the best
-available action is the least-bad move, which is not the same object as a
-climb that would have stopped.
+$\epsilon$, where it draws uniformly from the neighbourhood --- the only way a
+\emph{worsening} move is taken. It is not trainable and exposes no weights, so
+a measured escape rate is attributable to $\epsilon$ and not to a training run
+alongside it; $\epsilon$ follows a declared schedule over the iterations, as a
+temperature does in Section~\ref{sec:tempering}. At $\epsilon = 0$ the agent
+still walks, deterministically: past a local optimum the best available action
+is the least-bad move, not the same object as a climb that would have stopped.
 
-Two consequences for the accounting, and both are easy to get wrong in a
-direction that flatters the agent. An episode allowed to continue past a local
-optimum is scored on the \emph{best} state it saw and not on its last, or a
-better searcher looks worse the longer it runs. And the matched baseline is
-then greedy \emph{with restarts}: a single greedy run stops after a few
-decisions and leaves the rest of the budget unspent, so a result stated
-against it overstates itself. One failure is worth naming because it produces
-plausible numbers rather than an error --- wrapping an \emph{untrained} policy
-is not hill climbing, since with equal scores the best action is whichever the
-neighbourhood happens to list first, and what is then measured is exploration
-around a fixed arbitrary move.
+Two consequences for the accounting, both easy to get wrong in the direction
+that flatters the agent. An episode allowed to continue past a local optimum is
+scored on the \emph{best} state it saw and not its last, or a better searcher
+looks worse the longer it runs. And the matched baseline is then greedy
+\emph{with restarts}: a single greedy run stops after a few decisions and
+leaves the rest of the budget unspent, so a result stated against it overstates
+itself. One failure produces plausible numbers rather than an error ---
+wrapping an \emph{untrained} policy is not hill climbing, since with equal
+scores the best action is whichever the neighbourhood lists first, and what is
+measured is exploration around a fixed arbitrary move.
 
 \paragraph{What pins it.}
 Equation~\ref{eq:return} is an identity and is asserted exactly on every
 recorded episode. Equation~\ref{eq:reinforce} is an expectation, so its
-estimator is pinned against the gradient of the exact expected return, which
-is computable by enumerating every episode on a small environment, and the
-baseline's unbiasedness is asserted by the same enumeration: the expected
-gradient with and without $b$ agree. An environment small enough to enumerate
-is therefore the oracle for the learning machinery, exactly as a tree small
-enough to enumerate is the oracle for the search.
+estimator is pinned against the gradient of the exact expected return,
+computable by enumerating every episode on a small environment, and the
+baseline's unbiasedness by the same enumeration: the expected gradient with and
+without $b$ agree. An environment small enough to enumerate is the oracle for
+the learning machinery, as a tree small enough to enumerate is for the search.
 
 \subsection{Actor--Critic and Proximal Policy Optimization}
 \label{sec:actor-critic}
@@ -432,57 +422,54 @@ the ratio's effect on the objective,
     \min\big(\rho_t A_t,\; \mathrm{clip}(\rho_t, 1-\epsilon, 1+\epsilon)\, A_t\big)\Big],
   \label{eq:ppo-clip}
 \end{equation}
-so that an update cannot move the policy far from the one the advantages were
+so an update cannot move the policy far from the one the advantages were
 estimated under. At the collecting policy every ratio is one and, without
 clipping, the gradient of \eqref{eq:ppo-clip} is the actor--critic's; the
-regression suite pins that identity, and measures on the Potts chain what the
-reuse buys: the fraction of the 81 starts from which the trained policy
-reaches the enumerated optimum, at a matched number of episodes. The same
-ratio makes the update valid when a \emph{behaviour} policy collected the
-episodes: with $\pi_{\mathrm{old}}$ replaced by $\beta$, the
-$\epsilon$-greedy wrapper of the policy being trained, on an $\epsilon$
-schedule, the search can leave a local optimum the softmax would settle
-into, and the estimator is corrected by $\pi / \beta$.
+regression suite pins that identity and measures on the Potts chain what the
+reuse buys: the fraction of the 81 starts from which the trained policy reaches
+the enumerated optimum, at a matched number of episodes. The same ratio makes
+the update valid when a \emph{behaviour} policy collected the episodes: with
+$\pi_{\mathrm{old}}$ replaced by $\beta$, the $\epsilon$-greedy wrapper of the
+policy being trained, the search can leave a local optimum the softmax would
+settle into, and the estimator is corrected by $\pi / \beta$.
 
 \paragraph{What the critic reads, and what it may not.}
 $V$ is a function of the state, while the decision process supplies features
 of \emph{actions}. The state's features are therefore aggregates over its
 neighbourhood --- the mean and the maximum of the action features, and the
-logarithm of the neighbourhood's size --- which covers every instance without
+logarithm of the neighbourhood's size --- covering every instance without
 widening the interface, a terminal state having no actions and so the zero
-vector. The rule that makes the baseline legitimate is the one in
-Appendix~\ref{app:rl}: the critic may read the state and never the action
-sampled at that step. Where the return is exact by enumeration $V^\pi$ is
-exact too, and the critic is scored against \emph{that}; a critic scored
-against its own training loss can fit its targets, miss $V^\pi$, and leave an
-estimator that is unbiased and useless.
+vector. Appendix~\ref{app:rl} carries the rule that makes the baseline
+legitimate: the critic may read the state and never the action sampled at that
+step. Where the return is exact by enumeration $V^\pi$ is exact too, and the
+critic is scored against \emph{that}; a critic scored against its own training
+loss can fit its targets, miss $V^\pi$, and leave an estimator unbiased and
+useless.
 
 \paragraph{Off-policy, and what the ratio costs.}
 Equation~\ref{eq:ppo-clip} is one case of a general correction. For any
 behaviour policy $\beta$ with $\beta(a \mid s) > 0$ wherever $\pi(a \mid s) >
 0$, weighting each decision by $\rho_t = \pi(a_t \mid s_t) / \beta(a_t \mid
-s_t)$ makes the estimator of Equation~\ref{eq:reinforce} unbiased for $\pi$
-on episodes that $\beta$ collected \citep{suttonbarto2018}. The support condition
-is not a technicality: an action $\beta$ never samples contributes nothing and
-its weight under $\pi$ is never corrected, so a \emph{deterministic} behaviour
-policy corrects nothing at all. That is the second reason the exploring
-wrapper's uniform draw is there, and the reason its mixture must be available
-as a distribution and not only as a sampler --- $(1 - \epsilon)$ on the best
-action and $\epsilon / |\neighbourhood(s)|$ everywhere is what the ratio
-divides by. That $\epsilon$ is the exploration rate; the one in
+s_t)$ makes the estimator of Equation~\ref{eq:reinforce} unbiased for $\pi$ on
+episodes that $\beta$ collected \citep{suttonbarto2018}. The support condition
+is not a technicality: an action $\beta$ never samples contributes nothing, so
+a \emph{deterministic} behaviour policy corrects nothing. That is the second
+reason for the exploring wrapper's uniform draw, and why its mixture must be
+available as a distribution and not only as a sampler --- $(1 - \epsilon)$ on
+the best action and $\epsilon / |\neighbourhood(s)|$ everywhere is what the
+ratio divides by. That $\epsilon$ is the exploration rate; the one in
 Equation~\ref{eq:ppo-clip} is a clip width, and the two are unrelated.
 
-What the correction costs is variance, and the cost has a shape. A ratio is
-unbounded above, so one decision the behaviour policy made rarely can dominate
-a batch; and a weight formed as the \emph{product} of ratios along a
-trajectory is worse, its variance growing with the episode length. Two answers
-are carried, and they are not the same answer. The per-decision form of
-Equation~\ref{eq:ppo-clip} weights each step by its own ratio rather than by
-the trajectory's product, which removes the growth with episode length. The clip
-bounds the ratio's effect on the objective, and therefore the size of an
-update, while leaving the estimator's variance exactly where it was: it is a
-trust region and not a variance reduction, and reading it as the second is the
-standing error about it.
+The correction costs variance, and the cost has a shape. A ratio is unbounded
+above, so one decision the behaviour policy made rarely can dominate a batch;
+a weight formed as the \emph{product} of ratios along a trajectory is worse,
+its variance growing with the episode length. Two answers are carried, and
+they are not the same. The per-decision form of Equation~\ref{eq:ppo-clip}
+weights each step by its own ratio rather than the trajectory's product, which
+removes the growth with episode length. The clip bounds the ratio's effect on
+the objective, and so the size of an update, while leaving the estimator's
+variance where it was: a trust region and not a variance reduction, and
+reading it as the second is the standing error about it.
 
 \subsection{Planning with a Learned Prior and Value}
 \label{sec:planning}
@@ -498,40 +485,36 @@ is the prior the policy gives the move, decaying with the child's visits
 \citep{silver2017}; the first unexpanded child is scored by the critic and the
 return backed up to the root. The root's visit counts, normalized, are a
 policy that improves on the prior, and \emph{expert iteration}
-\citep{anthony2017} trains the policy toward that distribution by
-cross-entropy and the critic toward the achieved return, so the planner's
-answers become the policy's. Every expansion evaluates a successor, so the
-search is counted in the unit the rest of this document counts, and the
-comparison with greedy states the rate and the evaluations together
-(Appendix~\ref{app:rl}).
+\citep{anthony2017} trains the policy toward that distribution by cross-entropy
+and the critic toward the achieved return, so the planner's answers become the
+policy's. Every expansion evaluates a successor, so the search is counted in
+the unit the rest of this document counts, and the comparison with greedy
+states the rate and the evaluations together (Appendix~\ref{app:rl}).
 
 \paragraph{Compound moves.}
 A move set fixes the granularity of a decision, and a search whose
-neighbourhood holds one interchange must find a sacrifice and its payoff as
-two separate decisions --- which is exactly the credit assignment a truncated
-episode destroys. An \emph{option} is a policy over primitive moves with an
-initiation set and a termination rule, so a sequence that pays off only as a
-unit becomes one decision and is credited as one \citep{sutton1999}; the
-termination rule can be learned beside the policy that calls it
-\citep{bacon2017}. Nothing here builds one, and the budget rule says what it
-would have to survive: a compound move evaluates every primitive it composes,
-so an option reaching a better optimum by evaluating more candidates than
-hill climbing has not won.
+neighbourhood holds one interchange must find a sacrifice and its payoff as two
+decisions --- the credit assignment a truncated episode destroys. An
+\emph{option} is a policy over primitive moves with an initiation set and a
+termination rule, so a sequence that pays off only as a unit becomes one
+decision and is credited as one \citep{sutton1999}; the termination rule can be
+learned beside the policy that calls it \citep{bacon2017}. Nothing here builds
+one, and the budget rule says what it would have to survive: a compound move
+evaluates every primitive it composes, so an option reaching a better optimum
+by evaluating more candidates than hill climbing has not won.
 
 \paragraph{Planning with a learned model.}
 The planner above expands the \emph{true} successor and reads the true reward,
-which is affordable here only because a move's reward is a closed form at
-known parameters. It stops being affordable the moment the reward is a fit per
-candidate, which is the regime every problem in this document is actually in.
-The answer in that regime is to plan on a model that is learned rather than
-queried: a transition and a reward in a latent space, trained so that the
-values, policies and rewards the plan reads agree with the observed ones, and
-not so that the latent state reconstructs anything about the real one
-\citep{schrittwieser2020}. Requiring only the quantities the search reads to
-be right is what makes it a method rather than a reconstruction, and it is
-also what makes it checkable here: on an instance small enough to enumerate, a
-planner on a learned model must still return an optimal action wherever the
-planner on the true one does. It is not built.
+affordable only because a move's reward is a closed form at known parameters.
+It stops being affordable the moment the reward is a fit per candidate, the
+regime every problem here is in. The answer is then to plan on a learned model:
+a transition and a reward in a latent space, trained so that the values,
+policies and rewards the plan reads agree with the observed ones, and not so
+that the latent state reconstructs the real one \citep{schrittwieser2020}.
+Requiring only the quantities the search reads to be right makes it a method
+rather than a reconstruction, and makes it checkable here: on an instance small
+enough to enumerate, a planner on a learned model must return an optimal action
+wherever the planner on the true one does. It is not built.
 
 \subsection{Relaxing a Discrete Decision}
 \label{sec:relaxation}
@@ -543,11 +526,10 @@ relaxation from a second model, and both are checkable.
 \emph{It must be an extension of what it relaxes.} At every vertex --- every
 one-hot $q$ --- the relaxed value must equal the discrete score exactly,
 asserted over every configuration of an enumerable instance. A relaxation
-merely close at the corners is optimizing a different problem and nothing
-measured on it transfers, which is the same demand Section~\ref{sec:tropical}
-makes of the tropical relaxation and the reason
-Equation~\ref{eq:tropical-corner} is a derived tolerance rather than a
-constant.
+merely close at the corners optimizes a different problem and nothing measured
+on it transfers --- the demand Section~\ref{sec:tropical} makes of the tropical
+relaxation, and the reason Equation~\ref{eq:tropical-corner} is a derived
+tolerance rather than a constant.
 
 \emph{Its boundary is multilinearity, not the shape of the graph.} If every
 term of the score involves at most one factor from each site, then under a
@@ -557,49 +539,47 @@ that term at the marginals:
   \mathbb{E}_{q}\big[\,\mathrm{score}(x)\,\big] = \mathrm{score}(q),
   \label{eq:multilinear}
 \end{equation}
-exactly, so the form evaluated at the marginals \emph{is} the expected
-discrete score and not an approximation of it. The condition is easy to state
-wrongly. It is not that the model must be a chain --- a lattice is as
-multilinear --- and it is not that the terms must be pairwise, a term coupling
-three \emph{distinct} sites being still one factor per site. What breaks it is
-a term reading one site twice, since for an indicator $\mathbb{E}[X^2] =
-\mathbb{E}[X] \neq \mathbb{E}[X]^2$. Two things follow. A multilinear function
-on a product of simplices attains its maximum at a vertex, so the relaxation
-introduces no optimum the discrete problem lacks and everything a relaxed
-search loses is lost to the ascent rather than to the relaxation. And the
-deterministic relaxation needs no sampling at all, which makes the question
-about the stochastic one sharp: since Equation~\ref{eq:multilinear} is exact,
-whatever bias an estimator shows belongs to the estimator.
+exactly, so the form evaluated at the marginals \emph{is} the expected discrete
+score and not an approximation. The condition is easy to state wrongly. It is
+not that the model must be a chain --- a lattice is as multilinear --- nor that
+the terms must be pairwise, a term coupling three \emph{distinct} sites being
+one factor per site. What breaks it is a term reading one site twice, since for
+an indicator $\mathbb{E}[X^2] = \mathbb{E}[X] \neq \mathbb{E}[X]^2$. Two things
+follow. A multilinear function on a product of simplices attains its maximum at
+a vertex, so the relaxation introduces no optimum the discrete problem lacks
+and what a relaxed search loses is lost to the ascent. And the deterministic
+relaxation needs no sampling, which sharpens the question about the stochastic
+one: since Equation~\ref{eq:multilinear} is exact, whatever bias an estimator
+shows belongs to the estimator.
 
 Sampling a relaxed configuration is the Gumbel-softmax: perturb each site's
 log-probabilities by independent Gumbel noise and take a softmax at
 temperature $\tau$ where an $\arg\max$ would give a draw, which is
-reparameterized --- differentiable in the probabilities --- and biased at
-every $\tau > 0$, exact only in a limit where the gradient vanishes. The
-bias is measured against the exact gradient enumeration supplies and never
-assumed small, and the score-function estimator of
-Equation~\ref{eq:reinforce} is the unbiased alternative at higher variance,
-which is Section~\ref{sec:actor-critic}'s trade in a second place. Carrying
-the construction from one categorical variable to a \emph{structured} object,
-where the $\arg\max$ is a combinatorial solver rather than a coordinate, is
-the stochastic-softmax-trick family \citep{paulus2020} --- what a
-differentiable topology would need, and the direction
+reparameterized --- differentiable in the probabilities --- and biased at every
+$\tau > 0$, exact only in a limit where the gradient vanishes. The bias is
+measured against the exact gradient enumeration supplies and never assumed
+small, and the score-function estimator of Equation~\ref{eq:reinforce} is the
+unbiased alternative at higher variance: Section~\ref{sec:actor-critic}'s trade
+in a second place. Carrying the construction from one categorical variable to a
+\emph{structured} object, where the $\arg\max$ is a combinatorial solver rather
+than a coordinate, is the stochastic-softmax-trick family \citep{paulus2020}
+--- what a differentiable topology would need, and the direction
 Section~\ref{sec:tropical} approaches from the other side.
 
 \subsection{Surrogates and Bounds}
 \label{sec:surrogates}
 The evaluation a discrete search pays for---a fit of $\branch$ per topology,
 or $\log Z$ for a lattice---is what makes the search expensive, so each
-problem carries \emph{surrogates}: cheaper functions of the structure that
-stand in for it. A surrogate makes a claim, a lower bound, an upper bound, or
-a point prediction, and the claim is part of the object. An analytic bound is
+problem carries \emph{surrogates}: cheaper functions of the structure standing
+in for it. A surrogate makes a claim --- a lower bound, an upper bound, or a
+point prediction --- and the claim is part of the object. An analytic bound is
 proved (Appendix~\ref{app:bounds}) and \emph{certified}: checked against the
 exact value on every structure an oracle can score, with no violation allowed.
 A learned predictor is \emph{calibrated} instead, shifted by a quantile of its
-held-out residuals, and certified to the coverage it claims. The search
-ranks a neighbourhood by a surrogate and fits only the top candidates
-(Algorithm~\ref{alg:surrogate-rank}); the accepted move is always evaluated
-in full, so a surrogate changes what is fitted and never what is reported.
+held-out residuals, and certified to the coverage it claims. The search ranks a
+neighbourhood by a surrogate and fits only the top candidates
+(Algorithm~\ref{alg:surrogate-rank}); the accepted move is always evaluated in
+full, so a surrogate changes what is fitted and never what is reported.
 
 For a topology the maximized log-likelihood $\ell^\ast(\tree) = \max_{\branch}
 \ell(\tree, \branch)$ is bracketed by two one-pass quantities. Any feasible
@@ -625,11 +605,11 @@ $\pi(x_{1,s})\,k^{-F_s(\tree)}$ for the site's Fitch score $F_s$, whence
 \end{equation}
 Both apply to a subtree as they do to the tree.
 
-A third trades exactness for cost by the site count rather than by the tree.
+A third trades exactness for cost by the site count rather than the tree.
 Site-pattern compression, Equation~\ref{eq:site-patterns}, is exact and
-saturates; blocks of $N > 1$ consecutive sites do not repeat often enough for
-the same identity to save anything, and what a block partition buys instead is
-a bracket. Partition the $L$ columns into $\lceil L/N \rceil$ blocks of $N$
+saturates; blocks of $N > 1$ consecutive sites repeat too rarely for the same
+identity to save anything, so a block partition buys a bracket instead.
+Partition the $L$ columns into $\lceil L/N \rceil$ blocks of $N$
 consecutive sites, and let $\mathcal{F}$ be the blocks occurring at least $m$
 times. Evaluate those exactly, by Equation~\ref{eq:site-patterns} over their
 columns, and bound the remaining $B$ sites by the extremes of a single site's
@@ -652,13 +632,13 @@ with $\ell_{\mathcal{F}}$ the frequent blocks' own log-likelihood. Both
 $\underline\lambda$ and $\overline\lambda$ are had in one pass over the tree
 and independently of $L$, by Equation~\ref{eq:pruning} with each leaf's
 message replaced by the extremes of its transition row
-(Appendix~\ref{app:bounds}); relaxing them to those one-pass values is what
-makes the bracket cheap and what makes it loose. The width is exactly
-$B\,(\overline\lambda - \underline\lambda)$, so the cutoff $m$ sets the trade
-directly: $m = 1$ leaves $B = 0$ and returns the exact value, and raising $m$
-moves blocks into the tail and never out of it. Only the lower end bounds
-$\ell^\ast(\tree)$, by the same argument that
-Equation~\ref{eq:plugin-bound} rests on. Measured at five taxa and 2,000
+(Appendix~\ref{app:bounds}); relaxing them to those one-pass values makes the
+bracket cheap and makes it loose. The width is exactly
+$B\,(\overline\lambda - \underline\lambda)$, so the cutoff $m$ sets the trade:
+$m = 1$ leaves $B = 0$ and returns the exact value, and raising $m$ moves
+blocks into the tail and never out. Only the lower end bounds
+$\ell^\ast(\tree)$, by the argument Equation~\ref{eq:plugin-bound} rests on.
+Measured at five taxa and 2,000
 sites, $N = 1$ and $m = 8$ leaves a width of $1.0\,|\ell|$ and $N \ge 3$
 leaves the whole alignment in the tail, so neither end orders topologies and
 what ranks is $\ell_{\mathcal{F}}$ itself, a point prediction over a fixed
@@ -693,50 +673,46 @@ $e^{-\beta E_{\min}} \le Z(\beta) \le k^N e^{-\beta E_{\min}}$,
 
 \subsection{Reading a Comparison}
 \label{sec:comparisons}
-Every problem statement below ends with the same question: given more than
-one method that applies, which one is worth a budget at the sizes that
-section supports. Three axes answer it, and each is asked in the same order.
+Every problem statement below ends with the same question: given more than one
+method that applies, which is worth a budget at the sizes that section
+supports. Three axes answer it, asked in the same order.
 
-\emph{The precondition} is a structural property of the instance that decides
+\emph{The precondition} is a structural property of the instance deciding
 whether a method may run at all, and it is not a matter of degree: a
 non-negative coupling, a metric on labels, a tree, a terminated trellis, an
 output-symmetric channel. A method whose precondition fails is refused rather
-than run badly, which is what separates the comparisons here from a ranking
---- a cell of Section~\ref{sec:applicability} is empty where a precondition
-failed as often as where nobody wrote the code.
+than run badly, which separates the comparisons here from a ranking --- a cell
+of Section~\ref{sec:applicability} is empty where a precondition failed as
+often as where nobody wrote the code.
 
 \emph{The cost} is counted in the unit that problem counts: objective
 evaluations for a discrete search, sweeps for a sampler, passes over the
 graph for a marginalization, configurations for an enumeration. It is never
-counted in seconds. A cost in operations and in the live set a recursion
-holds is a property of the algorithm and transfers between machines; a
-wall clock is a property of neither, and the language a kernel is expressed
-in --- and the boundary between it and the language that calls it --- has
-been measured a small fraction of a call rather than the term that decides a
-method. No choice in this document turns on it, and the measurements
-themselves belong to the companion paper.
+counted in seconds. A cost in operations and in the live set a recursion holds
+is a property of the algorithm and transfers between machines; a wall clock is
+a property of neither, and the language a kernel is expressed in --- and the
+boundary between it and the language that calls it --- measures a small
+fraction of a call rather than the term that decides a method. No choice here
+turns on it, and the measurements belong to the companion paper.
 
-\emph{The reach of the referee} is the size past which nothing exact scores
-the answer. It is the axis that changes what may be \emph{claimed} rather
-than what may be run: inside it a method is scored against a truth, and
-outside it a method is scored against a recovered structure, a bound, or
-another method --- which is agreement and not truth
+\emph{The reach of the referee} is the size past which nothing exact scores the
+answer. It changes what may be \emph{claimed} rather than what may be run:
+inside it a method is scored against a truth, outside it against a recovered
+structure, a bound, or another method --- agreement and not truth
 (Section~\ref{sec:properties}). Two methods that agree inside the reach and
-diverge outside it have not been separated, and a comparison that crosses
-the reach without saying so has changed its subject mid-sentence.
+diverge outside it have not been separated, and a comparison crossing the reach
+without saying so has changed its subject mid-sentence.
 
-Where the three leave a genuine choice, the answer is a measurement at an
-equal budget in the problem's own unit over shared seeds, and it is a
-statement about that instance. Where they do not, the choice is already
-made and the section says which of the three made it.
+Where the three leave a genuine choice, the answer is a measurement at an equal
+budget in the problem's own unit over shared seeds, and a statement about that
+instance. Where they do not, the section says which of the three decided.
 
 \paragraph{What a referee assumes about the application.}
-A referee is only as good as the property it rests on, and those properties
-are not shared: they are facts about the model each section states, and each
-would be false of a neighbouring one.
-Table~\ref{tab:referee-assumptions} collects them, one per problem, so that a
-result read out of one section carries the assumption it was refereed under.
-Each problem's own discussion says where the assumption enters.
+A referee is only as good as the property it rests on, and those properties are
+not shared: each is a fact about the model its section states and would be
+false of a neighbouring one. Table~\ref{tab:referee-assumptions} collects them,
+one per problem, so a result read out of one section carries the assumption it
+was refereed under.
 
 \begin{table}[htbp]
   \centering
@@ -840,7 +816,7 @@ which puts the transition probabilities in closed form
 \end{equation}
 Rows sum to one, $\Pmat(0) = \mathbf{I}$, and every entry tends to $1/k$ as
 $t \to \infty$; the general time-reversible model replaces the single rate by
-$\SubMat$ and $\bpi$ and keeps Equation~\ref{eq:normalization}.
+$\SubMat$ and $\bpi$, keeping Equation~\ref{eq:normalization}.
 
 Given a topology $\tree$ over $n$ taxa, branch lengths $\branch$, and an
 alignment $\data$ of $L$ sites, sites evolve independently and the likelihood
@@ -853,17 +829,17 @@ marginalizes every assignment $z$ of states to the internal nodes:
 \end{equation}
 the product over the branches $(u \to v)$ of the rooted tree with the leaves
 fixed by the data---$k^{\,n-2}$ terms per site for a binary tree. Summing it
-directly is the oracle every faster evaluation of it is checked against.
+directly is the oracle every faster evaluation is checked against.
 
 \paragraph{Supported sizes.}
 \label{par:phylo:sizes}
 The declared range is $n \in [10, 1000]$ taxa by $L \in [100, 11{,}000]$ sites,
 and the largest evaluation measured is 200 taxa by 11,000 sites. What is
-\emph{refereed} is smaller, because the referee is an enumeration: the
-$(2n-5)!!$ unrooted topologies number 15 at five taxa, 105 at six, 945 at
-seven and 10,395 at eight, so the per-pull-request tier carries the five- and
-six-taxon fixtures, the stress tier seven, and the release tier eight and the
-twenty- and fifty-taxon trees that only the distance start referees. Direct
+\emph{refereed} is smaller, the referee being an enumeration: the $(2n-5)!!$
+unrooted topologies number 15 at five taxa, 105 at six, 945 at seven and 10,395
+at eight, so the per-pull-request tier carries the five- and six-taxon
+fixtures, the stress tier seven, and the release tier eight and the twenty- and
+fifty-taxon trees that only the distance start referees. Direct
 marginalization over the $k^{\,n-2}$ internal assignments of
 Equation~\ref{eq:site-independence} referees the likelihood on the same
 fixtures at $k = 4$ and $L$ from 200 to 200,000 sites. The Hadamard start is
@@ -907,12 +883,11 @@ Figure~\ref{fig:phylo:sketch} is that structure on four taxa.
 
 \subsection{The algorithm: simulation}
 The generative direction of Equation~\ref{eq:site-independence} is a pre-order
-walk: draw the root state, then each node's state from the row of its
-parent's state. One site is Algorithm~\ref{alg:simulate}; $L$ sites are $L$
-independent runs, and the empirical substitution frequencies along any branch
-converge to Equation~\ref{eq:jc}, which is the check a simulator is held
-to---against the closed form, and never against the likelihood that will later
-be fitted to its output.
+walk: draw the root state, then each node's state from the row of its parent's
+state. One site is Algorithm~\ref{alg:simulate}; $L$ sites are $L$ independent
+runs, and the empirical substitution frequencies along any branch converge to
+Equation~\ref{eq:jc}, the check a simulator is held to---against the closed
+form, never against the likelihood later fitted to its output.
 
 \begin{algorithm}[htbp]
 \caption{Forward simulation of one site under $(\tree, \branch, \Q)$}
@@ -961,12 +936,11 @@ a weighted sum over the $P \le \min(L, k^{\,n})$ distinct ones:
 \end{equation}
 with $w_p$ the number of columns equal to pattern $p$. The identity is exact:
 the arithmetic is reassociated, not approximated, and only the floating-point
-summation order distinguishes the two sides. It is the standard first step of
-a maximum-likelihood implementation \citep{felsenstein2004}, and it saturates,
+summation order distinguishes the two sides. It is the standard first step of a
+maximum-likelihood implementation \citep{felsenstein2004}, and it saturates,
 since $P \le k^{\,n}$ however long the alignment---at $k = 4$ and four taxa
-$P \le 256$ whatever $L$ is, so the recursion's cost stops growing once every
-column has appeared. Compression is a property of the alignment rather than of
-an evaluator, so every backend consumes patterns and weights.
+$P \le 256$ whatever $L$ is. Compression is a property of the alignment rather
+than of an evaluator, so every backend consumes patterns and weights.
 
 Equation~\ref{eq:pruning} is Equation~\ref{eq:sum-product} run leaf to root
 with the root as the last variable: $L_u(i)$ is the product over $u$'s
@@ -1000,19 +974,19 @@ parent in state $i$ to a child in state $j$:
     \infty & \text{otherwise}, \end{cases}
   \label{eq:sankoff}
 \end{equation}
-and a site's score is $\min_i S_{\mathrm{root}}(i)$. It is
-Equation~\ref{eq:pruning} in the min-plus semiring, and under the unit matrix
-$W = \mathbf{J} - \mathbf{I}$ it returns Fitch's count exactly. The score is
-that of a rooted tree: an asymmetric $W$ scores each rooting of one unrooted
-topology differently, and a search over unrooted topologies is well defined
-only when $W$ is a metric, where every rooting agrees.
+and a site's score is $\min_i S_{\mathrm{root}}(i)$.
+Equation~\ref{eq:pruning} in the min-plus semiring, returning Fitch's count
+exactly under the unit matrix $W = \mathbf{J} - \mathbf{I}$. The score is a
+rooted tree's: an asymmetric $W$ scores each rooting of one unrooted topology
+differently, so a search over unrooted topologies is well defined only when
+$W$ is a metric, where every rooting agrees.
 
 \paragraph{The gradient in the branch lengths.}
 Fitting $\branch$ needs $\partial \ell / \partial t_v$ for all $2n-3$ branches.
 Differentiating Equation~\ref{eq:pruning} branch by branch costs one recursion
-each; a single root-to-tip pass returns all of them together, and it is the
-transpose of the post-order pass rather than a second algorithm
-\citep{felsenstein2004}. Write $A^s_u(i) = \partial \ell / \partial L^s_u(i)$
+each; a single root-to-tip pass returns all of them together, the transpose of
+the post-order pass rather than a second algorithm \citep{felsenstein2004}.
+Write $A^s_u(i) = \partial \ell / \partial L^s_u(i)$
 for the adjoint of node $u$'s partial at site $s$, $m^s_v(i) = \sum_j
 \Pmat_{ij}(t_v)\, L^s_v(j)$ for the message $v$ sends its parent, and
 $\dot{\Pmat}(t) = \mathrm{d}\Pmat/\mathrm{d}t$, which is closed form under
@@ -1034,16 +1008,15 @@ $B^s_v(i) = A^s_u(i) \prod_{w \in \mathrm{children}(u) \setminus \{v\}} m^s_w(i)
 which is Algorithm~\ref{alg:pruning-backward}. Its cost is $O(n L k^2)$, the
 forward pass's, and independent of the number of branches differentiated.
 
-Two properties of that pass are worth stating, because both are places an
-implementation goes wrong silently. First, the rescaling contributes nothing:
-$\ell$ is algebraically independent of the per-node scales, the divided
-partial and the accumulated logarithm moving against each other, so the
-derivative may be taken with the scales frozen at the values the forward pass
-produced, and each adjoint is simply divided by its own node's scale. Second,
-the sibling product $\prod_{w \neq v} m^s_w$ must be formed by a scan over the
-siblings and not as $L^s_u / m^s_v$: a message vanishes at any site whose
-observation forbids that state, where the quotient is $0/0$ and the derivative
-is finite.
+Two properties of that pass are places an implementation goes wrong silently.
+First, the rescaling contributes nothing: $\ell$ is algebraically independent
+of the per-node scales, the divided partial and the accumulated logarithm
+moving against each other, so the derivative may be taken with the scales
+frozen at the forward pass's values and each adjoint divided by its own node's
+scale. Second, the sibling product $\prod_{w \neq v} m^s_w$ must be formed by a
+scan over the siblings and not as $L^s_u / m^s_v$: a message vanishes at any
+site whose observation forbids that state, where the quotient is $0/0$ and the
+derivative is finite.
 
 \begin{algorithm}[htbp]
 \caption{Two-pass gradient of the pruning recursion in the branch lengths}
@@ -1063,22 +1036,21 @@ is finite.
 \end{algorithm}
 
 \paragraph{Regime.}
-Exact on every input, because a tree has no cycle. The one failure mode is
-numerical---underflow of a product of $n$ factors each below one---and it is
-removed by the rescaling, not tolerated.
+Exact on every input, a tree having no cycle. The one failure mode is
+numerical---underflow of a product of $n$ factors each below one---and the
+rescaling removes it rather than tolerating it.
 
 \paragraph{What pins it.}
 Direct marginalization, Equation~\ref{eq:site-independence}, at the sizes it
 allows, to a relative tolerance (Section~\ref{sec:tolerance}). Two invariants
 past those sizes: the pulley principle, that a reversible model's likelihood
 does not depend on where the root is placed along a branch, and a gradient
-against central differences relative to its own norm---which is what refereed
-Algorithm~\ref{alg:pruning-backward} against the same likelihood
-differentiated by a tape, the two agreeing to a tighter tolerance than either
-agrees with the difference quotient. And the recovery test of
-Section~\ref{sec:properties}: on simulated data the fitted branch lengths
-cover the truth at their nominal rate, and the search recovers the generating
-topology at a stated site count.
+against central differences relative to its own norm---which refereed
+Algorithm~\ref{alg:pruning-backward} against the same likelihood differentiated
+by a tape, the two agreeing to a tighter tolerance than either agrees with the
+difference quotient. And the recovery test of Section~\ref{sec:properties}: on
+simulated data the fitted branch lengths cover the truth at their nominal rate,
+and the search recovers the generating topology at a stated site count.
 
 \subsection{The algorithm: discrete search}
 The number of unrooted binary topologies on $n$ taxa is $(2n-5)!!$
@@ -1092,23 +1064,22 @@ complete in the transitive closure, which for NNI is the connectivity of the
 associated graph \citep{felsenstein2004} and is inherited by SPR because it
 dominates NNI.
 
-Hill climbing over either neighbourhood fits the continuous parameters of
-every candidate and moves to the best; its budget is counted in candidates
-scored, never in seconds, so a run reproduces from its seed. The same climb
-with Equation~\ref{eq:fitch} or~\ref{eq:sankoff} in place of the fit is
-\emph{large parsimony} \citep{felsenstein2004}: nothing continuous is fitted,
-a candidate costs one pass, and the budget and the oracle are the same. A candidate
-that shares all but a few branches with its parent may start its fit from the
-parent's lengths, a branch being identified by the leaf bipartition below it
-rather than by a node's name; and a neighbourhood may be \emph{ranked} by one
-evaluation at those lengths before the few best are fitted, the accepted move
-always in full, so every reported score is an optimum. Whether the ranking
-finds the fitted best is a property of the move set and is measured per move
-set, not assumed.
+Hill climbing over either neighbourhood fits the continuous parameters of every
+candidate and moves to the best; its budget is counted in candidates scored,
+never in seconds, so a run reproduces from its seed. The same climb with
+Equation~\ref{eq:fitch} or~\ref{eq:sankoff} in place of the fit is \emph{large
+parsimony} \citep{felsenstein2004}: nothing continuous is fitted, a candidate
+costs one pass, and the budget and the oracle are the same. A candidate sharing
+all but a few branches with its parent may start its fit from the parent's
+lengths, a branch identified by the leaf bipartition below it rather than by a
+node's name; and a neighbourhood may be \emph{ranked} by one evaluation at
+those lengths before the few best are fitted, the accepted move always in full,
+so every reported score is an optimum. Whether the ranking finds the fitted
+best is measured per move set, not assumed.
 
-Three further economies apply to the same climb, and each is separable from
-the others. The climb may begin at a most-parsimonious topology rather than an
-arbitrary one, since a parsimony pass costs no fit. The regraft may be bounded
+Three further economies apply to the same climb, each separable from the
+others. The climb may begin at a most-parsimonious topology, since a parsimony
+pass costs no fit. The regraft may be bounded
 to edges within distance $r$ of the vacated edge, giving
 $|\neighbourhood_{\mathrm{SPR}}^{r}(\tree)| = O(nr)$ in place of $O(n^2)$;
 $r=1$ is exactly the NNI neighbourhood, so a bounded SPR inherits NNI's
@@ -1116,26 +1087,24 @@ transitive completeness at every $r$, and $r$ at least the tree's diameter is
 SPR itself. And a candidate may be fitted over only the branches whose
 bipartition the move changed --- the path between the vacated and the graft
 edge, one edge under NNI --- holding the rest at the parent's fitted lengths.
-That last is an optimization over a subspace, so its value is a lower bound on
-the candidate's maximum rather than equal to it: it decides which candidate to
-accept and the accepted one is refitted over every branch, exactly as a ranked
-neighbourhood is.
+That last optimizes over a subspace, so its value lower-bounds the candidate's
+maximum rather than equalling it: it decides which candidate to accept, and the
+accepted one is refitted over every branch, as a ranked neighbourhood is.
 
 \paragraph{What pins it.}
 Enumeration of the $(2n-5)!!$ topologies referees the search below eight taxa:
 the climb must reach the enumerated maximum, and the neighbourhood counts
-above are asserted exactly over every topology. Each economy above is held to
-that same enumeration alone and in combination, or the rate at which it loses
-the optimum is measured and stated. Two of them also have an exact reduction
-to something already refereed, which a count alone would not catch: the
-bounded regraft at $r=1$ must equal the NNI neighbourhood, and at $r$ past the
-diameter must equal the unbounded one candidate for candidate. A warm start is
-pinned by reaching the cold fit's optimum; a cached partial likelihood by
-equalling the recomputed one bitwise, since it is the same arithmetic in the
-same order. Large parsimony is held to the same enumeration from every
-start, and on the Felsenstein-zone fixture its enumerated optimum is
-asserted to be the wrong tree while the likelihood optimum is the right one,
-because there the criterion's failure is the theorem of
+above are asserted exactly over every topology. Each economy is held to that
+same enumeration alone and in combination, or the rate at which it loses the
+optimum is measured and stated. Two also have an exact reduction to something
+already refereed, which a count alone would not catch: the bounded regraft at
+$r=1$ must equal the NNI neighbourhood, and at $r$ past the diameter the
+unbounded one, candidate for candidate. A warm start is pinned by reaching the
+cold fit's optimum; a cached partial likelihood by equalling the recomputed one
+bitwise, being the same arithmetic in the same order. Large parsimony is held
+to the same enumeration from every start, and on the Felsenstein-zone fixture
+its enumerated optimum is asserted to be the wrong tree while the likelihood
+optimum is the right one, since there the criterion's failure is the theorem of
 Section~\ref{sec:properties} and not a defect of the search.
 
 \subsection{The initializer: distances, neighbor joining and the Hadamard spectrum}
@@ -1143,9 +1112,9 @@ Section~\ref{sec:properties} and not a defect of the search.
 Spectral learning of a hidden Markov model \citep{hsu2012} is a method of
 moments: the observable moments of short windows are inverted to the
 parameters, with a consistency guarantee and no likelihood surface to climb.
-\citet{mossel2006} carry the same argument to a phylogeny---the same
-inversion of pairwise moments learns a nonsingular tree---and what it becomes
-in practice is a distance per pair of taxa and a tree from the distances.
+\citet{mossel2006} carry the argument to a phylogeny---the same inversion of
+pairwise moments learns a nonsingular tree---where it becomes a distance per
+pair of taxa and a tree from the distances.
 The pair co-occurrence matrix $F$ of two taxa, $F_{ij}$ the fraction of sites
 at which the first is in state $i$ and the second in $j$, is the moment;
 under Equation~\ref{eq:jc} its off-diagonal mass is $\tfrac{k-1}{k}(1 -
@@ -1212,13 +1181,13 @@ under the Sylvester--Hadamard matrix $\hadamard$ of that order,
   \label{eq:hadamard}
 \end{equation}
 so the exact spectrum returns the tree's own lengths on its splits and zero
-elsewhere. The \emph{closest tree}, Algorithm~\ref{alg:hadamard-start}, takes the $n-3$
-largest mutually compatible weights of an estimated $q$. A four-state Jukes--Cantor alignment
-reduces to the two-state model exactly by grouping the states in pairs, at
-$\tfrac{2}{3}$ of every branch length; the four-state conjugation proper is
-over the Klein four-group and is not implemented. Both estimators are a
-start and not an estimate: the fit and the search begin from them, and every
-reported number is the optimum they reach.
+elsewhere. The \emph{closest tree}, Algorithm~\ref{alg:hadamard-start}, takes
+the $n-3$ largest mutually compatible weights of an estimated $q$. A four-state
+Jukes--Cantor alignment reduces to the two-state model exactly by grouping the
+states in pairs, at $\tfrac{2}{3}$ of every branch length; the four-state
+conjugation is over the Klein four-group and is not implemented. Both
+estimators are a start and not an estimate: the fit and the search begin from
+them, and every reported number is the optimum they reach.
 
 \paragraph{What pins it.}
 Equation~\ref{eq:jc-distance} against Equation~\ref{eq:jc} at the exact pair
@@ -1238,14 +1207,14 @@ budgeted comparison of Section~\ref{sec:properties}.
 The four-point condition of Section~\ref{sec:spectral-start} is more than a
 test for additivity: it is the defining relation of a variety.
 \citet{speyer2004} show that the tropical Grassmannian $\mathrm{Gr}(2,n)$, the
-tropicalization of the Pl\"ucker relations for two-planes in $n$-space, is
-exactly the space of trees on $n$ leaves --- its points the vectors
-$d \in \mathbb{R}^{\binom{n}{2}}$ for which every quartet's largest pairing
-sum is attained twice. Two consequences make it a relaxation of topology
-search. The coordinates are continuous, so a tree is a point of a Euclidean
-space rather than a combinatorial object; and a quartet's resolution is the
-pairing attaining the \emph{smallest} of its three sums, so the discrete
-structure is an $\arg\min$ of a linear function of those coordinates.
+tropicalization of the Pl\"ucker relations for two-planes in $n$-space, is the
+space of trees on $n$ leaves --- its points the vectors
+$d \in \mathbb{R}^{\binom{n}{2}}$ for which every quartet's largest pairing sum
+is attained twice. Two consequences make it a relaxation of topology search.
+The coordinates are continuous, so a tree is a point of a Euclidean space; and
+a quartet's resolution is the pairing attaining the \emph{smallest} of its
+three sums, so the discrete structure is an $\arg\min$ of a linear function of
+those coordinates.
 
 Relaxing the $\arg\min$ relaxes the topology. Write $s_Q(d) \in \mathbb{R}^3$
 for the pairing sums of quartet $Q$ and $\ell_Q \in \mathbb{R}^3$ for a score
@@ -1258,10 +1227,9 @@ The softmin at temperature $\tau$ gives
 \end{equation}
 differentiable in $d$ throughout and linear in the softmin weights, so at a
 one-hot weight vector it equals the discrete objective
-$D(\tree) = \sum_Q \ell_Q[r_\tree(Q)]$ exactly. The relaxation is an
-extension of what it relaxes rather than a second model, which is the same
-demand Section~\ref{sec:properties} makes of the Gumbel-softmax relaxation of
-a discrete state space.
+$D(\tree) = \sum_Q \ell_Q[r_\tree(Q)]$ exactly: an extension of what it relaxes
+rather than a second model, the demand Section~\ref{sec:properties} also makes
+of the Gumbel-softmax relaxation of a discrete state space.
 
 Three properties bound what may be claimed for it, and each is checkable.
 \emph{The scale of $d$ is a gauge}: $F_\tau(c\,d) = F_{\tau/c}(d)$ for
@@ -1277,17 +1245,16 @@ resolution, so
   \label{eq:tropical-corner}
 \end{equation}
 which inverts for the $\tau$ any requested tolerance needs and shrinks with a
-fixture's shortest internal branch. \emph{The relaxation is outer}: $F_\tau$
-is defined on all of $\mathbb{R}^{\binom{n}{2}}$ and not on $\mathrm{Gr}(2,n)$,
-a general dissimilarity resolves every quartet, and the collection of
-resolutions need not come from any tree. Ascent may therefore leave the
-variety, and the topology is read back off the point it stops at by neighbor
-joining, which is exact on the variety.
+fixture's shortest internal branch. \emph{The relaxation is outer}: $F_\tau$ is
+defined on all of $\mathbb{R}^{\binom{n}{2}}$ and not on $\mathrm{Gr}(2,n)$, a
+general dissimilarity resolves every quartet, and the resolutions need not come
+from any tree. Ascent may leave the variety, and the topology is read off the
+point it stops at by neighbor joining, exact on the variety.
 
 $D$ is a quartet decomposition of the criterion and not the tree's
-log-likelihood: it is a different surface, and substituting one for the other
-is licensed by measuring that the two agree at the $\arg\max$, never by a
-correlation between them.
+log-likelihood --- a different surface, so substituting one for the other is
+licensed by measuring that the two agree at the $\arg\max$, never by a
+correlation.
 
 \paragraph{What pins it.}
 Equation~\ref{eq:tropical-relaxation} against $D$ at the metric of every
@@ -1311,12 +1278,10 @@ convergence is not a property of the model.
 Four algorithms are assumed rather than derived here: the post-order
 marginalization (Appendix~\ref{app:pruning}), the two-pass adjoint that
 differentiates it (Algorithm~\ref{alg:pruning-backward}), the agglomeration
-that builds a tree from a distance matrix
-(Algorithm~\ref{alg:neighbor-joining}), and the climb over a neighbourhood
-(Algorithm~\ref{alg:hill-climbing}). Each is standard and each is stated in
-the appendix. What is not settled by citing them is which to spend a budget
-on at a given taxon count, and that is what
-Table~\ref{tab:phylo:regimes} answers.
+building a tree from a distance matrix (Algorithm~\ref{alg:neighbor-joining}),
+and the climb over a neighbourhood (Algorithm~\ref{alg:hill-climbing}). Each is
+standard and stated in the appendix. Citing them does not settle which to spend
+a budget on at a given taxon count; Table~\ref{tab:phylo:regimes} answers that.
 
 \begin{table}[htbp]
   \centering
@@ -1359,59 +1324,51 @@ Table~\ref{tab:phylo:regimes} answers.
 \end{table}
 
 The alignment length is a second axis and behaves oppositely. Pattern
-compression saturates at $P \le k^{\,n}$
-(Equation~\ref{eq:site-patterns}), so past a few thousand sites an
-evaluation stops growing in cost while the estimate keeps sharpening: length
-is the cheapest resolution on offer here, and the reason the declared range
-reaches eleven thousand sites at a taxon count whose search is unrefereed.
-Below a few hundred sites the same variance decides whether a distance
-matrix sits inside the recovery radius at all, so a short alignment is not a
-small problem but a different one.
+compression saturates at $P \le k^{\,n}$ (Equation~\ref{eq:site-patterns}), so
+past a few thousand sites an evaluation stops growing in cost while the
+estimate keeps sharpening: length is the cheapest resolution on offer, and the
+reason the declared range reaches eleven thousand sites at a taxon count whose
+search is unrefereed. Below a few hundred sites the same variance decides
+whether a distance matrix sits inside the recovery radius at all.
 
 \paragraph{What each method needs of the model.}
-The recursion applies to any tree and any rate matrix, reversible or not.
-The closed form Equation~\ref{eq:jc} is Jukes--Cantor's alone; the
-log-det distance, Equation~\ref{eq:logdet}, is additive under any Markov
-process on the branches and is the one distance that survives a model the
-fit does not assume. The conjugation of Equation~\ref{eq:hadamard} is the
-symmetric two-state model's, reaching four states only through the exact
-pairing reduction and not through a general time-reversible one. The
-tropical relaxation applies wherever a quartet carries a score, but is
-\emph{outer}: ascent may leave the space of trees entirely, so it is a way
-of moving and never a way of reporting, and the topology is read back by an
-algorithm that is exact on the space.
+The recursion applies to any tree and any rate matrix, reversible or not. The
+closed form Equation~\ref{eq:jc} is Jukes--Cantor's alone; the log-det
+distance, Equation~\ref{eq:logdet}, is additive under any Markov process on the
+branches and is the one distance surviving a model the fit does not assume. The
+conjugation of Equation~\ref{eq:hadamard} is the symmetric two-state model's,
+reaching four states only through the exact pairing reduction. The tropical
+relaxation applies wherever a quartet carries a score, but is \emph{outer}:
+ascent may leave the space of trees, so it is a way of moving and never of
+reporting, and the topology is read back by an algorithm exact on the space.
 
 \paragraph{What the validation assumes.}
 Three application-specific properties, and every referee in
-Section~\ref{sec:phylo:validation} rests on one of them. Sites are
-independent and identically distributed given the tree, which is what makes
-direct marginalization a per-column sum and pattern compression an identity
-rather than an approximation. The model is time-reversible, which is the
-whole content of the pulley principle: the invariant is not a general
-property of a likelihood but a statement about $\Q = \SubMat
-\operatorname{diag}(\bpi)$, and it is silent about a model that is not
-reversible. And recovery assumes the data came from the model, so it
-calibrates the pipeline on its own samples and transfers to nothing else ---
-which is why it is the referee of last resort and not the first.
+Section~\ref{sec:phylo:validation} rests on one. Sites are independent and
+identically distributed given the tree, which makes direct marginalization a
+per-column sum and pattern compression an identity. The model is
+time-reversible, which is the whole content of the pulley principle: the
+invariant is a statement about $\Q = \SubMat \operatorname{diag}(\bpi)$ and is
+silent about a model that is not reversible. And recovery assumes the data came
+from the model, so it calibrates the pipeline on its own samples and transfers
+to nothing else --- the referee of last resort.
 
 \subsection{Validation}
 \label{sec:phylo:validation}
-Each referee below establishes one thing and is silent about the rest; the
-list is what the section may claim, and the paragraphs above say where each
-check sits.
+Each referee below establishes one thing and is silent about the rest; the list
+is what the section may claim.
 \begin{itemize}
   \item \emph{Direct marginalization} over the $k^{\,n-2}$ internal
     assignments, Equation~\ref{eq:site-independence}, shares no traversal
-    with Equation~\ref{eq:pruning} and establishes that the recursion
-    computes the marginal it claims, to a relative tolerance. It does not
-    reach past the taxon count the supported sizes above give, and says
-    nothing about the rescaling at lengths where the unscaled product would
-    underflow.
+    with Equation~\ref{eq:pruning} and establishes that the recursion computes
+    the marginal it claims, to a relative tolerance. It does not reach past the
+    taxon count the supported sizes give, and says nothing about the rescaling
+    at lengths where the unscaled product would underflow.
   \item \emph{The closed form} Equation~\ref{eq:jc} referees the simulator
     through the empirical substitution frequencies along a branch. It
     establishes that the generative direction is the model; it does not check
-    the likelihood, and deliberately so, since a simulator checked against the
-    evaluator fitted to its output referees nothing.
+    the likelihood, since a simulator checked against the evaluator fitted to
+    its output referees nothing.
   \item \emph{The pulley principle} --- a reversible model's likelihood is
     unchanged by where the root sits along a branch --- and the gradient
     against central differences hold past every enumerable size. They are
@@ -1420,14 +1377,13 @@ check sits.
   \item \emph{Topology enumeration} of the $(2n-5)!!$ candidates referees the
     search, which must reach the enumerated maximum, and the neighbourhood
     counts $2(n-3)$ and $2(n-3)(2n-7)$ are asserted exactly over every
-    topology. It establishes that the climb found the best tree at those
-    sizes; past them nothing here says the climb succeeded, which is what a
-    branch-and-bound bound would supply.
-  \item \emph{Recovery of the simulated truth} --- the generating topology at
-    a stated site count, and branch lengths covered by their intervals at the
+    topology. Past those sizes nothing here says the climb succeeded, which
+    is what a branch-and-bound bound would supply.
+  \item \emph{Recovery of the simulated truth} --- the generating topology at a
+    stated site count, and branch lengths covered by their intervals at the
     nominal rate --- is the referee where no oracle reaches. It establishes
-    that the whole pipeline is calibrated on data from its own model; it
-    establishes nothing about data the model does not describe.
+    that the pipeline is calibrated on data from its own model and nothing
+    about data the model does not describe.
   \item \emph{The path lengths of a known tree} referee neighbor joining
     exactly on an additive matrix, and Atteson's radius bounds when an
     estimated matrix still recovers the topology. Outside that radius the
@@ -1443,33 +1399,31 @@ enumerable taxon count nothing says a climb found the optimum. What closes it
 is a \emph{bound}, not a faster climb --- a branch and bound over the topology
 space, with Equation~\ref{eq:parsimony-bound} or the plug-in of
 Equation~\ref{eq:plugin-bound} pruning a subtree of the search
-\citep{papadimitriou1998}. Three further directions each have a stated
-prerequisite. A posterior over topologies rather than a flat-prior weight over
-maximized likelihoods needs a chain that mixes over the move graph, whose
-mixing is the object studied rather than assumed \citep{whidden2015,
-altekar2004}; a differentiable topology needs a parameterization of the
-space itself, which the subsplit constructions supply and which would give
-Section~\ref{sec:tropical} an oracle it does not have \citep{zhang2018,
-zhang2019}; and a learned ranking of the regraft neighbourhood is the
-surrogate Section~\ref{sec:surrogates} ranks with, learned rather than derived
-\citep{azouri2021}. Richer substitution models --- rate heterogeneity across
-sites, a general time-reversible matrix fitted rather than fixed --- change
-the evaluator's parameter vector and nothing about its referees
-\citep{yang2014}. Established implementations are a comparison that could be
-made and is not one made here \citep{minh2020, kozlov2019}: they are surveyed,
-and admitting one is a decision on its own evidence.
+\citep{papadimitriou1998}. Three further directions each have a prerequisite. A
+posterior over topologies rather than a flat-prior weight over maximized
+likelihoods needs a chain that mixes over the move graph, whose mixing is
+studied rather than assumed \citep{whidden2015, altekar2004}; a differentiable
+topology needs a parameterization of the space itself, which the subsplit
+constructions supply and which would give Section~\ref{sec:tropical} an oracle
+it lacks \citep{zhang2018, zhang2019}; and a learned ranking of the regraft
+neighbourhood is the surrogate Section~\ref{sec:surrogates} ranks with, learned
+rather than derived \citep{azouri2021}. Richer substitution models --- rate
+heterogeneity across sites, a general time-reversible matrix fitted rather than
+fixed --- change the evaluator's parameter vector and nothing about its
+referees \citep{yang2014}. Established implementations are a comparison not
+made here \citep{minh2020, kozlov2019}: they are surveyed, and admitting one is
+a decision on its own evidence.
 
 \paragraph{What is deliberately not attempted.}
-Empirical alignments, because there is no true tree behind one and a result on
-it can be reported but not refereed --- which is the reason every fixture is
-simulated. Model misspecification, since every recovery statement here is
-calibration on the model's own samples and says nothing about data the model
-does not describe. Insertions and deletions, which break the site
+Empirical alignments, since there is no true tree behind one and a result on it
+can be reported but not refereed --- the reason every fixture is simulated.
+Model misspecification, since every recovery statement here is calibration on
+the model's own samples. Insertions and deletions, which break the site
 independence every referee in Section~\ref{sec:phylo:validation} rests on and
 would need a different likelihood rather than a longer one. And the four-state
-Hadamard conjugation proper, over the Klein four-group: the two-state
-transform with the exact pairing reduction is carried, and the general one is
-stated and left unbuilt.
+Hadamard conjugation over the Klein four-group: the two-state transform with
+the exact pairing reduction is carried, the general one stated and left
+unbuilt.
 
 \section{Problem Statement: Potts Models in an External Field}
 \label{sec:potts}
@@ -1523,12 +1477,11 @@ Figure~\ref{fig:potts:sketch} is that structure on the square lattice.
 \input{potts_figure}
 
 \subsection{Why an odd cycle is the whole story}
-A two-state antiferromagnet ($J < 0$) wants every edge to disagree, which is
-possible exactly when $\graph$ is $2$-colourable. So every bipartite
-lattice---a chain, a square lattice---has a trivial, unfrustrated ground state
-and says nothing about a hard problem. A geometry containing odd cycles is what
-makes the ground state non-trivial, and where a counting argument closes
-exactly it fixes that ground state at every size. This is the difference
+A two-state antiferromagnet ($J < 0$) wants every edge to disagree, possible
+exactly when $\graph$ is $2$-colourable. So every bipartite lattice---a chain,
+a square lattice---has a trivial ground state and says nothing about a hard
+problem. Odd cycles make the ground state non-trivial, and where a counting
+argument closes it fixes that ground state at every size: the difference
 between a fixture that exercises an optimizer and one that does not.
 
 \subsection{The algorithm: belief propagation}
@@ -1547,8 +1500,8 @@ $i$ to a neighbour $j$ is
 \end{equation}
 iterated to a fixed point, with beliefs $b_i(\sigma_i) \propto e^{h_i(\sigma_i)}
 \prod_{l \in \partial i} m_{l \to i}(\sigma_i)$ at a node and likewise on an
-edge. The messages are carried in the logarithm and normalized every sweep,
-because a coupling of a few units on a small lattice already puts a product of
+edge. The messages are carried in the logarithm and normalized every sweep: a
+coupling of a few units on a small lattice already puts a product of
 exponentials past what a linear recursion holds. The Bethe free energy of the
 fixed point,
 \begin{equation}
@@ -1562,22 +1515,22 @@ fixed point,
 with $E_{ij} = -J_{ij}\,\delta(\sigma_i,\sigma_j)$, $E_i = -h_i(\sigma_i)$ and
 $d_i$ the degree of $i$, equals $-\log Z$ exactly on a tree and approximates
 it on a loopy graph \citep{yedidia2005, mezard2009}; Appendix~\ref{app:bethe}
-states why, and Appendix~\ref{app:sum-product} places the tree case. A fixed point the iteration never reached is not an estimate of
-anything, so non-convergence is a refusal rather than a number.
+states why, and Appendix~\ref{app:sum-product} places the tree case. A fixed
+point the iteration never reached estimates nothing, so non-convergence is a
+refusal rather than a number.
 
 \paragraph{Regime.}
 Exact on a tree, in two passes. On a loopy graph the flooding schedule is
-iterated with damping to a tolerance and returns the Bethe approximation, and
-the tree schedule is refused rather than run, because a number that looks
-exact and is not is the worst output an evaluator can produce.
+iterated with damping to a tolerance and returns the Bethe approximation; the
+tree schedule is refused rather than run, a number that looks exact and is not
+being the worst output an evaluator can produce.
 
 \paragraph{What pins it.}
-On a tree, $\log Z$ and every marginal against enumeration to a stated
-relative tolerance. On a loopy graph nothing asserts agreement with the
-truth---that would assert something false---and what is asserted is the
-structure the physics requires: exact at zero coupling, and a deviation from
-the exact transfer matrix that grows away from it and is reported as a
-measurement.
+On a tree, $\log Z$ and every marginal against enumeration to a stated relative
+tolerance. On a loopy graph nothing asserts agreement with the truth---that
+would assert something false---and what is asserted is the structure the
+physics requires: exact at zero coupling, with a deviation from the exact
+transfer matrix that grows away from it and is reported as a measurement.
 
 \subsection{The algorithm: ground states as cuts}
 \label{sec:potts-cuts}
@@ -1604,25 +1557,23 @@ expected weight is at least $\alpha_{\mathrm{GW}} = 0.87856$ of the optimum,
   \label{eq:gw}
 \end{equation}
 and the relaxation's own value bounds the optimum from above
-\citep{goemans1995}. The bound is the claim that holds at every size; the
-realized ratio on an instance is measured beside it and is never quoted as the
-guarantee.
+\citep{goemans1995}. The bound is the claim holding at every size; the realized
+ratio on an instance is measured beside it and never quoted as the guarantee.
 
 \paragraph{Regime.}
 Exact where the couplings are submodular and refused rather than approximated
 where they are not (Section~\ref{sec:properties}): a wrong ground state on a
 structured instance is indistinguishable from a right one at any size worth
-solving. The relaxation runs on any instance and certifies a ratio, not an
-optimum.
+solving. The relaxation runs on any instance and certifies a ratio.
 
 \paragraph{What pins it.}
 Enumeration over $2^{|V|}$ configurations where it reaches; where it does not,
-a \emph{reduction}: on a bipartite graph the maximum cut is every edge, on a
-uniform ferromagnet the ground state is constant, and a construction error in
-the cut graph yields a labelling that is merely worse, which only a regime
-where the general construction must reproduce a simpler validated one will
-catch. A fixture whose answer is trivial measures nothing, so the odd cycles
-of Section~\ref{sec:potts} are what the instances carry.
+a \emph{reduction}: on a bipartite graph the maximum cut is every edge and on a
+uniform ferromagnet the ground state is constant. A construction error in the
+cut graph yields a merely worse labelling, which only a regime forcing the
+general construction to reproduce a simpler validated one catches. A fixture
+whose answer is trivial measures nothing, so the instances carry the odd cycles
+of Section~\ref{sec:potts}.
 
 \subsection{The algorithm: alpha expansion}
 \label{sec:alpha-expansion}
@@ -1642,7 +1593,7 @@ constant of the global one,
 \end{equation}
 so a factor of two for the Potts metric, where $c = 1$. The guarantee assumes
 each expansion is solved to optimality; where it is solved approximately the
-certificate is optimistic, and what can be asserted is the symptom---a value an
+certificate is optimistic, and only the symptom can be asserted---a value an
 exact solve could not have produced.
 
 \paragraph{What pins it.}
@@ -1697,9 +1648,9 @@ coupling rather than run badly.
 A sampler is validated by the distribution it converges to and never by
 inspection: at an enumerable size the exact Boltzmann distribution is
 available, and a chain is held to it by a goodness-of-fit test at a declared
-significance, thinned by several autocorrelation times because successive
-sweeps are not independent draws. The test's power is itself pinned---a move
-set with the field accept step removed runs, mixes, and is rejected.
+significance, thinned by several autocorrelation times since successive sweeps
+are not independent draws. The test's power is itself pinned---a move set with
+the field accept step removed runs, mixes, and is rejected.
 
 \subsection{Temperature, annealing and tempering}
 \label{sec:tempering}
@@ -1723,8 +1674,8 @@ the ratio of the joint target, a product of tempered marginals
 \citep{swendsenwang1986, geyer1991, earl2005}; Appendix~\ref{app:exchange}
 derives it. The hot replicas cross barriers the cold one cannot, and an
 exchange carries what they find down the ladder. Each replica draws from its
-own generator, spawned from one parent that then draws only the exchange
-uniforms, so no two replicas share a stream and one seed reproduces the run.
+own generator, spawned from one parent that draws only the exchange uniforms,
+so no two replicas share a stream and one seed reproduces the run.
 
 The replica at $T_1 = 1$ targets the unscaled model, so the fraction of its
 $N$ recorded sweeps spent at a structure $x$ estimates that structure's
@@ -1737,22 +1688,20 @@ weight over the whole space,
 where a weight over a neighbourhood is conditional on that neighbourhood and
 enumeration is refused past its cap. The structure may be a labelling, a
 hidden path, or a topology with $\energy$ the negative fitted log-likelihood,
-in which case the limit is the flat-prior weight over maximized likelihoods
-and not a marginal over branch lengths. It is a Monte Carlo estimate, and is
-named a posterior weight only beside the exchange acceptance of every
-adjacent pair and the autocorrelation time of the indicator, which say
-whether the ensemble mixed.
+where the limit is the flat-prior weight over maximized likelihoods and not a
+marginal over branch lengths. It is a Monte Carlo estimate, named a posterior
+weight only beside the exchange acceptance of every adjacent pair and the
+autocorrelation time of the indicator, which say whether the ensemble mixed.
 
 \paragraph{What pins it.}
 Every replica's marginal must still be $\exp(-\energy/T_r)$, enumerated from
 the \emph{unscaled} model, with exchanges on: a wrong exchange ratio
 contaminates the cold replica with hot configurations and only that test says
-so. Its power is pinned by the paired negative---an exchange that omits the
+so. Its power is pinned by the paired negative---an exchange omitting the
 energy term still runs and still mixes, and is rejected on every replica.
-Whether tempering or annealing beats restarts of descent at an equal budget
-of sweeps is not a property of the algorithms but of the instance, and is
-measured on the frustrated, past-enumeration instances the roadmap needs,
-never asserted in general.
+Whether tempering or annealing beats restarts of descent at an equal budget of
+sweeps is a property of the instance, measured on the frustrated,
+past-enumeration instances the roadmap needs and never asserted in general.
 
 \subsection{Choosing among these at the supported sizes}
 \label{sec:potts:discussion}
@@ -1762,11 +1711,11 @@ and~\ref{app:bethe}), the minimum cut and the expansion cycle built on it
 (Algorithm~\ref{alg:alpha-expansion}), the single-site and cluster updates
 (Algorithms~\ref{alg:heat-bath} and~\ref{alg:cluster-move}), the replica
 exchange over them (Algorithm~\ref{alg:parallel-tempering}), and the
-semidefinite relaxation with its rounding. They are not alternatives to one
-another in the ordinary sense, and the first thing to settle is which
-question is being asked: a sampler estimates a distribution, a cut returns
-one configuration, and message passing returns marginals and a free energy.
-Scoring one against another's referee is the standing error here.
+semidefinite relaxation with its rounding. They are not alternatives in the
+ordinary sense: a sampler estimates a distribution, a cut returns one
+configuration, and message passing returns marginals and a free energy, so the
+question being asked is what settles first. Scoring one against another's
+referee is the standing error here.
 
 \begin{table}[htbp]
   \centering
@@ -1815,27 +1764,26 @@ Scoring one against another's referee is the standing error here.
 \end{table}
 
 Temperature is the axis the table does not carry, and it moves the answer
-twice. Near a critical coupling the correlated regions span the lattice, so
-a single-site sweep decorrelates slowly and the cluster move is what makes a
-sampled estimate affordable --- but only at non-negative couplings, which is
-exactly where the exact cut is also available for the ground state. Away
-from criticality the cluster move's advantage narrows and its refusals
-remain. That the two closed forms of Section~\ref{sec:potts-sampling} exist
-is what lets an instance be placed \emph{at} a critical point rather than
-near one, so the comparison is run where the difference is largest and not
-where it happens to fall.
+twice. Near a critical coupling the correlated regions span the lattice, so a
+single-site sweep decorrelates slowly and the cluster move is what makes a
+sampled estimate affordable --- but only at non-negative couplings, exactly
+where the exact cut is also available for the ground state. Away from
+criticality the cluster move's advantage narrows and its refusals remain. The
+two closed forms of Section~\ref{sec:potts-sampling} let an instance be placed
+\emph{at} a critical point rather than near one, so the comparison runs where
+the difference is largest.
 
 \paragraph{What the validation assumes.}
-The referees in Section~\ref{sec:potts:validation} rest on three properties
-of the model, all easy to lose in a move set. The chain must reach every
+The referees in Section~\ref{sec:potts:validation} rest on three properties of
+the model, all easy to lose in a move set. The chain must reach every
 configuration the enumeration sums over: a move set that cannot leave a
 subspace mixes, passes a convergence diagnostic, and is scored against a
 distribution over a space it never visits. The number of moves composing a
 sweep must not depend on the state, since a count chosen from the outcome
 biases toward the states that chose it --- which is why a sweep is defined
-before it is run. And a temperature must act as a scaling of $J$ and $h$ and
-in no other way, since that is what lets the \emph{unscaled} model's
-enumeration referee every replica of a tempered ensemble at once.
+before it is run. And a temperature must act as a scaling of $J$ and $h$ and in
+no other way, which is what lets the \emph{unscaled} model's enumeration
+referee every replica of a tempered ensemble at once.
 
 \subsection{Validation}
 \label{sec:potts:validation}
@@ -1848,10 +1796,10 @@ enumeration referee every replica of a tempered ensemble at once.
     independently of the message passing, so a chain and a narrow lattice have
     an oracle past enumeration. It establishes agreement at a width, not a
     bound on the error at any width.
-  \item \emph{Zero coupling} is where belief propagation is exact on any
-    graph. It establishes that the loopy implementation reduces correctly; the
+  \item \emph{Zero coupling} is where belief propagation is exact on any graph.
+    It establishes that the loopy implementation reduces correctly; the
     deviation away from it is reported as a measurement and asserted against
-    nothing, because asserting agreement with the truth on a loopy graph would
+    nothing, since asserting agreement with the truth on a loopy graph would
     assert something false.
   \item \emph{A minimum cut} referees the two-state submodular ground state
     exactly at any size max-flow reaches, and alpha expansion must reproduce
@@ -1876,24 +1824,23 @@ enumeration referee every replica of a tempered ensemble at once.
 \subsection{Extensions, and what is not attempted}
 \label{sec:potts:extensions}
 \paragraph{What it would take to go further.}
-The missing referee is an oracle for the normalizer of a lattice wider than
-the transfer matrix reaches. A boundary contraction supplies one: a strip's
+The missing referee is an oracle for the normalizer of a lattice wider than the
+transfer matrix reaches. A boundary contraction supplies one: a strip's
 partition function is a product of transfer operators, and contracting it
 approximately with a controlled bond dimension turns the width from a hard
-ceiling into a stated accuracy \citep{schollwoeck2011}. Two bounds would
-extend what can be claimed without an oracle at all --- the tree-reweighted
-upper bound of Equation~\ref{eq:spanning-tree-bound} has a maximum-a-posteriori
-counterpart that bounds the ground state rather than $\log Z$
-\citep{wainwright2005map}, and the characterization of which energies a cut
-can minimize says exactly which multi-label instances reduce to the exact
-solver rather than to expansion \citep{kolmogorov2004}. For the search itself,
-population annealing carries a whole ensemble down a temperature schedule with
-resampling and is the natural comparison for the tempering of
-Section~\ref{sec:tempering} at equal sweeps \citep{machta2010}. A learned
-ground-state proposal is admissible on the same terms as any other: a graph
-network trained to output a configuration is a method \citep{schuetz2022}, and
-the objection that it must be measured against a competently tuned greedy
-baseline is part of the method rather than a criticism of it
+ceiling into a stated accuracy \citep{schollwoeck2011}. Two bounds would extend
+what can be claimed without an oracle --- the tree-reweighted upper bound of
+Equation~\ref{eq:spanning-tree-bound} has a maximum-a-posteriori counterpart
+bounding the ground state rather than $\log Z$ \citep{wainwright2005map}, and
+the characterization of which energies a cut can minimize says which
+multi-label instances reduce to the exact solver rather than to expansion
+\citep{kolmogorov2004}. For the search itself, population annealing carries an
+ensemble down a temperature schedule with resampling and is the natural
+comparison for Section~\ref{sec:tempering}'s tempering at equal sweeps
+\citep{machta2010}. A learned ground-state proposal is admissible on the same
+terms as any other: a graph network trained to output a configuration is a
+method \citep{schuetz2022}, and the demand that it be measured against a
+competently tuned greedy baseline is part of the method rather than a criticism
 \citep{angelini2023}.
 
 \paragraph{What is deliberately not attempted.}
@@ -1921,11 +1868,10 @@ The exact referee is that $k^T$ path enumeration, refused past 200,000 paths,
 so the oracle reaches eleven positions at three states and seventeen at two.
 The fixture is three states, four symbols and fifteen positions over 600
 sequences: long enough that a fit recovers the transition matrix, short enough
-that any window of it enumerates. Six emission families run against the same
-recursions, and the recursions themselves are exact at every length, the chain
-being a tree; the release tier fits sequences past the enumerable length and
-is refereed there by recovery of the simulated parameters alone, up to the
-permutation of hidden states.
+that any window enumerates. Six emission families run against the same
+recursions, exact at every length since the chain is a tree; the release tier
+fits sequences past the enumerable length, refereed by recovery of the
+simulated parameters alone, up to the permutation of hidden states.
 
 \subsection{As a factor graph}
 The variables are the hidden states, $x_t \equiv z_t$. The factors are
@@ -1944,15 +1890,14 @@ Figure~\ref{fig:hmm:sketch} is that structure on five positions.
 \paragraph{The emission family is the only part that knows what an observation
 is.} Everything else---the recursions, the expectation step, path
 enumeration---needs three things from it: draw an observation given a state,
-score one, and re-estimate itself from posterior weights. Separating it is what
-lets one set of recursions serve a finite alphabet, a real observation, and a
-count.
+score one, and re-estimate itself from posterior weights. Separating it lets
+one set of recursions serve a finite alphabet, a real observation, and a count.
 
 \paragraph{A density is not a probability.} For a family over a countable
 alphabet the evidence is a probability, so $\log p(\data) \le 0$. For a family
 over the reals it is a \emph{density} and carries no such bound. A check
-written against the first is false under the second, so what may be asserted
-is keyed on the support the model declares.
+written against the first is false under the second, so what may be asserted is
+keyed on the declared support.
 
 \subsection{The algorithm: forward--backward}
 The forward recursion is Equation~\ref{eq:pruning} on a chain:
@@ -1988,28 +1933,26 @@ unique maximum the max-marginals' argmax at every position is that path
 \citep{durbin1998}.
 
 \paragraph{Regime.}
-Exact for every length, the chain being a tree. The one hazard is the same
-underflow pruning meets, and the same remedy applies: the recursion runs in
-the logarithm.
+Exact for every length, the chain being a tree. The one hazard is the underflow
+pruning meets, with the same remedy: the recursion runs in the logarithm.
 
 \paragraph{What pins it.}
 The sum over every one of the $k^T$ paths, written out term by term with no
 recursion, referees the evidence, the posteriors and the Viterbi path at the
 lengths it allows; a gradient against central differences past them. The
-enumeration is the oracle two decoders are separated by, so it cannot be
-validated by a decoder, and it is pinned in turn against algebra: quantities
-that can be worked out by hand on a two-state, two-step chain.
+enumeration separates the two decoders, so no decoder can validate it; it is
+pinned against algebra instead, on quantities worked out by hand on a
+two-state, two-step chain.
 
 \subsection{The algorithm: expectation-maximization}
 Baum--Welch, Algorithm~\ref{alg:baum-welch}, alternates a posterior over
 hidden states given the parameters with a re-estimate of the parameters given
 that posterior, and increases the likelihood at every iteration
-\citep{mackay2003}. The initial distribution and
-the transitions re-estimate in closed form for every family; the emission
-re-estimate is the family's own, and \emph{whether it is a formula} is the
-property that separates the families. A weighted mean is; a dispersion
-parameter whose score involves the digamma function is not, and its M step is
-itself an optimization---which is the case that says whether an interface
+\citep{mackay2003}. The initial distribution and the transitions re-estimate in
+closed form for every family; the emission re-estimate is the family's own, and
+\emph{whether it is a formula} separates the families. A weighted mean is; a
+dispersion parameter whose score involves the digamma function is not, and its
+M step is itself an optimization---the case that says whether an interface
 built around closed forms was built correctly.
 
 \paragraph{What pins it.}
@@ -2024,63 +1967,57 @@ too: a dispersion the data cannot identify is refused, not clamped.
 Viterbi returns the single path of highest joint probability; posterior
 decoding returns, at each position independently, the state of highest marginal
 probability. Where they disagree, the posterior-decoded sequence can be a path
-the model assigns zero probability to, because nothing constrains consecutive
-choices to be compatible. They agree on almost every instance, which is exactly
-why an implementation that computes one and reports the other survives a test
-suite with no case where they diverge. Equation~\ref{eq:viterbi} and the
-argmax of Equation~\ref{eq:posterior} are those two decodings; the fixture on
-which they differ is constructed and kept, because it is the only kind of case
-that can tell an implementation of one from an implementation of the other.
-Sampling the path posterior rather than decoding it is
-Algorithm~\ref{alg:chain-block}, the block sweep the coupled model's E step
-also uses.
+the model assigns zero probability to, nothing constraining consecutive choices
+to be compatible. They agree on almost every instance, which is why an
+implementation computing one and reporting the other survives a test suite with
+no case where they diverge. Equation~\ref{eq:viterbi} and the argmax of
+Equation~\ref{eq:posterior} are those two decodings; the fixture on which they
+differ is constructed and kept, being the only case that tells an
+implementation of one from the other. Sampling the path posterior rather than
+decoding it is Algorithm~\ref{alg:chain-block}, the block sweep the coupled
+model's E step also uses.
 
 \subsection{Choosing among these at the supported sizes}
 \label{sec:hmm:discussion}
 Three algorithms are assumed and stated elsewhere: the two-pass
 marginalization on a chain (Appendix~\ref{app:forward-backward}), the
 alternation that fits it (Algorithm~\ref{alg:baum-welch}), and the block
-draw of a whole path from its conditional
-(Algorithm~\ref{alg:chain-block}). Unlike every other section here, none of
-them has a size at which it stops being exact: the chain is a tree, so the
-recursions cost $O(T k^2)$ and are exact at every length. The size question
-is therefore not which algorithm evaluates but which referee is available,
-and the two ceilings move for different reasons.
+draw of a whole path from its conditional (Algorithm~\ref{alg:chain-block}).
+Unlike every other section here, none has a size at which it stops being exact:
+the chain is a tree, so the recursions cost $O(T k^2)$ and are exact at every
+length. The size question is therefore which referee is available, and the two
+ceilings move for different reasons.
 
-Below the path enumeration --- eleven positions at three states, seventeen
-at two --- the term-by-term sum scores the evidence, both decodings and
-every posterior, and it is the only thing that can: it is what separates a
-decoder that computes the most probable path from one that computes the
-per-position modes, so no decoder can referee it. That is why the fixture on
-which the two decodings differ lives inside this ceiling, and why nothing
-else is asked of it. Past the ceiling only recovery remains, and recovery
-needs \emph{length} for a reason that has nothing to do with cost: a
-transition matrix is identified by the number of transitions observed, so
-the fixture's length is set by the variance of the estimate and its width by
-the state count, while the recursion's cost stays linear in the length.
+Below the path enumeration --- eleven positions at three states, seventeen at
+two --- the term-by-term sum scores the evidence, both decodings and every
+posterior, and it is the only thing that can, since it is what separates a
+decoder computing the most probable path from one computing the per-position
+modes. That is why the fixture on which the two decodings differ lives inside
+this ceiling. Past it only recovery remains, and recovery needs \emph{length}
+for a reason unrelated to cost: a transition matrix is identified by the number
+of transitions observed, so the fixture's length is set by the variance of the
+estimate and its width by the state count, while the recursion's cost stays
+linear in the length.
 
 \paragraph{Which fit, and why both are carried.}
 The alternation costs one pass per iterate and increases the likelihood at
-every one, so it is what to run wherever the emission family's re-estimate
-is a formula. Where the re-estimate is itself an optimization --- a
-dispersion whose score involves a digamma, the case that says whether an
-interface built around closed forms was built correctly --- the guarantee is
-inherited only if the inner solve actually converged, and an unsettled
-inner solve surfaces as a non-monotone outer likelihood several iterates
-later. There the gradient fit over the unconstrained vector of
-Section~\ref{sec:abstraction} is the direct route. Where both apply they
-must reach the same optimum, and it is the agreement of two routes sharing
-only the model that is the evidence, never the convergence of either.
+every one, so it is what to run wherever the emission family's re-estimate is a
+formula. Where the re-estimate is itself an optimization --- a dispersion whose
+score involves a digamma --- the guarantee is inherited only if the inner solve
+converged, and an unsettled one surfaces as a non-monotone outer likelihood
+several iterates later. There the gradient fit over the unconstrained vector of
+Section~\ref{sec:abstraction} is the direct route. Where both apply they must
+reach the same optimum, and the evidence is the agreement of two routes sharing
+only the model, never the convergence of either.
 
 \paragraph{Which decoding, and the choice is the caller's.}
-The two answers are not an accuracy ordering. The most probable path
-minimizes the probability of getting the whole path wrong; the per-position
-modes minimize the expected number of wrong positions and may return a path
-the model gives probability zero. Neither dominates, and the choice states
-what the caller is scored on. Sampling the path posterior rather than
-decoding it is the third answer and the one the coupled model's expectation
-step needs, since a decoded path is a point estimate and an expectation is
-not.
+The two answers are not an accuracy ordering. The most probable path minimizes
+the probability of getting the whole path wrong; the per-position modes
+minimize the expected number of wrong positions and may return a path the model
+gives probability zero. Neither dominates, and the choice states what the
+caller is scored on. Sampling the path posterior is the third answer and the
+one the coupled model's expectation step needs, a decoded path being a point
+estimate.
 
 \paragraph{What the validation assumes.}
 Two properties, both stated in the section and neither inherited from a
@@ -2098,11 +2035,10 @@ the fit would referee nothing.
 \label{sec:hmm:validation}
 \begin{itemize}
   \item \emph{The sum over all $k^T$ paths}, written out term by term with no
-    recursion, referees the evidence, both decodings and every posterior at
-    the lengths above. It establishes the recursions exactly; it is the oracle
-    that separates the two decodings, so it cannot itself be checked by a
-    decoder, and it is pinned in turn against quantities worked out by hand on
-    a two-state, two-step chain.
+    recursion, referees the evidence, both decodings and every posterior at the
+    lengths above. It establishes the recursions exactly; separating the two
+    decodings, it cannot itself be checked by a decoder, and is pinned against
+    quantities worked out by hand on a two-state, two-step chain.
   \item \emph{Central differences} referee the gradient past the enumerable
     length. They establish that the differentiable path agrees with the
     recursion's own value; they establish nothing about that value.
@@ -2112,11 +2048,11 @@ the fit would referee nothing.
     point is the maximum, which is why the fixed point is also required to
     agree with an independent gradient fit of the same likelihood.
   \item \emph{Recovery up to the permutation of hidden states} is the referee
-    where no oracle reaches. It establishes calibration on data from the
-    model, with the alignment an explicit part of the test rather than an
-    accident of labelling; on a family whose M step is itself an optimization
-    it also pins the refusals at the boundary, a dispersion the data cannot
-    identify being refused and not clamped.
+    where no oracle reaches. It establishes calibration on data from the model,
+    the alignment an explicit part of the test rather than an accident of
+    labelling; on a family whose M step is itself an optimization it also pins
+    the boundary refusals, a dispersion the data cannot identify being refused
+    and not clamped.
   \item \emph{The declared support} decides what may be asserted at all: for
     a family over a countable alphabet the evidence is a probability and
     $\log p(\data) \le 0$; for a family over the reals it is a density and
@@ -2127,19 +2063,19 @@ the fit would referee nothing.
 \subsection{Extensions, and what is not attempted}
 \label{sec:hmm:extensions}
 \paragraph{What it would take to go further.}
-The chain has no missing oracle inside its ceiling and no oracle at all past
-it, so the extensions are about the \emph{start} and the \emph{uncertainty}
-rather than about the recursion. A method-of-moments start would give the fit
-what the distance start gives the tree: the observable moments of short
-windows invert to the parameters with a consistency guarantee and no surface
-to climb \citep{hsu2012}, and the argument that carries it to a tree
-\citep{mossel2006} is already cited in Section~\ref{sec:spectral-start},
-which makes the chain the case where it is easiest to referee. A posterior
-over parameters rather than a point estimate --- variational, or sampled by
-Section~\ref{sec:hmc}'s chain --- would replace the delta-method interval
-whose asymptotics Section~\ref{sec:abstraction} is explicit about
-\citep{bishop2006, murphy2023}. And choosing the state count rather than
-declaring it is a model-selection problem this document does not pose.
+The chain has no missing oracle inside its ceiling and none past it, so the
+extensions are about the \emph{start} and the \emph{uncertainty} rather than
+the recursion. A method-of-moments start would give the fit what the distance
+start gives the tree: the observable moments of short windows invert to the
+parameters with a consistency guarantee and no surface to climb
+\citep{hsu2012}, and the argument carrying it to a tree \citep{mossel2006} is
+cited in Section~\ref{sec:spectral-start}, which makes the chain the easiest
+case to referee. A posterior over parameters rather than a point estimate ---
+variational, or sampled by Section~\ref{sec:hmc}'s chain --- would replace the
+delta-method interval whose asymptotics Section~\ref{sec:abstraction} is
+explicit about \citep{bishop2006, murphy2023}. And choosing the state count
+rather than declaring it is a model-selection problem this document does not
+pose.
 
 \paragraph{What is deliberately not attempted.}
 Continuous time, which replaces the transition matrix by a generator and the
@@ -2168,9 +2104,9 @@ are the three problem classes above: a Potts prior on the labels,
   \qquad J_{nn'} \ge 0,
   \label{eq:spatial-prior}
 \end{equation}
-ferromagnetic so that neighbouring nodes prefer one class---the penalty on
-disagreement, $-\beta \sum J_{nn'}\,\mathbb{1}[\ell_n \ne \ell_{n'}]$, is the same
-distribution up to a constant; one hidden Markov chain per class, in the
+ferromagnetic so neighbouring nodes prefer one class---the penalty on
+disagreement, $-\beta \sum J_{nn'}\,\mathbb{1}[\ell_n \ne \ell_{n'}]$, is the
+same distribution up to a constant; one hidden Markov chain per class, in the
 simplest case with a circulant transition,
 \begin{equation}
   \mathbf{A}_m(i, j) = t\,\delta_{ij} + \frac{1 - t}{K - 1}\,(1 - \delta_{ij}),
@@ -2178,10 +2114,10 @@ simplest case with a circulant transition,
 \end{equation}
 whose self-transition rate $t$ and initial distribution $\Pi_m$ are fitted;
 and a \emph{gated} emission, $\mathbb{1}[\ell_n = m]\,\log p(x_{sn} \mid k_{s,m},
-\theta_m)$, which is what couples the two. Marginalizing $k$ recovers a
-Potts model in a field the chains define; marginalizing $\ell$ recovers a
-mixture of hidden Markov models. Neither marginal is tractable on its own, and
-the structure of the joint is what dictates the estimator.
+\theta_m)$, which couples the two. Marginalizing $k$ recovers a Potts model in
+a field the chains define; marginalizing $\ell$ recovers a mixture of hidden
+Markov models. Neither marginal is tractable alone, and the structure of the
+joint dictates the estimator.
 
 \paragraph{Supported sizes.}
 \label{par:coupled:sizes}
@@ -2190,16 +2126,16 @@ canonical one is a $2 \times 2$ open lattice at $M = K = 2$ over $S = 6$
 positions, $2^4 \cdot 2^{12} = 65{,}536$ joint states, inside the 200,000-state
 refusal and with its emissions separated far enough that a draw at $S = 6$
 identifies the classes. Past it the model runs on the lattices of
-Section~\ref{sec:potts} at the sizes stated there. Under a categorical
-emission the instance stays small --- a $10 \times 10$ lattice at $M = K = 2$
-over four positions --- and is refereed by the planted labels alone, which is
-the cell Section~\ref{sec:applicability} marks as wanting an oracle. Under
-the paired count emission of Section~\ref{sec:emissionmixture} the sequential
-extent is what grows: an $8 \times 8$ lattice at $M = K = 2$ over 1,000
-positions per pull request, and a triangular $71 \times 71$ at $M = K = 10$
-over 20,000 positions past it. There the reference implementation of the
-posterior is itself the oracle, an accelerated one being pinned to it, and the
-planted labels referee the fit on top of that.
+Section~\ref{sec:potts} at the sizes stated there. Under a categorical emission
+the instance stays small --- a $10 \times 10$ lattice at $M = K = 2$ over four
+positions --- refereed by the planted labels alone, the cell
+Section~\ref{sec:applicability} marks as wanting an oracle. Under the paired
+count emission of Section~\ref{sec:emissionmixture} the sequential extent
+grows: an $8 \times 8$ lattice at $M = K = 2$ over 1,000 positions per pull
+request, and a triangular $71 \times 71$ at $M = K = 10$ over 20,000 positions
+past it. There the reference implementation of the posterior is the oracle, an
+accelerated one pinned to it, and the planted labels referee the fit above
+that.
 
 \subsection{As a factor graph}
 The variables are the $N$ labels and the $S M$ chain states. The factors are
@@ -2209,13 +2145,13 @@ emission factor per $(n, s, m)$ over the pair $(\ell_n, k_{s,m})$, equal to
 $p(x_{sn} \mid k_{s,m}, \theta_m)$ when $\ell_n = m$ and to one otherwise. A
 label sits on every emission factor of its node and on every Potts factor of
 its edges; in the Forney form it passes through an equality node of that
-degree, and the gated factors are the higher-degree nodes that join the
-lattice to the chains (Figure~\ref{fig:coupled:sketch}). What that structure
-is for is a labelling, which Figure~\ref{fig:coupled-labelling} shows on a
-lattice past enumeration, planted beside recovered. The graph has cycles, so Equation~\ref{eq:sum-product}
-is the Bethe approximation on it, and the exact quantities below come from
-enumeration on an instance small enough to enumerate---a $2 \times 2$ lattice
-with $M = 2$, $K = 2$, $S = 3$ has $2^4 \cdot 2^{12}$ joint states.
+degree, and the gated factors are the higher-degree nodes joining the lattice
+to the chains (Figure~\ref{fig:coupled:sketch}). That structure is for a
+labelling, which Figure~\ref{fig:coupled-labelling} shows on a lattice past
+enumeration, planted beside recovered. The graph has cycles, so
+Equation~\ref{eq:sum-product} is the Bethe approximation on it, and the exact
+quantities below come from enumeration---a $2 \times 2$ lattice with $M = 2$,
+$K = 2$, $S = 3$ has $2^4 \cdot 2^{12}$ joint states.
 
 \input{coupled_figure}
 
@@ -2265,14 +2201,14 @@ held to.
 
 \paragraph{Why a cluster move.}
 Under an effective spatial prior each class spans a contiguous region, and a
-single-site move must cross a region one node at a time against the prior's
-penalty; iterated conditional modes freezes into spurious disjoint clusters,
-and single-site annealing slows critically for the same reason. The Wolff move
-of Section~\ref{sec:potts-sampling} recolours a whole cluster at once, and
+single-site move must cross it one node at a time against the prior's penalty;
+iterated conditional modes freezes into spurious disjoint clusters, and
+single-site annealing slows critically for the same reason. The Wolff move of
+Section~\ref{sec:potts-sampling} recolours a whole cluster at once, and
 Algorithm~\ref{alg:wolff-field} is that move with the field of
 Equation~\ref{eq:external-field} in its accept step. At $\beta \to 0$ it is a
-single-site Gibbs update; at $\beta \gg 1$ it is the greedy entrapment of
-iterated conditional modes; annealing in $\beta$ moves between them.
+single-site Gibbs update, at $\beta \gg 1$ the greedy entrapment of iterated
+conditional modes; annealing in $\beta$ moves between them.
 
 \begin{algorithm}[htbp]
 \caption{One Wolff update on the labels, in the external field}
@@ -2293,13 +2229,12 @@ iterated conditional modes; annealing in $\beta$ moves between them.
 \end{algorithm}
 
 \subsection{The initializer: data-sampled burn-in}
-A block ascent on this joint is only as good as where it starts, and a start
-that ignores the graph and the emission family---$k$-means$++$ on the raw
-observations, say---leaves degenerate classes and false positives that the
-ascent then polishes. Algorithm~\ref{alg:graph-burnin} anneals in $\beta$ from
-zero, so that early on the labels are nearly free and the chains and emission
-parameters are fitted to what the data alone supports, and the spatial prior
-is tightened only as the classes separate. Its seeding step,
+A start ignoring the graph and the emission family---$k$-means$++$ on the raw
+observations---leaves degenerate classes and false positives the ascent then
+polishes. Algorithm~\ref{alg:graph-burnin} anneals in $\beta$ from zero, so
+early on the labels are nearly free and the chains and emission parameters are
+fitted to what the data alone supports, the spatial prior tightening as the
+classes separate. Its seeding step,
 \textsc{EmissionMixture++}, is $k$-means$++$ with the emission family's own
 negative log-density in place of squared Euclidean distance
 \citep{arthur2007}: candidates are drawn proportionally to how badly the
@@ -2336,63 +2271,58 @@ enumeration; the gradient identity Equation~\ref{eq:coupled-m-step} to
 central differences; the joint is non-decreasing across every block for every
 label solver; and label accuracy up to permutation against the planted labels
 is measured at an equal budget of sweeps for each of the three solvers, so
-whether a cluster move escapes what iterated conditional modes freezes into
-is a measurement here and not a premise---and on the planted lattice it is
-the start, not the move, that decides it.
+whether a cluster move escapes what iterated conditional modes freezes into is
+a measurement and not a premise---and on the planted lattice the start, not the
+move, decides it.
 
 \subsection{Choosing among these at the supported sizes}
 \label{sec:coupled:discussion}
-The estimator is not chosen here, it is dictated: neither marginal of
-Equation~\ref{eq:joint} is tractable, so the blocks are what remain, and
-what is actually chosen is the label solver and the start. Three algorithms
-are assumed --- the per-class chain marginalization of
-Section~\ref{sec:hmm}, one of the three label solvers of
-Section~\ref{sec:potts}, and the annealed start of
+The estimator is dictated rather than chosen: neither marginal of
+Equation~\ref{eq:joint} is tractable, so the blocks are what remain, and what
+is chosen is the label solver and the start. Three algorithms are assumed ---
+the per-class chain marginalization of Section~\ref{sec:hmm}, one of the three
+label solvers of Section~\ref{sec:potts}, and the annealed start of
 Algorithm~\ref{alg:graph-burnin}, whose cluster move is
 Algorithm~\ref{alg:wolff-field}.
 
 \paragraph{What each size decides.}
-The enumerable instance is where the constructed graph's log-density and the
-per-class posteriors are scored against a sum, and it decides nothing about
-the label solvers: what it referees is that log-density and those posteriors,
-and the solvers are separated past it. There the planted
-labels are the referee and the choice between the solvers is a measurement
-at an equal budget of sweeps, whose standing result is that on the planted
-lattice the start decides the labelling and the move does not --- a result
-that could not have been argued for and had to be run.
+The enumerable instance scores the constructed graph's log-density and the
+per-class posteriors against a sum, and decides nothing about the label
+solvers, which are separated past it. There the planted labels are the referee
+and the choice between solvers is a measurement at an equal budget of sweeps,
+whose standing result is that on the planted lattice the start decides the
+labelling and the move does not.
 
-The two axes past enumeration cost differently, and confusing them wastes a
-budget. The sequential extent enters the chain pass linearly and is what
-identifies the emission parameters, so more positions buy sharper
-components. The node count enters the label solve, which is not linear in
-it, and buys spatial resolution and nothing else. An instance at five
-thousand nodes and twenty thousand positions is therefore two hard problems
-bolted together rather than one large one, and its referee is the planted
-labelling for the first and a reference posterior for the second.
+The two axes past enumeration cost differently. The sequential extent enters
+the chain pass linearly and identifies the emission parameters, so more
+positions buy sharper components. The node count enters the label solve, which
+is not linear in it, and buys spatial resolution alone. An instance at five
+thousand nodes and twenty thousand positions is two hard problems bolted
+together, refereed by the planted labelling for the first and a reference
+posterior for the second.
 
 \paragraph{Which label solver, and what each needs.}
-Descent needs nothing of the model and is what remains when the budget is
-too small for either alternative; it freezes into disjoint clusters, which
-is a property of a single-site move against a prior that penalizes
-disagreement and not a defect. Expansion needs the pairwise term to be a
-metric on labels, which $\delta$ is, and returns the factor-of-two
-certificate of Equation~\ref{eq:alpha-expansion}. The cluster move needs
-non-negative couplings --- which Equation~\ref{eq:spatial-prior} has by
-construction, so the refusal that binds Section~\ref{sec:frustrated} does
-not bind here --- and moves a whole region at once, at the price of being a
-sampler and therefore of a schedule, not a solver.
+Descent needs nothing of the model and is what remains when the budget is too
+small for either alternative; it freezes into disjoint clusters, a property of
+a single-site move against a prior penalizing disagreement rather than a
+defect. Expansion needs the pairwise term to be a metric on labels, which
+$\delta$ is, and returns the factor-of-two certificate of
+Equation~\ref{eq:alpha-expansion}. The cluster move needs non-negative
+couplings --- which Equation~\ref{eq:spatial-prior} has by construction, so
+Section~\ref{sec:frustrated}'s refusal does not bind here --- and moves a whole
+region at once, at the price of being a sampler with a schedule rather than a
+solver.
 
 \paragraph{What the validation assumes.}
 One structural property carries most of Section~\ref{sec:coupled:validation}:
 the gated factor has degree two, joining one label to one chain state, so
 conditioning on the labels leaves a set of independent chains and the
 per-class two-pass recursion \emph{is} the expectation step rather than an
-approximation of it. A gate over more than one chain state would leave the
-same code running and the same monotonicity holding, with the expectation
-step no longer the posterior. Two weaker assumptions follow it: that classes
-are identified only up to permutation, and that the planted labelling is
-what a correct estimator recovers --- which the section states is strictly
-weaker than the planted labelling being the maximum of
+approximation of it. A gate over more than one chain state would leave the same
+code running and the same monotonicity holding, with the expectation step no
+longer the posterior. Two weaker assumptions follow: classes are identified
+only up to permutation, and the planted labelling is what a correct estimator
+recovers --- strictly weaker than its being the maximum of
 Equation~\ref{eq:label-ground-state}.
 
 \subsection{Validation}
@@ -2426,22 +2356,20 @@ Equation~\ref{eq:label-ground-state}.
 \label{sec:coupled:extensions}
 \paragraph{What it would take to go further.}
 Section~\ref{sec:coupled:validation} names its own gap: the planted labelling
-is what a correct estimator recovers, and nothing establishes that it
-maximizes Equation~\ref{eq:label-ground-state}. An enumerated
-maximum-posterior labelling on the canonical instance would close that,
-turning a recovery statement into an optimality one at one size. Past it, a
-bound on the joint evidence would say how far a block ascent's fixed point
-sits from the best available --- the mean-field bound of
-Equation~\ref{eq:mean-field-bound} from below and the tree-reweighted bound
-of Equation~\ref{eq:spanning-tree-bound} from above, both stated for a
-lattice and neither yet carried on the coupled graph. Two further directions
-are model rather than referee. The spatial coupling is declared and could be
-fitted, which makes it a parameter of the same block ascent and its
-identifiability a question the enumerable instance can answer. And the label
-update is a discrete search over a neighbourhood with a computable
-improvement, which is exactly the decision process of
-Section~\ref{sec:policy-gradient}, so a learned proposal is admissible here on
-the same terms it is admissible for a topology.
+is what a correct estimator recovers, and nothing establishes that it maximizes
+Equation~\ref{eq:label-ground-state}. An enumerated maximum-posterior labelling
+on the canonical instance would turn that recovery statement into an optimality
+one at one size. Past it, a bound on the joint evidence would say how far a
+block ascent's fixed point sits from the best available --- the mean-field
+bound of Equation~\ref{eq:mean-field-bound} from below and the tree-reweighted
+bound of Equation~\ref{eq:spanning-tree-bound} from above, both stated for a
+lattice and neither carried on the coupled graph. Two further directions are
+model rather than referee. The spatial coupling is declared and could be
+fitted, making it a parameter of the same block ascent and its identifiability
+a question the enumerable instance can answer. And the label update is a
+discrete search over a neighbourhood with a computable improvement --- the
+decision process of Section~\ref{sec:policy-gradient} --- so a learned proposal
+is admissible here on the terms it is admissible for a topology.
 
 \paragraph{What is deliberately not attempted.}
 A gate over more than one chain state. The degree-two factor is what makes
@@ -2471,10 +2399,10 @@ likelihood is a real number. \emph{Small} parsimony scores a given tree;
   F(\tree) = \sum_{s=1}^{L} F_s(\tree),
   \label{eq:large-parsimony}
 \end{equation}
-over the $(2n-5)!!$ unrooted topologies \citep{felsenstein2004}. It is
-NP-hard in general, which is why it is stated as the discrete half of
-Section~\ref{sec:phylo} with the continuous half removed, and why the same
-neighbourhoods and the same budget accounting serve it.
+over the $(2n-5)!!$ unrooted topologies \citep{felsenstein2004}. NP-hard in
+general, and stated as the discrete half of Section~\ref{sec:phylo} with the
+continuous half removed, so the same neighbourhoods and budget accounting
+serve it.
 
 \paragraph{Supported sizes.}
 \label{par:parsimony:sizes}
@@ -2584,11 +2512,10 @@ The brute force over every labelling of the internal nodes referees the
 score by sharing no traversal with either recursion, and it assumes only
 that both are scoring the same rooted tree. The load-bearing assumption is
 elsewhere: that the Felsenstein zone's inconsistency is a property of the
-criterion and not of an implementation. It is the strongest assumption in
-this section, and the reason the zone is carried as a \emph{pair} with its
-consistent counterpart --- an implementation that is merely broken fails
-both, so only the pair separates a defect from a theorem the section is
-asserting the code reproduces.
+criterion and not of an implementation --- the strongest assumption in this
+section, and the reason the zone is carried as a \emph{pair} with its
+consistent counterpart: only the pair separates a defect from a theorem the
+section asserts the code reproduces.
 
 \subsection{Validation}
 \label{sec:parsimony:validation}
@@ -2599,19 +2526,19 @@ asserting the code reproduces.
     nothing about the search.
   \item \emph{Fitch against Sankoff under the unit step matrix}, on every
     topology of a fixture, referees the two implementations against each
-    other. It establishes that the set recursion and the cost recursion are
-    the same criterion; being two of ours, it is agreement and not truth,
-    which is what the brute force above supplies.
+    other. It establishes that the set recursion and the cost recursion are the
+    same criterion; being two of ours, it is agreement and not truth, which the
+    brute force above supplies.
   \item \emph{Enumeration of Equation~\ref{eq:large-parsimony}'s domain}
     referees the climb from every start where it reaches. It establishes that
     the search found the minimum-score topology at those taxon counts.
-  \item \emph{The Felsenstein-zone fixture} referees the criterion rather
-    than the code: its enumerated parsimony optimum is asserted to be the
-    wrong tree while the likelihood optimum on the same alignment is the right
-    one. It establishes that the implementation reproduces a known statistical
-    inconsistency, which is the one case an implementation that is merely
-    broken cannot pass; it establishes nothing about accuracy outside that
-    zone, for which the Farris-zone pair is kept.
+  \item \emph{The Felsenstein-zone fixture} referees the criterion rather than
+    the code: its enumerated parsimony optimum is asserted to be the wrong tree
+    while the likelihood optimum on the same alignment is the right one. It
+    establishes that the implementation reproduces a known statistical
+    inconsistency, the one case a merely broken implementation cannot pass, and
+    nothing about accuracy outside that zone, for which the Farris-zone pair is
+    kept.
   \item \emph{The metric condition on the step matrix} is checked as a
     refusal, not as a result: an asymmetric matrix scores each rooting of an
     unrooted topology differently and is refused rather than scored at an
@@ -2621,15 +2548,15 @@ asserting the code reproduces.
 \subsection{Extensions, and what is not attempted}
 \label{sec:parsimony:extensions}
 \paragraph{What it would take to go further.}
-This is the one search in the document where an exact method past enumeration
-is plausibly affordable. The score is an integer and it decomposes over sites,
-so a partial tree admits a lower bound on every completion of it and a branch
-and bound can discard a whole subtree of the topology space without scoring
-it \citep{papadimitriou1998, clrs2022}; nothing about a likelihood offers the
-same, which is why the criterion is where an exact search would be built
-first. A weighted criterion is the other direction: the step matrix is
-declared here, and estimating one from the alignment --- subject to the metric
-condition the search needs --- would make the criterion a fitted model rather
+This is the one search here where an exact method past enumeration is plausibly
+affordable. The score is an integer and decomposes over sites, so a partial
+tree admits a lower bound on every completion and a branch and bound can
+discard a whole subtree of the topology space without scoring it
+\citep{papadimitriou1998, clrs2022}; a likelihood offers no such bound, which
+is why an exact search would be built on the criterion first. A weighted
+criterion is the other direction: the step matrix is declared here, and
+estimating one from the alignment --- subject to the metric condition the
+search needs --- would make the criterion a fitted model rather
 than a fixed one. Compound moves are the third, and they belong to
 Section~\ref{sec:policy-gradient}: a sacrifice and its payoff over this
 neighbourhood are two decisions whose credit an option would carry as one
@@ -2662,9 +2589,9 @@ field and $J = -|J|$,
   E_{\min} = |J|\, N ,
   \label{eq:triangular-ground-state}
 \end{equation}
-attained, and attained by many configurations: the residual entropy per site
-tends to Wannier's $0.3231$ in the thermodynamic limit, a value reported for
-orientation and never asserted at a finite size. The second is a planted
+attained by many configurations: the residual entropy per site tends to
+Wannier's $0.3231$ in the thermodynamic limit, a value reported for orientation
+and never asserted at a finite size. The second is a planted
 Viana--Bray spin glass: couplings $\pm J$ on a sparse random graph, built
 around a state $\sigma^{\ast}$ by setting each coupling to reward what the
 state does and then inverting a fraction $f$ of them, so that with $u$
@@ -2743,48 +2670,43 @@ measurement at equal sweeps (Section~\ref{sec:tempering}).
 
 \subsection{Choosing among these at the supported sizes}
 \label{sec:frustrated:discussion}
-These instances add no algorithm. Descent, annealing and replica exchange
-are Section~\ref{sec:potts}'s unchanged (Algorithms~\ref{alg:heat-bath}
-and~\ref{alg:parallel-tempering}), and what the section supplies is an
-answer known from outside at every size. That is the point of it: it is
-where a search is scored past the reach of every oracle the rest of this
-document uses.
+These instances add no algorithm. Descent, annealing and replica exchange are
+Section~\ref{sec:potts}'s unchanged (Algorithms~\ref{alg:heat-bath}
+and~\ref{alg:parallel-tempering}); what the section supplies is an answer known
+from outside at every size, so a search is scored past the reach of every other
+oracle here.
 
 \paragraph{What each instance can and cannot referee.}
-The two are not interchangeable, and the difference decides what a
-measurement on either may say. The triangular antiferromagnet states an
-\emph{energy} and not a configuration: the optimum is massively degenerate,
-so attaining Equation~\ref{eq:triangular-ground-state} proves a search
-succeeded and says nothing about which ground state it found, and a claim
-about \emph{the} ground state is not a well-formed question there. The
-planted glass states an \emph{upper bound} and not an energy: a search
-returning more than Equation~\ref{eq:planted-energy} has failed, and a
-search reaching it has not thereby succeeded, since at a large inverted
-fraction the true optimum lies below the planted state. One instance can
-acquit and the other can only convict.
+The difference decides what a measurement on either may say. The triangular
+antiferromagnet states an \emph{energy} and not a configuration: the optimum is
+massively degenerate, so attaining
+Equation~\ref{eq:triangular-ground-state} proves a search succeeded and says
+nothing about which ground state it found. The planted glass states an
+\emph{upper bound} and not an energy: a search returning more than
+Equation~\ref{eq:planted-energy} has failed, and one reaching it has not
+thereby succeeded, since at a large inverted fraction the true optimum lies
+below the planted state. One instance can acquit and the other can only
+convict.
 
 \paragraph{The axis is the disorder, not the size.}
 On the glass the useful parameter is the inverted fraction and not the node
-count: at zero inversion the instance is a gauge transform of the
-ferromagnet, a random start finds the answer and the comparison measures
-nothing, and the range worth running begins where the planted state stops
-being near-optimal. A success rate reported without the fraction it was
-measured at describes no instance. On the triangular lattice the analogous
-parameter is the extent, and it moves the degeneracy rather than the energy:
-the closed form holds at every extent while the number of configurations
-attaining it does not, which is why the extents are declared rather than
-swept.
+count: at zero inversion the instance is a gauge transform of the ferromagnet,
+a random start finds the answer and the comparison measures nothing, so the
+range worth running begins where the planted state stops being near-optimal. A
+success rate reported without its fraction describes no instance. On the
+triangular lattice the analogous parameter is the extent, and it moves the
+degeneracy rather than the energy: the closed form holds at every extent while
+the number of configurations attaining it does not, which is why the extents
+are declared rather than swept.
 
 \paragraph{What is unavailable here, by construction.}
 This is the one section whose applicability question is answered entirely by
-refusals. The exact cut refuses, the energy not being submodular; the
-cluster moves refuse, $1 - e^{-\beta J}$ not being a probability at a
-negative coupling. So the exact and the near-exact methods are gone before
-the comparison starts, and what is compared is three searches with no
-guarantee between any two of them, at an equal budget of sweeps over shared
-seeds. Those refusals are checked as results rather than described in prose,
-which is what keeps the boundary between exact and approximate drawn in one
-place.
+refusals. The exact cut refuses, the energy not being submodular; the cluster
+moves refuse, $1 - e^{-\beta J}$ not being a probability at a negative
+coupling. The exact and near-exact methods are gone before the comparison
+starts, and what is compared is three searches with no guarantee between any
+two, at an equal budget of sweeps over shared seeds. Those refusals are checked
+as results rather than described in prose.
 
 \paragraph{What the validation assumes.}
 The counting argument closes on a geometry: periodic boundaries, $3N$ bonds,
@@ -2828,30 +2750,26 @@ finite lattice is not the limit.
 \label{sec:frustrated:extensions}
 \paragraph{What it would take to go further.}
 These instances are where a search is scored with no oracle, so what would
-extend them is anything that turns a comparison into a certificate. The
+extend them is anything turning a comparison into a certificate. The
 semidefinite relaxation of Equation~\ref{eq:gw} already computes one: its
 optimal value bounds the maximum cut from above on the instance in hand
 \citep{goemans1995, boyd2004}, so reporting it beside a search's result would
-convert ``the best energy found'' into a bracket, and the guarantee stops
-being a statement about the ensemble. Population annealing is the search-side
-extension --- an ensemble carried down a schedule with resampling, rather than
-replicas exchanged along one \citep{machta2010} --- and it is the comparison
-Section~\ref{sec:tempering} would be made against at equal sweeps. A learned
-proposal is admissible on the terms Section~\ref{sec:potts:extensions} states,
-and these instances are where it would have to be measured, since they are the
-ones with a known answer at every size.
+convert ``the best energy found'' into a bracket. Population annealing is the
+search-side extension --- an ensemble carried down a schedule with resampling
+rather than replicas exchanged along one \citep{machta2010} --- and the
+comparison Section~\ref{sec:tempering} would be made against at equal sweeps. A
+learned proposal is admissible on the terms
+Section~\ref{sec:potts:extensions} states, and these instances, having a known
+answer at every size, are where it would be measured.
 
 \paragraph{What is deliberately not attempted.}
 A disorder average. Every statement here is about one instance at one seed;
-averaging over the ensemble of couplings is a different quantity and would
-need a different accounting, and the inverted fraction is swept precisely so
-that a per-instance result is reported with the disorder it was measured at. A
-phase diagram, for the same reason the thermodynamic limit is out of
-Section~\ref{sec:potts}: the residual entropy is quoted for orientation and
-asserted at no finite size. And the exact ground state of the glass, which is
-not available at any size here --- Equation~\ref{eq:planted-energy} is an
-upper bound and the section is explicit that it can convict a search and never
-acquit one.
+averaging over the ensemble of couplings is a different quantity needing a
+different accounting, and the inverted fraction is swept so a per-instance
+result is reported with the disorder it was measured at. A phase diagram, for
+the reason the thermodynamic limit is out of Section~\ref{sec:potts}: the
+residual entropy is quoted for orientation and asserted at no finite size. And
+the exact ground state of the glass, unavailable at any size here.
 
 \section{Problem Statement: The Gaussian Mixture}
 \label{sec:mixture}
@@ -2898,10 +2816,9 @@ normalization per variable, and the belief at $i$ is the responsibility
   \label{eq:responsibilities}
 \end{equation}
 the object an HMM's forward--backward pass produces with a recursion and a
-mixture produces with a division. That the M step receives the same object
-either way is what lets one emission family serve both, and
-Figure~\ref{fig:mixture:sketch} is Figure~\ref{fig:hmm:sketch} with the
-transition factors removed.
+mixture with a division. The M step receiving the same object either way lets
+one emission family serve both, and Figure~\ref{fig:mixture:sketch} is
+Figure~\ref{fig:hmm:sketch} with the transition factors removed.
 
 \input{mixture_figure}
 
@@ -2921,11 +2838,11 @@ the weights as the mean responsibility, and increases the likelihood at every
 iterate \citep{mackay2003}; the same objective is also fitted by the
 quasi-Newton optimizer of Section~\ref{sec:abstraction} over an unconstrained
 vector, the weights through a softmax and the scales through a logarithm.
-The two share the model and nothing else, which is what makes their agreement
-evidence. Where the components overlap the fixed point is approached
-linearly, so a raw iterate stopped at a count sits above its basin's optimum
-by an amount a gradient polish removes, and an equal-budget comparison
-charges the polish to every method.
+The two share the model and nothing else, which makes their agreement evidence.
+Where the components overlap the fixed point is approached linearly, so a raw
+iterate stopped at a count sits above its basin's optimum by an amount a
+gradient polish removes, and an equal-budget comparison charges the polish to
+every method.
 
 \subsection{The initializer: k-means++}
 The first initializer here that reads the data, Algorithm~\ref{alg:kmeanspp}. The first centre is an
@@ -2965,53 +2882,47 @@ is a refusal, in either algorithm.
 \subsection{Choosing among these at the supported sizes}
 \label{sec:mixture:discussion}
 Three algorithms are assumed: the alternation of
-Algorithm~\ref{alg:baum-welch} with the chain removed, the quasi-Newton fit
-of Section~\ref{sec:abstraction} over the unconstrained vector, and the
-seeding of Algorithm~\ref{alg:kmeanspp}. The interesting size here is not
-$N$ and not $K$ but the dimension, and it is one by choice rather than by
-convenience.
+Algorithm~\ref{alg:baum-welch} with the chain removed, the quasi-Newton fit of
+Section~\ref{sec:abstraction} over the unconstrained vector, and the seeding of
+Algorithm~\ref{alg:kmeanspp}. The interesting size is neither $N$ nor $K$ but
+the dimension, which is one by choice.
 
 \paragraph{Why one dimension is a decision about the referee.}
-Enumerating the $K^N$ labellings is out of reach at every declared size, so
-the expectation step has no enumeration behind it and is refereed instead by
-the chain recursion of Section~\ref{sec:hmm} on the same responsibilities
---- the one problem in this document whose oracle is borrowed from a
-neighbouring class. The seeding's referee is the exact clustering cost, a
-dynamic programme over cut positions in the sorted observations. That
-programme exists because the observations are totally ordered; in higher
-dimension the same quantity is NP-hard, so raising the dimension would not
-make the fit harder, it would delete the only oracle the initializer has and
-leave Equation~\ref{eq:kmeanspp-bound} with nothing to be checked against.
-Growing $N$ buys precision and changes no referee, which is why the
-simulator is checked at hundreds of thousands of draws and the method
-comparison at hundreds.
+Enumerating the $K^N$ labellings is out of reach at every declared size, so the
+expectation step is refereed by the chain recursion of Section~\ref{sec:hmm} on
+the same responsibilities --- the one problem here whose oracle is borrowed
+from a neighbouring class. The seeding's referee is the exact clustering cost,
+a dynamic programme over cut positions in the sorted observations, which exists
+because the observations are totally ordered. In higher dimension the same
+quantity is NP-hard, so raising the dimension would not make the fit harder: it
+would delete the initializer's only oracle and leave
+Equation~\ref{eq:kmeanspp-bound} with nothing to check against. Growing $N$
+buys precision and changes no referee.
 
 \paragraph{Which fit.}
 The alternation is cheaper per iterate and monotone; the gradient fit is
-neither, and is carried because two routes that share the model and nothing
-else are evidence where one route's convergence is not. Where the components
-overlap the alternation approaches its fixed point linearly, so an iterate
-stopped on a count sits above its basin's optimum by an amount a polish
-removes --- and an equal-budget comparison that charges the polish to one
-method and not to the others is comparing stopping rules.
+neither, and is carried because two routes sharing the model and nothing else
+are evidence where one route's convergence is not. Where the components overlap
+the alternation approaches its fixed point linearly, so an iterate stopped on a
+count sits above its basin's optimum by an amount a polish removes --- and an
+equal-budget comparison charging the polish to one method alone compares
+stopping rules.
 
 \paragraph{What the model does not have.}
 There is no maximum. A component contracting onto a single observation sends
-the likelihood to infinity, so what any method here finds is a local optimum
-by construction, and the floor that refuses such a fit is a modelling
-decision rather than a numerical guard --- it decides which optima are
-admissible. The count-emission family of Section~\ref{sec:emissionmixture}
-is the same mixture without this pathology, both of its channels being
-discrete, and the comparison between them is the clearest statement of what
-the Gaussian's unboundedness costs.
+the likelihood to infinity, so what any method here finds is a local optimum by
+construction, and the floor refusing such a fit is a modelling decision rather
+than a numerical guard: it decides which optima are admissible. The
+count-emission family of Section~\ref{sec:emissionmixture} is the same mixture
+without the pathology, both channels being discrete.
 
 \paragraph{What the validation assumes.}
-Independence across observations, which is what makes the responsibilities a
-per-observation normalization at all; and separation enough that ordering
-the components resolves the permutation. Neither transfers: a mixture whose
+Independence across observations, which makes the responsibilities a
+per-observation normalization; and separation enough that ordering the
+components resolves the permutation. Neither transfers: a mixture whose
 components overlap past the ordering's reach fails the recovery test for a
-reason that is a property of the instance and not a defect of the fit, so
-the separation is declared with the instance rather than discovered from it.
+property of the instance and not a defect of the fit, so the separation is
+declared with the instance rather than discovered from it.
 
 \subsection{Validation}
 \label{sec:mixture:validation}
@@ -3021,11 +2932,11 @@ the separation is declared with the instance rather than discovered from it.
     family serves both models; being two of ours it is agreement, not truth.
   \item \emph{The gradient fit of the same likelihood} referees
     expectation--maximization at its fixed point, and monotonicity referees
-    every iterate. The two share the model and nothing else, which is what
-    makes their agreement evidence; neither establishes that the shared
-    optimum is global, and where the components overlap the fixed point is
-    approached linearly, so an iterate stopped at a count sits above its
-    basin's optimum by an amount a polish removes.
+    every iterate. The two share the model and nothing else, which makes their
+    agreement evidence; neither establishes that the shared optimum is global,
+    and where the components overlap the fixed point is approached linearly, so
+    an iterate stopped at a count sits above its basin's optimum by an amount a
+    polish removes.
   \item \emph{The exact clustering cost}, a dynamic programme over the cut
     positions of the sorted observations, referees the seeding of
     Equation~\ref{eq:kmeanspp} and is the one oracle this section's
@@ -3045,26 +2956,24 @@ the separation is declared with the instance rather than discovered from it.
 \subsection{Extensions, and what is not attempted}
 \label{sec:mixture:extensions}
 \paragraph{What it would take to go further.}
-Raising the dimension is the obvious extension and it costs the only oracle
-the initializer has, so it is not free: the exact clustering cost is a
-dynamic programme over cut positions in sorted observations and has no
-counterpart above one dimension. What would replace it is either a certified
-bound on the seeding cost that does not need the optimum, or a regime where
-the planted labels alone referee and the section says so --- the second is
-what Section~\ref{sec:emissionmixture} already does at ten components. The
-unbounded likelihood is the other direction: a prior on the scales, or a
+Raising the dimension costs the initializer's only oracle: the exact clustering
+cost is a dynamic programme over cut positions in sorted observations and has
+no counterpart above one dimension. Replacing it needs either a certified bound
+on the seeding cost that does not need the optimum, or a regime where the
+planted labels alone referee and the section says so ---
+Section~\ref{sec:emissionmixture} already does the second at ten components.
+The unbounded likelihood is the other direction: a prior on the scales, or a
 penalized objective, gives a maximum that exists rather than a floor that
-refuses, and turns a modelling decision into a stated one \citep{bishop2006,
-murphy2023}. Choosing $K$ rather than declaring it is model selection, and
-the enumerable instance is where a criterion for it could be refereed at all.
+refuses \citep{bishop2006, murphy2023}. Choosing $K$ rather than declaring it
+is model selection, and the enumerable instance is where a criterion for it
+could be refereed.
 
 \paragraph{What is deliberately not attempted.}
 A component count fitted from the data, a non-diagonal covariance, and any
-dimension above one --- each for the same reason, which is that this section
-exists to referee an emission family and an initializer against exact
-quantities, and each of the three removes one. The collapsing component is
-kept rather than removed: it is the standing example of a likelihood with no
-maximum, and a section that regularized it away would lose the case
+dimension above one --- this section exists to referee an emission family and
+an initializer against exact quantities, and each of the three removes one. The
+collapsing component is kept: it is the standing example of a likelihood with
+no maximum, and regularizing it away would lose the case
 Section~\ref{sec:properties} needs.
 
 \section{Problem Statement: The Count-Emission Mixture}
@@ -3072,10 +2981,10 @@ Section~\ref{sec:properties} needs.
 
 \subsection{The model}
 \label{sec:emissionmixture:model}
-Section~\ref{sec:mixture}'s mixture with its component family exchanged, and
-the exchange is the point: the mixture asks its components for a density and
-for an M step and for nothing else, so a family over a different observation
-drops in unaltered. Here the observation is a \emph{pair}---a total count
+Section~\ref{sec:mixture}'s mixture with its component family exchanged, which
+is the point: the mixture asks its components for a density and an M step and
+nothing else, so a family over a different observation drops in unaltered. Here
+the observation is a \emph{pair}---a total count
 $n_i$ and the successes $y_i$ within it, a sequencing depth and its allele
 count---and each component is a negative binomial for the total together with
 a beta-binomial for the successes,
@@ -3135,13 +3044,13 @@ checks, and it is the property every step below rests on.
 
 \subsection{The algorithms: expectation--maximization and a seeded start}
 Expectation--maximization, Algorithm~\ref{alg:baum-welch} with the chain
-removed, exactly as for the Gaussian mixture---what differs is only that the
-M step it calls is itself an optimization. The negative binomial's dispersion
-is a one-dimensional root find and the beta-binomial's $(a, b)$ an alternating
-one, each bracketed rather than stepped toward, and each reporting whether it
-settled; a mixture that discarded that report would surface an unsettled inner
-solve several iterations later as a non-monotone outer likelihood, which is
-why it is propagated and refused on.
+removed, exactly as for the Gaussian mixture---what differs is that the M step
+it calls is itself an optimization. The negative binomial's dispersion is a
+one-dimensional root find and the beta-binomial's $(a, b)$ an alternating one,
+each bracketed rather than stepped toward and each reporting whether it
+settled; a mixture discarding that report would surface an unsettled inner
+solve several iterations later as a non-monotone outer likelihood, so it is
+propagated and refused on.
 
 The start is $\mathrm{Emission\_Mixture}{+}{+}$: Algorithm~\ref{alg:kmeanspp}
 with the family's own negative log-density in place of the squared distance of
@@ -3173,14 +3082,12 @@ compares two quantities that share no units.
 
 \paragraph{The cost is the family's, not the sample's.}
 Both shape parameters are found by bisection, at a few thousand score
-evaluations per component per iterate, so the budget is spent on iterations
-and on components and barely on observations. That is what makes the
-ten-component instance a hard case rather than a larger one: $N$ in the low
-thousands is not what the budget goes on. It also decides where a failure
-appears. An inner solve that did not settle is
-a local event, and a mixture that discarded its report would surface it as a
-non-monotone outer likelihood several iterates later, at which point nothing
-in the trace says which component or which iterate produced it --- so the
+evaluations per component per iterate, so the budget is spent on iterations and
+components and barely on observations: the ten-component instance is a hard
+case rather than a larger one. It also decides where a failure appears. An
+inner solve that did not settle is a local event, and a mixture discarding its
+report would surface it as a non-monotone outer likelihood several iterates
+later, with nothing in the trace saying which component produced it --- so the
 report is propagated and refused on rather than summarized.
 
 \paragraph{Two forms, and no default between them.}
@@ -3194,25 +3101,23 @@ and is handled as one rather than left to a logarithm of a negative
 argument.
 
 \paragraph{What the enumeration oracle is doing.}
-It runs over a prefix of ten observations, and that is licensed by exactly
-one property: the posterior factorizes across observations, so the marginal
-at each of ten is the same quantity the responsibilities of the whole
-dataset carry. The prefix is therefore not a sample of the test but the test
-itself, and it is at its sharpest precisely when the factorization is the
-thing in doubt --- which is the property every step in this section rests
-on and the one an implementation can break without any other check noticing.
+It runs over a prefix of ten observations, licensed by one property: the
+posterior factorizes across observations, so the marginal at each of ten is the
+same quantity the responsibilities of the whole dataset carry. The prefix is
+therefore the test itself rather than a sample of it, and is sharpest when the
+factorization is in doubt --- the property every step in this section rests on,
+and the one an implementation can break without another check noticing.
 
 \paragraph{What the validation assumes, beyond that.}
 The declared form of the trial count, since the two forms are refereed by
-different enumerations; and separation on depth and allele fraction
-sufficient for an ordering to resolve the permutation, which is what a
-declared instance supplies by construction and what makes an ordering
-admissible where enumerating the alignments of ten components would not be.
-Two flat directions bound what a fit may report at all: the dispersion
-toward the Poisson limit and the concentration toward the binomial one each
-have a value above which this much data cannot distinguish one value from
-infinity, so an estimate arriving there has found a bound rather than a
-maximum.
+different enumerations; and separation on depth and allele fraction sufficient
+for an ordering to resolve the permutation, which a declared instance supplies
+by construction and which makes an ordering admissible where enumerating the
+alignments of ten components would not be. Two flat directions bound what a fit
+may report: the dispersion toward the Poisson limit and the concentration
+toward the binomial one each have a value above which this much data cannot
+distinguish one value from infinity, so an estimate arriving there has found a
+bound rather than a maximum.
 
 \subsection{Validation}
 \label{sec:emissionmixture:validation}
@@ -3248,19 +3153,17 @@ maximum.
 \subsection{Extensions, and what is not attempted}
 \label{sec:emissionmixture:extensions}
 \paragraph{What it would take to go further.}
-The flat directions are the sharpest gap. An estimate that reaches its
-identifiability bound is reported as a bound, and what would say more is a
-profile likelihood in that direction --- the curvature being absent, the
-interval has to come from the objective's own shape rather than from the
-observed information Section~\ref{sec:abstraction} pushes through the delta
-method. The M step is the second: both shape parameters are found by
-bisection, and a closed form for either would move the cost of an iterate by
-the factor Section~\ref{sec:emissionmixture:discussion} says the budget is
-spent on. The third is structural and already built one section over: putting
-a chain over the component labels is exactly the coupled model of
-Section~\ref{sec:coupled}, so what this section carries as an independent
-mixture is the same family with its sequential structure removed, and the two
-share a maximization step by construction.
+The flat directions are the sharpest gap. An estimate reaching its
+identifiability bound is reported as a bound, and saying more needs a profile
+likelihood in that direction --- the curvature being absent, the interval must
+come from the objective's own shape rather than from the observed information
+Section~\ref{sec:abstraction} pushes through the delta method. The M step is
+the second: both shape parameters are found by bisection, and a closed form for
+either would move the cost of an iterate by the factor
+Section~\ref{sec:emissionmixture:discussion} says the budget is spent on. The
+third is structural and built one section over: a chain over the component
+labels is the coupled model of Section~\ref{sec:coupled}, so this section
+carries the same family with its sequential structure removed.
 
 \paragraph{What is deliberately not attempted.}
 More than two channels, since the trial count is what ties the pair and a
@@ -3291,12 +3194,11 @@ two \citep{nocedal2006}.
   f_{\mathrm{H}}(x, y) &= (x^2 + y - 11)^2 + (x + y^2 - 7)^2,
   \label{eq:himmelblau}
 \end{align}
-the last with four equal minima of value $0$, at $(3, 2)$ and three
-published points. Rosenbrock is a curved valley whose difficulty is
-conditioning alone; Rastrigin is a quadratic bowl under a cosine ripple with
-about $10^d$ local minima, every one satisfying the first-order condition;
-Himmelblau has no single answer, so ``the'' optimum is not a well-formed
-question and a method that always returns the same minimum is reading its
+the last with four equal minima of value $0$, at $(3, 2)$ and three published
+points. Rosenbrock is a curved valley whose difficulty is conditioning alone;
+Rastrigin is a quadratic bowl under a cosine ripple with about $10^d$ local
+minima, every one satisfying the first-order condition; Himmelblau has no
+single answer, so a method that always returns the same minimum is reading its
 start. They are not likelihoods: the Hessian at a minimum is not an observed
 information, and no interval is built from it.
 Figure~\ref{fig:testfunctions:sketch} sketches the shape of each.
@@ -3355,14 +3257,13 @@ claim.
 
 \subsection{Choosing among these at the supported sizes}
 \label{sec:testfunctions:discussion}
-Four methods are assumed and none is stated here: the quasi-Newton fit of
+Four methods are assumed and none stated here: the quasi-Newton fit of
 Section~\ref{sec:abstraction}, the Hamiltonian sampler of
 Section~\ref{sec:hmc} read as an energy, annealing over that sampler on a
 schedule (Section~\ref{sec:tempering}), and the restarts of
-Algorithm~\ref{alg:random-restart}. The
-functions are carried to separate those methods, not to be solved, so the
-question the other sections ask --- which method to spend a budget on --- is
-here asked in reverse: which failure does each surface expose.
+Algorithm~\ref{alg:random-restart}. The functions are carried to separate those
+methods rather than to be solved, so the question is asked in reverse: which
+failure does each surface expose.
 
 \paragraph{One surface per failure.}
 Conditioning alone, with a single basin: a second-order method arrives and
@@ -3379,14 +3280,12 @@ Section~\ref{sec:frustrated}: an equal budget of objective evaluations, and
 which method wins is a property of the surface.
 
 \paragraph{The one problem with no ceiling.}
-The minimizers are closed forms, so the referee costs nothing at any
-dimension and there is no per-tier size limit to state. What grows with $d$
-is not the cost of checking but the number of basins a multi-start must
-find, so the quantity that scales is a \emph{rate} --- the fraction of
-starts reaching the global minimum --- and it is asserted low rather than
-asserted to succeed. That is the bound on what a single fit of any
-multimodal surface in this document may claim, and it is measured here
-because here it can be.
+The minimizers are closed forms, so the referee costs nothing at any dimension
+and there is no per-tier size limit. What grows with $d$ is the number of
+basins a multi-start must find, so the quantity that scales is a \emph{rate}
+--- the fraction of starts reaching the global minimum --- asserted low rather
+than asserted to succeed. That bounds what a single fit of any multimodal
+surface here may claim, and it is measured here because here it can be.
 
 \paragraph{They are not likelihoods, and that is the point.}
 The Hessian at a minimum is not an observed information, so nothing here
@@ -3409,8 +3308,8 @@ carried at all.
   \item \emph{The analytic minimizer} referees a fit directly, to a stated
     tolerance and in several dimensions for Equation~\ref{eq:rosenbrock}. It
     establishes that the optimizer reaches the right point on a surface where
-    ``the right point'' is known --- which a likelihood cannot offer, and which
-    is the whole reason these functions are carried.
+    ``the right point'' is known --- which a likelihood cannot offer, and the
+    reason these functions are carried.
   \item \emph{The hand-written closed-form gradient} referees the automatic
     one exactly. It establishes the differentiation, separately from the
     optimization, so a failure of one is not read as a failure of the other.
@@ -3432,27 +3331,24 @@ carried at all.
 \subsection{Extensions, and what is not attempted}
 \label{sec:testfunctions:extensions}
 \paragraph{What it would take to go further.}
-The comparison here is restarts of a local fit against an annealed chain, and
-the method it has not been run against is a population one: an evolution
-strategy that adapts a covariance from its own samples is the standard
-baseline for a rugged continuous surface and would be scored at the same
-budget of objective evaluations \citep{hansen2001}. Two reporting extensions
-matter more than they sound. A rate over starts is a statistic with an
-interval, and stating it with the interval rather than as a number is what
-makes two methods separable at all \citep{agarwal2021}; and the seeds, the
-budget and the number of runs behind such a rate are part of the claim rather
-than of its provenance \citep{henderson2018}. Both apply to every
-equal-budget comparison in this document, and this is the surface where they
-can be checked against a known answer.
+The comparison here is restarts of a local fit against an annealed chain; the
+method it has not been run against is a population one, an evolution strategy
+adapting a covariance from its own samples being the standard baseline for a
+rugged continuous surface, scored at the same budget of objective evaluations
+\citep{hansen2001}. Two reporting extensions matter more than they sound. A
+rate over starts is a statistic with an interval, and stating the interval is
+what makes two methods separable \citep{agarwal2021}; and the seeds, the budget
+and the number of runs behind a rate are part of the claim rather than its
+provenance \citep{henderson2018}. Both apply to every equal-budget comparison
+here, and this is the surface where they can be checked against a known answer.
 
 \paragraph{What is deliberately not attempted.}
 Constraints, which would make the constraint map of
-Section~\ref{sec:abstraction} the thing under test rather than the optimizer.
-A noisy objective, since these functions are carried precisely because their
-value is exact and a fit that stopped early is distinguishable from a
-parameter that is not identified. And high dimension: what grows with $d$ is
-the number of basins, so a larger $d$ makes the rate smaller and the
-measurement no sharper.
+Section~\ref{sec:abstraction} the thing under test rather than the optimizer. A
+noisy objective, since these functions are carried because their value is exact
+and a fit that stopped early is distinguishable from a parameter that is not
+identified. And high dimension: what grows with $d$ is the number of basins, so
+a larger $d$ makes the rate smaller and the measurement no sharper.
 
 \section{The Problems, and What Applies to Each}
 \label{sec:applicability}
@@ -3464,22 +3360,21 @@ cell says whether the pair exists and what pins it.
 Tables~\ref{tab:methods-initializers} to~\ref{tab:methods-surrogates} are the
 same reading taken one method family at a time, in the grouping
 Appendix~\ref{app:algorithms} uses, and add to each pairing the tier it is
-validated at and a sentence on when the family wins on that problem and when
-it does not --- the one hand-written part of the three, and the part that
-names the experiment where a measurement decided it. A pairing the catalogue
-carries and no test of either significant kind names is marked
-\emph{untested} rather than omitted, so the table cannot go quiet about a
-method that exists. Two readings are
+validated at and a sentence on when the family wins on that problem and when it
+does not --- the one hand-written part of the three, naming the experiment
+where a measurement decided it. A pairing the catalogue carries and no test of
+either significant kind names is marked \emph{untested} rather than omitted, so
+the table cannot go quiet about a method that exists. Two readings are
 load-bearing. The first is the standard: where an oracle is affordable at a
 size, the method is pinned to it; where none is, recovering the simulated
-truth---the generating parameters or structure of a seeded fixture, to a
-stated tolerance or at a stated coverage---is sufficient, and the oracle
-remains desired. The second is the marks that say where that second case
-holds, per method and per size tier, so the oracle each would need can be
-named rather than left implicit: a branch-and-bound bound for trees past the
-enumerable taxon count, a boundary contraction for lattices past the
-transfer-matrix width, and for the code the density-evolution threshold of
-Appendix~\ref{app:density-evolution} extended past the erasure channel.
+truth---the generating parameters or structure of a seeded fixture, to a stated
+tolerance or at a stated coverage---is sufficient, and the oracle remains
+desired. The second is the marks saying where that second case holds, per
+method and per size tier, so the oracle each would need is named: a
+branch-and-bound bound for trees past the enumerable taxon count, a boundary
+contraction for lattices past the transfer-matrix width, and for the code the
+density-evolution threshold of Appendix~\ref{app:density-evolution} extended
+past the erasure channel.
 
 \input{generated/problems_tables}
 
@@ -3525,13 +3420,12 @@ is then
   \label{eq:ldpc-code}
 \end{equation}
 since $\log p(y \mid c) = \sum_i \log p(y_i \mid 0) - \sum_i c_i L_i$ and the
-first sum is the same for every word. Decoding asks two different questions
-of Equation~\ref{eq:ldpc-code}: the \emph{bitwise} MAP, each bit at the mode
-of its own marginal, which minimizes the bit error rate and need not be a
-codeword; and the \emph{blockwise} MAP, the single most probable codeword,
-which minimizes the block error rate. They are different answers, as
-Section~\ref{sec:hmm} says of the chain, and the fixture that separates them
-is a test.
+first sum is the same for every word. Decoding asks two questions of
+Equation~\ref{eq:ldpc-code}: the \emph{bitwise} MAP, each bit at the mode of
+its own marginal, minimizing the bit error rate and not necessarily a codeword;
+and the \emph{blockwise} MAP, the single most probable codeword, minimizing the
+block error rate. They are different answers, as Section~\ref{sec:hmm} says of
+the chain, and the fixture separating them is a test.
 
 \paragraph{Supported sizes.}
 \label{par:ldpc:sizes}
@@ -3558,13 +3452,13 @@ is zero on even-parity assignments and $-\infty$ elsewhere. This is the
 Tanner graph of the code; a bit sits on $d_v$ parity factors and one unary,
 so in the Forney form every bit passes through an equality node of degree
 $d_v + 1$ (Figure~\ref{fig:ldpc:sketch}). The sketch states the structure;
-Figure~\ref{fig:ldpc-tanner} draws one member of the ensemble, where which
-bits a check covers is the draw and not the design. The graph has cycles---a random draw of the ensemble does not
-avoid short ones---so Equation~\ref{eq:sum-product} is the Bethe
-approximation on it, and the exact quantities below come from enumerating
-the $2^k$ codewords where $2^k \le 200{,}000$ (a $(3,6)$ code at $n = 24$
-has $k \ge 14$) and from the tree schedule on a cycle-free code, where
-message passing is exact.
+Figure~\ref{fig:ldpc-tanner} draws one member of the ensemble, where which bits
+a check covers is the draw and not the design. The graph has cycles---a random
+draw does not avoid short ones---so Equation~\ref{eq:sum-product} is the Bethe
+approximation on it, and the exact quantities below come from enumerating the
+$2^k$ codewords where $2^k \le 200{,}000$ (a $(3,6)$ code at $n = 24$ has
+$k \ge 14$) and from the tree schedule on a cycle-free code, where message
+passing is exact.
 
 \input{ldpc_figure}
 
@@ -3606,11 +3500,11 @@ the min-sum decoder, whose decision is the blockwise MAP and is exact on a
 cycle-free code with a unique maximum; on a loopy code it is the cheaper
 and the weaker of the two, and the gap is measured rather than assumed.
 
-Three details are load-bearing in the implementation. The schedule is
-flooding: every check reads the bit messages of the previous half-iteration
-and every bit reads the check messages just written, one Jacobi sweep per
-direction over all edges at once, which is the schedule the general
-implementation runs and so the one it is compared against. The loop stops at
+Three details are load-bearing. The schedule is flooding: every check reads the
+bit messages of the previous half-iteration and every bit reads the check
+messages just written, one Jacobi sweep per direction over all edges at once,
+the schedule the general implementation runs and so the one it is compared
+against. The loop stops at
 the first iteration whose hard decision has every bit decided and satisfies
 $\parity \hat c = 0$, the syndrome check, and otherwise at an iteration
 cap, which is a decoding failure and the event a block error rate counts. And
