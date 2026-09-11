@@ -252,7 +252,7 @@ and the exact open-chain recursion, the Gibbs sweep, `enumerate_potts` and
 reproduces the shared-field `log Z` and marginals to 0.0, and the strip matches
 enumeration to 0.0 on a per-site field.
 
-`potts_spots` declares the spatial half with the chains and the gated
+`spatio_only` declares the spatial half with the chains and the gated
 emissions removed and the field `h[n, m] = alpha[m] * log(size[n] / size_bar)`
 added: 3x3 at `ci`, where enumeration over 19,683 configurations gives the
 exact marginals; a 12x6 strip at `stress`, where 3\*\*72 configurations are

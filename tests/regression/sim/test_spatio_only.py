@@ -30,10 +30,10 @@ from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_parti
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import (
-    PottsSpotsParams,
+    SpatioOnlyParams,
     simulate_potts,
     site_field,
-    spots_field,
+    spatio_only_field,
 )
 
 #: Deviation two exact routes may differ by: both sum the same weights in a
@@ -42,12 +42,12 @@ _EXACT = 1e-12
 
 #: The instances, loaded once each --- a stress draw is 15 s and a release
 #: draw 14 s, and the tests below would otherwise repeat them.
-CI: PottsSpotsParams = fixture("potts_spots", "ci").params
-STRESS: PottsSpotsParams = fixture("potts_spots", "stress").params
-RELEASE: PottsSpotsParams = fixture("potts_spots", "release").params
+CI: SpatioOnlyParams = fixture("spatio_only", "ci").params
+STRESS: SpatioOnlyParams = fixture("spatio_only", "stress").params
+RELEASE: SpatioOnlyParams = fixture("spatio_only", "release").params
 
 
-def _strip_shape(params: PottsSpotsParams) -> tuple[int, int]:
+def _strip_shape(params: SpatioOnlyParams) -> tuple[int, int]:
     """The declared lattice's ``(columns, width)``, which the strip transfers over."""
     shape = params.graph.shape
     if shape is None or len(shape) != 2:
@@ -134,14 +134,14 @@ def test_a_size_that_is_not_positive_is_refused() -> None:
     # `log(size)` is the whole construction, so a size of zero is refused
     # where it is declared rather than becoming a field of -inf.
     with pytest.raises(ValueError, match="every size must be positive"):
-        spots_field(np.array([1.0, 0.0]), np.array([1.0, 0.0]))
+        spatio_only_field(np.array([1.0, 0.0]), np.array([1.0, 0.0]))
 
 
 # --- the ci instance: enumeration referees everything -----------------------
 
 
 @pytest.mark.oracle
-def test_gibbs_matches_enumeration_at_the_declared_spots_instance() -> None:
+def test_gibbs_matches_enumeration_at_the_declared_spatio_only_instance() -> None:
     # The sampler under the declared per-site field against the exact
     # marginals of the same model, at the size all 19,683 configurations
     # enumerate. Measured deviation 0.0153 against the declared 0.04.
@@ -180,7 +180,7 @@ def test_the_declared_sizes_move_the_marginals() -> None:
     assert deviation > CI.tolerance
 
 
-def _fit_alpha(params: PottsSpotsParams, configurations: np.ndarray) -> np.ndarray:
+def _fit_alpha(params: SpatioOnlyParams, configurations: np.ndarray) -> np.ndarray:
     """Maximum likelihood ``alpha``, normalized exactly by enumeration.
 
     The model is an exponential family in ``alpha`` with sufficient statistic
@@ -200,7 +200,7 @@ def _fit_alpha(params: PottsSpotsParams, configurations: np.ndarray) -> np.ndarr
     def objective(free: np.ndarray) -> tuple[float, np.ndarray]:
         alpha = np.concatenate([free, [0.0]])
         alpha = alpha - alpha.mean()
-        exact = enumerate_potts(params.graph, spots_field(alpha, params.sizes))
+        exact = enumerate_potts(params.graph, spatio_only_field(alpha, params.sizes))
         gradient = covariate @ exact.single_site - observed
         return exact.log_partition - float(alpha @ observed), gradient[:-1] - float(
             gradient.mean()
