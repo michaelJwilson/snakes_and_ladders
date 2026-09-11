@@ -525,6 +525,98 @@ conserved as `snakes_and_ladders.sandbox.pruning_burn` over
 the wheel and every per-pull-request job link no `burn`, and
 `infra/release.sh` compiles the feature.
 
+**Nine PyTorch optimization patterns were itemized and all nine declined**
+([#544](https://github.com/michaelJwilson/snakes_and_ladders/issues/544)).
+#528 found no second portable candidate and left the remaining cost inside
+`torch`; these are the patterns that cost names, measured against the paths in
+the tree. `cProfile` self time over one warm run each, 8 taxa by 2,000 sites,
+one BLAS thread, `float64`: a JC fit spends **53.7%** in
+`pruning_torch._post_order` and **27.0%** in `run_backward`; a GTR fit **43.6%**
+in `run_backward`, **20.9%** in `_post_order`, **7.1%** in `LBFGS.step` and
+**2.6%** in `matrix_exp`; a 30-candidate NNI climb **44.1%** and **20.5%** in
+the same two, and with `lazy_top=3` **43.9%** and **20.3%** — the fits, not the
+gradient-free scoring, which does not reach the top ten. Both terms of each
+ratio come from one profiled run, so a shared load moves neither.
+
+1. **`inference_mode` on evaluation-only paths.** Every such path already runs
+   under `no_grad` — **20 blocks** outside the sandbox, across
+   `likelihood.pruning_torch`, `learn.policy`, `planning`, `critic`, `ppo`,
+   `actor_critic`, `surrogate`, `relaxed`, `search.rl` and `search.max_cut`.
+   The residue `inference_mode` would remove is the version counter and view
+   tracking. One gradient-free evaluation at 8
+   taxa by 20,000 sites: **12.11, 19.04 and 18.99 ms under `no_grad` against
+   12.26, 12.23 and 18.57 under `inference_mode`**, three readings, and the
+   spread inside either arm is larger than the gap between them. Several of the
+   14 could not take it in any case: PPO's stored log-probabilities re-enter an
+   autograd graph, which an inference tensor may not.
+2. **Batching independent fits, and `torch.vmap`.** `vmap` does reach the
+   objective at a fixed topology and reproduces the sequential values, but
+   nothing consumes a batched one: L-BFGS' strong-Wolfe line search branches on
+   each start's own values, so `B` starts need `B` line searches. Across
+   topologies it does not apply at all — the post-order is a Python recursion
+   over a different tree per candidate. Four starts at 8 taxa by 20,000 sites
+   measured 195.1 to 236.5 ms sequential against 163.9 to 366.7 batched, three
+   readings, which resolves nothing and does not need to.
+3. **Host–device and Python syncs.** There is no host–device boundary: CUDA and
+   Metal are unimplemented (#280) and `device.available_device()` returns `cpu`,
+   where a scalar read is a read and not a synchronisation. The package calls
+   `.item()` **zero** times. What remains is 2 `float()` per L-BFGS outer
+   iteration in `opt.fit` — one extra forward and backward for the relative
+   convergence test, against 20 inner iterations — and one `float()` per child
+   per node inside `log_likelihood_cached`'s cache key. Neither appears in any
+   profile above.
+4. **Preallocation and `out=`.** Forbidden rather than unused on the path that
+   pays: `pruning_torch.log_likelihood` runs under a tape, so every intermediate
+   is held for the backward and an in-place write would corrupt it. What is left
+   is hoistable allocation — `torch.arange` per leaf, `torch.ones_like` per
+   node for the rescaling `where` — which the profiles put at 1.4 to 1.9% and
+   1.2 to 1.7%. Hoisted, the recursion returns the value and the gradient
+   **bitwise**, at **1.02x** at 2,000 sites and **0.94x** at 20,000: no gain,
+   and the sign turns with the size.
+5. **Contiguity and stride order.** `partial @ transitions[i].T` passes BLAS a
+   transposed view, which `gemm` takes as a flag. Pre-transposing to a
+   contiguous copy is **slower** — 65.49, 68.30 and 65.60 µs against the view's
+   64.25, 67.15 and 64.48, three readings — and the product is bitwise
+   unchanged, so the copy buys nothing and costs itself.
+6. **`torch.matrix_exp` against the closed form.** The Jukes–Cantor path already
+   takes the closed form, and the measurement says to keep it: `matrix_exp` is
+   **2.57 to 2.73x** the closed form over the same branch vector. For GTR, one
+   eigendecomposition of the reversible `Q` with a vector exponential per branch
+   is **0.84 to 0.88x** `matrix_exp` and agrees with it to **3.3e-16**, which is
+   15% of the **2.6%** a GTR fit spends there — **0.4%** of the fit, below the
+   bar #341 sets.
+7. **Fused and `foreach` optimizer variants.** The continuous fits are
+   `torch.optim.LBFGS`, which has neither parameter; only `Adam` does, and
+   `learn/`'s eight `Adam` sites each hold one tensor or a small module, where
+   `foreach` has nothing to fuse over. The ceiling was already #457's 6.63% and
+   3.57%, and this profile's 1.2 to 7.1%.
+8. **`float32` is a correctness decision, not a performance one.** The
+   cross-device tolerance is relative and keyed on the lowest precision in the
+   comparison, so adopting `float32` moves `CROSS_DEVICE_RTOL` from 1e-11 to
+   1e-6 for every comparison it touches and costs five digits of every pinned
+   value. It is not taken as a speed-up, and is not measured as one.
+9. **CUDA and MPS** belong to
+   [#280](https://github.com/michaelJwilson/snakes_and_ladders/issues/280) and
+   are blocked on a device: this host has neither.
+
+`tests/regression/likelihood/test_torch_patterns.py` pins what each decline
+rests on — that the alternative computes the same thing — and
+`tests/benchmarks/test_torch_patterns_bench.py` times the arms.
+**The host was not quiet**, carrying three other agents' work throughout, so
+every absolute above is an upper bound and none is comparable to the timings
+recorded elsewhere in this file. What the readings support is the three ratios
+that repeat across all three of them, all under a millisecond per arm, and the
+profile shares, which are internal to one run.
+
+**`pruning_analytic` is measured and not wired in**
+([#453](https://github.com/michaelJwilson/snakes_and_ladders/issues/453)).
+`likelihood.objective` calls `pruning_torch.log_likelihood` on both objectives,
+and nothing under `python/` imports `pruning_analytic`, so the 694.5 → 454.2 ms
+recorded above is available and unclaimed on `BranchLengthObjective`.
+`SubstitutionModelObjective` cannot take it — it differentiates the rate matrix,
+which that backward refuses by design. Adopting it is its own change with its
+own measurement, filed rather than taken here.
+
 **The Rust backend returned nothing at the declared scale, and now returns
 2.5x.** Measured against the NumPy oracle end to end, it was **1.8x** at 10
 taxa by 1,000 sites and **1.00x** at 200 by 11,000 — the top of the range
