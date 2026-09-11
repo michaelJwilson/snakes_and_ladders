@@ -25,8 +25,9 @@ parenthesis the only way a ticket is cited.
   of the exact open-chain recursion (#186)
 - Additional evolutionary models (#107)
 - Rate variation across sites, in the simulator and every backend (#323)
-- Emission-family extensions: multivariate and tied Gaussian, zero-inflated
-  counts, the Dirichlet-multinomial (#330)
+- Emission-family extensions: tied Gaussian, zero-inflated counts, the
+  Dirichlet-multinomial (#330). The diagonal multivariate Gaussian landed with
+  the seeding control (#548); a full covariance and a tied one have not.
 - Simulate at the declared scale — `n` to 1000, `L` to 11000 — and report the
   memory footprint of the simulator alone beside the evaluator's
 
@@ -66,6 +67,19 @@ parenthesis the only way a ticket is cited.
 - Find where the projected likelihood stops disagreeing with the simulated
   truth about which seeding is better, between 40 and 1,000 observations a
   component (#559)
+- Seed `Emission_Mixture++` with the family's Bregman divergence rather than
+  its negative log-density. #548 measured the two on a Gaussian, where the
+  divergence is the squared distance exactly: 1.85 times the optimal
+  clustering cost against 3.91, uniform seeding being 4.35. The log
+  normalizer is an additive constant, D-squared sampling normalizes rather
+  than shifts, and what a count family's normalizer costs #541's candidate 3
+  is the measurement that decides whether this is a defect or a difference
+- Adapt the leapfrog step size of a seeding chain to the instance. #548 ran
+  `opt.hmc.sample`, `anneal` and `parallel_tempering` at one fixed step across
+  two sample sizes: acceptance 1.000 over 500 observations and 0.000 over
+  504,100, so at the larger size all three returned their starting point and
+  cost 110 to 220% of the fit budget to do it. `opt.hmc.Adaptation` exists and
+  `anneal` and `parallel_tempering` do not take one
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
