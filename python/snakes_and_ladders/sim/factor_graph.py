@@ -185,7 +185,11 @@ class FactorGraph:
     def log_density(self, assignment: Mapping[str, int]) -> float:
         """``sum_f log psi_f`` at one full assignment: the unnormalized log-density.
 
-        The definition every adapter is pinned against, by enumeration.
+        The definition every adapter is pinned against, by enumeration, and
+        the oracle of the compiled path a sampler takes over the edge layout
+        (:meth:`snakes_and_ladders.search.gibbs._Indexed.log_density`, issue
+        #563), which sums the same terms in the same order and so reproduces
+        this bitwise.
         """
         total = 0.0
         for factor in self.factors:
