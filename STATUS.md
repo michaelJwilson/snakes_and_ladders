@@ -1418,6 +1418,38 @@ the same test runs per pull request and pins the ordering. The paired test
 per-start hits, exact rather than chi-square, because 40 starts cannot support
 the approximation.
 
+**Eight ways to seed a Gaussian mixture, and the control that named the
+difference.**
+[#548](https://github.com/michaelJwilson/snakes_and_ladders/issues/548) ran
+[#541](https://github.com/michaelJwilson/snakes_and_ladders/issues/541)'s
+seeding comparison on a Gaussian instead of on counts, because a Gaussian is
+where #541's candidate 3 predicts no gain: the Bregman divergence of an
+isotropic Gaussian's log-partition *is* the squared Euclidean distance
+([`docs/experiments/009`](docs/experiments/009-gaussian-mixture-seeding-control.md)).
+**The prediction held for the divergence and failed for the implementation.**
+Over 200 seedings of `mixture/ci.yaml`, scored against the exact optimal
+k-means cost: the divergence and squared Euclidean produce **identical
+seedings, draw for draw**, at **1.8496** times the optimum (worst 6.21), while
+the rule `opt.emission_mixture.plus_plus_start` actually applies — the family's
+**negative log density** — costs **3.9111** (worst 33.80) against uniform
+seeding's **4.3470**, nine tenths of the way from the divergence to uniform.
+The cause is arithmetic and not statistical: the negative log density is the
+divergence plus the log normalizer, D-squared sampling normalizes its scores
+rather than shifting them, and an additive constant therefore dilutes the rule
+toward uniform. #541's candidate 3 is measuring a normalizer as well as a
+divergence, and what that costs a count family is #541's measurement to make.
+The two-channel rung this was sized against —
+`tests/regression/fixtures/mixture/release.yaml`, ten components over
+5,041 x 4,000 = 20,164,000 observations, mirroring
+`spatio_sequential_counts/stress.yaml` at bin factor 5 — **is declared and not
+run**: one expectation-maximization iteration over it holds four
+(20,164,000 x 10) float64 arrays, 1.613 GB for the responsibilities alone, and
+peak resident set measured 2,165 MiB at 5,041,000 observations against 695 MiB
+at 500,000, so 344 MiB per million above a 430 MiB floor and 7.4 GiB at the
+full size, against 8 GiB free on the 15 GiB host. The comparison runs at bin
+factor 40, 504,100 observations, which is the largest whose simulate-fit-assert
+run fits the 120 s key cap at 62.4 s.
+
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
 but until now only a gradient fit could ask for one: expectation-maximization

@@ -50,7 +50,10 @@ class GaussianMixtureObjective:
     Parameters
     ----------
     observations : np.ndarray
-        Observed values, shape ``(n_samples,)``.
+        Observed values, shape ``(n_samples,)`` or ``(n_samples, n_channels)``.
+        A trailing channel axis makes every component a product of independent
+        Gaussians, one per channel, on the terms
+        :class:`snakes_and_ladders.emissions.GaussianEmission` states.
     n_components : int
         Components in the mixture, at least 2 --- one component is a Gaussian,
         not a mixture, and the weight vector would be a constant.
@@ -61,7 +64,8 @@ class GaussianMixtureObjective:
     Raises
     ------
     ValueError
-        If fewer than two components are asked for.
+        If fewer than two components are asked for, or the observations carry
+        more than one trailing axis.
     """
 
     def __init__(
@@ -73,7 +77,16 @@ class GaussianMixtureObjective:
         if n_components < 2:
             msg = f"n_components must be >= 2, got {n_components}"
             raise ValueError(msg)
-        self._observations = torch.as_tensor(observations, dtype=dtype).reshape(-1)
+        values = torch.as_tensor(observations, dtype=dtype)
+        values = values.reshape(1) if values.ndim == 0 else values
+        if values.ndim > 2:
+            msg = (
+                f"an observation is a value, or one value per channel; got "
+                f"shape {tuple(values.shape)}"
+            )
+            raise ValueError(msg)
+        self._observations = values
+        self._n_channels = 1 if values.ndim == 1 else int(values.shape[1])
         self._n_components = n_components
         self._dtype = dtype
         self._variance_floor = pooled_variance_floor(np.asarray(observations))
@@ -84,8 +97,13 @@ class GaussianMixtureObjective:
         return self._n_components
 
     @property
+    def n_channels(self) -> int:
+        """Entries an observation carries; ``1`` for a scalar observation."""
+        return self._n_channels
+
+    @property
     def observations(self) -> torch.Tensor:
-        """The observations being fitted, shape ``(n_samples,)``."""
+        """The observations being fitted, of the shape they were given in."""
         return self._observations
 
     @property
@@ -95,8 +113,12 @@ class GaussianMixtureObjective:
 
     @property
     def n_parameters(self) -> int:
-        """``(k - 1)`` free weights, then ``k`` means and ``k`` log scales."""
-        return (self._n_components - 1) + 2 * self._n_components
+        """``(k - 1)`` free weights, then ``k`` means and ``k`` log scales, per channel."""
+        return (self._n_components - 1) + 2 * self._n_components * self._n_channels
+
+    @property
+    def _block(self) -> int:
+        return self._n_components * self._n_channels
 
     @property
     def _weight_slice(self) -> slice:
@@ -104,17 +126,23 @@ class GaussianMixtureObjective:
 
     def _mean_slice(self) -> slice:
         start = self._n_components - 1
-        return slice(start, start + self._n_components)
+        return slice(start, start + self._block)
 
     def _log_scale_slice(self) -> slice:
         start = self._mean_slice().stop
-        return slice(start, start + self._n_components)
+        return slice(start, start + self._block)
+
+    def _per_component(self, block: torch.Tensor) -> torch.Tensor:
+        """One parameter block as the family reads it: ``(k,)``, or ``(k, channels)``."""
+        if self._n_channels == 1:
+            return block
+        return block.reshape(self._n_components, self._n_channels)
 
     def components(self, theta: torch.Tensor) -> GaussianEmission:
         """The component family ``theta`` encodes, differentiable in ``theta``."""
         return GaussianEmission(
-            theta[self._mean_slice()],
-            torch.exp(theta[self._log_scale_slice()]),
+            self._per_component(theta[self._mean_slice()]),
+            torch.exp(self._per_component(theta[self._log_scale_slice()])),
             self._variance_floor,
         )
 
@@ -131,8 +159,18 @@ class GaussianMixtureObjective:
         quantiles = (
             torch.arange(self._n_components, dtype=self._dtype) + 0.5
         ) / self._n_components
-        theta[self._mean_slice()] = torch.quantile(self._observations, quantiles)
-        theta[self._log_scale_slice()] = torch.log(self._observations.std())
+        if self._n_channels == 1:
+            theta[self._mean_slice()] = torch.quantile(self._observations, quantiles)
+            theta[self._log_scale_slice()] = torch.log(self._observations.std())
+            return theta
+        # Per channel, since a quantile of the two channels pooled is a
+        # location in neither and would seed every component off the data.
+        theta[self._mean_slice()] = torch.quantile(
+            self._observations, quantiles, dim=0
+        ).reshape(-1)
+        theta[self._log_scale_slice()] = torch.log(
+            self._observations.std(dim=0)
+        ).repeat(self._n_components)
         return theta
 
     def theta_from_centres(self, centres: torch.Tensor) -> torch.Tensor:
@@ -144,7 +182,8 @@ class GaussianMixtureObjective:
         Parameters
         ----------
         centres : torch.Tensor
-            One location per component, shape ``(n_components,)``.
+            One location per component, shape ``(n_components,)`` or
+            ``(n_components, n_channels)``.
 
         Returns
         -------
@@ -157,8 +196,11 @@ class GaussianMixtureObjective:
             If the number of centres is not the number of components.
         """
         located = torch.as_tensor(centres, dtype=self._dtype).reshape(-1)
-        if located.shape[0] != self._n_components:
-            msg = f"expected {self._n_components} centres, got {located.shape[0]}"
+        if located.shape[0] != self._block:
+            msg = (
+                f"expected {self._n_components} centres of {self._n_channels} "
+                f"channel(s), got {located.shape[0]} values"
+            )
             raise ValueError(msg)
         theta = self.initial()
         theta[self._mean_slice()] = located
@@ -370,18 +412,20 @@ def clustering_cost(observations: np.ndarray, centres: np.ndarray) -> float:
     Parameters
     ----------
     observations : np.ndarray
-        Observations, shape ``(n_samples,)``.
+        Observations, shape ``(n_samples,)`` or ``(n_samples, n_channels)``.
     centres : np.ndarray
-        Centres, shape ``(n_centres,)``.
+        Centres, of one row per centre in the observations' own shape.
 
     Returns
     -------
     float
-        ``sum_i min_k (y_i - c_k) ** 2``.
+        ``sum_i min_k ||y_i - c_k|| ** 2``, the squared distance summed over
+        the channels.
     """
-    values = np.asarray(observations, dtype=np.float64).reshape(-1, 1)
-    located = np.asarray(centres, dtype=np.float64).reshape(1, -1)
-    return float(((values - located) ** 2).min(axis=1).sum())
+    values = np.atleast_2d(np.asarray(observations, dtype=np.float64).T).T
+    located = np.atleast_2d(np.asarray(centres, dtype=np.float64).T).T
+    squared = ((values[:, None, :] - located[None, :, :]) ** 2).sum(axis=-1)
+    return float(squared.min(axis=1).sum())
 
 
 def optimal_clustering_cost(observations: np.ndarray, n_centres: int) -> float:
@@ -450,7 +494,7 @@ def kmeans_plus_plus(
     Parameters
     ----------
     observations : np.ndarray
-        Observations, shape ``(n_samples,)``.
+        Observations, shape ``(n_samples,)`` or ``(n_samples, n_channels)``.
     n_centres : int
         Centres to seed, at least 1 and at most the number of observations.
     rng : np.random.Generator
@@ -459,32 +503,44 @@ def kmeans_plus_plus(
     Returns
     -------
     np.ndarray
-        The seeded centres, shape ``(n_centres,)``, in the order chosen.
+        The seeded centres, one per row in the observations' own shape, in the
+        order chosen.
 
     Raises
     ------
     ValueError
         If ``n_centres`` is outside ``[1, n_samples]``.
     """
-    values = np.asarray(observations, dtype=np.float64).reshape(-1)
+    values = np.asarray(observations, dtype=np.float64)
     if not 1 <= n_centres <= values.shape[0]:
         msg = f"n_centres must lie in [1, {values.shape[0]}], got {n_centres}"
         raise ValueError(msg)
 
-    chosen = [float(rng.choice(values))]
+    # `rng.choice` draws a row from a two-dimensional array and a value from a
+    # one-dimensional one off the same integer draw, so the multi-channel form
+    # is the scalar form's stream unchanged.
+    chosen = [rng.choice(values)]
+    nearest = _squared_distance(values, chosen[0])
     for _ in range(1, n_centres):
-        squared = (values[:, None] - np.array(chosen)[None, :]) ** 2
-        nearest = squared.min(axis=1)
         total = float(nearest.sum())
         if total <= 0.0:
             # Every remaining point coincides with a centre, so no point can
             # reduce the cost and the distribution is undefined. Falling back
             # to uniform keeps the seeding total rather than raising on a
             # degenerate but legitimate dataset.
-            chosen.append(float(rng.choice(values)))
-            continue
-        chosen.append(float(rng.choice(values, p=nearest / total)))
+            chosen.append(rng.choice(values))
+        else:
+            chosen.append(rng.choice(values, p=nearest / total))
+        nearest = np.minimum(nearest, _squared_distance(values, chosen[-1]))
     return np.array(chosen)
+
+
+def _squared_distance(values: np.ndarray, centre: np.ndarray) -> np.ndarray:
+    """``||y_i - c|| ** 2`` per observation, summed over the channels if there are any."""
+    difference = values - centre
+    if difference.ndim == 1:
+        return np.asarray(difference**2)
+    return np.asarray((difference**2).sum(axis=-1))
 
 
 def uniform_seeds(
@@ -498,7 +554,7 @@ def uniform_seeds(
     Parameters
     ----------
     observations : np.ndarray
-        Observations, shape ``(n_samples,)``.
+        Observations, shape ``(n_samples,)`` or ``(n_samples, n_channels)``.
     n_centres : int
         Centres to seed.
     rng : np.random.Generator
@@ -507,9 +563,9 @@ def uniform_seeds(
     Returns
     -------
     np.ndarray
-        The seeded centres, shape ``(n_centres,)``.
+        The seeded centres, one per row in the observations' own shape.
     """
-    values = np.asarray(observations, dtype=np.float64).reshape(-1)
+    values = np.asarray(observations, dtype=np.float64)
     return np.asarray(rng.choice(values, size=n_centres, replace=False))
 
 
@@ -595,13 +651,37 @@ class KMeansPlusPlus:
         return [
             objective.theta_from_centres(
                 torch.as_tensor(
-                    np.sort(
+                    canonical_order(
                         kmeans_plus_plus(observations, objective.n_components, self.rng)
                     )
                 )
             )
             for _ in range(self.n_starts)
         ]
+
+
+def canonical_order(centres: np.ndarray) -> np.ndarray:
+    """Centres sorted, so a relabelling of the same seeding is one seeding.
+
+    A mixture is invariant under permuting its components, so two seedings
+    differing only in the order they were drawn are the same start. Sorting on
+    the first channel, ties broken by the next, is the order a multi-channel
+    seeding is reported in; with one channel it is :func:`numpy.sort`.
+
+    Parameters
+    ----------
+    centres : np.ndarray
+        Shape ``(n_centres,)`` or ``(n_centres, n_channels)``.
+
+    Returns
+    -------
+    np.ndarray
+        The same rows, in the canonical order.
+    """
+    rows = np.asarray(centres, dtype=np.float64)
+    if rows.ndim == 1:
+        return np.sort(rows)
+    return np.asarray(rows[np.lexsort(rows.T[::-1])])
 
 
 def emission_mixture_plus_plus(

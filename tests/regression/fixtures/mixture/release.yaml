@@ -1,0 +1,90 @@
+model: gaussian-mixture
+oracle: none
+
+# The Gaussian control for the seeding comparison of issue #541, sized to the
+# instance that comparison projects (issue #548). Every field is required --
+# see python/snakes_and_ladders/sim/mixture.py and sim/CLAUDE.md.
+#
+# `spatio_sequential_counts/stress.yaml` at bin factor 5 is 5,041 vertices x
+# 4,000 positions = 20,164,000 two-channel observations over K = 10 states.
+# Its `emissions.form: independent` declares one ladder over those states
+# shared by every class and modulated by two per-class vectors, so the
+# projection is a mixture of **ten** components and not of M x K: the classes
+# share the component shapes rather than contributing their own.
+#
+# `ci.yaml`'s ladder in two channels. Adjacent means are 1.5 component
+# standard deviations apart along each channel -- five positions along the
+# first, two along the second -- so the realised separation is the one that
+# file states, in a second dimension. The weights are deliberately unequal,
+# for the reason it gives: a method that recovers the components by symmetry
+# rather than from the data is caught. Ratio 4.5 between the largest and the
+# smallest.
+#
+# **The oracle is `none`, and the refereed rung stays `ci.yaml`.**
+# `opt.mixture.optimal_clustering_cost` is a dynamic program over cuts of the
+# *sorted* observations: an optimal one-dimensional k-means clustering
+# partitions the line into contiguous runs, and that argument has no
+# counterpart in two dimensions, where the exact problem is NP-hard. Extending
+# it here would mean either an exponential search or an approximation, and an
+# approximate oracle referees nothing. So the exact cost referees the
+# one-dimensional `ci.yaml`, and this instance is refereed by the planted
+# component labels and the generating parameters, as #541's key instance is.
+seed: 20260911
+n_samples: 20164000
+weights: [0.18, 0.04, 0.11, 0.09, 0.13, 0.12, 0.06, 0.14, 0.06, 0.07]
+means:
+  - [-3.00, -0.75]
+  - [-1.50, -0.75]
+  - [ 0.00, -0.75]
+  - [ 1.50, -0.75]
+  - [ 3.00, -0.75]
+  - [-3.00,  0.75]
+  - [-1.50,  0.75]
+  - [ 0.00,  0.75]
+  - [ 1.50,  0.75]
+  - [ 3.00,  0.75]
+scales:
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+  - [1.0, 1.0]
+
+# The variance floor the fitting suite declares for this fixture, as
+# `ci.yaml` declares it: a Gaussian likelihood has no maximum, so a fit that
+# reaches the floor is a refusal rather than a converged answer.
+variance_floor: 1.0e-12
+
+# Absolute tolerance a validation test checks simulated frequencies against
+# their analytic counterpart within, at the `ci` instance's 20,164 draws.
+tolerance: 0.01
+
+# Several instances of one generating truth. A spatio-sequential fixture's
+# coarse instance *sums* `factor` consecutive positions, because the positions
+# are coupled; a mixture's observations are independent, so there is nothing
+# to sum and a coarse instance is `n_samples // factor` draws from the same
+# parameters -- distributed exactly as a subsample of the fine draw, and drawn
+# at its own size rather than decimated from one that will not fit.
+# `marker` is the tier the full test at that factor runs in.
+#
+# **The fine instance is declared and not run.** One expectation-maximization
+# iteration over 20,164,000 observations under ten components holds four
+# (n_samples, n_components) float64 arrays: the responsibilities alone are
+# 1.613 GB. Measured peak resident set for one iteration is 2,165 MiB at
+# 5,041,000 observations against 695 MiB at 500,000, which is 344 MiB per
+# million above a 430 MiB floor and so 7.4 GiB at the full size -- against the
+# 8 GiB free on the 15 GiB reference host. The cost per iteration scales with
+# it: the fine instance is 40x the `key` instance's, so the nine-row
+# comparison this fixture exists for is 40x its release-tier cost. The `key`
+# factor is the largest whose simulate-fit-assert run fits
+# SAL_KEY_DURATION_CAP.
+bin:
+  - factor: 1000
+    marker: ci
+  - factor: 40
+    marker: key
