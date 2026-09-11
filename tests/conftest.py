@@ -97,7 +97,10 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     makes the message readable: a worker that raises during collection is an
     xdist ``INTERNALERROR`` and the reason does not survive it.
     """
-    if "benchmark" in item.fixturenames and distributed(item.config):
+    # `fixturenames` belongs to the item types that take fixtures, not to
+    # `Item`, and this hook is given the base type.
+    fixtures: tuple[str, ...] = getattr(item, "fixturenames", ())
+    if "benchmark" in fixtures and distributed(item.config):
         pytest.fail(DISTRIBUTED_BENCHMARK, pytrace=False)
 
 
