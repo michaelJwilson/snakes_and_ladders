@@ -6,12 +6,12 @@ where an *instance* of one is obtained. A fixture is a file under
 the model that reads it and the oracle that referees a result at that size,
 and :func:`fixture` returns it loaded through that model's own loader.
 
-**A supported instance is a fixture, never a literal.** An instance typed
-into a test, a notebook or a figure script is one nothing else can find: the
-next caller writes its own, the two drift, and a claim about "the problem"
-is a claim about whichever copy the reader happened to open. Naming the
-instance in one file makes "every method is applied to every problem" a
-question the tools can answer rather than one a reviewer has to.
+**A supported instance is a fixture, never a literal.** An instance typed into
+a test, a notebook or a figure script is one nothing else can find: the next
+caller writes its own, the two drift, and a claim about "the problem" is a
+claim about whichever copy the reader opened. Naming the instance in one file
+makes "every method is applied to every problem" a question the tools can
+answer rather than a reviewer.
 
 **The files live under ``tests/`` and this module lives in the package**
 because the consumers are not only the suite: ``snakes_and_ladders.qa``
@@ -31,21 +31,19 @@ a diff can tell which of the two moved.
 **A record carries no digest of the tree it was written from** (issue #460).
 It did until then: one hash over the fixture bytes, the transitive import
 closure of the computing modules and three library versions, which
-:func:`baseline` compared with the current tree's and raised on. Measured
-over the whole history of the five records, that field moved 54 times and
-carried a moved number 0 times --- every re-key was a source edit somewhere
-in a closure spanning 66 of the 145 tracked source files, and the
-recomputation that followed reproduced the values byte for byte. It also
-made 8 of the 38 conflicts across the eight open branches, over a
-sixty-four-character line the three sides disagreed on and nothing else.
-The referee it stood in for is now the thing itself: ``infra/baselines.py``
-recomputes the records a change could have moved, per pull request, and
-every record at the release gate.
+:func:`baseline` compared with the current tree's and raised on. Over the whole
+history of the five records that field moved 54 times and carried a moved
+number 0 times --- every re-key was a source edit somewhere in a closure
+spanning 66 of the 145 tracked source files, and the recomputation that
+followed reproduced the values byte for byte. It also made 8 of the 38
+conflicts across the eight open branches. ``infra/baselines.py`` now recomputes
+the records a change could have moved, per pull request, and every record at
+the release gate.
 
-What survives here is the check a recomputation cannot make, because it is a
-fact about the machine and not about the tree: :func:`baseline` refuses a
-record whose ``numpy``, ``scipy`` or ``torch`` version is not the installed
-one, and that refusal is still a :class:`StaleBaselineError`.
+What survives here is the check a recomputation cannot make, being a fact about
+the machine rather than the tree: :func:`baseline` refuses a record whose
+``numpy``, ``scipy`` or ``torch`` version is not the installed one, and that
+refusal is still a :class:`StaleBaselineError`.
 """
 
 from __future__ import annotations
@@ -76,9 +74,9 @@ from snakes_and_ladders.sim.potts import (
 )
 from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
 
-#: The repository root, from this file rather than from a working directory:
-#: the fixture directory is named from it, and a caller in another tree
-#: passes its own.
+#: The repository root, from this file rather than a working directory: the
+#: fixture directory is named from it, and a caller in another tree passes its
+#: own.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 #: Where the fixture files live, as a path from this file rather than from a
@@ -107,19 +105,18 @@ LOADERS: dict[str, Callable[[Path], Any]] = {
 
 #: The oracles a fixture may state: an exhaustive sum over the instance, the
 #: exact normalizer of a chain, a formula or published value, or nothing
-#: independent at this size. ``none`` is a statement, not an omission --- it
-#: says the size is past every oracle, and a result there is refereed by a
-#: symmetry or by the simulated truth.
+#: independent at this size. ``none`` is a statement and not an omission: the
+#: size is past every oracle, and a result there is refereed by a symmetry or
+#: by the simulated truth.
 ORACLES = ("enumeration", "transfer-matrix", "closed-form", "none")
 
 _REQUIRED_FIELDS = frozenset({"model", "oracle"})
 
-#: The alias :func:`fixture` accepts beside a tier. It is not a fourth size:
-#: it names *which declared instance a study defaults to*, and the file says
-#: which by marking one of its own instances ``key`` (issue #399, fifth
-#: amendment). A problem whose instances all fit the per-pull-request budget
-#: needs none; one whose largest useful instance takes two minutes needs a
-#: name for it that is not "the stress file, factor 5".
+#: The alias :func:`fixture` accepts beside a tier. Not a fourth size: it names
+#: *which declared instance a study defaults to*, and the file says which by
+#: marking one of its instances ``key`` (issue #399, fifth amendment). A
+#: problem whose instances all fit the per-pull-request budget needs none; one
+#: whose largest useful instance takes two minutes needs a name for it.
 KEY = "key"
 
 
@@ -140,10 +137,10 @@ class Fixture:
     Parameters
     ----------
     problem : str
-        The directory name, which is the problem the registry knows the
-        instance as. `PROBLEMS.md` names it against a catalogue row.
+        The directory name, the problem the registry knows the instance as.
+        `PROBLEMS.md` names it against a catalogue row.
     tier : Scale
-        The size tier, which is the file name: which time budget the size was
+        The size tier, which is the file name: the time budget the size was
         chosen for, per ``DEV.md``.
     model : str
         The declared model, and so the loader that read the file.
@@ -173,10 +170,9 @@ def _key_path(problem: str, directory: Path) -> Path:
     Raises
     ------
     FileNotFoundError
-        If no file of the problem marks an instance ``key``. Refused here
-        rather than answered with the largest tier, because "the instance a
-        study defaults to" is a claim the fixture makes and not one the
-        registry may make for it.
+        If no file of the problem marks an instance ``key``. Refused rather than
+        answered with the largest tier: "the instance a study defaults to" is a
+        claim the fixture makes, not one the registry may make for it.
     """
     found = [
         path

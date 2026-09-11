@@ -8,22 +8,21 @@ input-output relation is a hidden Markov chain on ``2 ** m`` states with two
 edges leaving each -- the trellis, held here as arrays in the offsets layout
 root ``CLAUDE.md`` asks for rather than as a list of node objects.
 
-A turbo code is two such registers fed the same message in two orders
-through an interleaver \\citep{berrou1993}: the first sees the message, the
-second sees a permutation of it, and the transmitted word carries the
-message once and both parity streams. Rate 1/3 unpunctured, both registers
-driven back to the zero state by ``m`` tail steps each, so the transmitted
-length is ``3 K + 4 m`` for a ``K``-bit message and the trellis referee of
+A turbo code is two such registers fed the same message in two orders through
+an interleaver \\citep{berrou1993}: the first sees the message, the second a
+permutation of it, and the transmitted word carries the message once and both
+parity streams. Rate 1/3 unpunctured, both registers driven back to the zero
+state by ``m`` tail steps each, so the transmitted length is ``3 K + 4 m`` for
+a ``K``-bit message and the trellis referee of
 :mod:`snakes_and_ladders.likelihood.convolutional` may terminate both ends.
 
-**Codewords are the same objects LDPC's are.** A convolutional code is
-linear, so its words are the null space of a parity-check matrix and
-:func:`parity_check` produces one; that is what lets a turbo instance be
-decoded by issue #340's parity-check machinery and referees this encoder
-against a construction sharing no code with it. The channels are #340's,
-imported rather than restated, and the log-likelihood ratio convention is
-``eq:ldpc-llr`` unchanged: ``L_i = log p(y_i | c_i = 0) - log p(y_i | c_i =
-1)``.
+**Codewords are the same objects LDPC's are.** A convolutional code is linear,
+so its words are the null space of a parity-check matrix and
+:func:`parity_check` produces one; that lets a turbo instance be decoded by
+issue #340's parity-check machinery and referees this encoder against a
+construction sharing no code with it. The channels are #340's, imported rather
+than restated, and the log-likelihood ratio convention is ``eq:ldpc-llr``
+unchanged: ``L_i = log p(y_i | c_i = 0) - log p(y_i | c_i = 1)``.
 """
 
 from __future__ import annotations
@@ -38,15 +37,12 @@ from snakes_and_ladders.sim.ldpc import ParityCheck, null_space
 
 #: The log weight of an edge the trellis does not have. Finite rather than
 #: ``-inf``: the general message passing shifts by a row maximum before
-#: exponentiating, and a row that is entirely ``-inf`` -- which is what an
-#: unreachable state's incoming edges are at the first steps of a terminated
-#: trellis -- becomes ``-inf - (-inf)``, a ``nan`` that then spreads. At
-#: ``-1e30`` the shifted term underflows to exactly zero in ``float64``, so
-#: the sum is the one ``-inf`` would have given, and the row that is
-#: entirely impossible carries a finite number nothing reads. The same
-#: constant floors the recursions in
-#: :mod:`snakes_and_ladders.likelihood.convolutional`, which is why it is
-#: stated here rather than twice.
+#: exponentiating, and a row entirely ``-inf`` -- an unreachable state's
+#: incoming edges at the first steps of a terminated trellis -- becomes
+#: ``-inf - (-inf)``, a ``nan`` that spreads. At ``-1e30`` the shifted term
+#: underflows to exactly zero in ``float64``, so the sum is the one ``-inf``
+#: would have given. The same constant floors the recursions in
+#: :mod:`snakes_and_ladders.likelihood.convolutional`, so it is stated once.
 IMPOSSIBLE_EDGE = -1e30
 
 #: Past this the dense GF(2) construction of :func:`parity_check` is no
@@ -79,10 +75,9 @@ def octal_taps(polynomial: int, memory: int) -> np.ndarray:
     Raises
     ------
     ValueError
-        If the polynomial needs more than ``memory + 1`` bits, or its
-        constant term is zero -- a generator without one is a delayed copy
-        of a shorter generator, and a feedback polynomial without one has no
-        recursion to define.
+        If the polynomial needs more than ``memory + 1`` bits, or its constant
+        term is zero -- a generator without one is a delayed copy of a shorter
+        generator, and a feedback polynomial without one defines no recursion.
 
     Examples
     --------
@@ -107,12 +102,12 @@ def octal_taps(polynomial: int, memory: int) -> np.ndarray:
 class Trellis:
     """A shift register's state machine, as arrays indexed by (state, input).
 
-    The register holds ``m`` bits and the state is that word read as an
-    integer with the most recent bit *least* significant, so one step is a
-    left shift with the new bit entering at the bottom. One
-    array per quantity rather than a node object per state: an edge is then
-    a pair of indices and a sweep over a trellis step is one vectorized
-    gather, which is what the BCJR recursion needs.
+    The register holds ``m`` bits and the state is that word read as an integer
+    with the most recent bit *least* significant, so one step is a left shift
+    with the new bit entering at the bottom. One array per quantity rather than
+    a node object per state: an edge is a pair of indices and a sweep over a
+    trellis step is one vectorized gather, which is what the BCJR recursion
+    needs.
 
     Parameters
     ----------
@@ -132,12 +127,10 @@ class Trellis:
         ``(2, 2 ** m)`` ``int64``: ``source[u, s']`` is the state that enters
         ``s'`` on input ``u``. It exists because ``next_state[:, u]`` is a
         permutation --- two states differing only in their oldest cell get
-        different feedback values, since the feedback polynomial has its
-        ``D ** m`` term --- so the forward recursion is a *gather* through
-        this array rather than a scatter. `cProfile` over a ``K = 1024``
-        turbo decoding put 21.9% of self time in ``numpy.ufunc.at``, which
-        the scatter was; the field pays for itself against that measurement
-        and not against a guess.
+        different feedback values, the feedback polynomial having its ``D ** m``
+        term --- so the forward recursion is a *gather* through this array
+        rather than a scatter. `cProfile` over a ``K = 1024`` turbo decoding put
+        21.9% of self time in ``numpy.ufunc.at``, which the scatter was.
     """
 
     memory: int

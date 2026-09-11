@@ -9,10 +9,9 @@ successes, beta-binomial.
 
 **The seam.** The plan's step 2 (issue #399, second amendment) makes the pair
 one family, ``emissions.CountPairEmission``, in its independent and its joint
-form. Until that lands the independent form is what
-:class:`IndependentCountPair` computes here: two existing families side by
-side, their log-densities added, which is what the independent form of one
-family is. Every consumer already takes an
+form. Until that lands :class:`IndependentCountPair` computes the independent
+form here: two existing families side by side, their log-densities added. Every
+consumer already takes an
 :class:`~snakes_and_ladders.emissions.EmissionFamily`, so the swap is the
 constructor in :func:`load_spatio_sequential_counts_params` and nothing else.
 
@@ -62,17 +61,17 @@ class IndependentCountPair:
     """A total and a number of successes, drawn independently, per hidden state.
 
     The independent form of the two-channel emission: the negative binomial's
-    count and the beta-binomial's successes are drawn from separate streams
-    and their densities multiply, with the beta-binomial's trials fixed by the
-    state rather than taken from the total. The joint form --- trials equal to
-    the drawn total, a coverage and its allele count --- is
-    ``emissions.CountPairEmission``'s, and is not implemented here.
+    count and the beta-binomial's successes are drawn from separate streams and
+    their densities multiply, with the beta-binomial's trials fixed by the state
+    rather than taken from the total. The joint form --- trials equal to the
+    drawn total, a coverage and its allele count --- is
+    ``emissions.CountPairEmission``'s.
 
-    An observation is a pair, so every array this family sees carries a
-    trailing axis of length two: ``(..., 2)`` in, ``(..., n_states)`` out.
-    That is the one shape difference from a single-channel family, and it is
-    why :func:`snakes_and_ladders.sim.spatio_sequential.gated_log_density`
-    reads the leading two axes rather than unpacking all of them.
+    An observation is a pair, so every array this family sees carries a trailing
+    axis of length two: ``(..., 2)`` in, ``(..., n_states)`` out. That is the
+    one shape difference from a single-channel family, and why
+    :func:`snakes_and_ladders.sim.spatio_sequential.gated_log_density` reads the
+    leading two axes rather than unpacking all of them.
 
     Parameters
     ----------
@@ -85,8 +84,7 @@ class IndependentCountPair:
     ------
     ValueError
         If the two channels carry different numbers of states: they are two
-        views of one hidden state and cannot disagree about how many there
-        are.
+        views of one hidden state.
     """
 
     def __init__(
@@ -154,10 +152,10 @@ class IndependentCountPair:
         """Each channel's own M step, reported together.
 
         The channels are independent given the state, so the joint M step
-        separates; what does not separate is the report, and a caller must see
-        one refusal from either channel. ``converged`` is therefore the
-        conjunction and ``at_boundary`` the disjunction, with the larger
-        iteration count and residual of the two.
+        separates; the report does not, and a caller must see one refusal from
+        either channel. ``converged`` is therefore the conjunction and
+        ``at_boundary`` the disjunction, with the larger iteration count and
+        residual of the two.
         """
         first = self._total.reestimate(observations[..., TOTAL], posterior)
         second = self._successes.reestimate(observations[..., SUCCESSES], posterior)
@@ -187,13 +185,13 @@ class IndependentCountPair:
 def aggregate(family: IndependentCountPair, factor: int) -> IndependentCountPair:
     """The family a sum of ``factor`` consecutive draws is distributed under.
 
-    Exact for the negative-binomial channel and not for the other, which is
-    the point of separating them: a sum of ``f`` independent ``NB(r, mu)``
-    counts is ``NB(f r, f mu)``, while a sum of ``f`` beta-binomials is not
-    beta-binomial at all. The second channel is returned with its trials
-    multiplied by ``f`` and its ``(a, b)`` unchanged --- the binomial part of
-    the aggregation, which is the closest member of the family to the truth
-    and is the declared misspecification a coarse instance carries.
+    Exact for the negative-binomial channel and not for the other, which is the
+    point of separating them: a sum of ``f`` independent ``NB(r, mu)`` counts is
+    ``NB(f r, f mu)``, while a sum of ``f`` beta-binomials is not beta-binomial.
+    The second channel is returned with its trials multiplied by ``f`` and its
+    ``(a, b)`` unchanged --- the binomial part of the aggregation, the closest
+    member of the family to the truth and the declared misspecification a coarse
+    instance carries.
 
     Parameters
     ----------
