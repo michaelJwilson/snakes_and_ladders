@@ -1,9 +1,7 @@
 """Fitch and Sankoff parsimony, and the region where being wrong is the prediction.
 
-Two kinds of test, and the second is the reason the module exists.
-
 The algorithms are pinned against exhaustive enumeration over internal-node
-labellings, sharing no traversal with it --- the same relationship
+labellings, sharing no traversal with it --- the relationship
 `brute_force_log_likelihood` has to the pruning recursion. The score is an
 integer, so agreement is equality and not a tolerance. Sankoff is pinned
 twice: by reduction to Fitch under the unit step matrix on every topology of
@@ -12,10 +10,10 @@ directed edge costs of a planted asymmetric matrix.
 
 Then the zones. In the *Felsenstein zone* parsimony is statistically
 inconsistent: its error rate converges to 1, not 0, as sites increase. That is
-a theorem, so a test can assert it as a prediction rather than discover it as
-a defect. The *Farris zone* is the control that makes the first
-interpretable --- move the same two long branches to be adjacent and parsimony
-becomes correct and fast. An implementation that is simply broken fails both.
+a theorem, so a test asserts it as a prediction rather than discovering it as
+a defect. The *Farris zone* is the control that makes the first interpretable
+--- move the same two long branches to be adjacent and parsimony becomes
+correct and fast. An implementation that is simply broken fails both.
 """
 
 from __future__ import annotations
@@ -83,9 +81,9 @@ def _recovery_rates(tau: Node, n_sites: int, replicates: int) -> tuple[int, int]
 
 @pytest.mark.oracle
 def test_fitch_matches_exhaustive_enumeration_over_internal_labellings() -> None:
-    # The oracle assigns states to internal nodes directly and counts
-    # disagreeing edges; Fitch intersects state sets in one post-order pass.
-    # No traversal is shared, so agreement is evidence rather than a tautology.
+    # The oracle assigns states to internal nodes and counts disagreeing edges;
+    # Fitch intersects state sets in one post-order pass. No traversal is
+    # shared, so agreement is evidence rather than a tautology.
     rng = np.random.default_rng(0)
     tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
 
@@ -125,8 +123,8 @@ def test_a_constant_alignment_needs_no_changes() -> None:
 
 @pytest.mark.edge_case
 def test_a_missing_leaf_is_refused() -> None:
-    # Silently scoring the subtree it can reach would return a smaller number
-    # for the wrong reason, and smaller is better under this criterion.
+    # Silently scoring the subtree it can reach returns a smaller number for
+    # the wrong reason, and smaller is better under this criterion.
     tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
     alignment = {name: np.zeros(5, dtype=np.int64) for name in ("A", "B", "C")}
 
@@ -281,10 +279,10 @@ def test_sankoff_refuses_what_fitch_refuses() -> None:
 @pytest.mark.simulated_truth
 @pytest.mark.release
 def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
-    # The theorem, as a prediction. Parsimony does not merely do badly here --
-    # more data does not help, because the systematic pull toward grouping the
-    # two long branches grows with the data exactly as the true signal does.
-    # Measured over 12 replicates: 0/12 correct at 200, 1000 and 5000 sites.
+    # The theorem, as a prediction. More data does not help: the systematic
+    # pull toward grouping the two long branches grows with the data as the
+    # true signal does. Measured over 12 replicates: 0/12 correct at 200,
+    # 1000 and 5000 sites.
     few_parsimony, _ = _recovery_rates(FELSENSTEIN_ZONE, n_sites=200, replicates=6)
     many_parsimony, _ = _recovery_rates(FELSENSTEIN_ZONE, n_sites=2000, replicates=6)
 
@@ -295,9 +293,9 @@ def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
 @pytest.mark.simulated_truth
 @pytest.mark.release
 def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
-    # The other half of the same claim, and the reason the zone is the
-    # canonical argument for the criterion this repository actually uses.
-    # Measured: 10/12 at 200 sites, 12/12 at 1000 and 5000.
+    # The other half of the same claim, and why the zone is the canonical
+    # argument for the criterion this repository uses. Measured: 10/12 at 200
+    # sites, 12/12 at 1000 and 5000.
     _, few_likelihood = _recovery_rates(FELSENSTEIN_ZONE, n_sites=200, replicates=6)
     _, many_likelihood = _recovery_rates(FELSENSTEIN_ZONE, n_sites=2000, replicates=6)
 
@@ -321,14 +319,13 @@ def test_parsimony_is_correct_and_fast_in_the_farris_zone() -> None:
 @pytest.mark.mathematical
 def test_a_zero_length_internal_branch_leaves_the_three_topologies_tied() -> None:
     # An analytic corner: with no internal branch there is no split to detect,
-    # so no topology should be preferred and a strict preference would be
-    # reading noise as signal.
+    # so a strict preference would be reading noise as signal.
     #
     # Asserted across seeds rather than by a spread threshold on one. A single
     # replicate always has a winner -- measured spreads of 0.5% to 3.3% -- so
     # a threshold either passes trivially or fails on an unlucky draw. What
-    # says "no signal" is that the winner is *uniform*: over 30 seeds each of
-    # the three topologies won 12, 9 and 9 times.
+    # says "no signal" is a *uniform* winner: over 30 seeds the three
+    # topologies won 12, 9 and 9 times.
     star = Node(
         "root",
         None,

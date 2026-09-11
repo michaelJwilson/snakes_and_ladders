@@ -1,21 +1,19 @@
 """What the citation-driven figure selection must guarantee.
 
 The build regenerates only the figures the documents under ``docs/tex/`` cite,
-and the release gate regenerates the rest (issue #154). That trade is only
-sound if three things hold, and each is asserted here: a document can never cite a
-figure the build skips, no committed figure falls outside the release gate's
-reach, and a rotted figure is still caught -- by the per-PR path when the
-document cites it, and by the release path when it does not.
+and the release gate regenerates the rest (issue #154). Three things make that
+trade sound, each asserted here: a document can never cite a figure the build
+skips, no committed figure falls outside the release gate's reach, and a
+rotted figure is still caught -- by the per-PR path when the document cites
+it, by the release path when it does not.
 
 Since issue #492 the correspondence is a bijection and is asserted as one.
-``infra/check_citations.py`` covers cited-but-missing; the other direction,
-a figure the manifest renders and no document cites, is
+``infra/check_citations.py`` covers cited-but-missing; the other direction is
 ``test_every_manifest_figure_is_cited_by_a_document`` below. The two orphans
-that direction was written for, ``sim_problem_sizes`` and
-``topology_accuracy``, were rendered on every release and read by nobody. The
-selection tests that used to rely on their existence now construct the
-uncited case in ``tmp_path`` instead, so they check the mechanism rather than
-a state of the repository that is now forbidden.
+it was written for, ``sim_problem_sizes`` and ``topology_accuracy``, were
+rendered on every release and read by nobody. The selection tests that relied
+on their existence construct the uncited case in ``tmp_path`` instead, so they
+check the mechanism rather than a state of the repository now forbidden.
 """
 
 from __future__ import annotations
@@ -71,13 +69,12 @@ def test_every_committed_figure_has_a_manifest_entry() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_every_manifest_figure_is_cited_by_a_document() -> None:
-    # Issue #492's invariant, and the half `infra/check_citations.py` does not
-    # cover: that script fails a citation with no figure, and this fails a
-    # figure with no citation. An uncited figure is rendered by the release
-    # gate and read by nobody, so nothing ever decides whether it is right --
-    # which is how `sim_problem_sizes` and `topology_accuracy` sat stale on
-    # `main` for eight releases. A figure whose document has no room for it is
-    # deleted with its renderer, not left rendering.
+    # Issue #492's invariant, the half `infra/check_citations.py` does not
+    # cover: that script fails a citation with no figure, this fails a figure
+    # with no citation. An uncited figure is rendered by the release gate and
+    # read by nobody, so nothing decides whether it is right -- which is how
+    # `sim_problem_sizes` and `topology_accuracy` sat stale on `main` for
+    # eight releases.
     uncited = {spec.stem for spec in FIGURES} - cited_stems(*DOCUMENTS)
 
     assert uncited == set(), (
@@ -193,13 +190,12 @@ def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None
     # `--all` passes over a figure the given document does not cite, and
     # `--check --all` catches it.
     #
-    # The document is written here rather than taken from `docs/tex/`. Every
-    # committed figure is cited since #492, so the repository no longer
-    # supplies this case -- and a version of this test that kept reading the
-    # real documents would still have passed, for the unrelated reason that
-    # the rotted figure's *stamp* was copied intact and the staleness cache
-    # skipped it. That would be the release gate's guarantee asserted by the
-    # cache's behaviour, which is the substitution this module exists to deny.
+    # The document is written here rather than taken from `docs/tex/`: every
+    # committed figure is cited since #492. A version reading the real
+    # documents would still have passed, for the unrelated reason that the
+    # rotted figure's *stamp* was copied intact and the staleness cache
+    # skipped it -- the release gate's guarantee asserted by the cache's
+    # behaviour, the substitution this module exists to deny.
     output_dir = tmp_path / "figures"
     output_dir.mkdir()
     for path in COMMITTED_FIGURES.iterdir():
@@ -238,11 +234,11 @@ def test_check_catches_an_uncited_figure_that_has_rotted(tmp_path: Path) -> None
 def test_a_figure_only_the_textbook_cites_is_still_selected(
     tmp_path: Path,
 ) -> None:
-    # The seam the split turns on. The selection is the *union* of what the
-    # documents cite, so a figure the paper does not mention is regenerated
-    # per pull request because the textbook does. Deriving it from one
-    # document would stop regenerating the other's figures and fail nothing --
-    # issue #154's defect in mirror image (issue #249).
+    # The selection is the *union* of what the documents cite, so a figure the
+    # paper does not mention is regenerated per pull request because the
+    # textbook does. Deriving it from one document would stop regenerating the
+    # other's figures and fail nothing -- issue #154's defect mirrored (issue
+    # #249).
     paper = tmp_path / "paper.tex"
     paper.write_text(r"\includegraphics{figures/sim_example}")
     textbook = tmp_path / "textbook.tex"
@@ -255,10 +251,9 @@ def test_a_figure_only_the_textbook_cites_is_still_selected(
 
 @pytest.mark.structural
 def test_leaving_a_document_out_selects_the_wrong_set(tmp_path: Path) -> None:
-    # The paired half: the guard above is only worth having if the mistake it
-    # forbids is one that changes the answer. It is -- the textbook's figure
-    # disappears from the selection, silently, and every other check still
-    # passes.
+    # The paired half: the mistake the guard forbids changes the answer -- the
+    # textbook's figure disappears from the selection silently, and every other
+    # check still passes.
     paper = tmp_path / "paper.tex"
     paper.write_text(r"\includegraphics{figures/sim_example}")
     textbook = tmp_path / "textbook.tex"
@@ -290,9 +285,9 @@ def test_the_documents_the_build_defaults_to_all_exist() -> None:
 def test_the_textbook_names_no_code() -> None:
     # The separation the split is for (issue #249): the textbook states
     # problem formulations, algorithms and the properties that referee them,
-    # and none of that depends on how any of it is implemented. A module path,
-    # a filename or a function call in it is application documentation wearing
-    # a textbook's clothes.
+    # none of which depends on how they are implemented. A module path, a
+    # filename or a function call in it is application documentation wearing a
+    # textbook's clothes.
     textbook = next(
         document for document in DOCUMENTS if document.name == "textbook.tex"
     )

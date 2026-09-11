@@ -2,13 +2,13 @@
 
 The neighbourhood weight is held to the enumerated one where they coincide
 (four taxa under NNI, where the neighbourhood is every other topology) and
-bounded by it where they do not; the bootstrap is held to its definition;
-and the enumerated weight, which is exact, is calibrated on simulated data:
-the fraction of returned trees equal to the generating one rises with the
-support reported (issue #270). The same two weights over the labellings of
-a factor graph are held to `enumerate_potts` at `beta = 1` and to the
-enumerated path posterior, and the calibration is re-measured at seven and
-eight taxa behind the release gate (issue #331).
+bounded by it where they do not; the bootstrap to its definition; and the
+exact enumerated weight is calibrated on simulated data, the fraction of
+returned trees equal to the generating one rising with the support reported
+(issue #270). The same two weights over the labellings of a factor graph are
+held to `enumerate_potts` at `beta = 1` and to the enumerated path posterior,
+and the calibration is re-measured at seven and eight taxa behind the release
+gate (issue #331).
 """
 
 from __future__ import annotations
@@ -168,10 +168,9 @@ def test_the_generating_splits_have_full_bootstrap_support_at_many_sites() -> No
 @pytest.mark.simulated_truth
 @pytest.mark.release
 def test_the_enumerated_support_is_calibrated_on_simulated_data() -> None:
-    # The test the ticket names: bin the returned trees by the support they
-    # report and the fraction that equal the generating topology must not
-    # fall as the support rises. Site counts from 30 to 300 spread the runs
-    # across the bins; six seeds each.
+    # Bin the returned trees by the support they report; the fraction equal to
+    # the generating topology must not fall as the support rises. Site counts
+    # from 30 to 300 spread the runs across the bins; six seeds each.
     params = load_simulation_params(fixture_path(FIVE_TAXA))
     truth = leaf_bipartitions(params.tau)
     edges = (0.0, 0.5, 0.9, 1.0 + 1e-12)
@@ -215,12 +214,12 @@ def _calibration_bins(
 def test_the_neighbourhood_and_bootstrap_supports_are_calibrated_at_seven_and_eight_taxa(
     fixture: str, n_taxa: int
 ) -> None:
-    # The five-taxon calibration above, at the sizes where the enumerated
-    # weight is no longer affordable (945 fits per tree at seven taxa;
-    # refused at eight), so the quantities a search there can report are
-    # the ones binned: the NNI neighbourhood weight, and the bootstrap as a
-    # tree-level statistic -- the smallest support over the tree's internal
-    # splits, since the tree is right only if every split is. Four site
+    # The five-taxon calibration above, where the enumerated weight is no
+    # longer affordable (945 fits per tree at seven taxa; refused at eight),
+    # so what is binned is what a search there can report: the NNI
+    # neighbourhood weight, and the bootstrap as a tree-level statistic --
+    # the smallest support over the tree's internal splits, since the tree is
+    # right only if every split is. Four site
     # counts, four seeds, eight replicates: 16 runs per taxon count, about
     # 10 min at seven taxa and 30 at eight. The realized tables are in
     # `STATUS.md`; the assertion is that neither fraction falls from one
@@ -281,11 +280,11 @@ def test_the_single_site_neighbourhood_is_the_whole_space_only_where_one_site_is
     None
 ):
     # On a two-site chain the single-site flips reach 5 of the 9 labellings:
-    # the four that change both sites are two moves away, so the
-    # neighbourhood weight is the enumerated one renormalized over that
-    # ball, and larger. Clamp one site by an indicator factor, as a leaf's
-    # observed state clamps a tree's, and the ball is every labelling with
-    # weight, so the two agree to 1e-12.
+    # the four changing both sites are two moves away, so the neighbourhood
+    # weight is the enumerated one renormalized over that ball, and larger.
+    # Clamp one site by an indicator factor, as a leaf's observed state clamps
+    # a tree's, and the ball is every labelling with weight, so the two agree
+    # to 1e-12.
     labelling = np.array([1, 0])
     free = _two_site_chain(None)
     near, exact = (
