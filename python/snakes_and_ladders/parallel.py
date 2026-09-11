@@ -2,8 +2,8 @@
 
 Every loop this repository runs over independent work -- restarts of a fit,
 seeds of a budgeted comparison, bootstrap replicates -- ran serially, and each
-would have grown its own pool. This module is the one place a pool is made,
-under two rules that come before any speedup:
+would have grown its own pool. This is the one place a pool is made, under two
+rules that come before any speedup:
 
 * **A parallel run is bitwise equal to the serial run.** Randomness enters as
   one generator per task, spawned from the caller's generator with
@@ -15,16 +15,15 @@ under two rules that come before any speedup:
   machine (root ``CLAUDE.md``, Runtime Optimization Opportunities).
 
 ``torch`` and BLAS already multithread inside a kernel, so a pool of workers
-each running a multithreaded kernel oversubscribes the machine. The intra-op
-thread count is set per worker, explicitly, by ``intra_op_threads``; the
-serial backend applies the same count, so the two runs execute the same
-kernels with the same reduction order. ``DEV.md`` carries the measured rule
-and the hardware it was measured on.
+each running a multithreaded kernel oversubscribes the machine.
+``intra_op_threads`` sets the count per worker explicitly, and the serial
+backend applies the same count, so the two runs execute the same kernels with
+the same reduction order. ``DEV.md`` carries the measured rule and the hardware.
 
-The process backend uses the ``spawn`` start method, the one that works with
-``torch`` and on Apple Silicon. Spawned workers import the package afresh, a
-fixed cost per pool that ``STATUS.md`` reports beside each speedup; a
-function sent to it must be importable by name, and its items picklable.
+The process backend uses the ``spawn`` start method, which works with ``torch``
+and on Apple Silicon. Spawned workers import the package afresh, a fixed cost
+per pool that ``STATUS.md`` reports beside each speedup; a function sent to it
+must be importable by name, and its items picklable.
 """
 
 from __future__ import annotations
@@ -57,8 +56,8 @@ def _set_intra_op_threads(count: int) -> int:
 def _intra_op_threads(count: int | None) -> Iterator[None]:
     """Run the block with ``torch`` at ``count`` intra-op threads, then restore.
 
-    ``None`` leaves the setting alone, so a caller that does not name a count
-    keeps whatever the process had.
+    ``None`` leaves the setting alone, so a caller naming no count keeps
+    whatever the process had.
     """
     if count is None:
         yield
