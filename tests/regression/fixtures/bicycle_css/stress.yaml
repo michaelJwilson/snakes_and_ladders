@@ -1,0 +1,18 @@
+model: bicycle-css
+oracle: none
+
+# The CSS code at the length the classical stress fixture carries, with rows
+# deleted far enough to encode something. Every field is required -- see
+# python/snakes_and_ladders/sim/css.py.
+#
+# 2**96 errors cannot be enumerated, so no oracle stands here and no gap to
+# exact degenerate maximum likelihood can be quoted: what is reported is the
+# decoder's own logical error rate and which of the two failures it made.
+# n_checks = 48 would give k = 0, as it does at 12 bits; 40 gives rank 40 and
+# k = 16.
+seed: 361
+n_bits: 96
+n_checks: 40
+circulant_weight: 3
+
+flip_probability: 0.02

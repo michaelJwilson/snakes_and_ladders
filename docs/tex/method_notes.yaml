@@ -112,6 +112,14 @@
     two at every length and channel setting measured against a random draw of
     the same degrees.
 
+"Calderbank–Shor–Steane code over a bicycle matrix":
+  optimizers: >-
+    The same decoder, asked a different question: the residual it leaves is
+    scored on whether it is a stabilizer rather than on whether it is zero. It
+    is measured against exact degenerate maximum likelihood, which sums a
+    coset rather than maximizing over one error, and the gap is the price of
+    the four-cycles the self-orthogonality H H^T = 0 forces into the graph.
+
 "Turbo code, two (7,5) recursive systematic encoders":
   optimizers: >-
     BCJR is exact on one constituent code, since a terminated trellis is a

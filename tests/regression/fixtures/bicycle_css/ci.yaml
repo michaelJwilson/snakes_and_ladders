@@ -1,0 +1,33 @@
+model: bicycle-css
+oracle: enumeration
+
+# The CSS code Hx = Hz = H over a bicycle matrix, at the length every error
+# enumerates. Every field is required -- see
+# python/snakes_and_ladders/sim/css.py and sim/CLAUDE.md.
+#
+# The oracle here enumerates 2**n errors, not 2**k codewords: at n = 16 that
+# is 65,536, inside the 200,000 the enumeration policy allows, and n = 17 is
+# the ceiling. That is a different ceiling from the classical section's and
+# is why this instance is longer than the 12-bit bicycle fixture beside it.
+#
+# n_checks is 7 and not 8. At n_checks = n / 2 the code has
+# k = n - 2 rank(H) = 0 logical qubits, so every decode of it succeeds for
+# that reason alone and the fixture would measure nothing
+# (search/CLAUDE.md). Deleting one row gives rank 7 and k = 2.
+#
+# The seed is 1 and not the 361 the classical bicycle fixtures carry. At 361
+# this length draws a code whose coset probabilities tie at 34 of its 128
+# syndromes and whose degenerate-ML and single-error-ML logical error rates
+# are equal to every digit: a fixture that would measure a tie-break rather
+# than the difference degeneracy makes (sim/CLAUDE.md, on degenerate
+# fixtures). At seed 1 no syndrome ties at the declared rate, the two
+# decoders differ, and the margin is pinned.
+seed: 1
+n_bits: 16
+n_checks: 7
+circulant_weight: 3
+
+# The per-qubit X error rate. The erasure and Gaussian channels of sec:ldpc
+# describe a received symbol; a qubit is not measured, so this sector
+# declares one parameter and no others.
+flip_probability: 0.05
