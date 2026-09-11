@@ -1,11 +1,10 @@
 """Gradient-based fitting, and the intervals that make a fit falsifiable.
 
-Model-agnostic, like everything else in this package: ``fit`` takes an
-:class:`~snakes_and_ladders.opt.objective.Objective` and knows nothing about what it
-optimizes. ``opt/CLAUDE.md`` makes recovery the acceptance test, and recovery
-needs an interval, so the observed-information machinery lives here rather
-than in a test -- a standard error computed once in a test is not available
-to the next instance.
+Model-agnostic: ``fit`` takes an
+:class:`~snakes_and_ladders.opt.objective.Objective` and knows nothing about
+what it optimizes. ``opt/CLAUDE.md`` makes recovery the acceptance test, and
+recovery needs an interval, so the observed-information machinery lives here
+rather than in a test.
 
 **Convergence is judged relatively.** The objective is a summed
 log-likelihood, so both it and its gradient scale with the data; an absolute
@@ -71,10 +70,8 @@ class FitResult:
         caller can inspect it; every test here asserts this is ``True``.
     standard_errors : Mapping[str, torch.Tensor] | None
         Delta-method standard errors at ``theta`` under :meth:`constrain`'s
-        keys, when the fit was asked for them (``include_intervals``);
-        ``None`` otherwise. ``None`` means *not requested*, never *refused*: a
-        point where the information is singular raises instead, so a caller
-        cannot mistake a missing interval for one that could not exist.
+        keys, when ``include_intervals`` asked for them. ``None`` means *not
+        requested*, never *refused*: a singular information raises instead.
     """
 
     theta: torch.Tensor
@@ -96,10 +93,9 @@ def fit(
     """Minimize ``objective`` by L-BFGS with a strong-Wolfe line search.
 
     L-BFGS rather than a first-order method because the acceptance test is
-    parameter recovery, not a decreasing loss: an interval built from the
-    observed information is only meaningful at a point where the gradient is
-    actually zero, and reaching that to nine digits with Adam takes orders of
-    magnitude more steps.
+    parameter recovery: an interval from the observed information is only
+    meaningful where the gradient is actually zero, and reaching that to nine
+    digits with Adam takes orders of magnitude more steps.
 
     Parameters
     ----------
@@ -124,10 +120,10 @@ def fit(
     Raises
     ------
     ValueError
-        If an interval was asked for and the fit did not converge. The
+        If an interval was asked for and the fit did not converge: the
         observed information is a statement about a maximum, and a point the
-        optimizer left early is not one; without the flag the unconverged fit
-        is returned for inspection as before.
+        optimizer left early is not one. Without the flag the unconverged fit
+        is returned for inspection.
     """
     theta = (
         (objective.initial() if theta0 is None else theta0)
@@ -235,21 +231,19 @@ def parameter_covariance(
     """Inverse observed information: the asymptotic covariance of ``theta``.
 
     Conditioning is checked rather than left to ``torch.linalg.inv``. A model
-    with an exactly flat direction produces an information matrix that is
-    only *numerically* singular -- rounding leaves its smallest eigenvalue at
-    1e-4 rather than 0 -- so the inversion succeeds and returns an
-    astronomically large covariance instead of failing. Silently returning a
-    meaningless interval is worse than raising.
+    with an exactly flat direction produces an information matrix that is only
+    *numerically* singular -- rounding leaves its smallest eigenvalue at 1e-4
+    rather than 0 -- so the inversion succeeds and returns an astronomically
+    large covariance instead of failing.
 
     Parameters
     ----------
     objective : Objective
         The fitted objective.
     theta : torch.Tensor
-        Fitted parameters. This must be an optimum: the observed information
-        is a statement about curvature at a maximum, and away from one the
-        Hessian need not be positive definite, so a non-optimal point is
-        rejected by the same check that catches an unidentifiable model.
+        Fitted parameters. Must be an optimum: away from one the Hessian
+        need not be positive definite, so a non-optimal point is rejected by
+        the same check that catches an unidentifiable model.
     rcond : float
         Smallest acceptable ratio of the smallest to the largest eigenvalue
         of the observed information. The default separates the two cases by
@@ -268,10 +262,9 @@ def parameter_covariance(
     ValueError
         If the information is singular, indefinite, or worse conditioned than
         ``rcond``. All three mean the model as parameterized is not
-        identifiable from this data -- a gauge that was not fixed, a
-        confounded pair of parameters, or a sample too small to pin them.
-        Reported as such rather than as a linear-algebra error, because that
-        is the actual fault.
+        identifiable from this data -- an unfixed gauge, a confounded pair of
+        parameters, or too small a sample -- and are reported as such rather
+        than as a linear-algebra error.
     """
     information = observed_information(objective, theta)
     # Symmetric by construction, so eigvalsh is exact where a general
@@ -295,10 +288,9 @@ def constrained_standard_errors(
 ) -> Mapping[str, torch.Tensor]:
     """Delta-method standard errors of the *constrained* parameters.
 
-    Recovery is stated against the parameters a person named, not against the
-    unconstrained vector, so the covariance has to be pushed through the
-    constraint map: ``Var(g(theta)) ~ J Sigma J'`` with ``J`` the Jacobian of
-    ``g``.
+    Recovery is stated against the parameters a person named, so the
+    covariance is pushed through the constraint map:
+    ``Var(g(theta)) ~ J Sigma J'`` with ``J`` the Jacobian of ``g``.
 
     Parameters
     ----------
@@ -333,18 +325,13 @@ def standard_errors_at(
 
     The door every optimizer can use. :func:`constrained_standard_errors`
     takes a ``theta``, which only a gradient fit has; this takes the
-    parameters themselves, which every fit has, and carries them back through
+    parameters themselves and carries them back through
     :meth:`Objective.theta_from` (issue #268).
 
-    **The refusals are the point, and they are unchanged.** An interval from
-    a Hessian is a statement about a *maximum*, and three things here are not
-    one: a variance at its floor, where the likelihood is unbounded and there
-    is no maximum to expand around; a dispersion at its identifiable bound,
-    where the likelihood is flat and the curvature is numerically
-    indistinguishable from zero; and any point that is simply not an optimum.
-    :func:`parameter_covariance` refuses all three, and this changes nothing
-    about that --- widening the entry point without widening the guard would
-    leave it firing in one code path out of four.
+    **The refusals are unchanged.** Three points are not maxima: a variance at
+    its floor, where the likelihood is unbounded; a dispersion at its
+    identifiable bound, where the likelihood is flat; and any point that is
+    not an optimum. :func:`parameter_covariance` refuses all three.
 
     Parameters
     ----------
@@ -400,10 +387,8 @@ class MultiStartResult:
         The lowest-valued fit. What a single-start caller would want.
     all_fits : tuple[FitResult, ...]
         Every fit, ordered by value ascending. Reported rather than discarded
-        because discarding them hides that the surface was multimodal, which is
-        exactly what `test_a_converged_fit_on_rastrigin_is_not_a_global_minimum`
-        exists to say out loud: a fit that reports one answer for a surface with
-        four basins is the failure this is about.
+        because discarding them hides that the surface was multimodal ---
+        `test_a_converged_fit_on_rastrigin_is_not_a_global_minimum`'s case.
     spread : float
         ``max(value) - min(value)`` over the fits. Zero means every start
         agreed, which is the evidence that one start would have sufficed;
@@ -432,9 +417,8 @@ def fit_from(
 ) -> MultiStartResult:
     """Fit from every start an initializer offers, and report all of them.
 
-    A single-start initializer makes this exactly :func:`fit`, so the two are
-    not different code paths: `FromObjective` reproduces today's behaviour and
-    `spread` is then 0 by construction.
+    A single-start initializer makes this exactly :func:`fit`:
+    `FromObjective` reproduces today's behaviour and `spread` is then 0.
 
     Parameters
     ----------
@@ -456,9 +440,8 @@ def fit_from(
         pass ``1`` until a measurement on their hardware says otherwise.
     include_intervals : bool
         Attach standard errors to ``best`` only --- one Hessian rather than
-        one per start, and the only fit whose interval a caller reads. The
-        interval is conditional on the mode ``best`` sits in, and ``spread``
-        beside it is what says how much that conditioning matters.
+        one per start. The interval is conditional on the mode ``best`` sits
+        in, and ``spread`` beside it says how much that matters.
 
     Returns
     -------
@@ -468,9 +451,8 @@ def fit_from(
     Raises
     ------
     ValueError
-        If the initializer offers no starts, or ``workers`` is below one. A
-        caller asking for zero fits has made a mistake that would otherwise
-        surface as an empty ``min``.
+        If the initializer offers no starts, or ``workers`` is below one; the
+        first would otherwise surface as an empty ``min``.
     """
     starts = initializer.starts(objective)
     if not starts:
