@@ -64,13 +64,13 @@ from snakes_and_ladders.search.surrogate import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import PottsSpotsParams
+from snakes_and_ladders.sim.potts import SpatioOnlyParams
 
 #: Loaded once each: a lattice and a field per rung, from which every instance
 #: below is redrawn.
-CI: PottsSpotsParams = fixture("potts_spots", "ci").params
-STRESS: PottsSpotsParams = fixture("potts_spots", "stress").params
-RELEASE: PottsSpotsParams = fixture("potts_spots", "release").params
+CI: SpatioOnlyParams = fixture("spatio_only", "ci").params
+STRESS: SpatioOnlyParams = fixture("spatio_only", "stress").params
+RELEASE: SpatioOnlyParams = fixture("spatio_only", "release").params
 
 #: Adam for at most this many epochs, stopped this long after the validation
 #: error last improved. Both are below `fit_surrogate`'s own defaults, and the

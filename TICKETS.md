@@ -141,7 +141,7 @@ parenthesis the only way a ticket is cited.
   model into its own family, so the coarse model is evaluated exactly at
   `ci` and the surrogate's error is analysable rather than only measured
   (#365)
-- A patched or transformer form at `potts_spots/release`, against the graph
+- A patched or transformer form at `spatio_only/release`, against the graph
   surrogate at matched parameter count and training budget — conditional on
   the graph form degrading with size, which it has not (#365)
 - Self-attention over 5,041 tokens, whose weight matrix is quadratic in the

@@ -7,7 +7,7 @@ Correctness is pinned in ``tests/regression/likelihood/test_surrogate.py``
 and ``tests/regression/search/test_search_lattice_surrogate.py``.
 
 The lattice bounds are timed against a **per-site** field, the shape the
-`potts_spots` fixtures declare, since that is the shape the feature vector
+`spatio_only` fixtures declare, since that is the shape the feature vector
 pays for.
 """
 
@@ -43,7 +43,7 @@ from tests._fixtures import load_fixture
 
 FIVE_TAXA = "tree_search/ci.yaml"
 FIELD = np.array([0.3, -0.2, 0.1])
-#: One field row per site of the 3x3 lattice, which is what the `potts_spots`
+#: One field row per site of the 3x3 lattice, which is what the `spatio_only`
 #: fixtures declare and what the lattice features are assembled from.
 SITE_FIELD = np.random.default_rng(365).normal(0.0, 0.4, (9, 3))
 

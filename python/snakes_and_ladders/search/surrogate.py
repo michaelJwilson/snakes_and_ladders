@@ -41,7 +41,7 @@ from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.infer import Model, score_topology
 from snakes_and_ladders.search.topology import Topology
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import PottsSpotsParams, spots_field
+from snakes_and_ladders.sim.potts import SpatioOnlyParams, spatio_only_field
 from snakes_and_ladders.sim.tree import Node
 
 TreeTarget = Callable[[Topology, Mapping[str, np.ndarray]], float]
@@ -154,7 +154,7 @@ def ground_state_offset(
 
 
 def lattice_instances(
-    params: PottsSpotsParams, n_groups: int, per_group: int
+    params: SpatioOnlyParams, n_groups: int, per_group: int
 ) -> tuple[list[PottsGraph], list[np.ndarray], list[int]]:
     """``n_groups * per_group`` instances of the declared family, grouped by draw.
 
@@ -176,7 +176,7 @@ def lattice_instances(
             rng = np.random.default_rng([params.seed, group, member])
             sizes = np.exp(rng.normal(0.0, log_sigma, params.graph.n_nodes))
             graphs.append(params.graph)
-            fields.append(spots_field(params.alpha, sizes))
+            fields.append(spatio_only_field(params.alpha, sizes))
             groups.append(group)
     return graphs, fields, groups
 
@@ -223,7 +223,7 @@ def ground_state_target(
 
     ``backend`` reaches :func:`~snakes_and_ladders.search.alpha_expansion.expand`'s
     minimum cut and nothing else. Both settle on the same labelling, the cut
-    being deterministic, and on ``potts_spots/release.yaml`` both return
+    being deterministic, and on ``spatio_only/release.yaml`` both return
     ``-10454.156290057308``.
     """
 

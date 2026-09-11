@@ -11,7 +11,7 @@ saturated bounds on ``log Z``.
 **Every lattice feature costs ``O(N + E)``, and that is a constraint rather
 than a preference** (issue #365). The spanning-tree bound is one exact tree
 pass per edge and does not reach the 5,041 sites of
-``potts_spots/release.yaml``; belief propagation takes a shared field only;
+``spatio_only/release.yaml``; belief propagation takes a shared field only;
 and the energy alpha-expansion reaches *is* the target a release-size
 surrogate is fitted to, so reading it as a feature would predict the target
 from itself. All three were features here before that fixture existed, and
@@ -71,7 +71,7 @@ LATTICE_FEATURE_NAMES = (
 )
 #: Unrolled mean-field iterations the lattice feature takes. The bound holds
 #: at every iterate, so this trades tightness for cost: measured against 400
-#: iterations on the three ``potts_spots`` instances, 80 leaves 2.1e-10 at
+#: iterations on the three ``spatio_only`` instances, 80 leaves 2.1e-10 at
 #: 5,041 sites and nothing at 9 or 72, at two fifths of the 200 the bound's
 #: own default takes.
 MEAN_FIELD_ITERATIONS = 80
