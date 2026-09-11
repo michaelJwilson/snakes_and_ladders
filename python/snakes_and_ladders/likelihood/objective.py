@@ -1,11 +1,10 @@
 """The phylogenetic instance of ``snakes_and_ladders.opt.objective.Objective``.
 
-It lives here rather than in ``snakes_and_ladders.opt`` because ``opt/CLAUDE.md`` forbids
-that package from importing any application module, and a test enforces it
-(issue #63). The dependency runs one way -- an application knows the
-optimization vocabulary, the optimizer knows no models -- and this file is
-that direction made concrete: it imports ``snakes_and_ladders.opt.constrain`` and is
-imported by nothing in ``snakes_and_ladders.opt``.
+It lives here rather than in ``snakes_and_ladders.opt`` because
+``opt/CLAUDE.md`` forbids that package from importing any application module,
+and a test enforces it (issue #63): this file imports
+``snakes_and_ladders.opt.constrain`` and is imported by nothing in
+``snakes_and_ladders.opt``.
 
 **Not every branch length is identifiable, and which ones are depends on the
 root.** Under a reversible model the likelihood is invariant to where the
@@ -18,10 +17,10 @@ while the same shift between two non-root siblings moves it by 14.7. Fitting
 them separately would leave the observed information singular and every
 confidence interval undefined.
 
-So the pair is fitted as **one** parameter and reported as its sum. On a tree
-in the trifurcating-root convention there is no such pair and every branch is
-estimable, which is the usual reason phylogenetic inference is done on
-unrooted topologies.
+So the pair is fitted as **one** parameter and reported as its sum. In the
+trifurcating-root convention there is no such pair and every branch is
+estimable, which is why phylogenetic inference is usually done on unrooted
+topologies.
 """
 
 from __future__ import annotations
@@ -221,13 +220,11 @@ class BranchLengthObjective:
 
         The inverse of :meth:`theta_from_truth`, and the form anything that
         draws or serializes a fitted tree needs --- ``pruning_torch`` keeps
-        lengths out of the ``Node`` structure, which is right for
-        differentiation and wrong for display.
+        lengths out of the ``Node`` structure.
 
         On a rooted binary tree the estimable sum is split evenly between the
-        two root branches, per :meth:`branch_lengths`. That is a drawing
-        convention, which is exactly what this method is for; neither half is
-        an estimate.
+        two root branches, per :meth:`branch_lengths`. A drawing convention:
+        neither half is an estimate.
 
         Parameters
         ----------
@@ -257,11 +254,10 @@ class BranchLengthObjective:
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The unconstrained vector whose :meth:`constrain` is ``named``.
 
-        The inverse of the constraint map, keyed exactly as :meth:`constrain`
-        returns (issue #268). Only the estimable branch lengths appear, as in
-        :meth:`constrain`: a confounded pair is reported as the combination
-        that is identified, and there is nothing to invert for the parts that
-        are not.
+        The inverse of the constraint map, keyed as :meth:`constrain` returns
+        (issue #268). Only the estimable branch lengths appear: a confounded
+        pair is reported as the combination that is identified, and there is
+        nothing to invert for the rest.
 
         Parameters
         ----------
@@ -304,13 +300,13 @@ class SubstitutionModelObjective:
     """Fits branch lengths, GTR exchangeabilities and ``pi`` together.
 
     The follow-up to :class:`BranchLengthObjective`, and a modelling change
-    rather than an optimizer one: Jukes-Cantor has no free rate parameters,
-    so fitting ``Q`` and ``pi`` needs a model that has some
+    rather than an optimizer one: Jukes-Cantor has no free rate parameters, so
+    fitting ``Q`` and ``pi`` needs a model that has some
     (:mod:`snakes_and_ladders.sim.gtr`).
 
     **Three gauges, all load-bearing.** Each removes a direction along which
-    the likelihood is exactly flat, and a flat direction makes the observed
-    information singular and every interval undefined --- not merely wide.
+    the likelihood is exactly flat, which would make the observed information
+    singular and every interval undefined.
 
     * ``Q`` is normalized to one expected substitution per unit time, or it
       trades off against every branch length at once.
@@ -486,10 +482,9 @@ class SubstitutionModelObjective:
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The unconstrained vector whose :meth:`constrain` is ``named``.
 
-        The inverse of the constraint map, keyed exactly as :meth:`constrain`
-        returns (issue #268). The last exchangeability is pinned at 1 by the
-        gauge and so is dropped rather than inverted — it is not a free
-        parameter and has no coordinate to return to.
+        The inverse of the constraint map, keyed as :meth:`constrain` returns
+        (issue #268). The last exchangeability is pinned at 1 by the gauge and
+        is dropped rather than inverted.
 
         Parameters
         ----------
