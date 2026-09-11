@@ -3,6 +3,14 @@ description: Consolidate the repository and cut a release.
 title: "Release 0.5.0"
 labels: ["priority:high", "module:infra"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. This template's prompts count against that
+        once answered, so replace each with what it asks for rather than
+        adding to it, and put the evidence where it is refereed — `STATUS.md`
+        for a measurement, an experiment file for a sweep.
   - type: input
     id: version
     attributes:
@@ -31,8 +39,8 @@ body:
     attributes:
       label: Consistency audit
       value: |
-        Check `CLAUDE.md`, `DEV.md`, `README.md`, `INSTALL.md`, `ROADMAP.md`,
-        `docs/tex/` and the code against each other. Record what is stale, contradictory,
+        Check `CLAUDE.md`, `DEV.md`, `RELEASE.md`, `README.md`, `INSTALL.md`,
+        `ROADMAP.md`, `docs/tex/` and the code against each other. Record what is stale, contradictory,
         or duplicated (including duplicated machinery/code across modules), and fix it in this
         ticket's PR. Code duplication should be common language.
 

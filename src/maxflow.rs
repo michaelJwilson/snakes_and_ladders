@@ -281,11 +281,18 @@ fn node_indices(indices: &[i64]) -> PyResult<Vec<usize>> {
         .collect()
 }
 
-/// Maximum flow on an explicitly given network.
+/// Maximum flow on an explicitly given network, and the cut it certifies.
 ///
 /// `arcs` is `2 * n_arcs` flattened `(from, to)` pairs and `capacity` one
-/// entry per arc; back arcs are added automatically with zero capacity, so a
-/// caller wanting an undirected edge passes it twice.
+/// entry per arc. `reverse` is the back arc's capacity, one entry per arc:
+/// `None` leaves every back arc at zero, which is a directed network, and a
+/// caller wanting an undirected edge passes the same capacity in both.
+///
+/// Returns `(value, source_side)`. Until issue #528 this returned the value
+/// alone and discarded the side [`max_flow_impl`] had already built, which
+/// left `search.alpha_expansion` --- whose expansion step needs the cut and
+/// not the flow --- on the Python solver, at 49.0% of its self time. The
+/// side costs one `Vec<bool>` per call and no second traversal.
 ///
 /// **Arrays are borrowed, not copied.** The first binding took `Vec<usize>`
 /// and `Vec<f64>`, so PyO3 read one Python object per entry on the way in
@@ -293,14 +300,16 @@ fn node_indices(indices: &[i64]) -> PyResult<Vec<usize>> {
 /// `sampling::sample_rows` and `pruning::pruning_log_likelihood` already
 /// state.
 #[pyfunction]
-#[pyo3(signature = (n_nodes, arcs, capacity, source, sink))]
-pub fn max_flow(
+#[pyo3(signature = (n_nodes, arcs, capacity, source, sink, reverse=None))]
+pub fn max_flow<'py>(
+    py: Python<'py>,
     n_nodes: usize,
     arcs: PyReadonlyArray1<'_, i64>,
     capacity: PyReadonlyArray1<'_, f64>,
     source: usize,
     sink: usize,
-) -> PyResult<f64> {
+    reverse: Option<PyReadonlyArray1<'_, f64>>,
+) -> PyResult<(f64, Bound<'py, PyArray1<bool>>)> {
     // `as_slice` succeeds only for a C-contiguous array, the same contract
     // `sampling::sample_rows` states; the wrapper normalizes with
     // `ascontiguousarray`, free when the array already is one.
@@ -313,14 +322,32 @@ pub fn max_flow(
             capacity.len()
         )));
     }
+    let back = match reverse.as_ref() {
+        Some(array) => Some(array.as_slice()?),
+        None => None,
+    };
+    if let Some(back) = back {
+        if back.len() != capacity.len() {
+            return Err(PyValueError::new_err(format!(
+                "reverse has {} entries for {} capacities",
+                back.len(),
+                capacity.len()
+            )));
+        }
+    }
     let mut network = FlowNetwork::new(n_nodes);
     for (position, &weight) in capacity.iter().enumerate() {
         network
-            .add_edge(arcs[2 * position], arcs[2 * position + 1], weight, 0.0)
+            .add_edge(
+                arcs[2 * position],
+                arcs[2 * position + 1],
+                weight,
+                back.map_or(0.0, |back| back[position]),
+            )
             .map_err(PyValueError::new_err)?;
     }
-    let (value, _) = max_flow_impl(&mut network, source, sink).map_err(PyValueError::new_err)?;
-    Ok(value)
+    let (value, side) = max_flow_impl(&mut network, source, sink).map_err(PyValueError::new_err)?;
+    Ok((value, PyArray1::from_vec(py, side)))
 }
 
 /// The exact ground state of a two-state ferromagnetic Ising model.

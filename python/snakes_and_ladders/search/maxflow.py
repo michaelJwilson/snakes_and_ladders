@@ -73,6 +73,32 @@ class FlowNetwork:
         self.target.append(source)
         self.capacity.append(reverse)
 
+    def as_arrays(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The paired arcs as ``(arcs, capacity, reverse)``, one row per edge.
+
+        ``arcs`` is ``2 * n_edges`` flattened ``(from, to)`` pairs, and the
+        two capacity arrays are the forward and back arc of each. This is the
+        layout :mod:`snakes_and_ladders.search.maxflow_rust` crosses the
+        boundary with, and it is written here rather than there so the
+        paired-arc convention above has one reading: a second one, kept in
+        the module that consumes it, is a convention that can fall out of
+        step with the ``add_edge`` that produces it.
+
+        Residual capacities, after :func:`max_flow` has run, are what a
+        second call would see --- the arrays are read from the current state
+        and not from the network as it was built.
+        """
+        target = np.asarray(self.target, dtype=np.int64).reshape(-1, 2)
+        capacity = np.asarray(self.capacity, dtype=np.float64).reshape(-1, 2)
+        # Column 0 of a row is the head (`add_edge` appends the sink first),
+        # column 1 the tail, so the `(from, to)` order the binding takes is
+        # the reversed row.
+        return (
+            np.ascontiguousarray(target[:, ::-1]).reshape(-1),
+            np.ascontiguousarray(capacity[:, 0]),
+            np.ascontiguousarray(capacity[:, 1]),
+        )
+
 
 @dataclass(frozen=True)
 class MinCut:

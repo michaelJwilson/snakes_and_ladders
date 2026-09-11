@@ -14,6 +14,15 @@ a bound and the fixed timeout that reads it cannot coexist, because the
 timeout then cancels the pull requests the bound refused and a cancelled job
 is indistinguishable from a failing one.
 
+A cache decides *when* work is redone; it never decides whether a check runs.
+The two read the same way in a script and differ in what a wrong answer costs:
+a skipped rebuild is redone next time, and a skipped check is a claim nobody
+made. What bounds an expensive check is a stated budget and a tier, never a
+hash — and a cache is kept only while a measurement says it saves something,
+because one that is wrong on every decision it makes costs the renders it
+predicted and buys nothing. `DEV.md` carries what each check costs and what it
+buys.
+
 A worktree is created by `new_worktree.sh` rather than by a convention in a
 brief. A step a person repeats is a step a person skips, and each of the ones
 it replaces had already been skipped.

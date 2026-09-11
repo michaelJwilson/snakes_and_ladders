@@ -199,16 +199,16 @@ def test_the_comparison_imports_without_the_jupyter_stack() -> None:
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_every_notebook_given_is_executed_whatever_a_stamp_says(
+def test_every_notebook_given_is_executed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A digest may report staleness; it may not decide whether a check runs.
+    """Which notebooks a run checks is its arguments, and nothing else.
 
-    It decided until issue #480. `turbo.ipynb` was skipped for as long as no
-    diff reached its import closure, so the disagreement it had been carrying
-    (#507) surfaced only when an unrelated merge moved the hash and the check
-    ran for the first time in months. A stamp beside each notebook here says
-    "unchanged" as loudly as one can, and both notebooks are still executed.
+    A digest decided it until issue #480. `turbo.ipynb` was skipped for as
+    long as no diff reached its import closure, so the disagreement it had
+    been carrying (#507) surfaced only when an unrelated merge moved the hash
+    and the check ran for the first time in months. Issue #490 deleted the
+    digest and the stamps; this pins that every notebook named is run.
     """
     executed: list[Path] = []
 
@@ -222,7 +222,6 @@ def test_every_notebook_given_is_executed_whatever_a_stamp_says(
     for name in ("a", "b"):
         notebook = tmp_path / f"{name}.ipynb"
         notebook.write_text("{}")
-        notebook.with_suffix(".inputs").write_text("unchanged\n")
         notebooks.append(notebook)
 
     assert main([str(notebook) for notebook in notebooks]) == 0

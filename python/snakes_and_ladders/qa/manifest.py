@@ -11,6 +11,14 @@ drifting from it. At release, ``infra/release.sh`` regenerates every entry, so
 a figure the document has stopped citing still cannot rot unnoticed -- the
 check moves rather than disappearing.
 
+Since issue #492 the two sets coincide: every entry here is cited by one of
+the documents, and a guard fails one that is not
+(``tests/regression/qa/test_qa_build.py``). The selection is kept because it
+is the mechanism rather than the current count --- a document that drops a
+citation narrows it again the same day --- and because the release gate is
+what the guarantee rests on either way. Adding an entry means citing it;
+``DEV.md`` states the path from the request to the citation.
+
 The fixtures are named here rather than in the build script because which
 alignment a figure was rendered from is what its caption reports, and that is
 the application's knowledge, not the build's (``qa/CLAUDE.md``).
@@ -23,31 +31,33 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from snakes_and_ladders.inputs import (
-    digest,
-    library_versions,
-    module_closure,
-    source_fingerprint,
-)
-
 FIXTURES = "tests/regression/fixtures"
 
 #: The most a figure the documents cite may take to render, in seconds on the
-#: reference host (4 cores). A per-pull-request build is the sum of its stale
-#: cited figures, and one figure over this cap is a third of the 300 s budget
-#: `DEV.md` gives the whole validation (issue #372). A figure that cannot fit
-#: is cited by nothing and rendered at the release gate, as `topology_accuracy`
-#: is; one cited and over the cap is refused by a guard unless it is waived
-#: here with the ticket that will bring it under.
+#: reference host (4 cores). A documents build is the sum of its cited
+#: figures --- every one of them since issue #490 removed the stamps that
+#: skipped some --- and one figure over this cap is a third of the 300 s
+#: budget `DEV.md` gives the whole validation (issue #372). "Cited by
+#: nothing" was once the other way out, and issue #492 closed it: every
+#: figure here is cited, so a figure over the cap is waived below with the
+#: ticket that will bring it under, or it is cut.
 CITED_RENDER_CAP = 30.0
 
 #: Cited figures over the cap, each with the ticket that owns cutting it.
 #: A waiver is a debt with a name, not an exemption. Issue #498 tried to pay
-#: both by rendering at five taxa and could pay neither: `rl_tree_policy`
-#: renders from the 7-taxon fixture issue #177 chose, so the taxon count is
-#: not its term to cut, and `search_trajectory` loses its trajectory panel at
-#: five taxa (the comment on its entry below).
-CAP_WAIVERS: dict[str, str] = {"rl_tree_policy": "#372", "search_trajectory": "#372"}
+#: the first two by rendering at five taxa and could pay neither:
+#: `rl_tree_policy` renders from the 7-taxon fixture issue #177 chose, so the
+#: taxon count is not its term to cut, and `search_trajectory` loses its
+#: trajectory panel at five taxa (the comment on its entry below).
+#: `topology_accuracy` is the third since #492 cited it: its cost is
+#: attributed and unreduced --- no topology sweep at all, but 91.5% L-BFGS
+#: branch-length fitting over 48 inferences (#506) --- and #509 owns cutting
+#: the term the profile names.
+CAP_WAIVERS: dict[str, str] = {
+    "rl_tree_policy": "#372",
+    "search_trajectory": "#372",
+    "topology_accuracy": "#509",
+}
 
 
 @dataclass(frozen=True)
@@ -78,70 +88,6 @@ class FigureSpec:
     module: str
     arguments: tuple[str, ...]
     seconds: float
-
-    def data(self, root: Path) -> list[Path]:
-        """The inputs hashed as bytes rather than as code.
-
-        Returns
-        -------
-        list[Path]
-            Every argument naming an existing file. The Rust sources and
-            ``Cargo.lock`` are not here: they are in the import closure when a
-            module in it names the extension, and hashed there.
-        """
-        return [
-            root / argument
-            for argument in self.arguments
-            if (root / argument).is_file()
-        ]
-
-    def inputs(self, root: Path) -> list[Path]:
-        """Every file whose change can change what this figure renders.
-
-        The sources are hashed by :func:`snakes_and_ladders.inputs.source_fingerprint`
-        as code rather than as bytes, so this is what they cover, for reporting
-        and for tests; the digest below is what the stamp records.
-
-        Returns
-        -------
-        list[Path]
-            The renderer's import closure, then the fixtures its arguments name.
-        """
-        return [*module_closure([self.module], root), *self.data(root)]
-
-    def input_digest(self, root: Path) -> str:
-        """Hash of the inputs, the spec itself and the drawing libraries.
-
-        The package sources enter as
-        :func:`snakes_and_ladders.inputs.source_fingerprint` --- the ASTs of the
-        import closure, docstrings removed --- and not as their bytes, so a
-        reworded docstring is not a new figure (issues #372, #394).
-
-        Returns
-        -------
-        str
-            A SHA-256 hex digest; equal for two trees that render the same
-            figure, different when any input differs.
-        """
-        return digest(
-            self.data(root),
-            root,
-            source_fingerprint([self.module], root),
-            self.stem,
-            self.module,
-            *self.arguments,
-            *library_versions(),
-        )
-
-    def stamp(self, output_dir: Path) -> Path:
-        """The file recording the digest the committed figure was rendered from.
-
-        Returns
-        -------
-        Path
-            ``<output_dir>/<stem>.inputs``.
-        """
-        return output_dir / f"{self.stem}.inputs"
 
     def command(self, output_dir: Path) -> list[str]:
         """Build the argument vector that renders this figure.
@@ -295,7 +241,8 @@ FIGURES: tuple[FigureSpec, ...] = (
     # Enumerates no topology at all: its cost is 48 NNI hill-climbing
     # inferences over six site counts, 91% of it L-BFGS branch-length fitting
     # (issue #498). The fixture supplies the generating tree, so the taxon
-    # count is not the term to cut here.
+    # count is not the term to cut here. Cited by `paper.tex` since #492 and
+    # over the cap, so it is waived above under #509.
     FigureSpec(
         "topology_accuracy",
         "snakes_and_ladders.qa.topology_accuracy",

@@ -172,14 +172,66 @@ def test_the_rust_kernel_reproduces_the_python_oracle_exactly(extent: int) -> No
 
 
 @pytest.mark.oracle
-def test_the_rust_max_flow_reproduces_a_hand_computed_value() -> None:
+def test_the_rust_min_cut_reproduces_a_hand_computed_value_and_cut() -> None:
     # Two disjoint paths carry 2 each; the cross edge carries a third unit a
     # greedy first path would have blocked. The minimum cut is the two arcs
-    # out of the source, 3 + 2 = 5.
-    arcs = [(0, 1), (0, 2), (1, 3), (2, 3), (1, 2)]
-    capacity = [3.0, 2.0, 2.0, 3.0, 1.0]
+    # out of the source, 3 + 2 = 5, and it leaves only the source reachable.
+    network = FlowNetwork(n_nodes=4)
+    for (tail, head), capacity in zip(
+        [(0, 1), (0, 2), (1, 3), (2, 3), (1, 2)],
+        [3.0, 2.0, 2.0, 3.0, 1.0],
+        strict=True,
+    ):
+        network.add_edge(tail, head, capacity)
 
-    assert maxflow_rust.max_flow(4, arcs, capacity, 0, 3) == pytest.approx(5.0)
+    cut = maxflow_rust.min_cut(network, 0, 3)
+
+    assert cut.value == pytest.approx(5.0)
+    assert cut.source_side.tolist() == [True, False, False, False]
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("n_nodes", [6, 12, 24])
+@pytest.mark.parametrize("seed", [528, 529])
+def test_the_rust_min_cut_returns_the_python_cut_on_seeded_networks(
+    n_nodes: int, seed: int
+) -> None:
+    # The claim issue #528 rests on: the side the binding now returns is the
+    # side the oracle computes, arc for arc, on a random network with back
+    # capacities -- not merely a set of the same capacity. Two networks are
+    # built from the same draws because the pure solver consumes the one it
+    # is given, turning its capacities into residual capacities.
+    rng = np.random.default_rng(seed)
+    tails = rng.integers(0, n_nodes, size=4 * n_nodes)
+    heads = rng.integers(0, n_nodes, size=4 * n_nodes)
+    forward = rng.uniform(0.1, 3.0, size=4 * n_nodes)
+    reverse = rng.uniform(0.0, 1.0, size=4 * n_nodes)
+    networks = [FlowNetwork(n_nodes=n_nodes) for _ in range(2)]
+    for network in networks:
+        for tail, head, capacity, back in zip(
+            tails, heads, forward, reverse, strict=True
+        ):
+            if tail != head:
+                network.add_edge(int(tail), int(head), float(capacity), float(back))
+
+    expected = max_flow(networks[0], 0, n_nodes - 1)
+    realized = maxflow_rust.min_cut(networks[1], 0, n_nodes - 1)
+
+    assert realized.value == pytest.approx(expected.value, rel=1e-12)
+    assert realized.source_side.tolist() == expected.source_side.tolist()
+
+
+@pytest.mark.edge_case
+def test_the_rust_min_cut_leaves_the_network_it_was_given_alone() -> None:
+    # The one contract that differs from the pure implementation, so it is
+    # asserted rather than only documented: the residual graph lives in Rust.
+    network = FlowNetwork(n_nodes=3)
+    network.add_edge(0, 1, 2.0)
+    network.add_edge(1, 2, 1.0)
+    before = list(network.capacity)
+
+    assert maxflow_rust.min_cut(network, 0, 2).value == pytest.approx(1.0)
+    assert network.capacity == before
 
 
 @pytest.mark.edge_case

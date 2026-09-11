@@ -8,11 +8,14 @@
     x={(1.0cm, 0.5cm)},
     y={(0cm, 1.1cm)},
     z={(1.5cm, 0cm)},
-    latent/.style={circle, draw, minimum size=0.50cm, inner sep=0.5pt, font=\tiny, fill=white},
-    x_latent/.style={circle, draw, minimum size=0.18cm, inner sep=0pt},
-    factor_style/.style={rectangle, draw, fill=white, minimum size=0.1cm},
-    high_factor_style/.style={regular polygon, regular polygon sides=3, draw, fill=white, minimum size=0.25cm, inner sep=0pt},
-    edge_style/.style={draw, thick, black},
+    % The shared vocabulary of preamble.tex, at the diameters this lattice
+    % leaves room for: the drawing is three-dimensional and dense, so the
+    % circles and squares are smaller here than in the flat sketches.
+    latent/.style={fgvariable, minimum size=0.50cm, font=\tiny},
+    x_latent/.style={fgvariable, minimum size=0.18cm, inner sep=0pt},
+    factor_style/.style={fgfactor, minimum size=0.10cm},
+    high_factor_style/.style={fggate},
+    edge_style/.style={fglink},
     cuboid_edge/.style={draw, thin, black, opacity=0.5},
     dependency/.style={draw, thin, gray, opacity=0.4, bend left=15},
     dependency_inv/.style={draw, thin, gray, opacity=0.4, bend right=15},

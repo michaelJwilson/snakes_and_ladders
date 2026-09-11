@@ -1,8 +1,8 @@
 # Installing and running locally
 
 Everything needed for a working checkout: the environment, the build, the test
-suites, and the checks pre-commit runs against your branch. For the repository
-layout, the CI jobs, and how a change is reviewed, see [DEV.md](DEV.md).
+suites, and the checks pre-commit runs. For the repository layout, the CI jobs,
+and how a change is reviewed, see [DEV.md](DEV.md).
 
 ## Prerequisites
 
@@ -26,8 +26,8 @@ After changing a dependency, run `uv lock` and commit the updated lockfile in
 the same PR.
 
 Sync once per worktree, then set `UV_NO_SYNC=1` in the shell: every `uv run`
-otherwise re-resolves the environment, and in a fresh worktree recompiles the
-Rust extension, one to two minutes of a core per command (issues #369, #372).
+otherwise re-resolves the environment and, in a fresh worktree, recompiles the
+Rust extension — one to two minutes of a core per command (issues #369, #372).
 The repository's scripts export it themselves.
 
 Before pushing, run `infra/validate.sh`: lint, types, the critical gate, the
@@ -38,17 +38,16 @@ states.
 The extras are `dev` (ruff, mypy, pre-commit, pip-audit), `test` (pytest and
 plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
 `docs/nb/`), and `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch
-Geometric: the external implementations the suite pins its own against, and
-the Gymnasium adapter's one import). `--all-extras` installs all five; sync a
-single one with `uv sync --locked --extra test`. Nothing in the core install
-needs `frameworks`: every test that uses one of its packages skips without
-it, and `snakes_and_ladders.search.gym` is the only module that imports one
-at module level.
+Geometric: the external implementations the suite pins its own against).
+`--all-extras` installs all five; sync a single one with `uv sync --locked
+--extra test`. Nothing in the core install needs `frameworks`: every test using
+one of its packages skips without it, and `snakes_and_ladders.search.gym` is
+the only module that imports one at module level.
 
 `scipy` is a core dependency since the 0.5.0 audit (issue #376): three
-regression modules referee our neighbor joining, our Hadamard transform and
-our fit against it, and `search.maxflow`'s replacement (#388) will front its
-maximum flow.
+regression modules referee our neighbor joining, Hadamard transform and fit
+against it, and `search.maxflow`'s replacement (#388) will front its maximum
+flow.
 
 ## Building
 
@@ -70,9 +69,9 @@ editing anything under `src/`; the compiled module does not rebuild itself.
 One binding is not in that build. `pruning_gradient`, the `burn` taped
 gradient issue #449 measured and declined, sits behind the `sandbox` Cargo
 feature so the default install compiles no `burn` (34 crates in 37 s against
-102 in 86 s; `DEV.md`, Build System). Nothing needs it: the module in front of
-it, `snakes_and_ladders.sandbox.pruning_burn`, imports either way and refuses
-to run without it, and its tests skip. To run them, build with the feature:
+102 in 86 s; `DEV.md`, Build System). `snakes_and_ladders.sandbox.pruning_burn`
+imports either way and refuses to run without it, and its tests skip. To run
+them, build with the feature:
 
 ```
 maturin develop --release --features sandbox
@@ -117,8 +116,8 @@ Add a fragment under `changelog.d/` for the change as well, if it is
 user-visible (see `changelog.d/README.md`); `towncrier` merges fragments into
 `CHANGELOG.md` at release time.
 
-`pre-commit install` runs these same checks on every `git commit`. It does not
-run the dependency audits below; CI runs those when a lockfile changes.
+`pre-commit install` runs these same checks on every `git commit`, but not the
+dependency audits below; CI runs those when a lockfile changes.
 
 ## Dependency audits
 
@@ -129,8 +128,7 @@ cargo audit  # Rust; install once with `cargo install cargo-audit --locked`
 
 Both run in CI's `audit` job when `uv.lock` or `Cargo.lock` changed, and
 weekly on `main` regardless, so a newly disclosed advisory against a pinned
-dependency fails the build without every run auditing an unchanged graph.
-[DEV.md](DEV.md) describes the caching.
+dependency fails the build. [DEV.md](DEV.md) describes the caching.
 
 ## Building the documentation
 
@@ -141,19 +139,14 @@ sphinx-build -b html docs/source docs/_build/html -W
 ```
 
 Open `docs/_build/html/index.html`. The `-W` flag turns warnings into errors,
-matching CI, so a broken docstring or cross-reference fails locally rather
-than in review.
+matching CI, so a broken docstring or cross-reference fails locally.
 
-The documents — the paper and the textbook, carrying the scientific background,
-equations, and algorithms — are LaTeX under `docs/tex/`. The
+The documents — the paper and the textbook — are LaTeX under `docs/tex/`. The
 `snakes_and_ladders.qa` scripts render the figures and tables they include
 (`snakes_and_ladders.qa.manifest` lists them), so building them regenerates the
-cited ones first rather than only running `latexmk`; the applicability tables
-the textbook inputs are not committed and are written by
-`infra/problems_tables.py --write`, which `infra/build_documents.sh` runs for
-you (`infra/ledgers.sh` writes the same tables beside `CHECKS.md` and
-`SEAMS.md` at the review and release gates; the document build runs the one
-generator its documents need):
+cited ones before running `latexmk`; the applicability tables the textbook
+inputs are not committed and are written by `infra/problems_tables.py --write`,
+which `infra/build_documents.sh` runs for you:
 
 ```
 sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base \
@@ -163,11 +156,11 @@ uv sync --locked --extra test
 infra/build_documents.sh
 ```
 
-Open `docs/paper.pdf` and `docs/textbook.pdf`. CI runs the same script on
-every PR, and fails on an undefined or multiply-defined reference, an undefined
-citation, or a pull request that changes either committed PDF without being the
-rebuild the "Rebuild the documents" ticket asks for. The PDFs are *not* compared
-against the rebuild: they lag `docs/tex/` between rebuilds by design (`DEV.md`,
+Open `docs/paper.pdf` and `docs/textbook.pdf`. CI runs the same script and
+fails on an undefined or multiply-defined reference, an undefined citation, or
+a pull request that changes either committed PDF without being the rebuild the
+"Rebuild the documents" ticket asks for. The PDFs are *not* compared against
+the rebuild: they lag `docs/tex/` between rebuilds by design (`DEV.md`,
 Documents).
 
 **Revert `docs/paper.pdf` and `docs/textbook.pdf` after the build.** It rewrites
@@ -178,23 +171,20 @@ request may carry the change:
 git checkout -- docs/paper.pdf docs/textbook.pdf
 ```
 
-The rest of what the build writes needs no such care, and the two cases are
-different: the `.aux`, `.log`, `.fdb_latexmk` and other files `latexmk` leaves
-in `docs/`, and the applicability tables under `docs/tex/generated/`, are
-ignored and cannot be committed, while a re-rendered figure under
-`docs/tex/figures/` — its `.pdf` or `.tex`, its `_caption.txt` and its `.inputs`
-stamp — is committed by the pull request that changed it. `DEV.md` lists every
-path, and gives the wall clock on the 4-core reference host: **15.8 s** from a
-clean checkout when every figure stamp is current, **3.7 s** for a second run
-that finds nothing to do, and **230.7 s** on a checkout where nine of the
-nineteen cited stamps were stale — the stamps decide the cost, not the
-documents.
+The rest needs no such care: the `.aux`, `.log`, `.fdb_latexmk` and other
+files `latexmk` leaves in `docs/`, and the applicability tables under
+`docs/tex/generated/`, are ignored and cannot be committed, while a re-rendered
+figure under `docs/tex/figures/` — its `.pdf` or `.tex` and its `_caption.txt`
+— is committed by the pull request that changed it. `DEV.md` lists every path,
+and gives the wall clock on the 4-core reference host: **15.8 s** for the
+LaTeX, **3.7 s** for a second run that finds nothing to do, and **431.8 s** for
+the figures, all 23 in the manifest on every build since issue #490 deleted the
+stamps that used to select them and issue #492 left every entry cited.
 
 ## Benchmarking locally
 
-CI runs the benchmarks but asserts nothing against their timings, because
-GitHub-hosted runner hardware varies between runs. Compare against a local
-baseline instead:
+CI runs the benchmarks but asserts nothing against their timings: GitHub-hosted
+runner hardware varies between runs. Compare against a local baseline instead:
 
 ```
 pytest tests/benchmarks --benchmark-autosave            # establish a baseline

@@ -1,40 +1,47 @@
-"""What a committed artifact depends on, hashed so an unchanged one is not remade.
+"""What a recorded measurement is a function of: its code, and its libraries.
 
-A committed figure, an executed notebook or a fixture's recorded baseline is a
-function of its inputs: the script or the cells, every ``snakes_and_ladders``
-module they reach by import, the fixture files they read, and the versions of
-the libraries that draw or compute. A digest over those, recorded beside the
-artifact when it was made, says whether the artifact can have changed since.
-The build renders a figure only when its digest differs from the stamp, so a
-pull request that changed a paragraph of the textbook renders nothing (issue
-#372).
+A baseline record beside a fixture --- an enumerated maximum, the rate at
+which hill climbing reaches it --- is a number computed by some modules and
+by the libraries installed when it ran. :func:`module_closure` says which
+sources those modules reach, which is what ``infra/baselines.py --changed``
+selects the records a pull request could have moved on;
+:func:`library_versions` says which libraries were installed, which is what
+:func:`snakes_and_ladders.sim.fixtures.baseline` refuses a record on when
+they are not this machine's (issues #401, #460).
+
+**Nothing here hashes a committed artifact any more** (issue #490). A stamp
+beside each figure and each notebook recorded a digest over the renderer's
+import closure, and the build skipped an artifact whose stamp matched. Over
+476 decisions in two measured windows every stale call was a false positive
+and no figure byte moved, at a cost of ~48 minutes in one day; two causes
+are recorded in #490 rather than fixed, because the stamps are gone. What
+each stamp nominally provided is provided by running the check instead of
+predicting it: ``infra/release.sh`` renders every figure and compares bytes
+(issue #484), and the ``notebooks`` job executes every notebook under
+``docs/nb/`` (issue #480). The digest they shared went with them; only its
+two terms are left, and each is read directly.
 
 **Top level, not inside ``qa``.** It began there, where the figures are, and
 moved when ``snakes_and_ladders.sim.fixtures`` came to need it for the
 baseline records (issue #401): ``qa`` renders what the other modules compute
 and nothing may import it, so a digest living there made ``sim`` depend on
-``qa`` and a ``qa`` change select and time ``sim``. The module names no model
-and imports nothing from this package, so it sits beside
-:mod:`snakes_and_ladders.numerics` and :mod:`snakes_and_ladders.enumeration`
-on the terms root ``CLAUDE.md`` states for those: importable from anywhere,
-inverting no layering.
+``qa``. The baseline records are the only caller left, and this is where
+they read it from. The module names no model and imports nothing from this package, so it sits
+beside :mod:`snakes_and_ladders.numerics` and
+:mod:`snakes_and_ladders.enumeration` on the terms root ``CLAUDE.md`` states
+for those: importable from anywhere, inverting no layering.
 
 The import closure is read from the source with :mod:`ast`, as
 ``infra/select_tests.py`` reads the module graph: a listed dependency goes
 stale silently and an import does not. A module that reaches the Rust
 extension carries the Rust sources in its closure, since a kernel change
-alters what it computes. The closure enters the digest as ASTs with
-docstrings removed (:func:`source_fingerprint`), so a reworded paragraph is
-not a new figure.
-
-The digest is over file contents, not modification times, so a fresh clone
-and the tree that produced the stamp agree.
+alters what it computes. The closure is paths, relative to the root the
+caller passes, so a fresh clone and the tree that wrote a record agree.
 """
 
 from __future__ import annotations
 
 import ast
-import hashlib
 import sys
 from collections.abc import Iterable, Sequence
 from importlib import metadata
@@ -42,11 +49,6 @@ from pathlib import Path
 
 PACKAGE = "snakes_and_ladders"
 EXTENSION = "oxi_snakes_and_ladders"
-
-#: The libraries whose version is part of a rendered artifact. A matplotlib
-#: release moves glyph placement and a NumPy release can move a reduction's
-#: last bit; both change the committed bytes with no source change.
-LIBRARIES: tuple[str, ...] = ("matplotlib", "numpy", "scipy", "torch", "networkx")
 
 
 def _module_path(name: str, package_root: Path) -> Path | None:
@@ -69,7 +71,7 @@ def _module_path(name: str, package_root: Path) -> Path | None:
     return None
 
 
-def imported_names(source: str, module: str) -> set[str]:
+def _imported_names(source: str, module: str) -> set[str]:
     """Every dotted name ``source`` imports, absolute, including ``from``-targets.
 
     ``from snakes_and_ladders.sim import tree`` names both the package and,
@@ -138,7 +140,7 @@ def module_closure(modules: Iterable[str], root: Path) -> list[Path]:
         if path is None:
             continue
         files.add(path)
-        for imported in imported_names(path.read_text(), name):
+        for imported in _imported_names(path.read_text(), name):
             if imported.split(".")[0] == PACKAGE and imported not in seen:
                 todo.append(imported)
     closure = sorted(files)
@@ -148,72 +150,18 @@ def module_closure(modules: Iterable[str], root: Path) -> list[Path]:
     return closure
 
 
-def _strip_docstrings(tree: ast.AST) -> None:
-    """Delete every module, class and function docstring in ``tree``, in place.
+def library_versions(libraries: Sequence[str]) -> list[str]:
+    """``name==version`` per library, ``absent`` for one not installed.
 
-    A docstring is prose the renderer does not draw. Only a leading string is
-    removed; a string anywhere else is a statement and stays.
-    """
-    for node in ast.walk(tree):
-        if not isinstance(
-            node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
-        ):
-            continue
-        first = node.body[0] if node.body else None
-        if (
-            isinstance(first, ast.Expr)
-            and isinstance(first.value, ast.Constant)
-            and isinstance(first.value.value, str)
-        ):
-            del node.body[0]
-
-
-def source_fingerprint(modules: Iterable[str], root: Path) -> str:
-    """Hash the import closure of ``modules`` as code rather than as bytes.
-
-    The unit is a module's abstract syntax tree with docstrings removed, so a
-    reworded paragraph or a re-wrapped comment is not a different computation
-    and does not restamp a figure (issue #372). Everything else in the closure
-    -- the Rust sources, ``Cargo.lock`` -- is hashed as bytes.
-
-    **The whole closure, not the part a renderer executes.** Issue #422 walked
-    the ASTs from the entry point and hashed only the definitions it reached,
-    which needed seven fallbacks for the constructs the walk cannot follow.
-    Measured over the twelve branches merged before 2026-09-09, the walk and
-    this hash staled the same 26 figures: the walk saved none of them, and its
-    saving appears only on a synthetic edit to a constant no renderer reads
-    (issue #425). Hashing the closure over-approximates in the safe direction
-    -- a figure re-renders that need not have -- and carries no fallback.
+    The libraries are the caller's to name and carry no default here. The
+    one caller left is a baseline record, whose numbers depend on ``numpy``,
+    ``scipy`` and ``torch`` and on nothing that draws; the wider default this
+    had was the *figures*' list, and it went with them (issue #490).
 
     Parameters
     ----------
-    modules : Iterable[str]
-        Entry points, dotted.
-    root : Path
-        The repository root.
-
-    Returns
-    -------
-    str
-        A SHA-256 hex digest, equal for two trees whose closure is the same
-        code.
-    """
-    hasher = hashlib.sha256()
-    for path in module_closure(modules, root):
-        hasher.update(str(path.relative_to(root)).encode())
-        hasher.update(b"\0")
-        if path.suffix == ".py":
-            tree = ast.parse(path.read_text())
-            _strip_docstrings(tree)
-            hasher.update(ast.dump(tree, include_attributes=False).encode())
-        else:
-            hasher.update(path.read_bytes())
-        hasher.update(b"\0")
-    return hasher.hexdigest()
-
-
-def library_versions(libraries: Sequence[str] = LIBRARIES) -> list[str]:
-    """``name==version`` per library, ``absent`` for one not installed.
+    libraries : Sequence[str]
+        Distribution names, in the order the result reports them.
 
     Returns
     -------
@@ -228,69 +176,3 @@ def library_versions(libraries: Sequence[str] = LIBRARIES) -> list[str]:
             versions.append(f"{name}==absent")
     versions.append(f"python=={sys.version_info.major}.{sys.version_info.minor}")
     return versions
-
-
-def _expanded(files: Iterable[Path]) -> list[Path]:
-    """Every file among ``files``, a directory replaced by the files under it.
-
-    Returns
-    -------
-    list[Path]
-    """
-    found: list[Path] = []
-    for path in files:
-        if path.is_dir():
-            found += sorted(child for child in path.rglob("*") if child.is_file())
-        else:
-            found.append(path)
-    return found
-
-
-def digest(files: Iterable[Path], root: Path, *extra: str) -> str:
-    """Hash file contents and extra strings into one hex digest.
-
-    Parameters
-    ----------
-    files : Iterable[Path]
-        Files whose bytes enter the hash, keyed by their path relative to
-        ``root`` so the digest does not depend on where the checkout lives.
-        A directory stands for the files under it: a fixture named as a
-        problem rather than as one tier (issue #382) is a directory, and
-        hashing it as a unit is what makes adding a tier to it a change the
-        stamp sees.
-    root : Path
-        The repository root.
-    *extra : str
-        Strings that are inputs too: a spec's arguments, library versions.
-
-    Returns
-    -------
-    str
-        A SHA-256 hex digest.
-    """
-    hasher = hashlib.sha256()
-    for path in sorted(set(_expanded(files))):
-        hasher.update(str(path.relative_to(root)).encode())
-        hasher.update(b"\0")
-        hasher.update(path.read_bytes())
-        hasher.update(b"\0")
-    for item in extra:
-        hasher.update(item.encode())
-        hasher.update(b"\0")
-    return hasher.hexdigest()
-
-
-def read_stamp(path: Path) -> str | None:
-    """The digest a stamp file records, or None when there is no stamp.
-
-    Returns
-    -------
-    str | None
-        The recorded digest.
-    """
-    return path.read_text().strip() if path.is_file() else None
-
-
-def write_stamp(path: Path, value: str) -> None:
-    """Record ``value`` as the digest the artifact beside ``path`` was made from."""
-    path.write_text(f"{value}\n")

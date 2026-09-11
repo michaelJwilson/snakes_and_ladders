@@ -5,10 +5,14 @@
 \centering
 \begin{tikzpicture}[
     scale=1.05,
-    spin/.style={circle, draw, minimum size=0.44cm, inner sep=0pt, font=\tiny, fill=white},
-    up/.style={circle, draw, fill=black!10, minimum size=0.44cm, inner sep=0pt, font=\tiny},
-    down/.style={circle, draw, fill=black!45, text=white, minimum size=0.44cm, inner sep=0pt, font=\tiny},
-    bond/.style={draw, thick},
+    % The shared vocabulary of preamble.tex. The spins are the variables of
+    % Figure~\ref{fig:potts:sketch}; only the two labelled states are shaded,
+    % and the lattice is drawn without its factors, the bonds standing for
+    % them, because what this figure is about is the triangles.
+    spin/.style={fgvariable, minimum size=0.48cm, font=\tiny},
+    up/.style={spin, fill=black!10},
+    down/.style={spin, fill=black!45, text=white},
+    bond/.style={fglink},
     agree/.style={draw, very thick, dashed}
 ]
   % A patch of the triangular lattice: each row offset by half a spacing.
