@@ -944,16 +944,17 @@ build from 13.7 to 16.1 ms — the allocation the density no longer repeats
 3,008 times per recorded sweep.
 
 **Re-profiled again, the layout is what is left.** At 32x32 over 20 sweeps
-`_Indexed.layout` carries **36.1%** of the run in self time and 72% with the
-list building it calls, `_Indexed.__init__` 6.6%, `gibbs_sweep` 4.5%, and
-`log_density` does not reach the top eight: 20 calls at 11.5 µs is 0.2 ms of a
-24.1 ms run. The layout is paid once per graph, and a compiled sweep costs
-0.125 ms at this size, so the layout is worth 130 sweeps: it clears the 10%
-bar for any run under about 1,300 sweeps of one graph, and `sample_factor_graph`
-builds one per call. It is the next candidate on this path and is not carried
-here. Read on a host carrying one other single-threaded job on a 4-core box,
-two readings agreeing to within 0.6 points; the wall-clock numbers above were
-taken with the host quiet.
+`_Indexed.layout` carries **37.0%** of the run in self time and **80.2%**
+cumulatively, `_Indexed.__init__` 6.7% and 11.3%, `gibbs_sweep` 4.1% in self
+time, and `log_density` does not reach the top eight: 20 calls at 11.5 µs is
+0.2 ms of a 24.1 ms run. The layout is paid once per graph, and a compiled
+sweep costs 0.125 ms at this size, so the layout is worth 130 sweeps: at 100
+sweeps it is still 66.6% cumulatively, and it clears the 10% bar for any run
+under about 1,300 sweeps of one graph. `sample_factor_graph` builds one per
+call, so a caller that samples many graphs pays it every time and a long chain
+amortizes it. It is the next candidate on this path and is not carried here.
+Four readings on this host agree to within one point, the last two of them
+with `ps` showing nothing but the job.
 
 **Bounds with proofs, certified rather than trusted**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
