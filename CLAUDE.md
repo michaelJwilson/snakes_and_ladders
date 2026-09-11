@@ -32,7 +32,9 @@ This file is authoritative. Each of the remainder has a defined task:
 | `README.md` | What the project is, and where everything else lives |
 | `INSTALL.md` | Installing, building, running locally |
 | `DEV.md` | Layout, the CI jobs, repository settings, the CI budget, how a change is reviewed |
+| `RELEASE.md` | Cutting a release: what it is cut against, the preconditions, the steps, who runs each, and what it costs |
 | `ROADMAP.md` | The goals and a path to them |
+| `REFERENCES.md` | The texts and papers each part of the work is cited against |
 | `STATUS.md` | What has landed against each roadmap milestone, the evidence, and the PR carrying it |
 | `TICKETS.md` | The titles of the tickets that remain between `STATUS.md` and `ROADMAP.md` |
 | `CHECKS.md`, `SEAMS.md` | The checks the roadmap's claims rest on, and the seams the package has; both generated from the tree, neither committed |
@@ -48,8 +50,8 @@ This file is authoritative. Each of the remainder has a defined task:
 *   **Python (3.12):** Manage via `uv`. Run `uv sync --locked --all-extras`. Regenerate locks with `uv lock` and commit `uv.lock` in the same PR.
 *   **Rust:** Compiler pinned via `rust-toolchain.toml`. Lockfile is `Cargo.lock`. Update with `cargo update` and commit.
 *   **Lint/Format (Python):** `ruff check .` and `ruff format --check .`
-*   **Type Check (Python):** `mypy --strict`, over the paths in `pyproject.toml`'s `files` (`python/`, `tests/`).
-*   **Lint/Format (Rust):** `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`.
+*   **Type Check (Python):** `mypy --strict`, over the paths in `pyproject.toml`'s `files` (`python/`, `tests/`, `infra/`).
+*   **Lint/Format (Rust):** `cargo clippy --locked --all-targets -- -D warnings` and `cargo fmt --check`.
 *   **Audit:** `pip-audit` (Python) and `cargo audit` (Rust).
 *   **Docs:** Build with `sphinx-build -W` in `docs/source/`.
 
@@ -80,7 +82,7 @@ Checked in this order when a hot path is proposed; `DEV.md` carries the procedur
 *   **Branch misprediction.** A data-dependent branch in an inner loop is free or a stall; the branchless form (mask, select, table) wins only where a measurement shows the branch does not predict (Bryant & O'Hallaron ch. 5).
 *   **Inlining and call overhead.** No Python-level call per site or per node; hoist it or vectorize it. In Rust, `#[inline]` the small hot helpers (Gorelick & Ozsvald ch. 4; Bryant & O'Hallaron ch. 5).
 *   **Allocation.** Preallocate and reuse buffers across sweeps; NumPy `out=` and in-place operators over temporaries (Gorelick & Ozsvald ch. 6).
-*   **The FFI boundary.** Cross it once per call with contiguous arrays; minimize the perimeter.
+*   **The FFI boundary.** Cross it once per call with contiguous arrays; time a kernel alone *and* through its binding. The marshalling was assumed dominant and measured a few percent of a call, so the boundary is timed rather than presumed and `DEV.md` carries the mitigations.
 *   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — runs through `snakes_and_ladders.parallel`.
 *   **Compiled backends.** Two, each for a reason: Rust carries the load, so it stays opt-in; `numba`'s `njit` carries the ease.
 

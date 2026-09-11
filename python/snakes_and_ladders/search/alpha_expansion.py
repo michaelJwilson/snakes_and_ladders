@@ -33,6 +33,7 @@ import numpy as np
 
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
+from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
@@ -88,6 +89,8 @@ def expand(
     field_values: np.ndarray,
     labelling: np.ndarray,
     alpha: int,
+    *,
+    backend: Backend = Backend.PYTHON,
 ) -> tuple[np.ndarray, float]:
     """The optimal ``alpha``-expansion of ``labelling``, by one minimum cut.
 
@@ -118,18 +121,42 @@ def expand(
     unaffordable rather than by dropping it, so the edge terms around it stay
     in the same network.
 
+    ``backend`` chooses the minimum-cut solver and nothing else; the network
+    is built here either way. :data:`~snakes_and_ladders.search.backend.Backend.RUST`
+    runs :func:`snakes_and_ladders.search.maxflow_rust.min_cut`, which issue
+    #528 measured at 49.0% of this function's caller by `cProfile` self time.
+    It is **opt-in**, unlike the `numba` sweep of
+    :func:`iterated_conditional_modes`: a minimum cut is a combinatorial
+    minimum whose *value* both solvers must report exactly, but the cut
+    attaining it need not be unique, and a degenerate network could hand back
+    a different labelling of the same energy. The tests pin both routes to the
+    same labelling on the seeded fixtures; the default does not move on the
+    strength of that.
+
     Returns
     -------
     tuple[np.ndarray, float]
         The expanded labelling and its energy. When no expansion helps, the
         input is returned unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` names an implementation this function does not have.
     """
+    if backend not in (Backend.PYTHON, Backend.RUST):
+        msg = f"alpha expansion has no {backend} minimum-cut backend"
+        raise ValueError(msg)
+
     values = _site_field(graph, field_values)
-    disagreeing = [
+    # A set, not the list it replaced: the edge loop below tests membership
+    # once per edge, and building the set inside that loop made the
+    # construction quadratic in the edge count (#528).
+    disagreeing = {
         position
         for position, (first, second) in enumerate(graph.edges)
         if labelling[first] != labelling[second]
-    ]
+    }
     source, sink = graph.n_nodes, graph.n_nodes + 1
     network = FlowNetwork(n_nodes=graph.n_nodes + 2 + len(disagreeing))
 
@@ -151,7 +178,7 @@ def expand(
     for position, ((first, second), coupling) in enumerate(graph.weighted_edges()):
         first_differs = coupling if labelling[first] != alpha else 0.0
         second_differs = coupling if labelling[second] != alpha else 0.0
-        if position not in set(disagreeing):
+        if position not in disagreeing:
             network.add_edge(first, second, first_differs, reverse=first_differs)
             continue
         network.add_edge(first, auxiliary, first_differs, reverse=first_differs)
@@ -159,7 +186,11 @@ def expand(
         network.add_edge(auxiliary, sink, coupling)
         auxiliary += 1
 
-    cut = max_flow(network, source, sink)
+    cut = (
+        min_cut(network, source, sink)
+        if backend is Backend.RUST
+        else max_flow(network, source, sink)
+    )
     switched = ~cut.source_side[: graph.n_nodes]
     proposed = np.where(switched, alpha, labelling)
 
@@ -179,6 +210,7 @@ def alpha_expansion(
     *,
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
+    backend: Backend = Backend.PYTHON,
 ) -> ExpansionResult:
     """Cycle over labels until a full sweep lowers nothing.
 
@@ -204,6 +236,9 @@ def alpha_expansion(
         Refuse past this many sweeps rather than looping. Monotonicity makes
         exceeding it impossible on a correct implementation, so reaching it
         is a bug report rather than a tuning knob.
+    backend : Backend
+        Which minimum-cut solver each :func:`expand` runs, and nothing else.
+        See :func:`expand` for why the Rust one is opt-in.
 
     Raises
     ------
@@ -229,7 +264,9 @@ def alpha_expansion(
     for cycle in range(1, max_cycles + 1):
         improved = False
         for alpha in range(n_states):
-            labelling, candidate = expand(graph, values, labelling, alpha)
+            labelling, candidate = expand(
+                graph, values, labelling, alpha, backend=backend
+            )
             if candidate < current - 1e-12:
                 current = candidate
                 improved = True

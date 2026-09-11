@@ -6,27 +6,23 @@
 \centering
 \begin{tikzpicture}[
     scale=1.0,
-    label/.style={circle, draw, minimum size=0.62cm, inner sep=0.5pt, font=\small, fill=white},
-    observed/.style={circle, draw, fill=black!12, minimum size=0.55cm, inner sep=0.5pt, font=\footnotesize},
-    factor/.style={rectangle, draw, fill=black!25, minimum size=0.16cm, inner sep=0pt},
-    link/.style={draw, thick},
     within/.style={draw, thick, ->}
 ]
   \foreach \i in {1,...,4} {
-    \node[label] (z\i) at (2.1*\i, 2.2) {$z_{\i}$};
-    \node[factor] (e\i) at (2.1*\i, 1.4) {};
-    \node[observed] (n\i) at (2.1*\i - 0.45, 0.6) {$n_{\i}$};
-    \node[observed] (y\i) at (2.1*\i + 0.45, 0.6) {$y_{\i}$};
-    \draw[link] (z\i) -- (e\i);
-    \draw[link] (e\i) -- (n\i);
-    \draw[link] (e\i) -- (y\i);
+    \node[fgvariable] (z\i) at (2.1*\i, 2.2) {$z_{\i}$};
+    \node[fgdata] (e\i) at (2.1*\i, 1.4) {};
+    \node[fgobserved] (n\i) at (2.1*\i - 0.45, 0.6) {$n_{\i}$};
+    \node[fgobserved] (y\i) at (2.1*\i + 0.45, 0.6) {$y_{\i}$};
+    \draw[fglink] (z\i) -- (e\i);
+    \draw[fglink] (e\i) -- (n\i);
+    \draw[fglink] (e\i) -- (y\i);
     \draw[within] (n\i) -- (y\i);
   }
-  \node[anchor=west, font=\footnotesize] at (9.4, 2.2)
+  \node[fgnote] at (9.4, 2.2)
     {no pairwise factor};
-  \node[anchor=west, font=\footnotesize] at (9.4, 1.4)
+  \node[fgnote] at (9.4, 1.4)
     {$\psi_i = w_{z_i}\, p(n_i, y_i \mid z_i)$};
-  \node[anchor=west, font=\footnotesize] at (9.4, 0.6)
+  \node[fgnote] at (9.4, 0.6)
     {$y_i \mid n_i$ in the joint form};
 \end{tikzpicture}
 \caption{The count-emission mixture as a factor graph. It is

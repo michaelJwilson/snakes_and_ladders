@@ -12,3 +12,25 @@
 \usepackage{algpseudocode}
 \usepackage[numbers]{natbib}
 \usepackage[hidelinks]{hyperref}
+
+% The one visual vocabulary the problem-statement sketches share. Circles are
+% variables, squares are factors, shading marks where an observation enters,
+% and a triangle marks a factor that gates on a second variable. Each of the
+% eleven sketches carried a private copy, between them four circle diameters,
+% three square sizes and four fonts, so a reader learned the convention once
+% per figure (issue #529). A figure that needs a shape of its own adds it
+% locally, on top of these.
+\tikzset{
+  fgvariable/.style={circle, draw, fill=white, minimum size=0.58cm,
+                     inner sep=0.5pt, font=\footnotesize},
+  fgobserved/.style={fgvariable, fill=black!12},
+  fgfactor/.style={rectangle, draw, fill=white, minimum size=0.16cm,
+                   inner sep=0pt},
+  fgdata/.style={fgfactor, fill=black!25},
+  fgindicator/.style={fgfactor, fill=black!55},
+  fggate/.style={regular polygon, regular polygon sides=3, draw, fill=white,
+                 minimum size=0.25cm, inner sep=0pt},
+  fglink/.style={draw, thick},
+  fgabsent/.style={draw, thin, gray, dashed},
+  fgnote/.style={anchor=west, font=\footnotesize}
+}

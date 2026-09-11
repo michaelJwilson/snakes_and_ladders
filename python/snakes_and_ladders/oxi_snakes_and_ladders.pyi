@@ -50,7 +50,8 @@ def max_flow(
     capacity: np.ndarray,
     source: int,
     sink: int,
-) -> float: ...
+    reverse: np.ndarray | None = ...,
+) -> tuple[float, np.ndarray]: ...
 def ising_ground_state(
     n_nodes: int,
     field: np.ndarray,

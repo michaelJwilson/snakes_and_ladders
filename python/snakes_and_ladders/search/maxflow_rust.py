@@ -44,7 +44,7 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.search.maxflow import energy, site_field
+from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut, energy, site_field
 from snakes_and_ladders.sim.graph import PottsGraph
 
 
@@ -83,26 +83,30 @@ def ising_ground_state(
     return configuration, float(energy(graph, values, configuration))
 
 
-def max_flow(
-    n_nodes: int,
-    arcs: list[tuple[int, int]],
-    capacity: list[float],
-    source: int,
-    sink: int,
-) -> float:
-    """Maximum flow on an explicit directed network, computed in Rust.
+def min_cut(network: FlowNetwork, source: int, sink: int) -> MinCut:
+    """Maximum flow and the minimum cut it certifies, computed in Rust.
 
-    Back arcs are added with zero capacity, so an undirected edge is passed
-    twice. The Python side deliberately keeps no network object: a structure
-    mirrored on both sides of the boundary is a structure that can fall out
-    of step, and the only thing a caller needs back is a number.
+    The same signature and the same return as
+    :func:`snakes_and_ladders.search.maxflow.max_flow`, so a caller chooses
+    the solver and nothing else. The network crosses once, as the three
+    contiguous arrays :meth:`~snakes_and_ladders.search.maxflow.FlowNetwork.as_arrays`
+    builds; back-arc capacities cross with them, since an undirected edge
+    carries a capacity in both directions and a caller that had to pass such
+    an edge twice would be building a second network.
+
+    **The network is not mutated.** The pure implementation turns its
+    capacities into residual capacities in place, and this one leaves them as
+    they were: the residual graph lives in Rust and is dropped with the call.
+    Only :attr:`MinCut.source_side` reports on it, which is what the callers
+    here read. A caller that needs the residual capacities back needs the
+    pure implementation.
+
+    Until issue #528 the binding returned the flow value and discarded the
+    side, so :mod:`snakes_and_ladders.search.alpha_expansion`, which needs
+    the cut rather than the value, could not use it at all.
     """
-    return float(
-        oxi_snakes_and_ladders.max_flow(
-            n_nodes,
-            np.asarray(arcs, dtype=np.int64).reshape(-1),
-            np.asarray(capacity, dtype=np.float64),
-            source,
-            sink,
-        )
+    arcs, capacity, reverse = network.as_arrays()
+    value, side = oxi_snakes_and_ladders.max_flow(
+        network.n_nodes, arcs, capacity, source, sink, reverse
     )
+    return MinCut(value=float(value), source_side=np.asarray(side, dtype=bool))

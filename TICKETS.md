@@ -2,26 +2,25 @@
 
 The work that stands between `STATUS.md` and `ROADMAP.md`, as titles. Each line
 below is one filing through `.github/ISSUE_TEMPLATE/task.yml` — the outcome, the
-non-goals, and how it will be validated are written there, not here. A title is
-not a plan: the plan is posted to the thread and approved before any pull
-request opens (§0.2).
+non-goals, and how it will be validated are written there, not here. The plan is
+posted to the thread and approved before any pull request opens (§0.2).
 
 Ordering within a milestone is by dependency, not priority; priority is a label.
 A parenthesized number is an issue already filed; a bullet without one is work
-this file names and nobody has filed yet, which is the honest state and not an
-oversight to paper over. `tests/regression/test_planning_documents_agree.py`
-keeps the milestone headings here, in `ROADMAP.md` and in `STATUS.md` naming the
-same work, and keeps the parenthesis the only way a ticket is cited.
+this file names and nobody has filed yet.
+`tests/regression/test_planning_documents_agree.py` keeps the milestone headings
+here, in `ROADMAP.md` and in `STATUS.md` naming the same work, and keeps the
+parenthesis the only way a ticket is cited.
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 - Support the different lattice types (#231)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
-  sent through the 19,998-bit code rather than the zero word (#340)
+  sent through the 19,998-bit code (#340)
 - Bicycle codes and quantum LDPC codes as a second code family (#362)
 - Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
-  `simulate_chains` can call the general graph sampler instead of keeping
-  its own copy of the exact open-chain recursion (#186)
+  `simulate_chains` can call the general graph sampler instead of its own copy
+  of the exact open-chain recursion (#186)
 - Additional evolutionary models (#107)
 - Rate variation across sites, in the simulator and every backend (#323)
 - Emission-family extensions: multivariate and tied Gaussian, zero-inflated
@@ -56,8 +55,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Realize the tolerance helper rather than assume it is applied by hand (#91)
 - Profile a gradient fit in memory and time across the declared `n × L × k`
   range (#405)
-- Trajectory-length adaptation (NUTS), only if a posterior the #268
-  comparison reaches is one the fixed trajectory length of #333 samples badly
+- Trajectory-length adaptation (NUTS), only if the #268 comparison reaches a
+  posterior #333's fixed trajectory length samples badly
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
@@ -74,19 +73,18 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   coupling across every edge, so nothing in `learn` can express it
 - Beat random-restart descent, not one descent. Restarts reach
   `planted_glass/ci`'s ground state on every seed at 50 restarts, as they
-  reach #177's tree at 1.000 (#198); the 7-taxon Felsenstein-zone tree #406
-  measured is the only candidate where restarts also fail (0.938), and is
-  undeclared
+  reach #177's tree at 1.000 (#198); the undeclared 7-taxon Felsenstein-zone
+  tree #406 measured is the only candidate where restarts also fail (0.938)
 - Make the rooted/unrooted distinction explicit and give topologies a canonical
   key (#114)
 - Multi-SPR neighbourhoods, each stating in which sense it is complete and what
   it costs per step (#329)
 - Establish the external reference tools to benchmark against, and how they are
   installed (#126) — deferred while `CLAUDE.md` admits no external solver;
-  `docs/external_tools.md` is the survey a future adoption starts from
+  `docs/external_tools.md` surveys the candidates
 - A classical baseline suite the applications are scored against under one
-  budget — large parsimony under NNI and SPR is the tree baseline that exists
-  and `opt.budget.compare` the budget; the HMM and Potts baseline suites remain
+  budget — large parsimony under NNI and SPR exists as the tree baseline and
+  `opt.budget.compare` as the budget; the HMM and Potts suites remain
 - One Potts model in code: one adjacency, one energy, one heat-bath sweep
   (#277)
 - Max-Cut: the gradient norm at termination, and a certified SDP upper bound
@@ -103,11 +101,10 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - The surrogate-bound columns of #308 in the tree feature set — the plug-in
   lower and parsimony upper bounds — measured at the budget of
   `docs/experiments/005-tree-policy-features.md`, and the full feature set
-  against random-restart hill climbing, which reaches every start on #177's
-  fixture
+  against random-restart hill climbing
 - The factor-graph environment over the Gibbs moves of #309, and the
-  surrogates of #308 as a tree reward model — the parts of #313 that waited
-  on #296 and #308 and have no ticket since it closed
+  surrogates of #308 as a tree reward model — the parts of #313 left
+  unticketed since it closed
 - Truth as a terminal penalty, never a training signal
 - A move set for the code, so decoding is an environment like the other
   three (#340)
@@ -116,17 +113,16 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 
 - Weight transfer across problem sizes for a policy, and the schedule from
   `n = 10` to `n = 1000`; the surrogates of #308 transfer from 5 to 6 taxa
-  and from 3×3 to 4×6 lattices, and a policy does not yet — the lattice
-  half is filed (#414)
+  and from 3×3 to 4×6 lattices, and a policy does not yet (#414)
 - Batched episode rollout, so a budget at `n = 200` is affordable
 - Measure zero-shot collapse against the curriculum, so the regimen is
   justified rather than assumed
 
 ## Milestone 2.3 — Empirical Validation & Benchmarking
 
-- Validation past enumeration on simulated fixtures at the sizes this milestone
-  targets, refereed by the parameters that generated them; ingesting an
-  empirical alignment waits on the external-solver decision (#126)
+- Validation past enumeration on simulated fixtures at this milestone's sizes,
+  refereed by the parameters that generated them; ingesting an empirical
+  alignment waits on the external-solver decision (#126)
 - Benchmark harness: budget-matched runs on shared seeds against the classical
   baselines this repository implements; runs against IQ-TREE 2 and RAxML-NG
   wait on the same decision (#126)
@@ -140,8 +136,8 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - Create a ledger of benchmarked and validated runs with Aim (#75)
 - Reproduce a run from a single manifest, and assert it
 - Budget-matched ablation leaderboard across shared seeds — the experiment
-  ledger's index is the leaderboard; the matrix of problems × tiers × method
-  families is four cells filled
+  ledger's index is the leaderboard, four cells of problems × tiers × method
+  families filled
 - Paired significance test required before a variant is adopted as
   state-of-the-art — `opt.budget.mcnemar` exists; the adoption rule is not
   yet a gate
@@ -149,8 +145,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 ## Stage 3 — Research Extensions
 
 - Differentiable topology search over the tropical Grassmannian — landed as
-  a softmin over quartet resolutions (#408), refereed by enumeration at 5 to 8
-  taxa and by the Hadamard closed form, and conserved as
+  a softmin over quartet resolutions (#408) and conserved as
   `snakes_and_ladders.sandbox.tropical` because it beat nothing. What remains
   is a fixture on which it beats a classical baseline: on every one measured,
   neighbor joining reaches the same optimum without a gradient step
@@ -164,24 +159,23 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 ## Cross-Cutting Infrastructure
 
 - CPU parallelism past the first three sites: the candidate fits of
-  `search.infer`, `learn.rollout` batches, tempering replicas (a `rayon`
-  loop is the alternative, a dependency decision), `qa.build` and
-  `check_notebooks` through the seam, and `pytest-xdist` against the test
-  budget (#405)
+  `search.infer`, `learn.rollout` batches, tempering replicas (or a `rayon`
+  loop, a dependency decision), `qa.build` and `check_notebooks` through the
+  seam, and `pytest-xdist` against the test budget (#405)
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#405)
 - The targets the runtime-optimization audit left unmet: the tree schedule
   within 2x of the forward recursion on a chain, the reassociated
-  transfer-matrix product in the Potts chain objective, `maxflow_rust` as
-  alpha expansion's inner solver, and a compiled sweep for the factor-graph
-  Gibbs sampler (#405)
+  transfer-matrix product in the Potts chain objective, and a compiled sweep
+  for the factor-graph Gibbs sampler (#405). Alpha expansion's inner solver
+  is done (#528)
 - Adopt `rustworkx` on a hot path where a measurement says so —
   `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
   of the bound — moving the replaced implementation to `sandbox/`
 - TorchRL `TensorDict` environments and a `SyncDataCollector` over the
   Gymnasium adapter for Milestone 2.2's batched rollout, adopted only if the
   collector beats `learn.rollout` on the 8 → 20 taxa scaling with `float64`
-  forced throughout
+  forced
 - PyTorch Geometric `Batch.from_data_list` for surrogate training at 20+
   taxa, and `HeteroData` over `sim.factor_graph` for a learned message
   passing beside the exact one, gated on the training-time benchmark
@@ -190,7 +184,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
   #358 and again at 0.5.0 by #376, to be closed with #275 and #276
 - Release 0.4.0 (#358); #236 is the earlier filing of the same release. The
   cut is deferred and no tag exists, so #376's 0.5.0 audit runs from #358's
-  merged pull request rather than from a tag
+  merged pull request
 - Merge the eight annealing entry points onto one driver, and the eight
   enumerators onto one weighted enumeration, each against the oracle #375
   recorded for it
@@ -214,7 +208,7 @@ same work, and keeps the parenthesis the only way a ticket is cited.
 - One canonical list of the local checks (#40)
 - Detect a merge at a stale head, which silently drops commits (#123)
 - Abbreviate the package as `sal` (#301)
-- Test hygiene: remove the QA tests that duplicate their figures'
-  computations, and give the entry points one shape (#338)
+- Test hygiene: remove the QA tests duplicating their figures' computations,
+  and give the entry points one shape (#338)
 - Adopt `qa.layout` in the surrogate joint-distribution and coupled-model
   field figures (#339)

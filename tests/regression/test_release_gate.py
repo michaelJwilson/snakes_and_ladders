@@ -26,6 +26,11 @@ from snakes_and_ladders.qa.manifest import FIGURES
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_GATE = REPO_ROOT / "infra" / "release.sh"
 
+#: `RELEASE.md`'s rounded bound on the whole-manifest figure pass, in minutes.
+_FIGURE_PASS_BOUND = re.compile(
+    r"`qa\.build --all --check`[^|]*\|\s*\*\*Around (\d+) minutes\*\*"
+)
+
 #: One `run_check "<name>" <command>`, with the line continuations joined.
 _RUN_CHECK = re.compile(r"^run_check\s+(.*)$", re.MULTILINE)
 
@@ -131,20 +136,32 @@ def test_the_gate_builds_the_documentation_in_full() -> None:
 
 
 @pytest.mark.structural
-def test_dev_md_states_the_figure_pass_at_the_manifest_s_own_total() -> None:
-    """The cost beside the gate is the manifest's, to the tenth of a second.
+def test_release_md_bounds_the_figure_pass_above_the_manifest_s_total() -> None:
+    """`RELEASE.md`'s stated bound is not less than the manifest's sum.
 
     The number this replaced --- ~6 min a figure --- was a whole re-stamp
     pass's total read as one render, and it stood because nothing in the tree
     disagreed with it (issue #476). `snakes_and_ladders.qa.manifest` carries a
-    measured `seconds` per figure, so the released total has a source that a
-    reader can add up, and this fails when the manifest moves away from it.
+    measured `seconds` per figure, so the cost has a source a reader can add
+    up.
+
+    An inequality rather than an equality, because `RELEASE.md`'s numbers are
+    rounded upper bounds by design (issue #525) and an exact-equality guard
+    would fail on the rounding rather than on the drift. This fires when the
+    figure set outgrows what the document tells a reader to expect, which is
+    the drift worth catching.
     """
     total = sum(spec.seconds for spec in FIGURES)
-    stated = f"**{total:.1f} s**"
-    dev = (REPO_ROOT / "DEV.md").read_text()
-    assert stated in dev, (
-        f"DEV.md's release gate does not state the figure pass as {stated}, "
-        f"the sum of the {len(FIGURES)} declared render times in "
-        "snakes_and_ladders.qa.manifest"
+    release = (REPO_ROOT / "RELEASE.md").read_text()
+    match = _FIGURE_PASS_BOUND.search(release)
+    assert match is not None, (
+        "RELEASE.md no longer states a bound for the `qa.build --all --check` "
+        "step, so nothing couples the document to the manifest (issue #525)"
+    )
+    bound = int(match.group(1)) * 60
+    assert bound >= total, (
+        f"RELEASE.md bounds the figure pass at ~{match.group(1)} min, under "
+        f"the {total:.1f} s the {len(FIGURES)} entries of "
+        "snakes_and_ladders.qa.manifest declare between them: the manifest has "
+        "outgrown the stated bound (issue #525)"
     )
