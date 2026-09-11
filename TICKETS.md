@@ -142,8 +142,8 @@ parenthesis the only way a ticket is cited.
   `ci` and the surrogate's error is analysable rather than only measured
   (#365)
 - A patched or transformer form at `spatio_only/release`, against the graph
-  surrogate at matched parameter count and training budget — conditional on
-  the graph form degrading with size, which it has not (#365)
+  surrogate at matched parameter count and training budget. The condition is
+  met: the graph form degrades at 5,041 sites, to `R^2` -47.5 (#365)
 - Self-attention over 5,041 tokens, whose weight matrix is quadratic in the
   site count and which the kernel kills at the release rung; either a
   chunked or linear form, or the ticket records it declined (#365)
