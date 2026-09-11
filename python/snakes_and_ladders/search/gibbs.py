@@ -28,8 +28,9 @@ temperature one is the flat-prior weight over fitted likelihoods that
 
 The sweep runs through a ``numba`` kernel over an edge layout -- every
 factor's table in one array, and offsets into it per variable (issue #561) --
-with the NumPy path beside it as the oracle it reproduces bitwise. Its cost
-against the Potts kernels is measured in
+and the log-density a chain records through a second kernel over the same
+array (issue #563), with the NumPy path beside each as the oracle it
+reproduces bitwise. Their cost against the Potts kernels is measured in
 ``tests/benchmarks/test_gibbs_bench.py`` and recorded in ``STATUS.md``; the
 specialised kernels stay the default for the Potts lattice, and this sampler
 is the one for the model none of them can express.
@@ -120,6 +121,13 @@ class _EdgeLayout:
     ``entry_start``, add ``state[term_column] * term_stride`` over its terms,
     and step by ``entry_stride`` through the variable's own states.
 
+    The entries are grouped by variable, so a factor of degree ``d`` appears
+    ``d`` times among them and not in graph order. A density sums each factor
+    once, left to right in graph order
+    (:meth:`~snakes_and_ladders.sim.factor_graph.FactorGraph.log_density`), so it
+    reads the four ``factor_`` arrays instead: the same ``tables``, indexed
+    whole rather than along one axis.
+
     Parameters
     ----------
     tables : np.ndarray
@@ -136,6 +144,12 @@ class _EdgeLayout:
         ``term_offsets[e]:term_offsets[e + 1]`` are entry ``e``'s terms.
     term_column, term_stride : np.ndarray
         The variable a term reads, and the stride of the axis it fixes.
+    factor_start : np.ndarray
+        Where each factor begins in ``tables``, in graph order.
+    factor_offsets : np.ndarray
+        ``factor_offsets[f]:factor_offsets[f + 1]`` are factor ``f``'s axes.
+    factor_column, factor_stride : np.ndarray
+        The variable an axis reads, and its stride.
     """
 
     tables: np.ndarray
@@ -145,6 +159,10 @@ class _EdgeLayout:
     term_offsets: np.ndarray
     term_column: np.ndarray
     term_stride: np.ndarray
+    factor_start: np.ndarray
+    factor_offsets: np.ndarray
+    factor_column: np.ndarray
+    factor_stride: np.ndarray
 
 
 class _Indexed:
@@ -182,6 +200,10 @@ class _Indexed:
         table_start: dict[str, int] = {}
         strides: dict[str, list[int]] = {}
         total = 0
+        factor_start: list[int] = []
+        factor_offsets = [0]
+        factor_column: list[int] = []
+        factor_stride: list[int] = []
         for factor in self.graph.factors:
             table_start[factor.name] = total
             flat = np.ascontiguousarray(factor.log_table, dtype=np.float64).ravel()
@@ -192,6 +214,10 @@ class _Indexed:
             for axis in range(len(shape) - 2, -1, -1):
                 stride[axis] = stride[axis + 1] * shape[axis + 1]
             strides[factor.name] = stride
+            factor_start.append(table_start[factor.name])
+            factor_column.extend(self.index[name] for name in factor.variables)
+            factor_stride.extend(stride)
+            factor_offsets.append(len(factor_column))
 
         entry_offsets = [0]
         entry_start: list[int] = []
@@ -221,6 +247,10 @@ class _Indexed:
             np.array(term_offsets, dtype=np.int64),
             np.array(term_column, dtype=np.int64),
             np.array(term_stride, dtype=np.int64),
+            np.array(factor_start, dtype=np.int64),
+            np.array(factor_offsets, dtype=np.int64),
+            np.array(factor_column, dtype=np.int64),
+            np.array(factor_stride, dtype=np.int64),
         )
         return self._layout
 
@@ -233,7 +263,40 @@ class _Indexed:
             local += factor.log_table[tuple(key)]
         return local
 
-    def log_density(self, state: np.ndarray) -> float:
+    def log_density(self, state: np.ndarray, backend: Backend = Backend.NUMBA) -> float:
+        """``sum_f log psi_f`` at one state, in the graph's variable order.
+
+        :meth:`snakes_and_ladders.sim.factor_graph.FactorGraph.log_density` is the
+        definition and the oracle: a dictionary lookup per variable and a tuple
+        key per factor, which #561 promoted to 47.8% of a run once the sweep
+        was compiled. The
+        :data:`~snakes_and_ladders.search.backend.Backend.NUMBA` path
+        (:func:`snakes_and_ladders.search.kernels.factor_graph_log_density`) reads
+        the same tables through the edge layout and sums the same terms in the
+        same order, so it reproduces it **bitwise** (#563).
+
+        Raises
+        ------
+        ValueError
+            If ``backend`` is one this density has no implementation for.
+        """
+        if backend is Backend.NUMBA:
+            from snakes_and_ladders.search.kernels import factor_graph_log_density
+
+            layout = self.layout()
+            return float(
+                factor_graph_log_density(
+                    state,
+                    layout.tables,
+                    layout.factor_start,
+                    layout.factor_offsets,
+                    layout.factor_column,
+                    layout.factor_stride,
+                )
+            )
+        if backend is not Backend.PYTHON:
+            msg = f"the log-density has no {backend} backend"
+            raise ValueError(msg)
         return self.graph.log_density(
             dict(zip(self.names, map(int, state), strict=True))
         )
@@ -398,7 +461,7 @@ def sample_factor_graph(
         gibbs_sweep(indexed, state, rng, beta=beta, backend=backend)
         if sweep % thin == 0:
             states.append(state.copy())
-            densities.append(indexed.log_density(state))
+            densities.append(indexed.log_density(state, backend))
     return GibbsChain(indexed.names, np.array(states), np.array(densities))
 
 
@@ -420,11 +483,11 @@ def anneal_factor_graph(
     indexed = _Indexed(graph)
     state = indexed.start(rng, start)
     best_state = state.copy()
-    best = indexed.log_density(state)
+    best = indexed.log_density(state, backend)
     trajectory = [best]
     for step in range(schedule.n_steps):
         gibbs_sweep(indexed, state, rng, beta=1.0 / schedule(step), backend=backend)
-        value = indexed.log_density(state)
+        value = indexed.log_density(state, backend)
         trajectory.append(value)
         if value > best:
             best, best_state = value, state.copy()

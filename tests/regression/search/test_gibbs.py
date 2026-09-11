@@ -137,14 +137,17 @@ def _lattice_graph(extent: int) -> FactorGraph:
 def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
     extent: int, seed: int
 ) -> None:
-    # What lets the kernel be the default (#561): the same uniforms in the
-    # same order give the same states, exactly, not to a tolerance. The
-    # kernel gathers the conditional from one array of tables and NumPy from
-    # a slice per factor, in the same order, so the sums are identical; the
-    # exponential is where the two could part, and the kernel declines any
+    # What lets the kernels be the default (#561, #563): the same uniforms in
+    # the same order give the same states, exactly, not to a tolerance. The
+    # sweep kernel gathers the conditional from one array of tables and NumPy
+    # from a slice per factor, in the same order, so the sums are identical;
+    # the exponential is where the two could part, and the kernel declines any
     # site whose draw comes within the last place of a cumulative boundary.
-    # Realized: 8 of 8 runs agree on every state and every log-density,
-    # 15,360 draws at 16x16 and 61,440 at 32x32.
+    # The density kernel reads the same array and takes no exponential, so
+    # order is all it needs: it sums factors left to right in graph order, as
+    # the dictionary oracle does. Realized: 8 of 8 runs agree on every state
+    # and every log-density, 15,360 draws at 16x16 and 61,440 at 32x32, and
+    # every compiled density equals the dictionary one to the last bit.
     graph = _lattice_graph(extent)
 
     numpy_chain = sample_factor_graph(
@@ -156,6 +159,20 @@ def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
 
     assert np.array_equal(numpy_chain.states, compiled.states)
     assert np.array_equal(numpy_chain.log_densities, compiled.log_densities)
+    oracle = [
+        graph.log_density(dict(zip(compiled.variables, map(int, state), strict=True)))
+        for state in compiled.states
+    ]
+    assert np.array_equal(compiled.log_densities, np.array(oracle))
+
+
+@pytest.mark.edge_case
+def test_the_log_density_has_no_rust_backend() -> None:
+    graph = _lattice_graph(4)
+    indexed = _Indexed(graph)
+
+    with pytest.raises(ValueError, match="no rust backend"):
+        indexed.log_density(np.zeros(len(indexed.names), dtype=np.int64), Backend.RUST)
 
 
 @pytest.mark.structural

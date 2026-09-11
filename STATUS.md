@@ -802,7 +802,7 @@ sites) and the `qa`/`infra` row are recorded as not measured.
 | `learn` | `PottsLandscape.features`, 60 x 32 episodes on the length-8 chain: 23.5%, with 520,968 ufunc reductions from its loop over sites; `policy.sample` 4.0% | 23.5% | vectorization | under 20% of the run | `_deltas`, exact |
 | `search` | `maxflow.energy`, 32x32 x 64 configurations: the per-edge Python loop 91.6% (16x16: 93.0%) | 92% | vectorization | 5–10x on one configuration | `potts.log_weights`, 1e-12 relative |
 | `search` | `spr_neighbours` at 20 taxa: 128.7 ms for 1,122 candidates, `build` and its generator 44%, `visit` 28% | 10% of one `infer` step (1.28 s); 67% of one candidate fit (193 ms) | allocation (a `Node` tree per new key) | at most 2x on the neighbourhood, under 5% of a step | not ported: under the 10% rule per step |
-| `search` | `gibbs.sample_factor_graph`, 32x32: `conditional` 42.0%, `gibbs_sweep` 17.0%, `log_density` 9.7% (16x16: 40.8 / 18.6 / 9.2%) | 69% | compiled backend over the #341 edge layout | ~10x, from the Potts `numba` sweep's 7x | draw for draw on the same uniforms; **acted on by [#561](https://github.com/michaelJwilson/snakes_and_ladders/issues/561), below: 122x on the sweep, 7.1x on the run** |
+| `search` | `gibbs.sample_factor_graph`, 32x32: `conditional` 42.0%, `gibbs_sweep` 17.0%, `log_density` 9.7% (16x16: 40.8 / 18.6 / 9.2%) | 69% | compiled backend over the #341 edge layout | ~10x, from the Potts `numba` sweep's 7x | draw for draw on the same uniforms; **acted on by [#561](https://github.com/michaelJwilson/snakes_and_ladders/issues/561) and [#563](https://github.com/michaelJwilson/snakes_and_ladders/issues/563), below: 122x on the sweep, 147x on the density, 18.5x on the run** |
 | `search` | `alpha_expansion`, 32x32: Python Dinic `_augment` 28.8%, `_levels` 18.8%, `expand` 24.0% | 72% | FFI: `maxflow_rust` as the inner solver | 3x or more on the expansion | its energies, exact; **acted on by [#528](https://github.com/michaelJwilson/snakes_and_ladders/issues/528), below** |
 | `search` | `potts_mcmc` single-site, 32x32: `_single_site_sweep` 45.8% | 46% | none: the Rust backend exists and is opt-in (#287) | — | not changed by default |
 | `opt` | `hmc.sample`, 1,000 draws on the length-64 chain: `torch.logsumexp` 32.0% (512,000 calls, one per position per evaluation), `log_partition` 9.6%; the fit at length 64: 26.6% | 42% | call overhead: reassociate the homogeneous transfer-matrix product by repeated squaring, 6 products for 64 positions | 1.5–2x on the run | the sequential recursion at 1e-12 relative and central differences for the gradient; not acted on |
@@ -912,7 +912,50 @@ what lets the kernel be the default, where the Rust sampling sweep is opt-in.
 `layout` 13.2% — paid once per graph — and `gibbs_sweep` **2.1%**, down from
 18.0%. `conditional` does not appear: no call reaches it. `log_density` is
 the loop that clears the 10% bar now, a Python sum over factors with a tuple
-key built per factor; it is carried by [#563](https://github.com/michaelJwilson/snakes_and_ladders/issues/563) rather than here.
+key built per factor; it is carried by [#563](https://github.com/michaelJwilson/snakes_and_ladders/issues/563), below, rather than here.
+
+**The density compiled, and the layout left on top**
+([#563](https://github.com/michaelJwilson/snakes_and_ladders/issues/563)).
+`log_density` runs through a second `numba` kernel over the edge layout the
+sweep already walks: each factor's element is the offset its axes fix, and the
+sum runs left to right over factors in graph order. That order is the pin.
+Floating-point addition is not associative, so a pairwise or vectorized sum
+would move the last place of every recorded density; this one takes no
+exponential either, so nothing here needs the bound #561's sweep needs, and
+`FactorGraph.log_density` — unchanged, and still the definition every adapter
+is enumerated against — is reproduced **bitwise**.
+
+| 32x32, one call, 3,008 factors | dict | compiled | ratio |
+| --- | --- | --- | --- |
+| `log_density` (min / median) | 1,680.6 / 1,861.4 µs | **11.5 / 11.7 µs** | **146.7x / 159.5x** |
+
+| `sample_factor_graph`, 20 sweeps at 32x32 | min / median |
+| --- | --- |
+| NumPy | 445.6 / 451.7 ms |
+| compiled sweep, dictionary density (#561) | 65.2 / 70.4 ms |
+| both compiled (#563) | **24.1 / 25.0 ms** |
+
+The run realizes **18.5x** over NumPy against #561's 7.1x, and 2.7x over #561
+alone. `pytest-benchmark` over 494 and 36,977 rounds for the density, five
+repeats of `perf_counter` for the run, one thread, each reading on a host `ps`
+showed carrying nothing but the job (1-minute load 1.36 to 1.39). Peak traced
+memory over the run is 2.67 MiB against 1.05 MiB for the NumPy path; the
+layout grows to 475 KiB, of which the four factor arrays are 125 KiB, and its
+build from 13.7 to 16.1 ms — the allocation the density no longer repeats
+3,008 times per recorded sweep.
+
+**Re-profiled again, the layout is what is left.** At 32x32 over 20 sweeps
+`_Indexed.layout` carries **37.0%** of the run in self time and **80.2%**
+cumulatively, `_Indexed.__init__` 6.7% and 11.3%, `gibbs_sweep` 4.1% in self
+time, and `log_density` does not reach the top eight: 20 calls at 11.5 µs is
+0.2 ms of a 24.1 ms run. The layout is paid once per graph, and a compiled
+sweep costs 0.125 ms at this size, so the layout is worth 130 sweeps: at 100
+sweeps it is still 66.6% cumulatively, and it clears the 10% bar for any run
+under about 1,300 sweeps of one graph. `sample_factor_graph` builds one per
+call, so a caller that samples many graphs pays it every time and a long chain
+amortizes it. It is the next candidate on this path and is not carried here.
+Four readings on this host agree to within one point, the last two of them
+with `ps` showing nothing but the job.
 
 **Bounds with proofs, certified rather than trusted**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
