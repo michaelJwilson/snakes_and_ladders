@@ -1,31 +1,28 @@
 """Shared figure style for the documents.
 
-`docs/tex/` is written as an academic letter, and its figures follow: a serif
-face matching the body text, one-column sizing, recessive axes, and no
-ornament that does not carry information. Every QA script draws inside
-:func:`letter_style` so the document reads as one set of figures rather than
-one per author.
+`docs/tex/` is written as an academic letter and its figures follow: a serif
+face matching the body text, one-column sizing, recessive axes, and no ornament
+carrying no information. Every QA script draws inside :func:`letter_style`, so
+the document reads as one set of figures rather than one per author.
 
 Colour
 ------
-`PALETTE` is the Okabe--Ito colourblind-safe qualitative set, in a fixed
-order that is never cycled. Validated with the visualization skill's
-checker against a light print surface: adjacent-pair CVD separation
-``dE 11.0`` (deuteranopia), normal-vision floor ``dE 16.4``, all four inside
-the lightness band and above the chroma floor. Over all pairs rather than
-adjacent ones, ``purple/green`` falls to ``dE 7.6``, inside the band that is
-legal only with secondary encoding -- which is why `MARKERS` and
-`LINESTYLES` exist and why figures label series directly. Colour never
-carries identity alone.
+`PALETTE` is the Okabe--Ito colourblind-safe qualitative set, in a fixed order
+that is never cycled. Validated with the visualization skill's checker against
+a light print surface: adjacent-pair CVD separation ``dE 11.0``
+(deuteranopia), normal-vision floor ``dE 16.4``, all four inside the lightness
+band and above the chroma floor. Over all pairs, ``purple/green`` falls to
+``dE 7.6``, legal only with secondary encoding -- which is why `MARKERS` and
+`LINESTYLES` exist and why figures label series directly. Colour never carries
+identity alone.
 
 A fifth series is not a new hue. Facet, or fold into an aggregate.
 
-Categorical *states* -- Potts states, hidden states, the coupled model's
-labels -- are a different object from series and take `STATE_PALETTE`, the
-full eight-colour Okabe--Ito set (issue #312): a state is read off a
-legend or a colourbar, never traced across a plot, so the adjacent-pair
-separation the series palette was validated for is not what it needs. A
-ninth state is a facet, as a fifth series is.
+Categorical *states* -- Potts states, hidden states, the coupled model's labels
+-- take `STATE_PALETTE`, the full eight-colour Okabe--Ito set (issue #312): a
+state is read off a legend or a colourbar and never traced across a plot, so it
+does not need the adjacent-pair separation the series palette was validated
+for. A ninth state is a facet, as a fifth series is.
 """
 
 from __future__ import annotations
@@ -163,8 +160,8 @@ def discrete_palette(
 def notebook_style() -> Iterator[None]:
     """The letter style at screen resolution, for the notebooks under ``docs/nb/``.
 
-    The document's 200 dpi is what the committed PDFs are byte-compared at
-    and stays in :func:`letter_style`; a notebook renders inline and is not
+    The document's 200 dpi is what the committed PDFs are byte-compared at and
+    stays in :func:`letter_style`; a notebook renders inline and is not
     compared, so it draws at 150.
     """
     with letter_style(), mpl.rc_context({"figure.dpi": 150}):
@@ -175,17 +172,16 @@ def notebook_style() -> Iterator[None]:
 def letter_style() -> Iterator[None]:
     """Draw inside the documents' figure style.
 
-    The rcParams are written as a literal rather than built and passed, so
-    mypy checks each key against matplotlib's ``Literal`` key type -- a
-    misspelled rcParam is a type error here rather than a silently ignored
-    setting at runtime.
+    The rcParams are written as a literal rather than built and passed, so mypy
+    checks each key against matplotlib's ``Literal`` key type: a misspelled
+    rcParam is a type error rather than a silently ignored setting.
 
     Yields
     ------
     None
-        A context in which matplotlib's rcParams carry the letter style.
-        Scoped rather than global, so importing this module does not change
-        plotting behaviour for anything else in the process.
+        A context in which matplotlib's rcParams carry the letter style. Scoped
+        rather than global, so importing this module changes plotting behaviour
+        for nothing else in the process.
     """
     with mpl.rc_context(
         {

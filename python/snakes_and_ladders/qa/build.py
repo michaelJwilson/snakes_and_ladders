@@ -1,31 +1,29 @@
 """Regenerate QA figures, selected by what the documents cite.
 
-Per pull request, only the figures the documents under ``docs/tex/`` include need
-rebuilding: those are the ones a change could make stale in the committed
-document, and regenerating the rest cost most of the ``documents`` job
-while proving nothing about it (issue #154).
+Per pull request, only the figures the documents under ``docs/tex/`` include
+need rebuilding: those are the ones a change could make stale in the committed
+document, and regenerating the rest cost most of the ``documents`` job while
+proving nothing about it (issue #154).
 
 Every figure is rendered and compared at the release gate, where
-``infra/release.sh`` runs ``--all --check`` (issue #484): cited and uncited
-alike. The guarantee --- a figure whose rendered bytes would change cannot
-reach a release claiming to be current --- is enforced by rendering every
-figure rather than predicted for any of them. The selection below is a cost
-decision under that gate, not a substitute for it.
+``infra/release.sh`` runs ``--all --check`` (issue #484), cited and uncited
+alike: a figure whose rendered bytes would change cannot reach a release
+claiming to be current. The selection below is a cost decision under that gate,
+not a substitute for it.
 
 ``--check`` regenerates into a temporary directory and compares bytes instead
-of overwriting, so a verification run cannot itself produce the state it was
-meant to detect.
+of overwriting, so a verification run cannot produce the state it was meant to
+detect.
 
 **Every selected figure is rendered; nothing predicts which could have
-changed** (issue #490). A stamp beside each committed figure recorded a
-digest of the renderer's import closure, and a figure whose stamp matched
-the tree was skipped. Over 476 decisions the stamps never once skipped a
-figure whose bytes would have moved, and never once let one through: every
-stale call was a false positive, at ~48 minutes in one day. Rendering the
-selection unconditionally costs the cited set's declared time --- 305.3 s
-over the 21 entries `snakes_and_ladders.qa.manifest` states --- on the push
-to ``main`` where the documents job runs, and answers with the bytes rather
-than with a hash of their inputs.
+changed** (issue #490). A stamp beside each committed figure recorded a digest
+of the renderer's import closure, and a figure whose stamp matched the tree was
+skipped. Over 476 decisions the stamps never skipped a figure whose bytes would
+have moved and never let one through: every stale call was a false positive, at
+~48 minutes in one day. Rendering the selection unconditionally costs the cited
+set's declared time --- 305.3 s over the 21 entries
+`snakes_and_ladders.qa.manifest` states --- and answers with the bytes rather
+than a hash of their inputs.
 """
 
 from __future__ import annotations
@@ -50,11 +48,11 @@ from snakes_and_ladders.qa.manifest import (
 )
 
 # The committed figures are reproducible artifacts, so the clock they were
-# rendered against is part of what renders them: matplotlib embeds
-# SOURCE_DATE_EPOCH as the PDF's /CreationDate, and without it two rebuilds of
-# an unchanged figure differ. Pinned here rather than left to each caller,
-# because a `--check` that reports every figure stale unless the caller
-# remembered an environment variable is worse than no check. `2025-01-01`.
+# rendered against renders them: matplotlib embeds SOURCE_DATE_EPOCH as the
+# PDF's /CreationDate, and without it two rebuilds of an unchanged figure
+# differ. Pinned here rather than left to each caller, since a `--check`
+# reporting every figure stale unless the caller remembered an environment
+# variable is worse than no check. `2025-01-01`.
 SOURCE_DATE_EPOCH = "1735689600"
 
 # Development tooling, so a source checkout is assumed: the defaults below
@@ -62,10 +60,10 @@ SOURCE_DATE_EPOCH = "1735689600"
 # installed copy has neither, and nothing in the shipped package imports this.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 #: The documents the repository builds, in build order. Plural since issue
-#: #249: the paper carries the results and the textbook the algorithms, and
-#: the per-pull-request figure selection is the union of what they cite --- a
-#: selection taken from one of them alone would stop regenerating the other's
-#: figures without failing anything.
+#: #249: the paper carries the results and the textbook the algorithms, and the
+#: per-pull-request figure selection is the union of what they cite --- one
+#: taken from a single document would stop regenerating the other's figures
+#: without failing anything.
 DEFAULT_DOCUMENTS = (
     REPO_ROOT / "docs" / "tex" / "paper.tex",
     REPO_ROOT / "docs" / "tex" / "textbook.tex",
@@ -86,8 +84,8 @@ def selected(
     ----------
     documents : Sequence[Path]
         The documents whose citations drive the per-PR selection, taken
-        together. Every document the repository builds belongs here: one
-        left out is a figure set that is silently too small.
+        together. Every document the repository builds belongs here: one left
+        out is a figure set silently too small.
     every : bool
         Select the whole manifest instead, as the release gate does.
     only : Sequence[str]
@@ -103,9 +101,8 @@ def selected(
     ------
     UncitedFigureError
         If a document cites a stem the manifest does not know, or ``only``
-        names one. Silently skipping it would leave a figure in the document
-        that no build regenerates, which is the failure this whole selection
-        risks and so the one it must refuse.
+        names one. Skipping it silently would leave a figure in the document
+        that no build regenerates, the failure this selection risks.
     """
     if only:
         missing = unknown_stems(only)
@@ -128,11 +125,11 @@ def selected(
     return select(cited)
 
 
-#: Thread-count variables a figure's process does not inherit. The suite
-#: pins them to one so a process is one core (``tests/conftest.py``); a
-#: figure is rendered the way the manifest renders it, with the threading
-#: the committed bytes were produced under, since a reduction split across a
-#: different number of threads can move a last bit (``qa/CLAUDE.md``).
+#: Thread-count variables a figure's process does not inherit. The suite pins
+#: them to one so a process is one core (``tests/conftest.py``); a figure is
+#: rendered with the threading the committed bytes were produced under, since a
+#: reduction split across a different number of threads can move a last bit
+#: (``qa/CLAUDE.md``).
 THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 
 
