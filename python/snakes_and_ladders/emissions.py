@@ -1,20 +1,18 @@
 """What a hidden state emits, separated from how the model is fitted.
 
-An HMM's emission is the only part of the model that knows what an
-observation *is*. The rest --- the forward recursion, the Baum-Welch E step,
-path enumeration --- needs three things from it and nothing else: draw an
-observation given a state, score an observation given a state, and
-re-estimate itself from posterior state weights. This module is that
-interface and its implementations; ``snakes_and_ladders.opt.hmm`` holds the
-recursions that consume it.
+The emission is the only part of an HMM that knows what an observation
+*is*. The recursions need three things from it: draw an observation given a
+state, score one given a state, re-estimate from posterior state weights.
+This module is that interface and its implementations;
+``snakes_and_ladders.opt.hmm`` holds the recursions that consume it.
 
 **Why it is here rather than in a module that owns a model.** ``opt/CLAUDE.md``
 forbids ``snakes_and_ladders.opt`` from importing ``snakes_and_ladders.sim``, and
 ``tests/regression/opt/test_opt_objective.py`` asserts it, so a family defined
-in ``sim`` would be unreachable from the objective that has to score with it.
-A family names no tree, no alignment and no lattice, so it sits beside
-:mod:`snakes_and_ladders.numerics` and :mod:`snakes_and_ladders.enumeration` on
-the same terms: importable from anywhere, inverting no layering.
+in ``sim`` would be unreachable from the objective that scores with it. A
+family names no tree, no alignment and no lattice, so it sits beside
+:mod:`snakes_and_ladders.numerics` on the same terms: importable from
+anywhere, inverting no layering.
 
 **A density is not a probability, and the difference is load-bearing.**
 :meth:`EmissionFamily.log_density` returns a log-probability for a family over
@@ -26,17 +24,16 @@ is, so a test can assert the bound exactly where it holds.
 
 **An unbounded likelihood is a property of the model, not a bug in the fit.**
 A Gaussian emission's likelihood has no maximum: put one state's mean on a
-single observation and let its variance go to zero and the likelihood
-diverges (Bishop, *Pattern Recognition and Machine Learning*, section 9.2.1).
+single observation and let its variance go to zero (Bishop, *Pattern
+Recognition and Machine Learning*, section 9.2.1).
 :class:`GaussianEmission` therefore carries an explicit variance floor and
 **refuses** rather than clamps when a re-estimate reaches it, because a
-clamped fit returns normally and its intervals mean nothing --- issue #122's
-case, arrived at from a second direction.
+clamped fit returns normally and its intervals mean nothing (issue #122).
 
-Parameterization for an unconstrained optimizer is deliberately *not* here.
-That is what ``snakes_and_ladders.opt.constrain`` is for, and putting it here
-would make :mod:`snakes_and_ladders.sim` import ``snakes_and_ladders.opt``
-transitively to draw a sequence.
+Parameterization for an unconstrained optimizer belongs to
+``snakes_and_ladders.opt.constrain``; here it would make
+:mod:`snakes_and_ladders.sim` import ``snakes_and_ladders.opt`` transitively
+to draw a sequence.
 """
 
 from __future__ import annotations
@@ -52,26 +49,23 @@ import torch
 from snakes_and_ladders.numerics_rust import sample_rows
 
 #: What a family accepts for a parameter vector. A plain list is admitted
-#: because a fixture states its truth in one, and requiring an array at the
-#: boundary would put ``np.array`` around every literal in the suite for no
-#: gain -- the constructor converts, and validates what it converted.
+#: because a fixture states its truth in one; the constructor converts, and
+#: validates what it converted.
 type Values = np.ndarray | torch.Tensor | Sequence[float] | Sequence[int]
 
 #: Nearest-neighbour spacing, in units of the pooled standard deviation, that
 #: :func:`pooled_variance_floor` treats as the smallest scale a state can
-#: genuinely occupy. ``n`` observations spread over a pooled standard
-#: deviation ``s`` sit at a typical spacing ``s / n``, so a state explaining a
-#: *neighbourhood* of the data has variance of at least that order while a
-#: state collapsed onto a *single* observation has variance heading to zero.
-#: The floor is the boundary between the two and is derived from the data
-#: rather than fixed, so it transfers across fixture sizes.
+#: occupy. ``n`` observations spread over a pooled standard deviation ``s``
+#: sit at a typical spacing ``s / n``, so a state explaining a *neighbourhood*
+#: has variance of at least that order and one collapsed onto a *single*
+#: observation has variance heading to zero. Derived from the data rather than
+#: fixed, so it transfers across fixture sizes.
 COLLAPSE_EXPONENT = 2
 
 #: How far below :func:`identifiable_dispersion_bound` the dispersion solve's
 #: bracket reaches. Nine decades: the score diverges to ``+inf`` as ``r -> 0``,
-#: so the lower end only has to be small enough that the root is above it, and
-#: bisection pays for the width in ``log2`` of it -- three extra iterations per
-#: three decades.
+#: so the lower end only has to put the root above it, and bisection pays for
+#: the width in ``log2`` -- three extra iterations per three decades.
 _DISPERSION_BRACKET_RATIO = 1e-9
 
 #: How far a re-estimated binomial probability is held from 0 and 1. A
@@ -89,11 +83,9 @@ _MAX_BISECTIONS = 60
 
 
 #: The family a re-estimate returns, so a caller of a concrete family's M step
-#: keeps that family's own parameters rather than the protocol's. Covariant,
-#: which is sound because the record is frozen: a
-#: ``Reestimate[GaussianEmission]`` may stand where a
-#: ``Reestimate[EmissionFamily]`` is wanted, and nothing can write the narrower
-#: field through the wider view.
+#: keeps that family's own parameters rather than the protocol's. Covariance is
+#: sound because the record is frozen: nothing can write the narrower field
+#: through the wider view.
 FamilyT_co = TypeVar("FamilyT_co", covariant=True)
 
 
@@ -101,27 +93,26 @@ FamilyT_co = TypeVar("FamilyT_co", covariant=True)
 class Reestimate(Generic[FamilyT_co]):
     """One emission M step, and whether what it returned is an answer.
 
-    A closed-form M step needs none of this: it is a formula, it always
-    succeeds, and there is nothing to report. An M step that is itself an
-    optimization does need it, which is why the record exists --- a silent
-    inner failure surfaces as a mysteriously non-monotone outer likelihood,
-    several EM iterations later and nowhere near its cause (issue #229).
+    A closed-form M step needs none of this. An M step that is itself an
+    optimization does: a silent inner failure surfaces as a non-monotone outer
+    likelihood several EM iterations later, nowhere near its cause (issue
+    #229).
 
     Parameters
     ----------
     emissions : FamilyT_co
         The re-estimated family, at its own type.
     converged : bool
-        Whether an iterative M step settled. A closed-form one is ``True`` by
-        construction. ``False`` is a refusal-worthy condition, not a warning:
+        Whether an iterative M step settled; ``True`` by construction for a
+        closed-form one. ``False`` is refusal-worthy, not a warning:
         ``likelihood/CLAUDE.md`` forbids returning a number read off
         iterations that never settled, and Baum-Welch raises on it.
     at_boundary : bool
         Whether a parameter reached the edge of the range this data can
-        identify it over. **Not** an error: it is the honest report that the
-        estimate is a bound rather than a maximum, so a Wald interval around
-        it summarizes nothing (issue #122). A caller counts these the way
-        ``qa.opt_coverage`` counts a singular information matrix.
+        identify it over. **Not** an error: the estimate is a bound rather
+        than a maximum, so a Wald interval around it summarizes nothing (issue
+        #122). A caller counts these the way ``qa.opt_coverage`` counts a
+        singular information matrix.
     iterations : int
         Iterations the inner solve took; ``0`` for a closed-form M step.
     residual : float
@@ -141,13 +132,11 @@ class Reestimate(Generic[FamilyT_co]):
 class CountEmissionFamily(Protocol):
     """An emission family over the non-negative integers, which has moments.
 
-    Every count family here states a closed form for both its mean and its
-    variance, and the *ratio* of the two is what separates them: below one for
-    the binomial, exactly one for the Poisson, above one for the negative
-    binomial and the beta-binomial. That is why the moments are a protocol
-    rather than four coincidentally-named properties --- a test can range over
-    the families and assert the bracketing, which is the property the set
-    exists to establish.
+    Every count family here states a closed form for both moments, and their
+    *ratio* separates them: below one for the binomial, exactly one for the
+    Poisson, above one for the negative binomial and the beta-binomial. The
+    moments are a protocol so a test can range over the families and assert
+    that bracketing.
     """
 
     @property
@@ -155,9 +144,9 @@ class CountEmissionFamily(Protocol):
         """Per-state mean, shape ``(n_states,)``.
 
         A family whose observation is a tuple states one moment per channel,
-        shape ``(n_states, n_channels)``:
-        :class:`CountPairEmission` emits a depth and an allele count, and a
-        single mean over the two would be a number in no unit.
+        shape ``(n_states, n_channels)``: :class:`CountPairEmission` emits a
+        depth and an allele count, and a single mean over the two would be a
+        number in no unit.
         """
         ...  # pragma: no cover
 
@@ -282,9 +271,6 @@ class EmissionFamily(Protocol):
 class CategoricalEmission:
     """A symbol drawn from a per-state distribution over a fixed alphabet.
 
-    The family every HMM claim in this repository rested on before there was
-    an interface to state it against.
-
     Parameters
     ----------
     matrix : Values
@@ -296,12 +282,10 @@ class CategoricalEmission:
         if values.ndim != 2 or values.shape[1] < 1:
             msg = f"emission matrix must be 2-D, got shape {tuple(values.shape)}"
             raise ValueError(msg)
-        # Both forms are stored rather than one derived on demand. A sampler
-        # reads the probabilities and a recursion reads their logarithm, and
-        # a round trip through ``exp(log(p))`` moves the last bits of a
-        # probability -- enough to move an inverse-CDF draw at a cell
-        # boundary, which would change a pinned simulated sequence for no
-        # reason a reader could find.
+        # Both forms are stored rather than one derived on demand: a round
+        # trip through ``exp(log(p))`` moves the last bits of a probability,
+        # enough to move an inverse-CDF draw at a cell boundary and so change
+        # a pinned simulated sequence.
         self._matrix = values
         self._log_matrix = torch.log(values)
 
@@ -317,8 +301,8 @@ class CategoricalEmission:
         Returns
         -------
         CategoricalEmission
-            A family holding exactly these log-probabilities, without a
-            round trip through ``exp`` and ``log``.
+            A family holding exactly these log-probabilities, without a round
+            trip through ``exp`` and ``log``.
         """
         family = cls.__new__(cls)
         family._log_matrix = log_matrix
@@ -402,11 +386,10 @@ class GaussianEmission:
     """A real observation drawn from ``Normal(mean[state], scale[state])``.
 
     The family whose likelihood has **no maximum**. With ``mean[s]`` on a
-    single observation and ``scale[s] -> 0`` the density at that point
-    diverges, so a Gaussian-emission fit that converges was stopped by its
-    initialization or by a floor, and which one has to be knowable. This class
-    makes it knowable: the floor is explicit, derived from the data, and
-    reaching it is a refusal rather than a clamp.
+    single observation and ``scale[s] -> 0`` the density diverges, so a
+    Gaussian-emission fit that converges was stopped by its initialization or
+    by a floor, and which one has to be knowable: the floor is explicit,
+    derived from the data, and reaching it is a refusal rather than a clamp.
 
     Parameters
     ----------
@@ -491,8 +474,8 @@ class GaussianEmission:
         """The Normal log-density of every observation under every state.
 
         Unbounded above: as a scale shrinks with its mean on an observation,
-        the value at that observation grows without bound. That is the model,
-        not a defect, and a test exhibits it.
+        the value there grows without bound. That is the model, not a defect,
+        and a test exhibits it.
         """
         centred = observations.unsqueeze(-1).to(self._mean.dtype) - self._mean
         return (
@@ -517,10 +500,8 @@ class GaussianEmission:
         ValueError
             If a state's re-estimated variance reaches
             :attr:`variance_floor`. Refusal rather than clamping: the
-            likelihood is unbounded in that direction, so a fit that clamped
-            and returned normally would report a point estimate at a
-            degenerate optimum and a Wald interval around it that summarizes
-            nothing --- issue #122's case.
+            likelihood is unbounded in that direction, so a clamped fit would
+            report a point estimate at a degenerate optimum (issue #122).
         """
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
@@ -554,29 +535,25 @@ class GaussianEmission:
 class NegativeBinomialEmission:
     """A count drawn from ``NegativeBinomial(dispersion[state], mean[state])``.
 
-    Counts are a third data shape, neither a symbol from a fixed alphabet nor
-    a real number, and modelling them as either loses the mean-variance
-    relation that defines them: ``Var = mu + mu**2 / r``, with ``r`` setting
-    how far above Poisson the dispersion sits.
+    Counts are a third data shape, and modelling them as a symbol or a real
+    loses the mean-variance relation that defines them: ``Var = mu + mu**2 /
+    r``, with ``r`` setting how far above Poisson the dispersion sits.
 
-    Carried as ``(r, mu)`` rather than the textbook ``(r, p)``. The mean
-    profiles out of the M step in closed form in that parameterization, and it
-    is the one the mean-variance relation is stated in;
+    Carried as ``(r, mu)`` rather than the textbook ``(r, p)``: the mean
+    profiles out of the M step in closed form there, and it is the
+    parameterization the mean-variance relation is stated in.
     :meth:`from_probability` accepts the textbook form.
 
-    **The family whose M step is an optimization.** Categorical and Gaussian
-    emissions re-estimate by formula. ``r`` does not: its posterior-weighted
-    score involves ``digamma`` and has no analytic root. So the M step is a
-    solve, and this is the family that says whether an interface validated
-    only against formulas can carry one.
+    **The family whose M step is an optimization.** ``r``'s posterior-weighted
+    score involves ``digamma`` and has no analytic root, so the M step is a
+    solve --- the case an interface validated only against formulas has to
+    carry.
 
     **Its identifiability hazard is a *flat* likelihood, not an unbounded
     one.** Where the data are not measurably overdispersed the likelihood is
-    nearly flat in ``r`` as ``r -> inf`` --- the Poisson limit --- so the
-    maximum runs to the boundary and any interval around it summarizes
-    nothing. That is the opposite failure from :class:`GaussianEmission`'s and
-    needs the opposite guard: not a floor below which a parameter must not go,
-    but a ceiling above which the data cannot tell one value from another.
+    nearly flat in ``r`` as ``r -> inf`` (the Poisson limit), so the maximum
+    runs to the boundary. That is the opposite failure from
+    :class:`GaussianEmission`'s and needs a ceiling rather than a floor;
     :func:`identifiable_dispersion_bound` derives it.
 
     Parameters
@@ -648,9 +625,9 @@ class NegativeBinomialEmission:
     def is_discrete(self) -> bool:
         """True: the support is the non-negative integers.
 
-        Worth pinning beside :class:`GaussianEmission`, since the bound this
-        restores --- ``log P(observations) <= 0`` --- is exactly the one the
-        Gaussian case had to give up.
+        Pinned beside :class:`GaussianEmission`, since the bound it restores
+        --- ``log P(observations) <= 0`` --- is the one the Gaussian case gave
+        up.
         """
         return True
 
@@ -708,13 +685,11 @@ class NegativeBinomialEmission:
 
         With the mean profiled at its posterior-weighted value the score in
         ``r`` reduces to ``sum_t gamma[t] (digamma(y_t + r) - digamma(r)) + W
-        log(r / (r + mu))``, which has no analytic root. It is solved by
-        **bisection on** ``log r``, not by Newton: started at the
-        method-of-moments value Newton converges for moderate ``r`` and, on a
-        sample whose dispersion is near Poisson, overshoots and underflows to
-        zero --- which arrives as a domain error rather than as a bad answer.
-        Bisection cannot leave its bracket, and the bracket's upper end is
-        where "not identified" is detected rather than approached.
+        log(r / (r + mu))``, which has no analytic root. Solved by **bisection
+        on** ``log r``, not by Newton: from the method-of-moments start Newton
+        overshoots and underflows to zero on a near-Poisson sample, arriving
+        as a domain error. Bisection cannot leave its bracket, whose upper end
+        is where "not identified" is detected rather than approached.
 
         Returns
         -------
@@ -748,15 +723,13 @@ class NegativeBinomialEmission:
     def alignment_key(self) -> torch.Tensor:
         """The per-state mean **and variance**, both in observation units.
 
-        Two moments rather than one, unlike :class:`GaussianEmission`, and the
-        difference is not an inconsistency. A Gaussian scale is a nuisance
-        parameter the ticket asks to permute by mean alone; the negative
-        binomial's dispersion is the parameter the family exists for, so two
-        states sharing a mean and differing in dispersion are different states
-        and a mean-only signature would tie them. Both entries are in the units
-        of the observations, so summing their absolute differences is
-        dimensionally consistent --- which ``(mu, r)`` would not be, ``r``
-        being a shape.
+        Two moments rather than :class:`GaussianEmission`'s one. A Gaussian
+        scale is a nuisance parameter; the negative binomial's dispersion is
+        the parameter the family exists for, so two states sharing a mean and
+        differing in dispersion are different states and a mean-only signature
+        would tie them. Both entries are in observation units, so summing
+        their absolute differences is dimensionally consistent --- which
+        ``(mu, r)`` would not be, ``r`` being a shape.
         """
         return torch.stack([self._mean, self.variance], dim=1)
 
@@ -768,11 +741,10 @@ class NegativeBinomialEmission:
 class PoissonEmission:
     """A count drawn from ``Poisson(mean[state])``: the equidispersed case.
 
-    The family with no dispersion parameter at all, which is what makes it
-    useful here beyond its own merits. It is the ``r -> inf`` limit of
+    The family with no dispersion parameter. It is the ``r -> inf`` limit of
     :class:`NegativeBinomialEmission` and the ``n -> inf, p -> 0`` limit of
     :class:`BinomialEmission`, so it referees both against a second
-    implementation rather than against a hand-written expression.
+    implementation rather than a hand-written expression.
 
     Parameters
     ----------
@@ -851,12 +823,12 @@ class BinomialEmission:
     """A count of successes in ``trials[state]`` attempts, each with ``p[state]``.
 
     The **under**-dispersed case: ``Var = n p (1 - p) < n p``. Every other
-    count family here sits at or above equidispersion, so this is the one that
-    says whether anything in the interface quietly assumes otherwise.
+    count family here sits at or above equidispersion, so this one says
+    whether the interface quietly assumes otherwise.
 
-    The trial count is a declared constant per state, not a parameter. It is a
-    property of how an observation was made rather than of the process being
-    fitted, and estimating it from the data is a different problem.
+    The trial count is a declared constant per state, not a parameter: it is a
+    property of how an observation was made, and estimating it from the data
+    is a different problem.
 
     Parameters
     ----------
@@ -996,15 +968,13 @@ class BetaBinomialEmission:
     **The second family whose M step is an optimization, and a different
     one.** The negative binomial's is a one-dimensional root find; this is
     two-dimensional in ``(a, b)``, so a seam that took the first by accident
-    does not take this one by accident. It is solved by Minka's fixed point
-    for the Polya distribution, which increases the likelihood at every step
-    rather than merely converging somewhere.
+    does not take this one by accident.
 
     **Its hazard is the negative binomial's, one family over.** As
     ``a + b -> inf`` at fixed ``a / (a + b)`` the family approaches
     ``Binomial(n, p)``, so the concentration stops being identified and the
     maximum runs to the boundary. :func:`identifiable_concentration_bound`
-    says where, on the same reasoning.
+    says where.
 
     Parameters
     ----------
@@ -1118,13 +1088,7 @@ class BetaBinomialEmission:
     def reestimate(
         self, observations: torch.Tensor, posterior: torch.Tensor
     ) -> Reestimate[BetaBinomialEmission]:
-        """Minka's fixed point for ``(a, b)``, which increases the likelihood.
-
-        Chosen over Newton for the reason bisection was chosen for the
-        negative binomial: the update is a ratio of positive quantities, so
-        it cannot leave the feasible set, and it is monotone in the objective
-        rather than merely convergent. A test asserts the monotonicity per
-        iteration, since that is the property being relied on.
+        """Alternating bisection for ``(a, b)``; see :func:`_solve_beta_binomial`.
 
         Returns
         -------
@@ -1177,11 +1141,11 @@ class BetaBinomialEmission:
 class CountPairEmission:
     """A total count and the successes within it, as one observation.
 
-    The emission a coverage-and-allele-count assay produces: a sequencing
-    depth ``n`` drawn from a negative binomial, and an allele count ``y``
-    drawn from a beta-binomial over that depth. An observation is a pair,
-    carried in a trailing axis of length :data:`N_CHANNELS`, channel ``0`` the
-    total and channel ``1`` the successes.
+    The emission a coverage-and-allele-count assay produces: a depth ``n``
+    from a negative binomial, and an allele count ``y`` from a beta-binomial
+    over that depth. An observation is a pair in a trailing axis of length
+    :data:`N_CHANNELS`, channel ``0`` the total and channel ``1`` the
+    successes.
 
     **The two forms are different models, and neither is a default.** In the
     *independent* form the beta-binomial's trial count is a fixed parameter
@@ -1194,11 +1158,10 @@ class CountPairEmission:
     pick a generative model on a caller's behalf (``CLAUDE.md``, Code
     Standards).
 
-    A success count above the trial count --- the drawn total in the joint
-    form, the fixed parameter in the independent one --- is outside the
-    support, and is scored at ``-inf`` rather than at the ``nan`` ``lgamma``
-    returns at a negative argument. That matters where the two forms are
-    compared: a fit whose likelihood is ``nan`` is not a fit that lost.
+    A success count above the trial count is outside the support, and is
+    scored at ``-inf`` rather than at the ``nan`` ``lgamma`` returns at a
+    negative argument: a fit whose likelihood is ``nan`` is not a fit that
+    lost.
 
     Parameters
     ----------
@@ -1383,15 +1346,13 @@ class CountPairEmission:
         totals = values[..., 0].unsqueeze(-1)
         successes = values[..., 1].unsqueeze(-1)
         trials = totals if self._joint else self._success.trials
-        # A success count above the trial count is outside the support, and
-        # `lgamma` of the negative argument it produces is `nan`. `nan`
-        # propagates through a sum and turns a comparison of two fits into a
-        # comparison of two `nan`s, so the pair is scored at `-inf`: what is
-        # actually true of it under this model. The trial count is raised to
-        # the success count *inside* the density so the discarded branch is
-        # finite: `torch.where` multiplies the branch it did not take by zero,
-        # and `0 * nan` is `nan`, so a `nan` there would reach the gradient
-        # even though it never reaches the value.
+        # `lgamma` of the negative argument an unsupported pair produces is
+        # `nan`, which propagates through the sum, so the pair is scored at
+        # `-inf` instead. The trial count is raised to the success count
+        # *inside* the density so the discarded branch is finite:
+        # `torch.where` multiplies the branch it did not take by zero, and
+        # `0 * nan` is `nan`, so a `nan` there reaches the gradient even
+        # though it never reaches the value.
         supported = successes <= trials
         scored = self._total.log_density(values[..., 0]) + _beta_binomial_log_density(
             successes, torch.maximum(trials, successes), self._alpha, self._beta
@@ -1433,12 +1394,11 @@ class CountPairEmission:
         """The M step: each channel's own, on the trials the form supplies.
 
         The total channel is :class:`NegativeBinomialEmission`'s dispersion
-        solve, unchanged. The success channel is the same alternating
-        bisection :class:`BetaBinomialEmission` uses, given the fixed trial
-        count in the independent form and the *observed totals* in the joint
-        one --- which is the whole difference between the two M steps, and the
-        reason the solve takes a per-observation trial count rather than a
-        scalar.
+        solve, unchanged. The success channel is
+        :class:`BetaBinomialEmission`'s alternating bisection, given the fixed
+        trial count in the independent form and the *observed totals* in the
+        joint one --- the whole difference between the two M steps, and why
+        the solve takes a per-observation trial count.
 
         Returns
         -------
@@ -1508,10 +1468,10 @@ class CountPairEmission:
     def alignment_key(self) -> torch.Tensor:
         """Both channels' mean and variance, shape ``(n_states, 4)``.
 
-        The two-moment signature :class:`NegativeBinomialEmission` gives its
-        reasons for, once per channel: two states agreeing on the depth and
-        differing on the allele fraction are different states, and a key over
-        the total alone would tie them.
+        :class:`NegativeBinomialEmission`'s two-moment signature, once per
+        channel: two states agreeing on the depth and differing on the allele
+        fraction are different states, and a key over the total alone would
+        tie them.
         """
         return torch.cat([self.mean, self.variance], dim=1)
 
@@ -1537,10 +1497,9 @@ def _beta_binomial_log_density(
 ) -> torch.Tensor:
     """``log C(n, y) + log B(y + a, n - y + b) - log B(a, b)``, broadcast.
 
-    Written once because two families evaluate it: :class:`BetaBinomialEmission`
-    with a trial count per state, and :class:`CountPairEmission`'s joint form
-    with one per observation. Every argument broadcasts, so the caller decides
-    which of the two it has.
+    Two families evaluate it: :class:`BetaBinomialEmission` with a trial
+    count per state, :class:`CountPairEmission`'s joint form with one per
+    observation. Every argument broadcasts, so the caller decides which.
     """
     total = alpha + beta
     return (
@@ -1682,14 +1641,12 @@ def _solve_beta_binomial(
     """Maximize the weighted likelihood in ``(p, M)`` by alternating bisection.
 
     Minka's fixed point for the Polya distribution was tried first and
-    rejected on measurement: it is monotone but linearly convergent, and at a
+    rejected on measurement: monotone but linearly convergent, at a
     concentration of 120 it was still moving in the third decimal place after
-    500 iterations --- so it returned an unconverged answer that looked like
-    an estimate. Alternating bisection is the same discipline the negative
-    binomial's dispersion gets, for the same reason: bracket the root instead
-    of stepping toward it, and the failure mode becomes "the root is outside
-    the bracket", which is a fact worth reporting rather than an iterate that
-    ran out of patience.
+    500 iterations, returning an unconverged answer that looked like an
+    estimate. Alternating bisection brackets the root instead of stepping
+    toward it, so the failure mode becomes "the root is outside the bracket"
+    --- a fact worth reporting.
 
     Each coordinate's score is decreasing in that coordinate over its bracket,
     with the mean rate bracketed by ``(0, 1)`` and the concentration by
@@ -1751,9 +1708,8 @@ def _effective_trials(trials: float | torch.Tensor, weights: torch.Tensor) -> fl
 
     A fixed trial count is itself. A per-observation one has no single value,
     so the bound is taken at the *posterior-weighted mean* depth: the bound
-    scales as ``n - 1`` and the states' effective sample size is what weights
-    each observation's contribution to the concentration's score, so the mean
-    under those same weights is the depth the bound is about.
+    scales as ``n - 1``, and those same weights set each observation's
+    contribution to the concentration's score.
     """
     if isinstance(trials, torch.Tensor):
         return float((weights * trials).sum() / weights.sum())
@@ -1876,12 +1832,9 @@ def identifiable_dispersion_bound(mean: float, weight: float) -> float:
     ``Var sqrt(2 / W)``, which near the Poisson limit is ``mu sqrt(2 / W)``.
     Setting the excess equal to the noise gives ``r = mu sqrt(W / 2)``: beyond
     it the overdispersion the model is *for* is smaller than the error on
-    measuring it, the likelihood is flat, and a maximum reported there is a
-    bound rather than an estimate.
-
-    Derived rather than fixed, so it scales with both the counts and the
-    sample --- a constant cap would flag an identified fixture at one size and
-    miss an unidentified one at another.
+    measuring it, and a maximum reported there is a bound rather than an
+    estimate. Derived rather than fixed, so a constant cap cannot flag an
+    identified fixture at one size and miss an unidentified one at another.
 
     Parameters
     ----------

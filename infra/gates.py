@@ -2,25 +2,25 @@
 
 **Authoritative for two blocks, descriptive for the rest.** `pyproject.toml`'s
 marker registrations and `DEV.md`'s tier table are *written* from the tables
-below, each between marker comments naming this module, by `infra/ledgers.sh`
-(issue #470). There is no copy of those two left to drift: editing either block
-by hand is undone on the next regeneration, and the review gate fails a branch
-where regenerating rewrites a tracked file.
+below by `infra/ledgers.sh` (issue #470), each between marker comments naming
+this module. Neither copy can drift: editing a block by hand is undone on the
+next regeneration, and the review gate fails a branch where regenerating
+rewrites a tracked file.
 
-Every other value here is still a copy of what another file says --
+Every other value here is a copy of what another file says --
 `.github/workflows/ci.yml`'s steps, `infra/validate.sh`'s and
 `infra/review_gates.sh`'s exported caps, `infra/release.sh`'s command,
-`DEV.md`'s review-gate sentence. Each of those is read by something that cannot
-import Python at the point it needs the value: a workflow condition evaluated
-by GitHub, a shell export read by `tests/conftest.py`'s environment, a sentence
-a reviewer reads. They stay written where they are read and
+`DEV.md`'s review-gate sentence. Each is read by something that cannot import
+Python at the point it needs the value: a workflow condition GitHub evaluates,
+a shell export `tests/conftest.py` reads from the environment, a sentence a
+reviewer reads. They stay written where they are read and
 `tests/regression/test_gates.py` asserts they still say this; the file that
-runs the gate wins, and the module is corrected to match it.
+runs the gate wins.
 
 Issue #465 found the policy spread over twelve files that already disagreed:
 `DEV.md` said `infra/review_gates.sh` had nine rows while it had eight. Issue
-#469 wrote the policy down once and held the copies to it; this step removes
-the two copies that are pure data by generating them.
+#469 wrote the policy down once and held the copies to it; this step generates
+the two that are pure data.
 """
 
 from __future__ import annotations
@@ -83,9 +83,9 @@ RELEASE_GATE = Gate(
 #: The three gates a change passes, in the order it reaches them.
 GATES: tuple[Gate, ...] = (PR_GATE, MAIN_GATE, RELEASE_GATE)
 
-#: The cap the `python-tests` job carries, in minutes. The job's only bound:
-#: a bound on the selection and a fixed timeout cannot coexist, since the
-#: timeout then cancels the pull requests the bound refused (issue #425).
+#: The cap the `python-tests` job carries, in minutes, and its only bound: a
+#: bound on the selection and a fixed timeout cannot coexist, since the timeout
+#: then cancels the pull requests the bound refused (issue #425).
 WORKFLOW_TIMEOUT_MINUTES = 90
 
 

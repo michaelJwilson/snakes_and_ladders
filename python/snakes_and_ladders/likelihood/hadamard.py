@@ -12,13 +12,11 @@ invertibly by the Sylvester--Hadamard matrix ``H`` of order ``2^(n-1)``
     s = H^-1 exp(H q),  so  q = H^-1 log(H s),
 
 with ``q`` indexed by the same subsets as ``s`` and ``q_empty = -sum`` of the
-rest. Every ``2^(n-1)`` pattern probability of a two-state tree is a linear
-combination of ``exp`` of linear combinations of the branch lengths, and
-``H`` is the change of basis. On the exact spectrum the inversion returns
-the tree's own branch lengths on its splits and zero elsewhere, which is
-what the test pins to ``1e-12``; on an estimated spectrum the weights
-converge with the site count, and the *closest tree* (Hendy and Penny) is
-the compatible set of the largest, :func:`closest_tree`.
+rest: ``H`` is the change of basis. On the exact spectrum the inversion
+returns the tree's own branch lengths on its splits and zero elsewhere, which
+the test pins to ``1e-12``; on an estimated spectrum the weights converge with
+the site count, and the *closest tree* (Hendy and Penny) is the compatible set
+of the largest, :func:`closest_tree`.
 
 The model is the two-state Jukes--Cantor of ``eq:jc`` at ``k = 2``, whose
 probability of change over a branch ``t`` is ``(1 - exp(-2 t)) / 2``, so the
@@ -28,7 +26,7 @@ pairs, :func:`binary_recoding`: a change of group has probability ``(1 -
 exp(-4 t / 3)) / 2``, the two-state form at ``2 t / 3``, so the recoded
 spectrum returns ``2/3`` of every branch length. The Kimura three-parameter
 model has its own conjugation over the Klein four-group of order ``4^(n-1)``
-(Hendy, Penny and Steel 1994); it is not implemented here.
+(Hendy, Penny and Steel 1994), not implemented here.
 
 ``n`` is capped at 12 because the spectrum has ``2^(n-1)`` entries and the
 fast Walsh--Hadamard transform is ``O(N log N)`` in that size: 2,048 entries
@@ -54,8 +52,7 @@ def walsh_hadamard(vector: np.ndarray) -> np.ndarray:
 
     ``H`` is the Kronecker power of ``[[1, 1], [1, -1]]``, symmetric, with
     ``H H = N I``, so ``H^-1 = H / N``. Entry ``(A, B)`` is ``(-1)^|A and
-    B|`` for subsets read as bit masks, which is the indexing the spectra
-    below use.
+    B|`` for subsets read as bit masks, the indexing the spectra below use.
 
     Parameters
     ----------
@@ -100,10 +97,10 @@ def binary_recoding(
     """A ``k``-state Jukes--Cantor alignment as a two-state symmetric one.
 
     States ``0`` to ``k/2 - 1`` become ``0`` and the rest ``1``. Under
-    ``eq:jc`` every state is exchangeable, so the grouping is exact: a
-    change of group over a branch ``t`` has probability ``(1 - exp(-k t /
-    (k - 1))) / 2``, the two-state model at ``k t / (2 (k - 1))``, which
-    :func:`recoding_scale` reports so a caller can rescale the weights back.
+    ``eq:jc`` every state is exchangeable, so the grouping is exact: a change
+    of group over a branch ``t`` has probability ``(1 - exp(-k t / (k - 1)))
+    / 2``, the two-state model at ``k t / (2 (k - 1))``, which
+    :func:`recoding_scale` reports for rescaling the weights back.
 
     Parameters
     ----------
@@ -294,12 +291,12 @@ def closest_tree(
 ) -> Node:
     """The binary tree on the ``n - 3`` largest mutually compatible split weights.
 
-    Hendy and Penny's closest tree, in the greedy form: non-trivial splits
-    are taken in decreasing weight and kept when compatible with every one
-    already kept, until the tree is resolved. A weight at or below
-    ``minimum_length`` --- a split the data does not support, or a pendant
-    branch estimated at zero --- is floored there, because the tree is a
-    start for a fit in log coordinates and a zero length has none.
+    Hendy and Penny's closest tree, greedy: non-trivial splits are taken in
+    decreasing weight and kept when compatible with every one already kept,
+    until the tree is resolved. A weight at or below ``minimum_length`` --- a
+    split the data does not support, or a pendant branch estimated at zero ---
+    is floored there, since the tree starts a fit in log coordinates and a
+    zero length has no logarithm.
 
     Parameters
     ----------

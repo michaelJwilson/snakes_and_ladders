@@ -1,12 +1,12 @@
 """Constraint maps: unconstrained reals in, feasible parameters out.
 
 ``opt/CLAUDE.md`` requires constraints by construction rather than by
-projection, so this module holds the maps every instance shares. An
-optimizer never sees a constrained quantity and is never asked to stay
-inside a feasible set, because the set is the image of the map.
+projection, so this module holds the maps every instance shares: an optimizer
+never sees a constrained quantity, because the feasible set is the image of
+the map.
 
-Nothing here knows what the parameters mean. That is the point: this is the
-vocabulary the phylogenetic, Potts and HMM objectives are all written in.
+Nothing here knows what the parameters mean --- this is the vocabulary the
+phylogenetic, Potts and HMM objectives are all written in.
 """
 
 from __future__ import annotations
@@ -18,11 +18,10 @@ def log_simplex(free: torch.Tensor) -> torch.Tensor:
     """Map ``n - 1`` unconstrained reals to ``n`` log-probabilities.
 
     The first logit is pinned to zero rather than optimized. A plain softmax
-    over ``n`` logits is invariant to adding a constant to all of them, so it
-    would leave one direction of the parameter space flat -- harmless for a
-    gradient step, fatal for a Hessian-based interval (the observed
-    information would be singular). Pinning makes the map a bijection onto
-    the simplex, so a fitted parameter has an identifiable value.
+    over ``n`` logits is invariant to adding a constant to all of them, so one
+    direction of the parameter space would be flat -- harmless for a gradient
+    step, fatal for a Hessian-based interval, whose observed information would
+    be singular. Pinning makes the map a bijection onto the simplex.
 
     Parameters
     ----------

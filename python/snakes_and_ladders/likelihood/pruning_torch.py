@@ -2,19 +2,18 @@
 ``snakes_and_ladders.likelihood.pruning``, the NumPy oracle (CLAUDE.md, "The NumPy
 reference is the oracle and it stays").
 
-Branch lengths are a tensor kept separate from the
-topology: a ``snakes_and_ladders.sim.tree.Node`` here describes only shape (leaf names,
-children), never a differentiable quantity, while ``branch_lengths`` --
-ordered by ``branch_order(tau)`` -- is the tensor ``torch.autograd``
-differentiates through. ``Node.branch_length`` is never read by
-``log_likelihood``.
+Branch lengths are a tensor kept separate from the topology: a
+``snakes_and_ladders.sim.tree.Node`` here describes only shape (leaf names,
+children), while ``branch_lengths`` -- ordered by ``branch_order(tau)`` -- is
+the tensor ``torch.autograd`` differentiates through. ``Node.branch_length``
+is never read by ``log_likelihood``.
 
 JC transition probabilities default to the closed form ``eq:jc`` of
 ``docs/tex/textbook.tex``, built from ``torch.exp`` so the branch length stays
 in the graph. Passing ``rate_matrix`` switches to the general
-``torch.linalg.matrix_exp(Q * t)`` path -- the same path a fitted, non-JC
-rate matrix would use -- and must agree with the closed form when ``Q`` is
-the JC generator (tests/regression/test_pruning_torch.py).
+``torch.linalg.matrix_exp(Q * t)`` path -- what a fitted, non-JC rate matrix
+would use -- which must agree with the closed form when ``Q`` is the JC
+generator (tests/regression/test_pruning_torch.py).
 
 Rescaling (``likelihood/CLAUDE.md``, "Rescaling must stay differentiable")
 accumulates ``log_scale`` by tensor addition, never in place, so it composes
@@ -57,9 +56,9 @@ def branch_lengths_from_tree(
 ) -> torch.Tensor:
     """Read ``tau``'s own branch lengths into a tensor, ordered by ``branch_order``.
 
-    Convenience for seeding a ``branch_lengths`` tensor from a fixture tree
-    (e.g. before calling ``.requires_grad_(True)`` for ``gradcheck``);
-    ``log_likelihood`` itself never reads ``tau``'s ``branch_length`` fields.
+    Seeds a ``branch_lengths`` tensor from a fixture tree (e.g. before
+    ``.requires_grad_(True)`` for ``gradcheck``); ``log_likelihood`` never
+    reads ``tau``'s ``branch_length`` fields.
 
     Parameters
     ----------
@@ -108,10 +107,9 @@ def transition_probabilities(
 
     One call per likelihood evaluation rather than one per branch: the
     hill-climb profile behind #264 charged 8,730 scalar calls per 970
-    evaluations to this function, a Python-level call per child per node that
-    root ``CLAUDE.md``'s inlining rule names. Batched, the closed form is one
-    ``exp`` over the branch vector and the matrix exponential one batched
-    ``matrix_exp``.
+    evaluations here, the per-child call root ``CLAUDE.md``'s inlining rule
+    names. Batched, the closed form is one ``exp`` over the branch vector and
+    the matrix exponential one batched ``matrix_exp``.
     """
     if rate_matrix is None:
         return _jc_transition_probabilities(t, k)
@@ -151,10 +149,9 @@ def log_likelihood(
         One weight per column, or ``None`` for one occurrence each. The
         compressed alignment of
         ``snakes_and_ladders.likelihood.patterns.compress`` with its weights
-        gives the same value over the distinct columns alone. The weights
-        are constants of the data, so they enter the graph as a constant and
-        the gradient in ``branch_lengths`` is the weighted sum of the site
-        gradients.
+        gives the same value over the distinct columns alone. The weights are
+        constants of the data, so the gradient in ``branch_lengths`` is the
+        weighted sum of the site gradients.
     rate_matrix : torch.Tensor | None
         If given, shape ``(k, k)``: a general rate matrix ``Q``, and
         transition probabilities use ``torch.linalg.matrix_exp(Q * t)``
@@ -177,10 +174,10 @@ def log_likelihood(
         leaf of ``tau``, or ``weights`` does not have one entry per column.
     """
     # dtype and device follow branch_lengths, so a caller moves the whole
-    # recursion by moving one tensor -- and float64 stays the default
-    # because branch_lengths_from_tree defaults to it. Metal rejects
-    # float64 outright, so an accelerator path must choose float32 here
-    # rather than have it chosen silently.
+    # recursion by moving one tensor, and float64 stays the default because
+    # branch_lengths_from_tree defaults to it. Metal rejects float64, so an
+    # accelerator path must choose float32 here rather than have it chosen
+    # silently.
     dtype = branch_lengths.dtype
     device = branch_lengths.device
     pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
@@ -251,17 +248,17 @@ class PartialCache:
     """Partial likelihoods of subtrees, keyed by what determines them.
 
     A subtree's partial likelihood is a function of the subtree's shape, the
-    branch lengths inside it, and the leaf data -- and of nothing above it.
-    So when a search evaluates a neighbour topology at the lengths its parent
-    was fitted with, every subtree the move did not touch has the partial the
+    branch lengths inside it, and the leaf data -- and of nothing above it. So
+    when a search evaluates a neighbour topology at the lengths its parent was
+    fitted with, every subtree the move did not touch has the partial the
     parent already computed (issue #289). The key is the subtree's structure
-    with its lengths, built recursively and order-independent, so the same
-    subtree reached under a different rooting or child order still hits.
+    with its lengths, order-independent, so the same subtree reached under a
+    different rooting or child order still hits.
 
-    Two things are deliberate. The cache holds detached tensors and serves only
+    The cache holds detached tensors and serves only
     :func:`log_likelihood_cached`, which runs without gradients: inside a fit
     every length moves, so nothing would hit and the graph would be pinned
-    alive. And hits are counted, because a cache that never hits is a cost.
+    alive. Hits are counted, because a cache that never hits is a cost.
 
     Parameters
     ----------
@@ -306,11 +303,11 @@ def log_likelihood_cached(
     """:func:`log_likelihood` without gradients, reusing cached subtree partials.
 
     The same recursion and the same arithmetic per subtree, so a partial taken
-    from the cache is the partial the recursion would have computed, bitwise;
-    only the per-subtree rescaling sums are accumulated bottom-up rather than
-    in one running total, which is why this is a separate function and not a
-    flag on :func:`log_likelihood`, whose arithmetic stays exactly as it was.
-    A test pins the two within the float64 agreement tolerance.
+    from the cache is the partial the recursion would have computed, bitwise.
+    Only the per-subtree rescaling sums accumulate bottom-up rather than in one
+    running total, which is why this is a separate function and not a flag on
+    :func:`log_likelihood`, whose arithmetic is unchanged. A test pins the two
+    within the float64 agreement tolerance.
 
     Parameters
     ----------

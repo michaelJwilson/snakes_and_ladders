@@ -1,44 +1,40 @@
 """Decide which tests a change needs, and what to measure coverage against.
 
-Continuous integration runs the whole suite on every pull request, including
-one that changed only documentation, where the run cannot differ from the last
-one on `main` (issue #161). This module answers two questions from the list of
-changed files: which test paths to run, and which modules to measure coverage
-over.
+Continuous integration runs the whole suite on every pull request, including one
+that changed only documentation, where the run cannot differ from the last one
+on `main` (issue #161). This module answers two questions from the changed
+files: which test paths to run, and which modules to measure coverage over.
 
 Two properties matter more than the saving.
 
-A module's tests are not enough on their own: `snakes_and_ladders.search` imports
-`snakes_and_ladders.likelihood`, so a change to the latter must run the former's tests too.
-The dependents are derived from the source here rather than listed, because a
-list goes stale silently and an import does not.
+A module's tests are not enough alone: `snakes_and_ladders.search` imports
+`snakes_and_ladders.likelihood`, so a change to the latter must run the
+former's tests too. The dependents are derived from the source rather than
+listed, since a list goes stale silently and an import does not.
 
 Anything the mapping does not recognise selects everything. A changed lockfile,
-a changed shared fixture, a changed workflow -- the safe answer is the whole
-suite, and the unsafe answer is the one that looks like a saving.
+shared fixture or workflow -- the safe answer is the whole suite.
 
 A change that is not code selects the guards that read it (issue #372). A
-paragraph of the textbook cannot break a likelihood, but it can break a label
-or a citation, and `tests/regression/test_document_labels.py` is what checks
-that; the planning files, the `CLAUDE.md` files, the experiment ledger and the
-notebooks each have their guard. Those run, and nothing else does.
+paragraph of the textbook cannot break a likelihood but can break a label or a
+citation, which `tests/regression/test_document_labels.py` checks; the planning
+files, the `CLAUDE.md` files, the experiment ledger and the notebooks each have
+their guard. Those run, and nothing else does.
 
-A selection is a set of paths *and* a set of tiers, and the second is what
-keeps the `key` tier affordable (issue #399). A key test is a two-minute test,
-so it cannot run on every pull request; it is also the only test that runs the
-declared instance end to end, so it must run on the pull requests that could
-move its result. :data:`KEY_TRIGGERS` names those --- the coupled model, the
-emissions, the fixtures and the Rust crate --- and every other change
-deselects the tier.
+A selection is a set of paths *and* a set of tiers, and the second keeps the
+`key` tier affordable (issue #399). A key test takes two minutes, so it cannot
+run on every pull request, and it is the only test that runs the declared
+instance end to end, so it must run on the pull requests that could move its
+result. :data:`KEY_TRIGGERS` names those --- the coupled model, the emissions,
+the fixtures and the Rust crate --- and every other change deselects the tier.
 
 The fallback is not bounded. `--budget` bounded it for a merge gate and
-`UNBOUNDABLE` exempted the changes a bound was least safe for; the pair was
-removed with issue #425, because a bound and a fixed timeout cannot coexist.
-The merge gate's 15-minute cap fired on exactly the pull requests `UNBOUNDABLE`
-refused to bound -- every `likelihood/` one -- and a cancelled job is
-indistinguishable from a failing one (issue #423). The gate now runs the
-selection unbounded under the job's own cap, and the whole suite still runs on
-the push to `main`.
+`UNBOUNDABLE` exempted the changes a bound was least safe for; issue #425
+removed the pair, since a bound and a fixed timeout cannot coexist. The merge
+gate's 15-minute cap fired on exactly the pull requests `UNBOUNDABLE` refused to
+bound -- every `likelihood/` one -- and a cancelled job is indistinguishable
+from a failing one (issue #423). The gate now runs the selection unbounded under
+the job's own cap, and the whole suite still runs on the push to `main`.
 """
 
 from __future__ import annotations
@@ -58,8 +54,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULES = ("sim", "likelihood", "opt", "learn", "search", "qa")
 
 # The modules a benchmark measures. `qa` renders figures from what these
-# compute and is not itself timed, which is why issue #109's trigger excluded
-# it and why this does too.
+# compute and is not itself timed, as issue #109's trigger had it.
 BENCHMARKED = ("sim", "likelihood", "opt", "learn", "search")
 
 # Always run: cheap, and they cover what belongs to no single module.
@@ -91,8 +86,7 @@ EVERYTHING = (
 )
 
 # What could move a key fixture's own result, and so selects the `key` tier.
-# Everything else deselects it: the tier costs two minutes a test and runs
-# only where it can fail (issue #399).
+# Everything else deselects it: the tier costs two minutes a test (issue #399).
 KEY_TRIGGERS = (
     "src/",
     "Cargo.toml",

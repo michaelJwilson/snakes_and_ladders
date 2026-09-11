@@ -1,13 +1,13 @@
 """Compute the baseline numbers beside each fixture, or check the committed ones.
 
 A fixture's baseline is what a *reference* algorithm achieves on the instance
---- the enumerated maximum over its topologies, the rate at which random-restart
-hill climbing reaches that maximum, the rate an untrained policy reaches it,
-the exact target every learned surrogate is fitted against. Each is a
+--- the enumerated maximum over its topologies, the rate at which
+random-restart hill climbing reaches it, the rate an untrained policy reaches
+it, the exact target every learned surrogate is fitted against. Each is a
 deterministic function of the fixture, the code and a seed, and each is
 expensive: enumerating 945 topologies is 1.4 s and 200 uniform rollouts are
-8.3 s, paid before a test measures anything about the thing under test. That
-is most of why three claims left the per-pull-request tier (issue #401).
+8.3 s, paid before a test measures the thing under test. That is most of why
+three claims left the per-pull-request tier (issue #401).
 
 So the numbers are computed once and committed, and a test reads them:
 ``<problem>/<tier>.baseline.json`` beside the fixture, written here and read by
@@ -15,20 +15,17 @@ So the numbers are computed once and committed, and a test reads them:
 digest is not the current tree's.
 
 **Where the recomputation went.** Per pull request nothing here runs; the
-release gate runs ``infra/baselines.py`` with no flag, which recomputes every
-record and fails on any drift. That is the trade
-``snakes_and_ladders.qa.build`` states for figures --- the check moves to the
-release gate rather than disappearing --- and it is made for the same reason:
-a cached number no test ever recomputes is a claim with no referee, and one
-recomputed on every pull request costs the seconds the tier move removed. The
-digest closes the gap between the two: a change to the fixture, to the
-computing modules, or to a recorded budget makes every reader raise on the
-pull request that made it, without any of them recomputing.
+release gate runs ``infra/baselines.py`` with no flag, recomputing every record
+and failing on any drift --- the trade ``snakes_and_ladders.qa.build`` states
+for figures, for the same reason: a cached number no test recomputes is a claim
+with no referee, and one recomputed on every pull request costs the seconds the
+tier move removed. The digest closes the gap: a change to the fixture, to the
+computing modules, or to a recorded budget makes every reader raise on the pull
+request that made it, without recomputing.
 
-The record is a second file rather than a block in the fixture yaml. The
-fixture declares an instance and is written by hand; the record states a
-measurement and is written by this script, so a regeneration never rewrites a
-declaration.
+The record is a second file rather than a block in the fixture yaml. The fixture
+declares an instance and is written by hand; the record states a measurement and
+is written by this script, so a regeneration never rewrites a declaration.
 
 **How closely a recomputation has to agree is declared per measurement.** A
 count, an enumerated extremum and a rate over seeded rollouts are reproduced
@@ -110,10 +107,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # comparison every other value keeps is measured rather than assumed.
 FIT_RTOL = 1e-12
 
-# The tree measurements' budget, which is `test_search_hard_fixture.py`'s and
-# issue #178's: 50 starting topologies drawn from `seed + 1000`, 30 decisions
-# per episode. A rate at another budget is a different number, so the numbers
-# and the names travel together into every record below.
+# The tree measurements' budget, `test_search_hard_fixture.py`'s and issue
+# #178's: 50 starting topologies drawn from `seed + 1000`, 30 decisions per
+# episode. A rate at another budget is a different number, so the numbers and
+# the names travel together into every record below.
 STARTS = 50
 HORIZON = 30
 START_SEED_OFFSET = 1000
@@ -124,9 +121,9 @@ ROLLOUTS_PER_START = 4
 UNTRAINED_SEED = 99
 
 # The surrogate training set: every topology of each of the first three
-# alignments, fitted at 200 sites. Three rather than issue #308's six,
-# because the per-pull-request sibling splits one alignment to each of train,
-# validation and test and a fourth would only make the fit slower.
+# alignments, fitted at 200 sites. Three rather than issue #308's six: the
+# per-pull-request sibling splits one alignment to each of train, validation
+# and test, and a fourth would only make the fit slower.
 SURROGATE_ALIGNMENTS = 3
 SURROGATE_SITES = 200
 SURROGATE_SEED_OFFSET = 1000

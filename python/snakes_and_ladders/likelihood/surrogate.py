@@ -1,15 +1,14 @@
 """Surrogates for an exact evaluation: bounds with proofs, and the seam a learned one fills (issue #308).
 
 A surrogate is a function of a discrete structure and the data, at fixed
-continuous parameters, that stands in for an evaluation the search pays for.
-Its :class:`~snakes_and_ladders.bound.Bound` is part of the object: a **lower** bound, an **upper**
-bound, or a **point** prediction. An analytic bound carries a proof in the
-textbook's derivations appendix and is certified by
-:func:`~snakes_and_ladders.bound.certify`, which
-refuses a bound violated once against the exact value; a learned one is
-calibrated instead and certified to a stated coverage. Every surrogate is
-differentiable through ``torch`` in the continuous parameters it reads, so
-its gradient is available where the exact evaluation's is.
+continuous parameters, standing in for an evaluation the search pays for. Its
+:class:`~snakes_and_ladders.bound.Bound` is part of the object: a **lower**
+bound, an **upper** bound, or a **point** prediction. An analytic bound
+carries a proof in the textbook's derivations appendix and is certified by
+:func:`~snakes_and_ladders.bound.certify`, which refuses a bound violated once
+against the exact value; a learned one is calibrated to a stated coverage.
+Every surrogate is differentiable through ``torch`` in the continuous
+parameters it reads.
 
 Two hard evaluations, two families of surrogate:
 
@@ -23,10 +22,10 @@ Two hard evaluations, two families of surrogate:
   branch, so its maximum over lengths sits at a vertex where every branch
   is zero or infinite, and at a vertex it is at most ``pi(x_1) k^{-F_s}``
   for the site's Fitch score ``F_s`` (``eq:parsimony-bound``). One Fitch
-  pass, no parameters, and both bounds apply to a subtree as they do to the
-  tree. The entrywise limit of ``P(t)`` gives a weaker bound that this one
-  dominates; :func:`prune_with_matrices` is kept because the vertex
-  argument is checked by enumerating the vertices with it.
+  pass, no parameters, and both bounds apply to a subtree as to the tree.
+  The entrywise limit of ``P(t)`` gives a weaker bound this one dominates;
+  :func:`prune_with_matrices` is kept because the vertex argument is checked
+  by enumerating the vertices with it.
 * **Lattice Potts.** ``log Z`` is what enumeration cannot reach.
   :func:`mean_field_log_partition` is the naive mean-field lower bound,
   Gibbs' inequality at the fixed point of a product distribution

@@ -3,20 +3,18 @@
 Issue #240. `sim/CLAUDE.md` states the rule -- a generator, never a seed --
 because seeding inside a call makes every draw of an ensemble identical, which
 looks like a passing test over many draws and is one draw. That mistake has
-been made in this repository, which is why `erdos_renyi_graph` was given the
-generator signature deliberately and
-`test_independent_draws_come_from_one_generator` pins it.
+been made here, which is why `erdos_renyi_graph` was given the generator
+signature and `test_independent_draws_come_from_one_generator` pins it.
 
-Five public functions kept the seed shape. These tests extend that pairing to
-each of them: two draws from one generator differ, and two generators seeded
-alike agree. The first half is the one that matters -- under the old signature
-it fails, because every call rebuilt the same stream -- so it is a real
-discriminator rather than a restatement of what the code does.
+Five public functions kept the seed shape. These tests extend the pairing to
+each: two draws from one generator differ, and two generators seeded alike
+agree. The first half matters -- under the old signature it fails, every call
+rebuilding the same stream -- so it discriminates rather than restating the
+code.
 
 The guard below is the other half. A rule nothing checks is a rule the next
 module quietly breaks: at filing, #230 counted 12 seed-taking signatures
-against 10 generator-taking ones, and by the time this ticket was implemented
-it was 16 against 16. The seed side had grown while the ticket waited.
+against 10 generator-taking ones, and by implementation it was 16 against 16.
 
 Issue #337 converted the three the first pass deferred, the `torch` stream --
 `opt.hmc.sample`, `opt.hmc.anneal` and `search.max_cut.goemans_williamson` --
@@ -88,13 +86,12 @@ def _mcmc_draw(rng: np.random.Generator) -> tuple[int, ...]:
 def _icm_draw(rng: np.random.Generator) -> tuple[int, ...]:
     """One descent from a random start, on a surface where the start matters.
 
-    Iterated conditional modes is an optimizer, not a sampler, so it only
-    reports the generator it was given where the surface has more than one
-    local optimum to fall into. A *uniform* field has one -- every site takes
-    the same label and every start converges there -- and so does a field
-    strong enough to decide each site alone. A random field against a coupling
-    of comparable size is the case with content: the two terms disagree, the
-    surface is rugged, and 6 draws reach 3 distinct optima.
+    Iterated conditional modes is an optimizer rather than a sampler, so it
+    reports the generator it was given only where the surface has more than one
+    local optimum. A *uniform* field has one, as does a field strong enough to
+    decide each site alone. A random field against a coupling of comparable size
+    has content: the two terms disagree, the surface is rugged, and 6 draws
+    reach 3 distinct optima.
     """
     labelling, _ = iterated_conditional_modes(_graph(), ICM_FIELD, 3, rng)
     return tuple(int(v) for v in labelling)
@@ -119,9 +116,9 @@ def _max_cut_draw(generator: torch.Generator) -> tuple[float, ...]:
     """The relaxation an under-solved ascent reaches from a random start.
 
     The rounded cut is the wrong witness: on a small graph every hyperplane
-    finds the optimum, so two draws agree on the cut whatever stream they
-    came from. The relaxation after 20 ascent steps still remembers its
-    starting vectors, which is where the generator shows.
+    finds the optimum, so two draws agree whatever stream they came from. The
+    relaxation after 20 ascent steps still remembers its starting vectors,
+    which is where the generator shows.
     """
     result = goemans_williamson(_graph(), generator, iterations=20, roundings=4)
     return (result.relaxation, result.value)

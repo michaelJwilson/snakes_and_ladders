@@ -12,13 +12,12 @@ things are asserted instead, and each names its referee.
 * *The uncoded closed form* ``Q(sqrt(2 E_b / N_0))`` referees the waterfall:
   a coded curve above it at the operating point is a code buying nothing.
 * *The binomial interval the frame count supports* referees the
-  monotonicity claim, which is the one this suite could not make in the
-  strong form. It is stated in the weak form the measurement supports and
-  the departure is reported in the docstring of the test that measures it.
+  monotonicity claim, stated in the weak form the measurement supports, with
+  the departure reported in the docstring of the test that measures it.
 
-The tiers are set from the measured wall clock on the reference host, not
-guessed: the CI-tier tests here cost 4.4 s together, the stress waterfall
-12.1 s and the release waterfall 182 s.
+The tiers are set from the measured wall clock on the reference host: the
+CI-tier tests here cost 4.4 s together, the stress waterfall 12.1 s and the
+release waterfall 182 s.
 """
 
 from __future__ import annotations
@@ -43,10 +42,8 @@ from snakes_and_ladders.sim.fixtures import Fixture, fixture
 #: The exact bitwise MAP's bit error rate, times this, bounds the iteration's
 #: at the enumerable size. Measured at 1.26, 1.66, 1.74 and 3.20 over the
 #: four declared points of the CI fixture: a K = 12 interleaver is far too
-#: short for the iteration to approach the MAP, and the bound states that
-#: rather than hiding it. It is a bound on the *gap*, so the claim it makes
-#: is that the iteration is decoding the same code and not that it is
-#: optimal.
+#: short for the iteration to approach the MAP. A bound on the *gap*, so the
+#: claim is that the iteration decodes the same code, not that it is optimal.
 MAP_GAP_FACTOR = 4.0
 
 #: How many one-sigma binomial intervals an increase in the ensemble bit
@@ -70,9 +67,9 @@ def _increase_within_noise(rates: ErrorRates) -> float:
     """The largest rise across iterations, in one-sigma binomial intervals.
 
     Zero when the ensemble rate never rises. The interval is
-    :attr:`ErrorRates.bit_error_interval`, which the class states understates
-    the true spread because a turbo failure is bursty; the comparison is
-    therefore conservative in the direction that would fail.
+    :attr:`ErrorRates.bit_error_interval`, which understates the true spread
+    because a turbo failure is bursty, so the comparison is conservative in
+    the direction that would fail.
     """
     rise = np.diff(rates.bit_error_rate)
     interval = rates.bit_error_interval[:-1]
@@ -89,10 +86,10 @@ def _increase_within_noise(rates: ErrorRates) -> float:
 def test_the_iteration_reduces_the_bit_error_rate_towards_the_exact_map() -> None:
     """Iteration 8 beats iteration 1 and stays within `MAP_GAP_FACTOR` of the MAP.
 
-    Both directions matter. Without the first the iteration could be doing
-    nothing; without the second it could be converging to the wrong code's
-    answer. Neither is equality, because the joint graph has cycles: what is
-    asserted is the ordering the approximation must respect.
+    Without the first the iteration could be doing nothing; without the
+    second it could be converging to the wrong code's answer. Neither is
+    equality, because the joint graph has cycles: the ordering the
+    approximation must respect is what is asserted.
 
     Per point the claim is *no worse*, because the fixture's 1,200 message
     bits per point cannot separate 40 errors from 40: at 2 dB the first and
@@ -134,11 +131,10 @@ def test_the_joint_posterior_is_the_enumerated_one_where_the_two_chains_agree() 
 
     The regime in which the approximation is exact, which
     ``likelihood/CLAUDE.md`` says an approximate evaluator must state: when
-    every message bit is decided far from zero, the cycles carry no
-    ambiguity around them and the Bethe beliefs are the true marginals. The
-    sign agreement is asserted; the ratios themselves are not, since Bethe
-    over-counts the evidence around a cycle and the magnitudes differ by
-    construction.
+    every message bit is decided far from zero, the cycles carry no ambiguity
+    around them and the Bethe beliefs are the true marginals. The sign
+    agreement is asserted and the ratios are not, since Bethe over-counts the
+    evidence around a cycle.
     """
     params = fixture("turbo", "ci").params
     code = params.code()
@@ -165,8 +161,7 @@ def test_the_joint_posterior_is_the_enumerated_one_where_the_two_chains_agree() 
 def test_the_per_iteration_run_is_the_capped_run_at_every_cap() -> None:
     # One run reports every iteration count, which is what makes the release
     # waterfall cost the deepest iteration rather than the sum. The two paths
-    # would drift silently, so they are pinned to each other rather than
-    # trusted.
+    # would drift silently, so they are pinned to each other.
     params = fixture("turbo", "ci").params
     code = params.code()
     rng = np.random.default_rng(103)
@@ -186,10 +181,10 @@ def test_the_per_iteration_run_is_the_capped_run_at_every_cap() -> None:
 def test_the_second_decoder_reads_the_first_decoders_systematic_stream() -> None:
     """No message bit crosses the channel twice: the streams partition the word.
 
-    The interleaver reorders what decoder two reads, it does not add
-    evidence. A decoder given a second independent copy of the systematic
-    bits would decode better than the code allows, which is the failure this
-    catches and which no error-rate test would attribute.
+    The interleaver reorders what decoder two reads; it adds no evidence. A
+    decoder given a second independent copy of the systematic bits would
+    decode better than the code allows, and no error-rate test would
+    attribute that failure.
     """
     params = fixture("turbo", "ci").params
     code = params.code()
@@ -238,10 +233,9 @@ def test_a_word_of_the_wrong_length_or_a_zero_iteration_cap_is_refused() -> None
 def test_the_error_pattern_under_a_codeword_is_the_pattern_under_zero() -> None:
     """Per realization, on a real codeword, for the recursive encoder.
 
-    Issue #340 states the argument for the parity-check decoder and checks
-    it there; a turbo code's encoder is recursive and its decoder is a
-    different message map, so the property is re-checked here rather than
-    inherited. It is what licenses
+    Issue #340 states the argument for the parity-check decoder; a turbo
+    code's encoder is recursive and its decoder a different message map, so
+    the property is re-checked here rather than inherited. It licenses
     :func:`~snakes_and_ladders.likelihood.turbo.measure_error_rates` sending
     the zero message at every length.
     """
@@ -256,8 +250,7 @@ def test_the_error_pattern_under_a_codeword_is_the_pattern_under_zero() -> None:
         # One noise realization, read in each codeword's own frame. The
         # channel is output symmetric, so sending `c` instead of `0` negates
         # the ratio exactly at the bits where `c_i = 1`; the equivalent
-        # realization is therefore the sign map below and not the same
-        # additive noise, which would be a different channel output.
+        # realization is the sign map below, not the same additive noise.
         under_zero_llr = 2.0 * (1.0 + sigma * rng.standard_normal(code.block_length))
         under_zero_llr /= sigma**2
         under_word_llr = (1.0 - 2.0 * word) * under_zero_llr
@@ -300,13 +293,12 @@ def test_the_waterfall_falls_below_the_uncoded_closed_form() -> None:
     points it rises between consecutive iterations at four of them --- the
     largest rise 2.3e-3 at 0 dB, between iterations 7 and 8 --- and every
     rise is inside one binomial interval of the 12,800 message bits the
-    point rests on. The strong claim, that each iteration is an improvement,
-    is therefore not made: what is asserted is that the last iteration beats
-    the first and that no rise exceeds `NOISE_INTERVALS` intervals.
+    point rests on. So the strong claim is not made: asserted is that the
+    last iteration beats the first and that no rise exceeds
+    `NOISE_INTERVALS` intervals.
     """
     # 12.1 s measured, so `stress` and not the CI tier. The CI-tier sibling
-    # is the enumeration test above, which asserts the same ordering against
-    # a stronger referee at a size the budget holds.
+    # is the enumeration test above, at a size the budget holds.
     instance = fixture("turbo", "stress")
     params = instance.params
     rates = _waterfall(instance)
@@ -327,15 +319,13 @@ def test_the_waterfall_falls_below_the_uncoded_closed_form() -> None:
 def test_the_release_waterfall_turns_where_the_ensemble_says() -> None:
     """At `K = 1024` the curve falls two orders of magnitude across the span.
 
-    It stays under the uncoded closed form throughout. This is the claim a
-    short block cannot carry: the interleaver gain grows with the block
-    length, so the turn is sharp at 1,024 and gradual at 256. The same
-    monotonicity departure the stress tier reports applies here and is
-    checked the same way.
+    It stays under the uncoded closed form throughout. The claim a short block
+    cannot carry: the interleaver gain grows with the block length, so the
+    turn is sharp at 1,024 and gradual at 256. The stress tier's monotonicity
+    departure applies here and is checked the same way.
     """
     # 182 s measured over 1,200 decodings, so `release`: past both the 5- and
-    # the 10-minute budgets `DEV.md` sets. The claim is the shape of the
-    # curve, which needs the block length a short one cannot show.
+    # the 10-minute budgets `DEV.md` sets.
     instance = fixture("turbo", "release")
     params = instance.params
     rates = _waterfall(instance)
@@ -346,7 +336,7 @@ def test_the_release_waterfall_turns_where_the_ensemble_says() -> None:
     assert np.all(final < uncoded)
     assert np.all(np.diff(final) <= 0.0), final
     # The turn: two orders of magnitude across the declared span, which a
-    # K = 256 block does not reach and is the reason this tier exists.
+    # K = 256 block does not reach.
     assert final[0] > 100.0 * max(
         final[-1], 1.0 / (params.frames * params.message_length)
     )

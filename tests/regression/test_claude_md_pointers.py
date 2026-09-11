@@ -2,13 +2,13 @@
 
 Root `CLAUDE.md` states that its **Writing Style** rules bind every module
 file. Nothing enforced that: the eight module files carried a generic "these
-are local" line that never named the section, so an agent reading one of them
-alone had no way to know (issue #155).
+are local" line naming no section, so an agent reading one alone had no way to
+know (issue #155).
 
 Stating an invariant is not enforcing it. `docs/source/index.rst` claimed to
-cover every submodule while missing all eighteen of `snakes_and_ladders.qa`, because
-`sphinx-build -W` fails on a broken entry and never on an absent one (issue
-#154). This module is the check that was missing there.
+cover every submodule while missing all eighteen of `snakes_and_ladders.qa`,
+since `sphinx-build -W` fails on a broken entry and never on an absent one
+(issue #154).
 """
 
 from __future__ import annotations
@@ -40,22 +40,20 @@ POINTER = "**Writing Style**"
 # contain it and a file referencing the section would not.
 RESTATEMENT = "Apply naming, terminology, and syntax consistently"
 
-# Rule 6 says a `CLAUDE.md` carries principles, not technical detail, and the
-# detail that accretes fastest is a measurement: a result belongs to whatever
-# produced it, and a second copy in a module file is a copy to keep true.
-# Three shapes cover what was found in these files (issue #235): scientific
-# notation, an "N of M" count, and a decimal carrying two or more fractional
-# digits.
+# Rule 6 says a `CLAUDE.md` carries principles rather than technical detail,
+# and the detail accreting fastest is a measurement: a result belongs to
+# whatever produced it, and a second copy is a copy to keep true. Three shapes
+# cover what was found in these files (issue #235): scientific notation, an
+# "N of M" count, and a decimal carrying two or more fractional digits.
 MEASUREMENT = re.compile(
     r"\b\d+(?:\.\d+)?e[-+]?\d+\b|\b\d+ of \d+\b|\b\d+\.\d{2,}\b",
     re.IGNORECASE,
 )
 
-# The module files were 26 to 93 lines when written and had grown to 48-183 by
-# the time rule 6 landed, three- to six-fold, while root grew by four lines
-# over 26 commits. This is the ceiling that stops that growth resuming; it is
-# above the longest file after issue #235 rewrote them, and adding a rule past
-# it means removing one, which is what "edits are rare" means.
+# The module files were 26 to 93 lines when written and 48-183 by the time rule
+# 6 landed, while root grew by four lines over 26 commits. This ceiling stops
+# that growth resuming: it is above the longest file after issue #235 rewrote
+# them, so adding a rule past it means removing one.
 LINE_BUDGET = 120
 
 
@@ -63,8 +61,7 @@ def _module_claude_files() -> list[Path]:
     """Find every module `CLAUDE.md` on disk.
 
     Discovered rather than listed, so a module directory added without a
-    `CLAUDE.md` is caught by the emptiness check below rather than passing
-    because nobody updated a hardcoded list.
+    `CLAUDE.md` is caught by the emptiness check below.
 
     Returns
     -------
@@ -110,9 +107,9 @@ def test_every_module_claude_md_points_at_the_writing_style() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_no_module_claude_md_restates_the_writing_style() -> None:
-    # The other half, and the reason the pointer is a pointer. Root
-    # `CLAUDE.md`'s Writing Style section changed three times on the day this
-    # was written; nine copies of it would already disagree.
+    # Why the pointer is a pointer: root `CLAUDE.md`'s Writing Style section
+    # changed three times on the day this was written, and nine copies would
+    # already disagree.
     restating = [
         str(path.relative_to(REPO_ROOT))
         for path in _module_claude_files()
@@ -153,10 +150,8 @@ def test_the_root_file_states_that_the_rules_reach_the_module_files() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_the_expected_reader_contract_lives_only_in_docs() -> None:
-    # It is a contract about the documents, so the seven other module
-    # files have no business restating it -- which is what issue #141 removed
-    # from `docs/CLAUDE.md` in the other direction, and why only `docs/` may
-    # refer to it.
+    # A contract about the documents, so the seven other module files have no
+    # business restating it, and only `docs/` may refer to it.
     elsewhere = [
         str(path.relative_to(REPO_ROOT))
         for path in _module_claude_files()
@@ -170,9 +165,8 @@ def test_the_expected_reader_contract_lives_only_in_docs() -> None:
 @pytest.mark.structural
 def test_no_module_claude_md_carries_a_measurement() -> None:
     # Rule 6, made checkable. A measurement in one of these files is a second
-    # copy of a number that `STATUS.md`, a docstring or a test already owns,
-    # and the copy is the one that goes stale: nothing recomputes it and no
-    # check compares it against what it was copied from.
+    # copy of a number `STATUS.md`, a docstring or a test already owns, and the
+    # copy is the one that goes stale: nothing recomputes it.
     carrying = {
         str(path.relative_to(REPO_ROOT)): sorted(
             set(MEASUREMENT.findall(path.read_text()))
@@ -193,9 +187,8 @@ def test_no_module_claude_md_carries_a_measurement() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_the_measurement_check_catches_each_shape_it_claims_to() -> None:
-    # The check exercised, per shape rather than in aggregate: a guard that
-    # has never been seen to fail is not known to work, and a regex is exactly
-    # the kind of check that silently matches nothing.
+    # The check exercised per shape rather than in aggregate: a guard never
+    # seen to fail is not known to work, and a regex silently matches nothing.
     caught = ["worst deviation 3.7e-15", "39 of 40 runs", "a ratio of 0.87856"]
     passed = [
         "the deviation is reported rather than asserted",

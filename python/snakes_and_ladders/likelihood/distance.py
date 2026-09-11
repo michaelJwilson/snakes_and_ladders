@@ -2,24 +2,22 @@
 
 The moment estimator the tree has in place of the HMM's spectral method
 (issue #364). Spectral learning of an HMM inverts observable moments to
-parameters with a consistency guarantee (Hsu, Kakade and Zhang 2012);
-Mossel and Roch (2006) carry the same argument to a phylogeny, and the estimator
-it becomes in practice is a distance per pair of taxa inverted from the pair
-co-occurrence matrix, followed by neighbor joining
-(:mod:`snakes_and_ladders.search.neighbor_joining`). This module is the first
-half: the distances and their delta-method variances, so a caller can state
-whether the errors sit inside Atteson's radius rather than hope they do.
+parameters with a consistency guarantee (Hsu, Kakade and Zhang 2012); Mossel
+and Roch (2006) carry the argument to a phylogeny, where it becomes a distance
+per pair of taxa inverted from the pair co-occurrence matrix, followed by
+neighbor joining (:mod:`snakes_and_ladders.search.neighbor_joining`). This
+module is the first half: the distances and their delta-method variances, so a
+caller can state whether the errors sit inside Atteson's radius.
 
 Two distances, ``eq:jc-distance`` and ``eq:logdet`` of
-``docs/tex/textbook.tex``. The Jukes--Cantor one inverts ``eq:jc`` in closed form: with ``p`` the fraction of sites
-at which the pair differs, ``d = -((k-1)/k) log(1 - k p / (k-1))``. The
-log-det distance (Steel 1994) reads the full ``k x k`` pair frequency
-matrix ``F`` and is additive along the tree under any Markov model, whether
-or not the process is stationary or reversible; under a rate matrix of trace
-``-k``, which the normalization ``eq:normalization`` gives the Jukes--Cantor
-model, it equals the branch length exactly, and under a general
-time-reversible model it is proportional to it with the constant
-``-tr(Q)/k``, which is all neighbor joining needs.
+``docs/tex/textbook.tex``. The Jukes--Cantor one inverts ``eq:jc`` in closed
+form: with ``p`` the fraction of sites at which the pair differs,
+``d = -((k-1)/k) log(1 - k p / (k-1))``. The log-det distance (Steel 1994)
+reads the full ``k x k`` pair frequency matrix ``F`` and is additive along the
+tree under any Markov model, stationary or not; under a rate matrix of trace
+``-k``, which ``eq:normalization`` gives the Jukes--Cantor model, it equals
+the branch length exactly, and under a general time-reversible model it is
+``-tr(Q)/k`` times it, which is all neighbor joining needs.
 
 Both variances are the delta method over the multinomial site counts, stated
 in :func:`multinomial_delta_variance` once, so the two estimators share one

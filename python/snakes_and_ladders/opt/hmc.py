@@ -1,57 +1,49 @@
 """Hamiltonian Monte Carlo over an :class:`~snakes_and_ladders.opt.objective.Objective`.
 
-Every continuous result in this repository is a point estimate plus an
-interval built from the observed information at the optimum --- a Gaussian
-approximation to the posterior, evaluated at one point. This samples the
-posterior instead, so an interval becomes a quantile rather than a curvature
-estimate, and the two can be compared: where the Laplace approximation is good
-they agree, and where it is not the disagreement is the finding.
+Every other continuous result here is a point estimate plus an interval from
+the observed information at the optimum --- a Gaussian approximation to the
+posterior at one point. This samples the posterior instead, so an interval is
+a quantile rather than a curvature estimate, and where the two disagree the
+disagreement is the finding.
 
-The objective is read as an unnormalized negative log density. That is a
-choice, not an identity, and it is the caller's to justify: for a
-log-likelihood plus a proper log prior it is the posterior; for a bare
-log-likelihood it is a posterior under an improper flat prior, which may not
-be normalizable at all. Nothing here can check that, so nothing here pretends
-to --- :func:`sample` reports the chain and the diagnostics, and what the
-chain is a sample *of* is stated by whoever built the objective.
+The objective is read as an unnormalized negative log density. That is the
+caller's claim to justify: for a log-likelihood plus a proper log prior it is
+the posterior; for a bare log-likelihood it is a posterior under an improper
+flat prior, which may not be normalizable. Nothing here can check it, so
+:func:`sample` reports the chain and the diagnostics and leaves what the chain
+samples to whoever built the objective.
 
-`snakes_and_ladders.opt` may import no application module and this needs none: an
-`Objective` supplies an unconstrained vector and a differentiable scalar,
-which is exactly the interface a gradient-based sampler wants.
+`snakes_and_ladders.opt` may import no application module and this needs none:
+an `Objective` supplies an unconstrained vector and a differentiable scalar.
 
 **The integrator is a composition, not a procedure.** Every method here is a
 sequence of second-order kick-drift-kick sub-steps differing only in their
 lengths, so :class:`Integrator` carries the weights and one driver runs them
-all. A higher order costs more force evaluations per step, which is why the
-choice between them is a measurement at equal *evaluations* and never at
-equal steps --- `search/CLAUDE.md`'s budget rule, and the reason
-:meth:`Integrator.force_evaluations` exists.
+all. A higher order costs more force evaluations per step, so the choice
+between them is a measurement at equal *evaluations* and never at equal steps
+(`search/CLAUDE.md`'s budget rule, and why
+:meth:`Integrator.force_evaluations` exists).
 
 **Temperature is the momentum's variance.** The tempered target
 ``exp(-U / T)`` is the marginal of ``exp(-(U + K) / T)``, whose momentum is
-``N(0, T)``; and Hamilton's equations for ``(U + K) / T`` are the untempered
-ones in rescaled time, so the *same* integrator with the *same* step serves
-every temperature and only the momentum draw and the acceptance ratio change
-(issue #267). That is what makes :func:`anneal` the sampler on a schedule
-rather than a second sampler: at ``T = 1`` every operation is the identity
-bitwise, and every chain drawn before the temperature existed is unchanged.
-A quasi-Newton fit has no acceptance ratio to temper, which is why ``fit``
-takes no schedule and annealing a continuous objective enters here.
+``N(0, T)``; Hamilton's equations for ``(U + K) / T`` are the untempered ones
+in rescaled time, so the *same* integrator with the *same* step serves every
+temperature and only the momentum draw and the acceptance ratio change (issue
+#267). At ``T = 1`` every operation is the identity bitwise, so :func:`anneal`
+is this sampler on a schedule rather than a second sampler and chains drawn
+before the temperature existed are unchanged. A quasi-Newton fit has no
+acceptance ratio to temper, which is why ``fit`` takes no schedule.
 
-**Adaptation is a warm-up, and the chain is drawn after it.** A step size
-right on one posterior is wrong on the next, and a mass matrix that is the
-identity on a posterior whose coordinates differ in scale by a factor of ten
-spends the trajectory on the widest one. :class:`Adaptation` asks
-:func:`sample` for a warm-up that sets both --- the mass diagonal from the
-warm-up sample variance and the step size by dual averaging toward a stated
-acceptance (Hoffman & Gelman, 2014, §3.2; ``eq:dual-averaging``) --- and
-then draws the chain at those *fixed* values, so the draws are a Markov
-chain with the target as its stationary distribution and every estimate
-from them is what a fixed-parameter chain would report. Opt-in, never a
-default, and reported on the result (:class:`Adapted`), because a chain
-whose parameters are not stated cannot be reproduced. The fixed-parameter
-path is untouched: without an :class:`Adaptation` every draw is the one the
-same seed gave before, bitwise.
+**Adaptation is a warm-up, and the chain is drawn after it.**
+:class:`Adaptation` asks :func:`sample` for a warm-up that sets the mass
+diagonal from the warm-up sample variance and the step size by dual averaging
+toward a stated acceptance (Hoffman & Gelman, 2014, §3.2;
+``eq:dual-averaging``), then draws the chain at those *fixed* values, so the
+draws are a Markov chain with the target as its stationary distribution.
+Opt-in and reported on the result (:class:`Adapted`), because a chain whose
+parameters are not stated cannot be reproduced. Without an
+:class:`Adaptation` every draw is the one the same seed gave before,
+bitwise.
 
 See Neal (2011), "MCMC using Hamiltonian dynamics"; Yoshida (1990) for the
 fourth-order composition and Suzuki (1991) for why its middle coefficient
@@ -80,17 +72,14 @@ class WithGaussianPrior:
     """An objective plus an isotropic Gaussian log prior, so it has a posterior.
 
     A bare negative log-likelihood read as a log density is a posterior under
-    an improper flat prior, which for most models is not normalizable --- so
-    a chain against it is sampling from nothing well defined, and no
-    diagnostic in :func:`sample` can tell. Adding a proper prior fixes that,
-    and stating it here rather than inside the sampler keeps it the caller's
-    declaration: the sampler still just minimizes what it is handed.
+    an improper flat prior, which for most models is not normalizable, and no
+    diagnostic in :func:`sample` can tell. A proper prior fixes that, and
+    stating it here keeps it the caller's declaration.
 
     Isotropic and centred on zero *in unconstrained coordinates*, which is
     weakly informative rather than uninformative --- on a log-simplex
-    coordinate it pulls toward the uniform distribution, and on a coupling
-    toward zero. That is a modelling choice, and any interval reported from a
-    chain against it inherits it.
+    coordinate it pulls toward the uniform distribution, on a coupling toward
+    zero. Any interval reported from a chain against it inherits that.
 
     Parameters
     ----------
@@ -124,9 +113,9 @@ class WithGaussianPrior:
 
 #: Hoffman & Gelman's (2014, §3.2) dual-averaging constants: the shrinkage
 #: strength toward ``mu``, the iterations that stabilize the early estimates,
-#: and the exponent that forgets them. They set the *rate* of adaptation and
-#: not what it converges to, which is why they are constants here and the
-#: target acceptance is not. ``t0`` and ``kappa`` are as published.
+#: and the exponent that forgets them. They set the *rate* of adaptation, not
+#: what it converges to, which is why they are constants and the target
+#: acceptance is not. ``t0`` and ``kappa`` are as published.
 #:
 #: **``gamma`` is not, and the deviation is measured.** The published 0.05
 #: was set for a statistic averaged over a NUTS trajectory; a single
@@ -153,37 +142,33 @@ class Adaptation:
     The warm-up runs ``warmup`` proposals in two windows of equal length.
     The first adapts the step size at unit mass and records the positions of
     its second half; their per-coordinate variance is the inverse mass
-    diagonal, so momentum is drawn with the posterior's own scale on each
-    coordinate. The second window adapts the step size again on that
-    metric, since a metric that has changed the coordinates' scale has
-    changed the step that is right for them. Both adapt by dual averaging
-    (Hoffman & Gelman, 2014, §3.2; ``eq:dual-averaging``): the running
-    estimate ``h`` of ``target_acceptance - alpha`` is driven to zero by
-    shrinking ``log step_size`` toward ``mu = log(10 * step_size_0)``, and
-    the iterate reported is the polynomially averaged one, which is what
-    converges. Every draw after the warm-up is at the values it ended on.
+    diagonal. The second adapts the step size again on that metric, which has
+    changed the coordinates' scale and so the step right for them. Both adapt
+    by dual averaging (Hoffman & Gelman, 2014, §3.2; ``eq:dual-averaging``):
+    the running estimate ``h`` of ``target_acceptance - alpha`` is driven to
+    zero by shrinking ``log step_size`` toward ``mu = log(10 * step_size_0)``,
+    and the iterate reported is the polynomially averaged one. Every draw
+    after the warm-up is at the values it ended on.
 
     **The step is jittered, and that is what makes the target reachable.**
-    On a target that is locally quadratic the leapfrog energy error is
-    bounded and oscillatory, so the acceptance stays high right up to the
-    stability limit ``step_size * omega < 2`` on the stiffest direction and
-    falls to zero past it: measured on the analytic Gaussian at 20 steps,
-    0.86 at a step of 0.8, 0.75 at 1.2 and 0.00 at 1.4. A target of 0.65 is
-    then *on* the cliff, and dual averaging oscillates across it. Drawing
-    each proposal's step uniformly from ``step_size * (1 +/- step_jitter)``
-    (Neal, 2011, §5.4.2.2) averages the acceptance over the band, which
-    turns the cliff into a slope with one root, and it also breaks the
-    periodicity that makes a fixed step resonate with the target. It costs
-    nothing in validity --- each step is a kernel with the right stationary
-    distribution, drawn independently of the state --- and the draws after
-    warm-up use the same jitter, since that is the step the acceptance was
-    adapted for.
+    On a locally quadratic target the leapfrog energy error is bounded and
+    oscillatory, so the acceptance stays high up to the stability limit
+    ``step_size * omega < 2`` on the stiffest direction and falls to zero past
+    it: measured on the analytic Gaussian at 20 steps, 0.86 at a step of 0.8,
+    0.75 at 1.2 and 0.00 at 1.4. A target of 0.65 is then *on* the cliff, and
+    dual averaging oscillates across it. Drawing each proposal's step
+    uniformly from ``step_size * (1 +/- step_jitter)`` (Neal, 2011, §5.4.2.2)
+    averages the acceptance over the band, turning the cliff into a slope with
+    one root, and breaks the periodicity that makes a fixed step resonate.
+    Each step is a kernel with the right stationary distribution drawn
+    independently of the state, so it costs nothing in validity; the draws
+    after warm-up use the same jitter, since that is the step the acceptance
+    was adapted for.
 
-    Every field is required: the target is a choice about the posterior
-    --- 0.65 is Hoffman & Gelman's for HMC, the optimum for a Gaussian in
-    the limit of many dimensions (Beskos et al., 2013) --- a warm-up length
-    that is right for one target is too short for the next, and a jitter
-    that is right on a cliff is wasted on a slope.
+    Every field is required: 0.65 is Hoffman & Gelman's for HMC, the optimum
+    for a Gaussian in the limit of many dimensions (Beskos et al., 2013), a
+    warm-up right for one target is too short for the next, and a jitter right
+    on a cliff is wasted on a slope.
 
     Parameters
     ----------
@@ -321,17 +306,16 @@ class Integrator:
 
     Every method here is a composition of the second-order kick-drift-kick
     step, differing only in the sub-step lengths. Carrying the weights rather
-    than a procedure buys three things a bare function does not:
+    than a procedure buys:
 
     * **one implementation.** The kicks between adjacent sub-steps merge, so a
       hand-written composition is the same arithmetic with more places to put
-      a wrong coefficient. :func:`leapfrog` is this object at
-      ``(1.0,)`` and reproduces the previous implementation exactly;
-    * **a declared cost.** A comparison between integrators is only meaningful
-      at equal force evaluations, and :meth:`force_evaluations` is where that
-      count comes from rather than a caller's arithmetic;
+      a wrong coefficient. :func:`leapfrog` is this object at ``(1.0,)`` and
+      reproduces the previous implementation exactly;
+    * **a declared cost**, since a comparison between integrators is only
+      meaningful at equal force evaluations;
     * **a declared order**, so a test can assert the one it was built for
-      instead of the one it happens to achieve.
+      rather than the one it happens to achieve.
 
     Parameters
     ----------
@@ -389,10 +373,9 @@ class Integrator:
         """Integrate Hamiltonian dynamics over ``n_steps`` steps.
 
         Separated from :func:`sample` because its two defining properties ---
-        reversibility and its order of accuracy --- are exact statements
-        testable without any sampling, and they are where an error actually
-        localizes. A distributional test says the chain is wrong; these say
-        which half.
+        reversibility and order of accuracy --- are exact statements testable
+        without sampling. A distributional test says the chain is wrong; these
+        say which half.
 
         Parameters
         ----------
@@ -426,10 +409,9 @@ def _coefficients(
 ) -> tuple[list[float], list[float]]:
     """Kick and drift coefficients for ``n_steps`` of a composition.
 
-    Each sub-step is a kick-drift-kick of half, full, half its length, and the
-    trailing half-kick of one sub-step sits at the same position as the
-    leading half-kick of the next, so the two merge. That leaves one more kick
-    than there are sub-steps, which is where
+    Each sub-step is a kick-drift-kick of half, full, half its length, and
+    the trailing half-kick of one sub-step merges with the leading half-kick
+    of the next. That leaves one more kick than sub-steps, which is where
     :meth:`Integrator.force_evaluations` comes from.
     """
     sub_steps = list(weights) * n_steps
@@ -489,10 +471,9 @@ def sample(
     n_samples : int
         Draws recorded after burn-in.
     step_size : float
-        Leapfrog step. Required rather than defaulted: it is the one
-        parameter whose right value depends on the target's scale, and a
-        default would be wrong silently. With an ``adaptation`` it is the
-        warm-up's starting point and the chain is drawn at the adapted one.
+        Leapfrog step. Required rather than defaulted: its right value depends
+        on the target's scale, so a default would be wrong silently. With an
+        ``adaptation`` it is the warm-up's starting point.
     n_steps : int
         Leapfrog steps per proposal.
     theta0 : torch.Tensor | None
@@ -500,12 +481,10 @@ def sample(
     burn_in : int
         Draws discarded before recording.
     integrator : Integrator
-        The symplectic method. ``leapfrog`` by default, which is what every
-        chain in this repository was drawn with. A higher-order method takes
-        more force evaluations per step, so it is worth choosing only against
-        a comparison at equal evaluations rather than at equal steps ---
-        :meth:`Integrator.force_evaluations` is what makes that comparison
-        possible.
+        The symplectic method. ``leapfrog`` by default, which every chain in
+        this repository was drawn with. A higher-order method takes more force
+        evaluations per step, so choose it only against a comparison at equal
+        evaluations.
     temperature : float
         The chain targets ``exp(-objective / temperature)``; 1 is the
         objective as declared. Whether that is a tempered *energy* or a power
@@ -513,9 +492,8 @@ def sample(
     adaptation : Adaptation | None
         A warm-up that sets the step size and the mass diagonal before the
         ``burn_in`` and the draws, both of which then run at fixed values.
-        ``None`` --- the default, and the only default here that is not a
-        choice about the target --- runs the fixed-parameter chain at unit
-        mass, bitwise what it was before adaptation existed.
+        ``None`` runs the fixed-parameter chain at unit mass, bitwise what it
+        was before adaptation existed.
 
     Returns
     -------
@@ -528,8 +506,8 @@ def sample(
     ValueError
         If ``step_size`` or ``temperature`` is not positive, or ``n_steps``
         is below 1. A zero-length trajectory proposes the current point every
-        time, which accepts at rate 1 and samples nothing --- a chain that
-        looks healthy by every diagnostic and has not moved.
+        time: it accepts at rate 1 and samples nothing, looking healthy by
+        every diagnostic.
     """
     _check_trajectory(step_size, n_steps)
     if not temperature > 0.0:
@@ -599,7 +577,7 @@ class Annealed:
     theta : torch.Tensor
         The lowest-valued point visited, in unconstrained coordinates. The
         *best* rather than the last: the final proposals run cold but not at
-        zero, so the chain can leave the best point it found.
+        zero, so the chain can leave its best point.
     value : float
         The objective there.
     final : torch.Tensor
@@ -632,11 +610,10 @@ def anneal(
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
 
     One proposal per schedule step at that step's temperature, tracking the
-    lowest objective seen. The transition at each step is exactly the one
-    :func:`sample` runs at a constant temperature, so a constant schedule
-    reproduces a chain draw for draw from generators seeded alike; what
-    annealing adds is that the temperature falls, and what it buys is measured
-    against the alternatives at equal force evaluations and never assumed.
+    lowest objective seen. Each transition is the one :func:`sample` runs at a
+    constant temperature, so a constant schedule reproduces a chain draw for
+    draw from generators seeded alike. What the falling temperature buys is
+    measured against the alternatives at equal force evaluations.
 
     Parameters
     ----------
@@ -699,10 +676,9 @@ class Tempered:
     positions : torch.Tensor
         Every replica after every round, shape ``(n_rounds, n_replicas,
         dimension)``; replica ``r`` sits at ``temperatures[r]`` throughout,
-        because an exchange swaps *positions* between temperatures rather
-        than moving a chain along the ladder. Recorded so a replica's
-        marginal can be checked against the tempered target, as the discrete
-        version's are.
+        an exchange swapping *positions* between temperatures rather than
+        moving a chain along the ladder. Recorded so a replica's marginal can
+        be checked against the tempered target.
     acceptance_rate : torch.Tensor
         Fraction of Hamiltonian proposals accepted per replica, shape
         ``(n_replicas,)``.
@@ -762,9 +738,8 @@ def parallel_tempering(
     **The replicas must not share a stream and must be reproducible from one
     generator.** The caller's ``generator`` draws a seed per replica and then
     only the exchange uniforms, so the replicas are independent streams and
-    one generator state reproduces the run. Sharing one stream would correlate the
-    replicas, which is the whole point lost while every diagnostic looks
-    healthy.
+    one generator state reproduces the run. Sharing one stream would correlate
+    them while every diagnostic looked healthy.
 
     Parameters
     ----------
@@ -955,12 +930,11 @@ class _Scaled:
     unit-mass dynamics on ``phi = M^(1/2) theta``: substituting
     ``p = M^(1/2) q`` into ``U(theta) + p' M^-1 p / 2`` gives
     ``U(M^(-1/2) phi) + q'q / 2``, and the leapfrog steps map term for term
-    --- ``theta += eps M^-1 p`` is ``phi += eps q``. So the mass matrix is a
-    change of coordinates on the objective and the integrator is untouched,
-    exactly as temperature is a change to the momentum's variance; the
-    Hamiltonian is the same number in both, so the energy error reported is
-    the one on ``theta``. ``scale`` is ``M^(-1/2)``, the warm-up's standard
-    deviation per coordinate.
+    (``theta += eps M^-1 p`` is ``phi += eps q``). The mass matrix is
+    therefore a change of coordinates on the objective and the integrator is
+    untouched; the Hamiltonian is the same number in both, so the energy error
+    reported is the one on ``theta``. ``scale`` is ``M^(-1/2)``, the warm-up's
+    standard deviation per coordinate.
     """
 
     objective: Objective
@@ -1099,12 +1073,11 @@ def effective_sample_size(draws: torch.Tensor) -> torch.Tensor:
 
     The integrated autocorrelation time ``tau = 1 + 2 sum_k rho_k`` is
     estimated by summing the autocorrelations in adjacent pairs
-    ``Gamma_k = rho_2k + rho_2k+1`` and stopping at the first pair that is
-    not positive (Geyer, 1992, §3.3): for a reversible chain every
-    ``Gamma_k`` is positive, so the first non-positive one is noise and the
-    truncation is where the estimate stops being driven by it. The size is
-    ``n / tau``. Divided by the gradients a chain cost, it is the number two
-    samplers are compared on.
+    ``Gamma_k = rho_2k + rho_2k+1`` and stopping at the first non-positive
+    pair (Geyer, 1992, §3.3): for a reversible chain every ``Gamma_k`` is
+    positive, so the first non-positive one is noise. The size is ``n / tau``,
+    and divided by the gradients a chain cost it is the number two samplers
+    are compared on.
 
     Parameters
     ----------

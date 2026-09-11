@@ -2,27 +2,24 @@
 
 The turbo code's factor graph is two trellis chains sharing the message
 variables through a permutation, so it has cycles and no exact algorithm is
-available at the lengths it is used at. What Berrou, Glavieux and
-Thitimajshima (1993) proposed is loopy sum-product on a *serial* schedule:
-decoder one runs a full BCJR pass over its own chain, its extrinsic output
-(``eq:extrinsic``) is interleaved and handed to decoder two as an a priori
-ratio, decoder two runs, and its extrinsic output is deinterleaved and
-handed back (``alg:turbo-decode``). Two half-iterations are one iteration.
+available at the lengths it is used at. Berrou, Glavieux and Thitimajshima
+(1993) proposed loopy sum-product on a *serial* schedule: decoder one runs a
+full BCJR pass over its own chain, its extrinsic output (``eq:extrinsic``) is
+interleaved and handed to decoder two as an a priori ratio, decoder two runs,
+and its extrinsic output is deinterleaved and handed back
+(``alg:turbo-decode``). Two half-iterations are one iteration.
 
 **Extrinsic, and why it must be.** A decoder handed the other's *posterior*
-would be handed back its own previous output inside it, and the two would
-agree on a shared error after a few iterations regardless of the channel.
-The extrinsic ratio removes both the systematic channel term and the a
-priori term the decoder was given, so what crosses is only what that chain's
-own parity stream said. Nothing in :func:`decode_turbo` is a free choice
-here: the subtraction is what makes the exchange the sum-product message.
+would get its own previous output back inside it, and the two would agree on
+a shared error after a few iterations regardless of the channel. The extrinsic
+ratio removes the systematic channel term and the a priori term the decoder
+was given, so what crosses is only what that chain's own parity stream said.
 
 **This is an approximation, and the suite reports the departure.** Exactly
 one thing may be asserted against the exact bitwise MAP that
 :func:`exact_turbo_posterior` enumerates: the iteration's bit error rate
-approaches it, with a margin the fixture pins. Asserting equality would
-assert something false --- the graph has cycles --- and asserting only that
-the loop ran is the coverage theatre root ``CLAUDE.md`` forbids
+approaches it, with a margin the fixture pins. Equality would be false --- the
+graph has cycles --- and asserting only that the loop ran is coverage theatre
 (``likelihood/CLAUDE.md``, *An approximate evaluator states which regime
 carries its correctness*).
 
@@ -133,9 +130,8 @@ def _iterate(
     """One extrinsic exchange per step: the message posterior, agreement, residual.
 
     The single loop both public decoders read, so a waterfall at four
-    iteration counts costs the deepest one rather than their sum -- 8
-    passes against 36 at the release tier's cap -- and there is one
-    implementation of the schedule rather than two to keep in step.
+    iteration counts costs the deepest one rather than their sum -- 8 passes
+    against 36 at the release tier's cap.
 
     Yields
     ------
@@ -198,17 +194,16 @@ def decode_turbo(
         Full iterations, each two BCJR passes. At least one.
     early_stop : bool
         Stop at the first iteration whose two constituent decoders agree on
-        every message bit. Off by default, because an error rate measured
-        per iteration wants every iteration run; on, it is the cost saving a
-        deployment makes and the ``iterations`` field reports where it
+        every message bit. Off by default, because an error rate measured per
+        iteration wants every iteration run; ``iterations`` reports where it
         stopped.
 
     Returns
     -------
     Decoding
         Issue #340's type. ``bits`` is the ``K``-bit message decision, not
-        the transmitted word: the tail inputs are not message bits and a bit
-        error rate over them would count the code's overhead as errors.
+        the transmitted word: a bit error rate over the tail inputs would
+        count the code's overhead as errors.
         ``estimate`` is :attr:`~snakes_and_ladders.likelihood.ldpc.MapEstimate.BITWISE`,
         since both passes are sum-product.
 
@@ -288,9 +283,8 @@ def exact_turbo_posterior(code: TurboCode, llr: np.ndarray) -> ExactTurboDecodin
     """Bit posteriors of the turbo code by enumeration over its messages.
 
     Encodes every ``K``-bit message and softmaxes ``-c . L``; it shares no
-    recursion with :func:`decode_turbo` and reaches
-    only ``K`` small, which is the ceiling the textbook's *Supported sizes*
-    paragraph states.
+    recursion with :func:`decode_turbo` and reaches only small ``K``, the
+    ceiling the textbook's *Supported sizes* paragraph states.
 
     Parameters
     ----------
@@ -343,11 +337,10 @@ def uncoded_bit_error_rate(eb_n0_db: np.ndarray) -> np.ndarray:
     """``Q(sqrt(2 E_b / N_0))``: uncoded antipodal signalling, the analytic pin.
 
     The closed form every coded curve is read against: a code that does not
-    beat it at the operating point is not buying anything. Written through
-    ``erfc`` because ``Q(x) = erfc(x / sqrt 2) / 2`` and ``erfc`` keeps its
-    significant digits where ``1 - Phi(x)`` cancels them; through the
-    standard library's rather than ``scipy.special``'s, because a handful of
-    points is a comprehension and the package imports scipy nowhere else.
+    beat it at the operating point buys nothing. Written through ``erfc``
+    because ``Q(x) = erfc(x / sqrt 2) / 2`` and ``erfc`` keeps its significant
+    digits where ``1 - Phi(x)`` cancels them; the standard library's rather
+    than ``scipy.special``'s, since the package imports scipy nowhere else.
 
     Parameters
     ----------
@@ -396,8 +389,7 @@ class ErrorRates:
     """A waterfall point: what was measured, and how many frames it rests on.
 
     A bit error rate without its frame count is a number nothing bounds, so
-    the count travels with it and :attr:`bit_error_interval` is read from
-    both (``sec:turbo:validation``).
+    the count travels with it (``sec:turbo:validation``).
 
     Parameters
     ----------
@@ -436,9 +428,8 @@ class ErrorRates:
 
         ``sqrt(p (1 - p) / N)`` with ``N`` the message bits simulated. Bit
         errors inside one frame are correlated --- a turbo failure is bursty
-        --- so this understates the spread of the *estimate* and is stated
-        as what it is: the error bar the sample size supports if the bits
-        were independent, and a floor on the true one.
+        --- so this is the error bar the sample size supports if the bits were
+        independent, a floor on the true one.
 
         Returns
         -------
@@ -461,9 +452,9 @@ def measure_error_rates(
 
     The all-zero message is sent. The turbo code is linear and the Gaussian
     channel output symmetric, so the error pattern's distribution does not
-    depend on the message sent (``sec:ldpc``, the argument issue #340 states
-    and this suite re-checks for the recursive encoder); sending zero costs
-    nothing and removes the encoder from the inner loop.
+    depend on the message (``sec:ldpc``, the argument issue #340 states and
+    this suite re-checks for the recursive encoder), and sending zero removes
+    the encoder from the inner loop.
 
     Parameters
     ----------
@@ -471,8 +462,8 @@ def measure_error_rates(
     eb_n0_db : float
         The point, in dB.
     frames : int
-        Frames to simulate. It is the whole of the resolution of the
-        result, so it is a parameter and never a default.
+        Frames to simulate. It sets the resolution of the result, so it is a
+        parameter and never a default.
     rng : np.random.Generator
         ``sim/CLAUDE.md``: a generator, never a seed.
     iterations : int

@@ -2,9 +2,7 @@
 
 A supported problem's instance is a file, and `PROBLEMS.md` says which file.
 Two ways that can rot: a row naming a fixture that no longer loads, and a
-fixture no row names --- an instance nothing is claimed about, which is how
-the catalogue would come to describe less than the tree carries. Both fail
-here.
+fixture no row names --- an instance nothing is claimed about. Both fail here.
 
 The rule ``sim/CLAUDE.md`` states --- a supported instance is a fixture,
 never a literal --- is enforced here for the two consumers that cannot import
@@ -21,10 +19,9 @@ The baseline records of issue #401 are held to what makes reading a cached
 number safe. The reader returns what the writer wrote; a record computed
 against another ``numpy``, ``scipy`` or ``torch`` is refused rather than
 served; and a record the tree no longer produces is caught by recomputing it,
-which is what replaced the committed digest (issue #460). The selection that
-decides which records a change is recomputed against is asserted here too: it
-is the mechanism the digest was standing in for, so a selection that misses a
-record is a check that silently did not run.
+which replaced the committed digest (issue #460). The selection deciding which
+records a change is recomputed against is asserted here too, since a selection
+that misses a record is a check that silently did not run.
 
 Every proof runs against a *copy* of the fixture directory, since the
 committed fixtures and records must not be edited to make one.
@@ -95,8 +92,7 @@ def _catalogue_fixtures() -> dict[str, list[str]]:
 @pytest.mark.structural
 def test_every_catalogue_row_names_a_ci_fixture_that_loads() -> None:
     # The claim the column makes: this problem has an instance, at the size
-    # the per-pull-request suite runs. A row that names none is a problem
-    # nothing can be applied to without inventing one.
+    # the per-pull-request suite runs.
     rows = _catalogue_fixtures()
     assert len(rows) > 8, "the catalogue lost its table"
 
@@ -148,9 +144,8 @@ def test_every_problem_declares_the_ci_tier() -> None:
 
 @pytest.mark.oracle
 def test_the_coupled_fixture_is_the_canonical_instance() -> None:
-    # The file restates `canonical_spatio_sequential`, whose enumerable size
-    # is the reason the instance exists. Drift between them would leave two
-    # instances under one name.
+    # The file restates `canonical_spatio_sequential`, whose enumerable size is
+    # why the instance exists. Drift would leave two instances under one name.
     declared = fixture("spatio_sequential", Scale.CI).params
     canonical = canonical_spatio_sequential()
 
@@ -179,9 +174,8 @@ def test_the_coupled_fixture_is_the_canonical_instance() -> None:
 def test_the_frustrated_fixture_builds_the_lattice_with_the_known_ground_state() -> (
     None
 ):
-    # The 3x3 periodic triangular antiferromagnet: the counting argument
-    # fixes one agreeing edge in three, which is what makes this instance
-    # worth declaring at all.
+    # The 3x3 periodic triangular antiferromagnet: the counting argument fixes
+    # one agreeing edge in three, which is what makes it worth declaring.
     params = fixture("frustrated_lattice", Scale.CI).params
 
     assert params.lattice() == frustrated_triangular_lattice(
@@ -222,11 +216,9 @@ def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
 ) -> None:
     # The property that makes a cached number safe: a record whose instance
     # moved under it does not survive being recomputed. Against a *copy* of
-    # the fixture directory, so the committed instance is untouched --- one
-    # changed field and the recomputation disagrees with what is committed.
-    # This is the check the removed digest stood in for, and it is the
-    # stronger one: the digest said the tree had moved, this says the number
-    # did, and names both values (issue #460).
+    # the fixture directory, so the committed instance is untouched. The
+    # removed digest said the tree had moved; this says the number did, and
+    # names both values (issue #460).
     root = tmp_path / "tree"
     (root / "tests" / "regression").mkdir(parents=True)
     shutil.copytree(FIXTURES_DIR, root / "tests" / "regression" / "fixtures")
@@ -254,10 +246,10 @@ def test_an_edited_budget_is_a_disagreement_the_recomputation_reports(
     tmp_path: Path,
 ) -> None:
     # The budget says what a value means, so a record whose restart count was
-    # edited to match a test is describing a measurement other than the one it
-    # holds. `differences` reports it beside a moved value rather than only
-    # reporting the value, which would let the edit pass wherever the number
-    # happened to be reproduced.
+    # edited to match a test describes a measurement other than the one it
+    # holds. `differences` reports the budget beside a moved value; reporting
+    # the value alone would let the edit pass wherever the number was
+    # reproduced.
     copied = tmp_path / "release.baseline.json"
     original = baseline_path("tree_search", Scale.RELEASE)
     copied.write_text(original.read_text().replace('"starts": 50', '"starts": 20'))
@@ -286,12 +278,11 @@ def test_a_record_computed_against_another_library_is_refused(tmp_path: Path) ->
 
 @pytest.mark.structural
 def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
-    # The selection that replaced the digest, and the reason it is safe to
-    # recompute less than everything: a record's numbers are a function of its
-    # fixture and of the import closure of the modules that computed them, so
-    # a change to neither cannot move them. A selection that missed a record
-    # would be a check that silently did not run, which is the failure mode
-    # `infra/CLAUDE.md` names for `select_tests.py` too.
+    # The selection that replaced the digest, and why it is safe to recompute
+    # less than everything: a record's numbers are a function of its fixture
+    # and of the import closure of the modules that computed them, so a change
+    # to neither can move them. A missed record is a check that silently did
+    # not run, the failure mode `infra/CLAUDE.md` names for `select_tests.py`.
     every = {f"{spec.problem}/{spec.tier}" for spec in baseline_script.SPECS}
 
     def reached(*paths: str) -> set[str]:
@@ -318,9 +309,8 @@ def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
 @pytest.mark.structural
 def test_the_same_baseline_computed_twice_is_the_same_record() -> None:
     # A reference algorithm whose answer moved between two runs of the same
-    # tree would make every committed record a snapshot rather than a fact,
-    # and the release gate would fail at random. Checked on the cheapest
-    # record; the rest are recomputed at the release gate.
+    # tree would make every committed record a snapshot rather than a fact.
+    # Checked on the cheapest record; the rest run at the release gate.
     (spec,) = baseline_script.selected([CHEAPEST])
     first, second = baseline_script.compute(spec), baseline_script.compute(spec)
 
@@ -538,8 +528,8 @@ def _notebook_code(path: Path) -> str:
 
 @pytest.mark.structural
 def test_no_qa_script_builds_its_own_instance() -> None:
-    # A figure whose instance is typed into the module is a figure whose
-    # inputs the stamp cannot see, and a figure the catalogue cannot claim.
+    # A figure whose instance is typed into the module has inputs the stamp
+    # cannot see, and the catalogue cannot claim it.
     offenders = {
         path.name: sorted(_constructions(path.read_text()))
         for path in sorted(QA.glob("*.py"))
