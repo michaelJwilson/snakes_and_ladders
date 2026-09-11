@@ -1,4 +1,4 @@
-model: potts-spots
+model: spatio-only
 oracle: enumeration
 
 # The spatial half of the coupled model (issue #413): a Potts prior over M
