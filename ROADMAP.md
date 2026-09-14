@@ -269,7 +269,7 @@ and reduce the number of exact evaluations.
     at the corners of the simplex; the gradient estimator's bias and variance
     are measured against the exact gradient rather than assumed small; and any
     claim to beat a classical baseline needs the budget-matched paired test
-    §2.4 requires.
+    §4.1 requires.
   - *Landed:* the Gumbel-softmax half (#225); the tropical Grassmannian half
     as a softmin over quartet resolutions in tree-metric coordinates, refereed
     by enumeration at 5 to 8 taxa and by the Hadamard closed form (#408). It
