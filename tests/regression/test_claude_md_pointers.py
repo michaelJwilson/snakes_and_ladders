@@ -140,11 +140,22 @@ def test_a_module_directory_added_without_a_pointer_is_caught(
 @pytest.mark.structural
 def test_the_root_file_states_that_the_rules_reach_the_module_files() -> None:
     # The pointers are only true because root says so. If that sentence goes,
-    # eight files start referring to a scope nothing declares.
+    # eight files start referring to a scope nothing declares. The sentence is
+    # matched on what it must say rather than on its exact words, which is why
+    # rewording the root file broke this guard once (#579).
     text = ROOT_CLAUDE_MD.read_text()
 
     assert "## Writing Style" in text
-    assert "each module's `CLAUDE.md` included" in text
+    reach = [
+        line
+        for line in text.splitlines()
+        if "`CLAUDE.md`" in line and "same" in line and "rules" in line
+    ]
+
+    assert reach, (
+        "the root CLAUDE.md no longer says its rules reach the module files; "
+        "eight module files point at a scope nothing declares"
+    )
 
 
 @pytest.mark.critical
