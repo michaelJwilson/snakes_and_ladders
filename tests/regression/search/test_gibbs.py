@@ -39,7 +39,6 @@ from snakes_and_ladders.search.gibbs import (
 )
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.potts_mcmc import (
-    _adjacency,
     _single_site_sweep,
     anneal_potts,
     energies,
@@ -117,7 +116,7 @@ def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
     # over 2,000 sweeps of four sites none did. Asserted at 99 percent so a
     # single such draw does not fail the suite; realized at 100.
     graph, factor_graph = _potts_pair()
-    adjacency = _adjacency(graph)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
     indexed = _Indexed(factor_graph)
     generic, specialised = np.random.default_rng(5), np.random.default_rng(5)
     state_a = np.zeros(4, dtype=np.int64)
@@ -125,7 +124,7 @@ def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
     agreed = 0
     for _ in range(2000):
         gibbs_sweep(indexed, state_a, generic)
-        _single_site_sweep(state_b, _ROWS, adjacency, specialised)
+        _single_site_sweep(state_b, _ROWS, offsets, neighbours, couplings, specialised)
         agreed += int(np.array_equal(state_a, state_b))
         state_b[:] = state_a
 

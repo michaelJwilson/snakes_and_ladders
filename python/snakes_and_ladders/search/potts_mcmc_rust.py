@@ -35,44 +35,8 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.search.potts_mcmc import PottsChain, _adjacency
+from snakes_and_ladders.search.potts_mcmc import PottsChain
 from snakes_and_ladders.sim.graph import PottsGraph
-
-
-def flatten_adjacency(
-    graph: PottsGraph,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The graph's adjacency in compressed-row form, for the kernel.
-
-    Built from :func:`snakes_and_ladders.search.potts_mcmc._adjacency` rather
-    than from the edges directly, so the two backends cannot disagree about
-    which neighbours a node has: the oracle's own structure is what crosses.
-
-    Parameters
-    ----------
-    graph : PottsGraph
-        The graph to flatten.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
-        ``offsets`` of length ``n_nodes + 1``, and ``neighbours`` and
-        ``couplings`` of length ``2 * n_edges``, indexed in step.
-    """
-    neighbours = _adjacency(graph)
-    offsets = np.zeros(graph.n_nodes + 1, dtype=np.int64)
-    for node, incident in enumerate(neighbours):
-        offsets[node + 1] = offsets[node] + len(incident)
-
-    flat_neighbours = np.empty(int(offsets[-1]), dtype=np.int64)
-    flat_couplings = np.empty(int(offsets[-1]), dtype=np.float64)
-    position = 0
-    for incident in neighbours:
-        for neighbour, coupling in incident:
-            flat_neighbours[position] = neighbour
-            flat_couplings[position] = coupling
-            position += 1
-    return offsets, flat_neighbours, flat_couplings
 
 
 def sample_potts(
@@ -124,7 +88,7 @@ def sample_potts(
         ragged adjacency, or a draw count that does not match the sweeps.
     """
     n_states = int(field.shape[0])
-    offsets, neighbours, couplings = flatten_adjacency(graph)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
     state = np.ascontiguousarray(
         rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
     )

@@ -915,6 +915,40 @@ No `numba` or Rust port was reached: on every loop acted on the vectorized
 pass carried the gain, and the profile of what remains is dispatch per level
 (the chain) rather than a call-bound inner loop.
 
+**One Potts model in code, and the consolidation was also the optimization**
+([#277](https://github.com/michaelJwilson/snakes_and_ladders/issues/277)).
+Seven builders returned one adjacency and four loops scored one energy.
+`PottsGraph.compressed_adjacency` is now the only adjacency and
+`sim.potts.energies` the only scorer, with `sim.potts.heat_bath_log_weights`
+the conditional the vectorized simulator, the sequential sampler and the Rust
+kernel share --- the three loops around it stay separate, being separate.
+Which implementation survived was decided by measurement rather than by
+location: the surviving energy is the vectorized gather and dot product, and
+the surviving neighbour walk indexes the compressed rows. `likelihood.potts.log_weights`
+is deliberately not merged in, being what the rest is refereed by.
+
+Every chain, configuration and labelling is **bitwise** unchanged at the same
+seeds on `potts_chain`, `potts_lattice`, `planted_glass` and `spatio_only`
+(46 quantities). What moves is a reported *energy*, by at most **3.7e-16**
+relative --- two units in the last place --- where the edge sum is a dot
+product rather than a left-to-right loop. Timed on 4 cores with `ps` showing
+nothing but the job; this host resolves nothing below about 20%, its first
+process of a pair running 15--20% faster than its second, so every cell below
+is the minimum over interleaved runs in both orders.
+
+| path | before | after |
+| --- | --- | --- |
+| energy, 32x32 at 64 configurations | 2.89 ms (the sampler's, through `log_weights`); **1.34 ms the fastest replaced** (`maxflow.energy`) | **0.82 ms** |
+| `maxflow.energy`, the two-state entry point | 1.34 ms | 1.31 ms, unchanged |
+| heat-bath sweep, 32x32 at 2 / 10 states | 5.75 / 5.31 ms | 5.29 / 5.30 ms, unchanged |
+| Gibbs simulator, 6x6 x 50 chains; 12x12 x 200 | 46.5 / 148.5 ms | 45.1 / 132.7 ms, unchanged |
+| single-site descent, 16x16 at 3 / 5 labels | 2.59 / 2.62 ms | 2.67 / 2.47 ms, unchanged |
+
+`compressed_adjacency` is built by a stable sort rather than a Python loop
+over the edges, which `iterated_conditional_modes` pays per call: at 16x16 the
+loop was 1.3 ms of a 2.1 ms descent, and the rows are identical on 47 graphs
+including doubled bonds, self-loops and an empty edge set.
+
 **The minimum cut `alpha_expansion` could not reach, and the claim that
 looked like a boundary cost**
 ([#528](https://github.com/michaelJwilson/snakes_and_ladders/issues/528),

@@ -203,8 +203,9 @@ parenthesis the only way a ticket is cited.
   for the factor-graph Gibbs sampler (#405). Alpha expansion's inner solver
   is done (#528)
 - Adopt `rustworkx` on a hot path where a measurement says so —
-  `search.topology._component`, `potts_mcmc._adjacency`, the spanning trees
-  of the bound — moving the replaced implementation to `sandbox/`
+  `search.topology._component`, `PottsGraph.compressed_adjacency`, the
+  spanning trees of the bound — moving the replaced implementation to
+  `sandbox/`
 - TorchRL `TensorDict` environments and a `SyncDataCollector` over the
   Gymnasium adapter for Milestone 2.2's batched rollout, adopted only if the
   collector beats `learn.rollout` on the 8 → 20 taxa scaling with `float64`

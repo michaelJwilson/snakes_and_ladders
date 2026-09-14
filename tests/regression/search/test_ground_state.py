@@ -238,21 +238,20 @@ def test_gibbs_at_zero_temperature_is_the_descent_update() -> None:
     rung = _rung(CI, 3)
     rng = np.random.default_rng(12)
     state = rng.integers(0, 3, size=rung.n_nodes)
-    neighbours: list[list[tuple[int, float]]] = [[] for _ in range(rung.n_nodes)]
-    for (first, second), coupling in rung.graph.weighted_edges():
-        neighbours[first].append((second, coupling))
-        neighbours[second].append((first, coupling))
+    offsets, neighbours, couplings = rung.graph.compressed_adjacency()
 
     cold = state.copy()
     from snakes_and_ladders.search.potts_mcmc import _single_site_sweep
 
-    _single_site_sweep(cold, rung.field, neighbours, np.random.default_rng(3), 1e6)
+    _single_site_sweep(
+        cold, rung.field, offsets, neighbours, couplings, np.random.default_rng(3), 1e6
+    )
 
     descent = state.copy()
     for node in range(rung.n_nodes):
         local = -rung.field[node].copy()
-        for neighbour, coupling in neighbours[node]:
-            local[descent[neighbour]] -= coupling
+        for position in range(int(offsets[node]), int(offsets[node + 1])):
+            local[descent[neighbours[position]]] -= couplings[position]
         descent[node] = int(np.argmin(local))
 
     assert np.array_equal(cold, descent)
