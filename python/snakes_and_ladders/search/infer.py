@@ -60,6 +60,7 @@ from snakes_and_ladders.likelihood.pruning_torch import (
 )
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.parallel import Backend, map_tasks
 from snakes_and_ladders.search.topology import (
     Topology,
     branch_splits,
@@ -310,6 +311,21 @@ def _score(
     )
 
 
+_Candidate = tuple[
+    "Model", Topology, int, Mapping[str, np.ndarray], "_Fitted | None", bool
+]
+
+
+def _score_candidate(task: _Candidate) -> _Fitted:
+    """One candidate's fit, in the shape ``parallel.map_tasks`` takes.
+
+    Module level and one argument because the process backend pickles the
+    function by name; a closure over the loop variables would be refused.
+    """
+    model, topology, k, alignment, warm, partial = task
+    return _score(model, topology, k, alignment, warm, partial=partial)
+
+
 def _lazy_score(
     model: Model,
     topology: Topology,
@@ -375,6 +391,9 @@ def infer(
     surrogate: Surrogate | None = None,
     radius: int | None = None,
     partial_reoptimization: bool = False,
+    workers: int = 1,
+    backend: Backend = "serial",
+    intra_op_threads: int | None = None,
 ) -> Inference:
     """Hill-climb over topologies, fitting continuous parameters per candidate.
 
@@ -439,6 +458,26 @@ def infer(
         candidate wins can change, so it is opt-in and its cost in missed
         optima is measured. Needs ``warm_start``, the source of the lengths it
         holds fixed.
+    workers : int
+        How many candidate fits of one neighbourhood run at once
+        (issue #405). The candidates of a neighbourhood are independent and
+        their results are combined in input order, so a parallel search is
+        bitwise equal to the serial one, candidate for candidate. ``1``, the
+        default, is the loop this had.
+    backend : Backend
+        Which pool ``workers`` come from, per
+        :func:`snakes_and_ladders.parallel.map_tasks`. ``"serial"``, the
+        default, refuses ``workers > 1`` rather than ignoring it, so asking
+        for workers without naming a pool is an error and not a silent serial
+        run. Which backend pays inverts with the regime and neither is a
+        default: experiment 013 measured processes 2.72x up at 50 taxa and
+        2,000 sites, where the fit is Python-bound in the post-order, and
+        1.63x down at 8 taxa and 20,000 sites, where it sits inside
+        GIL-releasing ``torch`` kernels and threads win instead.
+    intra_op_threads : int | None
+        ``torch.set_num_threads`` inside each worker. ``None`` leaves it
+        alone; a pool of workers each running multithreaded kernels
+        oversubscribes the machine, and ``DEV.md`` carries the measured rule.
 
     Returns
     -------
@@ -451,8 +490,9 @@ def infer(
         If the alignment has fewer than 4 taxa, below which no unrooted
         topology has a neighbour to move to, ``lazy_top`` is not positive,
         a surrogate is given without ``lazy_top`` to apply it to, ``radius``
-        is given with ``MoveSet.NNI`` or is below 1, or
-        ``partial_reoptimization`` is set without ``warm_start``.
+        is given with ``MoveSet.NNI`` or is below 1,
+        ``partial_reoptimization`` is set without ``warm_start``, or
+        ``workers`` and ``backend`` disagree (:func:`parallel.map_tasks`).
     """
     if lazy_top is not None and lazy_top < 1:
         msg = f"lazy_top must be at least 1 when given, got {lazy_top}"
@@ -515,10 +555,17 @@ def infer(
             )
             likelihood_evaluations += len(fresh)
             to_fit = ranked[:lazy_top]
-        for neighbour in to_fit:
-            fitted = _score(
-                model, neighbour, k, alignment, warm, partial=partial_reoptimization
-            )
+        scored = map_tasks(
+            _score_candidate,
+            [
+                (model, neighbour, k, alignment, warm, partial_reoptimization)
+                for neighbour in to_fit
+            ],
+            workers=workers,
+            backend=backend,
+            intra_op_threads=intra_op_threads,
+        )
+        for neighbour, fitted in zip(to_fit, scored, strict=True):
             fits += 1
             likelihood_evaluations += fitted.evaluations
             if fitted.value > candidate_fit.value:

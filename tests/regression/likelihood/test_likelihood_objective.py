@@ -22,6 +22,7 @@ from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood import pruning_torch
 from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
+    GradientRoute,
     SubstitutionModelObjective,
 )
 from snakes_and_ladders.opt.fit import (
@@ -49,7 +50,9 @@ _RTOL_GRADIENT = 1e-6
 _FINITE_DIFFERENCE_STEP = 1e-6
 
 
-def _objective(fixture: str, sites: int = _SITES) -> BranchLengthObjective:
+def _objective(
+    fixture: str, sites: int = _SITES, gradient: GradientRoute = "taped"
+) -> BranchLengthObjective:
     params = load_fixture(fixture)
     dataset = simulate_alignment(
         tau=params.tau,
@@ -59,7 +62,11 @@ def _objective(fixture: str, sites: int = _SITES) -> BranchLengthObjective:
         n_sites=sites,
     )
     return BranchLengthObjective(
-        params.tau, params.k, params.pi, dict(dataset.alignment)
+        params.tau,
+        params.k,
+        params.pi,
+        dict(dataset.alignment),
+        gradient=gradient,
     )
 
 
@@ -604,3 +611,55 @@ def test_the_phylogenetic_objectives_invert_their_own_constraint_map(
     recovered = objective.theta_from(objective.constrain(theta))
 
     assert_allclose(recovered.numpy(), theta.numpy(), atol=1e-14)
+
+
+# --- which route the derivative comes from (issues #443, #449) -----------
+
+
+@pytest.mark.oracle
+def test_the_two_gradient_routes_agree_through_the_objective() -> None:
+    # `pruning_analytic` is pinned against `pruning_torch` at the level of
+    # `log_likelihood`; this pins the same agreement where a fit sees it,
+    # through the constraint map and the merged root pair. The value is the
+    # same forward pass and is therefore exact; the gradient is a different
+    # computation and carries the tolerance the closed form is stated at.
+    taped = _objective(EIGHT_TAXA, gradient="taped")
+    analytic = _objective(EIGHT_TAXA, gradient="analytic")
+    theta = taped.initial()
+
+    gradients = []
+    for objective in (taped, analytic):
+        at = theta.clone().requires_grad_(True)
+        value = objective(at)
+        (gradient,) = torch.autograd.grad(value, at)
+        gradients.append((float(value.detach()), gradient))
+
+    assert gradients[0][0] == gradients[1][0]
+    assert_allclose(
+        gradients[1][1].numpy(), gradients[0][1].numpy(), rtol=_RTOL_GRADIENT
+    )
+
+
+@pytest.mark.oracle
+def test_the_analytic_route_fits_to_the_same_optimum() -> None:
+    # What the route is for: the same maximum, reached by the same optimizer.
+    # A route that agreed on the gradient but moved the optimum would be a
+    # defect this catches and the pointwise test above would not.
+    taped = fit(_objective(FOUR_TAXA, gradient="taped"))
+    analytic = fit(_objective(FOUR_TAXA, gradient="analytic"))
+
+    assert analytic.value == pytest.approx(taped.value, rel=1e-8)
+    assert_allclose(analytic.theta.numpy(), taped.theta.numpy(), rtol=1e-5, atol=1e-7)
+
+
+@pytest.mark.edge_case
+def test_an_unknown_gradient_route_is_refused() -> None:
+    params = load_fixture(FOUR_TAXA)
+    with pytest.raises(ValueError, match="gradient is one of"):
+        BranchLengthObjective(
+            params.tau,
+            params.k,
+            params.pi,
+            {leaf: np.zeros(4, dtype=np.int64) for leaf in ("A", "B", "C", "D")},
+            gradient="adjoint",  # type: ignore[arg-type]
+        )

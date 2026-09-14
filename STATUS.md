@@ -201,6 +201,21 @@ pinning one thread per worker as the plan assumed.
 | `search.support.bootstrap_support` | default | 2 | 4.70 | 1.12× | yes |
 | `search.support.bootstrap_support` | default | 4 | 5.65 | 0.93× | yes |
 
+**A fourth parallelism site is positive: one neighbourhood's candidate fits
+([#405](https://github.com/michaelJwilson/snakes_and_ladders/issues/405)).**
+`search.infer` takes `workers`, `backend` and `intra_op_threads` and fans the
+candidates of a neighbourhood through the same seam. Unlike the three sites
+above, a candidate fit is seconds rather than tenths, so the pool's spawn is
+amortized: 58.87 s to **21.67 s at 50 taxa on 4 processes (2.72x)** and 14.94 s
+to 9.92 s at 20 taxa (1.51x), both at 2,000 sites, each returning the serial
+run's `log_likelihood` bitwise and its topology.
+Which backend pays inverts with the regime, so neither argument gets a
+parallel default: threads win 1.20x at 8 taxa by 20,000 sites, where the work
+sits inside GIL-releasing `torch` kernels, and lose 1.99x at 20 taxa by 2,000
+sites, where it is Python in the post-order; processes do the reverse, losing
+1.63x in the first and winning in the second.
+`docs/experiments/013-parallel-candidate-fits.md` carries the comparison.
+
 Speedup is against the site's serial run at one intra-op thread; the serial
 wall clock in the inventory includes the setup the loop does not carry. The
 sites the plan lists after these — the candidate fits of `search.infer`,
@@ -519,7 +534,19 @@ from Python, so the crossing is inside the spread and the kernel by itself
 already costs 1.45x PyTorch's whole evaluation. Its `f64` path was sound —
 5.9e-13 against the taped `float64` gradient.
 `docs/experiments/007-pruning-gradient-routes.md` carries the question, the
-three routes' numbers and the prediction they were taken to test. The route is
+three routes' numbers and the prediction they were taken to test.
+**Switching the fitted path to the closed form, which 007 left as
+[#443](https://github.com/michaelJwilson/snakes_and_ladders/issues/443), is
+not taken.** `likelihood.objective.BranchLengthObjective` now takes
+`gradient=`, so the two routes are comparable through a fit and not only at
+`log_likelihood`, and they agree at **5.4e-16** relative there and reach the
+same optimum. The default stays the tape, because the ratio between them is
+not a function of the problem's size: at one tree, one alignment and 20,000
+sites, replacing the fixture's branch lengths with 0.1 moves it from
+**2.11x** to **0.57x** — the routes swap places. Flushing denormals to zero
+leaves the swing intact (2.11 to 1.70, 0.57 to 0.74), so that is not the
+mechanism and the cause is unidentified; `docs/experiments/012-pruning-gradient-routes-after-the-post-order.md`
+carries it, and it is what #443 now asks. The route is
 conserved as `snakes_and_ladders.sandbox.pruning_burn` over
 `src/pruning_burn.rs` behind the `sandbox` Cargo feature; the default build,
 the wheel and every per-pull-request job link no `burn`, and
