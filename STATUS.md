@@ -1535,7 +1535,7 @@ points).
 that already existed**
 ([#541](https://github.com/michaelJwilson/snakes_and_ladders/issues/541)). The `M x K`
 parameters are seeded a prior draw, the data's own quantiles, `kmeans++`, the
-same construction scored under the family's negative log-density, a short
+same construction scored under the family's Bregman divergence, a short
 burn-in fit, and three chains on a Gaussian surrogate --- Hamiltonian,
 annealed and tempered. **The `Initializer` protocol needed no change** for the
 last three, as it needed none for `kmeans++` at
@@ -1545,12 +1545,16 @@ as its consumers. Cost is counted in passes over the data rather than seconds,
 which is what makes a 144-pass seeding comparable to a 6-pass fit.
 
 **At 100 components on 4,000 observations the likelihood prefers the seeding
-that read nothing, and the truth prefers the one that cost most.** Over six
-paired instances at a six-pass budget, the prior draw reaches the best
-projected value on **6 of 6** and no candidate beats it: `data`, `hmc`,
-`tempering` and a two-restart baseline sit behind it at McNemar **p = 0.031**,
-and `kmeans++`, `emission++`, `burn-in` and `anneal` do not separate (0.50,
-0.25, 0.06, 0.06). The same fits reverse on the simulated truth --- recovery of
+scored under the family's own divergence, and the truth prefers the one that
+cost most.** Over six paired instances at a six-pass budget, `emission++`
+reaches the best projected value on **6 of 6** at a mean gap of **0.4** nats
+and the prior draw on 5 at **3.2** --- an ordering #560 produced by correcting
+the scoring from the negative log density to the Bregman divergence, and one
+the paired test does not separate (**p = 1.00** against the prior draw, on one
+discordant instance of six). `kmeans++` follows at 6.8, and the six candidates
+whose fits #560 did not re-run at 11.5 to 16.1 against the best that move
+produced, 3.18 nats below the old one.
+The same fits reverse on the simulated truth --- recovery of
 the generating component **0.089** for `tempering` and **0.082** for `data`
 against `prior`'s **0.060**, each 6 of 6 at **p = 0.031**, against the
 generating parameters' own 0.109, with mean relative error in a component's
@@ -1651,19 +1655,24 @@ seeding comparison on a Gaussian instead of on counts, because a Gaussian is
 where #541's candidate 3 predicts no gain: the Bregman divergence of an
 isotropic Gaussian's log-partition *is* the squared Euclidean distance
 ([`docs/experiments/010`](docs/experiments/010-gaussian-mixture-seeding-control.md)).
-**It wins on neither rung, and the reason is that candidate 3 never ran the
-divergence.**
+**It ties on the one-channel rung and loses on the two-channel one, and #560
+had to correct the scoring before either was a measurement of the divergence.**
 Over 200 seedings of `mixture/ci.yaml`, scored against the exact optimal
 k-means cost: the divergence and squared Euclidean produce **identical
 seedings, draw for draw**, at **1.8496** times the optimum (worst 6.21), while
-the rule `opt.emission_mixture.plus_plus_start` actually applies — the family's
-**negative log density** — costs **3.9111** (worst 33.80) against uniform
-seeding's **4.3470**, nine tenths of the way from the divergence to uniform.
-The cause is arithmetic and not statistical: the negative log density is the
-divergence plus the log normalizer, D-squared sampling normalizes its scores
-rather than shifting them, and an additive constant therefore dilutes the rule
-toward uniform. #541's candidate 3 is measuring a normalizer as well as a
-divergence, and what that costs a count family is #541's measurement to make.
+the rule `opt.emission_mixture.plus_plus_start` applied until #560 — the
+family's **negative log density** — costs **3.9111** (worst 33.80) against
+uniform seeding's **4.3470**, nine tenths of the way from the divergence to
+uniform. The cause is arithmetic and not statistical: the negative log density
+is the divergence plus the log normalizer, D-squared sampling normalizes its
+scores rather than shifting them, and an additive constant therefore dilutes
+the rule toward uniform. The identity is exact and is pinned as one:
+`plus_plus_start` reproduces `opt.mixture.kmeans_plus_plus`'s seedings centre
+for centre under a shared generator. It is a **one-scale** identity, and the
+key rung has two channels of different pooled scale, where the divergence
+divides each by its own and is therefore a different rule: **749** nats there
+against squared Euclidean's 424, further than the 668 the negative log density
+reached.
 The two-channel rung this was sized against —
 `tests/regression/fixtures/mixture/release.yaml`, ten components over
 5,041 x 4,000 = 20,164,000 observations, mirroring
@@ -1693,8 +1702,8 @@ whole release tier and the paired test is correspondingly weak there.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | random-restart | 0 | 5.30 | 0.6800 | 0 | 3,030 | 0.4116 | 0.00, 0% |
 | kmeans++ | 0 | 0.723 | 0.6240 | 0 | 424 | 0.4632 | 0.90, 2.2% |
-| emission-d2 | 0 | 1.38 | 0.6140 | 0 | 668 | 0.4562 | 1.00, 2.5% |
-| burn-in | 0 | 19.1 | 0.6240 | 0 | 30,700 | 0.2968 | 7.00, 17.5% |
+| emission-d2 | 0 | 0.723 | 0.6240 | 0 | 749 | 0.4538 | 1.00, 2.5% |
+| burn-in | 0 | 18.6 | 0.6240 | 0 | 30,700 | 0.3126 | 7.00, 17.5% |
 | family-sample | 0 | 1.87 | 0.5980 | 0 | 717 | 0.4093 | 0.00, 0% |
 | spectral | 0 | 0.723 | 0.6240 | 0 | 424 | 0.4632 | 1.00, 2.5% |
 | hmc | 6 | 0.785 | 0.5260 | 0 | 595 | 0.4370 | 48.00, 120% |
@@ -1728,23 +1737,25 @@ parameters. The units differ, the ranks are what is compared.
 | tempering | 0.0 | 1.06 | 595 |
 | hmc | 2.2 | 0.785 | 595 |
 | anneal | 2.2 | 1.39 | 595 |
-| burn-in | 7.0 | 19.1 | 30,700 |
+| burn-in | 7.0 | 18.6 | 30,700 |
 | random-restart (#541's `data`) | 12.0 | 5.30 | 3,030 |
 | kmeans++ | 20.4 | 0.723 | 424 |
-| emission-d2 (#541's `emission++`) | 20.5 | 1.38 | 668 |
+| emission-d2 (#541's `emission++`) | 200.0 | 0.723 | 749 |
 | family-sample (#541's `prior`) | 114.2 | 1.87 | 717 |
 | spectral | not run (#554) | 0.723 | 424 |
 
-**Which of #548's three outcomes.** Not the first: emission-aware D-squared
-does not win on counts — 20.5 nats against squared Euclidean's 20.4 at equal
-budget, a difference no ordering rests on — and it does not tie on a Gaussian,
-where it is 1.6x further from the truth-started fit at the key rung. Not the
-second. The third, **it wins on neither**, with the cause named: the rule is
-not the divergence it is described as. #541's own reading — that
-`emission++` seeds closer (1,303 nats against 2,729) and recovers more labels
-(0.56 against 0.48) while ending level — is consistent with that: the
-normalizer moves where the seeding lands without moving which basin the fit
-reaches. The two studies agree on the chains as well, from opposite
+**Which of #548's three outcomes, once the rule is the divergence.** It is
+outcome three on the Gaussian, and by more than #548 measured: candidate 3 ties
+k-means++ exactly on the one-channel rung, because there it *is* k-means++, and
+loses by 749 nats against 424 on the two-channel one, where the divergence
+whitens the channels and k-means++ does not. On counts the answer is the size's
+rather than the family's: at four components and 1,000 observations a component
+it ends **200.0** nats short against squared Euclidean's 20.4, and at 100
+components and 40 a component it reaches the best projected value on 6 of 6
+instances and leads the nine (#541, above). The divergence is relative and a
+squared distance is absolute, so which wins is a property of how far apart the
+components sit in the family's own geometry, which is a measurement per
+instance and not a default that moves. The two studies agree on the chains as well, from opposite
 directions: #541 measured acceptance 1.00 at 4,000 observations with hmc and
 anneal returning the same seeding, and this one measured acceptance 0.000 at
 504,100, all three returning their starting points. One fixed step size does

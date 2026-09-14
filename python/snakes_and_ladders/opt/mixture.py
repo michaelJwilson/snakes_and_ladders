@@ -687,18 +687,19 @@ def canonical_order(centres: np.ndarray) -> np.ndarray:
 def emission_mixture_plus_plus(
     observations: np.ndarray,
     n_centres: int,
-    negative_log_density: Callable[[float, np.ndarray], np.ndarray],
+    divergence: Callable[[float, np.ndarray], np.ndarray],
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """``Emission_Mixture++``: k-means++ with a family's negative log-density as the distance (issue #306).
+    """``Emission_Mixture++``: k-means++ with a family's Bregman divergence as the distance (issue #306).
 
     :func:`kmeans_plus_plus` draws each centre proportionally to squared
     Euclidean distance, which assumes a unit-normal emission. Here the
-    distance is the family's: ``negative_log_density(seed, observations)``
-    scores every observation under a family seeded at ``seed``, and the next
-    seed is drawn proportionally to the smallest such score so far. With
-    ``0.5 * ((x - seed) / scale) ** 2`` it is k-means++ exactly, the reduction
-    the test pins.
+    distance is the family's: ``divergence(seed, observations)`` scores every
+    observation against a family seeded at ``seed``, and the next seed is drawn
+    proportionally to the smallest such score so far. With ``0.5 * ((x - seed)
+    / scale) ** 2`` it is k-means++ exactly, the reduction the test pins ---
+    and that expression *is* an isotropic Gaussian's divergence, so the two
+    rules coincide there rather than resembling one another (issue #560).
 
     Parameters
     ----------
@@ -706,7 +707,7 @@ def emission_mixture_plus_plus(
         Shape ``(n_samples,)``; the seeds are drawn from these values.
     n_centres : int
         Seeds to draw, in ``[1, n_samples]``.
-    negative_log_density : Callable
+    divergence : Callable
         ``(seed, observations) -> scores``, non-negative, shape ``(n_samples,)``.
     rng : np.random.Generator
         Generator, passed in rather than seeded here (``sim/CLAUDE.md``).
@@ -724,7 +725,7 @@ def emission_mixture_plus_plus(
     # The same draws in the same order as kmeans_plus_plus, so that with a
     # squared-distance score the two are one algorithm, draw for draw.
     chosen = [rng.choice(values)]
-    nearest = np.asarray(negative_log_density(float(chosen[0]), values), dtype=float)
+    nearest = np.asarray(divergence(float(chosen[0]), values), dtype=float)
     for _ in range(1, n_centres):
         total = float(nearest.sum())
         if total <= 0.0:
@@ -733,6 +734,6 @@ def emission_mixture_plus_plus(
             chosen.append(rng.choice(values, p=nearest / total))
         nearest = np.minimum(
             nearest,
-            np.asarray(negative_log_density(float(chosen[-1]), values), dtype=float),
+            np.asarray(divergence(float(chosen[-1]), values), dtype=float),
         )
     return np.array(chosen)

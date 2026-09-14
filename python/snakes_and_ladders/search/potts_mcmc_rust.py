@@ -37,6 +37,7 @@ import numpy as np
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.search.potts_mcmc import PottsChain, _adjacency
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import site_field
 
 
 def flatten_adjacency(
@@ -123,12 +124,18 @@ def sample_potts(
         If the kernel refuses its arguments -- a state outside the alphabet, a
         ragged adjacency, or a draw count that does not match the sweeps.
     """
-    n_states = int(field.shape[0])
+    n_states = int(field.shape[-1])
     offsets, neighbours, couplings = flatten_adjacency(graph)
     state = np.ascontiguousarray(
         rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
     )
-    contiguous_field = np.ascontiguousarray(field, dtype=np.float64)
+    # The kernel takes one field row per site (issue #571). A shared field
+    # arrives here as a single row, so it is widened once, outside the loop,
+    # rather than per sweep.
+    contiguous_field = np.ascontiguousarray(
+        site_field(field, graph.n_nodes) if field.ndim == 1 else field,
+        dtype=np.float64,
+    )
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
     for step in range(-burn_in * thin, n_sweeps * thin):
@@ -136,7 +143,7 @@ def sample_potts(
         # the uniforms are consumed in the same order.
         draws = np.ascontiguousarray(rng.random(graph.n_nodes), dtype=np.float64)
         oxi_snakes_and_ladders.single_site_sweeps(
-            state, contiguous_field, offsets, neighbours, couplings, draws, 1
+            state, contiguous_field, offsets, neighbours, couplings, draws, 1, 1.0
         )
         if step >= 0 and (step + 1) % thin == 0:
             recorded[step // thin] = state
