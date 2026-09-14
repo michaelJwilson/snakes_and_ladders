@@ -277,20 +277,32 @@ def test_a_swap_of_a_label_with_itself_is_refused() -> None:
         swap(rung.graph, rung.field, labelling, 1, 1)
 
 
-@pytest.mark.edge_case
-def test_the_rust_sweep_refuses_a_field_that_varies_by_site() -> None:
-    # The kernel takes one row shared by every site. Handed a varying field it
-    # would sample the wrong model rather than fail, so it is refused.
+@pytest.mark.oracle
+def test_the_rust_sweep_runs_the_per_site_field_and_matches_the_oracle() -> None:
+    # The kernel took one row shared by every site and refused this fixture,
+    # which is the one that has a per-site field -- so the backend that exists
+    # to make Potts sampling affordable could not sample the instance the
+    # roadmap targets (issue #571). It runs now, and against the Python sweep
+    # on the same stream it is the same run, not merely a close one.
     rung = _rung(CI, 3)
+    assert not bool(np.all(rung.field == rung.field[0])), (
+        "this fixture is the per-site case; a shared field tests nothing here"
+    )
 
-    with pytest.raises(ValueError, match="one field row shared by every site"):
+    runs = [
         anneal_potts(
             rung.graph,
             rung.field,
-            Exponential(2.0, 0.05, 2),
+            Exponential(2.0, 0.05, 8),
             np.random.default_rng(1),
-            backend=Backend.RUST,
+            backend=backend,
         )
+        for backend in (Backend.PYTHON, Backend.RUST)
+    ]
+
+    np.testing.assert_array_equal(runs[0].labelling, runs[1].labelling)
+    np.testing.assert_array_equal(runs[0].final, runs[1].final)
+    assert runs[0].energy == runs[1].energy
 
 
 # --- rung 2: 5,041 sites, the graph cut --------------------------------------

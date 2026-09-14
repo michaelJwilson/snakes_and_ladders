@@ -685,9 +685,9 @@ def _sweep_at(
     Both closures consume exactly ``n_nodes`` uniforms per sweep from the
     generator they are handed, so switching backend changes which arithmetic
     evaluates the conditional and nothing about the stream. Tempering reaches
-    the Rust kernel as the model scaling :func:`tempered` states -- field and
-    couplings multiplied by ``beta`` -- the identity the Python sweep applies
-    to its local field.
+    the Rust kernel as ``beta`` itself, applied to the accumulated local field
+    where the Python sweep applies it, so the two agree bitwise at every
+    temperature rather than only at 1.0 (issue #571).
 
     The adjacency arrives as the compressed rows both backends read, built
     once by the caller: the Python sweep indexes them and the kernel takes
@@ -706,27 +706,34 @@ def _sweep_at(
     if backend is Backend.RUST:
         from snakes_and_ladders import oxi_snakes_and_ladders
 
-        if not bool(np.all(rows == rows[0])):
-            msg = (
-                "the Rust heat-bath sweep takes one field row shared by every "
-                "site; this field varies by site. Run Backend.PYTHON, which is "
-                "the oracle either way"
-            )
-            raise ValueError(msg)
-        contiguous_field = np.ascontiguousarray(rows[0], dtype=np.float64)
+        # The field crosses as one row per site, which is the shape `rows`
+        # already has: `sim.potts.site_field` widened it at the entry point,
+        # so a shared field is rows that are all equal and there is one code
+        # path rather than two (issue #551, #571). The adjacency is the
+        # caller's, built once (issue #277); both arrays are made contiguous
+        # here rather than per sweep.
+        contiguous_field = np.ascontiguousarray(rows, dtype=np.float64)
+        contiguous_couplings = np.ascontiguousarray(couplings, dtype=np.float64)
 
         def rust_sweep(
             state: np.ndarray, rng: np.random.Generator, beta: float
         ) -> None:
             draws = np.ascontiguousarray(rng.random(state.shape[0]), dtype=np.float64)
+            # `beta` is passed rather than multiplied into the arguments. The
+            # Python sweep scales the accumulated local field, so scaling the
+            # parts instead computes `beta * h + sum (beta * J)` against its
+            # `(h + sum J) * beta` -- equal in real arithmetic, not bitwise,
+            # which cost agreement at every temperature but 1.0 (issue #571).
+            # It also drops two whole-array temporaries per sweep.
             oxi_snakes_and_ladders.single_site_sweeps(
                 state,
-                np.ascontiguousarray(beta * contiguous_field),
+                contiguous_field,
                 offsets,
                 neighbours,
-                np.ascontiguousarray(beta * couplings),
+                contiguous_couplings,
                 draws,
                 1,
+                beta,
             )
 
         return rust_sweep

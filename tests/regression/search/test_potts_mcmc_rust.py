@@ -186,10 +186,11 @@ def test_a_state_outside_the_alphabet_is_refused() -> None:
     with pytest.raises(ValueError, match=r"expected \[0, 2\)"):
         oxi_snakes_and_ladders.single_site_sweeps(
             np.array([5], dtype=np.int64),
-            np.zeros(2),
+            np.zeros((1, 2)),
             np.array([0, 0], dtype=np.int64),
             np.array([], dtype=np.int64),
             np.array([], dtype=np.float64),
             np.array([0.5]),
             1,
+            1.0,
         )

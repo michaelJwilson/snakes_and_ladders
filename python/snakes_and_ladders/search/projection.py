@@ -355,7 +355,7 @@ def euclidean_seeding(
 def emission_seeding(
     instance: ProjectedCounts, at: ComponentsAt, rng: np.random.Generator
 ) -> Seeding:
-    """``Emission_Mixture++``: the same scheme under the family's own negative log-density.
+    """``Emission_Mixture++``: the same scheme under the family's own Bregman divergence.
 
     Returns
     -------

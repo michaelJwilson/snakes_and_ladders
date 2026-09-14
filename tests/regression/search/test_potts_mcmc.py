@@ -55,7 +55,7 @@ from snakes_and_ladders.sim.canonical import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling
+from snakes_and_ladders.sim.potts import critical_coupling, site_field
 
 from tests._scale import at_scale
 
@@ -760,3 +760,109 @@ def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
 
     assert adapted_hits >= n_seeds - 2, (adapted_hits, hand_hits)
     assert hand_hits >= n_seeds - 2, (adapted_hits, hand_hits)
+
+
+# --- the Rust sweep's field, and where beta is applied (issue #571) -----------
+
+
+def _swept(
+    graph: PottsGraph, rows: np.ndarray, backend: Backend, beta: float
+) -> np.ndarray:
+    """Five sweeps from one seed, on the backend named.
+
+    The adjacency is passed in the compressed form both backends now read
+    (issue #277); the list-of-lists this test used to build for the Python
+    closure is the shape that builder replaced.
+    """
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    sweep = potts_mcmc._sweep_at(rows, offsets, neighbours, couplings, backend)
+    state = np.zeros(graph.n_nodes, dtype=np.int64)
+    rng = np.random.default_rng(7)
+    for _ in range(5):
+        sweep(state, rng, beta)
+    return state
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("beta", [1.0, 0.37, 2.5], ids=lambda value: f"beta{value}")
+@pytest.mark.parametrize("field", ["shared", "per_site"])
+def test_the_backends_agree_bitwise_at_every_temperature(
+    field: str, beta: float
+) -> None:
+    # Two failures this covers, and the second is why `beta` moved into the
+    # kernel. The per-site field the Rust sweep could not express at all
+    # (issue #571); and the *order* `beta` is applied in, which the caller used
+    # to get wrong by pre-scaling the arguments -- computing `beta * h + sum
+    # (beta * J)` where the oracle computes `(h + sum J) * beta`. Those agree
+    # in real arithmetic and differ in the last bits, so the old arrangement
+    # could only ever have been bitwise at beta = 1.0, which is the only place
+    # it was tested.
+    graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.7)
+    rows = (
+        site_field(np.array([0.3, -0.2, 0.5]), graph.n_nodes)
+        if field == "shared"
+        else np.random.default_rng(11).normal(size=(graph.n_nodes, 3))
+    )
+
+    np.testing.assert_array_equal(
+        _swept(graph, rows, Backend.PYTHON, beta),
+        _swept(graph, rows, Backend.RUST, beta),
+    )
+
+
+@pytest.mark.edge_case
+def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
+    # PyO3 reports a dimensionality mismatch as "'ndarray' object is not an
+    # instance of 'ndarray'", which names neither shape (issue #571).
+    from snakes_and_ladders import oxi_snakes_and_ladders
+
+    graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
+    offsets, index, couplings = graph.compressed_adjacency()
+    state = np.zeros(graph.n_nodes, dtype=np.int64)
+    draws = np.full(graph.n_nodes, 0.5)
+
+    with pytest.raises(ValueError, match="one row per site"):
+        oxi_snakes_and_ladders.single_site_sweeps(
+            state,
+            np.zeros((graph.n_nodes + 1, 3)),
+            offsets,
+            index,
+            couplings,
+            draws,
+            1,
+            1.0,
+        )
+    with pytest.raises(ValueError, match="beta must be finite"):
+        oxi_snakes_and_ladders.single_site_sweeps(
+            state,
+            np.zeros((graph.n_nodes, 3)),
+            offsets,
+            index,
+            couplings,
+            draws,
+            1,
+            float("nan"),
+        )
+
+
+@pytest.mark.edge_case
+def test_a_field_of_the_wrong_dimensionality_names_its_shape() -> None:
+    # PyO3 would reject a 1-D field before the kernel body, as "'ndarray'
+    # object is not an instance of 'ndarray'" (issue #571). The field is taken
+    # as a dynamic array so the refusal names the shape instead.
+    from snakes_and_ladders import oxi_snakes_and_ladders
+
+    graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.5)
+    offsets, index, couplings = graph.compressed_adjacency()
+
+    with pytest.raises(ValueError, match=r"must be 2-D.*got shape \[3\]"):
+        oxi_snakes_and_ladders.single_site_sweeps(
+            np.zeros(graph.n_nodes, dtype=np.int64),
+            np.zeros(3),
+            offsets,
+            index,
+            couplings,
+            np.full(graph.n_nodes, 0.5),
+            1,
+            1.0,
+        )
