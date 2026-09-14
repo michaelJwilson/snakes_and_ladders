@@ -164,7 +164,7 @@ parenthesis the only way a ticket is cited.
 - GPU scaling for the site-parallel recursion, once a device exists to
   measure on (#280)
 
-## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
+## Milestone 4.1 — Experiment Tracking, Ablations & Leaderboard
 
 - Create a ledger of benchmarked and validated runs with Aim (#75)
 - Reproduce a run from a single manifest, and assert it

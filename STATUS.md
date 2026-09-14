@@ -29,7 +29,7 @@ the code behind each problem class.
 | 2.1 RL formulation & deployment | The estimator, the Potts, hidden-path and tree environments, a critic, an actor–critic, PPO and a PUCT planner landed, each pinned to enumeration; a tree policy trained on the fixture hill climbing fails, a tie over one feature and ahead of greedy over the seven-column set (#349); not yet measured against restarts | Enumerated gradient against finite differences at 1.5e-11 relative; on the Potts chain REINFORCE 86.6%, PPO 96.3% and the planner 92.6% at 8.3 evaluations per episode against greedy's 80.2% at 48; on the 7-taxon fixture the single feature reaches 0.487 against greedy's 0.480 (sign test `p = 0.79`) and the full set 0.796, ahead on 16 of 16 seeds (`p = 3.05e-5`), while restarts reach 1.000 at the same budget | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139), [#192](https://github.com/michaelJwilson/snakes_and_ladders/pull/192), [#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193), [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#320](https://github.com/michaelJwilson/snakes_and_ladders/pull/320), [#349](https://github.com/michaelJwilson/snakes_and_ladders/pull/349), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355) |
 | 2.2 Curriculum learning | Started: the surrogate curriculum from 5 to 6 taxa, from 3x3 to 4x6 lattices, and across `spatio_only`'s 9 to 5,041 sites; weight transfer for a policy and batched rollout not started | Zero-shot at six taxa the set surrogate falls to `R^2` 0.68 and recovers to 0.94 after transfer, the MLP holds 0.92 and reaches 0.95; lattice surrogates transfer zero-shot at 0.99 at a shared field and collapse to -338.6 at a per-site one, recovering to 0.722 | [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317), [#547](https://github.com/michaelJwilson/snakes_and_ladders/pull/547) |
 | 2.3 Empirical validation | The budget utility and the exact paired test landed, and six budget-matched comparisons are recorded; no empirical alignment and no external tool ([#126](https://github.com/michaelJwilson/snakes_and_ladders/issues/126)) | Every comparison at one budget over shared seeds with McNemar's exact test: the glass, Rastrigin, the mixture, the relaxation against greedy, the cluster updates at the transition, and the tree's starts at equal evaluations | [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348) |
-| 2.4 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded, each capped at a ten-line body (#458); the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template and the cap per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
+| 4.1 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded, each capped at a ten-line body (#458); the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template and the cap per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
 | Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half landed, refereed by enumeration and the Hadamard closed form, and not shown to beat a classical baseline, so it is conserved in `sandbox/`; learned surrogates rank a neighbourhood with exact re-scoring of the top candidates; stochastic escape by epsilon-greedy landed | Gumbel-softmax exact at every corner to 1e-11 and deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098`; the tropical relaxation exact at every corner to 3.8e-16 relative, four-point violation of the Hadamard metric under 1e-12, ascent 8/8 at five and six taxa and 7/8 at eight against the enumerated maximum, and neighbor joining reaching it at no gradient steps; a surrogate-ranked SPR search reaches its optimum from 4/4 starts at 5 fits against 312; escape from a local optimum rises from 0.111 at `epsilon = 0` to 0.883 at 0.4 | [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 
 ## Progress Since the 0.4.0 Audit
@@ -1673,7 +1673,7 @@ nats. **Restarts are not beaten on the mixture**, at 3,000 evaluations:
 tempering does not separate from them and annealing loses to them, the opposite
 of the glass row above and the same finding as Rastrigin. The 8-start tier of
 the same test runs per pull request and pins the ordering. The paired test
-`ROADMAP.md` §2.4 asks for is now in the utility: `opt.budget.mcnemar` on the
+`ROADMAP.md` §4.1 asks for is now in the utility: `opt.budget.mcnemar` on the
 per-start hits, exact rather than chi-square, because 40 starts cannot support
 the approximation.
 
@@ -2620,7 +2620,7 @@ search, reaches 30.9%: the visit distributions at 20 simulations are flat
 targets, and what expert iteration taught here is the critic. The
 factor-graph environment and the surrogate reward model wait on #296 and #308.
 
-## Milestone 2.4 — Experiment Tracking, Ablations & Leaderboard
+## Milestone 4.1 — Experiment Tracking, Ablations & Leaderboard
 
 **The ledger has a record format before it has a run store**
 ([#314](https://github.com/michaelJwilson/snakes_and_ladders/issues/314)). An
@@ -3139,7 +3139,7 @@ found stale between the planning documents, the technical documents and the
 code, and fixed in the same pull request:
 
 - The summary table above said Viterbi, a trained tree policy and Milestones
-  2.2 to 2.4 were not started, and the Milestone 1.4 text said Viterbi was not
+  2.2 to 2.3 and 4.1 were not started, and the Milestone 1.4 text said Viterbi was not
   built, while max-product over the chain returns the enumerated Viterbi path
   since #296 and forward–backward the posteriors since #307. Corrected in all
   three places.
