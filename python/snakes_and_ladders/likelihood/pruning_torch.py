@@ -267,6 +267,9 @@ def log_likelihood(
     n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
     weight = check_weights(weights, n_sites)
     log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
+    # The scalar the rescale falls back to, built once per call rather
+    # than as a fresh `ones_like` per internal node.
+    one = torch.ones((), dtype=dtype, device=device)
     # Every branch's transition matrix at once, indexed by branch_order.
     transitions = transition_probabilities(branch_lengths, k, rate_matrix)
 
@@ -275,19 +278,29 @@ def log_likelihood(
         if node.is_leaf:
             return _leaf_partial(alignment[node.name], n_sites, k, dtype, device)
 
-        partial = torch.ones((n_sites, k), dtype=dtype, device=device)
+        # The first child's message seeds the product rather than a tensor of
+        # ones being multiplied by it: the ones were allocated and multiplied
+        # once per internal node per evaluation, and a product over one term is
+        # that term. The value is unchanged, so this is bitwise.
+        partial: torch.Tensor | None = None
         for child in node.children:
             child_partial = _post_order(child)
             transition = transitions[index[child.name]]
             # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
-            partial = partial * (child_partial @ transition.T)
+            message = child_partial @ transition.T
+            partial = message if partial is None else partial * message
+        if partial is None:
+            # A childless non-leaf constrains nothing.
+            partial = torch.ones((n_sites, k), dtype=dtype, device=device)
 
         if rescale:
             scale = partial.amax(dim=1)
             # See snakes_and_ladders.likelihood.pruning: a zero scale means the site is
             # genuinely impossible under the model, left at 0 rather than
             # divided so log(0) = -inf propagates instead of being masked.
-            safe_scale = torch.where(scale > 0, scale, torch.ones_like(scale))
+            # The replacement is the scalar one rather than a tensor of ones,
+            # which is the same value without the per-node allocation.
+            safe_scale = torch.where(scale > 0, scale, one)
             partial = partial / safe_scale.unsqueeze(1)
             log_scale = log_scale + torch.log(safe_scale)
 
