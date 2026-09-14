@@ -2,36 +2,30 @@
 
 ## 0. The Development Loop
 
-Development is agent-assisted. The claim the loop supports is not that an agent
-wrote the code, but that the process establishes whether the code is right.
-Each stage below is a gate, ordered so that an approach is rejected before it is
-written and a claim is pinned before it is published. `CLAUDE.md` is
-authoritative — where it and any other document disagree, it wins.
+Development is agent-assisted. The claim the loop supports is not just that an
+agent wrote the code, but that the process validates it. Each stage below is a gate,
+ordered so that an approach is rejected before it is written and a claim is pinned
+before it is published.
 
 ### 0.1 The Ticket
 
 - **Deliverable:** a unit of work filed through
   `.github/ISSUE_TEMPLATE/task.yml`, naming the desired outcome stated so it
-  can be checked, what it unblocks, the non-goals, the submodule it lands in,
-  and — the field that does the work — how it will be validated. Blank issues
-  are disabled.
-- **Gate:** a ticket whose validation field names only output shapes, or only
-  that execution did not raise, is rejected at filing rather than at review.
-  Priority (`high`, `medium`, `low`) and submodule labels come from
+  can be checked, what it unblocks, the non-goals, the submodule, and how it
+  will be validated. Blank issues are disabled.
+- Priority (`high`, `medium`, `low`) and submodule labels come from
   `.github/labels.yml` and are applied by a workflow.
 
 ### 0.2 The Plan
 
 - **Deliverable:** a plan posted to the ticket thread before any code exists,
-  at which point the issue is labelled `planned`. Review of an approach costs
-  a comment; review of an implementation costs the implementation.
+  at which point the issue is labelled `planned`.
 
-  A plan is 2–5 steps, or more where the work needs them and the plan says
+  A plan is 2–5 steps, or more where the work needs them, and the plan says
   why, each stating how it will be validated. It ends with an
   **Open Questions** section carrying every question on the desired
   behaviour; a plan with nothing outstanding says so under that heading rather
-  than omitting it. A plan is subject to `CLAUDE.md`'s Writing Style like
-  anything else here.
+  than omitting it. A plan is subject to `CLAUDE.md`'s Writing Style.
 - **Gate:** a maintainer applies `approved`, and only then may a pull request
   open. The pull request must implement the plan already in the thread. A plan
   that turns out to be flawed gets a revised plan posted to the same thread,
@@ -47,9 +41,9 @@ authoritative — where it and any other document disagree, it wins.
 ### 0.3 The Pull Request
 
 - **Deliverable:** a change answering the fixed checklist in
-  `.github/pull_request_template.md`: the Definition of Done, baseline and new
+  `.github/pull_request_template.md`: the Definition of Done, regression baseline and new
   benchmark numbers for every hot path it touches, the *realized* value of
-  every tolerance-based test beside the tolerance it was checked against, the
+  every tolerance-based test beside its reference and the tolerance, the
   documents the change made untrue, and anything deferred with the tracking
   issue that carries it.
 - **Gate:** ten required checks, stated in full in `DEV.md`, spanning a title
@@ -62,54 +56,45 @@ authoritative — where it and any other document disagree, it wins.
 
 ### 0.4 Validation
 
-- **Deliverable:** for every claim, an oracle that shares no code with the
-  thing it checks — an analytic result, a brute-force marginalization, an
+- **Deliverable:** for every new functionaltiy, an oracle that shares no code
+  with it — an analytic result, a brute-force on a small problem, an
   exhaustive enumeration, or an independently implemented algorithm — and a
-  regression test pinning the claim to it within a stated tolerance.
+  regression test pinning the claim to it within a stated tolerance.  Further,
+  recovery of known parameters and states from a dedicated simulation, across a
+  range of problem sizes.
 - **Gate:** three rules constrain what the suite may contain. Coverage
   theatre is forbidden: a test asserting only shapes, or only that nothing
-  raised, does not count, and a gap is left unwritten and tracked as an issue.
-  Every accelerated path keeps its vectorized NumPy implementation as the
-  oracle the Rust, PyTorch and GPU backends are pinned against. Correctness
-  comes from an independent source rather than from a second backend, and
-  agreement across devices and precisions is a declared relative tolerance
-  keyed on the lowest precision in the comparison, never bitwise equality. The
-  standard is two-way: where an oracle is affordable at a size the claim is
-  pinned to it, and where none is, recovering the simulated truth — the
-  generating parameters or structure of a seeded fixture, to a stated tolerance
-  or coverage — is sufficient, with the oracle still desired and ticketed; the
-  textbook's applicability tables mark which referee each method has at each
-  size tier.
+  raised, does not count, and a gap is has a placeholder  and a ticket.
+  Every accelerated path keeps its reference, e.g. vectorized NumPy for Rust,
+  Correctness comes from independent sources, generalization across problems,
+  validation of analytic properties, external frameworks and agreement across
+  devices and precisions is a declared relative tolerance keyed on the lowest
+  precision, never bitwise. The standard is two-way: where an oracle is affordable
+  at a size the claim is pinned to it, and where none is, recovering the simulated truth.
+  The validation is a ladder, bootstrapping from simple algorithms on small problems to
+  efficient ones on large, and validated against each other along the way.  Recovery of
+  simulation serves as an independent, final validation.
 
-### 0.5 The Record
+### 0.5 The book
 
-- **Deliverable:** the paper and the textbook (`docs/tex/`, contents in §1.3)
-  are the record a validated claim is written into. Every figure and table in
-  them is rendered by `snakes_and_ladders.qa` from the code it reports on,
-  carries a caption naming the seed, the sizes and the model that produced it,
-  and is committed so a changed plot is visible in review.
-  `CHANGELOG.md` is assembled by `towncrier` from per-pull-request fragments;
-  `STATUS.md` states what has landed against each milestone below, with the
-  pull request that carries it; `TICKETS.md` states, as titles, what has not.
-- **Gate:** continuous integration regenerates the figures and rebuilds the
-  document, and fails a pull request whose rebuilt PDF differs from the
-  committed one. A generated caption may report only quantities continuous in
-  their inputs — a discontinuous statistic breaks that build and was never a
-  measurement. A release is itself a ticket, gated on `infra/release.sh`
-  passing before a version is tagged.
+- **Deliverable:** the textbook and the paper (`docs/tex/`, contents in §1.3).  The textbook
+  contain the formulation of all supported problems in a common notation, the problem size/fixture
+  definitions, all supported algorithms, their applicability and efficiency for each problem,
+  the analytic results used for validation.  The tone is concise and follows the writing style
+  in Claude.md at root.  Every plot and table in is rendered by from declared fixtures by `snakes_and_ladders.qa`
+  using the same code it reports on.  The paper is in the academic style, advertising the work in a
+  measured, authoriative tone.  Plots show key evidence for conclusions drawn, e.g. the optimization performance
+  for key problems and the relative efficiency gains.  The model as a factor graph with a sketch of that structure,
 
 ## 1. Project Objectives & Specifications
 
 ### 1.1 Core Objective
 
-Develop and deploy solvers for mixed discrete-continuous optimization across
-four classes of graphical models: phylogenetic trees (the large parsimony
-problem), N-dimensional Potts models in an external field, hidden Markov models
-(HMMs), and low-density parity-check codes decoded on their Tanner graphs
-(#340). Two derived instances sit between them and every Stage 1 deliverable
-takes them too: the coupled spatio-sequential model, a Potts prior over class
-labels gating one hidden chain per class (#290), and the Gaussian mixture, an
-HMM with the chain removed (#262). The framework integrates automatic
+Develop and deploy solvers for mixed discrete-continuous optimization across problems
+defined by inference for graphical models (for a range of problem sizes).  Namely, 
+continuous optimization, GMMs, HMMs, phylogenetics, ND Potts models with a site-based
+external field, low-density parity-check codes, Bicycle codes and qLDPC. A derived
+instances exists:  the coupled spatio-sequential model.  The framework integrates automatic
 differentiation for continuous parameters with reinforcement learning (RL) to
 learn proposal policies that score discrete structural candidates using exact,
 approximate, or bounded likelihoods/energies.
@@ -118,11 +103,11 @@ approximate, or bounded likelihoods/energies.
 
 - **Accuracy & Validation:**
   - *Phylogenetics:* normalized Robinson–Foulds (RF) distance ≤0.05 against
-    simulated ground-truth topologies.
-  - *Potts/HMMs:* recovery of true coupling/transition parameters within 95%
+    simulated ground-truth topologies.  Recovery of known parameters and state configurations.
+  - *HMMs/Potts:* recovery of true coupling/transition parameters within 95%
     confidence intervals; precise state-sequence decoding.
-  - *Coupled model:* recovery of planted class labels up to permutation, and
-    of the emission parameters, on instances past enumeration.
+  - *Spatio-sequential  model:* recovery of knwoen class labels up to permutation, and
+    of the emission parameters, on key instances that are too large for enumeration.
   - *Codes:* agreement with exhaustive maximum-likelihood decoding on codes
     short enough to enumerate, and the block error rate reported against the
     channel where they are not (#340).
@@ -140,84 +125,38 @@ approximate, or bounded likelihoods/energies.
     on the fixed-hardware runner, reported beside the evaluation count and never
     as the gate.
 - **Computational Scaling & Hardware:**
-  - *Memory footprint:* bounded to `O(n×L×k)` — `n` nodes/taxa, `L`
-    sequence/chain length, `k` alphabet/state size — strictly fitting within
-    16 GB unified memory (Apple Silicon) or 24 GB VRAM (NVIDIA).
-  - *Hardware dispatch:* native support for CUDA, Metal/MPS, and CPU (for
-    CI/CD).
+  - *Memory footprint:* bounded to 16 GB unified memory (Apple Silicon) or 24 GB VRAM (NVIDIA).
+  - *Hardware dispatch:* native support for CUDA, Metal/MPS, and CPU.
   - *Numerical precision:* cross-device tensor operations evaluated against a
     declared float tolerance rather than bitwise equality. Use `float64` where
     required for recursive stability (e.g. partition functions, pruning),
     falling back to `float32` for Metal compatibility.
 
-### 1.3 The Documents
-
-`docs/tex/` is the version-controlled mathematical record of the project, and
-the application logic is bound to it. It must contain:
-
-- Complete mathematical formulations of all substitution models, energy
-  landscapes, transition probabilities and parity constraints across the four
-  problem classes and the instances derived from them, with a problem
-  statement per problem key of `PROBLEMS.md` and generated tables of which
-  algorithm and which referee applies to each. A key, not a row: a row is one
-  implementation and several may share a statement --- another substitution
-  matrix, another graph, another size, another emission family --- so the
-  eleven statements carry fifteen rows, and `infra/problem_join.py` fails a
-  statement no row is code for and a row keyed to no statement (#495).
-  A problem statement is complete when it carries the model, the sizes it is
-  supported at, the model as a factor graph with a sketch of that structure,
-  the algorithms it uses, and the validation naming each referee with what it
-  does and does not establish; a guard checks that shape rather than a
-  reviewer.
-- Rigorous derivations of the exact inference algorithms (Felsenstein's
-  pruning, belief propagation, forward-backward; Appendix A of the textbook,
-  #326).
-- Formal definitions of the Markov decision process (MDP) formulations for the
-  RL agents.
-- Proofs for any proposed upper/lower bounds used for branch-and-bound pruning
-  (the first four are Appendix B of the textbook, #308).
-- Dynamically generated QA figures and tables (parameter recovery, convergence
-  curves) sourced directly from tracked CI runs to guarantee empirical
-  reproducibility.
 
 ## Stage 1: Mathematical Foundations & Baseline Infrastructure
 
-Establish the simulation, exact inference, and optimization backends for the
-four distinct problem classes. Target scales span `n ∈ [10, 1000]`
-nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
+Establish the simulations, algorithms, and optimization backends for all
+problems / fixtures for a range of sizes determined by necessity and runtime
+budget.
 
 - **Milestone 1.1: Simulation & Ground Truth Engine**
-  - *Deliverable:* data generators for every problem class.
-    - *Phylogenetics:* `k`-state evolutionary models (Jukes-Cantor, GTR) on
-      simulated topologies.
-    - *Potts models:* N-D lattices and Markov random fields (MRFs) with
-      specified coupling constants and external fields.
+  - *Deliverable:* data generators for every problem.
+    - *C(\theta):*
+    - *GMMs:*
     - *HMMs:* hidden state paths and emitted observation sequences.
+    - *Phylogenetics:* `k`-state evolutionary models on simulated topologies.
+    - *Potts models:* ND lattices and Markov random fields (MRFs) with
+      specified coupling constants and external fields.
     - *Codes:* Gallager's regular parity-check ensemble and the bicycle
       construction from a circulant, the binary symmetric, erasure and
       Gaussian channels behind one log-likelihood interface, and an encoder
       where elimination is affordable.
-    - *Canonical cases:* instances whose answer is known from outside this
-      repository — a closed form, a published result, or an enumeration
-      sharing no code with what it tests — admitted only when more than one
-      module consumes them.
-  - *Validation:* generated sequence/spin distributions against analytic,
-    closed-form transition probabilities and partition functions. A canonical
-    case is validated against the outside answer it was admitted for, never
-    against a run of the method it is meant to referee.
-  - *Deferred, the coupled model at the square-lattice scales:* the coupled
-    spatio-sequential model is declared at 5,041 vertices on a 71 x 71
-    triangular lattice, `M` = 10 classes, `K` = 10 hidden states, `S` =
-    20,000 sequential positions, binned by 1, 5 and 10. The square lattices
-    the same objective asks for — 447 x 447 = 199,809 and 837 x 837 = 700,569
-    vertices, at the same `M`, `K` and `S` — need two things this does not: a
-    **per-vertex simulator**, the observations being drawn and held one vertex
-    at a time, and a **blocked E step**, a materialized `S x V` count pair at
-    700,569 vertices being 28 GB at `int16` against 385 MiB at 5,041. Each gets
-    its own ticket when it is called.
+    - *Canonical cases:* instances whose answer is known externally, a closed form,
+      a published result.
+  - *Validation:* tests against generated simulations, analytic, canonical cases.
 - **Milestone 1.2: Differentiable Likelihood & Energy Engine**
   - *Deliverable:* high-performance evaluators implemented in
-    PyTorch/Triton/JAX (GPU) and Rust (CPU).
+    PyTorch/Triton/JAX (GPU) and Numpy/njit/Rust (CPU), e.g.
     - *Phylogenetics:* Felsenstein's pruning algorithm.
     - *Potts models:* belief propagation and transfer matrix methods.
     - *HMMs:* the forward-backward algorithm.
@@ -230,7 +169,7 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
   - *Deliverable:* gradient-based solvers to fit continuous parameters.
     - *Phylogenetics:* branch lengths `t`, rate matrices `Q`, root
       distributions `π`.
-    - *Potts models:* coupling strengths `J`, external fields `h`.
+    - *Potts models:* coupling strengths `J`, per-site external field `h`.
     - *HMMs:* transition matrices `A`, emission matrices `B`.
   - *Deliverable:* posterior sampling over the same interface, so an interval
     can be a quantile of the posterior rather than the curvature at the mode,
@@ -262,38 +201,53 @@ nodes/taxa/states, with sequence/lattice lengths `L ∈ [100, 11000]`.
       relaxation and the certificate it yields, so the boundary between what
       is solved exactly and what is only bounded is drawn rather than
       assumed.
+- **Milestone 1.5: Continous samplers / HMC / Parallel tempering.
 
-## Stage 2: Reinforcement Learning & Variational Search
+## Stage 2: Complete support for Reinforcement Learning & Variational Search methods
 
-Replace hand-designed search heuristics with learned proposal policies
-parameterized by neural networks.
+Replace hand-designed search heuristics with classical learned proposal policies and
+exact or (differentiable) surrogates, e.g. neural networks.
+
+- **Milestone 2.0: RL definition**
+  A comprehensive formulation of RL in the textbook, defining classical methods and
+  a discussion of their suitability for the supported problems.
 
 - **Milestone 2.1: RL Agent Formulation & Deployment**
-  - *Deliverable:* define the MDPs across all four problem classes (the
-    code's move set is #340's later work).
+  - *Deliverable:* define the MDPs across all problems.
     - *State:* the current discrete structure (topology, lattice
       configuration, or state path), its fitted continuous parameters, and
       observation summaries.
     - *Action:* valid structural transformations from the classical
       neighborhoods (e.g. NNI/SPR, cluster flips, path mutations).
-    - *Reward:* improvement in the objective function (ΔlnL for
-      phylogenetics/HMMs, ΔE for Potts models).
+    - *Reward:* TBC. E.g. improvement in the objective function, ΔlnL.
   - *Validation:* train a policy that strictly outperforms classical baselines
-    on held-out simulated validation sets under a fixed evaluation budget.
+    on held-out simulated validation sets under a similar evaluation budget.
 - **Milestone 2.2: Curriculum Learning**
   - *Deliverable:* a progressive training regimen, since RL policies collapse
-    when exposed to combinatorial spaces zero-shot. The agent trains on
-    `n = 10` nodes/taxa, transferring weights and scaling to fine-tune on
-    `n = 50`, `n = 200` and `n = 1000` environments.
+    when exposed to combinatorial spaces zero-shot.
 - **Milestone 2.3: Empirical Validation & Benchmarking**
   - *Deliverable:* the RL agents benchmarked on high-dimensional simulated
-    datasets past the size enumeration reaches, each carrying the parameters
-    that generated it.
+    datasets past the size enumeration reaches.
   - *Validation:* compare convergence speed and final objectives against the
     classical domain heuristics this repository implements — large parsimony
     under NNI and SPR, and hill climbing — since no external solver is admitted
     (`docs/external_tools.md`).
-- **Milestone 2.4: Experiment Tracking, Ablations & Leaderboard**
+
+
+- **Milestone 3.1: model surrogates and bounds for supported problems**
+- **Neural Surrogate Modeling:** train graph neural networks (GNNs) or
+  transformers to approximate the Felsenstein likelihood, Potts energy, or HMM
+  likelihood. The RL agent queries the surrogate 10,000× faster to filter
+  proposal batches, computing the exact evaluation only on the top-`K`
+  candidates.
+  - *Landed:* as certified analytic bounds plus learned predictors on the gap
+    above them, ranking a neighbourhood for exact re-scoring of the top-`K`
+    (#317); the filter's cost ratio at large `n` is unmeasured.
+
+- TODO bounds.
+
+
+- **Milestone 4.1: Experiment Tracking, Ablations & Leaderboard**
   - *Deliverable:* a localized tracking manifest (e.g. Aim) logging git
     commits, objective traces, compute budgets, and QA figures.
   - *Validation:* an ablation leaderboard ranking algorithmic variants by
@@ -302,27 +256,15 @@ parameterized by neural networks.
     leaderboard is the generated index of `docs/experiments/` (#314), one file
     per experiment against its commit.
 
-## Stage 3: Research Extensions (Blue Sky)
+
+## Stage 5: Research Extensions (Blue Sky)
 
 Architectural extensions that amortize the cost of discrete structural search
 and reduce the number of exact evaluations.
 
 - **Differentiable Topology Search:** formulate continuous relaxations of the
-  discrete graph spaces. Utilize representations like the tropical Grassmannian
-  (for phylogenetic trees) or Gumbel-softmax relaxations (for Potts/HMM
-  discrete states) to enable end-to-end, gradient-based optimization of the
-  discrete structure alongside continuous parameters, bypassing discrete RL
-  moves entirely.
-  - *The two halves differ in what can referee them, and that decides the
-    order.* Potts configurations and HMM state paths are enumerable, so the
-    exact optimum, expected score and gradient are all computable and "does the
-    relaxation find what discrete search finds" is falsifiable. Tree topologies
-    at any interesting size are not, so the Gumbel-softmax half was built
-    first. *The block on the tropical Grassmannian half is lifted (#408):*
-    below nine taxa every topology enumerates, and the Hadamard conjugation of
-    a two-state spectrum is a closed form for the coordinates themselves. What
-    remains unrefereed is the size past enumeration, where simulated truth is
-    the standard.
+  discrete graph spaces, e.g. the tropical Grassmannian (for phylogenetic trees)
+  or Gumbel-softmax relaxations (for HMM/Potts/HMM) to enable gradient-based optimization.
   - *Validation:* the relaxation must reduce to the discrete objective exactly
     at the corners of the simplex; the gradient estimator's bias and variance
     are measured against the exact gradient rather than assumed small; and any
@@ -336,54 +278,14 @@ and reduce the number of exact evaluations.
     so no budget-matched claim is made. The module is conserved as
     `snakes_and_ladders.sandbox.tropical` on that measurement, with the tests
     and the figure that referee it.
-- **Neural Surrogate Modeling:** train graph neural networks (GNNs) or
-  transformers to approximate the Felsenstein likelihood, Potts energy, or HMM
-  likelihood. The RL agent queries the surrogate 10,000× faster to filter
-  proposal batches, computing the exact evaluation only on the top-`K`
-  candidates.
-  - *Landed:* as certified analytic bounds plus learned predictors on the gap
-    above them, ranking a neighbourhood for exact re-scoring of the top-`K`
-    (#317); the filter's cost ratio at large `n` is unmeasured.
-- **Learned Compound Moves:** replace single atomic actions (e.g. one SPR move,
-  one cluster flip) with temporally extended macro-actions, sampled via a
-  Dirichlet process, to tunnel through local optima.
+
+- **Learned Compound Moves:** replace single atomic actions with extended macro-actions,
+  e.g. whose number is sampled via a Dirichlet process, for efficiency and to tunnel.
   - *Landed:* nothing learned (#147); an exact block move over a chain-shaped
     subset exists (#310).
-- **Transformer Policy over Canonical Encodings:** serialize discrete graphs
-  (e.g. canonical Newick strings for trees, canonical adjacency sequences for
-  lattices) into tokenized sequences. Train an autoregressive or policy-gradient
-  transformer model directly on the structural sequence.
-  - *Landed:* the encoding half only — per-branch and per-node tokens and an
-    attention model, fitted as a surrogate rather than trained as a policy
-    (#317).
-- **Stochastic Escape Mechanisms:** implement Metropolis-Hastings
-  accepted-worsening steps or ratchet-style site reweighting (e.g. simulated
-  annealing) to force the RL agent out of suboptimal valleys.
-  - *Landed:* declared schedules, annealing and parallel tempering (#267); a
-    Gibbs sampler and annealer over the factor graph and Metropolis over
-    topologies (#310); adaptive HMC and a tempering ladder from measured
-    exchange (#352). Ratchet-style reweighting is not built.
-- **Candidate list:** what would follow the five items above, each with the
-  oracle that referees it and the tier it runs at, inventoried against every
-  earlier proposal in `docs/blue_sky.md`. None is a milestone until it is a
-  ticket with a plan.
-  - *Trees:* subsplit-network variational inference as the
-    differentiable-topology route with an enumerable support at eight taxa;
-    a graph-network policy with #317's encoder and #328's features on
-    #177's fixture; Metropolis-coupled MCMC over topologies on #352's
-    ladder; the external-baseline comparison at 50 to 200 taxa, blocked on
-    #126.
-  - *Potts and MRFs:* tree-reweighted max-product as a certified MAP bound;
-    population annealing beside parallel tempering; a replication of the
-    physics-inspired GNN result against its greedy critique, expected
-    negative; boundary matrix-product contraction as the exact oracle past the
-    transfer-matrix width.
-  - *HMMs:* spectral initialization against the k-means++ start; variational
-    EM against Baum-Welch at equal evaluations.
-  - *LDPC (#340):* neural belief propagation with learned message weights,
-    refereed by maximum-likelihood decoding below 24 bits and the
-    density-evolution threshold above.
-  - *Cross-cutting:* macro-actions as options for the compound-moves item; a
-    learned dynamics model for #313's planner; CMA-ES and a genetic algorithm
-    as the population baselines the leaderboard lacks; training across a
-    distribution of fixtures as §2.2's curriculum mechanism.
+- Attention as applied to Newick strings.
+- *HMMs:* spectral initialization against the k-means++ start; variational
+  EM against Baum-Welch at equal evaluations.
+- *LDPC (#340):* neural belief propagation with learned message weights,
+  refereed by maximum-likelihood decoding below 24 bits and the
+  density-evolution threshold above.
