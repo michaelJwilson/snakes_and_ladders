@@ -34,7 +34,7 @@
 //! element and that cost growing with the problem while the kernel's advantage
 //! does not.
 
-use numpy::{PyReadonlyArray1, PyReadwriteArray1};
+use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyReadwriteArray1, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -47,7 +47,18 @@ use pyo3::prelude::*;
 ///
 /// # Parameters
 /// - `state`: current configuration, length `n_nodes`, updated in place.
-/// - `field`: external field `h`, length `n_states`.
+/// - `field`: external field `h`, one row per site, flattened row-major to
+///   `n_nodes * n_states`. A field shared by every site reaches here widened,
+///   because `sim.potts.site_field` widens at the entry point and the oracle
+///   has one code path rather than two (issue #551).
+/// - `n_states`: the alphabet size, passed rather than derived, since `field`
+///   is now flat and its length alone cannot give it.
+/// - `beta`: inverse temperature, applied to the accumulated local field
+///   *after* the couplings are summed into it. That is where the Python sweep
+///   applies it, and the order is load-bearing: `(h + sum J) * beta` and
+///   `beta * h + sum (beta * J)` agree in real arithmetic and not in floating
+///   point, so pre-scaling the arguments costs bitwise agreement at every
+///   temperature but 1.0 (issue #571).
 /// - `offsets`: length `n_nodes + 1`; node `i`'s neighbours are
 ///   `neighbours[offsets[i]..offsets[i + 1]]`, with `couplings` in step.
 /// - `neighbours`, `couplings`: the flattened adjacency, each of length
@@ -61,19 +72,32 @@ use pyo3::prelude::*;
 ///
 /// `pub` so `cargo test` can exercise it without linking Python, per
 /// `src/pruning.rs`'s module docs.
+#[allow(clippy::too_many_arguments)]
 pub fn single_site_sweeps_impl(
     state: &mut [i64],
     field: &[f64],
+    n_states: usize,
     offsets: &[usize],
     neighbours: &[i64],
     couplings: &[f64],
     draws: &[f64],
     n_sweeps: usize,
+    beta: f64,
 ) -> Result<(), String> {
     let n_nodes = state.len();
-    let n_states = field.len();
     if n_states == 0 {
         return Err("field is empty, so there are no states to draw from".to_string());
+    }
+    if field.len() != n_nodes * n_states {
+        return Err(format!(
+            "field has {} entries, expected {n_nodes} * {n_states} = {} \
+             (one row per site)",
+            field.len(),
+            n_nodes * n_states
+        ));
+    }
+    if !beta.is_finite() {
+        return Err(format!("beta must be finite, got {beta}"));
     }
     if offsets.len() != n_nodes + 1 {
         return Err(format!(
@@ -116,7 +140,7 @@ pub fn single_site_sweeps_impl(
 
     for sweep in 0..n_sweeps {
         for node in 0..n_nodes {
-            local.copy_from_slice(field);
+            local.copy_from_slice(&field[node * n_states..(node + 1) * n_states]);
             for position in offsets[node]..offsets[node + 1] {
                 let neighbour = neighbours[position];
                 if neighbour < 0 || neighbour as usize >= n_nodes {
@@ -126,6 +150,12 @@ pub fn single_site_sweeps_impl(
                     ));
                 }
                 local[state[neighbour as usize] as usize] += couplings[position];
+            }
+
+            // `beta` here and not on the arguments, because the oracle
+            // scales the accumulated local field rather than its parts.
+            for value in local.iter_mut() {
+                *value *= beta;
             }
 
             // Shift by the maximum before exponentiating, as the oracle does:
@@ -167,16 +197,39 @@ pub fn single_site_sweeps_impl(
 /// impossible rather than merely unlikely, and the wrapper normalizes with
 /// `ascontiguousarray` before calling.
 #[pyfunction]
-#[pyo3(signature = (state, field, offsets, neighbours, couplings, draws, n_sweeps))]
+#[pyo3(signature = (state, field, offsets, neighbours, couplings, draws, n_sweeps, beta = 1.0))]
+#[allow(clippy::too_many_arguments)]
 pub fn single_site_sweeps(
     mut state: PyReadwriteArray1<'_, i64>,
-    field: PyReadonlyArray1<'_, f64>,
+    field: PyReadonlyArrayDyn<'_, f64>,
     offsets: PyReadonlyArray1<'_, i64>,
     neighbours: PyReadonlyArray1<'_, i64>,
     couplings: PyReadonlyArray1<'_, f64>,
     draws: PyReadonlyArray1<'_, f64>,
     n_sweeps: usize,
+    beta: f64,
 ) -> PyResult<()> {
+    // PyO3 reports a dimensionality mismatch as "'ndarray' object is not an
+    // instance of 'ndarray'", which names neither shape. Read the dimensions
+    // here so the caller is told what was wanted and what arrived (#571).
+    // Taken as a dynamic array rather than a 2-D one so a wrong dimensionality
+    // is reported here. PyO3 rejects it before the body otherwise, as
+    // "'ndarray' object is not an instance of 'ndarray'", which names neither
+    // the shape wanted nor the shape given (#571).
+    let [n_rows, n_states] = *field.shape() else {
+        return Err(PyValueError::new_err(format!(
+            "field must be 2-D, (n_nodes, n_states), one row per site; got \
+             shape {:?}",
+            field.shape()
+        )));
+    };
+    if n_rows != state.len() {
+        return Err(PyValueError::new_err(format!(
+            "field has {n_rows} rows and state has {} sites; the field \
+             carries one row per site",
+            state.len()
+        )));
+    }
     let offsets: Vec<usize> = offsets
         .as_slice()?
         .iter()
@@ -187,11 +240,13 @@ pub fn single_site_sweeps(
     single_site_sweeps_impl(
         state.as_slice_mut()?,
         field.as_slice()?,
+        n_states,
         &offsets,
         neighbours.as_slice()?,
         couplings.as_slice()?,
         draws.as_slice()?,
         n_sweeps,
+        beta,
     )
     .map_err(PyValueError::new_err)
 }
@@ -206,15 +261,28 @@ mod tests {
     /// independent of this implementation.
     #[test]
     fn a_field_only_conditional_matches_the_hand_computed_split() {
-        let field = vec![0.0, 3.0f64.ln()];
+        // Two sites, so the field is two rows: the kernel indexes per site.
+        let field = vec![0.0, 3.0f64.ln(), 0.0, 3.0f64.ln()];
         let offsets = vec![0usize, 0, 0];
         let mut state = vec![0i64, 0];
 
         let mut low = state.clone();
-        single_site_sweeps_impl(&mut low, &field, &offsets, &[], &[], &[0.1, 0.1], 1).unwrap();
+        single_site_sweeps_impl(&mut low, &field, 2, &offsets, &[], &[], &[0.1, 0.1], 1, 1.0)
+            .unwrap();
         assert_eq!(low, vec![0, 0]);
 
-        single_site_sweeps_impl(&mut state, &field, &offsets, &[], &[], &[0.9, 0.9], 1).unwrap();
+        single_site_sweeps_impl(
+            &mut state,
+            &field,
+            2,
+            &offsets,
+            &[],
+            &[],
+            &[0.9, 0.9],
+            1,
+            1.0,
+        )
+        .unwrap();
         assert_eq!(state, vec![1, 1]);
     }
 
@@ -223,7 +291,7 @@ mod tests {
     /// mass on the neighbour's state.
     #[test]
     fn a_dominant_coupling_makes_a_neighbour_agree() {
-        let field = vec![0.0, 0.0];
+        let field = vec![0.0, 0.0, 0.0, 0.0];
         let offsets = vec![0usize, 1, 2];
         let neighbours = vec![1i64, 0];
         let couplings = vec![20.0, 20.0];
@@ -232,11 +300,13 @@ mod tests {
         single_site_sweeps_impl(
             &mut state,
             &field,
+            2,
             &offsets,
             &neighbours,
             &couplings,
             &[0.5, 0.5],
             1,
+            1.0,
         )
         .unwrap();
 
@@ -248,11 +318,13 @@ mod tests {
         let error = single_site_sweeps_impl(
             &mut [0i64],
             &[0.0, 0.0],
+            2,
             &[0usize, 1],
             &[0i64],
             &[],
             &[0.5],
             1,
+            1.0,
         )
         .unwrap_err();
         assert!(error.contains("index in step"), "{error}");
@@ -260,17 +332,35 @@ mod tests {
 
     #[test]
     fn a_draw_count_that_does_not_match_the_sweeps_is_refused() {
-        let error =
-            single_site_sweeps_impl(&mut [0i64], &[0.0, 0.0], &[0usize, 0], &[], &[], &[0.5], 2)
-                .unwrap_err();
+        let error = single_site_sweeps_impl(
+            &mut [0i64],
+            &[0.0, 0.0],
+            2,
+            &[0usize, 0],
+            &[],
+            &[],
+            &[0.5],
+            2,
+            1.0,
+        )
+        .unwrap_err();
         assert!(error.contains("expected 2 * 1"), "{error}");
     }
 
     #[test]
     fn a_state_outside_the_alphabet_is_refused() {
-        let error =
-            single_site_sweeps_impl(&mut [5i64], &[0.0, 0.0], &[0usize, 0], &[], &[], &[0.5], 1)
-                .unwrap_err();
+        let error = single_site_sweeps_impl(
+            &mut [5i64],
+            &[0.0, 0.0],
+            2,
+            &[0usize, 0],
+            &[],
+            &[],
+            &[0.5],
+            1,
+            1.0,
+        )
+        .unwrap_err();
         assert!(error.contains("expected [0, 2)"), "{error}");
     }
 }
