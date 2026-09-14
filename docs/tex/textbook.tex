@@ -69,7 +69,8 @@ the logarithm being natural throughout.
     $\constrained$ & the constraint map, $\constrained(\params)$ the feasible parameters \\
     $\data$        & the observed data \\
     $\objective$   & the scalar being minimized \\
-    $\energy$      & a Hamiltonian: the energy of a configuration \\
+    $\energy$      & a Hamiltonian: the energy of a configuration, script \\
+    $\Prob(\cdot)$ & a probability; $\ln \Prob(\cdot)$ its logarithm, natural throughout \\
     $T,\ \beta = 1/T$ & a temperature and its inverse; a schedule is $T(t)$ over a budget of $t$ steps \\
     $\indicator[\,\cdot\,]$ & one where its condition holds and zero where it does not \\
     \midrule
@@ -77,6 +78,7 @@ the logarithm being natural throughout.
     $\sigma_i$     & a spin, the variable of a Potts graph: $x_i \equiv \sigma_i$ \\
     $J_{ij}$       & the coupling on the edge $\langle i, j \rangle$ \\
     $h_i$          & the external field at node $i$ \\
+    $\transfer$    & the transfer matrix between adjacent columns of a lattice \\
     \addlinespace
     \multicolumn{2}{l}{\emph{Sequential models: a chain and its emissions} (Sections~\ref{sec:hmm}, \ref{sec:coupled})} \\
     $z_t$          & a hidden state, the variable of a chain: $x_t \equiv z_t$ \\
@@ -89,10 +91,10 @@ the logarithm being natural throughout.
     $\SubMat$      & a symmetric exchangeability matrix \\
     $\bpi$         & a stationary or initial distribution \\
     $\branch$      & branch lengths, in expected substitutions per site \\
-    $\hadamard$    & the Sylvester--Hadamard matrix \\
+    $\hadamard$    & the Sylvester--Hadamard matrix, italic \\
     \addlinespace
     \multicolumn{2}{l}{\emph{Error correction: a code and its channel} (Sections~\ref{sec:ldpc}, \ref{sec:turbo})} \\
-    $\parity$      & a parity-check matrix; the codewords are the $c$ with $\parity c = 0$ \\
+    $\parity$      & a parity-check matrix, bold; the codewords are the $c$ with $\parity c = 0$ \\
     $L_i$          & the channel log-likelihood ratio at bit $i$ \\
     \bottomrule
   \end{tabular}
@@ -100,7 +102,9 @@ the logarithm being natural throughout.
   above the rule are general and mean the same thing in every section; each
   group below it belongs to the application named beside it, where the general
   variable $x_i$ is identified with the name that application's readers arrive
-  with.}
+  with. Three symbols share the letter $H$ and are kept apart by their face: a
+  Hamiltonian is script, a parity-check matrix bold, and the
+  Sylvester--Hadamard matrix italic.}
   \label{tab:notation}
 \end{table}
 
@@ -221,6 +225,19 @@ generating parameters or structure of a seeded fixture, to a stated tolerance
 or coverage. Agreement between two capable algorithms is agreement and not
 truth (Section~\ref{sec:properties}).
 
+Which rung runs when is a second axis, and the two are independent: a check
+is refereed somehow and separately gated somewhere. Four gates are used, and
+each problem's supported sizes name theirs. The \emph{per pull request} tier
+carries the sizes a merge waits for and is bounded by a stated duration. The
+\emph{stress} tier carries the same claim one size up, past that bound and
+inside a developer's. The \emph{release} tier carries everything, and a check
+too slow for the first tier is moved here rather than waited for. And the
+\emph{key} fixture is one instance per problem --- the largest declared one
+whose whole simulate, fit and assert run fits a stated cap --- run in full so
+that at least one instance of every problem is exercised end to end rather
+than in pieces. A claim moved up a tier keeps a small sibling below it where
+one exists, and where none does the gap is named rather than left implicit.
+
 A problem states its own ladder in its validation, and the Potts lattice of
 Section~\ref{sec:potts} is where all three rungs are visible at once:
 enumeration of $q^{|V|}$ configurations up to eleven nodes at three states,
@@ -242,7 +259,7 @@ application, and every algorithm any of them uses is general.
 \section{Continuous Test Functions}
 \label{sec:testfunctions}
 
-\subsection{The functions}
+\subsection{The model}
 \label{sec:testfunctions:model}
 Three standard functions with minimizers known in closed form, so the
 optimizer of Section~\ref{sec:abstraction} is checked against something that
@@ -784,7 +801,7 @@ the states $x_u \equiv z_u \in \states$ at every node $u$ of the rooted tree,
 leaves included. The factors are the root prior $\psi_{\rootnode}(x_{\rootnode})
 = \pi_{x_{\rootnode}}$, one pairwise factor per branch,
 $\psi_v(x_u, x_v) = \Pmat_{x_u x_v}(\tau_v)$ for $u$ the parent of $v$, and one
-indicator per leaf, $\psi_\ell(x_\ell) = \mathbb{1}[x_\ell = \text{observed}]$,
+indicator per leaf, $\psi_\ell(x_\ell) = \indicator[x_\ell = \text{observed}]$,
 which folds the data in. The bipartite graph is a tree, so
 Equation~\ref{eq:sum-product} is exact, and $Z$ is the site likelihood
 $p(\data_s \mid \tree, \branch, \Q)$; sites being independent
@@ -1296,31 +1313,37 @@ $k_{s,m} \in \{1, \dots, K\}$; and the observation at $(s, n)$ is emitted by
 the chain of the class the node belongs to, under that class's emission
 parameters $\theta_m$. The joint is
 \begin{equation}
-  \log p(\ell, k, x) = \beta \sum_{\langle n,n' \rangle} J_{nn'}\,\delta(\ell_n, \ell_{n'})
-    + \sum_m \Big[ \log \pi_m(k_{1,m}) + \sum_{s > 1} \log A_m(k_{s-1,m}, k_{s,m}) \Big]
-    + \sum_n \sum_s \log P(x_{sn} \mid k_{s,\ell_n}, \theta_{\ell_n}) - \log Z_{\mathrm{Potts}},
+  \begin{split}
+    \log p(\ell, k, x)
+      &= \beta \sum_{\langle n,n' \rangle} J_{nn'}\,
+         \delta(\ell_n, \ell_{n'}) - \log Z_{\mathrm{Potts}} \\
+      &\quad + \sum_m \Big[ \log \pi_m(k_{1,m})
+         + \sum_{s > 1} \log A_m(k_{s-1,m}, k_{s,m}) \Big] \\
+      &\quad + \sum_n \sum_s
+         \log P(x_{sn} \mid k_{s,\ell_n}, \theta_{\ell_n}),
+  \end{split}
   \label{eq:joint}
 \end{equation}
 Equation~\ref{eq:factor-graph} with pairwise, chain and degree-two gated
-factors, and no fourth code path. Section~\ref{sec:coupled} states the modelEquation~\ref{eq:factor-graph} with pairwise, chain and
-degree-two gated factors, and no fourth code path. Its three terms are the
-three problem classes above: a Potts prior on the labels,
+factors, and no fourth code path. Its three terms are the three problem
+classes above: a Potts prior on the labels,
 \begin{equation}
   \log p(\ell) = \beta \sum_{\langle n,n' \rangle} J_{nn'}\,\delta(\ell_n, \ell_{n'})
                  - \log Z_{\mathrm{Potts}},
   \qquad J_{nn'} \ge 0,
   \label{eq:spatial-prior}
 \end{equation}
-ferromagnetic so neighbouring nodes prefer one class---the penalty on
-disagreement, $-\beta \sum J_{nn'}\,\mathbb{1}[\ell_n \ne \ell_{n'}]$, is the
-same distribution up to a constant; one hidden Markov chain per class, in the
-simplest case with a circulant transition,
+ferromagnetic, so that neighbouring nodes prefer one class. Written as a
+penalty on disagreement it is $-\beta \sum J_{nn'}\,
+\indicator[\ell_n \ne \ell_{n'}]$, the same distribution up to a constant.
+Next, one hidden Markov chain per class, in the simplest case with a
+circulant transition,
 \begin{equation}
   \mathbf{A}_m(i, j) = t\,\delta_{ij} + \frac{1 - t}{K - 1}\,(1 - \delta_{ij}),
   \label{eq:circulant}
 \end{equation}
 whose self-transition rate $t$ and initial distribution $\Pi_m$ are fitted;
-and a \emph{gated} emission, $\mathbb{1}[\ell_n = m]\,\log p(x_{sn} \mid k_{s,m},
+and a \emph{gated} emission, $\indicator[\ell_n = m]\,\log p(x_{sn} \mid k_{s,m},
 \theta_m)$, which couples the two. Marginalizing $k$ recovers a Potts model in
 a field the chains define; marginalizing $\ell$ recovers a mixture of hidden
 Markov models. Neither marginal is tractable alone, and the structure of the
@@ -1328,7 +1351,17 @@ joint dictates the estimator.
 
 \paragraph{Supported sizes.}
 \label{par:coupled:sizes}
-The joint has $M^{N} K^{SM}$ states, so the enumerable instance is small: the
+The chains are per class and not per spot: each of the $N$ spots carries one
+label $\ell_n \in \{1, \dots, M\}$, and each of the $M$ classes carries one
+chain of $S$ states drawn from $K$, shared by every spot the labels assign to
+it. So the labels contribute $M^{N}$ and the chains $K^{SM}$, and the joint
+has $M^{N} K^{SM}$ states. The count is \emph{not} $K^{SN}$, which is the
+different model in which every spot owns a private chain; there the classes
+would carry no information and the coupling this section is about would not
+exist. The gated emission above is what makes the
+distinction observable: a spot reads the profile of its own class, so two
+spots sharing a label share a profile exactly.
+The enumerable instance is therefore small: the
 canonical one is a $2 \times 2$ open lattice at $M = K = 2$ over $S = 6$
 positions, $2^4 \cdot 2^{12} = 65{,}536$ joint states, inside the 200,000-state
 refusal and with its emissions separated far enough that a draw at $S = 6$
@@ -1471,19 +1504,20 @@ log-likelihood ratio,
 \begin{equation}
   L_i = \log \frac{p(y_i \mid c_i = 0)}{p(y_i \mid c_i = 1)}
   = \begin{cases}
-      (1 - 2 y_i) \log \dfrac{1 - p}{p}
-        & \text{binary symmetric, flip probability } p, \\[1.2ex]
-      0 \text{ if erased, else } \pm\infty \text{ with the sign of } 1 - 2 y_i
-        & \text{binary erasure, erasure probability } \epsilon, \\[0.6ex]
+      (1 - 2 y_i) \ln \dfrac{1 - p}{p}
+        & \text{binary symmetric, flip } p, \\[1.0ex]
+      0 \text{ if erased, else } \pm\infty \text{ signed by } 1 - 2 y_i
+        & \text{binary erasure, erasure } \epsilon, \\[0.6ex]
       2 y_i / \sigma^2
-        & \text{binary-input Gaussian, } y_i = (1 - 2 c_i) + \sigma z_i,
+        & \text{binary-input Gaussian,}
     \end{cases}
   \label{eq:ldpc-llr}
 \end{equation}
-positive when the received symbol favours zero. The posterior over the code
+positive when the received symbol favours zero, the Gaussian channel sending
+$y_i = (1 - 2 c_i) + \sigma z_i$ for standard normal $z_i$. The posterior over the code
 is then
 \begin{equation}
-  p(c \mid y) \;\propto\; \mathbb{1}[\parity c = 0]\, \exp(-c \cdot L),
+  p(c \mid y) \;\propto\; \indicator[\parity c = 0]\, \exp(-c \cdot L),
   \label{eq:ldpc-code}
 \end{equation}
 since $\log p(y \mid c) = \sum_i \log p(y_i \mid 0) - \sum_i c_i L_i$ and the
@@ -1559,7 +1593,7 @@ rather than for its classical performance.
 The variables are the bits, $x_i \equiv c_i \in \{0, 1\}$. The factors are a
 unary $\psi_i(c_i) = e^{-c_i L_i}$ per bit, the channel folded in as an
 observation is everywhere in this document, and a parity factor
-$\psi_a(c_{\partial a}) = \mathbb{1}[\bigoplus_{i \in \partial a} c_i = 0]$
+$\psi_a(c_{\partial a}) = \indicator[\bigoplus_{i \in \partial a} c_i = 0]$
 per row of $\parity$, a hard constraint of degree $d_c$ whose log table
 is zero on even-parity assignments and $-\infty$ elsewhere. This is the
 Tanner graph of the code; a bit sits on $d_v$ parity factors and one unary,
@@ -1740,15 +1774,15 @@ the register allows and the channel's score for the two bits it transmits:
   \psi_t(s_{t}, s_{t+1}) =
   \begin{cases}
     \exp\!\big(-u\,(L^{s}_t + L^{a}_t) - p\,L^{p}_t\big)
-      & \text{if the edge } (s_t \to s_{t+1}) \text{ exists, with input } u
-        \text{ and parity } p, \\
+      & \text{the edge exists,} \\
     0 & \text{otherwise,}
   \end{cases}
   \label{eq:turbo-factor}
 \end{equation}
-where $L^{s}, L^{p}$ are the channel ratios of the systematic and parity
-bits and $L^{a}$ an a priori ratio on the input, zero for a stand-alone
-decoding. The input bit needs no variable of its own: the two edges leaving
+where the edge is the transition $s_t \to s_{t+1}$, $u$ and $p$ are the input
+and parity bits labelling it, $L^{s}$ and $L^{p}$ are the channel ratios of
+the systematic and parity bits, and $L^{a}$ is an a priori ratio on the
+input, zero for a stand-alone decoding. The input bit needs no variable of its own: the two edges leaving
 a state enter different states, so $u_t$ is recoverable from the pair. This
 is a chain and the terminated boundary pins both ends, so
 Equation~\ref{eq:sum-product} on the tree schedule is exact on it. That is
@@ -1878,6 +1912,25 @@ branch-and-bound bound for trees past the enumerable taxon count, a boundary
 contraction for lattices past the transfer-matrix width, and for the code the
 density-evolution threshold of Appendix~\ref{app:density-evolution} extended
 past the erasure channel.
+
+\paragraph{A blank is not built, not inapplicable.}
+The tables are generated from the catalogue and the suite, both of which are
+records of what the tree holds, so an empty cell says that this problem
+carries no method of that family \emph{here} and says nothing about whether
+one could exist. The two are different claims and only the first is generated:
+not built is a gap with a ticket behind it, and not applicable is a statement
+about the mathematics that has to be argued rather than read off a table. Four
+pairings are the second, and they are the only four. A surrogate for the
+continuous test functions stands in for an evaluation that is already three
+arithmetic operations, so there is nothing for it to save
+(Section~\ref{sec:surrogates}). A cut-based ground state needs a submodular
+energy, which the frustrated lattice's mixed-sign couplings do not give
+(Section~\ref{sec:potts-cuts}). A single-spin cluster move built on the
+Fortuin--Kasteleyn bond needs a ferromagnetic coupling, so Swendsen--Wang and
+Wolff are defined on Section~\ref{sec:potts}'s lattice and not on
+Section~\ref{sec:frustrated}'s. And a branch-length optimizer has nothing to
+optimize under parsimony, whose score is a count and carries no continuous
+parameter (Section~\ref{sec:parsimony}). Every other blank is work not done.
 
 \input{generated/problems_tables}
 
@@ -2749,7 +2802,7 @@ state $i$:
            \sum_{j \in \states} \Pmat_{ij}(t_v)\, L_v(j),
   \label{eq:pruning}
 \end{equation}
-with $L_u(i) = \mathbb{1}[\,\text{$u$ observed in state $i$}\,]$ at a leaf, and
+with $L_u(i) = \indicator[\,\text{$u$ observed in state $i$}\,]$ at a leaf, and
 the site likelihood read off at the root,
 \begin{equation}
   p(\data_s \mid \tree, \branch, \Q) = \sum_{i \in \states} \pi_i\, L_{\rootnode}(i)
@@ -3381,6 +3434,52 @@ would assert something false---and what is asserted is the structure the
 physics requires: exact at zero coupling, with a deviation from the exact
 transfer matrix that grows away from it and is reported as a measurement.
 
+\subsection{The transfer matrix}
+\label{sec:transfer-matrix}
+The referee the ladder of Section~\ref{sec:ladder} puts above enumeration is
+the transfer matrix, and it is one identity. Cut an $W \times L$ lattice into
+$L$ columns of $W$ sites and write a column's configuration as a single
+variable $c_\ell \in \states^{W}$, of which there are $q^{W}$. Every
+interaction is then either inside a column or between adjacent ones, so
+\begin{equation}
+  Z = \sum_{c_1, \dots, c_L} \prod_{\ell} \nu(c_\ell)
+      \prod_{\ell < L} \transfer(c_\ell, c_{\ell+1}),
+  \qquad
+  \transfer(c, c') = \exp\Big[ \sum_{w} J\,\delta(c_w, c'_w) \Big],
+  \label{eq:transfer}
+\end{equation}
+with $\nu$ carrying a column's own field and vertical couplings. The sum is
+a matrix product, $Z = \nu_1^{\top} \transfer^{L-1} \nu_L$ under open
+boundaries and $\operatorname{tr}(\transfer^{L})$ under periodic ones, where
+the translation invariance folds $\nu$ into $\transfer$. Either way it costs
+$O(L q^{2W})$: exponential in the width and
+\emph{linear} in the length. That asymmetry is the whole reason the method
+earns a rung. Enumeration over $q^{WL}$ configurations dies in both
+directions at once, while the transfer matrix dies only in $W$, so it supplies
+an exact normalizer on a strip of any length at a width that fits --- which is
+what refereeing belief propagation on a loopy graph requires, since the
+quantity to compare against has to be exact and cannot be enumerated.
+
+The chain is the case $W = 1$, and there Equation~\ref{eq:transfer} is the
+forward recursion of Equation~\ref{eq:forward} with the emission folded into
+$\nu$: a hidden Markov model's likelihood and a one-dimensional Potts
+normalizer are one matrix product under two names
+(Section~\ref{sec:hmm:algorithms}). Replacing the sum by a maximum gives the
+same product in the max-plus semiring, which is Viterbi on the chain and the
+ground state of the strip. Two properties follow and both are asserted: the
+largest eigenvalue of $\transfer$ gives the free energy per column in the
+limit of many columns, $-\lim_{L} (\log Z)/L = -\log \lambda_{\max}$, and
+$\transfer$ is symmetric with strictly positive entries, so
+Perron--Frobenius makes $\lambda_{\max}$ simple and its eigenvector
+positive.
+
+\paragraph{What pins it.}
+Against enumeration wherever both run --- $q^{WL}$ against $O(L q^{2W})$, so
+that is a small lattice --- and, past it, against itself contracted the other
+way: a lattice's normalizer is the same number whether the columns or the rows
+are the transfer direction, and the two contractions share no loop order. The
+eigenvalue statement is checked against $(\log Z)/L$ at growing $L$.
+
 \subsection{Ground states as cuts}
 \label{sec:potts-cuts}
 With two states write $\sigma_i \in \{-1, +1\}$. The pairwise term of
@@ -3671,7 +3770,7 @@ chain states marginalized. For $\theta$ given $\ell$, the gradient of the
 marginal likelihood is the posterior-weighted gradient of the emission terms,
 \begin{equation}
   \nabla_{\theta} \log p(x \mid \ell, \theta)
-    = \sum_{n, m} \mathbb{1}[\ell_n = m] \sum_{s, k_{s,m}}
+    = \sum_{n, m} \indicator[\ell_n = m] \sum_{s, k_{s,m}}
       \mathbb{Q}(k_{s,m} \mid \theta, \ell; x)\,
       \nabla_{\theta} \log p(x_{sn} \mid k_{s,m}, \theta_m),
   \label{eq:coupled-m-step}
@@ -3682,7 +3781,7 @@ class's chain over the nodes assigned to it, and $t$ and $\Pi_m$ re-estimate
 in closed form. For $\ell$ given $\theta$, the same posterior defines a
 per-node, per-class external field,
 \begin{equation}
-  H_{nm}(\theta, \theta'; \ell) \equiv
+  h_{nm}(\theta, \theta'; \ell) \equiv
     - \sum_{s, k_{s,m}} \mathbb{Q}(k_{s,m} \mid \theta', \ell; x)\,
       \log p(x_{sn} \mid k_{s,m}, \theta),
   \label{eq:external-field}
@@ -3690,8 +3789,8 @@ per-node, per-class external field,
 and the label update is the ground state of a Potts model in that field,
 \begin{equation}
   \ell^\star = \arg\min_{\ell}\ \beta \Big[
-      \sum_{\langle n,n' \rangle} J_{nn'}\,\mathbb{1}[\ell_n \ne \ell_{n'}]
-    + \sum_{n, m} \mathbb{1}[\ell_n = m]\, H_{nm} \Big],
+      \sum_{\langle n,n' \rangle} J_{nn'}\,\indicator[\ell_n \ne \ell_{n'}]
+    + \sum_{n, m} \indicator[\ell_n = m]\, h_{nm} \Big],
   \label{eq:label-ground-state}
 \end{equation}
 which is the problem of Section~\ref{sec:alpha-expansion}, solved by
@@ -3758,7 +3857,7 @@ at an equal budget, over seeds, reported whether it wins or not.
   \For{each state $k$} $\theta_k \gets$ \textsc{EmissionMixture++}$(\beta, K, \theta, x_k, \ell)$ \Comment{state-constrained}
   \EndFor
   \State $\mathbb{Q} \gets$ forward--backward per class (Equation~\ref{eq:posterior}); M step for $\theta$, $t$, $\Pi$
-  \State $H_{nm} \gets$ Equation~\ref{eq:external-field}
+  \State $h_{nm} \gets$ Equation~\ref{eq:external-field}
   \State $\beta \gets \beta + \Delta\beta$
 \EndWhile
 \State \Return $\ell, \theta$
@@ -3847,7 +3946,7 @@ and from check $a$ to bit $i$,
 \end{equation}
 where the check update follows from $\tanh(L/2) = p(0) - p(1)$ and the fact
 that the parity of independent bits has a difference of probabilities equal
-to the product of theirs. The hard decision $\hat c_i = \mathbb{1}[\tilde L_i
+to the product of theirs. The hard decision $\hat c_i = \indicator[\tilde L_i
 < 0]$ is the bitwise MAP under the Bethe beliefs. Replacing the sum by a
 maximum in Equation~\ref{eq:sum-product} gives max-product, whose log-domain
 check update is
@@ -3976,7 +4075,11 @@ edge:
   \alpha_{t+1}(s') = \sum_{s} \alpha_t(s)\,\psi_t(s, s'),
   \qquad
   \beta_{t}(s) = \sum_{s'} \psi_t(s, s')\,\beta_{t+1}(s'),
-  \qquad
+  \label{eq:bcjr-recursions}
+\end{equation}
+and the bitwise ratio the decoder reports is their product over the edges
+each input bit labels,
+\begin{equation}
   \tilde L_t = \log
     \frac{\sum_{(s,s'):\,u=0} \alpha_t \psi_t \beta_{t+1}}
          {\sum_{(s,s'):\,u=1} \alpha_t \psi_t \beta_{t+1}},
@@ -4228,6 +4331,8 @@ problem. Both answer it the same way --- the relaxation must agree with what
 it relaxes at every corner --- and both are limited by the same thing, which
 is that the corner check needs an enumeration. Extending it to a space no
 enumeration reaches is where the structured relaxations \citep{paulus2020} and
+the parameterized topology spaces \citep{zhang2019} would have to meet.
+
 \bibliographystyle{plainnat}
 \bibliography{references}
 
@@ -4237,6 +4342,13 @@ enumeration reaches is where the structured relaxations \citep{paulus2020} and
 \label{app:hmc}
 \label{sec:hmc}
 
+The sampler every interval that is not a delta-method interval comes from, and
+the one Appendix~\ref{app:tempering} runs replicas of. Stated here in full ---
+the integrator, the acceptance, the warm-up that sets both, and what each is
+held to --- because a section of the main text cites it rather than deriving
+it.
+
+\subsection{The sampler}
 Where the delta-method interval is an approximation, the posterior can be
 sampled instead and an interval read as a quantile. Hamiltonian Monte Carlo
 \citep{neal2011} reads $\objective$ as a negative log density, adds a momentum
@@ -4252,7 +4364,40 @@ $\phi_i = \params_i / \sigma_i$: the unit-mass dynamics on
 $\objective(\sigma \odot \phi)$ are the mass-$M$ dynamics on $\params$ term for
 term, so one integrator serves every metric and every temperature.
 
-\paragraph{Adaptation, as a warm-up.}
+\subsection{The integrator: leapfrog against Yoshida}
+\label{app:hmc:integrator}
+Every integrator here is a composition of the second-order kick--drift--kick
+step, differing only in the sub-step lengths: a momentum half-kick, a position
+drift, a second half-kick, with the adjacent half-kicks of consecutive
+sub-steps merging into one. The leapfrog method is the trivial composition, one
+sub-step of full length, and costs one gradient per step. Yoshida's fourth-order
+method is the palindromic triple jump $(w_1, w_0, w_1)$ with
+\begin{equation}
+  w_1 = \frac{1}{2 - 2^{1/3}}, \qquad w_0 = -\frac{2^{1/3}}{2 - 2^{1/3}},
+  \qquad 2 w_1 + w_0 = 1,
+  \label{eq:yoshida}
+\end{equation}
+and costs three. Both are reversible --- the weights are a palindrome --- and
+both are volume-preserving, which is what makes $\Delta \energy$ the whole of
+the acceptance ratio for either; the order of accuracy changes the cost of a
+draw and never the distribution drawn from. That $w_0 < 0$ is not a sign error
+and is not avoidable: no symmetric composition of a second-order method reaches
+fourth order with positive coefficients, so the middle sub-step runs backwards
+in time and a plotted trajectory is non-monotone.
+
+Whether the higher order pays is a measurement at equal \emph{gradient
+evaluations}, and on these targets it does not. A fourth-order method pays
+where the step is limited by accuracy; here it is limited by \emph{stability}.
+Yoshida's largest sub-step is $|w_0| = 1.70$ times the nominal step, so its
+stability limit in $\varepsilon$ is a factor of about $0.6$ of leapfrog's,
+and three gradients per step multiply that. On the Potts posterior the
+regression suite pins the consequence: leapfrog reaches an acceptance of
+$0.7$ within 21 gradients per trajectory, where Yoshida needs at least 60 and
+at 61 accepts nothing. Leapfrog is therefore the default, and the composition
+is carried as an object with declared weights, order and cost so that the
+comparison is at equal evaluations rather than at equal steps.
+
+\subsection{Adaptation, as a warm-up}
 The step $\varepsilon$ right for one posterior is wrong for the next, and the
 coordinates' scales $\sigma_i$ are the posterior's. Both are set in a warm-up
 whose draws are discarded, after which the chain runs at fixed values and has
@@ -4261,14 +4406,14 @@ not. The scales are the sample standard deviations of a warm-up window. The
 step is driven to a target acceptance $\delta$ by dual averaging
 \citep[Sec.~3.2]{hoffman2014}: after proposal $m$ with acceptance probability
 $\alpha_m$,
-\begin{equation}
-  \bar h_m = \Big(1 - \frac{1}{m + t_0}\Big)\bar h_{m-1}
-             + \frac{\delta - \alpha_m}{m + t_0}, \qquad
-  \log \varepsilon_m = \mu - \frac{\sqrt{m}}{\gamma}\,\bar h_m, \qquad
-  \log \bar\varepsilon_m = m^{-\kappa}\log \varepsilon_m
-             + (1 - m^{-\kappa})\log \bar\varepsilon_{m-1},
+\begin{align}
+  \bar h_m &= \Big(1 - \frac{1}{m + t_0}\Big)\bar h_{m-1}
+             + \frac{\delta - \alpha_m}{m + t_0}, \notag \\
+  \ln \varepsilon_m &= \mu - \frac{\sqrt{m}}{\gamma}\,\bar h_m, \notag \\
+  \ln \bar\varepsilon_m &= m^{-\kappa}\ln \varepsilon_m
+             + (1 - m^{-\kappa})\ln \bar\varepsilon_{m-1},
   \label{eq:dual-averaging}
-\end{equation}
+\end{align}
 with $\mu = \log(10\,\varepsilon_0)$ and the constants $\gamma$, $t_0$,
 $\kappa$ setting the rate; the iterates $\varepsilon_m$ do not converge, the
 averaged $\bar\varepsilon_m$ does, and the chain runs at the last of those. The
@@ -4276,7 +4421,7 @@ iteration runs twice, once at unit mass to estimate the scales and once on the
 metric they define, since rescaling the coordinates changes the step right for
 them.
 
-\paragraph{Regime.}
+\subsection{The regime the adaptation sits in}
 On a target that is locally quadratic the leapfrog energy error is bounded
 and oscillatory, so $\alpha(\varepsilon)$ stays near one up to the stability
 limit $\varepsilon\,\omega_{\max} < 2$ on the stiffest direction and falls to
@@ -4293,21 +4438,35 @@ $1/(\gamma\sqrt{m})$. The chain after warm-up keeps the jitter, the step its
 acceptance was adapted for, and every draw is still from a kernel with the
 right stationary distribution.
 
-\paragraph{A ladder from what it measures.}
-The same principle sets a tempering ladder for Section~\ref{sec:tempering}. What
-makes a ladder right is the exchange acceptance of Equation~\ref{eq:exchange}
-between each neighbouring pair---near zero the replicas are independent chains,
-near one a rung is redundant---so a warm-up measures it on a candidate ladder
-and revises: a pair below a stated band is bisected at the geometric mean, a
-rung both of whose pairs are above the band is removed, and a pair above the
-band beside one inside it has their shared rung moved geometrically halfway
-toward the far end of the pair inside. Geometric, because the exchange ratio
-depends on the temperatures through $\beta_i - \beta_j$, so for an energy whose
-spread the temperature sets, the acceptance is a function of the ratio of
-neighbours. The endpoints are the caller's and never move; the warm-up's cost
-in sweeps is charged to any comparison against a ladder set by hand.
+\subsection{What a warm-up buys}
+\label{app:hmc:warmup}
+The warm-up is not free --- its draws are discarded --- so what it buys is
+measured on a target whose answer is known. Figure~\ref{fig:hmc-warmup} runs
+one adapted chain and one at fixed step and unit mass on the same correlated
+Gaussian, from the same start and at the same starting step. That Gaussian's
+two directions differ in width by a factor of 534, so at unit mass one step
+size must serve both and no value serves either well: above the narrow
+direction's stability limit the chain diverges, and below it the wide
+direction is crossed by a random walk. The adapted chain's running mean
+reaches the last tenth of a standard deviation at draw 211 and the fixed
+chain's at 323, and the separation that matters is the cost of a draw ---
+$2.08 \times 10^{-2}$ effective draws per gradient against
+$5.85 \times 10^{-3}$, a factor of 3.6, with the warm-up's own gradients
+charged to the chain that spent them. Both chains are correct: each is a
+kernel with the right stationary distribution, and each recovers the exact
+mean inside four standard errors at its own effective sample size. So what
+separates them is cost per effective draw and nothing else, which is the only
+claim a warm-up can make.
 
-\paragraph{What pins it.}
+\qacaptionread{figures/hmc_warmup_caption.txt}{\hmcWarmupCaption}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/hmc_warmup}
+  \caption{\hmcWarmupCaption}
+  \label{fig:hmc-warmup}
+\end{figure}
+
+\subsection{What pins it}
 Equation~\ref{eq:dual-averaging} is arithmetic and is stepped by hand against
 the implementation; the mass matrix is a change of coordinates and is held to
 a mass-matrix leapfrog written out, to round-off. What a draw costs is the
@@ -4325,6 +4484,14 @@ are unchanged and remain the oracles.
 \section{Tempering}
 \label{app:tempering}
 \label{sec:tempering}
+
+A temperature is a knob on the same model, and three methods turn it: a
+schedule that lowers it, an ensemble that holds several at once, and a limit
+that removes it. They are collected here because every problem with a discrete
+search cites one of them, and because the comparison that decides between them
+is one comparison, stated at the end.
+
+\subsection{Schedules, annealing and replica exchange}
 A temperature $T$ scales the model, $\energy / T$, so a chain at $T$ targets
 $\exp(-\energy/T)$; a \emph{schedule} $T(t)$ over a budget of $t$ steps is one
 object, shared by every consumer of it, with both endpoints reached exactly at
@@ -4364,7 +4531,52 @@ marginal over branch lengths. It is a Monte Carlo estimate, named a posterior
 weight only beside the exchange acceptance of every adjacent pair and the
 autocorrelation time of the indicator, which say whether the ensemble mixed.
 
-\paragraph{What pins it.}
+\subsection{Setting the ladder from what it measures}
+\label{app:tempering:ladder}
+The same principle sets a tempering ladder for Section~\ref{sec:tempering}. What
+makes a ladder right is the exchange acceptance of Equation~\ref{eq:exchange}
+between each neighbouring pair---near zero the replicas are independent chains,
+near one a rung is redundant---so a warm-up measures it on a candidate ladder
+and revises: a pair below a stated band is bisected at the geometric mean, a
+rung both of whose pairs are above the band is removed, and a pair above the
+band beside one inside it has their shared rung moved geometrically halfway
+toward the far end of the pair inside. Geometric, because the exchange ratio
+depends on the temperatures through $\beta_i - \beta_j$, so for an energy whose
+spread the temperature sets, the acceptance is a function of the ratio of
+neighbours. The endpoints are the caller's and never move; the warm-up's cost
+in sweeps is charged to any comparison against a ladder set by hand.
+
+\subsection{Tempering against a sampler, and against restarts}
+\label{app:tempering:comparison}
+Three ways to spend a budget on a multimodal continuous objective, and they are
+not variants of one method. \emph{Random restart}
+(Algorithm~\ref{alg:random-restart}) fits from many starts and reports every
+fit with its spread; it assumes nothing, parallelizes without communication,
+and finds a basin only if a start lands in it, so on a surface whose basins are
+narrow its success is a rate in the number of restarts. \emph{Hamiltonian Monte
+Carlo} (Appendix~\ref{app:hmc}) follows the gradient of one density and crosses
+a barrier only by paying its height in the acceptance ratio; it is the method
+when the question is a \emph{distribution} --- an interval, a posterior mean ---
+and it is the wrong instrument for a global minimum, since a chain that has not
+crossed a barrier reports the basin it started in with no sign that it did not.
+\emph{Tempering} is the one that attacks the barrier: hot replicas cross what
+the cold one cannot and an exchange carries what they find down the ladder, at
+the price of $R$ chains for one answer and a ladder that must itself be set
+(Section~\ref{app:tempering:ladder}).
+
+What follows is an accounting rule rather than a ranking. The budget is the
+problem's own unit --- objective evaluations for a fit, sweeps for a chain ---
+and every replica's sweeps and every restart's evaluations are charged to it,
+the warm-up's and the ladder's included. Under that rule none of the three
+dominates, and which wins is a property of the instance: it is measured on the
+frustrated lattices of Section~\ref{sec:frustrated}, where the answer is known
+from outside at every size, and on the multimodal test functions of
+Section~\ref{sec:testfunctions}, where the minimizers are published. What is
+asserted in general is only the refusal: a comparison at unequal budgets, or
+one quoting the best of many restarts against the single answer of one chain,
+has measured the accounting and not the method.
+
+\subsection{What pins it}
 Every replica's marginal must still be $\exp(-\energy/T_r)$, enumerated from
 the \emph{unscaled} model, with exchanges on: a wrong exchange ratio
 contaminates the cold replica with hot configurations and only that test says
@@ -4894,7 +5106,7 @@ factorizes into one sum per child:
 \end{equation*}
 the second equality conditioning on $z_v$ and using that the data below $v$
 depends on $z_u$ only through $z_v$. The inner probability is $L_v(j)$, which
-is Equation~\ref{eq:pruning}; at a leaf $L_u(i) = \mathbb{1}[z_u = i]$
+is Equation~\ref{eq:pruning}; at a leaf $L_u(i) = \indicator[z_u = i]$
 because the state is observed; and summing the root state against its prior
 gives Equation~\ref{eq:root}. Nothing in the argument fixes the order of the
 children or the depth of the tree, so the recursion is a post-order traversal
@@ -4995,6 +5207,44 @@ Equation~\ref{eq:bethe-factor} is $-\log Z$ and the stationary point is the
 answer of the two passes; on a loopy graph the factorization fails and the
 fixed point is the approximation
 \citep{yedidia2005, mezard2009}.
+
+\subsection{The evidence gradient is a posterior expectation}
+\label{app:logz}
+Equation~\ref{eq:logz-gradient} is what makes one message pass serve both the
+marginalization and the fit, so it is derived rather than asserted. Write the
+unnormalized measure of Equation~\ref{eq:factor-graph} as
+$\tilde p(x; \params) = \prod_a \psi_a(x_{\partial a}; \params)$ and
+$Z(\params) = \sum_x \tilde p(x; \params)$. Differentiating under the sum,
+which is finite here and so needs no further condition,
+\begin{equation}
+  \frac{\partial \ln Z}{\partial \params}
+    = \frac{1}{Z} \sum_x \frac{\partial \tilde p}{\partial \params}
+    = \sum_x \frac{\tilde p(x; \params)}{Z}\,
+      \frac{\partial \ln \tilde p(x; \params)}{\partial \params}
+    = \mathbb{E}_{p(x)}\Big[
+        \frac{\partial \ln \tilde p(x; \params)}{\partial \params}
+      \Big],
+  \label{eq:logz-expectation}
+\end{equation}
+the middle step being $\partial \tilde p = \tilde p \, \partial \ln
+\tilde p$. The logarithm turns the product over factors into a sum, and a
+factor's log-potential depends on $x$ only through $x_{\partial a}$, so each
+term's expectation is taken under the marginal of that factor's own variables
+--- the belief $b_a$, which sum-product returns:
+\begin{equation}
+  \mathbb{E}_{p(x)}\Big[
+      \sum_a \frac{\partial \ln \psi_a(x_{\partial a}; \params)}
+                   {\partial \params} \Big]
+    = \sum_a \mathbb{E}_{p(x_{\partial a})}
+      \Big[ \frac{\partial \ln \psi_a(x_{\partial a}; \params)}
+                  {\partial \params} \Big],
+\end{equation}
+which is Equation~\ref{eq:logz-gradient}. Two consequences are used in the
+body. The expectation step of an expectation--maximization is the beliefs and
+nothing further, since the quantity its maximization step differentiates is
+this same sum; and on a loopy graph the $b_a$ are the Bethe beliefs rather
+than the marginals, so the gradient is of an approximate evidence and the
+optimum it reaches is reported as the stationary point of one.
 
 \subsection{The Bethe free energy is stationary at a sum-product fixed point}
 \label{app:bethe}
@@ -5392,7 +5642,7 @@ Equation~\ref{eq:tanh-rule}}
          \setminus i} \tanh (m_{j \to a}/2)$, or
          Equation~\ref{eq:min-sum} for min-sum
   \State $\tilde L_i \gets L_i + \sum_{b \in \partial i} m_{b \to i}$;
-         $\hat c_i \gets \mathbb{1}[\tilde L_i < 0]$
+         $\hat c_i \gets \indicator[\tilde L_i < 0]$
   \State \textbf{stop} if every bit is decided and $\parity \hat c = 0$
 \EndFor
 \State \Return $\hat c$, and whether the syndrome check was reached --- a
@@ -5416,7 +5666,7 @@ Equation~\ref{eq:extrinsic}}
   \State $L^{a} \gets \Pi^{-1}(\tilde L^{2} - \Pi L^{s} - \Pi L^{e1})$
   \State \textbf{stop} if the two chains' hard decisions on $u$ agree
 \EndFor
-\State \Return $\hat u_i = \mathbb{1}[(\Pi^{-1}\tilde L^{2})_i < 0]$, and
+\State \Return $\hat u_i = \indicator[(\Pi^{-1}\tilde L^{2})_i < 0]$, and
        whether the two agreed --- which is a stopping rule and not a
        certificate, since the graph has cycles
 \end{algorithmic}
@@ -5472,3 +5722,4 @@ Equation~\ref{eq:extrinsic}}
 \end{algorithmic}
 \end{algorithm}
 
+\end{document}

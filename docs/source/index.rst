@@ -424,6 +424,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.qa.coupled_labelling
    :members:
 
+.. automodule:: snakes_and_ladders.qa.hmc_warmup
+   :members:
+
 .. automodule:: snakes_and_ladders.scripts
    :members:
 

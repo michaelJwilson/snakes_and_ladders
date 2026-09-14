@@ -291,6 +291,16 @@ FIGURES: tuple[FigureSpec, ...] = (
         ("--params", f"{FIXTURES}/spatio_sequential/stress.yaml"),
         seconds=3.0,
     ),
+    # The only entry that names no fixture: its target is a correlated
+    # Gaussian whose mean and covariance are declared in the module, so there
+    # is no simulated alignment to point at and the caption reports the
+    # constants instead.
+    FigureSpec(
+        "hmc_warmup",
+        "snakes_and_ladders.qa.hmc_warmup",
+        (),
+        seconds=12.2,
+    ),
 )
 
 # Any reference to `figures/<stem>` in the document, whichever way it is
