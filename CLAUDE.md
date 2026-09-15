@@ -55,7 +55,7 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 ## High Performance frameworks
 *   **GPU (PyTorch, Triton, JAX):** Target if the hot path is data-parallel and earns $\ge 10\times$ speedup over vectorized NumPy at realistic problem sizes.
 *   **Autodiff:** **PyTorch**, decided. Its MPS backend is the path on Apple Silicon, which `ROADMAP.md` targets alongside CUDA.
-*   **Rust Backend (`oxi_snakes_and_ladders`):** Target for CPU-bound hot paths (control flow, tree traversal, irregular memory access, small sizes).
+*   **Rust Backend (`oxi_snakes_and_ladders`):** Target for CPU-bound hot paths (control flow, tree traversal, irregular memory access, small sizes), and keep it only where it earns $\ge 2\times$ over the vectorized NumPy reference at realistic problem sizes. The bar is the GPU rule's, set lower because the cost it buys off is lower: a second language in the build, a second implementation to keep in step with its oracle, and a kernel a reader must cross a language boundary to follow. Below it the simpler code wins and the port is reverted rather than kept — a backend that exists and is never faster is a maintenance cost with no counterpart.
 *   **Measurement:** Benchmark candidates against the NumPy reference before committing to a port. Report both numbers in the PR.
 *   **The Oracle:** Every accelerated kernel keeps its pure Python/NumPy implementation as an oracle. Regression tests must pin the accelerated output against it, and recover known values on sims.
 
