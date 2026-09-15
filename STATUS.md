@@ -201,6 +201,24 @@ pinning one thread per worker as the plan assumed.
 | `search.support.bootstrap_support` | default | 2 | 4.70 | 1.12× | yes |
 | `search.support.bootstrap_support` | default | 4 | 5.65 | 0.93× | yes |
 
+**The leaf-count ladder is a cost axis, and it is now a fixture
+([#582](https://github.com/michaelJwilson/snakes_and_ladders/issues/582)).**
+The ticket asked where a ladder over leaf count stops; it does not. Neighbour
+joining recovers the generating topology **exactly at 8, 20, 50, 100 and 200
+leaves** --- normalized RF **0.0000**, zero variance over four seeds, 0.58 s at
+200 --- so no rung fails and the terminating rule never fires. The axes that do
+bite are sites (RF 0.2824 at 50 sites, 0.1529 at 100, 0.0235 at 200, 0.0000
+from 500, all at 20 leaves) and tree shape, where the Felsenstein zone fails at
+**four** leaves once pendant branches reach 0.8 (RF 0.4000 +/- 0.4899 over five
+seeds --- bimodal, two failures, not noise).
+`tests/regression/fixtures/tree_scale/` keeps the ladder for what it does
+measure: 20 leaves per pull request, 50 under `-m stress`, 200 at release, each
+declaring its topology as `{balanced: n, height: h}` rather than as yaml. On
+its default rung the branch's post-order optimizations are **8.389 ms to 7.032
+ms** per gradient and **4.035 s to 3.457 s** per search, at an identical
+log-likelihood on identical evaluation and fit counts;
+`docs/experiments/014-the-leaf-count-fixture.md` carries it.
+
 **A fourth parallelism site is positive: one neighbourhood's candidate fits
 ([#405](https://github.com/michaelJwilson/snakes_and_ladders/issues/405)).**
 `search.infer` takes `workers`, `backend` and `intra_op_threads` and fans the
