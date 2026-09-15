@@ -174,7 +174,7 @@ def _phi_inverse(value: np.ndarray) -> np.ndarray:
         smaller = _phi(middle) > value
         high = np.where(smaller, high, middle)
         low = np.where(smaller, middle, low)
-    return 0.5 * (low + high)
+    return np.asarray(0.5 * (low + high))
 
 
 def polar_information_set(reliability: np.ndarray, n_info: int) -> np.ndarray:
@@ -252,7 +252,7 @@ class PolarCode:
     @property
     def n_bits(self) -> int:
         """The block length ``N = 2^n``."""
-        return 2**self.n_stages
+        return int(2**self.n_stages)
 
     @property
     def n_info(self) -> int:
@@ -339,6 +339,18 @@ def capacity(reliability: np.ndarray) -> np.ndarray:
     return np.asarray(1.0 - reliability)
 
 
+_REQUIRED_FIELDS = frozenset(
+    {
+        "n_stages",
+        "n_info",
+        "construction",
+        "flip_probability",
+        "erasure_probability",
+        "noise_scale",
+    }
+)
+
+
 @dataclass(frozen=True)
 class PolarParams(ChannelParams):
     """Fully-specified truth for a polar fixture.
@@ -396,8 +408,28 @@ class PolarParams(ChannelParams):
 
 
 def load_polar_params(path: Path) -> PolarParams:
-    """Read a polar fixture."""
-    return load_declared(PolarParams, path)
+    """Read a polar fixture.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the yaml file.
+
+    Returns
+    -------
+    PolarParams
+        The parsed truth. Which construction the fields describe is checked by
+        :meth:`PolarParams.code`, so one statement of that serves both callers.
+    """
+    raw = load_declared(path, _REQUIRED_FIELDS)
+    return PolarParams(
+        n_stages=int(raw["n_stages"]),
+        n_info=int(raw["n_info"]),
+        construction=str(raw["construction"]),
+        flip_probability=float(raw["flip_probability"]),
+        erasure_probability=float(raw["erasure_probability"]),
+        noise_scale=float(raw["noise_scale"]),
+    )
 
 
 __all__ = [
