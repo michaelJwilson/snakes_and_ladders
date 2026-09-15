@@ -473,7 +473,11 @@ mod tests {
 
     /// A balanced tree with `n_leaves` leaves and random states, for the
     /// agreement tests below.
-    fn fixture(n_leaves: usize, n_sites: usize, k: usize) -> (Vec<f64>, Vec<Vec<usize>>, Vec<i64>, Vec<i64>) {
+    fn fixture(
+        n_leaves: usize,
+        n_sites: usize,
+        k: usize,
+    ) -> (Vec<f64>, Vec<Vec<usize>>, Vec<i64>, Vec<i64>) {
         let n_nodes = 2 * n_leaves - 1;
         let mut children: Vec<Vec<usize>> = vec![Vec::new(); n_leaves];
         for i in 0..n_leaves - 1 {
@@ -519,8 +523,7 @@ mod tests {
         };
         let whole = traverse_and_sum(&branch_length, &children, observations(), k, &pi, n_sites);
         for window in [n_sites, n_sites / 2 + 1, n_sites / 3 + 1, 1024] {
-            let split =
-                traverse_and_sum(&branch_length, &children, observations(), k, &pi, window);
+            let split = traverse_and_sum(&branch_length, &children, observations(), k, &pi, window);
             assert_eq!(
                 whole.to_bits(),
                 split.to_bits(),
@@ -561,7 +564,6 @@ mod tests {
         }
         total
     }
-
 
     #[test]
     fn test_jc_transition_probabilities_rows_sum_to_one() {
