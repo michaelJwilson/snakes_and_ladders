@@ -1,30 +1,21 @@
-"""Rust single-site heat-bath sampling, beside `potts_mcmc` rather than
-replacing it.
+"""The Rust single-site heat-bath chain, named for callers that want it by name.
 
-The Python sweep stays as the oracle, per root ``CLAUDE.md`` ("Every
-accelerated kernel keeps its pure Python/NumPy implementation as an oracle").
+One line of dispatch onto :func:`snakes_and_ladders.search.potts_mcmc.sample_potts`
+with :data:`~snakes_and_ladders.search.backend.Backend.RUST`, which is now that
+function's default. It stays because it is the name issue #246 published and
+`tests/benchmarks/` and `STATUS.md` still cite, and because it fixes the one
+move set the kernel implements; what it no longer carries is a second loop
+over sweeps, which is the thing that could have drifted from the one it
+duplicated (issue #599).
 
-**Why this is a second backend and not a replacement.** Issue #232 profiled
-`_single_site_sweep` as the one place a Python-level loop dominates -- 100
-sweeps on a 32x32 periodic lattice take 1.05 s against 0.064 s at 8x8, linear
-in nodes with the constant set by interpreter overhead. But the sweep calls
-``np.exp`` and ``np.searchsorted``, and Rust's ``f64::exp`` agrees with NumPy's
-SIMD implementation to within a unit in the last place rather than bit-exactly.
-``searchsorted`` is a threshold, so one draw landing across a boundary that
-moved by 1 ulp picks a different state, and from that step the two chains are
-unrelated rather than approximately equal. Switching `sample_potts` to this
-path would move every autocorrelation figure ``STATUS.md`` pins, every
-committed notebook output that reads a chain, and the goodness-of-fit fixtures'
-chain lengths. That is a decision with its own evidence, not a side effect of a
-performance ticket (issue #246).
+**The chain is the oracle's, state for state.** ``f64::exp`` and NumPy's SIMD
+``exp`` differ in the last place, and ``searchsorted`` is a threshold, so the
+kernel decides a site only where the draw clears every cumulative boundary by
+more than that difference can move it and hands the rest back for the NumPy
+path to decide. :func:`snakes_and_ladders.search.potts_mcmc._sweep_at` states
+the bound. The oracle stays, per root ``CLAUDE.md``, and pins this.
 
-**Agreement is therefore distributional, never bitwise.** The two backends are
-refereed by the distribution they converge to, against exhaustive enumeration
-at an enumerable size -- which is what ``search/CLAUDE.md`` requires of any
-sampler, and the only comparison that means anything between two
-implementations of a stochastic process.
-
-**The uniforms are drawn here and passed down.** The Rust module holds no
+**The uniforms are drawn in Python and passed down.** The Rust module holds no
 generator: ``snakes_and_ladders.sim``'s reproducibility contract is that a
 seeded generator determines the result, and a second stream inside Rust would
 break it silently.
@@ -34,10 +25,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.search.potts_mcmc import PottsChain
+from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.search.potts_mcmc import PottsChain, PottsMove
+from snakes_and_ladders.search.potts_mcmc import sample_potts as _sample_potts
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import site_field
 
 
 def sample_potts(
@@ -50,30 +41,16 @@ def sample_potts(
 ) -> PottsChain:
     """Draw a single-site chain on ``graph``, stepping in Rust.
 
-    Signature matches
-    :func:`snakes_and_ladders.search.potts_mcmc.sample_potts` less its
-    ``move`` argument, which has one value here: the cluster moves are not
-    ported, because #232 did not profile them as dominant and
+    :func:`snakes_and_ladders.search.potts_mcmc.sample_potts` less its ``move``
+    and ``backend`` arguments, which have one value each here: the cluster
+    moves are not ported, because #232 did not profile them as dominant and
     ``search/CLAUDE.md`` requires a cluster move in a field to carry an accept
     step this kernel does not implement.
 
     Parameters
     ----------
-    graph : PottsGraph
-        The graph to sample on.
-    field : np.ndarray
-        External field ``h``, shape ``(n_states,)``.
-    rng : np.random.Generator
-        Passed in rather than seeded here. Every uniform the kernel consumes is
-        drawn from it, in the order the oracle draws them.
-    n_sweeps : int
-        Sweeps to record.
-    burn_in : int
-        Sweeps run and discarded before recording starts.
-    thin : int
-        Record one sweep in every ``thin``. Successive sweeps are correlated,
-        so a goodness-of-fit test run on every sweep rejects a *correct*
-        sampler.
+    graph, field, rng, n_sweeps, burn_in, thin
+        As :func:`snakes_and_ladders.search.potts_mcmc.sample_potts`.
 
     Returns
     -------
@@ -88,31 +65,13 @@ def sample_potts(
         If the kernel refuses its arguments -- a state outside the alphabet, a
         ragged adjacency, or a draw count that does not match the sweeps.
     """
-    # `-1` rather than `0`: the field arrives shared as `(k,)` or per-site as
-    # `(n_nodes, k)`, and the alphabet is the last axis either way (issue
-    # #571). The adjacency comes from the one builder (issue #277).
-    n_states = int(field.shape[-1])
-    offsets, neighbours, couplings = graph.compressed_adjacency()
-    state = np.ascontiguousarray(
-        rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
+    return _sample_potts(
+        graph,
+        field,
+        PottsMove.SINGLE_SITE,
+        rng,
+        n_sweeps,
+        burn_in,
+        thin,
+        backend=Backend.RUST,
     )
-    # The kernel takes one field row per site (issue #571). A shared field
-    # arrives here as a single row, so it is widened once, outside the loop,
-    # rather than per sweep.
-    contiguous_field = np.ascontiguousarray(
-        site_field(field, graph.n_nodes) if field.ndim == 1 else field,
-        dtype=np.float64,
-    )
-
-    recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
-    for step in range(-burn_in * thin, n_sweeps * thin):
-        # One sweep at a time, so the recorded stride matches the oracle's and
-        # the uniforms are consumed in the same order.
-        draws = np.ascontiguousarray(rng.random(graph.n_nodes), dtype=np.float64)
-        oxi_snakes_and_ladders.single_site_sweeps(
-            state, contiguous_field, offsets, neighbours, couplings, draws, 1, 1.0
-        )
-        if step >= 0 and (step + 1) % thin == 0:
-            recorded[step // thin] = state
-
-    return PottsChain(states=recorded, mean_cluster_size=float(graph.n_nodes))

@@ -157,6 +157,7 @@ pub fn sample_rows_impl(
 #[pyfunction]
 #[pyo3(signature = (distributions, n_categories, rows, draws, out))]
 pub fn sample_rows(
+    py: Python<'_>,
     distributions: PyReadonlyArray1<'_, f64>,
     n_categories: usize,
     rows: PyReadonlyArray1<'_, i64>,
@@ -174,7 +175,7 @@ pub fn sample_rows(
     let rows = rows.as_slice()?;
     let draws = draws.as_slice()?;
     let destination = out.as_slice_mut()?;
-    sample_rows_into(distributions, n_categories, rows, draws, destination)
+    py.detach(|| sample_rows_into(distributions, n_categories, rows, draws, destination))
         .map_err(PyValueError::new_err)?;
     Ok(())
 }

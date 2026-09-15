@@ -14,18 +14,22 @@ grows, which is what the pruning port turned out not to do.
 from __future__ import annotations
 
 import math
+import threading
 
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.search import potts_mcmc_rust
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import (
+    _GUARD,
     PottsMove,
     parallel_tempering,
     sample_potts,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import site_field
 
 SWEEPS = 100
 FIELD = np.zeros(2)
@@ -47,6 +51,7 @@ def test_python_single_site_sweep(benchmark: BenchmarkFixture, extent: int) -> N
         PottsMove.SINGLE_SITE,
         np.random.default_rng(1),
         SWEEPS,
+        backend=Backend.PYTHON,
     )
 
     assert chain.states.shape == (SWEEPS, graph.n_nodes)
@@ -104,3 +109,71 @@ def test_parallel_tempering_benchmark(
     )
 
     assert run.states.shape == (20, len(LADDER), graph.n_nodes)
+
+
+# --- the GIL, released (#604) ------------------------------------------------
+
+THREADS = [1, 2, 4]
+THREADED_SWEEPS = 50
+
+
+def _sweep_task(seed: int) -> np.ndarray:
+    """One independent chain, start to finish, inside the kernel."""
+    graph = lattice_graph((32, 32), BoundaryCondition.PERIODIC, 0.4)
+    rows = site_field(FIELD, graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    rng = np.random.default_rng(seed)
+    state = np.ascontiguousarray(rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64)
+    draws = np.ascontiguousarray(
+        rng.random(THREADED_SWEEPS * graph.n_nodes), dtype=np.float64
+    )
+    oxi_snakes_and_ladders.single_site_sweeps(
+        state,
+        rows,
+        offsets,
+        neighbours,
+        couplings,
+        draws,
+        THREADED_SWEEPS,
+        1.0,
+        _GUARD,
+        0,
+    )
+    return state
+
+
+@pytest.mark.parametrize("n_threads", THREADS, ids=lambda n: f"{n}thread")
+def test_rust_sweep_under_python_threads(
+    benchmark: BenchmarkFixture, n_threads: int
+) -> None:
+    """``n_threads`` chains at once, which the kernel held the GIL through.
+
+    The ratio between the cells is the finding and is reported in
+    ``STATUS.md``: before issue #604 four threads took 4.03x the wall of one,
+    which is serialization exactly. It is **not** asserted here --- a
+    wall-clock threshold fails for the machine rather than for the change
+    (`DEV.md`, No CI Profiling). What is asserted is `parallel`'s standing
+    rule, which is what makes the timing reportable at all: a threaded run is
+    bitwise the serial one.
+    """
+    serial = [_sweep_task(7 + index) for index in range(n_threads)]
+
+    def run() -> list[np.ndarray]:
+        out: list[np.ndarray] = [np.empty(0, dtype=np.int64)] * n_threads
+
+        def body(index: int) -> None:
+            out[index] = _sweep_task(7 + index)
+
+        threads = [
+            threading.Thread(target=body, args=(index,)) for index in range(n_threads)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        return out
+
+    threaded = benchmark(run)
+
+    for expected, actual in zip(serial, threaded, strict=True):
+        np.testing.assert_array_equal(expected, actual)

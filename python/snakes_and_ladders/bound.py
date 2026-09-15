@@ -10,6 +10,7 @@ these and ``snakes_and_ladders.learn.surrogate`` the learned ones, and
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -33,6 +34,7 @@ class Surrogate(Protocol):
     @property
     def kind(self) -> Bound: ...  # pragma: no cover - protocol
 
+    @abstractmethod
     def __call__(self, structure: object, data: object) -> torch.Tensor:
         """The surrogate's value, a differentiable scalar."""
         ...  # pragma: no cover - protocol

@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# The generated ledgers: CHECKS.md from the tests' own markers, SEAMS.md from
-# the package, and the textbook's applicability tables from PROBLEMS.md and
-# the suite. None is committed (issue #425) -- a machine-written file that is
-# committed becomes a merge participant, and a conflict between two machine
-# writings carries no information to resolve.
+# The generated ledgers: CHECKS.md from the tests' own markers, and the
+# textbook's applicability tables from PROBLEMS.md and the suite. Neither is
+# committed (issue #425) -- a machine-written file that is committed becomes a
+# merge participant, and a conflict between two machine writings carries no
+# information to resolve.
+#
+# SEAMS.md was a third and is gone (issue #586): every Protocol is
+# discoverable at import, so the declaration is the record, and the one thing
+# the ledger computed that the class tree does not -- the consuming-module
+# count -- moved into infra/gate_new_seams.py, where it is used.
 #
 # And two blocks of files that *are* committed: pyproject.toml's marker list
 # and DEV.md's tier table, written from infra/gates.py between marker comments
@@ -19,7 +24,7 @@
 # stale copy that reaches the index fails CI wherever it came from.
 #
 # Usage: infra/ledgers.sh [--check]
-#   (default)  regenerate the three files and the two derived blocks in place
+#   (default)  regenerate the two files and the two derived blocks in place
 #   --check    regenerate, then fail if regenerating changed a tracked file
 set -euo pipefail
 
@@ -44,7 +49,6 @@ esac
 # cannot name, a pairing with no note -- fails here, which is the other half
 # of what the old per-file `--check` bought.
 uv run --no-sync python infra/checks_ledger.py --write
-uv run --no-sync python infra/seams_survey.py --write
 uv run --no-sync python infra/problems_tables.py --write
 uv run --no-sync python infra/gates.py --write
 
@@ -52,7 +56,7 @@ if [ "$check" = 0 ]; then
   exit 0
 fi
 
-LEDGERS=(CHECKS.md SEAMS.md docs/tex/generated/problems_tables.tex)
+LEDGERS=(CHECKS.md docs/tex/generated/problems_tables.tex)
 # The files carrying a generated block. Tracked, and required to be: the block
 # is part of a file a person reads and edits around.
 DERIVED=(pyproject.toml DEV.md)

@@ -35,6 +35,7 @@ from snakes_and_ladders.opt.schedule import (
 from snakes_and_ladders.search import potts_mcmc
 from snakes_and_ladders.search.alpha_expansion import energy, iterated_conditional_modes
 from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.search.potts_mcmc import _GUARD as GUARD
 from snakes_and_ladders.search.potts_mcmc import (
     PottsChain,
     PottsMove,
@@ -839,6 +840,8 @@ def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
             draws,
             1,
             1.0,
+            GUARD,
+            0,
         )
     with pytest.raises(ValueError, match="beta must be finite"):
         oxi_snakes_and_ladders.single_site_sweeps(
@@ -850,6 +853,8 @@ def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
             draws,
             1,
             float("nan"),
+            GUARD,
+            0,
         )
 
 
@@ -873,4 +878,6 @@ def test_a_field_of_the_wrong_dimensionality_names_its_shape() -> None:
             np.full(graph.n_nodes, 0.5),
             1,
             1.0,
+            GUARD,
+            0,
         )

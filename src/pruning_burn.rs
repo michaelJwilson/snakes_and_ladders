@@ -251,6 +251,7 @@ pub fn pruning_gradient_impl(
 #[pyfunction]
 #[pyo3(signature = (branch_length, children, leaf_states, leaf_row, k, pi, weight, rescale))]
 pub fn pruning_gradient(
+    py: Python<'_>,
     branch_length: PyReadonlyArray1<'_, f64>,
     children: Vec<Vec<usize>>,
     leaf_states: PyReadonlyArray2<'_, i64>,
@@ -273,15 +274,17 @@ pub fn pruning_gradient(
         n_sites,
         row: &leaf_row,
     };
-    pruning_gradient_impl(
-        branch_length,
-        &children,
-        observations,
-        k,
-        pi,
-        weight,
-        rescale,
-    )
+    py.detach(|| {
+        pruning_gradient_impl(
+            branch_length,
+            &children,
+            observations,
+            k,
+            pi,
+            weight,
+            rescale,
+        )
+    })
     .map_err(PyValueError::new_err)
 }
 

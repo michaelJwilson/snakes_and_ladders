@@ -28,12 +28,14 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 import torch
 
+from snakes_and_ladders.learn.environment import Environment
+
 # (position, new_state): change one position to a state it is not already in.
 Revision = tuple[int, int]
 Path = tuple[int, ...]
 
 
-class StatePathLandscape:
+class StatePathLandscape(Environment[Path, Revision]):
     """Search over hidden state paths, one position at a time.
 
     Parameters

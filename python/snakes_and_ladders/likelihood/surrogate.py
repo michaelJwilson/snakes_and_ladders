@@ -47,7 +47,7 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 import torch
 
-from snakes_and_ladders.bound import Bound
+from snakes_and_ladders.bound import Bound, Surrogate
 from snakes_and_ladders.likelihood.pruning_torch import log_likelihood
 from snakes_and_ladders.search.topology import Topology, branch_splits
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -125,7 +125,7 @@ def least_squares_residual(
     return total
 
 
-class PlugInLikelihood:
+class PlugInLikelihood(Surrogate):
     """Lower bound on the maximized log-likelihood: one pruning evaluation at least-squares lengths.
 
     Any feasible lengths give a value at most the maximum, and one pruning
@@ -207,7 +207,7 @@ def site_fitch_scores(tau: Node, alignment: Mapping[str, np.ndarray]) -> np.ndar
     return changes
 
 
-class ParsimonyUpperBound:
+class ParsimonyUpperBound(Surrogate):
     """Upper bound on the Jukes--Cantor log-likelihood at every branch length, hence on its maximum.
 
     ``P(t) = a I + (1 - a) J / k`` with ``a = exp(-k t / (k - 1))``, so the
@@ -483,7 +483,7 @@ def ground_state_energy_bounds(
     return -upper_log_z / beta, (graph.n_nodes * np.log(q) - lower_log_z) / beta
 
 
-class MeanFieldLogPartition:
+class MeanFieldLogPartition(Surrogate):
     """The mean-field bound as a :class:`Surrogate` over ``(graph, field)``."""
 
     kind = Bound.LOWER
@@ -493,7 +493,7 @@ class MeanFieldLogPartition:
         return mean_field_log_partition(graph, field)
 
 
-class SpanningTreeLogPartition:
+class SpanningTreeLogPartition(Surrogate):
     """The spanning-tree bound as a :class:`Surrogate` over ``(graph, field)``."""
 
     kind = Bound.UPPER

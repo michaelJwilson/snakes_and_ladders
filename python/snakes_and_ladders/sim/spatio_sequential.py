@@ -55,6 +55,8 @@ def circulant_transition(n_states: int, self_transition: float) -> np.ndarray:
 class SpatioSequentialParams:
     """Fully-specified truth for the coupled model.
 
+    Under the seam rule: issue #399's fixtures and emission add its consumers.
+
     Parameters
     ----------
     graph : PottsGraph
