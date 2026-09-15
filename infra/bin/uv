@@ -25,6 +25,14 @@ set -euo pipefail
 
 self_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 
+# `infra/repair_environment.py` is issue #556's, and lands with it. Until
+# then this guard can still refuse; it just has no repair to name, and says
+# so rather than printing a path that is not there.
+repair=$(cd -- "$self_dir/.." && pwd -P)/repair_environment.py
+if [ ! -f "$repair" ]; then
+  repair="(infra/repair_environment.py, which lands with issue #556)"
+fi
+
 # The real `uv`: the first one on `PATH` that is not this shim.
 real=""
 saved_ifs=$IFS
@@ -131,7 +139,7 @@ which every worktree on this host shares. A sync narrower than the extras
 already installed uninstalls the rest for all of them (issue #615); a sync
 with \`--all-extras\` repoints the shared editable install (issue #556).
 
-  To add what is missing:  $self_dir/../repair_environment.py
+  To add what is missing:  $repair
   To sync an environment of your own:
       UV_PROJECT_ENVIRONMENT=/path/to/real/venv uv $subcommand ...
 MESSAGE
