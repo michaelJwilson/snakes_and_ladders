@@ -23,12 +23,12 @@ from snakes_and_ladders.search.alpha_expansion import (
     iterated_conditional_modes,
 )
 from snakes_and_ladders.search.backend import Backend
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 sys.setrecursionlimit(50_000)
 
 
-def _problem(extent: int, n_states: int) -> tuple[object, np.ndarray]:
+def _problem(extent: int, n_states: int) -> tuple[PottsGraph, np.ndarray]:
     graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 1.2)
     rng = np.random.default_rng(extent * 10 + n_states)
     return graph, rng.normal(size=(graph.n_nodes, n_states))
