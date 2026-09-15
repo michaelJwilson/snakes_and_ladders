@@ -52,7 +52,7 @@ def test_a_class_missing_a_member_is_not_an_implementer() -> None:
             return 0.0
 
     members = seams_survey.members_of(
-        importlib.import_module("snakes_and_ladders.opt.schedule").Schedule
+        importlib.import_module("snakes_and_ladders.opt.schedule").TempSchedule
     )
     assert seams_survey._satisfies(Complete, members)
     assert not seams_survey._satisfies(Partial, members)
