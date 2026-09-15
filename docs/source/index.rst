@@ -144,6 +144,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.belief_propagation
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.schedule
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.message_passing
    :members:
 

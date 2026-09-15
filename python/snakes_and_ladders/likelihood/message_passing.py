@@ -34,13 +34,13 @@ with the same arithmetic per message in the same order, pinned bitwise on
 every schedule. Rooting at the first variable is shared with the reference, so
 the tree messages compare edge for edge.
 
-``_Layout``'s ``variable_edges`` and ``factor_edges`` stay lists of lists, and
+``Layout``'s ``variable_edges`` and ``factor_edges`` stay lists of lists, and
 issue #586 measured rather than assumed that: building the whole layout is
 **0.6 per cent** of a ``sum_product`` over a 2,000-variable chain, 0.24 on a
 2,000-leaf star and 0.22 on a loopy 16x16 lattice, so moving it to
 :class:`~snakes_and_ladders.incidence.SparseIncidence` would pay nothing
 (root ``CLAUDE.md``, Profile first). What the profile did rank is the tree
-*schedule*: :meth:`_Layout.tree_steps` is 18.2 per cent of the run at 500
+*schedule*: :meth:`Layout.tree_steps` is 18.2 per cent of the run at 500
 variables and 24.4 at 2,000, because a chain has one message per level and
 the grouping machinery is paid per level to group one thing. That is issue
 #592, and it is a different change from this one.
@@ -49,28 +49,27 @@ the grouping machinery is paid per level to group one thing. That is issue
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 
 import numpy as np
 
+from snakes_and_ladders.likelihood.schedule import (
+    FactorSends,
+    FloodingSchedule,
+    Guarantee,
+    Layout,
+    MessageSchedule,
+    Schedule,
+    Step,
+    VariableSends,
+    resolve,
+)
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 
 DEFAULT_DAMPING = 0.5
 DEFAULT_TOLERANCE = 1e-10
 DEFAULT_MAX_ITERATIONS = 500
-
-
-class MessageSchedule(StrEnum):
-    """How messages are ordered."""
-
-    TREE = "tree"
-    """Leaves to root then root to leaves: exact, and refused off a tree."""
-
-    FLOODING = "flooding"
-    """Every message from its neighbours' previous values, damped, until the
-    largest change falls below the tolerance: the Bethe approximation."""
 
 
 class ConvergenceError(RuntimeError):
@@ -93,220 +92,38 @@ class Marginals:
         For max-product, the unnormalized log-density at the returned
         assignment: the maximum, on a tree with a unique maximum.
     iterations : int
-        Sweeps run; ``2`` for the tree schedule.
-    exact : bool
-        Whether the graph is a tree, so the numbers above are exact.
+        Sweeps run; ``2`` for the tree schedule, ``1`` for each of its halves.
+    guarantee : Guarantee
+        What the schedule that produced these makes of them: ``EXACT``,
+        ``PARTIAL`` --- exact but not everywhere, with the undefined marginals
+        absent from ``variable`` rather than approximate --- or
+        ``APPROXIMATE``. A field with three values rather than a boolean,
+        because a half-pass answer is neither exact nor approximate and
+        calling it either loses what it is (issue #592).
+    tree : bool
+        Whether the graph is a tree. Distinct from ``guarantee``: a loopy
+        graph under flooding and a tree under flooding are both
+        ``APPROXIMATE``, and only the second is exact at its fixed point.
     """
 
     variable: Mapping[str, np.ndarray]
     factor: Mapping[str, np.ndarray]
     log_partition: float
     iterations: int
-    exact: bool
+    guarantee: Guarantee
+    tree: bool
 
+    @property
+    def exact(self) -> bool:
+        """Whether the numbers above are exact: the pre-#592 spelling, kept.
 
-@dataclass(frozen=True)
-class _VariableSends:
-    """Variable-to-factor messages of one (degree, cardinality), as edge rows.
-
-    ``targets[r]`` is the edge written; ``sources[r]`` the variable's other
-    edges in factor order, whose factor-to-variable messages are added in
-    that order onto zeros -- the reference's arithmetic, term for term.
-    """
-
-    cardinality: int
-    targets: np.ndarray
-    sources: np.ndarray
-
-
-@dataclass(frozen=True)
-class _VariableBeliefs:
-    """Variables of one (degree, cardinality) with all their edges, for the beliefs."""
-
-    cardinality: int
-    variables: np.ndarray
-    edges: np.ndarray
-
-
-@dataclass(frozen=True)
-class _FactorSends:
-    """Factor-to-variable messages of one table shape along one axis.
-
-    ``tables`` stacks the group's log tables as ``(n, *shape)``; ``incoming``
-    holds each factor's edges per axis, and ``targets`` the edge row written
-    -- or, when ``axis`` is ``None`` (the beliefs), the factor's own index.
-    """
-
-    shape: tuple[int, ...]
-    axis: int | None
-    targets: np.ndarray
-    tables: np.ndarray
-    incoming: np.ndarray
-
-
-_Step = tuple[list[_VariableSends], list[_FactorSends]]
-
-
-class _Layout:
-    """The graph as contiguous edge arrays, and the groups a sweep runs over."""
-
-    def __init__(self, graph: FactorGraph) -> None:
-        self.graph = graph
-        index = {variable.name: i for i, variable in enumerate(graph.variables)}
-        self.cardinality = [variable.cardinality for variable in graph.variables]
-        self.width = max(self.cardinality)
-        self.edge_variable: list[int] = []
-        self.edge_factor: list[int] = []
-        self.variable_edges: list[list[int]] = [[] for _ in graph.variables]
-        self.factor_edges: list[list[int]] = []
-        for position, factor in enumerate(graph.factors):
-            edges = []
-            for name in factor.variables:
-                edge = len(self.edge_variable)
-                self.edge_variable.append(index[name])
-                self.edge_factor.append(position)
-                self.variable_edges[index[name]].append(edge)
-                edges.append(edge)
-            self.factor_edges.append(edges)
-        self.n_edges = len(self.edge_variable)
-
-    def variable_sends(self, pairs: Iterable[tuple[int, int]]) -> list[_VariableSends]:
-        """Group ``(variable, target edge)`` sends by (degree, cardinality)."""
-        buckets: dict[tuple[int, int], tuple[list[int], list[list[int]]]] = {}
-        for variable, target in pairs:
-            sources = [e for e in self.variable_edges[variable] if e != target]
-            key = (len(sources), self.cardinality[variable])
-            targets, rows = buckets.setdefault(key, ([], []))
-            targets.append(target)
-            rows.append(sources)
-        return [
-            _VariableSends(
-                cardinality,
-                np.asarray(targets, dtype=np.int64),
-                np.asarray(rows, dtype=np.int64).reshape(len(targets), degree),
-            )
-            for (degree, cardinality), (targets, rows) in buckets.items()
-        ]
-
-    def factor_sends(
-        self, pairs: Iterable[tuple[int, int | None]]
-    ) -> list[_FactorSends]:
-        """Group ``(factor, axis)`` sends by (table shape, axis); ``None`` keeps every axis."""
-        buckets: dict[
-            tuple[tuple[int, ...], int | None],
-            tuple[list[int], list[np.ndarray], list[list[int]]],
-        ] = {}
-        for position, axis in pairs:
-            table = self.graph.factors[position].log_table
-            targets, tables, incoming = buckets.setdefault(
-                (table.shape, axis), ([], [], [])
-            )
-            edges = self.factor_edges[position]
-            targets.append(position if axis is None else edges[axis])
-            tables.append(table)
-            incoming.append(edges)
-        return [
-            _FactorSends(
-                shape,
-                axis,
-                np.asarray(targets, dtype=np.int64),
-                tables[0][np.newaxis] if len(tables) == 1 else np.stack(tables),
-                np.asarray(incoming, dtype=np.int64),
-            )
-            for (shape, axis), (targets, tables, incoming) in buckets.items()
-        ]
-
-    def flooding_step(self) -> _Step:
-        """Every variable-to-factor send, then every factor-to-variable send."""
-        variables = self.variable_sends(
-            (v, e) for v, edges in enumerate(self.variable_edges) for e in edges
-        )
-        factors = self.factor_sends(
-            (f, axis)
-            for f, edges in enumerate(self.factor_edges)
-            for axis in range(len(edges))
-        )
-        return variables, factors
-
-    def tree_steps(self) -> list[_Step]:
-        """Leaf-to-root sends grouped by height, then root-to-leaf by depth.
-
-        Rooted at the first variable, as the reference is. A node's up message
-        needs only its children's, so every node of one height sends in one
-        call; the down pass mirrors it by depth. Breadth-first rather than
-        recursive, so a 20,000-step chain is not a recursion-depth error.
+        ``guarantee is EXACT``, or an approximate schedule that converged on a
+        tree --- which is what the boolean meant when it was the graph's
+        property alone.
         """
-        n_variables = len(self.cardinality)
-        n_nodes = n_variables + len(self.factor_edges)
-        parent_edge = [-1] * n_nodes
-        parent = [-1] * n_nodes
-        depth = [0] * n_nodes
-        order = [0]
-        for node in order:
-            for edge in self._edges_of(node):
-                if edge == parent_edge[node]:
-                    continue
-                child = self._other_end(node, edge)
-                parent_edge[child], parent[child], depth[child] = (
-                    edge,
-                    node,
-                    depth[node] + 1,
-                )
-                order.append(child)
-        height = [0] * n_nodes
-        for node in reversed(order[1:]):
-            height[parent[node]] = max(height[parent[node]], height[node] + 1)
-
-        up: dict[int, tuple[list[tuple[int, int]], list[tuple[int, int | None]]]] = {}
-        down: dict[int, tuple[list[tuple[int, int]], list[tuple[int, int | None]]]] = {}
-        for node in order:
-            for edge in self._edges_of(node):
-                level = up if edge == parent_edge[node] else down
-                key = height[node] if edge == parent_edge[node] else depth[node]
-                variables, factors = level.setdefault(key, ([], []))
-                if node < n_variables:
-                    variables.append((node, edge))
-                else:
-                    factors.append(
-                        (
-                            node - n_variables,
-                            self.factor_edges[node - n_variables].index(edge),
-                        )
-                    )
-        return [
-            (self.variable_sends(variables), self.factor_sends(factors))
-            for level in (up, down)
-            for _, (variables, factors) in sorted(level.items())
-        ]
-
-    def variable_beliefs(self) -> list[_VariableBeliefs]:
-        buckets: dict[tuple[int, int], tuple[list[int], list[list[int]]]] = {}
-        for variable, edges in enumerate(self.variable_edges):
-            variables, rows = buckets.setdefault(
-                (len(edges), self.cardinality[variable]), ([], [])
-            )
-            variables.append(variable)
-            rows.append(edges)
-        return [
-            _VariableBeliefs(
-                cardinality,
-                np.asarray(variables, dtype=np.int64),
-                np.asarray(rows, dtype=np.int64),
-            )
-            for (_, cardinality), (variables, rows) in buckets.items()
-        ]
-
-    def _edges_of(self, node: int) -> list[int]:
-        n_variables = len(self.cardinality)
-        if node < n_variables:
-            return self.variable_edges[node]
-        return self.factor_edges[node - n_variables]
-
-    def _other_end(self, node: int, edge: int) -> int:
-        n_variables = len(self.cardinality)
-        if node < n_variables:
-            return n_variables + self.edge_factor[edge]
-        return self.edge_variable[edge]
+        return self.guarantee is Guarantee.EXACT or (
+            self.tree and self.guarantee is Guarantee.APPROXIMATE
+        )
 
 
 def _logsumexp_last(values: np.ndarray) -> np.ndarray:
@@ -327,17 +144,26 @@ def _normalize(rows: np.ndarray) -> np.ndarray:
 
 
 def _send_from_variables(
-    group: _VariableSends, to_variable: np.ndarray, to_factor: np.ndarray
-) -> None:
-    """Write the group's variable-to-factor messages into ``to_factor``."""
+    group: VariableSends, to_variable: np.ndarray, to_factor: np.ndarray
+) -> np.ndarray:
+    """Write the group's variable-to-factor messages; return what normalizing removed.
+
+    Every message is normalized as it is sent, which is what keeps a long
+    chain off the floating-point floor --- and which throws away the scale.
+    The scales are ``log Z``: their sum, plus the root's, is it exactly. Only
+    a bounded schedule asks for them (issue #592); flooding reaches ``log Z``
+    through the Bethe free energy instead and does not pay for this.
+    """
     c = group.cardinality
     total = np.zeros((group.targets.shape[0], c))
     for i in range(group.sources.shape[1]):
         total = total + to_variable[group.sources[:, i], :c]
-    to_factor[group.targets, :c] = _normalize(total)
+    scale = _logsumexp_last(total)
+    to_factor[group.targets, :c] = total - scale
+    return np.asarray(scale)
 
 
-def _factor_terms(group: _FactorSends, to_factor: np.ndarray) -> np.ndarray:
+def _factor_terms(group: FactorSends, to_factor: np.ndarray) -> np.ndarray:
     """Each table plus its incoming messages on every axis but ``group.axis``, in axis order."""
     acc = group.tables
     n = group.targets.shape[0]
@@ -351,7 +177,7 @@ def _factor_terms(group: _FactorSends, to_factor: np.ndarray) -> np.ndarray:
 
 
 def _send_from_factors(
-    group: _FactorSends, to_factor: np.ndarray, maximum: bool
+    group: FactorSends, to_factor: np.ndarray, maximum: bool
 ) -> np.ndarray:
     """The group's factor-to-variable messages, ``(n, cardinality of the axis)``, unnormalized."""
     acc = _factor_terms(group, to_factor)
@@ -366,57 +192,125 @@ def _send_from_factors(
     return _logsumexp_last(flat)[:, :, 0]
 
 
+def _apply(
+    step: Step,
+    to_variable: np.ndarray,
+    to_factor: np.ndarray,
+    maximum: bool,
+    damping: float | None,
+    track: bool = False,
+) -> tuple[float, float]:
+    """Run one step's sends; return the largest change, and the scale removed.
+
+    ``damping`` is ``None`` for a bounded schedule, which writes each message
+    once and has nothing to mix it with. That is not only a shortcut: a
+    bounded send normalizes once, and normalizing an already-normalized row a
+    second time is not the identity in floating point, so routing the tree
+    schedule through the damped path would move its output in the last bits.
+    The two branches below are the two this function replaced, unchanged.
+    """
+    variables, factors = step
+    scale = 0.0
+    for group in variables:
+        removed = _send_from_variables(group, to_variable, to_factor)
+        if track:
+            scale += float(removed.sum())
+    residual = 0.0
+    for sends in factors:
+        c = sends.shape[sends.axis]  # type: ignore[index]
+        raw = _send_from_factors(sends, to_factor, maximum)
+        proposal = _normalize(raw)
+        if track:
+            scale += float(_logsumexp_last(raw).sum())
+        if damping is None:
+            to_variable[sends.targets, :c] = proposal
+            continue
+        old = to_variable[sends.targets, :c]
+        updated = _normalize(damping * old + (1.0 - damping) * proposal)
+        residual = max(residual, float(np.abs(updated - old).max()))
+        to_variable[sends.targets, :c] = updated
+    return residual, scale
+
+
 def _run(
     graph: FactorGraph,
-    schedule: MessageSchedule,
+    schedule: Schedule | MessageSchedule | str,
     maximum: bool,
     damping: float,
     tolerance: float,
     max_iterations: int,
-) -> tuple[_Layout, np.ndarray, np.ndarray, int, bool]:
-    """Messages in both directions as edge rows, the iteration count, and whether exact."""
-    layout = _Layout(graph)
-    tree = graph.is_tree()
+) -> tuple[Layout, np.ndarray, np.ndarray, int, Schedule, float]:
+    """Messages in both directions as edge rows, the sweeps run, and the schedule.
+
+    One loop for every schedule (issue #592). A bounded schedule's plan is
+    finite and runs once; an unbounded one repeats its sweep until the largest
+    change falls below the tolerance.
+    """
+    plan = resolve(schedule)
+    layout = Layout(graph)
+    if plan.requires_tree and not graph.is_tree():
+        msg = (
+            f"the {plan.name} schedule is exact only on a tree; "
+            "this graph has a cycle or is disconnected"
+        )
+        raise ValueError(msg)
     to_variable = np.zeros((layout.n_edges, layout.width))
     to_factor = np.zeros((layout.n_edges, layout.width))
 
-    if schedule is MessageSchedule.TREE:
-        if not tree:
-            msg = "the tree schedule is exact only on a tree; this graph has a cycle or is disconnected"
-            raise ValueError(msg)
-        for variables, factors in layout.tree_steps():
-            for group in variables:
-                _send_from_variables(group, to_variable, to_factor)
-            for sends in factors:
-                c = sends.shape[sends.axis]  # type: ignore[index]
-                to_variable[sends.targets, :c] = _normalize(
-                    _send_from_factors(sends, to_factor, maximum)
-                )
-        return layout, to_variable, to_factor, 2, tree
+    if plan.bounded:
+        steps = 0.0
+        partial = plan.guarantee is Guarantee.PARTIAL
+        for step in plan.steps(layout):
+            _, removed = _apply(step, to_variable, to_factor, maximum, None, partial)
+            steps += removed
+        # Reported as passes, not steps: two for the tree schedule, one for
+        # each of its halves, which is what the count meant before #592.
+        passes = 2 if plan.guarantee is Guarantee.EXACT else 1
+        return layout, to_variable, to_factor, passes, plan, steps
 
     if not 0.0 <= damping < 1.0:
         msg = f"damping must be in [0, 1), got {damping}"
         raise ValueError(msg)
-    variables, factors = layout.flooding_step()
-    for iteration in range(1, max_iterations + 1):
-        residual = 0.0
-        for group in variables:
-            _send_from_variables(group, to_variable, to_factor)
-        for sends in factors:
-            c = sends.shape[sends.axis]  # type: ignore[index]
-            old = to_variable[sends.targets, :c]
-            proposal = _normalize(_send_from_factors(sends, to_factor, maximum))
-            updated = _normalize(damping * old + (1.0 - damping) * proposal)
-            residual = max(residual, float(np.abs(updated - old).max()))
-            to_variable[sends.targets, :c] = updated
+    length = _sweep_length(plan, layout)
+    residual, sweep, position = math.inf, 0, 0
+    for step in plan.steps(layout):
+        if position == 0:
+            residual = 0.0
+        residual = max(
+            residual, _apply(step, to_variable, to_factor, maximum, damping)[0]
+        )
+        position += 1
+        if position < length:
+            continue
+        position, sweep = 0, sweep + 1
         if residual <= tolerance:
-            return layout, to_variable, to_factor, iteration, tree
-    msg = f"flooding did not converge in {max_iterations} sweeps; residual {residual:.2e} above {tolerance:.0e}"
+            return layout, to_variable, to_factor, sweep, plan, math.nan
+        if sweep >= max_iterations:
+            break
+    msg = (
+        f"{plan.name} did not converge in {max_iterations} sweeps; "
+        f"residual {residual:.2e} above {tolerance:.0e}"
+    )
     raise ConvergenceError(msg)
 
 
+def _sweep_length(plan: Schedule, layout: Layout) -> int:
+    """How many steps make one sweep, so a residual is compared over a full pass.
+
+    Flooding sends everything in one step, so its sweep is one; a sequential
+    schedule sends one factor's messages per step, so its sweep is the factor
+    count. Comparing a residual against the tolerance mid-sweep would stop on
+    a message that had simply not moved yet.
+    """
+    return 1 if isinstance(plan, FloodingSchedule) else len(layout.factor_edges)
+
+
 def _beliefs(
-    layout: _Layout, to_variable: np.ndarray, to_factor: np.ndarray, maximum: bool
+    layout: Layout,
+    to_variable: np.ndarray,
+    to_factor: np.ndarray,
+    maximum: bool,
+    defined: frozenset[int] | None = None,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], float]:
     graph = layout.graph
     variable_rows: list[np.ndarray | None] = [None] * len(graph.variables)
@@ -454,10 +348,16 @@ def _beliefs(
             free_energy += float(term.sum())
         for position, table in zip(sends.targets, b, strict=True):
             factor_rows[position] = table
+    # A partial schedule leaves most marginals undefined rather than
+    # approximate, so they are absent from the mapping and a caller reading
+    # one gets a `KeyError` instead of a number that looks like a posterior
+    # (issue #592).
     variable = {
         v.name: row
-        for v, row in zip(graph.variables, variable_rows, strict=True)
-        if row is not None
+        for index, (v, row) in enumerate(
+            zip(graph.variables, variable_rows, strict=True)
+        )
+        if row is not None and (defined is None or index in defined)
     }
     factor = {
         f.name: row
@@ -470,7 +370,7 @@ def _beliefs(
 def sum_product(
     graph: FactorGraph,
     *,
-    schedule: MessageSchedule = MessageSchedule.TREE,
+    schedule: Schedule | MessageSchedule | str = MessageSchedule.TREE,
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
@@ -485,17 +385,26 @@ def sum_product(
     ConvergenceError
         If flooding does not settle in ``max_iterations`` sweeps.
     """
-    layout, to_variable, to_factor, iterations, exact = _run(
+    layout, to_variable, to_factor, iterations, plan, scale = _run(
         graph, schedule, False, damping, tolerance, max_iterations
     )
-    variable, factor, log_partition = _beliefs(layout, to_variable, to_factor, False)
-    return Marginals(variable, factor, log_partition, iterations, exact)
+    variable, factor, log_partition = _beliefs(
+        layout, to_variable, to_factor, False, plan.defined(layout)
+    )
+    return Marginals(
+        variable,
+        factor,
+        plan.log_partition(layout, to_variable, log_partition, scale),
+        iterations,
+        plan.guarantee,
+        graph.is_tree(),
+    )
 
 
 def max_product(
     graph: FactorGraph,
     *,
-    schedule: MessageSchedule = MessageSchedule.TREE,
+    schedule: Schedule | MessageSchedule | str = MessageSchedule.TREE,
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
@@ -506,11 +415,39 @@ def max_product(
     chain. Ties are broken by the smallest state, which is the tie rule
     :func:`snakes_and_ladders.likelihood.hmm_paths.enumerate_hidden_paths` uses.
     """
-    layout, to_variable, to_factor, iterations, exact = _run(
+    layout, to_variable, to_factor, iterations, plan, scale = _run(
         graph, schedule, True, damping, tolerance, max_iterations
     )
-    variable, factor, _ = _beliefs(layout, to_variable, to_factor, True)
-    assignment = {name: int(np.argmax(values)) for name, values in variable.items()}
-    return assignment, Marginals(
-        variable, factor, graph.log_density(assignment), iterations, exact
+    variable, factor, _ = _beliefs(
+        layout, to_variable, to_factor, True, plan.defined(layout)
     )
+    assignment = {name: int(np.argmax(values)) for name, values in variable.items()}
+    density = (
+        graph.log_density(assignment)
+        if len(assignment) == len(graph.variables)
+        else math.nan
+    )
+    return assignment, Marginals(
+        variable, factor, density, iterations, plan.guarantee, graph.is_tree()
+    )
+
+
+#: What this module offers, re-exports included. Declared rather than left
+#: implicit: a bare re-export is a private name under ``mypy --strict``, so
+#: `MessageSchedule` --- which every caller of `sum_product` names, and which
+#: moved to `schedule` in issue #592 --- would stop type-checking at the call
+#: site while the functions beside it passed.
+__all__ = [
+    "DEFAULT_DAMPING",
+    "DEFAULT_MAX_ITERATIONS",
+    "DEFAULT_TOLERANCE",
+    "ConvergenceError",
+    "Guarantee",
+    "Layout",
+    "Marginals",
+    "MessageSchedule",
+    "Schedule",
+    "Step",
+    "max_product",
+    "sum_product",
+]

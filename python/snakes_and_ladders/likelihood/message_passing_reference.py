@@ -24,6 +24,7 @@ from snakes_and_ladders.likelihood.message_passing import (
     DEFAULT_MAX_ITERATIONS,
     DEFAULT_TOLERANCE,
     ConvergenceError,
+    Guarantee,
     Marginals,
     MessageSchedule,
 )
@@ -217,6 +218,22 @@ def _beliefs(
     return beliefs_v, beliefs_f, -free_energy
 
 
+def _guarantee(schedule: MessageSchedule) -> Guarantee:
+    """The guarantee the reference's two schedules carry (issue #592).
+
+    The reference implements the two orders that predate the schedule seam.
+    A partial schedule has no reference yet, and asking for one here raises
+    rather than returning a `Marginals` labelled with a guarantee nothing
+    computed.
+    """
+    if schedule is MessageSchedule.TREE:
+        return Guarantee.EXACT
+    if schedule is MessageSchedule.FLOODING:
+        return Guarantee.APPROXIMATE
+    msg = f"the reference implements tree and flooding only, not {schedule}"
+    raise ValueError(msg)
+
+
 def sum_product(
     graph: FactorGraph,
     *,
@@ -239,7 +256,14 @@ def sum_product(
         graph, schedule, False, damping, tolerance, max_iterations
     )
     variable, factor, log_partition = _beliefs(graph, to_variable, to_factor, False)
-    return Marginals(variable, factor, log_partition, iterations, exact=graph.is_tree())
+    return Marginals(
+        variable,
+        factor,
+        log_partition,
+        iterations,
+        _guarantee(schedule),
+        graph.is_tree(),
+    )
 
 
 def max_product(
@@ -266,5 +290,6 @@ def max_product(
         factor,
         graph.log_density(assignment),
         iterations,
-        exact=graph.is_tree(),
+        _guarantee(schedule),
+        graph.is_tree(),
     )

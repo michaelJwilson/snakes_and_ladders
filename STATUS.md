@@ -3274,6 +3274,36 @@ taken: fourteen sites across seven modules reduced a score vector by
 `logsumexp(values[None, :], axis=1)[0]`, which is `axis=0`.
 `docs/experiments/016` and `017` carry the runs.
 
+**Message schedules (issue #592).** The order messages go in is an interface,
+`likelihood/schedule.py`, where it was two branches of an `if`. Five schedules
+declare a `Guarantee` of three values rather than a boolean, because the
+leaf-to-root pass alone is exact where it speaks and silent elsewhere and
+neither "exact" nor "approximate" says that: **`upward` returns all of `log Z`
+for 1.71x less work** than the two-pass schedule (85.8 ms against 146.4 ms on a
+1,000-variable chain), agreeing with it to one unit in the last place and with
+`likelihood.pruning.log_likelihood` --- an oracle sharing no code --- to 1e-13
+relative over seven sites. A marginal a schedule does not compute is absent
+rather than wrong, and `downward` reports `nan` for `log Z` rather than the
+nearest available number. `sim.factor_graph`'s six adapters already reach every
+graph class, so one seam covers the Potts lattice, the HMM chain, the tree, the
+coupled model, the Tanner graph and the trellis with no seventh adapter.
+
+The refactor is bitwise on the two schedules that predate it, asserted on a
+200-leaf star and a 50-node caterpillar as well as the suite's chains. It also
+uncovered a real defect: `sum_product(graph, schedule="tree")` ran **flooding**,
+because a plain string compares equal to a `StrEnum` member without being it and
+the branch used `is`.
+
+The cost the ticket named was only half recovered, and the half is recorded
+rather than rounded up. Carrying the axis from the breadth-first walk instead of
+a `list.index` scan paid **nothing** --- a chain's factors have degree two, so
+the scan it replaced was over two elements. Building the group arrays once per
+shape instead of once per level paid **1.21x** on the plan (64.2 to 52.9 ms at
+2,000 variables), taking its share of the run from 24.9 to 20.8 per cent. What
+remains has no hotspot: it is Python bookkeeping proportional to the edges, and
+removing it would mean vectorising the level assignment wholesale.
+`docs/experiments/018` carries the run.
+
 ## Consistency audit at 0.4.0
 
 What the release audit ([#358](https://github.com/michaelJwilson/snakes_and_ladders/issues/358))
