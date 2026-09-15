@@ -83,6 +83,8 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 *   **Scientific Outputs:** The suite must emit plots, tables and the  LaTeX documents.
 *   **Time is money:** test and build frameworks should be justified wrt time and computational budget, e.g. cached; a high priority is to quickly standup a minimal implementation against the ROADMAP.md with  test-driven development.  
 *   **The per-PR tier is the fast gate; the release gate runs everything.** A test over the per-PR duration cap, or whose claim is not needed to gate a merge, carries the `release` marker and runs for a release.
+*   **Select narrowly to iterate; gate on the tier.** Three axes compose — the problem a test exercises, derived from the fixture its module loads; the kind it is refereed by; and the tier it runs in. Reach for the narrowest selection that can still refute the change, `-m "potts_lattice and critical"` for the inner loop, and hold a push to `-m "not release"`. A selection narrower than the change is how a green run hides a failure: the full tier found 12 on #601 and 2 on #595, both after the per-PR gate passed. A narrow run is never reported as the gate.
+*   **A plan says how the work will be developed, not only how it will be checked.** A plan naming an oracle and a tolerance but no selection is a plan whose author will run the merge gate and nothing else. What it must name is `ROADMAP.md` §0.2's, and is not restated here.
 
 ## Definition of Done
 1.  **Regression Test:** Asserts scientific validity against known simulations, simpler/alternative algorithms, and pins expected output.

@@ -26,6 +26,19 @@ before it is published.
   **Open Questions** section carrying every question on the desired
   behaviour; a plan with nothing outstanding says so under that heading rather
   than omitting it. A plan is subject to `CLAUDE.md`'s Writing Style.
+
+  A plan states its **development strategy** beside its validation: the
+  selection it will iterate against, and the tier that validates it. The
+  narrow selection is for iterating — `-m "<problem> and critical"`, or the
+  kind the change is refereed by — and the tier the merge is gated on decides,
+  which is `-m "not release"`; the full tier runs on the push to `main` and is
+  not something an open pull request can have. A plan claiming a speedup names
+  a benchmark at a stress size too, per `CLAUDE.md`'s **Measurement** rule: the
+  gate's sizes are chosen to be cheap, not to be representative. Why this is
+  not bookkeeping: the gate is 212 of 2,746 tests (2026-09-15), #598's headline
+  benchmark was gate-sized and did not survive a stress-relevant reading, and
+  `CLAUDE.md`'s selection rule carries what the full tier has caught behind a
+  passing gate.
 - **Gate:** a maintainer applies `approved`, and only then may a pull request
   open. The pull request must implement the plan already in the thread. A plan
   that turns out to be flawed gets a revised plan posted to the same thread,
