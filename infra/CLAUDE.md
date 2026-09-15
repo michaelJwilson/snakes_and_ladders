@@ -90,3 +90,6 @@ that needs one skips without it, so the core install carries none of them.
 - **One implementation agent per four cores**, the document build counted as
   a process, and an agent waits for its own long job in the foreground: a job
   it detaches ends its turn and nothing resumes it (issue #369).
+
+*   **Incomplete work lives on an origin branch behind a draft pull request, never only in a worktree.** A worktree is scratch space: no backup, no reviewer, and nothing that reads it but the agent that made it. The rule is what lets `infra/reap_worktrees.py` retire a tree on the branch being gone from the remote, and the cost of the opposite policy is measured — this host reached 56 worktrees against 9 open pull requests, and the seventeen that looked like unsaved work held none of it: every one was zero commits ahead of `main`, carrying a stale index that would have reverted it (issue #618).
+
