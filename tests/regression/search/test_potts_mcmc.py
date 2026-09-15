@@ -765,23 +765,17 @@ def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
 # --- the Rust sweep's field, and where beta is applied (issue #571) -----------
 
 
-def _neighbour_lists(graph: PottsGraph) -> list[list[tuple[int, float]]]:
-    """The adjacency in the shape `_sweep_at`'s Python closure wants."""
-    offsets, index, couplings = graph.compressed_adjacency()
-    return [
-        [
-            (int(index[at]), float(couplings[at]))
-            for at in range(offsets[i], offsets[i + 1])
-        ]
-        for i in range(graph.n_nodes)
-    ]
-
-
 def _swept(
     graph: PottsGraph, rows: np.ndarray, backend: Backend, beta: float
 ) -> np.ndarray:
-    """Five sweeps from one seed, on the backend named."""
-    sweep = potts_mcmc._sweep_at(graph, rows, _neighbour_lists(graph), backend)
+    """Five sweeps from one seed, on the backend named.
+
+    The adjacency is passed in the compressed form both backends now read
+    (issue #277); the list-of-lists this test used to build for the Python
+    closure is the shape that builder replaced.
+    """
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    sweep = potts_mcmc._sweep_at(rows, offsets, neighbours, couplings, backend)
     state = np.zeros(graph.n_nodes, dtype=np.int64)
     rng = np.random.default_rng(7)
     for _ in range(5):

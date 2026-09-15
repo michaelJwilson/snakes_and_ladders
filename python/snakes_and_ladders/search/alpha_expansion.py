@@ -33,6 +33,7 @@ from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
 from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import energies
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
 # coupling the ratio is 1 and the factor is exactly 2.
@@ -69,17 +70,15 @@ class ExpansionResult:
 def energy(graph: PottsGraph, field_values: np.ndarray, labelling: np.ndarray) -> float:
     """``-sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]``, for any state count.
 
-    The same convention :func:`snakes_and_ladders.likelihood.potts.log_weights` defines,
-    negated, and generalized to a per-node field exactly as
-    :func:`snakes_and_ladders.search.maxflow.energy` does for two states. A test pins the
-    two against each other at ``k = 2`` so the multi-state form cannot drift.
+    One labelling is the single-configuration case of
+    :func:`snakes_and_ladders.sim.potts.energies`, which this passes
+    ``labelling[None]`` and reads element zero of: the block form is
+    vectorized over the edges, where the loop this held measured 92% of the
+    self time (issue #341), so scoring one labelling through it is faster
+    than the loop it replaces rather than slower (issue #277).
     """
     values = _site_field(graph, field_values)
-    total = float(values[np.arange(graph.n_nodes), labelling].sum())
-    for (first, second), coupling in graph.weighted_edges():
-        if labelling[first] == labelling[second]:
-            total += coupling
-    return -total
+    return float(energies(graph, values, np.asarray(labelling)[None])[0])
 
 
 def expand(
@@ -340,23 +339,31 @@ def iterated_conditional_modes(
         msg = f"iterated conditional modes has no {backend} backend"
         raise ValueError(msg)
 
-    neighbours: list[list[tuple[int, float]]] = [[] for _ in range(graph.n_nodes)]
-    for (first, second), coupling in graph.weighted_edges():
-        neighbours[first].append((second, coupling))
-        neighbours[second].append((first, coupling))
+    # The compressed rows as Python sequences, converted once rather than
+    # sliced per site: a NumPy slice and gather per site measured a third of
+    # this sweep (issue #277, `sim.potts.heat_bath_log_weights`). The
+    # `numba` kernel above takes the arrays themselves.
+    offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
+    bounds = offsets.tolist()
+    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
 
+    # The labels as a Python list for the duration: the sweep reads a
+    # neighbour's label once per incident edge, and a list read is 0.18 us
+    # cheaper than a NumPy scalar one. Same reads, same order, same writes.
+    labels = labelling.tolist()
     for _ in range(max_sweeps):
         changed = False
         for node in range(graph.n_nodes):
             local = -values[node].copy()
-            for neighbour, coupling in neighbours[node]:
-                local[labelling[neighbour]] -= coupling
+            for position in range(bounds[node], bounds[node + 1]):
+                local[labels[neighbours[position]]] -= couplings[position]
             best = int(np.argmin(local))
-            if best != labelling[node]:
-                labelling[node] = best
+            if best != labels[node]:
+                labels[node] = best
                 changed = True
         if not changed:
             break
+    labelling[:] = labels
 
     return labelling, energy(graph, values, labelling)
 

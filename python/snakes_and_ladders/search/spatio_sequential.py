@@ -156,10 +156,9 @@ def _wolff_update(
     on ``beta * sum_C (H[n, new] - H[n, old])``.
     """
     n_nodes = labels.shape[0]
-    adjacency: list[list[tuple[int, float]]] = [[] for _ in range(n_nodes)]
-    for (first, second), coupling in graph.weighted_edges():
-        adjacency[first].append((second, coupling))
-        adjacency[second].append((first, coupling))
+    offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
+    bounds = offsets.tolist()
+    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
     root = int(rng.integers(n_nodes))
     colour = int(labels[root])
     members = [root]
@@ -168,7 +167,8 @@ def _wolff_update(
     frontier = [root]
     while frontier:
         node = frontier.pop()
-        for neighbour, coupling in adjacency[node]:
+        for position in range(bounds[node], bounds[node + 1]):
+            neighbour, coupling = neighbours[position], couplings[position]
             if inside[neighbour] or labels[neighbour] != colour:
                 continue
             if rng.random() < 1.0 - np.exp(-beta * coupling):

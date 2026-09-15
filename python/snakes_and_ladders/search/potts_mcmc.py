@@ -45,11 +45,29 @@ from typing import NamedTuple
 
 import numpy as np
 
-from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.schedule import AdaptedLadder, Schedule, adapt_ladder
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.sim.potts import energies, heat_bath_log_weights, site_field
+
+#: Declared so :func:`snakes_and_ladders.sim.potts.energies` re-exports from
+#: this module, which `mypy --strict` otherwise refuses: the energy moved to
+#: `sim/` in issue #277 so the simulator could score with it, and every
+#: caller that had it from here still does.
+__all__ = [
+    "AnnealedPotts",
+    "ClusterCounter",
+    "PottsChain",
+    "PottsMove",
+    "Recolour",
+    "TemperedChains",
+    "adapt_ladder_potts",
+    "anneal_potts",
+    "energies",
+    "parallel_tempering",
+    "sample_potts",
+    "tempered",
+]
 
 
 class PottsMove(StrEnum):
@@ -271,17 +289,19 @@ def sample_potts(
     rows = site_field(field, graph.n_nodes)
     n_states = int(rows.shape[1])
     state = rng.integers(0, n_states, size=graph.n_nodes)
-    neighbours = _adjacency(graph)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
     cluster_total, cluster_count = 0, 0
     for step in range(-burn_in * thin, n_sweeps * thin):
         if move is PottsMove.SINGLE_SITE:
-            _single_site_sweep(state, rows, neighbours, rng)
+            _single_site_sweep(state, rows, offsets, neighbours, couplings, rng)
         elif move is PottsMove.SWENDSEN_WANG:
             _swendsen_wang_sweep(state, graph, rows, rng)
         else:
-            cluster_total += _wolff_sweep(state, rows, neighbours, rng)
+            cluster_total += _wolff_sweep(
+                state, rows, offsets, neighbours, couplings, rng
+            )
             cluster_count += 1
         if step >= 0 and (step + 1) % thin == 0:
             recorded[step // thin] = state
@@ -389,11 +409,11 @@ def anneal_potts(
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     state = rng.integers(0, int(rows.shape[1]), size=graph.n_nodes)
-    neighbours = _adjacency(graph)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
 
     best_state = state.copy()
     best_energy = float(energies(graph, rows, state[None])[0])
-    sweep = _sweep_at(graph, rows, neighbours, backend)
+    sweep = _sweep_at(rows, offsets, neighbours, couplings, backend)
     # A heat-bath sweep reads every site's label once as a neighbour of each
     # incident edge and writes it once; the bond pass of Swendsen-Wang reads
     # the same two labels per edge. Counting both in one unit is what makes
@@ -412,7 +432,17 @@ def anneal_potts(
                 _swendsen_wang_sweep(state, graph, rows, rng, counter, beta)
                 visits += per_sweep
             else:
-                _wolff_sweep(state, rows, neighbours, rng, counter, graph, beta)
+                _wolff_sweep(
+                    state,
+                    rows,
+                    offsets,
+                    neighbours,
+                    couplings,
+                    rng,
+                    counter,
+                    graph,
+                    beta,
+                )
                 # A Wolff step reads each cluster member's neighbours and
                 # writes the members; a heat-bath sweep is charged the same
                 # way, so one budget covers both.
@@ -558,7 +588,7 @@ def parallel_tempering(
     states = np.stack(
         [child.integers(0, n_states, size=graph.n_nodes) for child in children]
     )
-    neighbours = _adjacency(graph)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
 
     recorded = np.empty((n_sweeps, n_replicas, graph.n_nodes), dtype=np.int64)
     proposed = np.zeros(n_replicas - 1)
@@ -567,7 +597,7 @@ def parallel_tempering(
     best_index = int(np.argmin(current))
     best, best_energy = states[best_index].copy(), float(current[best_index])
 
-    sweep = _sweep_at(graph, rows, neighbours, backend)
+    sweep = _sweep_at(rows, offsets, neighbours, couplings, backend)
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(n_replicas):
             sweep(states[replica], children[replica], betas[replica])
@@ -643,29 +673,11 @@ def adapt_ladder_potts(
     return adapt_ladder(measure, ladder, band, max_rounds, max_replicas)
 
 
-def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
-    """Energy of each configuration, ``E = -log W``.
-
-    Taken from :func:`snakes_and_ladders.likelihood.potts.log_weights` rather than written
-    again, so the samplers and the exact evaluators cannot disagree about what
-    model they are on.
-    """
-    return -log_weights(graph, field, states)
-
-
-def _adjacency(graph: PottsGraph) -> list[list[tuple[int, float]]]:
-    """Neighbour lists with the coupling on each incident edge."""
-    neighbours: list[list[tuple[int, float]]] = [[] for _ in range(graph.n_nodes)]
-    for (first, second), coupling in graph.weighted_edges():
-        neighbours[first].append((second, coupling))
-        neighbours[second].append((first, coupling))
-    return neighbours
-
-
 def _sweep_at(
-    graph: PottsGraph,
     rows: np.ndarray,
-    neighbours: list[list[tuple[int, float]]],
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
     backend: Backend,
 ) -> Callable[[np.ndarray, np.random.Generator, float], None]:
     """One tempered heat-bath sweep, on the backend the caller named.
@@ -676,23 +688,29 @@ def _sweep_at(
     the Rust kernel as ``beta`` itself, applied to the accumulated local field
     where the Python sweep applies it, so the two agree bitwise at every
     temperature rather than only at 1.0 (issue #571).
+
+    The adjacency arrives as the compressed rows both backends read, built
+    once by the caller: the Python sweep indexes them and the kernel takes
+    them across the boundary without marshalling (issue #277).
     """
     if backend is Backend.PYTHON:
 
         def python_sweep(
             state: np.ndarray, rng: np.random.Generator, beta: float
         ) -> None:
-            _single_site_sweep(state, rows, neighbours, rng, beta=beta)
+            _single_site_sweep(
+                state, rows, offsets, neighbours, couplings, rng, beta=beta
+            )
 
         return python_sweep
     if backend is Backend.RUST:
         from snakes_and_ladders import oxi_snakes_and_ladders
 
-        offsets, neighbour_index, couplings = graph.compressed_adjacency()
         # The field crosses as one row per site, which is the shape `rows`
         # already has: `sim.potts.site_field` widened it at the entry point,
         # so a shared field is rows that are all equal and there is one code
-        # path rather than two (issue #551). Both arrays are converted once
+        # path rather than two (issue #551, #571). The adjacency is the
+        # caller's, built once (issue #277); both arrays are made contiguous
         # here rather than per sweep.
         contiguous_field = np.ascontiguousarray(rows, dtype=np.float64)
         contiguous_couplings = np.ascontiguousarray(couplings, dtype=np.float64)
@@ -711,7 +729,7 @@ def _sweep_at(
                 state,
                 contiguous_field,
                 offsets,
-                neighbour_index,
+                neighbours,
                 contiguous_couplings,
                 draws,
                 1,
@@ -726,32 +744,41 @@ def _sweep_at(
 def _single_site_sweep(
     state: np.ndarray,
     rows: np.ndarray,
-    neighbours: list[list[tuple[int, float]]],
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
     rng: np.random.Generator,
     beta: float = 1.0,
 ) -> None:
     """One heat-bath sweep: every site redrawn from its exact conditional.
 
-    The baseline the cluster algorithms are measured against, and the update
-    `snakes_and_ladders.sim.potts._simulate_gibbs` uses --- restated for a
-    single chain rather than shared, since that one is vectorized across many
-    independent chains and this one steps a single chain in time.
+    The baseline the cluster algorithms are measured against. The conditional
+    is :func:`snakes_and_ladders.sim.potts.heat_bath_log_weights`, shared with
+    the vectorized simulator; the loop is not, since that one runs many
+    independent chains at once and this one steps a single chain in time
+    (issue #277).
 
     ``rows`` is the field as one row per site, widened by
     :func:`snakes_and_ladders.sim.potts.site_field` at the entry point. A
     shared field reaches here as rows that are all equal, so there is one
     code path rather than two, on `sim/potts.py`'s rule (issue #551).
 
+    ``offsets``, ``neighbours`` and ``couplings`` are the graph's compressed
+    rows: site ``i``'s neighbours are ``neighbours[offsets[i]:offsets[i + 1]]``
+    and their couplings sit at the same positions.
+
     ``beta`` tempers the conditional in place, for :func:`anneal_potts`, whose
     temperature changes every sweep and would otherwise rebuild the adjacency
-    each time. At 1.0 the multiplication is the identity bitwise.
+    each time. At 1.0 the multiplication is the identity bitwise, and is
+    skipped.
     """
     draws = np.asarray(rng.random(state.shape[0]))
+    bounds = offsets.tolist()
+    incident, weights = neighbours.tolist(), couplings.tolist()
     for node in range(state.shape[0]):
-        local = rows[node].copy()
-        for neighbour, coupling in neighbours[node]:
-            local[state[neighbour]] += coupling
-        local *= beta
+        local = heat_bath_log_weights(
+            rows[node], state, incident, weights, bounds[node], bounds[node + 1], beta
+        )
         local -= local.max()
         cumulative = np.cumsum(np.exp(local))
         # One uniform and a search, rather than `rng.choice` per site: this
@@ -807,7 +834,9 @@ def _swendsen_wang_sweep(
 def _wolff_sweep(
     state: np.ndarray,
     rows: np.ndarray,
-    neighbours: list[list[tuple[int, float]]],
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
     rng: np.random.Generator,
     counter: ClusterCounter | None = None,
     graph: PottsGraph | None = None,
@@ -834,6 +863,8 @@ def _wolff_sweep(
     int
         The size of the cluster this step built.
     """
+    bounds = offsets.tolist()
+    incident, weights = neighbours.tolist(), couplings.tolist()
     seed_node = int(rng.integers(state.shape[0]))
     colour = int(state[seed_node])
     cluster = [seed_node]
@@ -842,7 +873,8 @@ def _wolff_sweep(
     frontier = [seed_node]
     while frontier:
         node = frontier.pop()
-        for neighbour, coupling in neighbours[node]:
+        for position in range(bounds[node], bounds[node + 1]):
+            neighbour, coupling = incident[position], weights[position]
             if in_cluster[neighbour] or state[neighbour] != colour:
                 continue
             if rng.random() < 1.0 - np.exp(-beta * coupling):

@@ -1,19 +1,33 @@
-"""The compressed-row adjacency is the list adjacency, flattened, in the same order.
+"""The compressed-row adjacency is the neighbour lists, flattened, in the same order.
 
-Two kernels read it (`search.kernels`, the Rust sweep) and both consume their
+Every kernel and every Python sweep reads it, and all of them consume their
 inputs in neighbour order, so a permutation here would change which draw a
-site sees without changing any distribution a chi-square could catch. The
-oracle is `search.potts_mcmc._adjacency`, the list of lists every Python sweep
-walks.
+site sees without changing any distribution a chi-square could catch.
+
+The oracle is :func:`_neighbour_lists` below: the list-of-lists loop the five
+builders issue #277 retired each held --- `search.potts_mcmc._adjacency`,
+`search.potts_mcmc_rust.flatten_adjacency`, and the open-coded copies in
+`search.ground_state`, `search.alpha_expansion` and `sim.potts`. Each was
+asserted equal to `compressed_adjacency` on these graphs before its call site
+moved; the loop stays here, in the suite, as the independent reference the
+package no longer contains.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.search.potts_mcmc import _adjacency
 from snakes_and_ladders.sim.canonical import planted_spin_glass
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+
+
+def _neighbour_lists(graph: PottsGraph) -> list[list[tuple[int, float]]]:
+    """Neighbour lists with the coupling on each incident edge, from the edges."""
+    neighbours: list[list[tuple[int, float]]] = [[] for _ in range(graph.n_nodes)]
+    for (first, second), coupling in graph.weighted_edges():
+        neighbours[first].append((second, coupling))
+        neighbours[second].append((first, coupling))
+    return neighbours
 
 
 def _graphs() -> list[PottsGraph]:
@@ -31,7 +45,7 @@ def _graphs() -> list[PottsGraph]:
 )
 def test_the_compressed_rows_are_the_list_adjacency_in_order(graph: PottsGraph) -> None:
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    lists = _adjacency(graph)
+    lists = _neighbour_lists(graph)
 
     assert offsets.shape == (graph.n_nodes + 1,)
     assert offsets[0] == 0
