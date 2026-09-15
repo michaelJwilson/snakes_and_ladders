@@ -26,9 +26,12 @@ the code behind each problem class.
 | 1.2 Likelihood & energy engine | CPU landed (NumPy, PyTorch, Rust at 2.5x the oracle at 200 taxa by 11,000 sites); belief propagation with two exact oracles; Fitch and Sankoff parsimony; one factor graph with sum-product and max-product over it, Viterbi included; forward–backward as an evaluator; certified bounds and learned surrogates; the LDPC decoder pinned to the general sum-product and to enumeration; two runtime audits; GPU dispatch not started (#280) | Worst relative deviation 4.0e-14 against brute-force marginalization across three backends and four site counts spanning a factor of 30; max-product returns the enumerated Viterbi path on four chains; flooding on the 8x8 lattice within 1.8x of belief propagation after the audit; decoder posteriors within 4.6e-11 of the general flooding on six loopy codes and 1.9e-13 of enumeration on a cycle-free one; the 19,998-bit (3,6) code brackets the erasure threshold 0.4294 between 0.42 and 0.44 | [#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66), [#74](https://github.com/michaelJwilson/snakes_and_ladders/pull/74), [#81](https://github.com/michaelJwilson/snakes_and_ladders/pull/81), [#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#219](https://github.com/michaelJwilson/snakes_and_ladders/pull/219), [#247](https://github.com/michaelJwilson/snakes_and_ladders/pull/247), [#296](https://github.com/michaelJwilson/snakes_and_ladders/pull/296), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317), [#343](https://github.com/michaelJwilson/snakes_and_ladders/pull/343), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#354](https://github.com/michaelJwilson/snakes_and_ladders/pull/354), [#356](https://github.com/michaelJwilson/snakes_and_ladders/pull/356) |
 | 1.3 Continuous optimization | Landed for trees, the HMM, the Potts chain and lattice, and the mixture; an interval at any fit, whatever produced it; posterior sampling by leapfrog and Yoshida, tempered and adapted; initializers, multi-start, k-means++ and, since #373, the tree's two data-driven starts — neighbor joining on pairwise distances and the closest tree of the Hadamard conjugation (#364); since #541 three chain starts on a surrogate surface — `FromChain`, `FromAnnealing`, `FromTempering` — and eight seedings of the coupled model's emission parameters compared through them; closed-form test functions; the mixture at equal evaluations through the budget utility | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates; the lattice fitted against an enumerated normalizer, coverage 157/160 at 100 samples and 153/160 at 400 and 1600; integrator orders realized at 4.000 and 16.001; the adapted chain's acceptance 0.650 pooled over 20 seeds at a target of 0.65; restarts reach the mixture's best-known optimum from 7/40 starts against tempering's 4/40 (`p = 0.549`) and annealing's 1/40 (`p = 0.031`); neighbor joining returns every branch of a known tree to 1e-12 at 20 and 50 taxa, and no start separates on the fit at five and six taxa, every one converging in 22 to 27 evaluations (experiment 006); the coupled model's emission seedings split the two orderings at 100 components on 4,000 observations — the prior draw reaches the best projected value on 6 of 6 paired instances while `tempering` and `data` recover more of the generating component on 6 of 6, both at `p = 0.031`, so no default moves (experiment 009) | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#256](https://github.com/michaelJwilson/snakes_and_ladders/pull/256), [#263](https://github.com/michaelJwilson/snakes_and_ladders/pull/263), [#269](https://github.com/michaelJwilson/snakes_and_ladders/pull/269), [#271](https://github.com/michaelJwilson/snakes_and_ladders/pull/271), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#345](https://github.com/michaelJwilson/snakes_and_ladders/pull/345), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348), [#352](https://github.com/michaelJwilson/snakes_and_ladders/pull/352), [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373), [#553](https://github.com/michaelJwilson/snakes_and_ladders/pull/553) |
 | 1.4 Move sets & classical baselines | Trees landed, with warm starts, lazy scoring and support; large parsimony; Potts cluster updates; the exact-baseline family — minimum cut, alpha expansion with its proved bound, Max-Cut with a certificate; schedules, annealing and parallel tempering with an opt-in Rust sweep; one Gibbs sampler and annealer over any factor graph, and a tempered ensemble over labellings, decodings and topologies; the coupled model fitted; Viterbi and posterior decoding landed; iterated conditional modes over HMM paths not started (#176) | NNI and SPR neighbour counts exhaustively verified at `n = 5..8`; hill climbing reaches the enumerated optimum from 12 of 12 starts and large parsimony from every start at five and six taxa; the two-state ground state exact against enumeration over 36 shape-coupling-field combinations; on the planted glass at equal sweeps tempering 12/12 against annealing 10/12 and restarts 4/12; the tempered weight within 0.039 of enumeration on every seed of 20 | [#82](https://github.com/michaelJwilson/snakes_and_ladders/pull/82), [#127](https://github.com/michaelJwilson/snakes_and_ladders/pull/127), [#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#212](https://github.com/michaelJwilson/snakes_and_ladders/pull/212), [#220](https://github.com/michaelJwilson/snakes_and_ladders/pull/220), [#221](https://github.com/michaelJwilson/snakes_and_ladders/pull/221), [#222](https://github.com/michaelJwilson/snakes_and_ladders/pull/222), [#255](https://github.com/michaelJwilson/snakes_and_ladders/pull/255), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284), [#289](https://github.com/michaelJwilson/snakes_and_ladders/pull/289), [#304](https://github.com/michaelJwilson/snakes_and_ladders/pull/304), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#310](https://github.com/michaelJwilson/snakes_and_ladders/pull/310), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#350](https://github.com/michaelJwilson/snakes_and_ladders/pull/350) |
+| 1.5 Continuous samplers, HMC & tempering | Landed: leapfrog and Yoshida integrators with step-size adaptation, temperature schedules, simulated annealing, and a parallel-tempered ensemble over any supported problem | A chain's spread against the analytic Gaussian; each replica's marginals against the unscaled model's enumeration with exchanges on; Yoshida measured fourth-order and **declined** on cost, 91 evaluations per trajectory against leapfrog's fewer | [#266](https://github.com/michaelJwilson/snakes_and_ladders/issues/266), [#267](https://github.com/michaelJwilson/snakes_and_ladders/issues/267), [#268](https://github.com/michaelJwilson/snakes_and_ladders/issues/268) |
+| 2.0 RL definition | Landed: `app:rl` in the textbook is a self-contained account of the algorithms a learned proposal is drawn from, organised on the state-space and update axes, with the suitability of each for the supported problems argued rather than asserted | The section is cited from `sec:policy-gradient` at the point of use, and every algorithm it names is either implemented or stated as not built | [#313](https://github.com/michaelJwilson/snakes_and_ladders/issues/313) |
 | 2.1 RL formulation & deployment | The estimator, the Potts, hidden-path and tree environments, a critic, an actor–critic, PPO and a PUCT planner landed, each pinned to enumeration; a tree policy trained on the fixture hill climbing fails, a tie over one feature and ahead of greedy over the seven-column set (#349); not yet measured against restarts | Enumerated gradient against finite differences at 1.5e-11 relative; on the Potts chain REINFORCE 86.6%, PPO 96.3% and the planner 92.6% at 8.3 evaluations per episode against greedy's 80.2% at 48; on the 7-taxon fixture the single feature reaches 0.487 against greedy's 0.480 (sign test `p = 0.79`) and the full set 0.796, ahead on 16 of 16 seeds (`p = 3.05e-5`), while restarts reach 1.000 at the same budget | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139), [#192](https://github.com/michaelJwilson/snakes_and_ladders/pull/192), [#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193), [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#320](https://github.com/michaelJwilson/snakes_and_ladders/pull/320), [#349](https://github.com/michaelJwilson/snakes_and_ladders/pull/349), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355) |
 | 2.2 Curriculum learning | Started: the surrogate curriculum from 5 to 6 taxa, from 3x3 to 4x6 lattices, and across `spatio_only`'s 9 to 5,041 sites; weight transfer for a policy and batched rollout not started | Zero-shot at six taxa the set surrogate falls to `R^2` 0.68 and recovers to 0.94 after transfer, the MLP holds 0.92 and reaches 0.95; lattice surrogates transfer zero-shot at 0.99 at a shared field and collapse to -338.6 at a per-site one, recovering to 0.722 | [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317), [#547](https://github.com/michaelJwilson/snakes_and_ladders/pull/547) |
 | 2.3 Empirical validation | The budget utility and the exact paired test landed, and six budget-matched comparisons are recorded; no empirical alignment and no external tool ([#126](https://github.com/michaelJwilson/snakes_and_ladders/issues/126)) | Every comparison at one budget over shared seeds with McNemar's exact test: the glass, Rastrigin, the mixture, the relaxation against greedy, the cluster updates at the transition, and the tree's starts at equal evaluations | [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348) |
+| 3.1 Surrogates & bounds | Landed as certified analytic bounds plus learned predictors on the gap above them, ranking a neighbourhood so only the top-`K` are re-scored exactly; the filter's cost ratio at large `n` is **unmeasured** and is what remains | Each bound proved in Appendix B and asserted against the exact value it bounds; the learned gap predictor refereed by the enumeration the bound is checked on | [#317](https://github.com/michaelJwilson/snakes_and_ladders/issues/317) |
 | 4.1 Tracking, ablations & leaderboard | The experiment ledger, its generated index and the run logger landed; six experiments recorded, each capped at a ten-line body (#458); the Aim run store not started ([#75](https://github.com/michaelJwilson/snakes_and_ladders/issues/75)) | Every file under `docs/experiments/` validated against the template and the cap per pull request, and this file cites the files rather than restating them | [#316](https://github.com/michaelJwilson/snakes_and_ladders/pull/316), [#318](https://github.com/michaelJwilson/snakes_and_ladders/pull/318) |
 | Stage 3 Research extensions | Gumbel-softmax relaxation of Potts and HMM states landed; the tropical Grassmannian half landed, refereed by enumeration and the Hadamard closed form, and not shown to beat a classical baseline, so it is conserved in `sandbox/`; learned surrogates rank a neighbourhood with exact re-scoring of the top candidates; stochastic escape by epsilon-greedy landed | Gumbel-softmax exact at every corner to 1e-11 and deterministic ascent 18/40 against greedy's 5/40, McNemar `p = 0.00098`; the tropical relaxation exact at every corner to 3.8e-16 relative, four-point violation of the Hadamard metric under 1e-12, ascent 8/8 at five and six taxa and 7/8 at eight against the enumerated maximum, and neighbor joining reaching it at no gradient steps; a surrogate-ranked SPR search reaches its optimum from 4/4 starts at 5 fits against 312; escape from a local optimum rises from 0.111 at `epsilon = 0` to 0.883 at 0.4 | [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#225](https://github.com/michaelJwilson/snakes_and_ladders/pull/225), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317) |
 
@@ -2529,6 +2532,41 @@ What survives both is the offset --- every prediction, the diverged fit
 included, stays inside the bracket, which is what predicting a gap above a
 bound buys. Both failures are ticketed rather than worked around.
 
+## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
+
+**Landed, and one of its two integrators was declined on measurement.** A
+Hamiltonian chain with leapfrog and with Yoshida's (1990) triple jump, step-size
+adaptation, temperature schedules, simulated annealing, and a parallel-tempered
+ensemble that runs over any of the supported problems. The detail sits under
+Milestone 1.3 above, where the chain first appeared as a second, non-asymptotic
+source of intervals; this section is where the roadmap's own numbering puts it.
+
+**Yoshida is fourth-order and loses anyway**
+([#266](https://github.com/michaelJwilson/snakes_and_ladders/issues/266)). The
+convergence order was confirmed against its prediction, and the integrator was
+still declined: it needs **91** gradient evaluations per trajectory to reach an
+acceptance of 0.975 where leapfrog needs fewer, because the middle sub-step runs
+backwards and costs stability rather than buying it. The order is a property of
+the method; the cost is a property of this problem, and only the second decides
+adoption.
+
+## Milestone 2.0 — RL Definition
+
+**Landed as `app:rl` in the textbook**
+([#313](https://github.com/michaelJwilson/snakes_and_ladders/issues/313)). A
+self-contained account of the algorithms a learned proposal is drawn from,
+organised on the two axes that separate them --- whether the state space is a
+table over discrete states or a parameterized function over a continuous one,
+and whether an estimate is updated from a full observed return or by
+bootstrapping from the estimate at the next state. It runs from an exact
+framework needing a model of the environment to the methods that do not.
+
+It is a definition milestone, so what makes it done is coverage rather than a
+measurement: the section is cited from `sec:policy-gradient` at the point of
+use, and every algorithm it names is either implemented in `learn/` or stated
+there as not built. A named algorithm with neither is the defect this section
+is checkable against.
+
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
 **The estimator is pinned to a closed form, not to a training curve**
@@ -2676,6 +2714,23 @@ search, reaches 30.9%: the visit distributions at 20 simulations are flat
 targets, and what expert iteration taught here is the critic. The
 factor-graph environment and the surrogate reward model wait on #296 and #308.
 
+## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
+
+**Landed as bounds first and predictors second**
+([#317](https://github.com/michaelJwilson/snakes_and_ladders/issues/317)). The
+roadmap asked for a neural surrogate queried 10,000x faster than the exact
+evaluation to filter proposal batches. What landed inverts the emphasis: a
+*certified analytic bound* on the objective, with a learned predictor on the
+gap above it, ranking a neighbourhood so that only the top-`K` candidates are
+re-scored exactly. The bound is what makes the filter safe --- a learned score
+alone can rank the true optimum out of the top-`K` and nothing would say so ---
+and the proofs are Appendix B.
+
+**What remains is the number the roadmap asked for.** The filter's cost ratio
+at large `n` is unmeasured: the surrogate's speed against the exact evaluation's
+is the claim "10,000x" was a target for, and this file cannot repeat it because
+nothing here has measured it. `TICKETS.md` carries it under this milestone.
+
 ## Milestone 4.1 — Experiment Tracking, Ablations & Leaderboard
 
 **The ledger has a record format before it has a run store**
@@ -2707,7 +2762,7 @@ the guard now fails an eleventh content line. The Aim run store (#75) is part 2,
 behind the dependency's approval; until then the numbers are typed from the
 measurement and the file names the command that produced them.
 
-## Stage 3 — Research Extensions
+## Stage 5 — Research Extensions
 
 **Both halves are built, and the second's block was the referee, not the
 effort.** Potts configurations and HMM state paths are enumerable, so the exact
