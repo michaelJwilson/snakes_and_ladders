@@ -48,6 +48,15 @@ in this module. It is referenced here, never restated. What follows is local.
   answer must be known from *outside* this repository — a closed form, a
   published result, or an enumeration sharing no code with what it tests. 
 
+- **The Potts model is one adjacency, one energy and one conditional, and
+  they live here.** `PottsGraph.compressed_adjacency` is the only neighbour
+  structure, `energies` the only scorer, `heat_bath_log_weights` the only
+  conditional; six modules restated one of the three before issue #277. They
+  are in `sim/` because `search/` may import `sim/` and `sim/` may not import
+  back, so anything the simulator needs has to be reachable from here. The
+  *loops* around the conditional stay separate --- stepped in time,
+  vectorized across chains, compiled --- because they are separate.
+
 - **A known energy is not a known optimum.**
 
 - **A fixture proposed as hard is hard only once measured.** Difficulty is a

@@ -39,7 +39,6 @@ from snakes_and_ladders.search.gibbs import (
 )
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.potts_mcmc import (
-    _adjacency,
     _single_site_sweep,
     anneal_potts,
     energies,
@@ -79,6 +78,12 @@ from tests._fixtures import FOUR_TAXA, fixture_path, load_fixture
 SIGNIFICANCE = 0.001
 FIELD = np.array([0.6, -0.4])
 
+#: The same field as one row per site, which is the shape
+#: `potts_mcmc._single_site_sweep` takes since issue #551 widened it. A shared
+#: field reaching it as equal rows is the identity, which
+#: `tests/regression/search/test_ground_state.py` pins.
+_ROWS = np.tile(FIELD, (4, 1))
+
 
 def _potts_pair() -> tuple[PottsGraph, FactorGraph]:
     graph = lattice_graph((2, 2), BoundaryCondition.OPEN, 0.8)
@@ -111,7 +116,7 @@ def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
     # over 2,000 sweeps of four sites none did. Asserted at 99 percent so a
     # single such draw does not fail the suite; realized at 100.
     graph, factor_graph = _potts_pair()
-    adjacency = _adjacency(graph)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
     indexed = _Indexed(factor_graph)
     generic, specialised = np.random.default_rng(5), np.random.default_rng(5)
     state_a = np.zeros(4, dtype=np.int64)
@@ -119,7 +124,7 @@ def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
     agreed = 0
     for _ in range(2000):
         gibbs_sweep(indexed, state_a, generic)
-        _single_site_sweep(state_b, FIELD, adjacency, specialised)
+        _single_site_sweep(state_b, _ROWS, offsets, neighbours, couplings, specialised)
         agreed += int(np.array_equal(state_a, state_b))
         state_b[:] = state_a
 
@@ -137,14 +142,17 @@ def _lattice_graph(extent: int) -> FactorGraph:
 def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
     extent: int, seed: int
 ) -> None:
-    # What lets the kernel be the default (#561): the same uniforms in the
-    # same order give the same states, exactly, not to a tolerance. The
-    # kernel gathers the conditional from one array of tables and NumPy from
-    # a slice per factor, in the same order, so the sums are identical; the
-    # exponential is where the two could part, and the kernel declines any
+    # What lets the kernels be the default (#561, #563): the same uniforms in
+    # the same order give the same states, exactly, not to a tolerance. The
+    # sweep kernel gathers the conditional from one array of tables and NumPy
+    # from a slice per factor, in the same order, so the sums are identical;
+    # the exponential is where the two could part, and the kernel declines any
     # site whose draw comes within the last place of a cumulative boundary.
-    # Realized: 8 of 8 runs agree on every state and every log-density,
-    # 15,360 draws at 16x16 and 61,440 at 32x32.
+    # The density kernel reads the same array and takes no exponential, so
+    # order is all it needs: it sums factors left to right in graph order, as
+    # the dictionary oracle does. Realized: 8 of 8 runs agree on every state
+    # and every log-density, 15,360 draws at 16x16 and 61,440 at 32x32, and
+    # every compiled density equals the dictionary one to the last bit.
     graph = _lattice_graph(extent)
 
     numpy_chain = sample_factor_graph(
@@ -156,6 +164,20 @@ def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
 
     assert np.array_equal(numpy_chain.states, compiled.states)
     assert np.array_equal(numpy_chain.log_densities, compiled.log_densities)
+    oracle = [
+        graph.log_density(dict(zip(compiled.variables, map(int, state), strict=True)))
+        for state in compiled.states
+    ]
+    assert np.array_equal(compiled.log_densities, np.array(oracle))
+
+
+@pytest.mark.edge_case
+def test_the_log_density_has_no_rust_backend() -> None:
+    graph = _lattice_graph(4)
+    indexed = _Indexed(graph)
+
+    with pytest.raises(ValueError, match="no rust backend"):
+        indexed.log_density(np.zeros(len(indexed.names), dtype=np.int64), Backend.RUST)
 
 
 @pytest.mark.structural

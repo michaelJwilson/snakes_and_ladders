@@ -25,6 +25,13 @@ pin exact is that :func:`gibbs_sweep_sites` decides a site only where the
 draw clears every cumulative boundary by more than the two exponentials can
 move it, and hands the rest back; a bound, not an assumption about rounding.
 
+Issue #563's density is here for the reason the descent sweep is: it takes no
+exponential, so summing the same terms in the same order is bitwise
+reproduction outright, and the pin needs no bound. What it does need is that
+order -- floating-point addition is not associative, so the kernel sums
+factors left to right in graph order as the oracle does, and a vectorized sum
+would be a different number.
+
 The kernels take arrays, never the graph: the caller flattens once and the
 kernel walks strides (the layout rule), and ``cache=True`` writes the compiled
 object beside the source so the first call in a process pays once.
@@ -162,3 +169,36 @@ def gibbs_sweep_sites(
             return position
         state[position] = chosen
     return n_variables
+
+
+@njit(cache=True)
+def factor_graph_log_density(
+    state: np.ndarray,
+    tables: np.ndarray,
+    factor_start: np.ndarray,
+    factor_offsets: np.ndarray,
+    factor_column: np.ndarray,
+    factor_stride: np.ndarray,
+) -> float:
+    """``sum_f log psi_f`` at one full assignment, over the edge layout.
+
+    The density :meth:`snakes_and_ladders.sim.factor_graph.FactorGraph.log_density`
+    defines, read from the ``tables`` of
+    :class:`snakes_and_ladders.search.gibbs._EdgeLayout` rather than from a table
+    and a tuple key per factor: each factor's element is the offset its axes
+    fix, and the sum runs left to right over factors in graph order.
+
+    That order is the whole of the pin. Floating-point addition is not
+    associative, so a pairwise or vectorized sum would move the last place of
+    every recorded log-density; this accumulates the same terms in the same
+    sequence as the oracle and reproduces it **bitwise**. No exponential is
+    taken, so nothing here depends on which ``exp``
+    :func:`gibbs_sweep_sites` had to bound.
+    """
+    total = 0.0
+    for factor in range(factor_start.shape[0]):
+        offset = factor_start[factor]
+        for axis in range(factor_offsets[factor], factor_offsets[factor + 1]):
+            offset += state[factor_column[axis]] * factor_stride[axis]
+        total += tables[offset]
+    return total

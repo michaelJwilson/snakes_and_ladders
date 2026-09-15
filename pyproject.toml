@@ -77,6 +77,13 @@ test = [
     "pytest>=9.0.3",
     "pytest-cov>=4.0.0",
     "pytest-benchmark>=4",
+    # The CI tier at three workers, like-for-like: 993.7 s against 361.9 s,
+    # 2.75x (issue #405, measured under #530). MIT, 1.9k stars, so neither
+    # dependency rule in CLAUDE.md is triggered. It never runs the benchmarks:
+    # pytest-benchmark disables itself when a run is distributed, so the two
+    # are separate invocations and `tests/conftest.py` fails a benchmark that
+    # reaches a distributed one.
+    "pytest-xdist>=3.6",
 ]
 
 [project.scripts]

@@ -6,6 +6,13 @@ distribution (pi), the seed, the number of sites, and the tolerance a
 validation test checks simulated frequencies against. No field defaults
 silently -- every one of these must be present in the yaml (root
 CLAUDE.md, "Do not introduce silent behavior changes").
+
+``tau`` is written out node by node, or -- where writing it out would bury
+the fixture in yaml -- declared as ``{balanced: n, height: h}``, which names
+:func:`snakes_and_ladders.sim.tree.balanced_tree`'s two arguments. That
+function is deterministic, so the declaration fixes the tree exactly as a
+literal one does; what it does not do is carry six hundred lines for a
+200-leaf instance (issue #582).
 """
 
 from __future__ import annotations
@@ -17,7 +24,7 @@ from typing import Any
 import numpy as np
 
 from snakes_and_ladders.fixtures import load_declared
-from snakes_and_ladders.sim.tree import Node
+from snakes_and_ladders.sim.tree import Node, balanced_tree
 
 _REQUIRED_FIELDS = frozenset({"seed", "n_sites", "tolerance", "k", "pi", "tau"})
 
@@ -83,7 +90,7 @@ def load_simulation_params(path: Path) -> SimulationParams:
         msg = f"{path}: pi sums to {pi.sum()}, expected 1.0"
         raise ValueError(msg)
 
-    tau = _node_from_dict(raw["tau"], branch_length=None)
+    tau = _tau_from_declaration(raw["tau"], path)
 
     return SimulationParams(
         tau=tau,
@@ -93,6 +100,28 @@ def load_simulation_params(path: Path) -> SimulationParams:
         n_sites=int(raw["n_sites"]),
         tolerance=float(raw["tolerance"]),
     )
+
+
+def _tau_from_declaration(raw: Any, path: Path) -> Node:
+    """The topology a fixture's ``tau`` names, literal or generated.
+
+    Raises
+    ------
+    ValueError
+        If a generated declaration names neither both of ``balanced`` and
+        ``height`` nor a literal node.
+    """
+    if isinstance(raw, dict) and "balanced" in raw:
+        missing = {"balanced", "height"} - set(raw)
+        if missing:
+            msg = f"{path}: a generated tau needs {sorted(missing)} as well"
+            raise ValueError(msg)
+        unknown = set(raw) - {"balanced", "height"}
+        if unknown:
+            msg = f"{path}: a generated tau takes no {sorted(unknown)}"
+            raise ValueError(msg)
+        return balanced_tree(int(raw["balanced"]), float(raw["height"]))
+    return _node_from_dict(raw, branch_length=None)
 
 
 def _node_from_dict(raw: dict[str, Any], branch_length: float | None) -> Node:

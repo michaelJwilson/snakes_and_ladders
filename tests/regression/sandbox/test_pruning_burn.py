@@ -12,10 +12,11 @@ The `f64` question the route was adopted on is settled by
 in ``src/pruning_burn.rs``: a tape that had narrowed to `f32` could not agree
 with the taped `float64` gradient to 1e-13.
 
-**The route lives in ``snakes_and_ladders.sandbox`` and this module stays
-here**, because what it referees is a likelihood route and
-``infra/select_tests.py`` runs this directory whenever ``likelihood`` changes
---- which is when a second tape disagreeing with the first is worth knowing.
+**The route lives in ``snakes_and_ladders.sandbox`` and issue #516 moved this
+module beside it.** It still runs whenever ``likelihood`` changes --- which is
+when a second tape disagreeing with the first is worth knowing --- because
+``infra/select_tests.py`` derives that from the sandbox importing
+``likelihood``, not from which directory the test sits in.
 
 **It skips unless the extension carries the ``sandbox`` Cargo feature.** The
 route is not in the default build, so the missing ``pruning_gradient`` skips

@@ -337,6 +337,20 @@ jobs:
       # merge rather than before one, and `main` carries the failure until
       # someone fixes it. `main`'s own run is what catches it, and a red
       # `main` is work before anything else -- DEV.md says so.
+      # Two invocations over one selection, because `pytest-benchmark`
+      # disables itself whenever `pytest-xdist` is active (issue #405). Under
+      # `-n` the 212 benchmark tests would pass and measure nothing, so they
+      # are not distributed and not collected here: the correctness run
+      # ignores `tests/benchmarks` and a second, serial run takes it. The
+      # split is the selection's, unchanged -- `infra/select_tests.py` still
+      # decides what runs, and this only sorts its answer into the two.
+      #
+      # `-n 3` is the measured peak on the 4-core reference host: 1.00x,
+      # 1.89x, 2.30x, 2.25x at one through four concurrent, and 2.75x
+      # like-for-like on the whole CI tier (993.7 s to 361.9 s) with the
+      # benchmarks off on both sides. Four is past the knee. Every cell of
+      # that grid returned the same 2,302 passed and 13 skipped, so nothing in
+      # the suite depends on the order or the seeding a worker changes.
       - name: Run the selected tests
         if: github.event_name != 'pull_request'
         run: |
@@ -346,15 +360,32 @@ jobs:
             echo "::notice::no code changed -- the suite would repeat main's last run"
             exit 0
           fi
+          correctness=""
+          benchmarks=""
+          for path in $paths; do
+            case "$path" in
+              tests/benchmarks*) benchmarks="$benchmarks $path" ;;
+              tests) correctness="$correctness tests"
+                     benchmarks="$benchmarks tests/benchmarks" ;;
+              *) correctness="$correctness $path" ;;
+            esac
+          done
           # The gate is 90% of what was selected. Where everything is
           # selected that is the package, as before; where a subset is, the
           # claim is that each touched module is covered by its own tests.
-          # DEV.md states the difference.
+          # DEV.md states the difference. Coverage is unaffected by the split:
+          # every line a benchmark reaches is also reached by the regression
+          # module DEV.md requires it to pair with.
           # `--durations=10`: the slowest tests are printed, not asserted --
           # a test over the cap fails on the reference host through
           # tests/conftest.py, never here (DEV.md, No CI Profiling).
-          uv run pytest -m "not release" $paths --durations=10 \
+          uv run pytest -n 3 -m "not release" $correctness \
+            --ignore=tests/benchmarks --durations=10 \
             $cov --cov-report=term-missing --cov-fail-under=90
+          if [ -n "$benchmarks" ]; then
+            # Serial, and no `-n`: this is the run that measures.
+            uv run pytest -m "not release" $benchmarks --durations=10
+          fi
 
   docs:
     name: Docs build (Sphinx)

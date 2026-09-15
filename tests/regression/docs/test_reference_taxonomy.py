@@ -1,21 +1,35 @@
 """The reference routing table is kept in three places, and this keeps them one.
 
-Root `CLAUDE.md` routes each concern to its sources; the textbook's Reference
-Taxonomy appendix mirrors the grouping in `\\citet` form; and
-`docs/tex/references.bib` carries the entries either resolves to. Before this
-guard the table named three works the bibliography did not carry (Ramalho,
-Gorelick & Ozsvald, Antão) and nothing said so (issue #360). An addition lands
-in all three or in none, and that is now checked rather than asked for.
+Root `CLAUDE.md` routes each concern to its sources; `REFERENCES.md` carries
+the table; and `docs/tex/references.bib` carries the entries it resolves to.
+Before this guard the table named three works the bibliography did not carry
+(Ramalho, Gorelick & Ozsvald, Antão) and nothing said so (issue #360). An
+addition lands in all three or in none, and that is now checked rather than
+asked for.
+
+The third leg used to be a Reference Taxonomy appendix in the textbook, which
+restated the grouping as a list of `\\citet` calls. The review of issue #575
+struck it: a work is cited where it is used, in the usual way, and a document
+that also carries a list of its own citations has two places to keep in step.
+The leg is now the documents' own citations, which is what the list stood in
+for and is strictly more of them --- every `\\cite` in `textbook.tex` and
+`paper.tex`.
 
 The matching rule, chosen so that no file has to carry another's keys:
 
-* every citation key in the appendix is an entry in the bibliography;
+* every citation key in a document is an entry in the bibliography; and
 * every item in the table -- an author string, an optional year, a
   parenthesized title or phrase -- names surnames that all appear in one
-  bibliography entry's `author` field, of that year where a year is given;
-* one such entry is cited in the appendix, so the table and the appendix
-  name the same works; and
-* every entry the appendix cites has its first author's surname in the table.
+  bibliography entry's `author` field, of that year where a year is given.
+
+The two sets are no longer required to coincide, and that is a consequence of
+the appendix going rather than a relaxation for its own sake. The table routes
+a *concern* to what to read, so it names texts no document cites --- a Rust
+book, a systems book --- and a document cites the primary papers behind one
+algorithm, which the table groups rather than lists. While the appendix
+existed the two were forced equal by a list written to make them so. What both
+still resolve against is the bibliography, which is where issue #360's defect
+was.
 
 Surnames are compared after stripping accents and TeX accent commands, so
 `M{\\'e}zard` and `Mézard` are one name.
@@ -31,13 +45,15 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 #: The reference routing table moved out of `CLAUDE.md` into its own
-#: document, which is where the appendix is now checked against.
+#: document, which is where the table is now checked against.
 REFERENCES_MD = REPO_ROOT / "REFERENCES.md"
-TEXTBOOK = REPO_ROOT / "docs" / "tex" / "textbook.tex"
+DOCUMENTS = (
+    REPO_ROOT / "docs" / "tex" / "textbook.tex",
+    REPO_ROOT / "docs" / "tex" / "paper.tex",
+)
 BIBLIOGRAPHY = REPO_ROOT / "docs" / "tex" / "references.bib"
 
 TABLE_HEADING = "## Documents & Reference Sources"
-APPENDIX_HEADING = r"\section{Reference Taxonomy}"
 
 #: One bibliography entry: its key and the text up to the next entry.
 _ENTRY = re.compile(r"@\w+\{([^,]+),(.*?)(?=\n@|\Z)", re.DOTALL)
@@ -67,14 +83,12 @@ def bibliography() -> dict[str, dict[str, str]]:
     return entries
 
 
-def appendix_keys() -> set[str]:
-    """Every key the Reference Taxonomy appendix cites."""
-    text = TEXTBOOK.read_text()
-    start = text.index(APPENDIX_HEADING)
-    end = text.index(r"\end{document}", start)
+def document_keys() -> set[str]:
+    """Every key the documents cite, anywhere in either of them."""
     keys: set[str] = set()
-    for group in _CITE.findall(text[start:end]):
-        keys.update(k.strip() for k in group.split(","))
+    for document in DOCUMENTS:
+        for group in _CITE.findall(document.read_text()):
+            keys.update(k.strip() for k in group.split(","))
     return keys
 
 
@@ -136,17 +150,16 @@ def matching_entries(
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_every_key_the_appendix_cites_is_in_the_bibliography() -> None:
-    missing = sorted(appendix_keys() - set(bibliography()))
+def test_every_key_a_document_cites_is_in_the_bibliography() -> None:
+    missing = sorted(document_keys() - set(bibliography()))
 
-    assert missing == [], f"appendix cites keys the bibliography lacks: {missing}"
+    assert missing == [], f"documents cite keys the bibliography lacks: {missing}"
 
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_every_table_item_names_a_bibliography_entry_the_appendix_cites() -> None:
+def test_every_table_item_names_a_bibliography_entry_a_document_cites() -> None:
     entries = bibliography()
-    cited = appendix_keys()
     items = table_items()
     assert len(items) > 20, "the table parser found too few items to be reading it"
 
@@ -159,30 +172,24 @@ def test_every_table_item_names_a_bibliography_entry_the_appendix_cites() -> Non
         f"table items with no bibliography entry naming every surname: {unmatched}"
     )
 
-    uncited = [
-        f"{authors} {year}".strip()
-        for authors, year in items
-        if not matching_entries(surnames(authors), year, entries) & cited
-    ]
-    assert uncited == [], (
-        f"table items whose bibliography entry the appendix does not cite: {uncited}"
-    )
-
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_every_entry_the_appendix_cites_is_in_the_table() -> None:
+def test_the_documents_cite_what_the_table_routes_to() -> None:
+    # Not an equality: the table routes a concern to what to read and the
+    # documents cite what they use. What is asserted is that the two overlap
+    # at all, so a table that had drifted into naming nothing any document
+    # reads would be reported rather than quietly kept.
     entries = bibliography()
-    named = {name for authors, _ in table_items() for name in surnames(authors)}
+    cited = document_keys()
+    overlap = {
+        authors
+        for authors, year in table_items()
+        if matching_entries(surnames(authors), year, entries) & cited
+    }
 
-    absent = sorted(
-        key
-        for key in appendix_keys()
-        if normalize(_authors(entries[key]).split(" and ")[0].split(",")[0])
-        not in named
-    )
-    assert absent == [], (
-        f"appendix cites works the CLAUDE.md table does not name: {absent}"
+    assert len(overlap) > 20, (
+        f"only {len(overlap)} table items name a work either document cites"
     )
 
 

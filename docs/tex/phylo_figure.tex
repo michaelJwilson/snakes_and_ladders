@@ -1,41 +1,61 @@
-% The tree factor graph of Section~\ref{sec:phylo}, drawn by hand. Input by
-% textbook.tex; a sketch and not a rendered figure, so it is outside the
-% figure cache and the render cap, which govern generated output only.
+% The tree factor graph of Section~\ref{sec:phylo}, drawn by hand on the eight
+% taxa of the release fixture. Input by textbook.tex; a sketch and not a
+% rendered figure, so it is outside the figure cache and the render cap, which
+% govern generated output only. The branch lengths are those of
+% tests/regression/fixtures/tree_jc/release.yaml, and the horizontal axis is
+% their unit: one node's depth is the sum of the lengths above it.
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[
-    scale=1.0
-]
-  % Internal states, drawn as variables of the factor graph.
-  \node[fgvariable] (root) at (0, 3.6) {$x_\rootnode$};
-  \node[fgvariable] (u)    at (-1.9, 2.1) {$x_u$};
-  \node[fgvariable] (v)    at (1.9, 2.1) {$x_v$};
-  % Leaves: the same variables, with the data folded in by an indicator.
-  \foreach \name/\pos/\label in {a/-3.0/1, b/-0.8/2, c/0.8/3, d/3.0/4} {
-    \node[fgobserved] (\name) at (\pos, 0.5) {$x_{\label}$};
-    \node[fgindicator] (i\name) at (\pos, -0.25) {};
-    \draw[fglink] (\name) -- (i\name);
-  }
-  % Branch factors: one per edge, carrying $\Pmat(\tau)$.
-  \foreach \parent/\child in {root/u, root/v, u/a, u/b, v/c, v/d} {
-    \draw[fglink] (\parent) -- node[fgfactor, pos=0.5] {} (\child);
-  }
-  % The root prior.
-  \node[fgfactor] (prior) at (0, 4.35) {};
-  \draw[fglink] (root) -- (prior);
-  \node[fgnote] at (0.25, 4.35) {$\psi_\rootnode = \bpi$};
-  \node[fgnote] at (0.85, 2.9) {$\psi_v = \Pmat(\tau_v)$};
-  \node[fgnote] at (3.35, -0.25) {$\mathbb{1}[x_4 = \data_{4}]$};
+    x=9cm, y=0.55cm,
+    fgsmall/.style={fgvariable, minimum size=0.30cm, inner sep=0pt},
+    blen/.style={font=\tiny, inner sep=1pt},
+    taxon/.style={anchor=west, font=\footnotesize}
+  ]
+  % node name/depth/height
+  \foreach \n/\d/\h in {%
+      root/0/3.5, l/0.05/5.5, ll/0.10/6.5, lr/0.10/4.5,
+      r/0.05/1.5, rl/0.10/2.5, rr/0.10/0.5}
+    { \node[fgsmall] (\n) at (\d, \h) {}; }
+  \foreach \n/\d/\h/\t in {%
+      A/0.20/7/A, B/0.25/6/B, C/0.30/5/C, D/0.35/4/D,
+      E/0.40/3/E, F/0.20/2/F, G/0.25/1/G, H/0.50/0/H}
+    { \node[fgobserved, minimum size=0.34cm, inner sep=0pt] (\n) at (\d, \h) {};
+      \node[fgfactor, fill=black!55] (i\n) at (\d, \h) [xshift=7mm] {};
+      \draw[fglink] (\n) -- (i\n);
+      \node[taxon] at (\d, \h) [xshift=10mm] {\t}; }
+  % parent/child/length: a square branch, the factor at the midpoint of its
+  % horizontal segment, the length above it.
+  \foreach \p/\c/\len in {%
+      root/l/0.05, root/r/0.05, l/ll/0.05, l/lr/0.05, r/rl/0.05, r/rr/0.05,
+      ll/A/0.10, ll/B/0.15, lr/C/0.20, lr/D/0.25,
+      rl/E/0.30, rl/F/0.10, rr/G/0.15, rr/H/0.40}
+    { \draw[fglink] (\p) |- (\c);
+      \path (\p |- \c) -- (\c)
+        node[fgfactor, pos=0.5] {} node[blen, pos=0.5, above] {\len}; }
+  % the root prior
+  \node[fgfactor] (prior) at (0, 3.5) [xshift=-6mm] {};
+  \draw[fglink] (prior) -- (root);
+  \node[fgnote, anchor=east] at (0, 3.5) [xshift=-8mm] {$\psi_\rootnode = \bpi$};
+  % the axis, in the unit the branch lengths are in
+  \draw[semithick] (0, -1.2) -- (0.5, -1.2);
+  \foreach \d in {0, 0.1, 0.2, 0.3, 0.4, 0.5}
+    { \draw[semithick] (\d, -1.2) -- ++(0, -0.25)
+        node[below, font=\tiny, inner sep=1.5pt] {\d}; }
+  \node[font=\footnotesize, anchor=north] at (0.25, -2.0)
+    {expected substitutions per site};
 \end{tikzpicture}
-\caption{One site of a four-taxon phylogeny as a factor graph. Open circles
-are the states of the internal nodes and shaded circles the states at the
-leaves; small squares are factors. Each branch carries the pairwise factor
-$\Pmat(\tau_v)$ of Equation~\ref{eq:jc}, the root carries the prior $\bpi$,
-and the filled square at each leaf is the indicator that folds in the
-observed character. The bipartite graph is a tree, so
+\caption{One site of the eight-taxon release fixture as a factor graph, drawn
+at the fixture's own branch lengths. Open circles are the states of the
+internal nodes and shaded circles the states at the leaves; the small square
+on each branch is the pairwise factor $\Pmat(\tau_v)$ of
+Equation~\ref{eq:jc}, labelled with that branch's length; the filled square at
+each leaf is the indicator folding in the observed character; and the square
+at the root is the prior $\bpi$. Horizontal position is the sum of the branch
+lengths above a node, in the unit the axis carries, so the drawing is the
+topology and the lengths at once. The bipartite graph is a tree, so
 Equation~\ref{eq:sum-product} is exact and its leaf-to-root pass is
-Equation~\ref{eq:pruning}. A sketch of the structure, not a rendering of any
-instance: the drawn tree is four taxa, where the section's supported sizes
-run from five to the taxon count enumeration reaches.}
+Equation~\ref{eq:pruning}. Figure~\ref{fig:sim-tree} is the same fixture with
+the characters this structure generates at its leaves.}
 \label{fig:phylo:sketch}
 \end{figure}

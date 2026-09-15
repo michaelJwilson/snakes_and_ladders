@@ -1,0 +1,30 @@
+% The four-point condition of Section~\ref{sec:phylo:nj}, drawn by hand. Input
+% by textbook.tex; a sketch and not a rendered figure, so it is outside the
+% figure cache and the render cap, which govern generated output only.
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[scale=1.0]
+  \node[fgobserved] (i) at (-2.6, 0.95) {$i$};
+  \node[fgobserved] (j) at (-2.6,-0.95) {$j$};
+  \node[fgobserved] (k) at ( 2.6, 0.95) {$k$};
+  \node[fgobserved] (l) at ( 2.6,-0.95) {$l$};
+  \node[fgvariable] (u) at (-0.7, 0) {};
+  \node[fgvariable] (v) at ( 0.7, 0) {};
+  \draw[fglink] (i) -- node[above left,  font=\footnotesize] {$a$} (u);
+  \draw[fglink] (j) -- node[below left,  font=\footnotesize] {$b$} (u);
+  \draw[fglink] (u) -- node[above,       font=\footnotesize] {$m$} (v);
+  \draw[fglink] (v) -- node[above right, font=\footnotesize] {$c$} (k);
+  \draw[fglink] (v) -- node[below right, font=\footnotesize] {$d$} (l);
+  \node[font=\footnotesize, align=left, anchor=north] at (0, -1.45)
+    {$d_{ij} + d_{kl} = a + b + c + d$\\[2pt]
+     $d_{ik} + d_{jl} \;=\; d_{il} + d_{jk} \;=\; a + b + c + d + 2m$};
+\end{tikzpicture}
+\caption{The four-point condition, Equation~\ref{eq:four-point}, on the
+quartet resolved as $ij \mid kl$. Each of the two larger pairing sums crosses
+the interior edge twice, so the two are equal and each exceeds the smallest by
+$2m$; the smallest sum names the resolution. A quartet with $m = 0$ is
+unresolved and all three sums agree, which is why an estimated matrix recovers
+a quartet only when its error is below the interior length --- Atteson's
+radius, in one quartet.}
+\label{fig:fourpoint}
+\end{figure}

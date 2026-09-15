@@ -54,6 +54,25 @@ def test_tree_layout_depths_match_branch_length_sums() -> None:
 
 
 @pytest.mark.structural
+def test_the_drawn_axis_puts_the_first_taxon_at_the_top() -> None:
+    # The layout counts leaves downward in traversal order and matplotlib
+    # counts y upward, so the figure reads in the fixture's own order only if
+    # the axis is inverted. Asserted on the drawn axes rather than on the
+    # layout, which is deliberately left in tree coordinates.
+    params = load_simulation_params(PARAMS_PATH)
+    _figure, ax = plt.subplots()
+    try:
+        layout = render_sim_tree(params.tau, ax)
+        bottom, top = ax.get_ylim()
+        first = next(node.name for node in preorder(params.tau) if node.is_leaf)
+        last = [node.name for node in preorder(params.tau) if node.is_leaf][-1]
+        assert bottom > top, "the y axis is not inverted"
+        assert layout[first][1] < layout[last][1]
+    finally:
+        plt.close(_figure)
+
+
+@pytest.mark.structural
 def test_tree_layout_gives_every_leaf_a_distinct_ordered_y() -> None:
     params = load_simulation_params(FIXTURES_DIR / "tree_jc/release.yaml")
     layout = tree_layout(params.tau)

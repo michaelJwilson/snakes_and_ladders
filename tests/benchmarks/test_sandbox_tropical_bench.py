@@ -1,6 +1,6 @@
 """Benchmark for the tropical Grassmannian relaxation's objective.
 
-Correctness is pinned in ``tests/regression/test_sandbox_tropical.py``,
+Correctness is pinned in ``tests/regression/sandbox/test_sandbox_tropical.py``,
 per the repo's division of labour between the two directories.
 
 What is timed here is :func:`relaxed_score`, and only it. A run of the

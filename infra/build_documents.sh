@@ -4,10 +4,26 @@
 # science -- it orchestrates snakes_and_ladders.qa and latexmk, and knows nothing about
 # topologies, models, or which fixture renders which figure (see this
 # directory's CLAUDE.md, and snakes_and_ladders.qa.manifest for the figures themselves).
+#
+# --no-figures: build the documents against the figures already in
+# docs/tex/figures/. For a caller that has just rendered every one of them and
+# compared it against those bytes, which is infra/release.sh and nothing else;
+# the comparison is the proof that a second render would write the same bytes,
+# so the flag exists to stop the release gate paying for the manifest twice
+# (issue #530). Without it every figure is rendered, which is what the
+# `documents` job on the push to main does.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+
+figures=1
+for argument in "$@"; do
+  case "$argument" in
+    --no-figures) figures=0 ;;
+    *) echo "usage: ${0##*/} [--no-figures]" >&2; exit 2 ;;
+  esac
+done
 
 # Both PDFs are committed, so identical inputs must produce identical
 # bytes. Both matplotlib (the QA figures below) and pdftex (the LaTeX build)
@@ -48,10 +64,14 @@ export FORCE_SOURCE_DATE=1
 # Every figure the documents cite is rendered. Which of them a change could
 # have moved was predicted by a stamp until issue #490, wrongly on all 476
 # decisions it made; the cost is bounded by the render cap per figure instead.
-uv run --no-sync python -m snakes_and_ladders.qa.build \
-  --document docs/tex/paper.tex \
-  --document docs/tex/textbook.tex \
-  --output-dir docs/tex/figures
+if [ "$figures" -eq 1 ]; then
+  uv run --no-sync python -m snakes_and_ladders.qa.build \
+    --document docs/tex/paper.tex \
+    --document docs/tex/textbook.tex \
+    --output-dir docs/tex/figures
+else
+  echo "skipping the figure pass: --no-figures"
+fi
 
 # The textbook \inputs docs/tex/generated/problems_tables.tex, which is
 # written from PROBLEMS.md and the suite and is not committed (issue #425).

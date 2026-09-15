@@ -20,7 +20,6 @@ import torch
 from snakes_and_ladders.bound import Bound, BoundViolation, Certificate, certify
 from snakes_and_ladders.likelihood.features import (
     TREE_FEATURE_NAMES,
-    lattice_features,
     tree_features,
     tree_tokens,
 )
@@ -39,6 +38,7 @@ from snakes_and_ladders.likelihood.surrogate import (
     site_fitch_scores,
     spanning_tree_log_partition,
 )
+from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.surrogate import shuffle_children
 from snakes_and_ladders.search.topology import enumerate_topologies
@@ -287,8 +287,13 @@ def test_ground_state_bracket_contains_the_enumerated_minimum() -> None:
         minimum = -float(log_weights(graph, field, configurations).max())
         assert lower - 1e-9 <= minimum <= upper + 1e-9
         assert (minimum - lower) / graph.n_nodes < 0.1
-    features = lattice_features(graph, field)
-    assert features[3] * features[4] == pytest.approx(minimum, abs=1e-9)
+    expansion = alpha_expansion(
+        graph,
+        np.tile(field, (graph.n_nodes, 1)),
+        3,
+        start=np.zeros(graph.n_nodes, dtype=np.int64),
+    )
+    assert expansion.energy == pytest.approx(minimum, abs=1e-9)
 
 
 # --- the seam -----------------------------------------------------------------

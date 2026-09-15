@@ -21,9 +21,16 @@ of the renderer's import closure, and a figure whose stamp matched the tree was
 skipped. Over 476 decisions the stamps never skipped a figure whose bytes would
 have moved and never let one through: every stale call was a false positive, at
 ~48 minutes in one day. Rendering the selection unconditionally costs the cited
-set's declared time --- 305.3 s over the 21 entries
-`snakes_and_ladders.qa.manifest` states --- and answers with the bytes rather
-than a hash of their inputs.
+set's declared time --- since issue #492 the whole manifest, 431.8 s over the 23
+entries `snakes_and_ladders.qa.manifest` states --- on the push to ``main``
+where the documents job runs, and answers with the bytes rather than a hash of
+their inputs.
+
+The release gate pays that once rather than twice. ``--check`` renders the
+manifest into a temporary directory and compares it, so a pass proves the
+committed bytes are a render's; `infra/build_documents.sh` therefore runs
+there with ``--no-figures`` and typesets what is already in the tree (issue
+#530).
 """
 
 from __future__ import annotations

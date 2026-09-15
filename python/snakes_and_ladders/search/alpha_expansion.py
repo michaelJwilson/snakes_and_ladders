@@ -33,6 +33,7 @@ from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
 from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import energies
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
 # coupling the ratio is 1 and the factor is exactly 2.
@@ -69,17 +70,15 @@ class ExpansionResult:
 def energy(graph: PottsGraph, field_values: np.ndarray, labelling: np.ndarray) -> float:
     """``-sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]``, for any state count.
 
-    The same convention :func:`snakes_and_ladders.likelihood.potts.log_weights` defines,
-    negated, and generalized to a per-node field exactly as
-    :func:`snakes_and_ladders.search.maxflow.energy` does for two states. A test pins the
-    two against each other at ``k = 2`` so the multi-state form cannot drift.
+    One labelling is the single-configuration case of
+    :func:`snakes_and_ladders.sim.potts.energies`, which this passes
+    ``labelling[None]`` and reads element zero of: the block form is
+    vectorized over the edges, where the loop this held measured 92% of the
+    self time (issue #341), so scoring one labelling through it is faster
+    than the loop it replaces rather than slower (issue #277).
     """
     values = _site_field(graph, field_values)
-    total = float(values[np.arange(graph.n_nodes), labelling].sum())
-    for (first, second), coupling in graph.weighted_edges():
-        if labelling[first] == labelling[second]:
-            total += coupling
-    return -total
+    return float(energies(graph, values, np.asarray(labelling)[None])[0])
 
 
 def expand(
@@ -340,23 +339,31 @@ def iterated_conditional_modes(
         msg = f"iterated conditional modes has no {backend} backend"
         raise ValueError(msg)
 
-    neighbours: list[list[tuple[int, float]]] = [[] for _ in range(graph.n_nodes)]
-    for (first, second), coupling in graph.weighted_edges():
-        neighbours[first].append((second, coupling))
-        neighbours[second].append((first, coupling))
+    # The compressed rows as Python sequences, converted once rather than
+    # sliced per site: a NumPy slice and gather per site measured a third of
+    # this sweep (issue #277, `sim.potts.heat_bath_log_weights`). The
+    # `numba` kernel above takes the arrays themselves.
+    offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
+    bounds = offsets.tolist()
+    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
 
+    # The labels as a Python list for the duration: the sweep reads a
+    # neighbour's label once per incident edge, and a list read is 0.18 us
+    # cheaper than a NumPy scalar one. Same reads, same order, same writes.
+    labels = labelling.tolist()
     for _ in range(max_sweeps):
         changed = False
         for node in range(graph.n_nodes):
             local = -values[node].copy()
-            for neighbour, coupling in neighbours[node]:
-                local[labelling[neighbour]] -= coupling
+            for position in range(bounds[node], bounds[node + 1]):
+                local[labels[neighbours[position]]] -= couplings[position]
             best = int(np.argmin(local))
-            if best != labelling[node]:
-                labelling[node] = best
+            if best != labels[node]:
+                labels[node] = best
                 changed = True
         if not changed:
             break
+    labelling[:] = labels
 
     return labelling, energy(graph, values, labelling)
 
@@ -391,3 +398,161 @@ def _site_field(
         msg = f"a field for {n_states} states must have {n_states} columns, got {values.shape[1]}"
         raise ValueError(msg)
     return values
+
+
+def swap(
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    labelling: np.ndarray,
+    alpha: int,
+    beta: int,
+    *,
+    backend: Backend = Backend.PYTHON,
+) -> tuple[np.ndarray, float]:
+    """The optimal ``alpha``-``beta`` swap of ``labelling``, by one minimum cut.
+
+    Only the sites currently labelled ``alpha`` or ``beta`` move, and each
+    chooses between the two; every other site is held. The binary problem is
+    therefore over that subset alone, and it needs **no auxiliary node**: both
+    endpoints of an edge inside the subset end at ``alpha`` or ``beta``, so
+    the Potts term takes two values and one arc carries it. That is the whole
+    difference from :func:`expand` --- a smaller network, a cheaper cut, and
+    **no bound**, since the factor-2 guarantee of Boykov, Veksler & Zabih is a
+    property of the expansion move and not of this one.
+
+    The source side takes ``alpha`` and the sink side ``beta``. A held
+    neighbour carries neither label --- those are exactly the ones that move
+    --- so it agrees with the moving site under neither choice and drops out
+    of the data term entirely.
+
+    Returns
+    -------
+    tuple[np.ndarray, float]
+        The swapped labelling and its energy; the input unchanged where no
+        swap lowers it.
+
+    Raises
+    ------
+    ValueError
+        If ``backend`` names an implementation this function does not have,
+        or ``alpha`` and ``beta`` are the same label, where the move is the
+        identity and a caller asking for it has a bug rather than a no-op.
+    """
+    if backend not in (Backend.PYTHON, Backend.RUST):
+        msg = f"the alpha-beta swap has no {backend} minimum-cut backend"
+        raise ValueError(msg)
+    if alpha == beta:
+        msg = f"a swap needs two distinct labels, got {alpha} twice"
+        raise ValueError(msg)
+
+    values = _site_field(graph, field_values)
+    moving = np.flatnonzero((labelling == alpha) | (labelling == beta))
+    if moving.size == 0:
+        return labelling, energy(graph, values, labelling)
+    position = {int(node): index for index, node in enumerate(moving)}
+
+    source, sink = moving.size, moving.size + 1
+    network = FlowNetwork(n_nodes=moving.size + 2)
+
+    # The data term of a moving site is its own field and nothing else. A
+    # *held* neighbour carries neither alpha nor beta --- those are exactly
+    # the labels that move --- so it agrees with the moving site under
+    # neither choice and contributes the same constant to both. That is why
+    # this move needs no auxiliary node and why the expansion does: there,
+    # a held neighbour can already be alpha.
+    to_alpha = -values[moving, alpha].astype(float)
+    to_beta = -values[moving, beta].astype(float)
+    offsets = np.minimum(to_alpha, to_beta)
+    for index in range(moving.size):
+        # Cut source -> index when the site lands on the sink side, taking
+        # beta, so that arc carries the cost of beta.
+        network.add_edge(source, index, float(to_beta[index] - offsets[index]))
+        network.add_edge(index, sink, float(to_alpha[index] - offsets[index]))
+
+    for (first, second), coupling in graph.weighted_edges():
+        if first in position and second in position:
+            network.add_edge(
+                position[first], position[second], coupling, reverse=coupling
+            )
+
+    cut = (
+        min_cut(network, source, sink)
+        if backend is Backend.RUST
+        else max_flow(network, source, sink)
+    )
+    proposed = labelling.copy()
+    proposed[moving] = np.where(cut.source_side[: moving.size], alpha, beta)
+
+    current, candidate = (
+        energy(graph, values, labelling),
+        energy(graph, values, proposed),
+    )
+    if candidate < current:
+        return proposed, candidate
+    return labelling, current
+
+
+def alpha_beta_swap(
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    n_states: int,
+    *,
+    start: np.ndarray | None = None,
+    max_cycles: int = DEFAULT_MAX_CYCLES,
+    backend: Backend = Backend.PYTHON,
+) -> ExpansionResult:
+    """Cycle over every label pair until a full sweep lowers nothing.
+
+    The same loop as :func:`alpha_expansion` over a different move set, so a
+    difference between the two is a statement about the move and not about
+    the model or the code path. It is the cheaper move --- one cut over the
+    sites carrying two labels rather than over the whole lattice, and no
+    auxiliary node --- and it carries **no bound**, which is the trade issue
+    #551 measures. A cycle is ``n_states * (n_states - 1) / 2`` cuts against
+    the expansion's ``n_states``, so "cheaper per move" is not "cheaper per
+    cycle" and the comparison is run at equal budget rather than equal cycles.
+
+    Raises
+    ------
+    ValueError
+        If a coupling is negative, or the cap is reached. Monotonicity over a
+        finite state space makes the second impossible on a correct
+        implementation, as it is for :func:`alpha_expansion`.
+    """
+    couplings = np.asarray(graph.coupling, dtype=float)
+    if couplings.size and couplings.min() < 0.0:
+        msg = (
+            f"every coupling must be non-negative, got {couplings.min()}: the "
+            "swap's binary sub-problem is submodular only then"
+        )
+        raise ValueError(msg)
+
+    values = _site_field(graph, field_values, n_states)
+    labelling = (
+        values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
+    )
+    current = energy(graph, values, labelling)
+
+    moves = 0
+    for cycle in range(1, max_cycles + 1):
+        improved = False
+        for alpha in range(n_states):
+            for beta in range(alpha + 1, n_states):
+                labelling, candidate = swap(
+                    graph, values, labelling, alpha, beta, backend=backend
+                )
+                if candidate < current - 1e-12:
+                    current = candidate
+                    improved = True
+                    moves += 1
+        if not improved:
+            return ExpansionResult(
+                labelling=labelling, energy=current, cycles=cycle, moves=moves
+            )
+
+    msg = (
+        f"the alpha-beta swap did not settle in {max_cycles} cycles. The energy "
+        "is non-increasing over a finite state space, so this cannot happen on "
+        "a correct implementation and is a defect rather than a budget"
+    )
+    raise ValueError(msg)

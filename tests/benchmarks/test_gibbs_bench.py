@@ -24,6 +24,7 @@ from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 Backend = pytest.importorskip("snakes_and_ladders.search.backend").Backend
 
 SHAPE = (8, 8)
+DENSITY_SHAPE = (32, 32)
 FIELD = np.array([0.3, -0.2, 0.1])
 SWEEPS = 20
 
@@ -55,6 +56,31 @@ def test_generic_gibbs_sweep_benchmark(
 
     result = benchmark(run)
     assert result.shape == (graph.n_nodes,)
+
+
+@pytest.mark.parametrize(
+    "backend", [Backend.PYTHON, Backend.NUMBA], ids=["python", "numba"]
+)
+def test_generic_log_density_benchmark(
+    benchmark: BenchmarkFixture, backend: Any
+) -> None:
+    """One log-density of a 32x32 three-state lattice, per backend.
+
+    The size the #561 profile was taken at, where the dictionary implementation
+    carries 47.8% of a compiled run over 3,072 factors. One call runs before
+    the timing so that the edge layout and the kernel's compilation fall
+    outside it, and its value is what the timed calls are asserted against;
+    ``tests/regression/search/test_gibbs.py`` pins the compiled density against
+    the dictionary one bitwise.
+    """
+    graph = lattice_graph(DENSITY_SHAPE, BoundaryCondition.PERIODIC, 0.5)
+    indexed = _Indexed(from_potts(graph, FIELD))
+    state = np.random.default_rng(1).integers(0, 3, size=graph.n_nodes)
+    expected = indexed.log_density(state, backend)
+
+    value = benchmark(indexed.log_density, state, backend)
+
+    assert value == expected
 
 
 @pytest.mark.parametrize(

@@ -152,6 +152,12 @@ def render_sim_tree(
 
     ax.set_xlabel("Expected substitutions / site")
     ax.set_yticks([])
+    # Leaves are laid out in traversal order at increasing y, and matplotlib
+    # counts y upward, so without this the first taxon of the fixture sits at
+    # the bottom and the alignment beside it reads from the last row up. The
+    # axis is inverted rather than the layout, so the coordinates a test pins
+    # stay the tree's.
+    ax.invert_yaxis()
     for spine in ("top", "right", "left"):
         ax.spines[spine].set_visible(False)
     return layout

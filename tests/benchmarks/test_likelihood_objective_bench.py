@@ -26,6 +26,7 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
+    GradientRoute,
     SubstitutionModelObjective,
 )
 from snakes_and_ladders.sim.gtr import gtr_rate_matrix
@@ -71,14 +72,42 @@ def _topology(n_taxa: int) -> Node:
     )
 
 
-@pytest.fixture(scope="module")
-def objective() -> BranchLengthObjective:
+def _objective(gradient: GradientRoute) -> BranchLengthObjective:
     tau = _topology(_TAXA)
     pi = np.full(4, 0.25)
     dataset = simulate_alignment(
         tau=tau, k=4, pi=pi, rng=np.random.default_rng(_SEED), n_sites=_SITES
     )
-    return BranchLengthObjective(tau, 4, pi, dict(dataset.alignment))
+    return BranchLengthObjective(tau, 4, pi, dict(dataset.alignment), gradient=gradient)
+
+
+@pytest.fixture(scope="module")
+def objective() -> BranchLengthObjective:
+    return _objective("taped")
+
+
+def _one_update(objective: BranchLengthObjective, theta: torch.Tensor) -> float:
+    point = theta.detach().clone().requires_grad_(True)
+    value = objective(point)
+    torch.autograd.grad(value, point)
+    return float(value.detach())
+
+
+@pytest.mark.parametrize("gradient", ["taped", "analytic"])
+def test_gradient_update_by_route_at_roadmap_scale(
+    benchmark: BenchmarkFixture, gradient: GradientRoute
+) -> None:
+    """The two routes at n = 100, the size ROADMAP.md states.
+
+    Experiment 012 measured them at 4 and 8 taxa and found the ratio
+    inverting on the branch lengths alone, so no default follows from a
+    size. This is the same comparison at the scale the roadmap states,
+    where the answer is the one that matters and where a drift in either
+    route becomes visible.
+    """
+    subject = _objective(gradient)
+    theta = subject.initial()
+    assert math.isfinite(benchmark(_one_update, subject, theta))
 
 
 def test_gradient_update_at_roadmap_scale(

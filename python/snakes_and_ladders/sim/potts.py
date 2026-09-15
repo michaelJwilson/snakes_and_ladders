@@ -19,7 +19,7 @@ the broadcast of a per-site one and not a second model.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -75,6 +75,147 @@ def site_field(field: np.ndarray, n_nodes: int) -> np.ndarray:
         f"field has shape {field.shape}; expected (n_states,) or ({n_nodes}, n_states)"
     )
     raise ValueError(msg)
+
+
+def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
+    """``E(s) = -sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]``, per configuration.
+
+    The negated log weight :func:`snakes_and_ladders.likelihood.potts.log_weights`
+    defines, generalized to a per-node field and vectorized over a block of
+    configurations. Three modules scored a labelling with their own loop
+    before issue #277; this is the one they call. It lives here rather than
+    beside the oracle because `likelihood/` imports :func:`site_field` from
+    this module, so `sim/` cannot import back.
+
+    ``log_weights`` stays the independent referee and is not merged into
+    this: an implementation that computes its own oracle is no longer
+    refereed. The two sum the edge terms in different orders --- one gather
+    and a dot product here, a term per edge there --- so they agree to a
+    relative ``1e-12`` rather than bitwise (issue #341, pinned in
+    `tests/regression/search/test_maxflow.py`).
+
+    A single labelling is the ``n_configurations = 1`` case: a caller passes
+    ``state[None]`` and reads element zero. Consolidating the other way ---
+    the block form looping over a scalar one --- would give every caller the
+    throughput of the slowest.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The instance. Its edge order fixes which coupling applies where.
+    field : np.ndarray
+        External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
+    states : np.ndarray
+        Integer states, shape ``(..., n_nodes)``.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``states.shape[:-1]``.
+
+    Raises
+    ------
+    ValueError
+        If ``states`` does not carry one column per node. A silently
+        broadcast mismatch would return energies for a different model.
+    """
+    if states.shape[-1] != graph.n_nodes:
+        msg = (
+            f"states has {states.shape[-1]} columns for a graph of "
+            f"{graph.n_nodes} nodes"
+        )
+        raise ValueError(msg)
+    rows = site_field(field, graph.n_nodes)
+    total = rows[np.arange(graph.n_nodes), states].sum(axis=-1)
+    if graph.edges:
+        # One gather over every edge rather than a Python-level term per
+        # edge: issue #341 measured that loop at 92% of this function's self
+        # time, and #336 found it the term left in the Rust ground state's
+        # wall clock.
+        ends = np.asarray(graph.edges, dtype=np.int64)
+        agree = states[..., ends[:, 0]] == states[..., ends[:, 1]]
+        total = total + agree.astype(float) @ np.asarray(graph.coupling, dtype=float)
+    return -np.asarray(total)
+
+
+def heat_bath_log_weights(
+    field_row: np.ndarray,
+    state: np.ndarray,
+    neighbours: Sequence[int],
+    couplings: Sequence[float],
+    start: int,
+    stop: int,
+    beta: float = 1.0,
+    chain_index: np.ndarray | None = None,
+) -> np.ndarray:
+    """One site's unnormalized log conditional: its own field plus its neighbours'.
+
+    ``log p(s_i = k | rest) + c = beta * (h_ik + sum_j J_ij [k = s_j])``, the
+    arithmetic every heat-bath sweep performs and three of them each wrote
+    out before issue #277: the vectorized simulator :func:`_simulate_gibbs`,
+    the sequential sampler `search.potts_mcmc._single_site_sweep`, and the
+    Rust kernel. The *loops* stay separate --- one steps a chain in time, one
+    is vectorized across independent chains, one is compiled --- because they
+    are separate; what they share is this expression.
+
+    **The couplings are summed in neighbour order and not reassociated.** That
+    order is the graph's edge order from each end, which
+    :meth:`~snakes_and_ladders.sim.graph.PottsGraph.compressed_adjacency`
+    fixes, and it is what makes the extraction bitwise rather than
+    approximate. Reassociating for speed is a separate change carrying its
+    own measurement (issue #277).
+
+    **The adjacency arrives as Python sequences, and that is measured rather
+    than stylistic.** The compressed rows are the storage, and the arrays are
+    what the compiled kernels take; a Python-level sweep slicing and
+    gathering from them per site measured 1.40 us a site against 1.03 us for
+    the same additions over lists converted once per sweep, which was 22% of
+    a 32x32 sweep. So a caller converts `compressed_adjacency`'s rows once
+    (``tolist()``) and passes them with the bounds it would have sliced by.
+
+    Parameters
+    ----------
+    field_row : np.ndarray
+        The site's own field, shape ``(n_states,)``.
+    state : np.ndarray
+        The current configuration: ``(n_nodes,)`` for one chain, or
+        ``(n_chains, n_nodes)`` for a block of independent chains. The
+        returned shape follows it.
+    neighbours : Sequence[int]
+        The compressed neighbour rows, ``compressed_adjacency()[1].tolist()``.
+    couplings : Sequence[float]
+        The coupling per entry of ``neighbours``, in the same order.
+    start, stop : int
+        The site's row: ``offsets[i]`` and ``offsets[i + 1]``.
+    beta : float
+        Inverse temperature, applied to the whole conditional --- the model
+        scaling `search.potts_mcmc.tempered` states. At 1.0 the
+        multiplication is the identity, so it is skipped rather than applied.
+    chain_index : np.ndarray | None
+        ``arange(n_chains)``, for the block form only. Passed in so the
+        vectorized caller hoists it out of its site loop rather than
+        rebuilding it per site; built here when omitted.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_states,)`` or ``(n_chains, n_states)``, following
+        ``state``. Unnormalized: the caller shifts, exponentiates and samples
+        in whatever way its own loop needs.
+    """
+    if state.ndim == 1:
+        local = field_row.copy()
+        for position in range(start, stop):
+            local[state[neighbours[position]]] += couplings[position]
+    else:
+        if chain_index is None:
+            chain_index = np.arange(state.shape[0])
+        local = np.tile(field_row, (state.shape[0], 1))
+        for position in range(start, stop):
+            local[chain_index, state[:, neighbours[position]]] += couplings[position]
+    if beta != 1.0:
+        local *= beta
+    return local
 
 
 _REQUIRED_FIELDS = frozenset(
@@ -388,21 +529,30 @@ def _simulate_gibbs(
     rather than one long chain thinned for decorrelation, so the Python-level
     loop is over sweeps, not over sweeps times samples: each site update is
     one vectorized draw across every chain.
+
+    The conditional is :func:`heat_bath_log_weights` and the neighbours are
+    the graph's compressed rows, which is what a site's update indexes rather
+    than a list of Python tuples per node (issue #277).
     """
     n_states = field.shape[1]
-    adjacency: list[list[tuple[int, float]]] = [[] for _ in range(graph.n_nodes)]
-    for (a, b), coupling in graph.weighted_edges():
-        adjacency[a].append((b, coupling))
-        adjacency[b].append((a, coupling))
+    offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
+    bounds = offsets.tolist()
+    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
 
     state = rng.integers(0, n_states, size=(n_samples, graph.n_nodes))
     chain_index = np.arange(n_samples)
 
     for _ in range(burn_in):
         for node in range(graph.n_nodes):
-            local = np.tile(field[node], (n_samples, 1))
-            for neighbor, coupling in adjacency[node]:
-                local[chain_index, state[:, neighbor]] += coupling
+            local = heat_bath_log_weights(
+                field[node],
+                state,
+                neighbours,
+                couplings,
+                bounds[node],
+                bounds[node + 1],
+                chain_index=chain_index,
+            )
             state[:, node] = sample_rows(rng, _softmax(local, axis=1), chain_index)
 
     return state

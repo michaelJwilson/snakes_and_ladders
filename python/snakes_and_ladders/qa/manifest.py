@@ -114,12 +114,6 @@ FIGURES: tuple[FigureSpec, ...] = (
         ("--params", f"{FIXTURES}/tree_jc/stress.yaml"),
         seconds=2.7,
     ),
-    FigureSpec(
-        "jc_transition",
-        "snakes_and_ladders.qa.jc_transition",
-        ("--params", f"{FIXTURES}/tree_jc/stress.yaml"),
-        seconds=2.7,
-    ),
     # Brute-force marginalization costs k**m for m internal nodes, so this
     # runs on the 4-taxon fixture and nowhere larger.
     FigureSpec(
@@ -296,6 +290,16 @@ FIGURES: tuple[FigureSpec, ...] = (
         "snakes_and_ladders.qa.coupled_labelling",
         ("--params", f"{FIXTURES}/spatio_sequential/stress.yaml"),
         seconds=3.0,
+    ),
+    # The only entry that names no fixture: its target is a correlated
+    # Gaussian whose mean and covariance are declared in the module, so there
+    # is no simulated alignment to point at and the caption reports the
+    # constants instead.
+    FigureSpec(
+        "hmc_warmup",
+        "snakes_and_ladders.qa.hmc_warmup",
+        (),
+        seconds=12.2,
     ),
 )
 

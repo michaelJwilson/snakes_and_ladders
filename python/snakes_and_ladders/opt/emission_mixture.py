@@ -13,8 +13,8 @@ it settled. This loop propagates that report: an unconverged inner solve
 reaching an outer likelihood is the fault ``likelihood/CLAUDE.md`` forbids.
 
 **And it is where ``Emission_Mixture++`` finally has a model.** Issue #306
-built the seeding rule --- k-means++ with a family's own negative log-density
-as the distance --- and recorded that no problem used it.
+built the seeding rule --- k-means++ with a family's own Bregman divergence as
+the distance --- and recorded that no problem used it.
 
 Ground truth and data generation live in
 :mod:`snakes_and_ladders.sim.emission_mixture`; this module draws no data.
@@ -303,39 +303,34 @@ class CountPairSeeding:
 def _seed_scores(
     observations: np.ndarray, at: ComponentsAt
 ) -> Callable[..., np.ndarray]:
-    """``(index, indices) -> -log p(y | one component seeded at that index)``.
+    """``(index, indices) -> D_phi(y, the component seeded at that index)``.
 
     :func:`snakes_and_ladders.opt.mixture.emission_mixture_plus_plus` draws its
     seeds from the array it is given, so the array here is of *indices*: an
     observation is a pair, and a draw from a flattened array of pairs would
-    seed a component on half of one. The scores are negative log-probabilities
-    of a discrete family, so they are non-negative, as the sampling rule
-    needs.
+    seed a component on half of one.
 
-    **The negative log density is not the family's Bregman divergence, and
-    the difference does not cancel** (issue #548). The divergence of the
-    log-partition is the log density less its value at the seed; what is
-    scored here carries the log normalizer as well, and D-squared sampling
-    normalizes its scores rather than shifting them, so an additive constant
-    dilutes the rule toward uniform in proportion to its size against a
-    typical divergence. Measured on a Gaussian, where the divergence is the
-    squared Euclidean distance exactly: seeding under the divergence costs
-    **1.85** times the exact optimum and under the negative log density
-    **3.91**, against uniform seeding's 4.35
-    (``tests/regression/opt/test_opt_mixture_seeding.py``,
-    ``docs/experiments/010``). On the count mixture #541 measures, the two end
-    level --- 20.5 nats against squared Euclidean's 20.4 at six passes --- so
-    the normalizer moves where a seeding lands without moving which basin the
-    fit reaches at that size.
+    **The score is the family's Bregman divergence, not its negative log
+    density** (issue #560). The two differ by ``log b_phi(y)``, the log density
+    at the family's best member for that observation, which depends on the
+    observation and not on the seed; D-squared sampling normalizes its scores
+    rather than shifting them, so that term does not cancel --- it dilutes the
+    rule toward uniform in proportion to its size against a typical divergence.
+    Measured on a Gaussian, where the divergence is the squared Euclidean
+    distance exactly: seeding under the divergence costs **1.8496** times the
+    exact optimum, under the negative log density **3.9111**, and uniformly
+    **4.3470** (``tests/regression/opt/test_opt_mixture_seeding.py``,
+    ``docs/experiments/010``). The divergence is non-negative, as the sampling
+    rule needs, and zero at the seed's own observation.
     """
     rows = np.asarray(observations, dtype=np.float64)
 
     def score(seed: float, candidates: np.ndarray) -> np.ndarray:
         family = at(rows[[int(seed)]])
-        scored = family.log_density(
+        scored = family.bregman_divergence(
             torch.as_tensor(rows[candidates.astype(np.int64)], dtype=torch.float64)
         )
-        return -scored[:, 0].numpy()
+        return np.asarray(scored[:, 0].numpy())
 
     return score
 

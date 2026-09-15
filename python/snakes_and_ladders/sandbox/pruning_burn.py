@@ -61,7 +61,7 @@ from snakes_and_ladders.sim.tree import Node, preorder
 
 #: Whether the extension was built with the ``sandbox`` Cargo feature. A
 #: missing ``pruning_gradient`` is the only signal it gives, and it is what
-#: ``tests/regression/likelihood/test_pruning_burn.py`` skips on.
+#: ``tests/regression/sandbox/test_pruning_burn.py`` skips on.
 AVAILABLE = hasattr(oxi_snakes_and_ladders, "pruning_gradient")
 
 _UNAVAILABLE = (

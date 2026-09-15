@@ -527,3 +527,50 @@ def test_partial_reoptimization_reports_a_full_fit() -> None:
     assert result.log_likelihood == pytest.approx(
         score_topology(result.topology, alignment, k), rel=1e-8
     )
+
+
+# --- parallel candidate fits (issue #405) --------------------------------
+
+
+@pytest.mark.structural
+def test_parallel_candidate_fits_reproduce_the_serial_search_exactly() -> None:
+    # The claim that makes the fan-out safe: a neighbourhood's candidates are
+    # independent and their results are combined in input order, so the pool
+    # cannot change which move is accepted. Bitwise, not to a tolerance --
+    # every candidate is fitted from the same start by the same optimizer, and
+    # only where they run differs.
+    alignment, k = _alignment()
+
+    serial = infer(alignment, k, rng=np.random.default_rng(0), max_evaluations=12)
+    parallel = infer(
+        alignment,
+        k,
+        rng=np.random.default_rng(0),
+        max_evaluations=12,
+        workers=2,
+        backend="processes",
+        intra_op_threads=1,
+    )
+
+    assert parallel.log_likelihood == serial.log_likelihood
+    assert parallel.trace == serial.trace
+    assert to_newick(parallel.topology) == to_newick(serial.topology)
+    assert parallel.evaluations == serial.evaluations
+    assert parallel.fits == serial.fits
+    assert parallel.likelihood_evaluations == serial.likelihood_evaluations
+
+
+@pytest.mark.edge_case
+def test_workers_without_a_pool_is_refused_rather_than_run_serially() -> None:
+    # `parallel.map_tasks`'s rule, reached through `infer`: asking for workers
+    # while leaving the default serial backend is a mistake worth an error,
+    # since the alternative is a run that silently ignores the request.
+    alignment, k = _alignment()
+    with pytest.raises(ValueError, match="serial backend runs one worker"):
+        infer(
+            alignment,
+            k,
+            rng=np.random.default_rng(0),
+            max_evaluations=4,
+            workers=2,
+        )

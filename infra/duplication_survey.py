@@ -1,4 +1,4 @@
-"""Count the duplications issue #230 surveys, by the query that found each.
+"""Count the duplications issues #230 and #277 survey, by the query that found each.
 
 The survey's numbers were an impression until they were a query. Each finding
 below carries the pattern that produces it, so a reader re-runs the survey
@@ -61,6 +61,12 @@ FINDINGS = (
         "open-coded edge/coupling zips",
         r"zip\(\s*\w+\.edges,\s*\w+\.coupling",
         6,
+        owner="sim/graph.py",
+    ),
+    Finding(
+        "list-of-lists adjacency",
+        r"list\[list\[tuple\[int, ?float\]\]\]",
+        9,
         owner="sim/graph.py",
     ),
     Finding(

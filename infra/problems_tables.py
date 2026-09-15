@@ -881,9 +881,12 @@ def render(catalogue: Path = CATALOGUE) -> str:
             "The algorithms that apply to each problem, read from the problem "
             "catalogue, and what referees each: $\\checkmark$ a test pinned to "
             "an oracle, $\\checkmark^{\\dagger}$ a test pinned to the simulated "
-            "truth only, $\\circ$ neither kind of test, and -- not applicable "
-            "or not built. A dagger or a circle is a cell where an oracle is "
-            "wanted and absent.",
+            "truth only, $\\circ$ neither kind of test, and -- the problem "
+            "carries no method of that family. The tables report what the "
+            "tree holds, so -- reads as \\emph{not built} and never as "
+            "\\emph{not applicable}; Section~\\ref{sec:applicability} says "
+            "which pairings are the second. A dagger or a circle is a cell "
+            "where an oracle is wanted and absent.",
         ),
         "",
         *_table(

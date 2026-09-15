@@ -178,6 +178,35 @@ def test_changing_a_test_selects_its_module() -> None:
 
 @pytest.mark.critical
 @pytest.mark.structural
+def test_a_likelihood_change_still_runs_the_conserved_gradient_tape() -> None:
+    # Issue #516 moved `test_pruning_burn.py` out of `tests/regression/
+    # likelihood/` and into the sandbox's own directory. What it referees is a
+    # second tape over the likelihood recursion, so a likelihood change is
+    # when it can fail, and the move must not have taken that away. The
+    # sandbox imports `likelihood`, so the expansion carries it.
+    for changed in (
+        "python/snakes_and_ladders/likelihood/pruning_torch.py",
+        "python/snakes_and_ladders/search/topology.py",
+        "python/snakes_and_ladders/sim/tree.py",
+    ):
+        assert "sandbox" in _modules_of(select([changed])), changed
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_the_sandbox_import_guard_runs_on_every_package_it_guards() -> None:
+    # `test_sandbox.py` asserts an absence -- that none of the five hot-path
+    # packages imports the oracle home -- and an absence is not an import the
+    # expansion can follow. It is in ALWAYS for that reason, so it is not
+    # enough that today's import graph happens to reach it.
+    assert "tests/regression/test_sandbox.py" in ALWAYS
+    for package in ("sim", "likelihood", "opt", "search", "learn"):
+        chosen = select([f"python/snakes_and_ladders/{package}/__init__.py"])
+        assert "tests/regression/test_sandbox.py" in chosen["paths"], package
+
+
+@pytest.mark.critical
+@pytest.mark.structural
 @pytest.mark.parametrize(
     "path",
     [
@@ -279,7 +308,7 @@ def test_a_widely_imported_module_selects_its_dependents_benchmarks() -> None:
 @pytest.mark.critical
 @pytest.mark.structural
 def test_the_always_run_modules_are_always_run() -> None:
-    # They cover what belongs to no module, and cost 0.5 s between them.
+    # They cover what belongs to no module.
     for changed in (
         ["python/snakes_and_ladders/learn/policy.py"],
         ["python/snakes_and_ladders/qa/figure.py"],

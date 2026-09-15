@@ -1,0 +1,20 @@
+model: jukes-cantor
+oracle: none
+
+# The leaf-count ladder at 50, behind `-m stress` (issue #582).
+#
+# tree_scale/ci.yaml at 20 leaves is the rung a pull request runs; this one
+# is the same instance and the same assertion at a leaf count the 5-minute
+# budget cannot hold. Only the leaf count differs, so a change to what the
+# test asserts reaches this rung by construction.
+#
+# Everything the ci rung's comment says about the oracle, the bounded height
+# and why this is a cost rather than a difficulty axis applies unchanged.
+seed: 20260914
+n_sites: 2000
+tolerance: 0.03
+k: 4
+pi: [0.25, 0.25, 0.25, 0.25]
+tau:
+  balanced: 50
+  height: 0.25

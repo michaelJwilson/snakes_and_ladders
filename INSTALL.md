@@ -75,7 +75,7 @@ them, build with the feature:
 
 ```
 maturin develop --release --features sandbox
-pytest tests/regression/likelihood/test_pruning_burn.py
+pytest tests/regression/sandbox/test_pruning_burn.py
 ```
 
 ## Running the tests
