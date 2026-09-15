@@ -33,6 +33,17 @@ dictionary-per-message implementation this replaced (issue #341): the oracle,
 with the same arithmetic per message in the same order, pinned bitwise on
 every schedule. Rooting at the first variable is shared with the reference, so
 the tree messages compare edge for edge.
+
+``_Layout``'s ``variable_edges`` and ``factor_edges`` stay lists of lists, and
+issue #586 measured rather than assumed that: building the whole layout is
+**0.6 per cent** of a ``sum_product`` over a 2,000-variable chain, 0.24 on a
+2,000-leaf star and 0.22 on a loopy 16x16 lattice, so moving it to
+:class:`~snakes_and_ladders.incidence.SparseIncidence` would pay nothing
+(root ``CLAUDE.md``, Profile first). What the profile did rank is the tree
+*schedule*: :meth:`_Layout.tree_steps` is 18.2 per cent of the run at 500
+variables and 24.4 at 2,000, because a chain has one message per level and
+the grouping machinery is paid per level to group one thing. That is issue
+#592, and it is a different change from this one.
 """
 
 from __future__ import annotations
