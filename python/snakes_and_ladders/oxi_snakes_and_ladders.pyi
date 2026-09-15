@@ -66,8 +66,10 @@ def single_site_sweeps(
     couplings: np.ndarray,
     draws: np.ndarray,
     n_sweeps: int,
-    beta: float = ...,
-) -> None: ...
+    beta: float,
+    guard: float,
+    first: int,
+) -> int: ...
 def class_posteriors(
     totals: np.ndarray,
     successes: np.ndarray,

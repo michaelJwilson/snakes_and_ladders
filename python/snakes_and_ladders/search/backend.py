@@ -7,14 +7,19 @@ choice explicit at the call site: a test that pins a kernel against its
 oracle names both, and a caller that wants the oracle can say so.
 
 Two compiled backends exist here for two different reasons, and the split is
-deliberate rather than a stack. **Rust** carries the sampling sweep, because
-a sampler's agreement with its oracle is distributional -- ``f64::exp`` and
-NumPy's differ in the last place and one draw across a moved threshold sends
-two chains apart -- so that port lives behind an opt-in and is refereed by
-the distribution it converges to. **Numba** carries the deterministic
-kernels -- descent, energy evaluation -- whose output is an integer labelling
-or a sum that the oracle reproduces *bitwise*, so the pin is exact and the
-compiled path can be the default without moving a single committed number.
+deliberate rather than a stack. **Rust** carries the sampling sweep, where
+the loop is over an adjacency structure and there is no array arithmetic for
+NumPy to vectorize. **Numba** carries the kernels whose arithmetic is
+NumPy's operation for operation -- descent, energy evaluation, the Gibbs
+sweep.
+
+Both are defaults, and on the same terms. ``f64::exp`` and NumPy's differ in
+the last place, and ``searchsorted`` is a threshold, so a sampling port is
+distributional unless something bounds that: each compiled sweep decides a
+site only where the draw clears every cumulative boundary by more than the
+two exponentials can move it, and hands the rest back. The pin is then exact
+and the compiled path is the default without a committed number moving
+(issues #561, #599).
 """
 
 from __future__ import annotations

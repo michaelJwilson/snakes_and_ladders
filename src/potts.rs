@@ -11,17 +11,20 @@
 //! reserves the Rust backend for exactly this: control flow over an adjacency
 //! structure, with no array arithmetic for NumPy to vectorize.
 //!
-//! **This does not replace the oracle, and the reason is arithmetic.** The
-//! Python sweep calls `np.exp` and `np.searchsorted`. Rust's `f64::exp` agrees
-//! with NumPy's SIMD implementation to within a unit in the last place, not
-//! bit-exactly, and `searchsorted` is a threshold: one draw landing across a
-//! boundary that moved by 1 ulp picks a different state, and from that step
-//! the two chains are unrelated rather than approximately equal. Replacing the
-//! Python path would move every autocorrelation figure `STATUS.md` pins, every
-//! committed notebook output that reads a chain, and the goodness-of-fit
-//! fixtures. So this lands beside the oracle, in the shape `maxflow`,
-//! `pruning` and `sampling` already establish, and which caller uses which is
-//! a later judgement with its own evidence (issue #246).
+//! **It reproduces the oracle state for state, and a guard is what buys
+//! that.** The Python sweep calls `np.exp` and `np.searchsorted`. Rust's
+//! `f64::exp` agrees with NumPy's SIMD implementation to within a unit in
+//! the last place, not bit-exactly, and `searchsorted` is a threshold: one
+//! draw landing across a boundary that moved by 1 ulp picks a different
+//! state, and from that step the two chains are unrelated rather than
+//! approximately equal. So the kernel decides a site only where the draw
+//! clears every cumulative boundary by more than the two exponentials can
+//! move it, and returns the position of the first site it declines so the
+//! NumPy path decides that one and the caller resumes. That is a bound, not
+//! an assumption about rounding, and it is the construction
+//! `search/kernels.py::gibbs_sweep_sites` established for the Gibbs sweep
+//! (issues #561, #599). The oracle stays, per root `CLAUDE.md`, and pins
+//! this one.
 //!
 //! **The uniforms are drawn in Python and passed in.** This module holds no
 //! generator, for the reason `sampling.rs` states: `snakes_and_ladders.sim`'s
@@ -64,11 +67,27 @@ use pyo3::prelude::*;
 /// - `neighbours`, `couplings`: the flattened adjacency, each of length
 ///   `offsets[n_nodes]`. Every edge appears twice, once from each end.
 /// - `draws`: `n_sweeps * n_nodes` uniforms in `[0, 1)`, drawn by the caller.
+/// - `guard`: how far from a cumulative boundary a draw must land for this
+///   kernel to decide the site itself, in units of the last place per state.
+///   NumPy's `exp` and `libm`'s differ by at most one such unit, the
+///   cumulative sum carries that across at most `n_states` additions, and
+///   scaling by the last entry carries it once more: four units per state
+///   bounds it. The caller passes the width it derives, and a test raises it
+///   until every site is handed back.
+/// - `first`: where to start, as a flat `sweep * n_nodes + node` position, so
+///   a run the caller resumed after deciding one site itself picks up at the
+///   next.
+///
+/// # Returns
+/// `n_sweeps * n_nodes` if every remaining site was decided, otherwise the
+/// flat position of the first site it declined to decide -- which it leaves
+/// unwritten, for the caller's NumPy path to decide.
 ///
 /// # Errors
 /// Returns `Err` describing the first violated precondition: a ragged
 /// adjacency, a draw count that does not match the sweeps requested, a state
-/// or neighbour index outside its array, or an empty alphabet.
+/// or neighbour index outside its array, an empty alphabet, a negative guard,
+/// or a start beyond the run.
 ///
 /// `pub` so `cargo test` can exercise it without linking Python, per
 /// `src/pruning.rs`'s module docs.
@@ -83,7 +102,9 @@ pub fn single_site_sweeps_impl(
     draws: &[f64],
     n_sweeps: usize,
     beta: f64,
-) -> Result<(), String> {
+    guard: f64,
+    first: usize,
+) -> Result<usize, String> {
     let n_nodes = state.len();
     if n_states == 0 {
         return Err("field is empty, so there are no states to draw from".to_string());
@@ -98,6 +119,9 @@ pub fn single_site_sweeps_impl(
     }
     if !beta.is_finite() {
         return Err(format!("beta must be finite, got {beta}"));
+    }
+    if !(guard >= 0.0) {
+        return Err(format!("guard must be >= 0, got {guard}"));
     }
     if offsets.len() != n_nodes + 1 {
         return Err(format!(
@@ -126,6 +150,12 @@ pub fn single_site_sweeps_impl(
             draws.len()
         ));
     }
+    if first > n_sweeps * n_nodes {
+        return Err(format!(
+            "first is {first}, past the {} sites of this run",
+            n_sweeps * n_nodes
+        ));
+    }
     for (node, &value) in state.iter().enumerate() {
         if value < 0 || value as usize >= n_states {
             return Err(format!(
@@ -138,68 +168,85 @@ pub fn single_site_sweeps_impl(
     // site, and allocating it per site is the cost the port exists to remove.
     let mut local = vec![0.0f64; n_states];
 
-    for sweep in 0..n_sweeps {
-        for node in 0..n_nodes {
-            local.copy_from_slice(&field[node * n_states..(node + 1) * n_states]);
-            for position in offsets[node]..offsets[node + 1] {
-                let neighbour = neighbours[position];
-                if neighbour < 0 || neighbour as usize >= n_nodes {
-                    return Err(format!(
-                        "adjacency entry {position} names node {neighbour}, \
-                         expected [0, {n_nodes})"
-                    ));
-                }
-                local[state[neighbour as usize] as usize] += couplings[position];
+    for position in first..n_sweeps * n_nodes {
+        let node = position % n_nodes;
+        local.copy_from_slice(&field[node * n_states..(node + 1) * n_states]);
+        for entry in offsets[node]..offsets[node + 1] {
+            let neighbour = neighbours[entry];
+            if neighbour < 0 || neighbour as usize >= n_nodes {
+                return Err(format!(
+                    "adjacency entry {entry} names node {neighbour}, \
+                     expected [0, {n_nodes})"
+                ));
             }
-
-            // `beta` here and not on the arguments, because the oracle
-            // scales the accumulated local field rather than its parts.
-            for value in local.iter_mut() {
-                *value *= beta;
-            }
-
-            // Shift by the maximum before exponentiating, as the oracle does:
-            // the field and the accumulated couplings are unbounded above, and
-            // exp of the raw sum overflows well inside the couplings this
-            // repository samples at.
-            let shift = local.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            let mut total = 0.0f64;
-            for value in local.iter_mut() {
-                *value = (*value - shift).exp();
-                total += *value;
-                // The cumulative sum in place, so the search below reads the
-                // same array rather than a second allocation.
-                *value = total;
-            }
-
-            let target = draws[sweep * n_nodes + node] * total;
-            // `searchsorted`'s left side: the first index whose cumulative
-            // weight is strictly greater, clamped to the last state so a draw
-            // in the rounding sliver above `total` still lands in support.
-            let mut chosen = n_states - 1;
-            for (index, &cumulative) in local.iter().enumerate() {
-                if target < cumulative {
-                    chosen = index;
-                    break;
-                }
-            }
-            state[node] = chosen as i64;
+            local[state[neighbour as usize] as usize] += couplings[entry];
         }
+
+        // `beta` here and not on the arguments, because the oracle
+        // scales the accumulated local field rather than its parts.
+        for value in local.iter_mut() {
+            *value *= beta;
+        }
+
+        // Shift by the maximum before exponentiating, as the oracle does:
+        // the field and the accumulated couplings are unbounded above, and
+        // exp of the raw sum overflows well inside the couplings this
+        // repository samples at.
+        let shift = local.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let mut total = 0.0f64;
+        for value in local.iter_mut() {
+            *value = (*value - shift).exp();
+            total += *value;
+            // The cumulative sum in place, so the search below reads the
+            // same array rather than a second allocation.
+            *value = total;
+        }
+
+        let target = draws[position] * total;
+        // 2**-52, the largest relative gap between neighbouring float64s.
+        let slack = guard * n_states as f64 * 2.220446049250313e-16 * total;
+        // `searchsorted`'s left side: the first index whose cumulative weight
+        // is at least the target. A boundary this draw sits within `slack` of
+        // is one the two exponentials could have moved across it, so the site
+        // goes back to the caller undecided rather than being guessed at.
+        let mut chosen: Option<usize> = None;
+        for (index, &cumulative) in local.iter().enumerate() {
+            let gap = cumulative - target;
+            if !(gap > slack || -gap > slack) {
+                return Ok(position);
+            }
+            if chosen.is_none() && gap >= 0.0 {
+                chosen = Some(index);
+            }
+        }
+        // No boundary reached the draw: `total` rounded below `draw * total`,
+        // which `searchsorted` answers by running off the end. The oracle's
+        // clamp is its own, so this one goes back too.
+        let Some(chosen) = chosen else {
+            return Ok(position);
+        };
+        state[node] = chosen as i64;
     }
-    Ok(())
+    Ok(n_sweeps * n_nodes)
 }
 
 /// PyO3 boundary for [`single_site_sweeps_impl`], `Err` mapped to a Python
-/// `ValueError`. See the free function's docs for the algorithm and shapes.
+/// `ValueError`. See the free function's docs for the algorithm, the shapes,
+/// and the flat position it returns.
+///
+/// `guard` and `first` carry no defaults, and that is root `CLAUDE.md`'s rule
+/// against a silent behaviour change: a caller left on the old signature would
+/// run a partial sweep, ignore the position it came back at, and not be told.
 ///
 /// Arrays are borrowed rather than copied, per issue #232: `as_slice` succeeds
 /// only for a C-contiguous array, so a borrow with the wrong stride is
 /// impossible rather than merely unlikely, and the wrapper normalizes with
 /// `ascontiguousarray` before calling.
 #[pyfunction]
-#[pyo3(signature = (state, field, offsets, neighbours, couplings, draws, n_sweeps, beta = 1.0))]
+#[pyo3(signature = (state, field, offsets, neighbours, couplings, draws, n_sweeps, beta, guard, first))]
 #[allow(clippy::too_many_arguments)]
 pub fn single_site_sweeps(
+    py: Python<'_>,
     mut state: PyReadwriteArray1<'_, i64>,
     field: PyReadonlyArrayDyn<'_, f64>,
     offsets: PyReadonlyArray1<'_, i64>,
@@ -208,7 +255,9 @@ pub fn single_site_sweeps(
     draws: PyReadonlyArray1<'_, f64>,
     n_sweeps: usize,
     beta: f64,
-) -> PyResult<()> {
+    guard: f64,
+    first: usize,
+) -> PyResult<usize> {
     // PyO3 reports a dimensionality mismatch as "'ndarray' object is not an
     // instance of 'ndarray'", which names neither shape. Read the dimensions
     // here so the caller is told what was wanted and what arrived (#571).
@@ -237,23 +286,26 @@ pub fn single_site_sweeps(
             usize::try_from(value).map_err(|_| PyValueError::new_err("offsets must be >= 0"))
         })
         .collect::<PyResult<_>>()?;
-    single_site_sweeps_impl(
-        state.as_slice_mut()?,
-        field.as_slice()?,
-        n_states,
-        &offsets,
-        neighbours.as_slice()?,
-        couplings.as_slice()?,
-        draws.as_slice()?,
-        n_sweeps,
-        beta,
-    )
+    let state = state.as_slice_mut()?;
+    let field = field.as_slice()?;
+    let neighbours = neighbours.as_slice()?;
+    let couplings = couplings.as_slice()?;
+    let draws = draws.as_slice()?;
+    py.detach(|| {
+        single_site_sweeps_impl(
+            state, field, n_states, &offsets, neighbours, couplings, draws, n_sweeps, beta, guard,
+            first,
+        )
+    })
     .map_err(PyValueError::new_err)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `search.potts_mcmc._GUARD`, the width the callers pass.
+    const GUARD: f64 = 16.0;
 
     /// Two isolated sites, no coupling, a field favouring state 1 by `ln 3`.
     /// The conditional is then `(1/4, 3/4)` exactly, so a draw below 0.25
@@ -267,11 +319,23 @@ mod tests {
         let mut state = vec![0i64, 0];
 
         let mut low = state.clone();
-        single_site_sweeps_impl(&mut low, &field, 2, &offsets, &[], &[], &[0.1, 0.1], 1, 1.0)
-            .unwrap();
-        assert_eq!(low, vec![0, 0]);
+        let stop = single_site_sweeps_impl(
+            &mut low,
+            &field,
+            2,
+            &offsets,
+            &[],
+            &[],
+            &[0.1, 0.1],
+            1,
+            1.0,
+            GUARD,
+            0,
+        )
+        .unwrap();
+        assert_eq!((stop, low), (2, vec![0, 0]));
 
-        single_site_sweeps_impl(
+        let stop = single_site_sweeps_impl(
             &mut state,
             &field,
             2,
@@ -281,9 +345,11 @@ mod tests {
             &[0.9, 0.9],
             1,
             1.0,
+            GUARD,
+            0,
         )
         .unwrap();
-        assert_eq!(state, vec![1, 1]);
+        assert_eq!((stop, state), (2, vec![1, 1]));
     }
 
     /// A coupling large enough to dominate a zero field drives a neighbour to
@@ -307,6 +373,8 @@ mod tests {
             &[0.5, 0.5],
             1,
             1.0,
+            GUARD,
+            0,
         )
         .unwrap();
 
@@ -325,6 +393,8 @@ mod tests {
             &[0.5],
             1,
             1.0,
+            GUARD,
+            0,
         )
         .unwrap_err();
         assert!(error.contains("index in step"), "{error}");
@@ -342,6 +412,8 @@ mod tests {
             &[0.5],
             2,
             1.0,
+            GUARD,
+            0,
         )
         .unwrap_err();
         assert!(error.contains("expected 2 * 1"), "{error}");
@@ -359,8 +431,75 @@ mod tests {
             &[0.5],
             1,
             1.0,
+            GUARD,
+            0,
         )
         .unwrap_err();
         assert!(error.contains("expected [0, 2)"), "{error}");
+    }
+
+    /// A guard wide enough to cover the whole cumulative sum can decide no
+    /// site, so the call returns where it started and writes nothing. This
+    /// pins the hand-back path itself, which no realistic draw reaches
+    /// (issue #599).
+    #[test]
+    fn a_guard_wider_than_the_distribution_decides_nothing() {
+        let mut state = vec![0i64];
+        let stop = single_site_sweeps_impl(
+            &mut state,
+            &[0.0, 3.0f64.ln()],
+            2,
+            &[0usize, 0],
+            &[],
+            &[],
+            &[0.9],
+            1,
+            1.0,
+            1e18,
+            0,
+        )
+        .unwrap();
+        assert_eq!((stop, state), (0, vec![0]));
+    }
+
+    /// `first` resumes: a run started past its only site decides nothing and
+    /// reports the run complete.
+    #[test]
+    fn a_run_resumed_past_its_last_site_decides_nothing() {
+        let mut state = vec![0i64];
+        let stop = single_site_sweeps_impl(
+            &mut state,
+            &[0.0, 3.0f64.ln()],
+            2,
+            &[0usize, 0],
+            &[],
+            &[],
+            &[0.9],
+            1,
+            1.0,
+            GUARD,
+            1,
+        )
+        .unwrap();
+        assert_eq!((stop, state), (1, vec![0]));
+    }
+
+    #[test]
+    fn a_negative_guard_is_refused() {
+        let error = single_site_sweeps_impl(
+            &mut [0i64],
+            &[0.0, 0.0],
+            2,
+            &[0usize, 0],
+            &[],
+            &[],
+            &[0.5],
+            1,
+            1.0,
+            -1.0,
+            0,
+        )
+        .unwrap_err();
+        assert!(error.contains("guard must be >= 0"), "{error}");
     }
 }

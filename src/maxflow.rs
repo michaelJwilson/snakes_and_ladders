@@ -346,7 +346,9 @@ pub fn max_flow<'py>(
             )
             .map_err(PyValueError::new_err)?;
     }
-    let (value, side) = max_flow_impl(&mut network, source, sink).map_err(PyValueError::new_err)?;
+    let (value, side) = py
+        .detach(|| max_flow_impl(&mut network, source, sink))
+        .map_err(PyValueError::new_err)?;
     Ok((value, PyArray1::from_vec(py, side)))
 }
 
@@ -367,7 +369,10 @@ pub fn ising_ground_state<'py>(
     coupling: PyReadonlyArray1<'py, f64>,
 ) -> PyResult<Bound<'py, PyArray1<i64>>> {
     let edges = node_indices(edges.as_slice()?)?;
-    let states = ising_ground_state_impl(n_nodes, field.as_slice()?, &edges, coupling.as_slice()?)
+    let field = field.as_slice()?;
+    let coupling = coupling.as_slice()?;
+    let states = py
+        .detach(|| ising_ground_state_impl(n_nodes, field, &edges, coupling))
         .map_err(PyValueError::new_err)?;
     Ok(PyArray1::from_vec(py, states))
 }

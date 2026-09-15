@@ -81,6 +81,9 @@ def test_annealed_move_set_benchmark(
     # here are not comparable work and the ratio between them is the finding.
     graph, field = _problem(extent, 10)
 
+    # The oracle sweep explicitly, for the reason
+    # `test_potts_mcmc_bench.py` gives: this compares move sets, not
+    # backends (issue #599).
     result = benchmark(
         anneal_potts,
         graph,
@@ -88,6 +91,7 @@ def test_annealed_move_set_benchmark(
         Exponential(2.0, 0.05, STEPS),
         np.random.default_rng(551),
         move=move,
+        backend=Backend.PYTHON,
     )
 
     assert result.n_sweeps == STEPS

@@ -351,7 +351,9 @@ pub fn pruning_log_likelihood_impl(
 /// `rust-numpy` hands over the buffer itself.
 #[pyfunction]
 #[pyo3(signature = (branch_length, children, leaf_states, leaf_row, k, pi, rescale))]
+#[allow(clippy::too_many_arguments)]
 pub fn pruning_log_likelihood(
+    py: Python<'_>,
     branch_length: PyReadonlyArray1<'_, f64>,
     children: Vec<Vec<usize>>,
     leaf_states: PyReadonlyArray2<'_, i64>,
@@ -374,8 +376,10 @@ pub fn pruning_log_likelihood(
         n_sites,
         row: &leaf_row,
     };
-    pruning_log_likelihood_impl(branch_length, &children, observations, k, pi, rescale)
-        .map_err(PyValueError::new_err)
+    py.detach(|| {
+        pruning_log_likelihood_impl(branch_length, &children, observations, k, pi, rescale)
+    })
+    .map_err(PyValueError::new_err)
 }
 
 #[cfg(test)]

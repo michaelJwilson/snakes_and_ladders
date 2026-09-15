@@ -17,6 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling
@@ -35,8 +36,18 @@ def test_potts_sweep_benchmark(
 ) -> None:
     graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, TRANSITION)
 
+    # The oracle sweep explicitly, though it is no longer the default: this
+    # compares *move sets*, and a Rust single-site against two Python cluster
+    # moves would be a comparison of backends (issue #599).
     chain = benchmark(
-        sample_potts, graph, FIELD, move, np.random.default_rng(7), 50, 10
+        sample_potts,
+        graph,
+        FIELD,
+        move,
+        np.random.default_rng(7),
+        50,
+        10,
+        backend=Backend.PYTHON,
     )
 
     assert chain.states.shape == (50, graph.n_nodes)
