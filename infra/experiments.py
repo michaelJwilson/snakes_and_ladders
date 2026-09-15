@@ -45,7 +45,20 @@ REQUIRED_FIELDS = (
     "hardware",
     "status",
 )
-PROBLEMS = ("potts-lattice", "hmm-path", "coupled", "tree", "mixture")
+#: The problem an experiment is run on. A vocabulary and not free text, so
+#: two files comparing methods on one problem are found together; a class
+#: the repository supports and this tuple omits is a gap in the index
+#: rather than a licence to invent a name. `bicycle-css` enters with the
+#: quantum code of issue #362, which is the first problem here whose
+#: success criterion is a coset rather than a word.
+PROBLEMS = (
+    "potts-lattice",
+    "hmm-path",
+    "coupled",
+    "tree",
+    "mixture",
+    "bicycle-css",
+)
 SIZES = ("ci", "stress", "release")
 STATUSES = ("open", "confirmed", "retracted", "superseded")
 SECTIONS = ("Question", "Numbers", "Finding")

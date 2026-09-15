@@ -17,9 +17,9 @@ parenthesis the only way a ticket is cited.
 - Support the different lattice types (#231)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code (#340)
-- Quantum LDPC codes over the bicycle construction, whose classical half
-  landed: syndrome decoding with degeneracy, and the success criterion that
-  replaces agreement with the maximum-likelihood codeword (#362)
+- Correlated `X` and `Z` errors on the CSS code, whose one sector landed: a
+  depolarizing channel couples the two, so the decoder decodes a quaternary
+  alphabet on one graph rather than a binary alphabet on two (#362)
 - Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of its own copy
   of the exact open-chain recursion (#186)
@@ -115,6 +115,22 @@ parenthesis the only way a ticket is cited.
 - Transcribe the seven- and eight-taxon calibration table of #331 from a
   release-gate run into `STATUS.md`, where #350 left a placeholder
 
+## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
+
+- Iterated conditional modes over HMM paths (#176) — the deterministic
+  counterpart of the samplers here, and the one move set the milestone's
+  family is missing
+- A mixing-time claim for the tempered ensemble. The exchange ratio is pinned
+  against enumeration and the cold replica is shown uncontaminated, but how
+  long a chain must run before its marginals are usable is unmeasured, so
+  every budget here is stated in sweeps rather than in mixing times
+
+## Milestone 2.0 — RL Definition
+
+- Nothing outstanding. The section is complete on its own terms; an algorithm
+  named there and neither implemented nor declared unbuilt would be a defect,
+  and the guard for that is a reader rather than a test (#407)
+
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
 - The surrogate-bound columns of #308 in the tree feature set — the plug-in
@@ -160,6 +176,16 @@ parenthesis the only way a ticket is cited.
 - GPU scaling for the site-parallel recursion, once a device exists to
   measure on (#280)
 
+## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
+
+- **Measure the filter's cost ratio at large `n`** — the roadmap asks for a
+  surrogate queried far faster than the exact evaluation, and the ratio that
+  claim rests on has never been measured. Until it is, the top-`K` filter is
+  justified by its bound being sound rather than by its being cheap
+- A bound for the tree's likelihood tight enough to rank a neighbourhood. The
+  parsimony upper bound exists; on the fixtures measured it does not separate
+  candidates a hill climb has not already separated
+
 ## Milestone 4.1 — Experiment Tracking, Ablations & Leaderboard
 
 - Create a ledger of benchmarked and validated runs with Aim (#75)
@@ -171,7 +197,7 @@ parenthesis the only way a ticket is cited.
   state-of-the-art — `opt.budget.mcnemar` exists; the adoption rule is not
   yet a gate
 
-## Stage 3 — Research Extensions
+## Stage 5 — Research Extensions
 
 - Differentiable topology search over the tropical Grassmannian — landed as
   a softmin over quartet resolutions (#408) and conserved as

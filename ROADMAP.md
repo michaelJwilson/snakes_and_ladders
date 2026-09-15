@@ -149,8 +149,10 @@ budget.
       specified coupling constants and external fields.
     - *Codes:* Gallager's regular parity-check ensemble and the bicycle
       construction from a circulant, the binary symmetric, erasure and
-      Gaussian channels behind one log-likelihood interface, and an encoder
-      where elimination is affordable.
+      Gaussian channels behind one log-likelihood interface, an encoder where
+      elimination is affordable, and the Calderbank-Shor-Steane code the
+      bicycle matrices define, whose decoder is scored on the coset of the
+      error rather than on the error.
     - *Canonical cases:* instances whose answer is known externally, a closed form,
       a published result.
   - *Validation:* tests against generated simulations, analytic, canonical cases.
@@ -201,7 +203,14 @@ budget.
       relaxation and the certificate it yields, so the boundary between what
       is solved exactly and what is only bounded is drawn rather than
       assumed.
-- **Milestone 1.5: Continous samplers / HMC / Parallel tempering.
+- **Milestone 1.5: Continuous Samplers, HMC & Parallel Tempering**
+  - *Deliverable:* Hamiltonian Monte Carlo with a symplectic integrator and
+    step-size adaptation, temperature schedules, simulated annealing, and a
+    parallel-tempered ensemble over any of the supported problems.
+  - *Validation:* a chain's spread against the analytic Gaussian it samples,
+    and a replica's marginals against the unscaled model's enumeration with
+    exchanges on, so the exchange ratio is shown not to contaminate the cold
+    replica.
 
 ## Stage 2: Complete support for Reinforcement Learning & Variational Search methods
 
@@ -234,7 +243,12 @@ exact or (differentiable) surrogates, e.g. neural networks.
     (`docs/external_tools.md`).
 
 
-- **Milestone 3.1: model surrogates and bounds for supported problems**
+## Stage 3: Surrogates & Bounds
+
+Cheap stand-ins for an expensive evaluation, each admitted only with a statement
+of what it is refereed against.
+
+- **Milestone 3.1: Model Surrogates & Bounds for Supported Problems**
 - **Neural Surrogate Modeling:** train graph neural networks (GNNs) or
   transformers to approximate the Felsenstein likelihood, Potts energy, or HMM
   likelihood. The RL agent queries the surrogate 10,000× faster to filter
@@ -244,8 +258,7 @@ exact or (differentiable) surrogates, e.g. neural networks.
     above them, ranking a neighbourhood for exact re-scoring of the top-`K`
     (#317); the filter's cost ratio at large `n` is unmeasured.
 
-- TODO bounds.
-
+## Stage 4: Experiment Tracking & Ablations
 
 - **Milestone 4.1: Experiment Tracking, Ablations & Leaderboard**
   - *Deliverable:* a localized tracking manifest (e.g. Aim) logging git
