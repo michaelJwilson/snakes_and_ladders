@@ -43,7 +43,7 @@ from snakes_and_ladders.opt.mixture import (
     expectation_maximization,
     uniform_seeds,
 )
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 
 from tests._objective_checks import Counted
@@ -192,7 +192,7 @@ def _anneal(fixture: Fixture, budget: Budget, rng: np.random.Generator) -> Outco
     n_proposals = (budget.size - POLISH_RESERVE - 1) // PER_PROPOSAL
     run = anneal(
         counted,
-        Exponential(LADDER[-1], LADDER[0], n_proposals),
+        ExponentialTempSchedule(LADDER[-1], LADDER[0], n_proposals),
         torch.Generator().manual_seed(int(rng.integers(2**31 - 1))),
         step_size=STEP_SIZE,
         n_steps=N_STEPS,

@@ -80,7 +80,7 @@ PROTOCOLS = (
         "protocol",
         "the count families' shared moments, which now bracket equidispersion in five families and carry a per-channel pair (#399)",
     ),
-    Seam("opt.schedule", "Schedule", "protocol"),
+    Seam("opt.schedule", "TempSchedule", "protocol"),
     Seam("opt.initialize", "Initializer", "protocol"),
     Seam("learn.environment", "Environment", "protocol"),
     Seam(

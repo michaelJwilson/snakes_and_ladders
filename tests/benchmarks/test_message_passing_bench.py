@@ -16,7 +16,10 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.likelihood import message_passing_reference as reference
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
-from snakes_and_ladders.likelihood.message_passing import MessageSchedule, sum_product
+from snakes_and_ladders.likelihood.message_passing import (
+    MessageScheduleName,
+    sum_product,
+)
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
 from snakes_and_ladders.sim.factor_graph import from_hmm, from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
@@ -76,7 +79,7 @@ def test_flooding_on_a_lattice_benchmark(benchmark: BenchmarkFixture) -> None:
     """Sum-product with flooding on the loopy graph belief_propagation is written for."""
     graph = from_potts(LATTICE, FIELD)
 
-    result = benchmark(sum_product, graph, schedule=MessageSchedule.FLOODING)
+    result = benchmark(sum_product, graph, schedule=MessageScheduleName.FLOODING)
 
     assert math.isfinite(result.log_partition)
 
@@ -87,7 +90,9 @@ def test_dictionary_flooding_on_the_same_lattice_benchmark(
     """The reference the edge-array layout replaced: the before number."""
     graph = from_potts(LATTICE, FIELD)
 
-    result = benchmark(reference.sum_product, graph, schedule=MessageSchedule.FLOODING)
+    result = benchmark(
+        reference.sum_product, graph, schedule=MessageScheduleName.FLOODING
+    )
 
     assert math.isfinite(result.log_partition)
 

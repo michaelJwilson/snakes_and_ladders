@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.opt.schedule import Constant
+from snakes_and_ladders.opt.schedule import ConstantTempSchedule
 from snakes_and_ladders.search.gibbs import _Indexed, gibbs_sweep
 from snakes_and_ladders.search.potts_mcmc import anneal_potts
 from snakes_and_ladders.sim.factor_graph import from_potts
@@ -96,7 +96,7 @@ def test_potts_single_site_sweep_benchmark(
         anneal_potts,
         graph,
         FIELD,
-        Constant(1.0, SWEEPS),
+        ConstantTempSchedule(1.0, SWEEPS),
         np.random.default_rng(1),
         backend=backend,
     )
