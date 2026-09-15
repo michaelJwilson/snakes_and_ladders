@@ -38,6 +38,7 @@ from snakes_and_ladders.opt.constrain import (
     log_simplex,
     positive,
 )
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sim.gtr import n_exchangeabilities
 from snakes_and_ladders.sim.tree import Node
 
@@ -64,7 +65,7 @@ lengths alone at one tree and one site count.
 GRADIENT_ROUTES: tuple[GradientRoute, ...] = ("analytic", "taped")
 
 
-class BranchLengthObjective:
+class BranchLengthObjective(Objective):
     """Negative log-likelihood of an alignment as a function of branch lengths.
 
     Parameters
@@ -340,7 +341,7 @@ class BranchLengthObjective:
         return free_from_positive(lengths)
 
 
-class SubstitutionModelObjective:
+class SubstitutionModelObjective(Objective):
     """Fits branch lengths, GTR exchangeabilities and ``pi`` together.
 
     The follow-up to :class:`BranchLengthObjective`, and a modelling change

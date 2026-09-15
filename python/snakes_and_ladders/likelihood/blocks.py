@@ -50,7 +50,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from snakes_and_ladders.bound import Bound
+from snakes_and_ladders.bound import Bound, Surrogate
 from snakes_and_ladders.likelihood.patterns import compress_columns
 from snakes_and_ladders.likelihood.pruning_torch import (
     branch_order,
@@ -389,7 +389,7 @@ def block_frequency_interval(
     )
 
 
-class BlockFrequencyBound:
+class BlockFrequencyBound(Surrogate):
     """The block-frequency interval as a :class:`~snakes_and_ladders.bound.Surrogate`.
 
     Branch lengths come from the least-squares fit to the Jukes-Cantor

@@ -229,11 +229,8 @@ parenthesis the only way a ticket is cited.
   replaced implementation to `sandbox/`. `PottsGraph.compressed_adjacency`
   leaves this list: #586 made it a per-graph derivation, so what a port would
   replace is one build rather than one per call
-- Deprecate `SEAMS.md` in favour of the abstractions declared in code (#586,
-  steps 6 and 7): the protocols subclassed explicitly, `infra/seams_survey.py`
-  and its hand-written catalogue deleted, and the consumer count that
-  `infra/gate_new_seams.py` asks it for moved into the gate. Blocked on #591,
-  which edits `infra/appraise_structures.py`, the file the count moves toward
+- The tree schedule's per-level grouping: 24.4 per cent of a `sum_product`
+  over a 2,000-variable chain, where every level carries one message (#592)
 - Route `likelihood.ldpc` and `likelihood.belief_propagation` through the
   schedule seam #592 added. Both run their own message iteration, and
   `sequential` is the layered order the LDPC literature uses, so the seam is

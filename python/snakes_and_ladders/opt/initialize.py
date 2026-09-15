@@ -37,6 +37,7 @@ that costs 2% of it.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Protocol, runtime_checkable
 
 import numpy as np
@@ -56,6 +57,7 @@ class Initializer(Protocol):
     for one, and the shape of the answer does not change.
     """
 
+    @abstractmethod
     def starts(self, objective: Objective) -> list[torch.Tensor]:
         """Candidate starting points, in unconstrained coordinates.
 
@@ -67,7 +69,7 @@ class Initializer(Protocol):
         ...  # pragma: no cover
 
 
-class FromObjective:
+class FromObjective(Initializer):
     """The objective's own `initial()`, unchanged.
 
     The default, and today's behaviour exactly: every number `STATUS.md` pins
@@ -85,7 +87,7 @@ class FromObjective:
         return [objective.initial()]
 
 
-class Perturbed:
+class Perturbed(Initializer):
     """The objective's start, tilted by a fixed amount along each coordinate.
 
     Deterministic by design. It exists for a surface whose nominal start is
@@ -125,7 +127,7 @@ class Perturbed:
         return [base + self.magnitude * signs]
 
 
-class RandomRestart:
+class RandomRestart(Initializer):
     """Several starts, drawn around the objective's own.
 
     For a surface with more than one local optimum, where the answer a single
@@ -190,7 +192,7 @@ class RandomRestart:
         return drawn
 
 
-class FromChain:
+class FromChain(Initializer):
     """A start drawn from a short Hamiltonian chain on the objective itself.
 
     The three above propose a point; this one samples the surface. Where the
@@ -270,7 +272,7 @@ class FromChain:
         return list(self.chain(objective).theta)
 
 
-class FromAnnealing:
+class FromAnnealing(Initializer):
     """The best point a Hamiltonian chain visits while its temperature falls.
 
     The single-chain control :class:`FromTempering` is measured against:
@@ -327,7 +329,7 @@ class FromAnnealing:
         return [self.run(objective).theta]
 
 
-class FromTempering:
+class FromTempering(Initializer):
     """The best point a temperature ladder visits, exchanging positions.
 
     The hot replicas cross barriers the cold one cannot, so this escapes a
