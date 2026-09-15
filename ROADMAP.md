@@ -26,6 +26,23 @@ before it is published.
   **Open Questions** section carrying every question on the desired
   behaviour; a plan with nothing outstanding says so under that heading rather
   than omitting it. A plan is subject to `CLAUDE.md`'s Writing Style.
+
+  A plan states its **development strategy** beside its validation: the
+  selection it will iterate against, and the tier that decides it. The narrow
+  selection is for iterating --- `-m "<problem> and critical"`, or the kind the
+  change is refereed by. The tier that decides is `DEV.md`'s CI tier,
+  `-m "not release and not stress and not key"`; CI does not run it on a pull
+  request, so a plan that wants it before the merge says who runs it and when.
+  A plan claiming a speedup names the size its benchmark was taken at, because
+  a size chosen so the gate stays affordable is not a size a user works at.
+
+  The gate is narrow by design and that is the reason for the rule: `-m
+  critical` collects **212** tests where the CI tier collects **2,641** and the
+  whole suite 2,746 (measured on this branch, 2026-09-15). This session the
+  full tier caught what `critical` could not on two pull requests --- twelve
+  failures on #601, two stale references on #595 --- and #598's headline
+  benchmark was gate-sized, withdrawn as unmeasured at a stress size rather
+  than refuted by one.
 - **Gate:** a maintainer applies `approved`, and only then may a pull request
   open. The pull request must implement the plan already in the thread. A plan
   that turns out to be flawed gets a revised plan posted to the same thread,
