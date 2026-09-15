@@ -56,7 +56,7 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 *   **GPU (PyTorch, Triton, JAX):** Target if the hot path is data-parallel and earns $\ge 10\times$ speedup over vectorized NumPy at realistic problem sizes.
 *   **Autodiff:** **PyTorch**, decided. Its MPS backend is the path on Apple Silicon, which `ROADMAP.md` targets alongside CUDA.
 *   **Rust Backend (`oxi_snakes_and_ladders`):** Target for CPU-bound hot paths (control flow, tree traversal, irregular memory access, small sizes).
-*   **Measurement:** Benchmark candidates against the NumPy reference before committing to a port. Report both numbers in the PR.
+*   **Measurement:** Benchmark candidates against the NumPy reference before committing to a port. Report both numbers in the PR. **The two concerns do not share a size policy.** Validity is established at every tier — at gate sizes so a merge has something to gate on, and at stress sizes because a claim that holds only where the problem is small is not the claim the roadmap makes. A *speedup* is established at stress sizes alone: that is where the work is done and what a user pays. So a ratio read at a gate size decides nothing in either direction — a regression there is not a defect to fix, a win there is not a result to report — and an optimization whose only evidence is a gate-sized benchmark has not been measured.
 *   **The Oracle:** Every accelerated kernel keeps its pure Python/NumPy implementation as an oracle. Regression tests must pin the accelerated output against it, and recover known values on sims.
 
 ## High Performance coding

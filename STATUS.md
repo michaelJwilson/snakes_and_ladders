@@ -3429,12 +3429,13 @@ edges the gather wins 1.68–2.77x at 128 configurations and 2.4–5.4x below 96
 and runs 0.72–1.70x at 256, so the threshold sits below the mixed region.
 
 **`search.maxflow.FlowNetwork.from_arcs`** builds a network with no Python call
-per arc. It is the smaller half by an order of magnitude, and it regresses at
-the smallest size:
+per arc. It is the smaller half by an order of magnitude. The 8x8 row is a
+validation size, not an optimization size, and is printed for completeness
+rather than as a result:
 
 | network build, `Backend.RUST` | `add_edge` loop | `from_arcs` |
 | --- | --- | --- |
-| 8x8, 3 / 5 states, 112 edges | 0.254 / 0.265 ms | 0.390 / 0.351 ms (**0.7 / 0.8x**) |
+| 8x8, 3 / 5 states, 112 edges (a gate size) | 0.254 / 0.265 ms | 0.390 / 0.351 ms (0.7 / 0.8x) |
 | 16x16, 3 / 5 states, 480 edges | 1.059 / 1.098 ms | 0.966 / 1.089 ms (1.1 / 1.0x) |
 | 32x32, 3 / 5 states, 1,984 edges | 4.860 / 4.760 ms | 4.046 / 4.176 ms (1.2 / 1.1x) |
 
