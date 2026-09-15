@@ -6,6 +6,11 @@ statements, 8,421 missed, 36.80%** --- 149 of those tests infrastructure and
 eight across the five application packages. The floor is that measurement, and
 it rises as tests land.
 
+It has since risen once, on the build-out in the same pull request: **298
+tests, 14,051 statements, 7,269 missed, 48.27%**. The tier's own clock went
+from 42.4 s to 48.3 s over the same 34 tests, so the eleven and a half points
+cost 5.9 s.
+
 **Why a floor here as well as the 90% on the whole tier.** The two answer
 different questions. The whole tier's gate asks whether the package is tested;
 this asks whether the *fast* gate tests it, and a tier that passed the first
@@ -30,11 +35,12 @@ import pytest
 #: a pull request lands and never lower it --- the rule root `CLAUDE.md` gives
 #: for `--cov-fail-under`, one tier down.
 #:
-#: **Rounded down, not to nearest.** The measurement is 36.7982587811468 and
-#: the terminal report prints 37%; a floor set from what was printed is above
-#: what was measured, and fails the run it was derived from. This one was, and
-#: the guard below caught it.
-CRITICAL_COVERAGE_FLOOR = 36.7
+#: **Rounded down, not to nearest.** The measurement is 48.267027257846415 and
+#: the terminal report prints 48%; a floor set from what was printed is below
+#: what was measured and gives back a point, and one rounded up is above it and
+#: fails the run it was derived from --- which the 36.7 that stood here before
+#: the build-out did, and this guard caught.
+CRITICAL_COVERAGE_FLOOR = 48.2
 
 #: Where CI leaves the report this reads. Absent locally, which is a skip
 #: rather than a failure: a developer running `-m critical` bare has no report

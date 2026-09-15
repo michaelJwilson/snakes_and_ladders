@@ -219,6 +219,7 @@ def test_nni_and_spr_exhaustive_at_n8(n_taxa: int) -> None:
 # --- the deduplication key, and the neighbourhood it deduplicates ---------------
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_bitmask_split_key_is_leaf_bipartitions_on_every_topology() -> None:
     # `spr_neighbours` deduplicates on `_split_key` since #264; it must name the
@@ -266,6 +267,7 @@ def _spr_by_definition(start: Topology) -> list[frozenset[frozenset[str]]]:
     return keys
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize("n_taxa", [5, 7, 9])
 def test_spr_neighbours_are_the_definition_in_the_definition_order(n_taxa: int) -> None:
@@ -307,6 +309,7 @@ def test_spr_radius_at_the_leaf_count_is_the_unbounded_neighbourhood(
     assert len(bounded) == 2 * (n_taxa - 3) * (2 * n_taxa - 7)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize("n_taxa", [5, 6, 7, 8])
 def test_spr_radius_one_is_the_nni_neighbourhood(n_taxa: int) -> None:

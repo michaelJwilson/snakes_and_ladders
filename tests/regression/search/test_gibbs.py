@@ -93,6 +93,7 @@ def _potts_pair() -> tuple[PottsGraph, FactorGraph]:
     return graph, from_potts(graph, FIELD)
 
 
+@pytest.mark.critical
 @pytest.mark.simulated_truth
 def test_the_generic_sweep_samples_the_potts_boltzmann_distribution() -> None:
     graph, factor_graph = _potts_pair()
@@ -112,6 +113,7 @@ def test_the_generic_sweep_samples_the_potts_boltzmann_distribution() -> None:
     assert chi_square_p_value(counts, len(chain.states) * expected) > SIGNIFICANCE
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_generic_sweep_reproduces_the_potts_sweep_draw_for_draw() -> None:
     # Same uniforms, same site order, same cumulative search: the only way
@@ -139,6 +141,7 @@ def _lattice_graph(extent: int) -> FactorGraph:
     return from_potts(lattice, np.array([0.3, -0.7, 0.15]))
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize("extent", [16, 32])
 @pytest.mark.parametrize("seed", range(4))
@@ -236,6 +239,7 @@ def _chain() -> tuple[FactorGraph, list[tuple[int, ...]], np.ndarray]:
     return graph, paths, posterior / posterior.sum()
 
 
+@pytest.mark.critical
 @pytest.mark.simulated_truth
 def test_the_generic_sweep_samples_the_hidden_path_posterior() -> None:
     graph, paths, posterior = _chain()
@@ -341,6 +345,7 @@ def test_the_block_move_draws_the_whole_chain_from_the_enumerated_path_posterior
     )
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
     params = load_fixture(FOUR_TAXA)
@@ -372,6 +377,7 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
         )
 
 
+@pytest.mark.critical
 @pytest.mark.simulated_truth
 def test_the_generic_sweep_samples_the_coupled_model_s_label_posterior() -> None:
     params = fixture("spatio_sequential", "ci").params
@@ -392,6 +398,7 @@ def test_the_generic_sweep_samples_the_coupled_model_s_label_posterior() -> None
         assert p_value > SIGNIFICANCE, (node, p_value)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_does() -> (
     None

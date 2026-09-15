@@ -1,6 +1,7 @@
 """Suite-wide configuration: one process is one core, slow tests are named, and no benchmark runs distributed.
 
-Three things; the first two are issue #372's and the third is issue #405's.
+Four things; the first two are issue #372's, the third issue #405's and the
+fourth issue #635's.
 
 **One process is one core.** The BLAS behind NumPy and PyTorch starts a
 thread per core, so one test process reads as four on the load average and
@@ -26,6 +27,14 @@ tags anything. The names are registered below with the rest, so
 ``--strict-markers`` refuses a typo, and they are a third axis: ``-m
 "potts_lattice and critical"`` is the intersection.
 
+**An early-gate test is never scale-marked out of the tier.** Issue #635.
+``-m critical`` replaces ``addopts``' ``-m "not release"`` rather than
+intersecting with it, so a test carrying both `critical` and a scale marker
+runs in the early gate and not in a bare `pytest` --- the opposite of what
+each marker asks for. The scale markers come from the fixture file through
+``tests/_scale.py`` and never appear as a decorator, so this is read from the
+collected items and refused at collection (``tests/_durations.py``).
+
 **A benchmark is never collected under ``pytest-xdist``.** ``pytest-benchmark``
 disables itself whenever a run is distributed and says so in a line of its
 header, so a distributed run collects the 212 benchmark tests, passes every
@@ -47,7 +56,11 @@ for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 
 import pytest  # noqa: E402
 
-from tests._durations import key_over_cap, over_cap  # noqa: E402
+from tests._durations import (  # noqa: E402
+    key_over_cap,
+    outside_the_tier,
+    over_cap,
+)
 from tests._problems import (  # noqa: E402
     CACHE_KEY,
     fixtures_named_in,
@@ -113,6 +126,14 @@ def pytest_collection_modifyitems(
             continue
         for problem in fixtures_named_in(path):
             item.add_marker(problem)
+
+    conflicts = outside_the_tier(
+        (item.nodeid, frozenset(marker.name for marker in item.iter_markers()))
+        for item in items
+    )
+    if conflicts:
+        raise pytest.UsageError("\n".join([EARLY_GATE_CONFLICT, *conflicts]))
+
     cache = getattr(config, "cache", None)
     if cache is not None and not hasattr(config, "workerinput"):
         # The controller only: `pytest-xdist`'s workers share one cache
@@ -138,6 +159,15 @@ def distributed(config: pytest.Config) -> bool:
     if getattr(config.option, "numprocesses", None):
         return True
     return str(config.getoption("dist", "no")) != "no"
+
+
+#: What a run collecting a scale-marked critical test is told. The refusal is
+#: at collection because the conflict is one of selection, not of a result.
+EARLY_GATE_CONFLICT = (
+    "a test gates early and is also scale-marked out of the per-PR tier, so "
+    "-m critical runs it and a bare pytest does not (tests/_durations.py, "
+    "issue #635):"
+)
 
 
 #: What a benchmark reaching a distributed run is told. Read by the guard's
