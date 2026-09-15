@@ -35,8 +35,9 @@ before it is published.
   not something an open pull request can have. A plan claiming a speedup names
   a benchmark at a stress size too, per `CLAUDE.md`'s **Measurement** rule: the
   gate's sizes are chosen to be cheap, not to be representative. Why this is
-  not bookkeeping: the gate is 212 of 2,746 tests (2026-09-15), #598's headline
-  benchmark was gate-sized and did not survive a stress-relevant reading, and
+  not bookkeeping: the gate is 212 of the 2,674 tests the merge runs
+  (2026-09-15; 2,746 with `release`), #598's headline benchmark was gate-sized
+  and did not survive a stress-relevant reading, and
   `CLAUDE.md`'s selection rule carries what the full tier has caught behind a
   passing gate.
 - **Gate:** a maintainer applies `approved`, and only then may a pull request
