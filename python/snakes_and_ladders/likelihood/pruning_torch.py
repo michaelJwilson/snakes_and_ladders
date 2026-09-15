@@ -117,6 +117,70 @@ def transition_probabilities(
     return result
 
 
+#: Leaf indicator partials, keyed by the states array's identity with the
+#: alphabet and the tensor type. A leaf's partial is the data indicator of
+#: ``eq:pruning``: it depends on the alignment and on nothing being fitted, so
+#: it is the same tensor at every evaluation of a fit -- and a fit evaluates it
+#: thousands of times. At 20 taxa, 20 of the tree's 38 nodes are leaves, and
+#: rebuilding each one cost a ``zeros``, an ``arange``, an ``as_tensor`` and a
+#: scatter per evaluation (issue #443's Python post-order, measured at 21.8% of
+#: a 20-taxon fit's self time).
+#:
+#: The states array is held in the value so its ``id`` cannot be recycled onto
+#: a different array while the entry lives, which is what makes the identity
+#: key sound rather than merely usually right.
+_LEAF_PARTIALS: dict[
+    tuple[int, int, torch.dtype, str], tuple[object, torch.Tensor]
+] = {}
+
+#: Entries kept before the oldest is dropped. One entry is an
+#: ``(n_sites, k)`` tensor; a 20-taxon fit needs 20 of them.
+_LEAF_PARTIAL_LIMIT = 512
+
+
+def _leaf_partial(
+    states: object,
+    n_sites: int,
+    k: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    """The one-hot partial for a leaf's observed states, built once per array.
+
+    Parameters
+    ----------
+    states : object
+        The leaf's observed states, as the alignment holds them.
+    n_sites : int
+        Columns in the alignment.
+    k : int
+        Alphabet size.
+    dtype : torch.dtype
+        Tensor type, taken from the branch lengths.
+    device : torch.device
+        Where the recursion runs.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(n_sites, k)``, one at the observed state of each site. Constant in
+        the branch lengths, so it carries no gradient and is shared rather
+        than copied.
+    """
+    key = (id(states), k, dtype, str(device))
+    hit = _LEAF_PARTIALS.get(key)
+    if hit is not None and hit[0] is states:
+        return hit[1]
+
+    observed = torch.as_tensor(states, dtype=torch.long, device=device)
+    partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
+    partial[torch.arange(n_sites, device=device), observed] = 1.0
+    if len(_LEAF_PARTIALS) >= _LEAF_PARTIAL_LIMIT:
+        _LEAF_PARTIALS.pop(next(iter(_LEAF_PARTIALS)))
+    _LEAF_PARTIALS[key] = (states, partial)
+    return partial
+
+
 def log_likelihood(
     tau: Node,
     k: int,
@@ -203,32 +267,40 @@ def log_likelihood(
     n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
     weight = check_weights(weights, n_sites)
     log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
+    # The scalar the rescale falls back to, built once per call rather
+    # than as a fresh `ones_like` per internal node.
+    one = torch.ones((), dtype=dtype, device=device)
     # Every branch's transition matrix at once, indexed by branch_order.
     transitions = transition_probabilities(branch_lengths, k, rate_matrix)
 
     def _post_order(node: Node) -> torch.Tensor:
         nonlocal log_scale
         if node.is_leaf:
-            states = torch.as_tensor(
-                alignment[node.name], dtype=torch.long, device=device
-            )
-            partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
-            partial[torch.arange(n_sites), states] = 1.0
-            return partial
+            return _leaf_partial(alignment[node.name], n_sites, k, dtype, device)
 
-        partial = torch.ones((n_sites, k), dtype=dtype, device=device)
+        # The first child's message seeds the product rather than a tensor of
+        # ones being multiplied by it: the ones were allocated and multiplied
+        # once per internal node per evaluation, and a product over one term is
+        # that term. The value is unchanged, so this is bitwise.
+        partial: torch.Tensor | None = None
         for child in node.children:
             child_partial = _post_order(child)
             transition = transitions[index[child.name]]
             # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
-            partial = partial * (child_partial @ transition.T)
+            message = child_partial @ transition.T
+            partial = message if partial is None else partial * message
+        if partial is None:
+            # A childless non-leaf constrains nothing.
+            partial = torch.ones((n_sites, k), dtype=dtype, device=device)
 
         if rescale:
             scale = partial.amax(dim=1)
             # See snakes_and_ladders.likelihood.pruning: a zero scale means the site is
             # genuinely impossible under the model, left at 0 rather than
             # divided so log(0) = -inf propagates instead of being masked.
-            safe_scale = torch.where(scale > 0, scale, torch.ones_like(scale))
+            # The replacement is the scalar one rather than a tensor of ones,
+            # which is the same value without the per-node allocation.
+            safe_scale = torch.where(scale > 0, scale, one)
             partial = partial / safe_scale.unsqueeze(1)
             log_scale = log_scale + torch.log(safe_scale)
 

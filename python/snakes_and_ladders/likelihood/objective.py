@@ -26,11 +26,12 @@ topologies.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Literal
 
 import numpy as np
 import torch
 
-from snakes_and_ladders.likelihood import pruning_torch
+from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.opt.constrain import (
     free_from_log_simplex,
     free_from_positive,
@@ -45,6 +46,22 @@ from snakes_and_ladders.sim.tree import Node
 # would make the fit's own convergence part of what the recovery test
 # measures.
 _INITIAL_BRANCH_LENGTH = 0.1
+
+GradientRoute = Literal["analytic", "taped"]
+"""Where the derivative in the branch lengths comes from.
+
+``"analytic"`` is :mod:`snakes_and_ladders.likelihood.pruning_analytic`, the
+closed form of ``alg:pruning-backward``; ``"taped"`` is
+:mod:`snakes_and_ladders.likelihood.pruning_torch`, which stays the oracle the
+closed form is pinned against and the default here. The two values agree
+exactly -- they are the same forward pass -- and the two gradients to the
+tolerance ``tests/regression/likelihood/test_pruning_analytic.py`` states,
+so the choice is one of cost alone. Which costs less is not settled:
+experiment 012 measured the ratio inverting, 2.11x to 0.57x, on the branch
+lengths alone at one tree and one site count.
+"""
+
+GRADIENT_ROUTES: tuple[GradientRoute, ...] = ("analytic", "taped")
 
 
 class BranchLengthObjective:
@@ -67,12 +84,24 @@ class BranchLengthObjective:
         derivative check is meaningless in ``float32``.
     device : torch.device | str | None
         Where to run. ``None`` leaves the tensor on the default device.
+    gradient : GradientRoute
+        Where the derivative in the branch lengths comes from. ``"taped"``,
+        the default, is ``pruning_torch``; ``"analytic"`` is the closed form
+        of ``alg:pruning-backward``. Both return the same forward value,
+        computed by the same operations in the same order, and their
+        gradients agree to 5.4e-16 relative.
+
+        The default is the tape because it is what this objective has
+        always used, and experiment 012 found no size rule that would
+        justify changing it: the ratio between the two inverts on the
+        branch lengths alone. The argument exists so a caller can measure
+        the two through a fit, rather than only at ``log_likelihood``.
 
     Raises
     ------
     ValueError
         If ``tau``'s root has fewer than two children, which is not a tree
-        this likelihood is defined on.
+        this likelihood is defined on, or ``gradient`` names no route.
     """
 
     def __init__(
@@ -83,6 +112,7 @@ class BranchLengthObjective:
         alignment: Mapping[str, np.ndarray],
         dtype: torch.dtype = torch.float64,
         device: torch.device | str | None = None,
+        gradient: GradientRoute = "taped",
     ) -> None:
         if len(tau.children) < 2:
             msg = (
@@ -90,7 +120,11 @@ class BranchLengthObjective:
                 f"needs a root with at least 2"
             )
             raise ValueError(msg)
+        if gradient not in GRADIENT_ROUTES:
+            msg = f"gradient is one of {GRADIENT_ROUTES}, got {gradient!r}"
+            raise ValueError(msg)
 
+        self._gradient: GradientRoute = gradient
         self._tau = tau
         self._k = k
         self._pi = pi
@@ -205,9 +239,19 @@ class BranchLengthObjective:
         halved[first] = head[first] / 2.0
         return torch.cat([halved, halved[first : first + 1], tail])
 
+    @property
+    def gradient(self) -> GradientRoute:
+        """Which route this objective's derivative comes from."""
+        return self._gradient
+
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """Negative log-likelihood of the alignment at these branch lengths."""
-        return -pruning_torch.log_likelihood(
+        route = (
+            pruning_analytic.log_likelihood
+            if self._gradient == "analytic"
+            else pruning_torch.log_likelihood
+        )
+        return -route(
             self._tau,
             self._k,
             self._pi,

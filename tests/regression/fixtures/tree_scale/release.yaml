@@ -1,0 +1,20 @@
+model: jukes-cantor
+oracle: none
+
+# The leaf-count ladder at 200, run in the release process (issue #582).
+#
+# The largest rung #582 considered. It is here because the ticket asked for
+# it and it costs almost nothing to state, not because anything measured
+# needs it: neighbour joining recovers the generating topology exactly here
+# in 0.58 s, as it does at every smaller rung.
+#
+# Everything the ci rung's comment says about the oracle, the bounded height
+# and why this is a cost rather than a difficulty axis applies unchanged.
+seed: 20260914
+n_sites: 2000
+tolerance: 0.03
+k: 4
+pi: [0.25, 0.25, 0.25, 0.25]
+tau:
+  balanced: 200
+  height: 0.25
