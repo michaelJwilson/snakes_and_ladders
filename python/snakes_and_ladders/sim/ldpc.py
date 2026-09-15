@@ -318,7 +318,11 @@ def bicycle_code(
 
 
 class Channel(Protocol):
-    """A memoryless binary-input channel, seen only through its LLRs."""
+    """A memoryless binary-input channel, seen only through its LLRs.
+
+    Under the seam rule: the decoder's channel argument, with three
+    implementers in its module.
+    """
 
     def log_likelihood_ratios(
         self, codeword: np.ndarray, rng: np.random.Generator

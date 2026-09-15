@@ -137,6 +137,9 @@ class CountEmissionFamily(Protocol):
     Poisson, above one for the negative binomial and the beta-binomial. The
     moments are a protocol so a test can range over the families and assert
     that bracketing.
+
+    Under the seam rule: the count families' shared moments, which bracket
+    equidispersion in five families and carry a per-channel pair (issue #399).
     """
 
     @property

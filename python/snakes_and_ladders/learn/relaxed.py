@@ -98,6 +98,9 @@ class RelaxedObjective(Protocol):
     the optimizer are written against this and never against a Potts chain or
     an HMM. A third discrete space means writing one of these, not a second
     optimizer.
+
+    Under the seam rule: the relaxation driver's argument, with two
+    implementers in its module.
     """
 
     @property

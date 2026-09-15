@@ -32,7 +32,7 @@ This file is authoritative. Each of the remainder has a defined task:
 | `ROADMAP.md` | The goals and the planned path to them |
 | `STATUS.md` | What has landed against each roadmap milestone, the evidence, and the PR carrying it |
 | `TICKETS.md` | Titles of planned tickets remaining on the roadmap |
-| `CHECKS.md`, `SEAMS.md` | The evidence the repository is founded on, and the abstractions/apis that ensure usability and extensibility|
+| `CHECKS.md` | The evidence the repository is founded on, read from the tree and not committed. The abstractions are not listed beside it: a `Protocol` is declared in the package and found at import, so the declaration is the record (issue #586) |
 | `CHANGELOG.md` | What has landed, per dated release section; built from `changelog.d/` fragments by `towncrier` |
 | `INSTALL.md` | Installing, building and running locally |
 | `DEV.md` | Layout, the CI jobs, repository settings, the CI budget, how a change is reviewed |
@@ -61,8 +61,12 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 
 ## High Performance coding
 *   **Profile first.** `cProfile` decides what is worth teststing and whether alternatives are superior.
+*   **Do less work before doing the same work faster.** An algorithmic cut outranks a mechanical one and the profile says which is available; #289 bought 6.3x by scoring fewer candidates, where the layout work on the same tree bought 3.7x.
+*   **Warm starts before cold ones.** A search recomputing per step what it could update incrementally pays the full cost per step, and asking for that comes before reaching for a faster language.
+*   **Recompute or store is a decision, and unmade it defaults to recompute.** A derived quantity rebuilt inside a loop is a store nobody has chosen yet: `compressed_adjacency` was 2.5 ms of a 3.5 ms cluster move, rebuilt per call to touch one cluster.
+*   **Cost depends on the data, not only on its size.** A route chosen on problem size alone is chosen on the wrong variable, and a default taken from one fixture is a default taken from one dataset; at one size, replacing a fixture's branch lengths moved taped against analytic from 2.1x to 0.6x (#443).
 *   **L1/2/3 caches.** Design code to fully utilize simd and the cache.
-*   **Memory layout.** Contiguous, row-major arrays walked in stride order; neighbour lists as offsets, not lists of lists.
+*   **Memory layout.** Contiguous, row-major arrays walked in stride order; neighbour lists as offsets, not lists of lists. **The rule stops at the Python boundary:** it is about a NumPy or compiled consumer, and for a pure-Python inner loop it inverts — over 16,384 rows of degree six a row walk is 2.0 ms as lists, 3.9 ms flat with offsets and 25.6 ms as a NumPy slice.
 *   **Vectorization and SIMD.** Inner loops contiguous, unaliased, without early exit or data-dependent reduction, so NumPy and the Rust compiler vectorize.
 *   **Branch misprediction.** minimize branch misses, queries etc.
 *   **Inlining.** No Python-level call per site or per node; hoist it or vectorize it. In Rust, `#[inline]` the small hot helpers; use smallvec on the stack.

@@ -38,6 +38,9 @@ class Policy(Protocol):
     is what lets a non-differentiable wrapper such as
     :class:`EpsilonGreedyPolicy` be rolled out without being trainable, which
     is exactly what it is.
+
+    Under the seam rule: what a rollout needs and no more, so an untrainable
+    wrapper rolls out.
     """
 
     def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
