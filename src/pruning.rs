@@ -227,58 +227,6 @@ pub fn pruning_log_likelihood_impl(
     Ok(total_log_likelihood)
 }
 
-/// [`pruning_log_likelihood_impl`] with the reduction done in parallel.
-///
-/// The candidate bit-identity forbade. `fold`/`reduce` over an indexed
-/// parallel iterator combines partials in index order, which is still
-/// `(a+b)+(c+d)` against the serial `((a+b)+c)+d`, so the total differs in its
-/// last bits. `likelihood/CLAUDE.md` accepts a relative 1e-11 for `float64`
-/// and a tree combination over 200,000 terms is far inside it -- and is in
-/// fact *more* accurate than the serial sum, not less. What it buys is one
-/// `f64` per site of memory and one pass over it. Benchmarked against the
-/// bit-identical form; only one survives (issue #627).
-#[allow(dead_code)]
-pub fn pruning_log_likelihood_reduced(
-    branch_length: &[f64],
-    children: &[Vec<usize>],
-    observations: LeafObservations<'_>,
-    k: usize,
-    pi: &[f64],
-    rescale: bool,
-) -> Result<f64, String> {
-    let LeafObservations {
-        states: leaf_states,
-        n_sites,
-        row: leaf_row,
-    } = observations;
-    let window = if n_sites >= PARALLEL_ABOVE {
-        n_sites.div_ceil(rayon::current_num_threads().max(1))
-    } else {
-        n_sites
-    };
-    let totals: Result<Vec<f64>, String> = (0..n_sites.div_ceil(window))
-        .into_par_iter()
-        .map(|index| {
-            let start = index * window;
-            let mut slot = vec![0.0f64; window.min(n_sites - start)];
-            traverse_window(
-                branch_length,
-                children,
-                leaf_states,
-                n_sites,
-                leaf_row,
-                k,
-                pi,
-                rescale,
-                start,
-                &mut slot,
-            )?;
-            Ok(slot.iter().sum::<f64>())
-        })
-        .collect();
-    Ok(totals?.iter().sum::<f64>())
-}
-
 /// Sites below this run the traversal once, on one thread.
 ///
 /// Measured, not chosen: `STATUS.md` carries what the pool costs on each side
@@ -614,36 +562,6 @@ mod tests {
         total
     }
 
-    /// The reassociated form stays inside the tolerance that permits it.
-    ///
-    /// `likelihood/CLAUDE.md` holds a `float64` comparison to a relative
-    /// 1e-11. This asserts the reduced form is within it *and* reports the
-    /// realized deviation, so the number in `STATUS.md` is one a reader can
-    /// reproduce rather than one taken on trust.
-    #[test]
-    fn test_the_reassociated_reduction_stays_inside_the_float64_tolerance() {
-        let (k, n_sites) = (4usize, 50_000usize);
-        let pi = vec![0.25; k];
-        let (branch_length, children, leaf_states, leaf_row) = fixture(4, n_sites, k);
-        let observations = || LeafObservations {
-            states: &leaf_states,
-            n_sites,
-            row: &leaf_row,
-        };
-        let exact =
-            pruning_log_likelihood_impl(&branch_length, &children, observations(), k, &pi, true)
-                .unwrap();
-        let reduced =
-            pruning_log_likelihood_reduced(&branch_length, &children, observations(), k, &pi, true)
-                .unwrap();
-        let relative = ((reduced - exact) / exact).abs();
-        assert!(
-            relative <= 1e-11,
-            "relative deviation {relative} exceeds the float64 tolerance 1e-11 \
-             (likelihood/CLAUDE.md); exact {exact}, reduced {reduced}"
-        );
-        println!("reassociated reduction: relative deviation {relative:e}");
-    }
 
     #[test]
     fn test_jc_transition_probabilities_rows_sum_to_one() {

@@ -296,27 +296,23 @@ pub fn class_posteriors_into(
     class_log_density(&shape, tables, totals, successes, labels, &mut density);
     let per_class = n_positions * n_states;
     let per_class_pairs = n_positions.saturating_sub(1) * n_states * n_states;
-    // One class per item, and a class writes only its own slice of
-    // `posterior`, `pairwise` and `log_evidence`: no two items share a
-    // mutable byte and nothing is summed across them, so the result is the
-    // serial path's bit for bit. `forward_backward` is a chain over positions
-    // and is not an axis; the axis is `m`, which is why the ceiling here is
-    // `n_classes` and not the 5,041 positions (issue #627).
-    log_evidence
-        .par_iter_mut()
-        .zip(posterior.par_chunks_mut(per_class))
-        .zip(pairwise.par_chunks_mut(per_class_pairs.max(1)))
-        .enumerate()
-        .for_each(|(m, ((evidence, class_posterior), class_pairwise))| {
-            *evidence = forward_backward(
-                &density[m * per_class..][..per_class],
-                &log_initial[m * n_states..][..n_states],
-                &log_transition[m * n_states * n_states..][..n_states * n_states],
-                n_states,
-                class_posterior,
-                &mut class_pairwise[..per_class_pairs],
-            );
-        });
+    // **Serial, and measured to be right.** `m` is a clean axis --- each class
+    // writes its own slice of `posterior`, `pairwise` and `log_evidence`, and
+    // nothing is summed across them --- so a `rayon` port was written and
+    // benchmarked. It ran **26.703 ms against this loop's 23.064 ms, 0.86x**:
+    // ten items against four cores, and `forward_backward` allocates per
+    // class, so the pool costs more than it saves. Declined by measurement
+    // (issue #627), and recorded in `STATUS.md` so it is not proposed again.
+    for m in 0..n_classes {
+        log_evidence[m] = forward_backward(
+            &density[m * per_class..][..per_class],
+            &log_initial[m * n_states..][..n_states],
+            &log_transition[m * n_states * n_states..][..n_states * n_states],
+            n_states,
+            &mut posterior[m * per_class..][..per_class],
+            &mut pairwise[m * per_class_pairs..][..per_class_pairs],
+        );
+    }
     Ok(())
 }
 
@@ -394,63 +390,6 @@ pub fn external_field_into(
             }
         });
     Ok(())
-}
-
-/// [`external_field_into`] parallelised over **positions** instead of vertices.
-///
-/// The candidate the cost ranking suggested and bit-identity forbade: `s` is
-/// the accumulation, so splitting it needs one `field` per thread and a sum
-/// across them, which reassociates. `likelihood/CLAUDE.md` accepts a relative
-/// 1e-11 for `float64`, and a tree combination over 5,041 terms sits far
-/// inside that, so the question is not whether it is allowed but whether it is
-/// faster: inverting the loops for the bit-identical version costs locality,
-/// because `totals[s * n_nodes + v]` walks contiguously in `s` and strides in
-/// `v`. Both are benchmarked and only one survives (issue #627).
-#[allow(dead_code)]
-pub fn external_field_by_position(
-    shape: CoupledShape,
-    tables: &EmissionTables<'_>,
-    totals: &[u16],
-    successes: &[u16],
-    weights: &[f64],
-    field: &mut [f64],
-) {
-    let block = shape.block();
-    let (n_positions, n_nodes, n_states) = (shape.n_positions, shape.n_nodes, shape.n_states);
-    let n_classes = shape.n_classes;
-    let combined = (0..n_positions)
-        .into_par_iter()
-        .fold(
-            || vec![0.0f64; n_nodes * n_classes],
-            |mut partial, s| {
-                let row = s * n_nodes;
-                let weight = &weights[s * block..][..block];
-                for v in 0..n_nodes {
-                    let total = &tables.total[usize::from(totals[row + v]) * block..][..block];
-                    let success = &tables.success[usize::from(successes[row + v]) * block..][..block];
-                    let into = &mut partial[v * n_classes..][..n_classes];
-                    for (m, cell) in into.iter_mut().enumerate() {
-                        let mut accumulated = 0.0;
-                        for k in 0..n_states {
-                            let index = m * n_states + k;
-                            accumulated += (total[index] + success[index]) * weight[index];
-                        }
-                        *cell -= accumulated;
-                    }
-                }
-                partial
-            },
-        )
-        .reduce(
-            || vec![0.0f64; n_nodes * n_classes],
-            |mut left, right| {
-                for (cell, value) in left.iter_mut().zip(right.iter()) {
-                    *cell += value;
-                }
-                left
-            },
-        );
-    field.copy_from_slice(&combined);
 }
 
 /// The preconditions both kernels share.
