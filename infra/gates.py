@@ -181,7 +181,18 @@ SCHEDULING_MARKERS: Mapping[str, str] = {
         "long-running scientific validity test, run on release rather than "
         "per PR (DEV.md CI & Performance Budget)"
     ),
-    "critical": "gates early; fast, and its failure invalidates what runs after it",
+    # Widened by issue #635. It read "its failure invalidates what runs after
+    # it", which is *structural* priority, and the tier it produced was
+    # 149 infrastructure tests of 177 at 37% coverage: the import graph, the
+    # documentation index, the `CLAUDE.md` pointers, `select_tests` itself.
+    # A broken likelihood is not structurally prior to anything and surfaced
+    # after the twenty-minute tier rather than after sixteen seconds. The
+    # second clause admits it, and "the rest is not worth running" is what
+    # both clauses have in common.
+    "critical": (
+        "gates early; fast, and its failure means the rest is not worth "
+        "running -- structurally, or because the science it rests on is wrong"
+    ),
     "stress": (
         "same claim at a size the 5-minute CI budget cannot hold; run with "
         "`-m stress` inside the 10-minute developer budget (DEV.md CI & "
