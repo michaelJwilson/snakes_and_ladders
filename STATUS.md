@@ -48,6 +48,7 @@ and this release. A milestone not named here did not move.
 | §0 Development loop, §1.3 | Every problem statement carries the same five labelled parts, the applicability tables gain a third reading by method family, and five hand-rolled implementations are refereed against the frameworks that duplicate them | this release ([#376](https://github.com/michaelJwilson/snakes_and_ladders/issues/376)) |
 | Milestone 1.3 | The tree's two data-driven starts --- neighbor joining on the pairwise Jukes--Cantor and log-det distances, and the closest tree of the Hadamard conjugation --- with Atteson's radius and the four-point condition as their guarantees, measured against the objective's own start at equal evaluations | [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373) (#364) |
 | Milestone 2.3 | A sixth budget-matched comparison, the tree's starts at 2,000 evaluations over twenty seeds, recorded as experiment 006 | [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373) (#364) |
+| Milestone 1.1 | The Calderbank–Shor–Steane code the bicycle matrices define, and decoding it under degeneracy. `k = n - 2 rank(H)` is 0 at both classical fixtures, so two instances are declared at `m < n / 2`: [[16, 2]] with 30 four-cycles and [[96, 16]] with 160. Success is the residual lying in the row space, not equalling the error, and it is pinned from both sides before a decoder runs. Exact degenerate maximum likelihood over all 65,536 errors gives a logical error rate of 0.070297, against 0.072735 for the decoder maximizing one error's probability; sum-product on the same matrix gives 0.1705, failing 341 of 2,000 as 73 logical cosets and 268 non-convergences | [#568](https://github.com/michaelJwilson/snakes_and_ladders/pull/568) (#362) |
 | Milestone 1.1 | The bicycle construction as a second code family: `H = [A | A^T]` from a sparse circulant, rows deleted to the target rate, on the channels and the decoder already carried. It decodes worse than a Gallager draw of the same length, degrees and rate --- more blocks failed at all six 96-bit settings and at eleven of twelve 996-bit ones --- and is carried for the CSS condition `H H^T = 0` the quantum half rests on | [#546](https://github.com/michaelJwilson/snakes_and_ladders/pull/546) (#362) |
 
 The 0.4.0 cut itself did not move: no tag exists, so `0.4.0` and `0.5.0` are
@@ -512,6 +513,34 @@ posterior exactly and moves every decided bit with it, for both check
 updates and all three channels. The channels are held to their closed forms —
 `+-log((1 - p) / p)`, zero or `+-30`, `2 y / sigma^2` with mean `2 / sigma^2`
 and variance `4 / sigma^2` — and to binomial counts at 19,998 bits.
+
+**The quantum code the bicycle matrices open, decoded on the coset**
+([#362](https://github.com/michaelJwilson/snakes_and_ladders/issues/362)).
+`Hx = Hz = H` is a Calderbank--Shor--Steane code whenever `H H^T = 0`, which
+the bicycle construction satisfies because `A` and `A^T` are polynomials in the
+same cyclic shift. The classical half measured that condition without using it;
+this half builds the code, and with it the criterion degeneracy forces: two
+errors differing by a stabilizer act identically on the codespace, so a decode
+succeeds when `(e + e_hat)` is in `rowspace(H)` and not when `e_hat == e`.
+
+**Degeneracy is worth 3.4%, and belief propagation gives back far more than
+that.** At `n = 16`, `k = 2`, `p = 0.05`: exact degenerate maximum likelihood
+**0.070297** against the likeliest single error's 0.072735, differing at **24**
+of 128 syndromes with no tie broken. Sum-product reaches 0.178750 +- 0.005788
+over three seeds of 4,000 trials --- **2.54x the floor** --- and the code's
+defining property is why. `H H^T = 0` forces even row overlaps; an overlap of
+exactly two is a four-cycle; the graph carries **30** of them at `n = 16` and
+**160** at `n = 96`. A decoder that assumes a tree is being run on a graph the
+CSS condition fills with short cycles.
+
+**The two failures are counted apart because they invert with size.** A single
+block-error number would hide it: of 2,145 failures at `n = 16`, 1,742 did not
+converge and 403 converged on a logical coset; at `n = 96` it is 1,323 against
+2,128. The first returns no usable correction, the second returns one that
+damages the encoded state. The quotient is pinned by its own partition --- every
+reachable syndrome carries exactly `2^k` cosets ---
+and `docs/experiments/015-css-decoding-under-degeneracy.md` carries the
+comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 

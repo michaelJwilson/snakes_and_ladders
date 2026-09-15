@@ -149,8 +149,10 @@ budget.
       specified coupling constants and external fields.
     - *Codes:* Gallager's regular parity-check ensemble and the bicycle
       construction from a circulant, the binary symmetric, erasure and
-      Gaussian channels behind one log-likelihood interface, and an encoder
-      where elimination is affordable.
+      Gaussian channels behind one log-likelihood interface, an encoder where
+      elimination is affordable, and the Calderbank-Shor-Steane code the
+      bicycle matrices define, whose decoder is scored on the coset of the
+      error rather than on the error.
     - *Canonical cases:* instances whose answer is known externally, a closed form,
       a published result.
   - *Validation:* tests against generated simulations, analytic, canonical cases.

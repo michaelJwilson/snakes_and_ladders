@@ -27,6 +27,8 @@ from snakes_and_ladders.sim.ldpc import (
     encode,
     gallager_code,
     generator_matrix,
+    gf2_inverse,
+    gf2_rank,
 )
 
 COLUMN_WEIGHT, ROW_WEIGHT = 3, 6
@@ -303,3 +305,70 @@ def test_the_encoder_refuses_a_wrong_length_and_a_code_past_its_size() -> None:
         generator_matrix(_code(MAX_ENCODABLE_BITS + 4, seed=24))
     with pytest.raises(ValueError, match="shape"):
         from_parity_check(code, np.zeros(23))
+
+
+def _independent(matrix: np.ndarray, take: int, *, by_row: bool) -> list[int]:
+    """Indices of ``take`` rows or columns independent over GF(2).
+
+    Greedy: an index joins the set when it lifts the rank, which is what
+    independence means, so the set is independent at every step and the walk
+    is bounded by the axis it scans.
+
+    Raises
+    ------
+    ValueError
+        If the axis carries fewer than ``take`` independent vectors, which
+        means the caller's rank was not this matrix's.
+    """
+    chosen: list[int] = []
+    for index in range(matrix.shape[0] if by_row else matrix.shape[1]):
+        trial = [*chosen, index]
+        block = matrix[trial, :] if by_row else matrix[:, trial]
+        if gf2_rank(block) == len(trial):
+            chosen.append(index)
+        if len(chosen) == take:
+            return chosen
+    msg = f"only {len(chosen)} independent vectors on this axis, needed {take}"
+    raise ValueError(msg)
+
+
+@pytest.mark.mathematical
+def test_the_gf2_rank_and_inverse_agree_with_the_elimination_they_share() -> None:
+    """The rank against the null space's dimension, and the inverse against `I`.
+
+    `null_space` and `gf2_rank` read the same elimination, so the check that
+    means something is the rank-nullity identity between them: a rank that
+    disagrees with `columns - dim ker` is an elimination that lost a pivot.
+    """
+    code = _code(24, seed=17)
+    dense = code.dense()
+
+    rank = gf2_rank(dense)
+
+    assert rank + generator_matrix(code).shape[0] == code.n_bits
+
+    # An invertible block has to be built, not sliced off. `dense` here is
+    # 12 x 24 of rank 10 -- neither full row rank nor full column rank -- so
+    # its leading `rank` columns span only 7 dimensions and any fixed slice is
+    # singular. Greedily take `rank` independent columns, then `rank`
+    # independent rows of those, which is square and invertible by
+    # construction and terminates in at most one pass over each axis.
+    columns = _independent(dense, rank, by_row=False)
+    block = dense[:, columns]
+    square = block[_independent(block, rank, by_row=True), :]
+    assert square.shape == (rank, rank)
+
+    inverse = gf2_inverse(square)
+    np.testing.assert_array_equal(
+        (inverse.astype(np.int64) @ square.astype(np.int64)) & 1,
+        np.eye(rank, dtype=np.int64),
+    )
+
+
+@pytest.mark.edge_case
+def test_a_non_square_or_singular_matrix_has_no_inverse_over_gf2() -> None:
+    """Singular over GF(2) is a fact about the input, not a numerical near-miss."""
+    with pytest.raises(ValueError, match="square matrix"):
+        gf2_inverse(np.zeros((2, 3), dtype=np.uint8))
+    with pytest.raises(ValueError, match="singular over GF"):
+        gf2_inverse(np.array([[1, 1], [1, 1]], dtype=np.uint8))

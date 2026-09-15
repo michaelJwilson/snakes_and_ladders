@@ -99,6 +99,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.ldpc
    :members:
 
+.. automodule:: snakes_and_ladders.sim.css
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.convolutional
    :members:
 
@@ -175,6 +178,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.ldpc
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.css
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.convolutional
