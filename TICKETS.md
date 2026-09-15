@@ -231,6 +231,15 @@ parenthesis the only way a ticket is cited.
   replace is one build rather than one per call
 - The tree schedule's per-level grouping: 24.4 per cent of a `sum_product`
   over a 2,000-variable chain, where every level carries one message (#592)
+- Route `likelihood.ldpc` and `likelihood.belief_propagation` through the
+  schedule seam #592 added. Both run their own message iteration, and
+  `sequential` is the layered order the LDPC literature uses, so the seam is
+  the shape they would take; it is a real simplification against a real risk
+  to two pinned decoders, so it is its own change
+- Vectorise the level assignment in `Layout.tree_passes`. #592 took the plan
+  from 24.9 to 20.8 per cent of a 2,000-variable chain's run by batching the
+  group arrays; the residue is Python bookkeeping proportional to the edges,
+  with no hotspot left to attack piecemeal
 - TorchRL `TensorDict` environments and a `SyncDataCollector` over the
   Gymnasium adapter for Milestone 2.2's batched rollout, adopted only if the
   collector beats `learn.rollout` on the 8 → 20 taxa scaling with `float64`

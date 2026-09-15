@@ -9,6 +9,12 @@ set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# Issue #556: the shared `.venv` carries dependencies, not the project, so
+# `PYTHONPATH` is the only route to the package and no script can repoint a
+# global editable install at its own worktree. Exported here rather than left
+# to the caller, so this script operates on the tree it lives in whatever the
+# environment says.
+export PYTHONPATH="$repo_root/python${PYTHONPATH:+:$PYTHONPATH}"
 
 failures=()
 
@@ -45,12 +51,15 @@ run_check "cargo test" cargo test --locked
 run_check "cargo clippy --features sandbox" \
   cargo clippy --locked --all-targets --features sandbox -- -D warnings
 run_check "cargo test --features sandbox" cargo test --locked --features sandbox
-# Plain `pytest`, not `-m release`: the latter marker-filters down to only
-# release-marked tests, dropping everything `python-tests`' `-m "not
-# release"` already covers. DEV.md's "Run the full suite ... with `pytest -m
-# release` or plain `pytest`" names both, but only the unfiltered form runs
-# the full suite -- see this PR's DEV.md fix.
-run_check "pytest (full suite)" uv run pytest --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
+# `-m "release or not release"`, which selects everything. Not `-m release`:
+# that filters down to only release-marked tests, dropping everything
+# `python-tests`' `-m "not release"` already covers. And not a bare `pytest`
+# either, which is what this line used to be: `pyproject.toml` deselects
+# `release` by default, so the unfiltered form is now the per-PR tier and
+# this is the one place that has to say otherwise. The expression is a
+# tautology written out rather than an empty `-m ""`, so that what it selects
+# is legible and a later reader does not delete it as a stray flag.
+run_check "pytest (full suite)" uv run pytest -m "release or not release" --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
 # The full documentation build, not an incremental one (issue #485). `-E`
 # discards any saved environment and `-a` writes every output, so the verdict
 # is a function of the tree and not of whatever `docs/_build/` holds from an

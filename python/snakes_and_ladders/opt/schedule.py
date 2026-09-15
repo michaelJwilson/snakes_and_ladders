@@ -44,7 +44,7 @@ from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
-class Schedule(Protocol):
+class TempSchedule(Protocol):
     """A positive temperature for each of ``n_steps`` steps.
 
     ``step`` runs from ``0`` to ``n_steps - 1`` inclusive. Asking outside that
@@ -89,7 +89,7 @@ def _check_step(step: int, n_steps: int) -> None:
 
 
 @dataclass(frozen=True)
-class Constant(Schedule):
+class ConstantTempSchedule(TempSchedule):
     """One temperature throughout. ``ConstantLR`` with factor 1.
 
     The schedule every existing chain and fit is on, so passing it must
@@ -116,7 +116,7 @@ class Constant(Schedule):
 
 
 @dataclass(frozen=True)
-class _Interpolated(Schedule):
+class _InterpolatedTempSchedule(TempSchedule):
     """``start`` at step 0, ``end`` at the last step, some curve between.
 
     Each subclass supplies the weight ``w(t)`` on ``start`` at fraction ``t``
@@ -153,7 +153,7 @@ class _Interpolated(Schedule):
 
 
 @dataclass(frozen=True)
-class Linear(_Interpolated):
+class LinearTempSchedule(_InterpolatedTempSchedule):
     """Straight line from ``start`` to ``end``. ``LinearLR`` with declared ends.
 
     ``T(t) = (1 - t) * start + t * end``.
@@ -165,7 +165,7 @@ class Linear(_Interpolated):
 
 
 @dataclass(frozen=True)
-class Exponential(_Interpolated):
+class ExponentialTempSchedule(_InterpolatedTempSchedule):
     """Geometric from ``start`` to ``end``. ``ExponentialLR`` with a declared end.
 
     ``T(t) = start ** (1 - t) * end ** t``, so successive temperatures have
@@ -183,7 +183,7 @@ class Exponential(_Interpolated):
 
 
 @dataclass(frozen=True)
-class Cosine(_Interpolated):
+class CosineTempSchedule(_InterpolatedTempSchedule):
     """Half a cosine from ``start`` to ``end``. ``CosineAnnealingLR`` with ``T_max = n_steps - 1``.
 
     ``T(t) = w * start + (1 - w) * end`` with ``w = (1 + cos(pi t)) / 2``.
@@ -197,7 +197,7 @@ class Cosine(_Interpolated):
         return weight * self.start + (1.0 - weight) * self.end
 
 
-def temperatures(schedule: Schedule) -> list[float]:
+def temperatures(schedule: TempSchedule) -> list[float]:
     """Every temperature of ``schedule``, in step order.
 
     A convenience for tests and for reporting a run; a consumer that steps

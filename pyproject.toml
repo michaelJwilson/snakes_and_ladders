@@ -257,7 +257,15 @@ testpaths = ["tests"]
 # older axis and says when a test runs. `CLAUDE.md`'s Testing section states
 # the principle; the list below is written from `infra/gates.py`, where the
 # names and their text live, by `infra/ledgers.sh` (issue #470).
-addopts = "--strict-markers"
+# `release` is deselected by default and has to be asked for. It is the tier
+# DEV.md reserves for the release process, and a bare `pytest` used to run it:
+# a developer who typed one got a suite with no upper bound on its duration,
+# and the tier a per-PR command reaches was a matter of remembering `-m "not
+# release"` rather than of the configuration. Overriding is one flag --- the
+# release gate passes `-m "release or not release"` --- and a later `-m` on
+# the command line replaces this one, so `-m critical` still means exactly
+# `-m critical`.
+addopts = '--strict-markers -m "not release"'
 # BEGIN GENERATED markers (infra/gates.py, via infra/ledgers.sh)
 markers = [
     "release: long-running scientific validity test, run on release rather than per PR (DEV.md CI & Performance Budget)",

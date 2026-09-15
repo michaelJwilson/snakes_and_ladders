@@ -58,7 +58,7 @@ from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
     emission_mixture_plus_plus,
 )
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.count_pairs import (
     TOTAL,
     IndependentCountPair,
@@ -558,7 +558,7 @@ def annealed_seeding(
     Seeding
     """
     run = FromAnnealing(
-        Exponential(float(TEMPERATURES[-1]), 1.0, ANNEAL_STEPS),
+        ExponentialTempSchedule(float(TEMPERATURES[-1]), 1.0, ANNEAL_STEPS),
         CHAIN_STEP,
         _generator(rng),
         n_steps=CHAIN_TRAJECTORY,
