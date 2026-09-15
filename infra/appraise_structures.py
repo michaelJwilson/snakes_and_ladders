@@ -3,10 +3,11 @@
 
 Issue #230 surveyed *functions* and #400 *abstractions*; neither surveyed the
 types that carry state, and both left a hand-written list --- ``FINDINGS`` in
-`infra/duplication_survey.py`, ``PROTOCOLS``/``CONTRACTS`` in
+`infra/duplication_survey.py`, ``PROTOCOLS``/``CONTRACTS`` in the since-deleted
 `infra/seams_survey.py`. A hand list re-counts what is known and discovers
-nothing, and `infra/gate_new_seams.py` then exists to enforce that the list is
-updated, which is the work the list was meant to save.
+nothing, and a gate then exists to enforce that the list is updated, which is
+the work the list was meant to save. Issue #586 deleted that one; this is the
+argument it was deleted on.
 
 This derives the inventory instead: every class holding state, its fields,
 its public methods, the modules importing it, and the *clusters* of classes

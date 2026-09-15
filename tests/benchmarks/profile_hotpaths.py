@@ -48,7 +48,10 @@ from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
 from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
-from snakes_and_ladders.likelihood.message_passing import MessageSchedule, sum_product
+from snakes_and_ladders.likelihood.message_passing import (
+    MessageScheduleName,
+    sum_product,
+)
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.numerics_rust import sample_rows
@@ -193,7 +196,7 @@ def likelihood_sections(mid: bool) -> list[Section]:
         pruning_rust.log_likelihood(tau, 4, pi, alignment)
 
     def _flooding() -> None:
-        sum_product(potts_graph, schedule=MessageSchedule.FLOODING)
+        sum_product(potts_graph, schedule=MessageScheduleName.FLOODING)
 
     def _bp() -> None:
         belief_propagation(graph, FIELD)

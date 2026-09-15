@@ -1,15 +1,19 @@
 """A protocol the branch adds names the consumers that earn it.
 
-`infra/review_gates.sh` calls this. `DEV.md`'s seam rule admits an abstraction
-with three or more consuming modules; one below that is kept only for a stated
-reason. `infra/seams_survey.py` already computes both numbers, so this asks it
-about the protocols the diff adds rather than recomputing anything: a new
-`Protocol` must appear in the survey's catalogue, and its verdict must be that
-it earns its place or that a reason was written down.
+`infra/review_gates.sh` calls this. Root `CLAUDE.md`'s seam rule admits an
+abstraction with three or more consuming modules; one below that is kept only
+for a reason **stated where it is declared**. Issue #586 deleted `SEAMS.md`
+and the hand-written catalogue that used to hold those reasons, on the
+argument that a ledger is a copy of the truth: a `Protocol` is discoverable at
+import, so the declaration is the record and a second list of declarations is
+a list to keep in step.
 
-The catalogue is where the reason lives, so a protocol the survey does not know
-fails here -- that is the case this gate exists for, since an unlisted protocol
-is invisible to `SEAMS.md` and to the rule.
+Two things did not follow the ledger, and live here instead. The consumer
+count is a property of the **import graph**, not of the class tree, so
+:func:`consumers` computes it. And the reason a seam under the rule is kept
+has to be written down somewhere a reader already looks, so it goes in the
+declaring class's own docstring behind :data:`REASON`, and this gate reads it
+there.
 
 Usage::
 
@@ -20,13 +24,20 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT / "infra"))
-import seams_survey  # noqa: E402
+PACKAGE_ROOT = REPO_ROOT / "python" / "snakes_and_ladders"
+#: Consuming modules at or above which a seam earns its place, per root
+#: `CLAUDE.md`. Below it the seam needs a reason.
+CONSUMER_RULE = 3
+#: What a docstring writes in front of the reason a seam under the rule is
+#: kept. A fixed prefix rather than prose, so the gate reads what a reviewer
+#: reads and neither has to trust the other.
+REASON = "Under the seam rule:"
 
 
 def added_protocols(base: str) -> list[tuple[str, str]]:
@@ -99,8 +110,85 @@ def _protocols(source: str) -> set[str]:
     return found
 
 
+def source_modules() -> dict[str, str]:
+    """Package-relative dotted module name to its source text.
+
+    Returns
+    -------
+    dict[str, str]
+    """
+    out: dict[str, str] = {}
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        relative = path.relative_to(PACKAGE_ROOT).with_suffix("")
+        parts = list(relative.parts)
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        out[".".join(parts) or "__init__"] = path.read_text()
+    return out
+
+
+def consumers(module: str, name: str, sources: dict[str, str]) -> tuple[str, ...]:
+    """Modules whose source names the seam, other than the one declaring it.
+
+    Read from the source text rather than from imports, so a module reaching
+    the seam through a re-export counts as the consumer it is.
+
+    Parameters
+    ----------
+    module : str
+        Package-relative dotted module declaring the seam.
+    name : str
+        The class name.
+    sources : dict[str, str]
+        As :func:`source_modules`.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Sorted dotted module names.
+    """
+    pattern = re.compile(rf"\b{re.escape(name)}\b")
+    return tuple(
+        sorted(
+            other
+            for other, text in sources.items()
+            if other != module and pattern.search(text)
+        )
+    )
+
+
+def reason_for(module: str, name: str, sources: dict[str, str]) -> str:
+    """The reason the class's own docstring states for keeping it under the rule.
+
+    Parameters
+    ----------
+    module, name, sources
+        As :func:`consumers`.
+
+    Returns
+    -------
+    str
+        The rest of the paragraph following :data:`REASON`, or ``""`` where
+        the class, its docstring or the marker is absent. One paragraph and
+        not the remainder of the docstring, so a reason written above a
+        ``Parameters`` section stops where the reason does.
+    """
+    source = sources.get(module, "")
+    if not source.strip():
+        return ""
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.ClassDef) or node.name != name:
+            continue
+        text = ast.get_docstring(node) or ""
+        if REASON not in text:
+            return ""
+        tail = text.split(REASON, 1)[1]
+        return " ".join(tail.split("\n\n", 1)[0].split()).strip()
+    return ""
+
+
 def verdicts(base: str) -> list[str]:
-    """The survey's verdict on each protocol the branch adds, when it is a failure.
+    """The rule's verdict on each protocol the branch adds, when it is a failure.
 
     Returns
     -------
@@ -110,22 +198,19 @@ def verdicts(base: str) -> list[str]:
     added = added_protocols(base)
     if not added:
         return []
-    rows = {(row.seam.module, row.seam.name): row for row in seams_survey.survey()}
+    sources = source_modules()
     failures: list[str] = []
     for module, name in added:
-        row = rows.get((module, name))
-        if row is None:
-            failures.append(
-                f"{module}.{name} is not in seams_survey.SEAMS, so SEAMS.md and "
-                f"the consumer rule cannot see it"
-            )
+        consuming = consumers(module, name, sources)
+        if len(consuming) >= CONSUMER_RULE:
             continue
-        verdict = seams_survey.under_the_rule(row)
-        if "no reason stated" in verdict:
-            failures.append(
-                f"{module}.{name}: {len(row.consumers)} consumers, "
-                f"{seams_survey.CONSUMER_RULE} required -- {verdict}"
-            )
+        if reason_for(module, name, sources):
+            continue
+        failures.append(
+            f"{module}.{name}: {len(consuming)} consuming modules, "
+            f"{CONSUMER_RULE} required, and its docstring states no "
+            f'"{REASON}" reason for keeping it'
+        )
     return failures
 
 

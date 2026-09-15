@@ -57,7 +57,7 @@ TOTAL = 0
 SUCCESSES = 1
 
 
-class IndependentCountPair:
+class IndependentCountPair(EmissionFamily):
     """A total and a number of successes, drawn independently, per hidden state.
 
     The independent form of the two-channel emission: the negative binomial's

@@ -81,6 +81,98 @@ def energy(graph: PottsGraph, field_values: np.ndarray, labelling: np.ndarray) -
     return float(energies(graph, values, np.asarray(labelling)[None])[0])
 
 
+def _expansion_network(
+    graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int
+) -> FlowNetwork:
+    """The expansion network of :func:`expand`, built without a call per arc.
+
+    Arc for arc and in the same order as the ``add_edge`` loop it replaces,
+    which `tests/regression/search/test_alpha_expansion.py` asserts against a
+    transcription of that loop: the order is the contract, since a minimum cut
+    need not be unique and the two solvers are pinned to one labelling.
+
+    Issue #598 measured the loop at 76,928 calls and 53.0 per cent of a 32x32
+    run at four labels, against the Rust cut kernel's 12.1 --- the network was
+    built in Python and solved in Rust.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The graph.
+    values : np.ndarray
+        Per-site field, shape ``(n_nodes, n_states)``, as
+        :func:`_site_field` widens it.
+    labelling : np.ndarray
+        The labelling to expand, one label per node.
+    alpha : int
+        The label every node may move to.
+
+    Returns
+    -------
+    FlowNetwork
+        Spanning ``n_nodes + 2`` nodes plus one auxiliary per disagreeing
+        edge, with the source at ``n_nodes`` and the sink at ``n_nodes + 1``.
+    """
+    n_nodes = graph.n_nodes
+    source, sink = n_nodes, n_nodes + 1
+    first, second, coupling = graph.endpoints
+    labels = np.asarray(labelling)
+    disagree = labels[first] != labels[second]
+    n_auxiliary = int(np.count_nonzero(disagree))
+
+    # The keep branch of a node already labelled alpha is unaffordable rather
+    # than absent, so the node stays in the network (see :func:`expand`).
+    switch = -values[:, alpha].astype(np.float64)
+    keep = np.where(
+        labels == alpha,
+        _infinite_capacity(graph, values),
+        -values[np.arange(n_nodes), labels].astype(np.float64),
+    )
+    offset = np.minimum(keep, switch)
+
+    node_tail = np.empty(2 * n_nodes, dtype=np.int64)
+    node_head = np.empty(2 * n_nodes, dtype=np.int64)
+    node_capacity = np.empty(2 * n_nodes, dtype=np.float64)
+    nodes = np.arange(n_nodes, dtype=np.int64)
+    node_tail[0::2], node_tail[1::2] = source, nodes
+    node_head[0::2], node_head[1::2] = nodes, sink
+    node_capacity[0::2], node_capacity[1::2] = switch - offset, keep - offset
+
+    # One arc per agreeing edge and three per disagreeing one, laid out in
+    # edge order so the auxiliaries are numbered as the loop numbered them.
+    width = np.where(disagree, 3, 1)
+    start = np.concatenate(([0], np.cumsum(width)[:-1]))
+    edge_tail = np.empty(int(width.sum()), dtype=np.int64)
+    edge_head = np.empty_like(edge_tail)
+    edge_capacity = np.zeros(edge_tail.size, dtype=np.float64)
+    edge_reverse = np.zeros(edge_tail.size, dtype=np.float64)
+
+    first_differs = np.where(labels[first] != alpha, coupling, 0.0)
+    second_differs = np.where(labels[second] != alpha, coupling, 0.0)
+
+    agreeing = start[~disagree]
+    edge_tail[agreeing], edge_head[agreeing] = first[~disagree], second[~disagree]
+    edge_capacity[agreeing] = edge_reverse[agreeing] = first_differs[~disagree]
+
+    split = np.flatnonzero(disagree)
+    at = start[split]
+    auxiliary = np.arange(n_auxiliary, dtype=np.int64) + n_nodes + 2
+    edge_tail[at], edge_head[at] = first[split], auxiliary
+    edge_capacity[at] = edge_reverse[at] = first_differs[split]
+    edge_tail[at + 1], edge_head[at + 1] = second[split], auxiliary
+    edge_capacity[at + 1] = edge_reverse[at + 1] = second_differs[split]
+    edge_tail[at + 2], edge_head[at + 2] = auxiliary, sink
+    edge_capacity[at + 2] = coupling[split]
+
+    return FlowNetwork.from_arcs(
+        n_nodes + 2 + n_auxiliary,
+        np.concatenate((node_tail, edge_tail)),
+        np.concatenate((node_head, edge_head)),
+        np.concatenate((node_capacity, edge_capacity)),
+        np.concatenate((np.zeros(2 * n_nodes), edge_reverse)),
+    )
+
+
 def expand(
     graph: PottsGraph,
     field_values: np.ndarray,
@@ -146,42 +238,8 @@ def expand(
         raise ValueError(msg)
 
     values = _site_field(graph, field_values)
-    # A set, not the list it replaced: the edge loop below tests membership
-    # once per edge, and building the set inside that loop made the
-    # construction quadratic in the edge count (#528).
-    disagreeing = {
-        position
-        for position, (first, second) in enumerate(graph.edges)
-        if labelling[first] != labelling[second]
-    }
+    network = _expansion_network(graph, values, labelling, alpha)
     source, sink = graph.n_nodes, graph.n_nodes + 1
-    network = FlowNetwork(n_nodes=graph.n_nodes + 2 + len(disagreeing))
-
-    infinite = _infinite_capacity(graph, values)
-    for node in range(graph.n_nodes):
-        switch_cost = -float(values[node, alpha])
-        keep_cost = (
-            infinite
-            if labelling[node] == alpha
-            else -float(values[node, labelling[node]])
-        )
-        offset = min(keep_cost, switch_cost)
-        # Cut source -> node when the node moves to the sink side, i.e. takes
-        # alpha; cut node -> sink when it stays on the source side and keeps.
-        network.add_edge(source, node, switch_cost - offset)
-        network.add_edge(node, sink, keep_cost - offset)
-
-    auxiliary = graph.n_nodes + 2
-    for position, ((first, second), coupling) in enumerate(graph.weighted_edges()):
-        first_differs = coupling if labelling[first] != alpha else 0.0
-        second_differs = coupling if labelling[second] != alpha else 0.0
-        if position not in disagreeing:
-            network.add_edge(first, second, first_differs, reverse=first_differs)
-            continue
-        network.add_edge(first, auxiliary, first_differs, reverse=first_differs)
-        network.add_edge(second, auxiliary, second_differs, reverse=second_differs)
-        network.add_edge(auxiliary, sink, coupling)
-        auxiliary += 1
 
     cut = (
         min_cut(network, source, sink)

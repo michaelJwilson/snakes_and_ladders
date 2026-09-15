@@ -22,6 +22,7 @@ exists to prevent, one module over.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Protocol
 
 import numpy as np
@@ -38,14 +39,40 @@ class Policy(Protocol):
     is what lets a non-differentiable wrapper such as
     :class:`EpsilonGreedyPolicy` be rolled out without being trainable, which
     is exactly what it is.
+
+    Under the seam rule: what a rollout needs and no more, so an untrainable
+    wrapper rolls out.
     """
 
+    @abstractmethod
     def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int:
         """Choose an action index from the scored actions."""
         ...
 
 
-class LinearPolicy:
+class TrainablePolicy(Policy, Protocol):
+    """What the actor-critic and PPO trainers need: differentiable log-probabilities and the tensors behind them.
+
+    A `Policy` and more, stated as the subclass it is rather than by
+    redeclaring ``sample``: every trainer that needs the weights also rolls
+    out, so the narrow protocol is the wide one's base and an implementer
+    reaches both by naming one (issue #586).
+    """
+
+    @property
+    def dtype(self) -> torch.dtype: ...
+
+    @abstractmethod
+    def parameters(self) -> list[torch.Tensor]: ...
+
+    @abstractmethod
+    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor: ...
+
+    @abstractmethod
+    def greedy(self, features: torch.Tensor) -> int: ...
+
+
+class LinearPolicy(TrainablePolicy):
     """Scores each action linearly in its features, then softmaxes.
 
     Parameters
@@ -153,22 +180,7 @@ class LinearPolicy:
             return int(torch.argmax(self.log_probabilities(features)))
 
 
-class TrainablePolicy(Protocol):
-    """What the actor-critic and PPO trainers need: differentiable log-probabilities and the tensors behind them."""
-
-    @property
-    def dtype(self) -> torch.dtype: ...
-
-    def parameters(self) -> list[torch.Tensor]: ...
-
-    def log_probabilities(self, features: torch.Tensor) -> torch.Tensor: ...
-
-    def sample(self, features: torch.Tensor, rng: np.random.Generator) -> int: ...
-
-    def greedy(self, features: torch.Tensor) -> int: ...
-
-
-class MLPPolicy:
+class MLPPolicy(TrainablePolicy):
     """Scores each action by a small multilayer perceptron on its features, then softmaxes (issue #313).
 
     A drop-in for :class:`LinearPolicy` where the reward is not linear in
@@ -248,7 +260,7 @@ class MLPPolicy:
             return int(torch.argmax(self.log_probabilities(features)))
 
 
-class EpsilonGreedyPolicy:
+class EpsilonGreedyPolicy(Policy):
     """Takes the wrapped policy's best action, except a fraction of the time.
 
     With probability ``epsilon`` it draws uniformly from the available

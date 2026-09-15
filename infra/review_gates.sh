@@ -23,6 +23,12 @@ set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# Issue #556: the shared `.venv` carries dependencies, not the project, so
+# `PYTHONPATH` is the only route to the package and no script can repoint a
+# global editable install at its own worktree. Exported here rather than left
+# to the caller, so this script operates on the tree it lives in whatever the
+# environment says.
+export PYTHONPATH="$repo_root/python${PYTHONPATH:+:$PYTHONPATH}"
 
 base="origin/main"
 rebuild=0
@@ -112,7 +118,7 @@ new_seams_name_their_consumers() {
 }
 
 generated_ledgers_are_current() {
-  # CHECKS.md, SEAMS.md and the problem tables are written from the tree and
+  # CHECKS.md and the problem tables are written from the tree and
   # are not committed (issue #425). Two things can still fail: a generator
   # that no longer runs -- a catalogue symbol it cannot name, a pairing with
   # no note -- and a copy of one that reached the index and has gone stale.

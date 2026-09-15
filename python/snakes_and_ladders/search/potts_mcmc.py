@@ -45,7 +45,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from snakes_and_ladders.opt.schedule import AdaptedLadder, Schedule, adapt_ladder
+from snakes_and_ladders.opt.schedule import AdaptedLadder, TempSchedule, adapt_ladder
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energies, heat_bath_log_weights, site_field
@@ -378,7 +378,7 @@ class AnnealedPotts:
 def anneal_potts(
     graph: PottsGraph,
     field: np.ndarray,
-    schedule: Schedule,
+    schedule: TempSchedule,
     rng: np.random.Generator,
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
@@ -409,7 +409,7 @@ def anneal_potts(
         The instance. Couplings of either sign.
     field : np.ndarray
         External field, shape ``(n_states,)``.
-    schedule : Schedule
+    schedule : TempSchedule
         Temperature per sweep. Its length is the budget.
     rng : np.random.Generator
         Source of every draw, the start included. Passed in rather than

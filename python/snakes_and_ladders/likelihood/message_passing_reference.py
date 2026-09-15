@@ -24,8 +24,9 @@ from snakes_and_ladders.likelihood.message_passing import (
     DEFAULT_MAX_ITERATIONS,
     DEFAULT_TOLERANCE,
     ConvergenceError,
+    Guarantee,
     Marginals,
-    MessageSchedule,
+    MessageScheduleName,
 )
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph
@@ -90,7 +91,7 @@ def _tree_order(graph: FactorGraph) -> list[tuple[str, str, bool]]:
 
 def _run(
     graph: FactorGraph,
-    schedule: MessageSchedule,
+    schedule: MessageScheduleName,
     maximum: bool,
     damping: float,
     tolerance: float,
@@ -113,7 +114,7 @@ def _run(
                 total = total + to_variable[(factor.name, name)]
         return total
 
-    if schedule is MessageSchedule.TREE:
+    if schedule is MessageScheduleName.TREE:
         if not graph.is_tree():
             msg = "the tree schedule is exact only on a tree; this graph has a cycle or is disconnected"
             raise ValueError(msg)
@@ -217,10 +218,26 @@ def _beliefs(
     return beliefs_v, beliefs_f, -free_energy
 
 
+def _guarantee(schedule: MessageScheduleName) -> Guarantee:
+    """The guarantee the reference's two schedules carry (issue #592).
+
+    The reference implements the two orders that predate the schedule seam.
+    A partial schedule has no reference yet, and asking for one here raises
+    rather than returning a `Marginals` labelled with a guarantee nothing
+    computed.
+    """
+    if schedule is MessageScheduleName.TREE:
+        return Guarantee.EXACT
+    if schedule is MessageScheduleName.FLOODING:
+        return Guarantee.APPROXIMATE
+    msg = f"the reference implements tree and flooding only, not {schedule}"
+    raise ValueError(msg)
+
+
 def sum_product(
     graph: FactorGraph,
     *,
-    schedule: MessageSchedule = MessageSchedule.TREE,
+    schedule: MessageScheduleName = MessageScheduleName.TREE,
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
@@ -239,13 +256,20 @@ def sum_product(
         graph, schedule, False, damping, tolerance, max_iterations
     )
     variable, factor, log_partition = _beliefs(graph, to_variable, to_factor, False)
-    return Marginals(variable, factor, log_partition, iterations, exact=graph.is_tree())
+    return Marginals(
+        variable,
+        factor,
+        log_partition,
+        iterations,
+        _guarantee(schedule),
+        graph.is_tree(),
+    )
 
 
 def max_product(
     graph: FactorGraph,
     *,
-    schedule: MessageSchedule = MessageSchedule.TREE,
+    schedule: MessageScheduleName = MessageScheduleName.TREE,
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
@@ -266,5 +290,6 @@ def max_product(
         factor,
         graph.log_density(assignment),
         iterations,
-        exact=graph.is_tree(),
+        _guarantee(schedule),
+        graph.is_tree(),
     )

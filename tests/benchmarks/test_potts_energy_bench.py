@@ -18,7 +18,9 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.search.maxflow import energy as cut_energy
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import energies
@@ -53,3 +55,22 @@ def test_the_two_state_entry_point(benchmark: BenchmarkFixture) -> None:
 
     assert realized.shape == (CONFIGURATIONS,)
     assert math.isfinite(float(realized.sum()))
+
+
+@pytest.mark.parametrize("extent", [8, 16, 32])
+def test_log_weights_on_one_configuration_benchmark(
+    benchmark: BenchmarkFixture, extent: int
+) -> None:
+    """One configuration, the shape the annealing loop scores per sweep (#598).
+
+    :func:`~snakes_and_ladders.search.potts_mcmc.anneal_potts` calls this once
+    a step, so a per-edge Python loop here is paid once per edge per sweep.
+    """
+    graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 1.0)
+    rng = np.random.default_rng(598)
+    field = rng.normal(size=(graph.n_nodes, 3))
+    state = rng.integers(0, 3, size=graph.n_nodes)[None]
+
+    scored = benchmark(log_weights, graph, field, state)
+
+    assert scored.shape == (1,)

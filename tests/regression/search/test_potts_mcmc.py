@@ -28,7 +28,10 @@ import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
-from snakes_and_ladders.opt.schedule import Constant, Exponential
+from snakes_and_ladders.opt.schedule import (
+    ConstantTempSchedule,
+    ExponentialTempSchedule,
+)
 from snakes_and_ladders.search import potts_mcmc
 from snakes_and_ladders.search.alpha_expansion import energy, iterated_conditional_modes
 from snakes_and_ladders.search.backend import Backend
@@ -411,14 +414,16 @@ def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not(
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
     field = np.zeros(2)
     ground = float(minimum_frustrated_edges(graph))  # |J| = 1
-    schedule = Exponential(2.0, 0.05, 200)
+    schedule = ExponentialTempSchedule(2.0, 0.05, 200)
 
     annealed = [
         anneal_potts(graph, field, schedule, np.random.default_rng(seed))
         for seed in range(20)
     ]
     constant = [
-        anneal_potts(graph, field, Constant(1.0, 200), np.random.default_rng(seed))
+        anneal_potts(
+            graph, field, ConstantTempSchedule(1.0, 200), np.random.default_rng(seed)
+        )
         for seed in range(20)
     ]
     descended = [
@@ -597,7 +602,10 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
         instance: PlantedSpinGlass, budget: Budget, rng: np.random.Generator
     ) -> Outcome:
         run = anneal_potts(
-            instance.graph, np.zeros(2), Exponential(2.0, 0.05, budget.size), rng
+            instance.graph,
+            np.zeros(2),
+            ExponentialTempSchedule(2.0, 0.05, budget.size),
+            rng,
         )
         return Outcome(run.energy, budget.size)
 
@@ -637,7 +645,7 @@ def test_the_sweep_has_no_numba_backend() -> None:
         anneal_potts(
             graph,
             NO_FIELD,
-            Constant(1.0, 5),
+            ConstantTempSchedule(1.0, 5),
             np.random.default_rng(0),
             backend=Backend.NUMBA,
         )

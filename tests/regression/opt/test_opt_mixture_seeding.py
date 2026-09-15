@@ -54,7 +54,7 @@ from snakes_and_ladders.opt.mixture import (
     responsibilities,
     uniform_seeds,
 )
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 
@@ -266,7 +266,7 @@ def seed_burn_in(instance: Instance, rng: np.random.Generator) -> Seeding:
     log_weight = torch.full(
         (instance.n_components,), -math.log(instance.n_components), dtype=torch.float64
     )
-    schedule = Exponential(BURN_IN_TEMPERATURE, 1.0, BURN_IN_STEPS)
+    schedule = ExponentialTempSchedule(BURN_IN_TEMPERATURE, 1.0, BURN_IN_STEPS)
     for step in range(BURN_IN_STEPS):
         scored = (log_weight + components.log_density(values)) / schedule(step)
         posterior = torch.exp(scored - torch.logsumexp(scored, dim=-1, keepdim=True))
@@ -437,7 +437,7 @@ def seed_anneal(instance: Instance, rng: np.random.Generator) -> Seeding:
     start = seed_uniform(instance, rng)
     run = anneal(
         objective,
-        Exponential(
+        ExponentialTempSchedule(
             LADDER[-1] * hot, LADDER[0] * hot, max(2, BUDGET.size // PER_PROPOSAL)
         ),
         torch.Generator().manual_seed(int(rng.integers(2**31 - 1))),

@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.layout import discrete_legend
 from snakes_and_ladders.qa.runner import (
@@ -233,7 +233,7 @@ def recover(
         params,
         data.observations,
         np.random.default_rng(fit_seed),
-        Exponential(*ANNEALING),
+        ExponentialTempSchedule(*ANNEALING),
     )
     fit = fit_spatio_sequential(
         warm.params,

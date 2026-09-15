@@ -46,6 +46,7 @@ from snakes_and_ladders.likelihood.objective import (
     BranchLengthObjective,
     SubstitutionModelObjective,
 )
+from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.search.neighbor_joining import neighbor_joining, split_lengths
 from snakes_and_ladders.sim.gtr import n_exchangeabilities
@@ -137,7 +138,7 @@ def _leaves(node: Node) -> frozenset[str]:
     return frozenset().union(*(_leaves(child) for child in node.children))
 
 
-class FromDistances:
+class FromDistances(Initializer):
     """Neighbor joining on pairwise distances, as the start of a fit or a search.
 
     Parameters
@@ -205,7 +206,7 @@ class FromDistances:
         return [_theta(tree_objective, placed)]
 
 
-class FromHadamard:
+class FromHadamard(Initializer):
     """The closest tree of the Hadamard conjugation, as the start of a fit or a search.
 
     The alignment is recoded to two states
