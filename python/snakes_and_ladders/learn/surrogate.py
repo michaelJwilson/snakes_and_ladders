@@ -40,7 +40,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 import torch
 
-from snakes_and_ladders.bound import Bound
+from snakes_and_ladders.bound import Bound, Surrogate
 
 
 @dataclass(frozen=True)
@@ -370,7 +370,7 @@ class Standardizer:
 
 
 @dataclass(frozen=True)
-class Fitted:
+class Fitted(Surrogate):
     """A trained predictor with the standardization it was trained under."""
 
     model: torch.nn.Module

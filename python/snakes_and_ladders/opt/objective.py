@@ -24,6 +24,7 @@ a move is.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Mapping
 from typing import Protocol, runtime_checkable
 
@@ -38,6 +39,7 @@ class Objective(Protocol):
     structure); only ``theta`` is optimized.
     """
 
+    @abstractmethod
     def initial(self) -> torch.Tensor:
         """A starting point in unconstrained coordinates.
 
@@ -49,6 +51,7 @@ class Objective(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         """The named, feasible parameters ``theta`` encodes.
 
@@ -66,6 +69,7 @@ class Objective(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """The unconstrained vector whose :meth:`constrain` is ``named``.
 
@@ -89,6 +93,7 @@ class Objective(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """The value to **minimize**, differentiable with respect to ``theta``.
 

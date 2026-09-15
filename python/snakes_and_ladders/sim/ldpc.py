@@ -36,6 +36,7 @@ non-trivial codewords too.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -324,6 +325,7 @@ class Channel(Protocol):
     implementers in its module.
     """
 
+    @abstractmethod
     def log_likelihood_ratios(
         self, codeword: np.ndarray, rng: np.random.Generator
     ) -> np.ndarray:
@@ -339,7 +341,7 @@ def _bits(codeword: np.ndarray) -> np.ndarray:
 
 
 @dataclass(frozen=True)
-class BinarySymmetricChannel:
+class BinarySymmetricChannel(Channel):
     """Each bit is flipped independently with probability ``flip_probability``.
 
     ``L_i = (1 - 2 y_i) log((1 - p) / p)``: the received bit, at the one
@@ -363,7 +365,7 @@ class BinarySymmetricChannel:
 
 
 @dataclass(frozen=True)
-class BinaryErasureChannel:
+class BinaryErasureChannel(Channel):
     """Each bit is erased independently with probability ``erasure_probability``.
 
     An erased bit says nothing, ``L_i = 0``; a delivered bit is certain, and
@@ -388,7 +390,7 @@ class BinaryErasureChannel:
 
 
 @dataclass(frozen=True)
-class BinaryInputGaussianChannel:
+class BinaryInputGaussianChannel(Channel):
     """Antipodal signalling ``x = 1 - 2c`` plus ``N(0, sigma^2)`` noise.
 
     ``L_i = 2 y_i / sigma^2``, the log-ratio of two Gaussian densities with

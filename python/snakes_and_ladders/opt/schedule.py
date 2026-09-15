@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import itertools
 import math
+from abc import abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -52,11 +53,13 @@ class Schedule(Protocol):
     would let it.
     """
 
-    @property
-    def n_steps(self) -> int:
-        """How many steps the schedule covers."""
-        ...  # pragma: no cover
+    #: How many steps the schedule covers. Declared as data rather than as a
+    #: ``@property``, because a property in a protocol body is a descriptor
+    #: every implementer inherits, and it would shadow the dataclass field
+    #: :class:`Constant` and :class:`_Interpolated` keep it in (issue #586).
+    n_steps: int
 
+    @abstractmethod
     def __call__(self, step: int) -> float:
         """The temperature at ``step``, strictly positive."""
         ...  # pragma: no cover
@@ -86,7 +89,7 @@ def _check_step(step: int, n_steps: int) -> None:
 
 
 @dataclass(frozen=True)
-class Constant:
+class Constant(Schedule):
     """One temperature throughout. ``ConstantLR`` with factor 1.
 
     The schedule every existing chain and fit is on, so passing it must
@@ -113,7 +116,7 @@ class Constant:
 
 
 @dataclass(frozen=True)
-class _Interpolated:
+class _Interpolated(Schedule):
     """``start`` at step 0, ``end`` at the last step, some curve between.
 
     Each subclass supplies the weight ``w(t)`` on ``start`` at fraction ``t``

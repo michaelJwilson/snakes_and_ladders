@@ -68,7 +68,7 @@ DEFAULT_STEPS = 20
 
 
 @dataclass(frozen=True)
-class WithGaussianPrior:
+class WithGaussianPrior(Objective):
     """An objective plus an isotropic Gaussian log prior, so it has a posterior.
 
     A bare negative log-likelihood read as a log density is a posterior under
@@ -923,7 +923,7 @@ def _gradient(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass(frozen=True)
-class _Scaled:
+class _Scaled(Objective):
     """``objective`` in the coordinates ``phi = theta / scale``.
 
     Hamiltonian dynamics with a diagonal mass ``M`` on ``theta`` is the
