@@ -281,3 +281,12 @@ untested pairings:
     The model fit and the parsimony search run on the search fixtures for the
     same reason; what these alignments referee is the simulator and the
     evaluators.
+  tree_scale / samplers: >-
+    The leaf-count rungs have no enumerable topology to referee an annealed
+    chain against, and recovering the simulated tree is the search's claim
+    rather than the sampler's; the sampler is refereed on the search fixtures,
+    where enumeration reaches (issue #582).
+  tree_scale / surrogates: >-
+    A surrogate is trained against maximized likelihoods per topology, which
+    these rungs exist to be too large to enumerate; what they referee is how
+    the search and the gradient scale with the leaf count (issue #582).
