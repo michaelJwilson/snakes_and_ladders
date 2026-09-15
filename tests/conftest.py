@@ -48,7 +48,13 @@ for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 import pytest  # noqa: E402
 
 from tests._durations import key_over_cap, over_cap  # noqa: E402
-from tests._problems import fixtures_named_in, problem_names  # noqa: E402
+from tests._problems import (  # noqa: E402
+    CACHE_KEY,
+    fixtures_named_in,
+    problem_names,
+    restore,
+    snapshot,
+)
 
 DURATIONS = pytest.StashKey[list[tuple[str, float, frozenset[str]]]]()
 
@@ -65,11 +71,14 @@ def pytest_configure(config: pytest.Config) -> None:
     config.stash[DURATIONS] = []
     for problem in problem_names():
         config.addinivalue_line("markers", PROBLEM_MARKER.format(problem=problem))
+    cache = getattr(config, "cache", None)
+    if cache is not None:
+        restore(cache.get(CACHE_KEY, None))
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(
-    config: pytest.Config,  # noqa: ARG001 -- the hook's signature
+    config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
     """Mark each item with the problems its module loads.
@@ -80,6 +89,9 @@ def pytest_collection_modifyitems(
     looking like it worked. The order is pinned by
     ``tests/regression/test_problem_markers.py``, which runs the selection
     rather than trusting registration order.
+
+    What each module names is written back to `pytest`'s cache here, so the
+    next invocation reads 232 file stats rather than 232 parses.
     """
     for item in items:
         path = getattr(item, "path", None)
@@ -87,6 +99,12 @@ def pytest_collection_modifyitems(
             continue
         for problem in fixtures_named_in(path):
             item.add_marker(problem)
+    cache = getattr(config, "cache", None)
+    if cache is not None and not hasattr(config, "workerinput"):
+        # The controller only: `pytest-xdist`'s workers share one cache
+        # directory, and several processes writing one JSON file is a corrupt
+        # file rather than a faster session.
+        cache.set(CACHE_KEY, snapshot())
 
 
 def distributed(config: pytest.Config) -> bool:

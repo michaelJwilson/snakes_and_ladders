@@ -21,6 +21,13 @@ markers are unaffected and are still read from the source by
 author makes and a reviewer reads in the diff, and a problem is a fact about the
 call, so the two are established opposite ways on purpose.
 
+**The scan is cached across invocations, not only within one.** Collection runs
+once per process and a developer types several a minute, so a cache the process
+throws away saves nothing where the cost is felt. The reading of each file is
+keyed on its size and modification time and kept in `pytest`'s own cache
+directory; `tests/conftest.py` restores it before collection and writes it back
+after. The numbers are in the pull request for issue #614.
+
 **An unreadable name selects everything.** A `fixture(name, tier)` whose name is
 computed cannot be read statically, and such a module is marked with every
 problem rather than with none --- `infra/select_tests.py`'s rule for a change it
@@ -32,7 +39,9 @@ from __future__ import annotations
 
 import ast
 import re
+from functools import cache
 from pathlib import Path
+from typing import Any
 
 from snakes_and_ladders.sim.fixtures import FIXTURES_DIR, problems
 
@@ -56,11 +65,15 @@ NAMES_SECOND = ("at_fixture", "at_bin")
 #: problem in the directory above the file.
 FIXTURE_PATH = re.compile(r"([a-z_0-9]+)/[a-z]+\.yaml$")
 
-#: ``path -> (mtime, names)``. Collection parses nothing else, so the parse is
-#: worth keeping across the invocations a developer types in a row.
-_CACHE: dict[Path, tuple[float, frozenset[str]]] = {}
+#: Where `tests/conftest.py` keeps this between sessions, under `.pytest_cache`.
+CACHE_KEY = "problems/fixtures-named"
+
+#: ``path -> (mtime, size, names)``. Size as well as time because a checkout
+#: that restores a file writes the recorded time with different bytes.
+_CACHE: dict[str, tuple[float, int, frozenset[str]]] = {}
 
 
+@cache
 def problem_names(directory: Path = FIXTURES_DIR) -> tuple[str, ...]:
     """Every problem the registry declares, which is every marker name.
 
@@ -92,6 +105,16 @@ def problem_names(directory: Path = FIXTURES_DIR) -> tuple[str, ...]:
         )
         raise ValueError(msg)
     return names
+
+
+@cache
+def _imported_constants(source: Path, mtime: float) -> dict[str, str]:  # noqa: ARG001
+    """`_string_constants` of a module imported from, cached by its own mtime.
+
+    Around fifty modules import a fixture path constant from `tests/_fixtures.py`,
+    and parsing it once per importer was most of what the scan cost.
+    """
+    return _string_constants(ast.parse(source.read_text()))
 
 
 def _string_constants(tree: ast.Module) -> dict[str, str]:
@@ -140,7 +163,7 @@ def _bound_strings(path: Path, tree: ast.Module) -> dict[str, str]:
         source = REPO_ROOT / Path(*node.module.split(".")).with_suffix(".py")
         if source == path or not source.is_file():
             continue
-        constants = _string_constants(ast.parse(source.read_text()))
+        constants = _imported_constants(source, source.stat().st_mtime)
         for alias in node.names:
             if alias.name in constants:
                 bound[alias.asname or alias.name] = constants[alias.name]
@@ -194,7 +217,7 @@ def _scan(path: Path) -> frozenset[str]:
 
 
 def fixtures_named_in(path: Path) -> frozenset[str]:
-    """The problems one test module exercises, cached by the file's mtime.
+    """The problems one test module exercises, cached by size and mtime.
 
     Parameters
     ----------
@@ -207,10 +230,44 @@ def fixtures_named_in(path: Path) -> frozenset[str]:
         Registry problem names; every one of them if the module names a fixture
         this scan cannot read, and none if it names no fixture at all.
     """
-    mtime = path.stat().st_mtime
-    cached = _CACHE.get(path)
-    if cached is not None and cached[0] == mtime:
-        return cached[1]
+    key = str(path)
+    stat = path.stat()
+    cached = _CACHE.get(key)
+    if cached is not None and (cached[0], cached[1]) == (stat.st_mtime, stat.st_size):
+        return cached[2]
     found = _scan(path)
-    _CACHE[path] = (mtime, found)
+    _CACHE[key] = (stat.st_mtime, stat.st_size, found)
     return found
+
+
+def restore(entries: Any) -> None:
+    """Seed the cache from a previous session's, ignoring anything malformed.
+
+    The argument is JSON a previous session wrote and a later one may have
+    edited or truncated, so every entry is checked rather than trusted: a cache
+    that cannot be read is a scan, and a cache that raises is a collection
+    error for a saving.
+    """
+    if not isinstance(entries, dict):
+        return
+    for key, entry in entries.items():
+        match entry:
+            case [float() | int() as mtime, int() as size, list() as names] if all(
+                isinstance(name, str) for name in names
+            ):
+                _CACHE[str(key)] = (float(mtime), size, frozenset(names))
+
+
+def snapshot() -> dict[str, list[Any]]:
+    """What this session learned, for the next one, minus files since deleted.
+
+    Returns
+    -------
+    dict[str, list[Any]]
+        JSON-serializable, one entry per file read.
+    """
+    return {
+        key: [mtime, size, sorted(names)]
+        for key, (mtime, size, names) in _CACHE.items()
+        if Path(key).is_file()
+    }

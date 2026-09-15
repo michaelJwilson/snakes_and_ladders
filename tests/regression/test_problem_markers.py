@@ -19,9 +19,11 @@ Selecting a module that only mentions a fixture --- a path handed to
 from __future__ import annotations
 
 import ast
+import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -30,6 +32,8 @@ from tests._problems import (
     NAMES_SECOND,
     fixtures_named_in,
     problem_names,
+    restore,
+    snapshot,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -230,6 +234,67 @@ def test_the_collected_items_carry_what_their_module_names(
             f"{item.nodeid} carries {sorted(carried)} and its module names "
             f"{sorted(fixtures_named_in(item.path))}"
         )
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_the_cache_is_reread_when_the_file_changes(tmp_path: Path) -> None:
+    """What makes the cross-session cache safe, rather than fast and wrong.
+
+    A stale entry is a module selected for the problem it used to load, which
+    is worse than the parse it saves. Both halves of the key are exercised, the
+    other held fixed with `os.utime`: an edit within one clock tick moves the
+    size and not the time, and a checkout moves the time and not necessarily
+    the size.
+    """
+
+    def write(problem: str) -> None:
+        module.write_text(f'def test_one() -> None:\n    {CALL}("{problem}", "ci")\n')
+
+    module = tmp_path / "test_cached.py"
+    write("hmm")
+    assert fixtures_named_in(module) == {"hmm"}
+
+    stamp = module.stat()
+    write("turbo")
+    os.utime(module, (stamp.st_atime, stamp.st_mtime))
+    assert module.stat().st_size != stamp.st_size
+    assert fixtures_named_in(module) == {"turbo"}, "the size did not invalidate"
+
+    write("bicycle")
+    assert fixtures_named_in(module) == {"bicycle"}
+    stamp = module.stat()
+    write("mixture")
+    os.utime(module, (stamp.st_atime, stamp.st_mtime + 1))
+    assert module.stat().st_size == stamp.st_size
+    assert fixtures_named_in(module) == {"mixture"}, "the mtime did not invalidate"
+
+    saved = snapshot()
+    assert saved[str(module)][2] == ["mixture"]
+    restore(saved)
+    assert fixtures_named_in(module) == {"mixture"}
+
+
+@pytest.mark.structural
+@pytest.mark.edge_case
+def test_a_damaged_cache_is_ignored_rather_than_raised_on() -> None:
+    """A cache decides when work is redone, never whether a check runs.
+
+    `infra/CLAUDE.md`'s rule, applied to this one: the file is JSON a previous
+    session wrote and anything may have happened to it since, so a malformed
+    entry is dropped and rescanned rather than ending collection.
+    """
+    damaged: tuple[Any, ...] = (
+        None,
+        [],
+        {"a": "b"},
+        {"a": [1, 2]},
+        {"a": [1.0, 2, [3]]},
+    )
+    for entry in damaged:
+        restore(entry)
+    module = TESTS / "_problems.py"
+    assert fixtures_named_in(module) == frozenset()
 
 
 # --- the mini-suite: `-m` run for real, not inspected ----------------------
