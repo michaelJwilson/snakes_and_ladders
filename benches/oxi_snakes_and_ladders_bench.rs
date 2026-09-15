@@ -15,11 +15,14 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use oxi_snakes_and_ladders::coupled::{
-    class_posteriors_into, external_field_into, CoupledShape, EmissionTables,
+    class_posteriors_into, external_field_by_position, external_field_into, CoupledShape,
+    EmissionTables,
 };
 use oxi_snakes_and_ladders::double;
 use oxi_snakes_and_ladders::maxflow::{max_flow_impl, FlowNetwork};
-use oxi_snakes_and_ladders::pruning::{pruning_log_likelihood_impl, LeafObservations};
+use oxi_snakes_and_ladders::pruning::{
+    pruning_log_likelihood_impl, pruning_log_likelihood_reduced, LeafObservations,
+};
 #[cfg(feature = "sandbox")]
 use oxi_snakes_and_ladders::pruning_burn::pruning_gradient_impl;
 use oxi_snakes_and_ladders::sampling::sample_rows_impl;
@@ -117,6 +120,25 @@ fn bench_pruning_log_likelihood(c: &mut Criterion) {
         group.bench_function(label, |b| {
             b.iter(|| {
                 pruning_log_likelihood_impl(
+                    std::hint::black_box(&branch_length),
+                    std::hint::black_box(&children),
+                    std::hint::black_box(LeafObservations {
+                        states: &leaf_states,
+                        n_sites,
+                        row: &leaf_row,
+                    }),
+                    k,
+                    &pi,
+                    true,
+                )
+                .unwrap()
+            })
+        });
+        // The reassociated reduction, measured beside the bit-identical one
+        // it is offered against (issue #627).
+        group.bench_function(format!("{label}_reduced"), |b| {
+            b.iter(|| {
+                pruning_log_likelihood_reduced(
                     std::hint::black_box(&branch_length),
                     std::hint::black_box(&children),
                     std::hint::black_box(LeafObservations {
@@ -295,6 +317,14 @@ fn bench_class_posteriors(c: &mut Criterion) {
     c.bench_function("external_field 200x5041 M=K=10", |b| {
         b.iter(|| {
             external_field_into(shape, &tables, &totals, &successes, &weights, &mut field).unwrap();
+        });
+    });
+    // The candidate bit-identity forbade, measured beside the one it kept:
+    // parallel over positions with a per-thread field, against parallel over
+    // vertices with the loops inverted (issue #627).
+    c.bench_function("external_field by position 200x5041 M=K=10", |b| {
+        b.iter(|| {
+            external_field_by_position(shape, &tables, &totals, &successes, &weights, &mut field);
         });
     });
 }

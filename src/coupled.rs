@@ -396,6 +396,63 @@ pub fn external_field_into(
     Ok(())
 }
 
+/// [`external_field_into`] parallelised over **positions** instead of vertices.
+///
+/// The candidate the cost ranking suggested and bit-identity forbade: `s` is
+/// the accumulation, so splitting it needs one `field` per thread and a sum
+/// across them, which reassociates. `likelihood/CLAUDE.md` accepts a relative
+/// 1e-11 for `float64`, and a tree combination over 5,041 terms sits far
+/// inside that, so the question is not whether it is allowed but whether it is
+/// faster: inverting the loops for the bit-identical version costs locality,
+/// because `totals[s * n_nodes + v]` walks contiguously in `s` and strides in
+/// `v`. Both are benchmarked and only one survives (issue #627).
+#[allow(dead_code)]
+pub fn external_field_by_position(
+    shape: CoupledShape,
+    tables: &EmissionTables<'_>,
+    totals: &[u16],
+    successes: &[u16],
+    weights: &[f64],
+    field: &mut [f64],
+) {
+    let block = shape.block();
+    let (n_positions, n_nodes, n_states) = (shape.n_positions, shape.n_nodes, shape.n_states);
+    let n_classes = shape.n_classes;
+    let combined = (0..n_positions)
+        .into_par_iter()
+        .fold(
+            || vec![0.0f64; n_nodes * n_classes],
+            |mut partial, s| {
+                let row = s * n_nodes;
+                let weight = &weights[s * block..][..block];
+                for v in 0..n_nodes {
+                    let total = &tables.total[usize::from(totals[row + v]) * block..][..block];
+                    let success = &tables.success[usize::from(successes[row + v]) * block..][..block];
+                    let into = &mut partial[v * n_classes..][..n_classes];
+                    for (m, cell) in into.iter_mut().enumerate() {
+                        let mut accumulated = 0.0;
+                        for k in 0..n_states {
+                            let index = m * n_states + k;
+                            accumulated += (total[index] + success[index]) * weight[index];
+                        }
+                        *cell -= accumulated;
+                    }
+                }
+                partial
+            },
+        )
+        .reduce(
+            || vec![0.0f64; n_nodes * n_classes],
+            |mut left, right| {
+                for (cell, value) in left.iter_mut().zip(right.iter()) {
+                    *cell += value;
+                }
+                left
+            },
+        );
+    field.copy_from_slice(&combined);
+}
+
 /// The preconditions both kernels share.
 fn check_inputs(
     shape: &CoupledShape,

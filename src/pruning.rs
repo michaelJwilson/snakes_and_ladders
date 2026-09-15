@@ -227,6 +227,58 @@ pub fn pruning_log_likelihood_impl(
     Ok(total_log_likelihood)
 }
 
+/// [`pruning_log_likelihood_impl`] with the reduction done in parallel.
+///
+/// The candidate bit-identity forbade. `fold`/`reduce` over an indexed
+/// parallel iterator combines partials in index order, which is still
+/// `(a+b)+(c+d)` against the serial `((a+b)+c)+d`, so the total differs in its
+/// last bits. `likelihood/CLAUDE.md` accepts a relative 1e-11 for `float64`
+/// and a tree combination over 200,000 terms is far inside it -- and is in
+/// fact *more* accurate than the serial sum, not less. What it buys is one
+/// `f64` per site of memory and one pass over it. Benchmarked against the
+/// bit-identical form; only one survives (issue #627).
+#[allow(dead_code)]
+pub fn pruning_log_likelihood_reduced(
+    branch_length: &[f64],
+    children: &[Vec<usize>],
+    observations: LeafObservations<'_>,
+    k: usize,
+    pi: &[f64],
+    rescale: bool,
+) -> Result<f64, String> {
+    let LeafObservations {
+        states: leaf_states,
+        n_sites,
+        row: leaf_row,
+    } = observations;
+    let window = if n_sites >= PARALLEL_ABOVE {
+        n_sites.div_ceil(rayon::current_num_threads().max(1))
+    } else {
+        n_sites
+    };
+    let totals: Result<Vec<f64>, String> = (0..n_sites.div_ceil(window))
+        .into_par_iter()
+        .map(|index| {
+            let start = index * window;
+            let mut slot = vec![0.0f64; window.min(n_sites - start)];
+            traverse_window(
+                branch_length,
+                children,
+                leaf_states,
+                n_sites,
+                leaf_row,
+                k,
+                pi,
+                rescale,
+                start,
+                &mut slot,
+            )?;
+            Ok(slot.iter().sum::<f64>())
+        })
+        .collect();
+    Ok(totals?.iter().sum::<f64>())
+}
+
 /// Sites below this run the traversal once, on one thread.
 ///
 /// Measured, not chosen: `STATUS.md` carries what the pool costs on each side
@@ -470,6 +522,128 @@ pub fn pruning_log_likelihood(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A balanced tree with `n_leaves` leaves and random states, for the
+    /// agreement tests below.
+    fn fixture(n_leaves: usize, n_sites: usize, k: usize) -> (Vec<f64>, Vec<Vec<usize>>, Vec<i64>, Vec<i64>) {
+        let n_nodes = 2 * n_leaves - 1;
+        let mut children: Vec<Vec<usize>> = vec![Vec::new(); n_leaves];
+        for i in 0..n_leaves - 1 {
+            children.push(vec![2 * i, 2 * i + 1]);
+        }
+        // A fixed multiplicative generator, so the fixture is the same on
+        // every host and no dependency is added for it.
+        let mut state = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let branch_length: Vec<f64> = (0..n_nodes)
+            .map(|_| 0.05 + (next() % 1000) as f64 / 10_000.0)
+            .collect();
+        let leaf_states: Vec<i64> = (0..n_leaves * n_sites)
+            .map(|_| (next() % k as u64) as i64)
+            .collect();
+        let leaf_row: Vec<i64> = (0..n_nodes)
+            .map(|i| if i < n_leaves { i as i64 } else { -1 })
+            .collect();
+        (branch_length, children, leaf_states, leaf_row)
+    }
+
+    /// Splitting the sites must not move a bit of the answer.
+    ///
+    /// The whole point of writing `ln(L_s) + scale_s` per site and summing
+    /// sequentially: the result cannot depend on how many threads ran, so a
+    /// run on a 4-core host and a run on a 64-core one agree exactly. A
+    /// `fold`/`reduce` would not have this property, which is why the
+    /// benchmark carries both and only this one is called (issue #627).
+    #[test]
+    fn test_the_total_does_not_depend_on_how_the_sites_were_divided() {
+        let (k, n_sites) = (4usize, 50_000usize);
+        let pi = vec![0.25; k];
+        let (branch_length, children, leaf_states, leaf_row) = fixture(4, n_sites, k);
+        let observations = || LeafObservations {
+            states: &leaf_states,
+            n_sites,
+            row: &leaf_row,
+        };
+        let whole = traverse_and_sum(&branch_length, &children, observations(), k, &pi, n_sites);
+        for window in [n_sites, n_sites / 2 + 1, n_sites / 3 + 1, 1024] {
+            let split =
+                traverse_and_sum(&branch_length, &children, observations(), k, &pi, window);
+            assert_eq!(
+                whole.to_bits(),
+                split.to_bits(),
+                "window {window} gave {split}, not {whole}"
+            );
+        }
+    }
+
+    /// The traversal at a chosen window width, summed the caller's way.
+    fn traverse_and_sum(
+        branch_length: &[f64],
+        children: &[Vec<usize>],
+        observations: LeafObservations<'_>,
+        k: usize,
+        pi: &[f64],
+        window: usize,
+    ) -> f64 {
+        let n_sites = observations.n_sites;
+        let mut per_site = vec![0.0f64; n_sites];
+        for (index, into) in per_site.chunks_mut(window).enumerate() {
+            traverse_window(
+                branch_length,
+                children,
+                observations.states,
+                n_sites,
+                observations.row,
+                k,
+                pi,
+                true,
+                index * window,
+                into,
+            )
+            .unwrap();
+        }
+        let mut total = 0.0f64;
+        for &value in per_site.iter() {
+            total += value;
+        }
+        total
+    }
+
+    /// The reassociated form stays inside the tolerance that permits it.
+    ///
+    /// `likelihood/CLAUDE.md` holds a `float64` comparison to a relative
+    /// 1e-11. This asserts the reduced form is within it *and* reports the
+    /// realized deviation, so the number in `STATUS.md` is one a reader can
+    /// reproduce rather than one taken on trust.
+    #[test]
+    fn test_the_reassociated_reduction_stays_inside_the_float64_tolerance() {
+        let (k, n_sites) = (4usize, 50_000usize);
+        let pi = vec![0.25; k];
+        let (branch_length, children, leaf_states, leaf_row) = fixture(4, n_sites, k);
+        let observations = || LeafObservations {
+            states: &leaf_states,
+            n_sites,
+            row: &leaf_row,
+        };
+        let exact =
+            pruning_log_likelihood_impl(&branch_length, &children, observations(), k, &pi, true)
+                .unwrap();
+        let reduced =
+            pruning_log_likelihood_reduced(&branch_length, &children, observations(), k, &pi, true)
+                .unwrap();
+        let relative = ((reduced - exact) / exact).abs();
+        assert!(
+            relative <= 1e-11,
+            "relative deviation {relative} exceeds the float64 tolerance 1e-11 \
+             (likelihood/CLAUDE.md); exact {exact}, reduced {reduced}"
+        );
+        println!("reassociated reduction: relative deviation {relative:e}");
+    }
 
     #[test]
     fn test_jc_transition_probabilities_rows_sum_to_one() {
