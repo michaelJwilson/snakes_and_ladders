@@ -18,6 +18,14 @@ so does a ``key`` test over that (``tests/_durations.py``).
 `DEV.md`'s rule against timing on its runners, and prints ``--durations``
 instead.
 
+**A test is selectable by the problem it exercises.** Issue #614. Every test
+module's fixture calls are read at collection (``tests/_problems.py``) and one
+marker per problem named is added to its items, so ``pytest -m potts_lattice``
+selects that problem across `search/` and `likelihood/` at once and no author
+tags anything. The names are registered below with the rest, so
+``--strict-markers`` refuses a typo, and they are a third axis: ``-m
+"potts_lattice and critical"`` is the intersection.
+
 **A benchmark is never collected under ``pytest-xdist``.** ``pytest-benchmark``
 disables itself whenever a run is distributed and says so in a line of its
 header, so a distributed run collects the 212 benchmark tests, passes every
@@ -40,12 +48,45 @@ for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 import pytest  # noqa: E402
 
 from tests._durations import key_over_cap, over_cap  # noqa: E402
+from tests._problems import fixtures_named_in, problem_names  # noqa: E402
 
 DURATIONS = pytest.StashKey[list[tuple[str, float, frozenset[str]]]]()
 
 
+#: What a problem marker says of itself, once registered.
+PROBLEM_MARKER = (
+    "{problem}: exercises the {problem} fixture, from the registry call the "
+    "test module already makes; added at collection, never by an author "
+    "(tests/_problems.py, issue #614)"
+)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     config.stash[DURATIONS] = []
+    for problem in problem_names():
+        config.addinivalue_line("markers", PROBLEM_MARKER.format(problem=problem))
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(
+    config: pytest.Config,  # noqa: ARG001 -- the hook's signature
+    items: list[pytest.Item],
+) -> None:
+    """Mark each item with the problems its module loads.
+
+    ``tryfirst`` because `pytest`'s own mark plugin deselects on ``-m`` from
+    this same hook: a marker added after that runs has been added to an item
+    already thrown away, and ``-m potts_lattice`` would select nothing while
+    looking like it worked. The order is pinned by
+    ``tests/regression/test_problem_markers.py``, which runs the selection
+    rather than trusting registration order.
+    """
+    for item in items:
+        path = getattr(item, "path", None)
+        if path is None:
+            continue
+        for problem in fixtures_named_in(path):
+            item.add_marker(problem)
 
 
 def distributed(config: pytest.Config) -> bool:
