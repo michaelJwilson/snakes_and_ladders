@@ -33,6 +33,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.inputs
    :members:
 
+.. automodule:: snakes_and_ladders.incidence
+   :members:
+
 .. automodule:: snakes_and_ladders.parallel
    :members:
 

@@ -85,7 +85,7 @@ def forward_backward(
         beta[t] = logsumexp(
             log_transition + (log_density[t + 1] + beta[t + 1])[None, :], axis=1
         )
-    log_evidence = float(logsumexp(alpha[-1][None, :], axis=1)[0])
+    log_evidence = float(logsumexp(alpha[-1], axis=0))
     posterior = np.exp(alpha + beta - log_evidence)
     pairwise = np.empty((max(length - 1, 0), n_states, n_states))
     for t in range(1, length):
@@ -120,10 +120,10 @@ def sample_path(
             logsumexp(alpha[t - 1][:, None] + log_transition, axis=0) + log_density[t]
         )
     path = np.empty(length, dtype=np.int64)
-    weights = np.exp(alpha[-1] - logsumexp(alpha[-1][None, :], axis=1)[0])
+    weights = np.exp(alpha[-1] - logsumexp(alpha[-1], axis=0))
     path[-1] = rng.choice(n_states, p=weights / weights.sum())
     for t in range(length - 2, -1, -1):
         scores = alpha[t] + log_transition[:, path[t + 1]]
-        weights = np.exp(scores - logsumexp(scores[None, :], axis=1)[0])
+        weights = np.exp(scores - logsumexp(scores, axis=0))
         path[t] = rng.choice(n_states, p=weights / weights.sum())
     return path

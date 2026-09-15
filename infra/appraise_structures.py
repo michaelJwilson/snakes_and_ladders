@@ -181,7 +181,7 @@ def structures(root: Path = PACKAGE_ROOT) -> list[Structure]:
                     frozen=_is_frozen(node),
                     consumers=consumers,
                     layout=_layout(annotated),
-                    notes=_notes(node, annotated),
+                    notes=_notes(f"{module}.{node.name}", node, annotated),
                 )
             )
     return found
@@ -230,28 +230,58 @@ def _layout(fields: tuple[str, ...]) -> str:
     return "none"
 
 
-def _notes(node: ast.ClassDef, fields: tuple[str, ...]) -> tuple[str, ...]:
+#: Layouts the rule would flag that a measurement has settled, against the
+#: reason. A finding is a question, and a question that has been answered
+#: with numbers should not be asked again every run; an entry here is not an
+#: opinion but a benchmark, named so the next reader can re-run it rather
+#: than re-litigate it. The reason replaces the finding, so the survey still
+#: reports the layout --- it stops calling it a cost.
+MEASURED: dict[str, str] = {
+    "search.maxflow.FlowNetwork": (
+        "list of lists kept: Dinic is a pure-Python inner loop, where a row "
+        "is 1.95 ms as lists, 3.93 ms flat with offsets and 25.63 ms as a "
+        "NumPy slice over 16,384 rows of degree six; the compiled consumer "
+        "takes the contiguous form from as_arrays (#586)"
+    ),
+}
+
+
+def _notes(
+    qualified: str, node: ast.ClassDef, fields: tuple[str, ...]
+) -> tuple[str, ...]:
     """Cost findings the source decides, per root `CLAUDE.md`'s checklist."""
     out: list[str] = []
     source = ast.unparse(node)
-    for item in node.body:
-        if not isinstance(item, ast.FunctionDef):
-            continue
-        body = ast.unparse(item)
-        derives_csr = any(mark in body for mark in ("cumsum", "offsets", "indptr"))
-        cached = any(
+    # A class that derives the layout once under a cache derives it once for
+    # every method that reads it, so the per-call finding is about the class
+    # and not about each method: a delegating accessor is not a second
+    # derivation, and reporting it as one would outlive the fix.
+    derived_once = any(
+        isinstance(item, ast.FunctionDef)
+        and any(
             "cached_property" in ast.unparse(d) or "lru_cache" in ast.unparse(d)
             for d in item.decorator_list
         )
-        if derives_csr and not cached and _layout(fields) != "csr":
+        and any(mark in ast.unparse(item) for mark in ("cumsum", "offsets", "indptr"))
+        for item in node.body
+    )
+    for item in node.body:
+        if not isinstance(item, ast.FunctionDef) or derived_once:
+            continue
+        body = ast.unparse(item)
+        derives_csr = any(mark in body for mark in ("cumsum", "offsets", "indptr"))
+        if derives_csr and _layout(fields) != "csr":
             out.append(
                 f"{item.name} derives a compressed layout per call from a store "
                 "that is not compressed (CLAUDE.md, Memory layout; recompute or store)"
             )
     if "list[list[" in source:
         out.append(
-            "carries a list of lists where the rule asks for offsets into one "
-            "array (CLAUDE.md, Memory layout)"
+            MEASURED.get(
+                qualified,
+                "carries a list of lists where the rule asks for offsets into one "
+                "array (CLAUDE.md, Memory layout)",
+            )
         )
     return tuple(out)
 
@@ -274,7 +304,21 @@ def clusters(found: list[Structure]) -> list[Cluster]:
 
 
 def _keys(structure: Structure) -> list[str]:
-    """The shapes a structure belongs to: its suffix, and its field signature."""
+    """The shapes a structure belongs to: its suffix, and its field signature.
+
+    Two kinds of key, and the difference decides what a reader does with a
+    cluster. A ``role:`` key says the members carry the same *relation* and
+    differ in how they store it, which is a merge to consider ---
+    ``role:incidence`` is the one issue #586 acted on. A ``suffix:`` or
+    ``prefix:`` key says only that the names agree, and the names of this
+    package agree by convention: ``suffix:Params`` holds fifteen
+    per-problem parameter bundles whose whole shared surface is ``seed`` and
+    ``tolerance``, each read by one simulator, and nothing calls any of them
+    polymorphically. Merging on a name key would be writing a seam the rule
+    in root ``CLAUDE.md`` refuses --- a contract belongs where three or more
+    modules call *through* it, and ``prefix:Exact`` is reported at five
+    members and **zero** consuming references.
+    """
     keys: list[str] = []
     for suffix in ("Params", "Result", "Fit", "Decoding", "Dataset", "Enumeration"):
         if structure.name.endswith(suffix):

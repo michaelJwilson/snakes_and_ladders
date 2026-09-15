@@ -559,7 +559,7 @@ def chain_block_sweep(
         if step_table is None:
             step_table = np.zeros((unary[t - 1].shape[0], unary[t].shape[0]))
         alpha.append(logsumexp(alpha[t - 1][:, None] + step_table, axis=0) + unary[t])
-    weights = np.exp(alpha[-1] - logsumexp(alpha[-1][None, :], axis=1)[0])
+    weights = np.exp(alpha[-1] - logsumexp(alpha[-1], axis=0))
     state[positions[-1]] = rng.choice(weights.shape[0], p=weights / weights.sum())
     for t in range(length - 2, -1, -1):
         step_table = transition[t]
@@ -569,7 +569,7 @@ def chain_block_sweep(
             else step_table[:, int(state[positions[t + 1]])]
         )
         scores = alpha[t] + column
-        weights = np.exp(scores - logsumexp(scores[None, :], axis=1)[0])
+        weights = np.exp(scores - logsumexp(scores, axis=0))
         state[positions[t]] = rng.choice(weights.shape[0], p=weights / weights.sum())
 
 

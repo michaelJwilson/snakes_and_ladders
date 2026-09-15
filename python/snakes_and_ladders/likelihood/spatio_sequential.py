@@ -167,7 +167,7 @@ def enumerate_spatio_sequential(
     """
     labellings, paths, table = _log_joint(params, observations)
     flat = table.reshape(1, -1)
-    log_z_prior = float(logsumexp(log_prior(params, labellings)[None, :], axis=1)[0])
+    log_z_prior = float(logsumexp(log_prior(params, labellings), axis=0))
     log_total = float(logsumexp(flat, axis=1)[0])
     weights = np.exp(table - log_total)  # posterior over (l, k_1, ..., k_M)
 
@@ -213,7 +213,7 @@ def conditional_state_posterior(
             scores = scores + gated[n, np.arange(params.n_positions), m, :][
                 np.arange(params.n_positions), paths
             ].sum(axis=1)
-        weights = np.exp(scores - logsumexp(scores[None, :], axis=1)[0])
+        weights = np.exp(scores - logsumexp(scores, axis=0))
         for s in range(params.n_positions):
             np.add.at(posterior[m, s], paths[:, s], weights)
     return posterior
@@ -230,7 +230,7 @@ def log_evidence_by_forward(
     """
     labellings = _labellings(params)
     prior = log_prior(params, labellings)
-    log_z_prior = float(logsumexp(prior[None, :], axis=1)[0])
+    log_z_prior = float(logsumexp(prior, axis=0))
     gated = gated_log_density(params, observations)
     log_transition = torch.log(torch.as_tensor(params.transition))
     terms = np.empty(labellings.shape[0])
@@ -247,7 +247,7 @@ def log_evidence_by_forward(
                 )
             )
         terms[index] = total
-    return float(logsumexp(terms[None, :], axis=1)[0])
+    return float(logsumexp(terms, axis=0))
 
 
 # --- the E step, the field and the joint given a labelling (issue #306) ----

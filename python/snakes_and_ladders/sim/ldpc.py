@@ -43,6 +43,7 @@ from typing import Protocol
 import numpy as np
 
 from snakes_and_ladders.fixtures import load_declared
+from snakes_and_ladders.incidence import SparseIncidence
 
 #: The magnitude that stands for certainty. ``tanh(LLR_CAP / 2)`` is below
 #: one in ``float64`` by ``1.9e-13``, so the decoder's ``tanh`` rule never
@@ -114,30 +115,28 @@ class ParityCheck:
         ):
             msg = f"an edge lies outside the {n_checks} x {n_bits} matrix"
             raise ValueError(msg)
-        order = np.lexsort((checks, variables))
-        edge_variable, edge_check = variables[order], checks[order]
-        keys = edge_variable * n_checks + edge_check
-        if np.any(keys[1:] == keys[:-1]):
-            msg = "an edge (variable, check) is listed twice"
-            raise ValueError(msg)
-        variable_offsets = np.searchsorted(edge_variable, np.arange(n_bits + 1))
-        check_order = np.argsort(edge_check, kind="stable")
-        check_offsets = np.searchsorted(
-            edge_check[check_order], np.arange(n_checks + 1)
+        # The two orientations and the permutation between them are one
+        # structure, `snakes_and_ladders.incidence.SparseIncidence`, which
+        # this class's fields were written by hand before issue #586 named
+        # it. `ascending` keeps the rows column-sorted, the convention the
+        # decoder's segments and every pinned message order already have.
+        by_variable = SparseIncidence.from_pairs(
+            n_bits, n_checks, variables, checks, distinct=True, ascending=True
         )
-        if np.any(np.diff(variable_offsets) == 0):
+        by_check, check_order = by_variable.transpose()
+        if not by_variable.degrees.all():
             msg = "every bit must sit in at least one check"
             raise ValueError(msg)
-        if np.any(np.diff(check_offsets) == 0):
+        if not by_check.degrees.all():
             msg = "every check must hold at least one bit"
             raise ValueError(msg)
         return cls(
             n_bits,
             n_checks,
-            edge_variable,
-            edge_check,
-            variable_offsets,
-            check_offsets,
+            by_variable.rows,
+            by_variable.indices,
+            by_variable.offsets,
+            by_check.offsets,
             check_order,
         )
 

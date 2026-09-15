@@ -185,7 +185,7 @@ def bcjr(
     # `alpha + beta` at the final step and not `alpha` alone: on a terminated
     # trellis only paths ending at the zero state are in the model, and
     # summing every end state would be the evidence of a different code.
-    log_evidence = float(logsumexp((alpha[length] + beta[length])[None, :], axis=1)[0])
+    log_evidence = float(logsumexp((alpha[length] + beta[length]), axis=0))
     return TrellisDecoding(
         posterior_llr=np.asarray(posterior),
         extrinsic_llr=np.asarray(posterior - systematic - apriori),
@@ -327,7 +327,7 @@ def exact_bitwise_posterior(
         inputs = terminate(trellis, message)
         bits, _ = encode_stream(trellis, inputs)
         scores[index] = -(inputs @ systematic) - (bits @ parity)
-    log_evidence = float(logsumexp(scores[None, :], axis=1)[0])
+    log_evidence = float(logsumexp(scores, axis=0))
     ones = np.where(messages == 1, scores[:, None], -np.inf)
     zeros = np.where(messages == 0, scores[:, None], -np.inf)
     posterior = np.logaddexp.reduce(zeros, axis=0) - np.logaddexp.reduce(ones, axis=0)

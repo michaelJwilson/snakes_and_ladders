@@ -73,18 +73,46 @@ def test_the_incidence_cluster_holds_the_three_representations(
 
 
 @pytest.mark.structural
-def test_the_two_layout_findings_are_reported(
+def test_the_one_structure_the_three_now_hold_is_in_the_cluster(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
-    # Both are real, both were found by the walk rather than by a reader, and
-    # both name a rule in root `CLAUDE.md`'s Runtime Optimization
-    # Opportunities. They are pinned so a fix has to delete the finding.
+    # The three above still store what their problems need -- a Potts graph
+    # is an edge list, a factor graph is tables -- and each now derives its
+    # incidence through one structure rather than three. The survey should
+    # place that structure in the cluster it was lifted from, and classify it
+    # by the same rule, or it has stopped measuring the tree.
+    incidence = next(c for c in grouped if c.key == "role:incidence")
+
+    assert "incidence.SparseIncidence" in incidence.members
+    assert incidence.layouts["incidence.SparseIncidence"] == "csr"
+
+
+@pytest.mark.structural
+def test_the_per_call_derivation_finding_is_gone(
+    grouped: list[appraise_structures.Cluster],
+) -> None:
+    # The survey reported `PottsGraph.compressed_adjacency` deriving the
+    # layout per call; it is derived once now, and the finding has to go with
+    # it -- a survey whose findings outlive their fixes is a survey nobody
+    # reads. Stated as the absence, because that is what the fix changed.
+    findings = " ".join(f for cluster in grouped for f in cluster.findings)
+
+    assert "derives a compressed layout per call" not in findings
+
+
+@pytest.mark.structural
+def test_the_list_of_lists_finding_carries_its_measurement(
+    grouped: list[appraise_structures.Cluster],
+) -> None:
+    # The other finding was measured rather than fixed: converting Dinic's
+    # adjacency would have made it slower, so the survey reports the layout
+    # and the numbers instead of asking again. A finding answered with a
+    # benchmark still shows, so the reader can re-run it.
     findings = " ".join(f for cluster in grouped for f in cluster.findings)
 
     assert "search.maxflow.FlowNetwork" in findings
-    assert "list of lists" in findings
-    assert "sim.graph.PottsGraph" in findings
-    assert "derives a compressed layout per call" in findings
+    assert "list of lists kept" in findings
+    assert "25.63 ms as a NumPy slice" in findings
 
 
 @pytest.mark.structural
