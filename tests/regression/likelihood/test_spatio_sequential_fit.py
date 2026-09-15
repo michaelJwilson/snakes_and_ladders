@@ -114,7 +114,7 @@ def test_the_labelled_joint_is_the_enumeration_s_per_labelling_term() -> None:
             for second in paths
         ]
     )
-    expected = float(logsumexp(terms[None, :], axis=1)[0]) - exact.log_prior_normalizer
+    expected = float(logsumexp(terms, axis=0)) - exact.log_prior_normalizer
 
     realized = labelled_log_likelihood(params, data.observations, data.labels)
 

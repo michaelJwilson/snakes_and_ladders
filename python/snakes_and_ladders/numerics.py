@@ -96,7 +96,12 @@ def logsumexp(values: np.ndarray, axis: int) -> np.ndarray:
         Log-domain values.
     axis : int
         Axis to reduce. It is removed from the result, as ``np.max`` without
-        ``keepdims`` would remove it.
+        ``keepdims`` would remove it. A one-dimensional vector of scores ---
+        a log normalizer over an enumeration, which is most of the callers
+        --- reduces with ``axis=0`` and returns a zero-dimensional array that
+        ``float`` takes. Fourteen sites across seven modules wrote
+        ``values[None, :]`` and indexed ``[0]`` back off instead, which is
+        the same arithmetic on the same values and was removed by issue #586.
 
     Returns
     -------
@@ -106,7 +111,7 @@ def logsumexp(values: np.ndarray, axis: int) -> np.ndarray:
     Examples
     --------
     >>> import numpy as np
-    >>> float(logsumexp(np.array([[0.0, 0.0]]), axis=1)[0])
+    >>> float(logsumexp(np.array([0.0, 0.0]), axis=0))
     0.6931471805599453
     """
     peak = values.max(axis=axis, keepdims=True)

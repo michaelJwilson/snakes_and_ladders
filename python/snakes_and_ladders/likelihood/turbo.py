@@ -318,7 +318,7 @@ def exact_turbo_posterior(code: TurboCode, llr: np.ndarray) -> ExactTurboDecodin
     generator = turbo_generator_matrix(code).astype(np.int64)
     words = (messages.astype(np.int64) @ generator) & 1
     scores = -(words.astype(float) @ ratios)
-    log_evidence = float(logsumexp(scores[None, :], axis=1)[0])
+    log_evidence = float(logsumexp(scores, axis=0))
     ones = np.where(messages == 1, scores[:, None], -np.inf)
     zeros = np.where(messages == 0, scores[:, None], -np.inf)
     posterior = np.logaddexp.reduce(zeros, axis=0) - np.logaddexp.reduce(ones, axis=0)

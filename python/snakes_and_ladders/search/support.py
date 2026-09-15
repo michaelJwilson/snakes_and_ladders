@@ -163,7 +163,7 @@ def _support(log_score: float, competitors: list[float], kind: SupportKind) -> S
     if not competitors:
         return Support(log_score, np.inf, 1.0, 1, kind)
     scores = np.array([log_score, *competitors])
-    total = float(logsumexp(scores[None, :], axis=1)[0])
+    total = float(logsumexp(scores, axis=0))
     return Support(
         log_score=log_score,
         margin=log_score - max(competitors),

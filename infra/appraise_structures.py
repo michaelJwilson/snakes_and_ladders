@@ -304,7 +304,21 @@ def clusters(found: list[Structure]) -> list[Cluster]:
 
 
 def _keys(structure: Structure) -> list[str]:
-    """The shapes a structure belongs to: its suffix, and its field signature."""
+    """The shapes a structure belongs to: its suffix, and its field signature.
+
+    Two kinds of key, and the difference decides what a reader does with a
+    cluster. A ``role:`` key says the members carry the same *relation* and
+    differ in how they store it, which is a merge to consider ---
+    ``role:incidence`` is the one issue #586 acted on. A ``suffix:`` or
+    ``prefix:`` key says only that the names agree, and the names of this
+    package agree by convention: ``suffix:Params`` holds fifteen
+    per-problem parameter bundles whose whole shared surface is ``seed`` and
+    ``tolerance``, each read by one simulator, and nothing calls any of them
+    polymorphically. Merging on a name key would be writing a seam the rule
+    in root ``CLAUDE.md`` refuses --- a contract belongs where three or more
+    modules call *through* it, and ``prefix:Exact`` is reported at five
+    members and **zero** consuming references.
+    """
     keys: list[str] = []
     for suffix in ("Params", "Result", "Fit", "Decoding", "Dataset", "Enumeration"):
         if structure.name.endswith(suffix):
