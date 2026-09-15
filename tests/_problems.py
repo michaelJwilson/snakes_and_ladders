@@ -50,7 +50,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: Calls whose *first* positional argument names the problem.
 #: `snakes_and_ladders.sim.fixtures.fixture` and `path_of`.
-NAMES_FIRST = ("fixture", "path_of")
+NAMES_FIRST = ("fixture", "path_of", "load_fixture", "fixture_path")
 
 #: Calls whose *second* positional argument names the problem: the
 #: parameterizing wrappers in `tests/_scale.py`, which pass it through to
@@ -68,9 +68,23 @@ FIXTURE_PATH = re.compile(r"([a-z_0-9]+)/[a-z]+\.yaml$")
 #: Where `tests/conftest.py` keeps this between sessions, under `.pytest_cache`.
 CACHE_KEY = "problems/fixtures-named"
 
-#: ``path -> (mtime, size, names)``. Size as well as time because a checkout
-#: that restores a file writes the recorded time with different bytes.
-_CACHE: dict[str, tuple[float, int, frozenset[str]]] = {}
+#: ``path -> ((mtime, size, registry), names)``. Size as well as time because a
+#: checkout that restores a file writes the recorded time with different bytes,
+#: and the registry because `_scan` reads it as well as the file.
+_CACHE: dict[str, tuple[tuple[float, int, str], frozenset[str]]] = {}
+
+
+def _registry_stamp() -> str:
+    """The declared problems, as one string the cache key can carry.
+
+    A renamed or added fixture directory changes what `_scan` returns for a
+    module whose own bytes have not moved: the filter narrows, and an
+    unreadable module's answer is the whole set. Keying on the module alone
+    left a stale name to reach `add_marker`, which `--strict-markers` raises
+    inside `pytest_collection_modifyitems` --- a collection error for the whole
+    session, surviving until `.pytest_cache` is deleted.
+    """
+    return ",".join(problem_names())
 
 
 @cache
@@ -179,10 +193,23 @@ def _called_names(tree: ast.Module, bound: dict[str, str]) -> set[str] | None:
         function = node.func
         called = function.id if isinstance(function, ast.Name) else None
         if called is None and isinstance(function, ast.Attribute):
+            # `pytest.fixture` shares a name with ours and is everywhere. Its
+            # decorator form takes no positional argument, so without this the
+            # rule below reads every `@pytest.fixture(scope=...)` as a registry
+            # call it cannot resolve, and the module collects every problem.
+            base = function.value
+            if isinstance(base, ast.Name) and base.id == "pytest":
+                continue
             called = function.attr
         index = 0 if called in NAMES_FIRST else 1 if called in NAMES_SECOND else None
-        if index is None or len(node.args) <= index:
+        if index is None:
             continue
+        if len(node.args) <= index:
+            # The call is one of ours and the problem is not positional --- a
+            # keyword form, or `fixture(*DECLARED)`. Unreadable, so every
+            # problem, never none: a module that silently carried no marker is
+            # the defect this axis exists to remove.
+            return None
         argument = node.args[index]
         if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
             found.add(argument.value)
@@ -232,11 +259,17 @@ def fixtures_named_in(path: Path) -> frozenset[str]:
     """
     key = str(path)
     stat = path.stat()
+    # `_scan` reads the registry as well as this file: `problem_names()` is both
+    # the filter and the whole answer for an unreadable module. A key over the
+    # module alone survives a renamed fixture directory, and the stale name then
+    # reaches `add_marker`, which `--strict-markers` turns into a collection
+    # error for the session --- persisting until someone deletes `.pytest_cache`.
+    stamp = (stat.st_mtime, stat.st_size, _registry_stamp())
     cached = _CACHE.get(key)
-    if cached is not None and (cached[0], cached[1]) == (stat.st_mtime, stat.st_size):
-        return cached[2]
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
     found = _scan(path)
-    _CACHE[key] = (stat.st_mtime, stat.st_size, found)
+    _CACHE[key] = (stamp, found)
     return found
 
 
@@ -252,10 +285,13 @@ def restore(entries: Any) -> None:
         return
     for key, entry in entries.items():
         match entry:
-            case [float() | int() as mtime, int() as size, list() as names] if all(
-                isinstance(name, str) for name in names
-            ):
-                _CACHE[str(key)] = (float(mtime), size, frozenset(names))
+            case [
+                float() | int() as mtime,
+                int() as size,
+                str() as registry,
+                list() as names,
+            ] if all(isinstance(name, str) for name in names):
+                _CACHE[str(key)] = ((float(mtime), size, registry), frozenset(names))
 
 
 def snapshot() -> dict[str, list[Any]]:
@@ -267,7 +303,7 @@ def snapshot() -> dict[str, list[Any]]:
         JSON-serializable, one entry per file read.
     """
     return {
-        key: [mtime, size, sorted(names)]
-        for key, (mtime, size, names) in _CACHE.items()
+        key: [mtime, size, registry, sorted(names)]
+        for key, ((mtime, size, registry), names) in _CACHE.items()
         if Path(key).is_file()
     }

@@ -69,7 +69,21 @@ PROBLEM_MARKER = (
 
 def pytest_configure(config: pytest.Config) -> None:
     config.stash[DURATIONS] = []
+    # A fixture directory named `critical`, `key`, `stress` or `release` would
+    # register a second marker of that name and then be applied by the hook to
+    # every module that loads it --- and `tests/_durations.py` reads
+    # `iter_markers()` to decide what the duration cap exempts, so a directory
+    # name would start excusing tests from it. Refuse rather than collide.
+    reserved = {
+        line.split(":", 1)[0].strip() for line in config.getini("markers") if line
+    }
     for problem in problem_names():
+        if problem in reserved:
+            message = (
+                f"fixture directory {problem!r} collides with the marker of that "
+                f"name; rename the directory (issue #614)"
+            )
+            raise pytest.UsageError(message)
         config.addinivalue_line("markers", PROBLEM_MARKER.format(problem=problem))
     cache = getattr(config, "cache", None)
     if cache is not None:

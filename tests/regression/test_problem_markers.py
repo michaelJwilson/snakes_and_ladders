@@ -270,7 +270,7 @@ def test_the_cache_is_reread_when_the_file_changes(tmp_path: Path) -> None:
     assert fixtures_named_in(module) == {"mixture"}, "the mtime did not invalidate"
 
     saved = snapshot()
-    assert saved[str(module)][2] == ["mixture"]
+    assert saved[str(module)][3] == ["mixture"]
     restore(saved)
     assert fixtures_named_in(module) == {"mixture"}
 
