@@ -44,9 +44,24 @@ def _catalogue(tmp_path: Path, rows: str) -> Path:
     return path
 
 
+def _statement(title: str, key: str) -> str:
+    """One problem statement in the shape the join reads.
+
+    A section of the problems part that opens on a model. The prose is what
+    makes it a statement rather than a heading, so the fixtures carry it.
+    """
+    return f"\\section{{{title}}}\n\\label{{{key}}}\n\\subsection{{The model}}\n"
+
+
 def _textbook(tmp_path: Path, sections: str) -> Path:
+    """A textbook whose problems part holds ``sections`` and nothing else.
+
+    The part markers are supplied here because the join reads the problems
+    part alone: a section outside it is an algorithm or an appendix, whatever
+    its shape.
+    """
     path = tmp_path / "textbook.tex"
-    path.write_text(sections)
+    path.write_text("\\part{The Problems}\n" + sections + "\\part{The Algorithms}\n")
     return path
 
 
@@ -92,8 +107,7 @@ def test_an_orphaned_statement_fails_the_join_and_is_named(tmp_path: Path) -> No
     # returned by name rather than merely making a count disagree.
     textbook = _textbook(
         tmp_path,
-        "\\section{Problem Statement: A}\n\\label{sec:aaa}\n"
-        "\\section{Problem Statement: B}\n\\label{sec:bbb}\n",
+        _statement("A", "sec:aaa") + _statement("B", "sec:bbb"),
     )
     catalogue = _catalogue(tmp_path, "| Row A | sec:aaa | `x` |\n")
 
@@ -104,9 +118,7 @@ def test_an_orphaned_statement_fails_the_join_and_is_named(tmp_path: Path) -> No
 def test_an_orphaned_row_fails_the_join_and_is_named(tmp_path: Path) -> None:
     # And the reverse, including the unkeyed row: an empty Statement cell is a
     # row naming no statement, not a row exempt from the join.
-    textbook = _textbook(
-        tmp_path, "\\section{Problem Statement: A}\n\\label{sec:aaa}\n"
-    )
+    textbook = _textbook(tmp_path, _statement("A", "sec:aaa"))
     catalogue = _catalogue(
         tmp_path,
         "| Row A | sec:aaa | `x` |\n| Row B | sec:zzz | `y` |\n| Row C |  | `z` |\n",
@@ -119,9 +131,7 @@ def test_an_orphaned_row_fails_the_join_and_is_named(tmp_path: Path) -> None:
 def test_rows_sharing_a_key_are_variants_and_not_a_failure(tmp_path: Path) -> None:
     # The granularity decision: four keys carry two rows each in the tree, and
     # that must group rather than fail, or every variant becomes a statement.
-    textbook = _textbook(
-        tmp_path, "\\section{Problem Statement: A}\n\\label{sec:aaa}\n"
-    )
+    textbook = _textbook(tmp_path, _statement("A", "sec:aaa"))
     catalogue = _catalogue(
         tmp_path, "| Row A | sec:aaa | `x` |\n| Row A prime | sec:aaa | `y` |\n"
     )
@@ -178,8 +188,7 @@ def test_the_check_exits_nonzero_on_an_orphan(
     # A guard whose failure path was never run is a guard nobody has checked.
     textbook = _textbook(
         tmp_path,
-        "\\section{Problem Statement: A}\n\\label{sec:aaa}\n"
-        "\\section{Problem Statement: B}\n\\label{sec:bbb}\n",
+        _statement("A", "sec:aaa") + _statement("B", "sec:bbb"),
     )
     monkeypatch.setattr(problem_join, "TEXTBOOK", textbook)
     monkeypatch.setattr(
