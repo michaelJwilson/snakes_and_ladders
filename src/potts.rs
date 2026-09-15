@@ -120,7 +120,7 @@ pub fn single_site_sweeps_impl(
     if !beta.is_finite() {
         return Err(format!("beta must be finite, got {beta}"));
     }
-    if !(guard >= 0.0) {
+    if guard < 0.0 || guard.is_nan() {
         return Err(format!("guard must be >= 0, got {guard}"));
     }
     if offsets.len() != n_nodes + 1 {
@@ -168,7 +168,9 @@ pub fn single_site_sweeps_impl(
     // site, and allocating it per site is the cost the port exists to remove.
     let mut local = vec![0.0f64; n_states];
 
-    for position in first..n_sweeps * n_nodes {
+    // `draws` is `n_sweeps * n_nodes` long and validated above, so enumerating
+    // it is the flat sweep-and-node position this returns.
+    for (position, &draw) in draws.iter().enumerate().skip(first) {
         let node = position % n_nodes;
         local.copy_from_slice(&field[node * n_states..(node + 1) * n_states]);
         for entry in offsets[node]..offsets[node + 1] {
@@ -202,7 +204,7 @@ pub fn single_site_sweeps_impl(
             *value = total;
         }
 
-        let target = draws[position] * total;
+        let target = draw * total;
         // 2**-52, the largest relative gap between neighbouring float64s.
         let slack = guard * n_states as f64 * 2.220446049250313e-16 * total;
         // `searchsorted`'s left side: the first index whose cumulative weight

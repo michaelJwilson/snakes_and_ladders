@@ -1164,6 +1164,70 @@ amortizes it. It is the next candidate on this path and is not carried here.
 Four readings on this host agree to within one point, the last two of them
 with `ps` showing nothing but the job.
 
+**The Rust sampling sweep is the default, on the same construction**
+([#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599)). `src/potts.rs`
+decides a site only where the draw clears every cumulative boundary by 16
+units of the last place per state — four times the bound the error analysis
+needs — returns the flat position of the first site it declines, and the
+oracle's own site update, factored out of `_single_site_sweep`, decides that
+one before the kernel resumes. `sample_potts` gains the `backend` argument it
+lacked; it, `anneal_potts`, `parallel_tempering` and `adapt_ladder_potts`
+default to `Backend.RUST`.
+
+| 100 sweeps / steps, median of five | oracle | Rust | ratio |
+| --- | --- | --- | --- |
+| `sample_potts`, 16x16 | 302.5 ms | **2.7 ms** | **110.7x** |
+| `sample_potts`, 32x32 | 1,192.0 ms | **8.5 ms** | **140.1x** |
+| `anneal_potts`, 16x16 | 344.5 ms | 25.0 ms | 13.8x |
+| `anneal_potts`, 32x32 | 1,381.6 ms | 79.9 ms | 17.3x |
+| `parallel_tempering`, 4 x 20, 16x16 | 260.5 ms | 7.3 ms | 35.8x |
+| `parallel_tempering`, 4 x 20, 32x32 | 1,066.0 ms | 23.9 ms | 44.7x |
+| `adapt_ladder_potts`, 10 sweeps, 16x16 | 324.6 ms | 8.8 ms | 36.9x |
+| `adapt_ladder_potts`, 10 sweeps, 32x32 | 1,288.9 ms | 26.8 ms | 48.1x |
+
+One thread per process, 1-minute load 1.0 to 2.0 on the 4-core host, which
+carried one other job. A quieter reading (load 0.97) gave `sample_potts` at
+**121.2x** and **152.0x**, so the two extents are 111–121x and 140–152x over
+two runs. Annealing trails because the per-sweep energy the schedule needs is
+NumPy either way. The cluster moves are not ported and are unchanged; the
+comparison between move sets is therefore run on `Backend.PYTHON`, in
+`test_potts_mcmc_bench.py`, `test_ground_state_bench.py` and
+`profile_hotpaths.py`, so it stays a statement about move sets.
+
+**The chain is the oracle's, state for state.** 48 runs — two extents, four
+seeds, two alphabets, with a field and without, 100 sweeps each — agree on
+every recorded configuration, and the kernel handed **0 of 2,457,600** sites
+back. So `_GUARD` is free at 16 and narrowing it toward 4 buys nothing, which
+is what [#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599) asked to be
+measured. On the same 48 runs the *unguarded* kernel also matched, so on this
+host the two `exp` implementations never moved a decision: the guard is what
+makes the agreement a bound rather than a property of this `libm` and this
+NumPy build. Every autocorrelation time, goodness-of-fit p-value and notebook
+output above is therefore unmoved, which the search regression suite (481
+passed) is the check on.
+
+**Every kernel releases the GIL**
+([#604](https://github.com/michaelJwilson/snakes_and_ladders/issues/604)). Nine of the ten
+`#[pyfunction]`s wrap their inner call in `Python::detach`; `double` is a
+placeholder integer multiply and does not. Each already extracted its slices
+and then touched no Python object, so `Ungil` makes a Python object inside
+the closure a compile error rather than a crash.
+
+| `oxi.single_site_sweeps`, 32x32, 200 sweeps | held | released | control |
+| --- | --- | --- | --- |
+| 1 thread | 13.3 ms, 1.00x | 13.1 ms, 1.00x | 1.00x |
+| 2 threads | 25.8 ms, 1.03x | 13.4 ms, **1.96x** | 1.87x |
+| 4 threads | 50.8 ms, 1.05x | 14.2 ms, **3.70x** | 3.19x |
+
+Throughput against one thread, medians of five, `OMP_NUM_THREADS=1` so one
+thread is one core; the control is a 700x700 NumPy matmul, which releases the
+GIL already. Held, four times the work cost **3.82x** the wall — serialization
+exactly. No serial timing moves, and none should: this is throughput under
+`backend="threads"`, not latency. What it buys is that `DEV.md`'s documented
+`"threads"` case has eligible sites for the first time; which callers clear
+the 2x bar through `snakes_and_ladders.parallel` is not measured here and is
+what remains of #604.
+
 **Bounds with proofs, certified rather than trusted**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
 surrogate carries its claim — lower bound, upper bound or point prediction —
