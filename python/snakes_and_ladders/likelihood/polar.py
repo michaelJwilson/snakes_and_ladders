@@ -77,12 +77,14 @@ def _f(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     capped_a = np.clip(a, -LLR_CAP, LLR_CAP)
     capped_b = np.clip(b, -LLR_CAP, LLR_CAP)
-    return 2.0 * np.arctanh(np.tanh(capped_a / 2.0) * np.tanh(capped_b / 2.0))
+    return np.asarray(
+        2.0 * np.arctanh(np.tanh(capped_a / 2.0) * np.tanh(capped_b / 2.0))
+    )
 
 
 def _g(a: np.ndarray, b: np.ndarray, left: np.ndarray) -> np.ndarray:
     """The variable-node combination: ``b + (1 - 2 u) a`` given the left decision."""
-    return b + (1.0 - 2.0 * left) * a
+    return np.asarray(b + (1.0 - 2.0 * left) * a)
 
 
 def _penalty(llr: np.ndarray, bit: np.ndarray | int) -> np.ndarray:
