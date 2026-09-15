@@ -18,7 +18,25 @@ from typing import Any, TypeVar
 
 import pytest
 from snakes_and_ladders.fixtures import Scale
-from snakes_and_ladders.sim.fixtures import KEY, Fixture, fixture, tiers  # noqa: F401
+from snakes_and_ladders.sim.fixtures import KEY, Fixture, fixture, tiers
+
+#: What this module offers, re-exports included. Declared rather than left to
+#: a ``noqa``: a bare re-export is a private name under ``mypy --strict``, so
+#: a test importing the type its own decorator hands it --- `Fixture`, which
+#: :func:`at_fixture` names --- failed type-checking while the functions
+#: beside it passed. Naming them here says the re-export is the interface.
+__all__ = [
+    "KEY",
+    "Fixture",
+    "at_bin",
+    "at_fixture",
+    "at_scale",
+    "fixture",
+    "key_only",
+    "scaled_values",
+    "stress_only",
+    "tiers",
+]
 
 T = TypeVar("T")
 
