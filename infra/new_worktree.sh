@@ -7,6 +7,11 @@
 # judged (issue #401), 164 collection errors from a real `.venv` directory
 # rather than the symlink (issue #404), and two worktrees without the compiled
 # extension. Each step below is one of those failures.
+#
+# The symlink this makes is also what a `uv sync` narrower than the extras
+# installed would strip for all of them at once, so the last line emitted puts
+# `infra/bin` --- the guard that refuses that --- ahead of `uv` on `PATH`
+# (issue #615).
 set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
@@ -45,4 +50,5 @@ case "$resolved" in
 esac
 
 echo "$branch at $path, from $base, importing $resolved"
+echo "export PATH=$main/infra/bin:\$PATH"
 echo "export PYTHONPATH=$path/python"

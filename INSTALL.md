@@ -30,6 +30,22 @@ otherwise re-resolves the environment and, in a fresh worktree, recompiles the
 Rust extension — one to two minutes of a core per command (issues #369, #372).
 The repository's scripts export it themselves.
 
+Where several worktrees share one environment through a `.venv` symlink, put
+the guard ahead of `uv` as well — `infra/new_worktree.sh` emits both lines:
+
+```
+export PATH=/path/to/main/checkout/infra/bin:$PATH
+```
+
+`infra/bin/uv` refuses `sync`, `add`, `remove` and a syncing `run` when `.venv`
+is a symlink, and passes everything else through untouched. A sync narrower
+than the extras installed uninstalls the rest — 15 of 24 declared requirements,
+twice (issue #615) — and one with `--all-extras` repoints the shared editable
+install (issue #556); `infra/repair_environment.py` is what adds back what is
+missing. A real `.venv` directory has one owner and is never refused, which is
+why CI, and the first sync above, are unaffected. `UV_NO_SYNC=1` does not
+substitute: it is a `uv run` option, and `uv sync` ignores it.
+
 Before pushing, run `infra/validate.sh`: lint, types, the critical gate, the
 tests the diff selects, and whichever of the Sphinx, notebook and document
 checks the diff calls for, each timed, under the 300 s budget `DEV.md`
