@@ -28,18 +28,21 @@ before it is published.
   than omitting it. A plan is subject to `CLAUDE.md`'s Writing Style.
 
   A plan states its **development strategy** beside its validation: the
-  selection it will iterate against, and the tier that validates it. The
-  narrow selection is for iterating — `-m "<problem> and critical"`, or the
-  kind the change is refereed by — and the tier the merge is gated on decides,
-  which is `-m "not release"`; the full tier runs on the push to `main` and is
-  not something an open pull request can have. A plan claiming a speedup names
-  a benchmark at a stress size too, per `CLAUDE.md`'s **Measurement** rule: the
-  gate's sizes are chosen to be cheap, not to be representative. Why this is
-  not bookkeeping: the gate is 212 of the 2,674 tests the merge runs
-  (2026-09-15; 2,746 with `release`), #598's headline benchmark was gate-sized
-  and did not survive a stress-relevant reading, and
-  `CLAUDE.md`'s selection rule carries what the full tier has caught behind a
-  passing gate.
+  selection it will iterate against, and the tier that decides it. The narrow
+  selection is for iterating --- `-m "<problem> and critical"`, or the kind the
+  change is refereed by. The tier that decides is `DEV.md`'s CI tier,
+  `-m "not release and not stress and not key"`; CI does not run it on a pull
+  request, so a plan that wants it before the merge says who runs it and when.
+  A plan claiming a speedup names the size its benchmark was taken at, because
+  a size chosen so the gate stays affordable is not a size a user works at.
+
+  The gate is narrow by design and that is the reason for the rule: `-m
+  critical` collects **212** tests where the CI tier collects **2,641** and the
+  whole suite 2,746 (measured on this branch, 2026-09-15). This session the
+  full tier caught what `critical` could not on two pull requests --- twelve
+  failures on #601, two stale references on #595 --- and #598's headline
+  benchmark was gate-sized, withdrawn as unmeasured at a stress size rather
+  than refuted by one.
 - **Gate:** a maintainer applies `approved`, and only then may a pull request
   open. The pull request must implement the plan already in the thread. A plan
   that turns out to be flawed gets a revised plan posted to the same thread,
