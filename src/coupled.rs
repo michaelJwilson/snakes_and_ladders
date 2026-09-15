@@ -47,6 +47,7 @@
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 /// The shape of one coupled E step.
 ///
@@ -295,16 +296,27 @@ pub fn class_posteriors_into(
     class_log_density(&shape, tables, totals, successes, labels, &mut density);
     let per_class = n_positions * n_states;
     let per_class_pairs = n_positions.saturating_sub(1) * n_states * n_states;
-    for m in 0..n_classes {
-        log_evidence[m] = forward_backward(
-            &density[m * per_class..][..per_class],
-            &log_initial[m * n_states..][..n_states],
-            &log_transition[m * n_states * n_states..][..n_states * n_states],
-            n_states,
-            &mut posterior[m * per_class..][..per_class],
-            &mut pairwise[m * per_class_pairs..][..per_class_pairs],
-        );
-    }
+    // One class per item, and a class writes only its own slice of
+    // `posterior`, `pairwise` and `log_evidence`: no two items share a
+    // mutable byte and nothing is summed across them, so the result is the
+    // serial path's bit for bit. `forward_backward` is a chain over positions
+    // and is not an axis; the axis is `m`, which is why the ceiling here is
+    // `n_classes` and not the 5,041 positions (issue #627).
+    log_evidence
+        .par_iter_mut()
+        .zip(posterior.par_chunks_mut(per_class))
+        .zip(pairwise.par_chunks_mut(per_class_pairs.max(1)))
+        .enumerate()
+        .for_each(|(m, ((evidence, class_posterior), class_pairwise))| {
+            *evidence = forward_backward(
+                &density[m * per_class..][..per_class],
+                &log_initial[m * n_states..][..n_states],
+                &log_transition[m * n_states * n_states..][..n_states * n_states],
+                n_states,
+                class_posterior,
+                &mut class_pairwise[..per_class_pairs],
+            );
+        });
     Ok(())
 }
 
@@ -353,24 +365,34 @@ pub fn external_field_into(
         ));
     }
 
-    field.fill(0.0);
-    for s in 0..n_positions {
-        let row = s * n_nodes;
-        let weight = &weights[s * block..][..block];
-        for v in 0..n_nodes {
-            let total = &tables.total[usize::from(totals[row + v]) * block..][..block];
-            let success = &tables.success[usize::from(successes[row + v]) * block..][..block];
-            let into = &mut field[v * shape.n_classes..][..shape.n_classes];
-            for (m, cell) in into.iter_mut().enumerate() {
-                let mut accumulated = 0.0;
-                for k in 0..n_states {
-                    let index = m * n_states + k;
-                    accumulated += (total[index] + success[index]) * weight[index];
+    // **The axis is `v`, not `s`.** Read by cost alone the outer loop looks
+    // like the one to split -- 5,041 positions against 200 vertices -- but it
+    // is the loop that *accumulates*: every `s` adds into `field[v]`, so
+    // splitting it reassociates a sum the oracles pin. Inverting the loops
+    // gives each `v` its own `field[v * M..][..M]` to write and leaves the sum
+    // over `s` sequential inside it, in the same order and so to the same
+    // bits. 200 items against 4 cores is ample; the reassociated version
+    // would have been faster and wrong (issue #627).
+    field
+        .par_chunks_mut(shape.n_classes)
+        .enumerate()
+        .for_each(|(v, into)| {
+            into.fill(0.0);
+            for s in 0..n_positions {
+                let row = s * n_nodes;
+                let weight = &weights[s * block..][..block];
+                let total = &tables.total[usize::from(totals[row + v]) * block..][..block];
+                let success = &tables.success[usize::from(successes[row + v]) * block..][..block];
+                for (m, cell) in into.iter_mut().enumerate() {
+                    let mut accumulated = 0.0;
+                    for k in 0..n_states {
+                        let index = m * n_states + k;
+                        accumulated += (total[index] + success[index]) * weight[index];
+                    }
+                    *cell -= accumulated;
                 }
-                *cell -= accumulated;
             }
-        }
-    }
+        });
     Ok(())
 }
 
