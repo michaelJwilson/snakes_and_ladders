@@ -48,7 +48,10 @@ from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
 from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
-from snakes_and_ladders.likelihood.message_passing import MessageSchedule, sum_product
+from snakes_and_ladders.likelihood.message_passing import (
+    MessageScheduleName,
+    sum_product,
+)
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.numerics_rust import sample_rows
@@ -58,6 +61,7 @@ from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
+from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.gibbs import sample_factor_graph
 from snakes_and_ladders.search.infer import MoveSet, infer
 from snakes_and_ladders.search.maxflow import energy, ising_ground_state
@@ -192,7 +196,7 @@ def likelihood_sections(mid: bool) -> list[Section]:
         pruning_rust.log_likelihood(tau, 4, pi, alignment)
 
     def _flooding() -> None:
-        sum_product(potts_graph, schedule=MessageSchedule.FLOODING)
+        sum_product(potts_graph, schedule=MessageScheduleName.FLOODING)
 
     def _bp() -> None:
         belief_propagation(graph, FIELD)
@@ -323,8 +327,16 @@ def search_sections(mid: bool) -> list[Section]:
         alpha_expansion(graph, potts_field, 3)
 
     def _single_site() -> None:
+        # The oracle sweep explicitly, though it is no longer the default:
+        # this ranks *Python* self time to decide what to port, and the
+        # default now spends the sweep in Rust (issue #599).
         sample_potts(
-            graph, FIELD, PottsMove.SINGLE_SITE, np.random.default_rng(0), sweeps
+            graph,
+            FIELD,
+            PottsMove.SINGLE_SITE,
+            np.random.default_rng(0),
+            sweeps,
+            backend=Backend.PYTHON,
         )
 
     def _wolff() -> None:

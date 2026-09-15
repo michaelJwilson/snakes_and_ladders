@@ -169,6 +169,40 @@ class PottsGraph:
             array.flags.writeable = False
         return arrays
 
+    @cached_property
+    def endpoints(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The edges as three arrays in edge order: first, second, coupling.
+
+        The coordinate form beside :attr:`incidence`'s compressed one, and
+        for the other kind of consumer. A sweep walks a node's neighbours and
+        wants the compressed rows; a scorer evaluates every edge at once and
+        wants the two endpoint columns, which is what
+        :func:`snakes_and_ladders.likelihood.potts.log_weights` gathers with.
+
+        Derived once for the reason :attr:`incidence` is (issue #586's
+        recompute-or-store rule): the alternative is
+        ``np.asarray(graph.edges)`` inside a loop, and
+        :func:`snakes_and_ladders.search.potts_mcmc.anneal_potts` scores once
+        per sweep.
+
+        Read-only, as :attr:`incidence` is and for the same reason.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray, np.ndarray]
+            ``first`` and ``second`` of dtype ``int64`` and ``coupling`` of
+            ``float64``, each of length ``len(self.edges)``.
+        """
+        ends = np.asarray(self.edges, dtype=np.int64).reshape(-1, 2)
+        arrays = (
+            np.ascontiguousarray(ends[:, 0]),
+            np.ascontiguousarray(ends[:, 1]),
+            np.asarray(self.coupling, dtype=np.float64),
+        )
+        for array in arrays:
+            array.flags.writeable = False
+        return arrays
+
     def to_rustworkx(self) -> rustworkx.PyGraph:
         """This graph as a ``rustworkx.PyGraph``: one node per site, the coupling as edge data.
 

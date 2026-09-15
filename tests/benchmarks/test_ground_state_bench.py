@@ -22,7 +22,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import PottsMove, anneal_potts
@@ -81,13 +81,17 @@ def test_annealed_move_set_benchmark(
     # here are not comparable work and the ratio between them is the finding.
     graph, field = _problem(extent, 10)
 
+    # The oracle sweep explicitly, for the reason
+    # `test_potts_mcmc_bench.py` gives: this compares move sets, not
+    # backends (issue #599).
     result = benchmark(
         anneal_potts,
         graph,
         field,
-        Exponential(2.0, 0.05, STEPS),
+        ExponentialTempSchedule(2.0, 0.05, STEPS),
         np.random.default_rng(551),
         move=move,
+        backend=Backend.PYTHON,
     )
 
     assert result.n_sweeps == STEPS

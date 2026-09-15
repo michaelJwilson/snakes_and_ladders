@@ -288,3 +288,39 @@ def test_a_disconnected_sink_carries_no_flow() -> None:
 
     assert cut.value == pytest.approx(0.0)
     assert not bool(cut.source_side[2])
+
+
+@pytest.mark.oracle
+def test_from_arcs_builds_what_add_edge_builds() -> None:
+    # `from_arcs` exists to avoid a Python call per arc (issue #598), so what
+    # has to hold is that it is the *same* network: the arc order is the
+    # contract, since a minimum cut need not be unique and the Python and
+    # Rust solvers are pinned to one labelling.
+    rng = np.random.default_rng(598)
+    for _ in range(50):
+        n_nodes = int(rng.integers(2, 9))
+        n_edges = int(rng.integers(1, 20))
+        tail = rng.integers(0, n_nodes, size=n_edges)
+        head = rng.integers(0, n_nodes, size=n_edges)
+        capacity = rng.random(n_edges)
+        reverse = rng.random(n_edges) * (rng.random(n_edges) > 0.5)
+
+        appended = FlowNetwork(n_nodes=n_nodes)
+        for one, two, forward, back in zip(tail, head, capacity, reverse, strict=True):
+            appended.add_edge(int(one), int(two), float(forward), float(back))
+        built = FlowNetwork.from_arcs(n_nodes, tail, head, capacity, reverse)
+
+        assert built.target == appended.target
+        assert built.capacity == appended.capacity
+        assert built.outgoing == appended.outgoing
+
+
+@pytest.mark.edge_case
+def test_from_arcs_refuses_what_add_edge_refuses() -> None:
+    ones = np.array([1.0])
+    with pytest.raises(ValueError, match="non-negative"):
+        FlowNetwork.from_arcs(2, np.array([0]), np.array([1]), -ones, ones)
+    with pytest.raises(ValueError, match="non-negative"):
+        FlowNetwork.from_arcs(2, np.array([0]), np.array([1]), ones, -ones)
+    with pytest.raises(ValueError, match="agree in shape"):
+        FlowNetwork.from_arcs(2, np.array([0, 1]), np.array([1]), ones, ones)

@@ -371,7 +371,16 @@ class Standardizer:
 
 @dataclass(frozen=True)
 class Fitted:
-    """A trained predictor with the standardization it was trained under."""
+    """A trained predictor with the standardization it was trained under.
+
+    Not a :class:`~snakes_and_ladders.bound.Surrogate`, though it carries a
+    :attr:`kind`: a surrogate is *called*, and this exposes
+    :meth:`predict`. Issue #586's structural walk reported it as one, because
+    ``hasattr(cls, "__call__")`` is true of every class -- `type` defines it --
+    so the only member discriminating the protocol was ``kind``. Declaring the
+    base made `@abstractmethod` say so at instantiation, which is the check
+    the walk could not do.
+    """
 
     model: torch.nn.Module
     features: Standardizer

@@ -25,7 +25,7 @@ the code behind each problem class.
 | 1.1 Simulation & ground truth | Trees, the HMM under six emission families, Potts (1-D chain plus general N-D lattice/MRF and `G(n, p)`), the Gaussian mixture, the coupled spatio-sequential model, three canonical fixtures with outside answers, and two code constructions --- Gallager's ensemble and the bicycle code --- landed as first-class simulators | Simulated substitution frequencies against the closed-form JC probabilities; GTR reproduces JC to machine precision; HMM state and emission marginals against brute-force path enumeration; the count families reach their Poisson and binomial limits at the `O(1/x)` rate; Potts single-site and pair marginals against exhaustive enumeration at 3-state 3x3 and 2-state 4x4; the coupled simulator held to what it composes by chi-square at 0.001 over 400 draws; every encoded codeword satisfies `H c = 0` at `n = 24`, `96`, `510`, and a codeword's channel ratios are the zero word's up to sign on every realization; the bicycle construction's degrees, rank and self-orthogonality `H H^T = 0` exact over GF(2), and its 12-bit fixture at minimum distance 4 over 64 enumerated codewords | [#58](https://github.com/michaelJwilson/snakes_and_ladders/pull/58), [#64](https://github.com/michaelJwilson/snakes_and_ladders/pull/64), [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#182](https://github.com/michaelJwilson/snakes_and_ladders/pull/182), [#190](https://github.com/michaelJwilson/snakes_and_ladders/pull/190), [#223](https://github.com/michaelJwilson/snakes_and_ladders/pull/223), [#224](https://github.com/michaelJwilson/snakes_and_ladders/pull/224), [#259](https://github.com/michaelJwilson/snakes_and_ladders/pull/259), [#261](https://github.com/michaelJwilson/snakes_and_ladders/pull/261), [#263](https://github.com/michaelJwilson/snakes_and_ladders/pull/263), [#302](https://github.com/michaelJwilson/snakes_and_ladders/pull/302), [#356](https://github.com/michaelJwilson/snakes_and_ladders/pull/356), [#546](https://github.com/michaelJwilson/snakes_and_ladders/pull/546) |
 | 1.2 Likelihood & energy engine | CPU landed (NumPy, PyTorch, Rust at 2.5x the oracle at 200 taxa by 11,000 sites); belief propagation with two exact oracles; Fitch and Sankoff parsimony; one factor graph with sum-product and max-product over it, Viterbi included; forward–backward as an evaluator; certified bounds and learned surrogates; the LDPC decoder pinned to the general sum-product and to enumeration; two runtime audits; GPU dispatch not started (#280) | Worst relative deviation 4.0e-14 against brute-force marginalization across three backends and four site counts spanning a factor of 30; max-product returns the enumerated Viterbi path on four chains; flooding on the 8x8 lattice within 1.8x of belief propagation after the audit; decoder posteriors within 4.6e-11 of the general flooding on six loopy codes and 1.9e-13 of enumeration on a cycle-free one; the 19,998-bit (3,6) code brackets the erasure threshold 0.4294 between 0.42 and 0.44 | [#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66), [#74](https://github.com/michaelJwilson/snakes_and_ladders/pull/74), [#81](https://github.com/michaelJwilson/snakes_and_ladders/pull/81), [#112](https://github.com/michaelJwilson/snakes_and_ladders/pull/112), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#219](https://github.com/michaelJwilson/snakes_and_ladders/pull/219), [#247](https://github.com/michaelJwilson/snakes_and_ladders/pull/247), [#296](https://github.com/michaelJwilson/snakes_and_ladders/pull/296), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#317](https://github.com/michaelJwilson/snakes_and_ladders/pull/317), [#343](https://github.com/michaelJwilson/snakes_and_ladders/pull/343), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#354](https://github.com/michaelJwilson/snakes_and_ladders/pull/354), [#356](https://github.com/michaelJwilson/snakes_and_ladders/pull/356) |
 | 1.3 Continuous optimization | Landed for trees, the HMM, the Potts chain and lattice, and the mixture; an interval at any fit, whatever produced it; posterior sampling by leapfrog and Yoshida, tempered and adapted; initializers, multi-start, k-means++ and, since #373, the tree's two data-driven starts — neighbor joining on pairwise distances and the closest tree of the Hadamard conjugation (#364); since #541 three chain starts on a surrogate surface — `FromChain`, `FromAnnealing`, `FromTempering` — and eight seedings of the coupled model's emission parameters compared through them; closed-form test functions; the mixture at equal evaluations through the budget utility | Gradients against central differences; 95% intervals cover truth at the nominal rate over 60 replicates; the lattice fitted against an enumerated normalizer, coverage 157/160 at 100 samples and 153/160 at 400 and 1600; integrator orders realized at 4.000 and 16.001; the adapted chain's acceptance 0.650 pooled over 20 seeds at a target of 0.65; restarts reach the mixture's best-known optimum from 7/40 starts against tempering's 4/40 (`p = 0.549`) and annealing's 1/40 (`p = 0.031`); neighbor joining returns every branch of a known tree to 1e-12 at 20 and 50 taxa, and no start separates on the fit at five and six taxa, every one converging in 22 to 27 evaluations (experiment 006); the coupled model's emission seedings split the two orderings at 100 components on 4,000 observations — the prior draw reaches the best projected value on 6 of 6 paired instances while `tempering` and `data` recover more of the generating component on 6 of 6, both at `p = 0.031`, so no default moves (experiment 009) | [#115](https://github.com/michaelJwilson/snakes_and_ladders/pull/115), [#116](https://github.com/michaelJwilson/snakes_and_ladders/pull/116), [#119](https://github.com/michaelJwilson/snakes_and_ladders/pull/119), [#120](https://github.com/michaelJwilson/snakes_and_ladders/pull/120), [#256](https://github.com/michaelJwilson/snakes_and_ladders/pull/256), [#263](https://github.com/michaelJwilson/snakes_and_ladders/pull/263), [#269](https://github.com/michaelJwilson/snakes_and_ladders/pull/269), [#271](https://github.com/michaelJwilson/snakes_and_ladders/pull/271), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#303](https://github.com/michaelJwilson/snakes_and_ladders/pull/303), [#345](https://github.com/michaelJwilson/snakes_and_ladders/pull/345), [#348](https://github.com/michaelJwilson/snakes_and_ladders/pull/348), [#352](https://github.com/michaelJwilson/snakes_and_ladders/pull/352), [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373), [#553](https://github.com/michaelJwilson/snakes_and_ladders/pull/553) |
-| 1.4 Move sets & classical baselines | Trees landed, with warm starts, lazy scoring and support; large parsimony; Potts cluster updates; the exact-baseline family — minimum cut, alpha expansion with its proved bound, Max-Cut with a certificate; schedules, annealing and parallel tempering with an opt-in Rust sweep; one Gibbs sampler and annealer over any factor graph, and a tempered ensemble over labellings, decodings and topologies; the coupled model fitted; Viterbi and posterior decoding landed; iterated conditional modes over HMM paths not started (#176) | NNI and SPR neighbour counts exhaustively verified at `n = 5..8`; hill climbing reaches the enumerated optimum from 12 of 12 starts and large parsimony from every start at five and six taxa; the two-state ground state exact against enumeration over 36 shape-coupling-field combinations; on the planted glass at equal sweeps tempering 12/12 against annealing 10/12 and restarts 4/12; the tempered weight within 0.039 of enumeration on every seed of 20 | [#82](https://github.com/michaelJwilson/snakes_and_ladders/pull/82), [#127](https://github.com/michaelJwilson/snakes_and_ladders/pull/127), [#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#212](https://github.com/michaelJwilson/snakes_and_ladders/pull/212), [#220](https://github.com/michaelJwilson/snakes_and_ladders/pull/220), [#221](https://github.com/michaelJwilson/snakes_and_ladders/pull/221), [#222](https://github.com/michaelJwilson/snakes_and_ladders/pull/222), [#255](https://github.com/michaelJwilson/snakes_and_ladders/pull/255), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284), [#289](https://github.com/michaelJwilson/snakes_and_ladders/pull/289), [#304](https://github.com/michaelJwilson/snakes_and_ladders/pull/304), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#310](https://github.com/michaelJwilson/snakes_and_ladders/pull/310), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#350](https://github.com/michaelJwilson/snakes_and_ladders/pull/350) |
+| 1.4 Move sets & classical baselines | Trees landed, with warm starts, lazy scoring and support; large parsimony; Potts cluster updates; the exact-baseline family — minimum cut, alpha expansion with its proved bound, Max-Cut with a certificate; schedules, annealing and parallel tempering on the Rust sweep by default; one Gibbs sampler and annealer over any factor graph, and a tempered ensemble over labellings, decodings and topologies; the coupled model fitted; Viterbi and posterior decoding landed; iterated conditional modes over HMM paths not started (#176) | NNI and SPR neighbour counts exhaustively verified at `n = 5..8`; hill climbing reaches the enumerated optimum from 12 of 12 starts and large parsimony from every start at five and six taxa; the two-state ground state exact against enumeration over 36 shape-coupling-field combinations; on the planted glass at equal sweeps tempering 12/12 against annealing 10/12 and restarts 4/12; the tempered weight within 0.039 of enumeration on every seed of 20 | [#82](https://github.com/michaelJwilson/snakes_and_ladders/pull/82), [#127](https://github.com/michaelJwilson/snakes_and_ladders/pull/127), [#128](https://github.com/michaelJwilson/snakes_and_ladders/pull/128), [#148](https://github.com/michaelJwilson/snakes_and_ladders/pull/148), [#212](https://github.com/michaelJwilson/snakes_and_ladders/pull/212), [#220](https://github.com/michaelJwilson/snakes_and_ladders/pull/220), [#221](https://github.com/michaelJwilson/snakes_and_ladders/pull/221), [#222](https://github.com/michaelJwilson/snakes_and_ladders/pull/222), [#255](https://github.com/michaelJwilson/snakes_and_ladders/pull/255), [#272](https://github.com/michaelJwilson/snakes_and_ladders/pull/272), [#284](https://github.com/michaelJwilson/snakes_and_ladders/pull/284), [#289](https://github.com/michaelJwilson/snakes_and_ladders/pull/289), [#304](https://github.com/michaelJwilson/snakes_and_ladders/pull/304), [#307](https://github.com/michaelJwilson/snakes_and_ladders/pull/307), [#310](https://github.com/michaelJwilson/snakes_and_ladders/pull/310), [#346](https://github.com/michaelJwilson/snakes_and_ladders/pull/346), [#350](https://github.com/michaelJwilson/snakes_and_ladders/pull/350) |
 | 1.5 Continuous samplers, HMC & tempering | Landed: leapfrog and Yoshida integrators with step-size adaptation, temperature schedules, simulated annealing, and a parallel-tempered ensemble over any supported problem | A chain's spread against the analytic Gaussian; each replica's marginals against the unscaled model's enumeration with exchanges on; Yoshida measured fourth-order and **declined** on cost, 91 evaluations per trajectory against leapfrog's fewer | [#266](https://github.com/michaelJwilson/snakes_and_ladders/issues/266), [#267](https://github.com/michaelJwilson/snakes_and_ladders/issues/267), [#268](https://github.com/michaelJwilson/snakes_and_ladders/issues/268) |
 | 2.0 RL definition | Landed: `app:rl` in the textbook is a self-contained account of the algorithms a learned proposal is drawn from, organised on the state-space and update axes, with the suitability of each for the supported problems argued rather than asserted | The section is cited from `sec:policy-gradient` at the point of use, and every algorithm it names is either implemented or stated as not built | [#313](https://github.com/michaelJwilson/snakes_and_ladders/issues/313) |
 | 2.1 RL formulation & deployment | The estimator, the Potts, hidden-path and tree environments, a critic, an actor–critic, PPO and a PUCT planner landed, each pinned to enumeration; a tree policy trained on the fixture hill climbing fails, a tie over one feature and ahead of greedy over the seven-column set (#349); not yet measured against restarts | Enumerated gradient against finite differences at 1.5e-11 relative; on the Potts chain REINFORCE 86.6%, PPO 96.3% and the planner 92.6% at 8.3 evaluations per episode against greedy's 80.2% at 48; on the 7-taxon fixture the single feature reaches 0.487 against greedy's 0.480 (sign test `p = 0.79`) and the full set 0.796, ahead on 16 of 16 seeds (`p = 3.05e-5`), while restarts reach 1.000 at the same budget | [#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135), [#137](https://github.com/michaelJwilson/snakes_and_ladders/pull/137), [#139](https://github.com/michaelJwilson/snakes_and_ladders/pull/139), [#192](https://github.com/michaelJwilson/snakes_and_ladders/pull/192), [#193](https://github.com/michaelJwilson/snakes_and_ladders/pull/193), [#198](https://github.com/michaelJwilson/snakes_and_ladders/pull/198), [#320](https://github.com/michaelJwilson/snakes_and_ladders/pull/320), [#349](https://github.com/michaelJwilson/snakes_and_ladders/pull/349), [#355](https://github.com/michaelJwilson/snakes_and_ladders/pull/355) |
@@ -946,9 +946,11 @@ default sampler path moved:
 
 Two things the table does not say. The Rust-backed tempering chain agreed with
 the Python one **draw for draw** on the enumerable instance — identical
-p-values and exchange acceptances — which `potts_mcmc_rust.py` says cannot be
-relied on: one draw across a threshold moved by an ulp would part them, so the
-backend stays opt-in. And the batched transition matrices leave the JC
+p-values and exchange acceptances — which could not be relied on then: one
+draw across a threshold moved by an ulp would part them, so the backend stayed
+opt-in. [#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599), below, made
+that agreement a bound rather than an observation, and the backend the
+default. And the batched transition matrices leave the JC
 log-likelihood bitwise unchanged while the gradient moves by 1.5e-11 absolute,
 autograd summing the same terms in a different order; the finite-difference
 check that pins the gradient is unaffected.
@@ -973,7 +975,7 @@ sites) and the `qa`/`infra` row are recorded as not measured.
 | `search` | `spr_neighbours` at 20 taxa: 128.7 ms for 1,122 candidates, `build` and its generator 44%, `visit` 28% | 10% of one `infer` step (1.28 s); 67% of one candidate fit (193 ms) | allocation (a `Node` tree per new key) | at most 2x on the neighbourhood, under 5% of a step | not ported: under the 10% rule per step |
 | `search` | `gibbs.sample_factor_graph`, 32x32: `conditional` 42.0%, `gibbs_sweep` 17.0%, `log_density` 9.7% (16x16: 40.8 / 18.6 / 9.2%) | 69% | compiled backend over the #341 edge layout | ~10x, from the Potts `numba` sweep's 7x | draw for draw on the same uniforms; **acted on by [#561](https://github.com/michaelJwilson/snakes_and_ladders/issues/561) and [#563](https://github.com/michaelJwilson/snakes_and_ladders/issues/563), below: 122x on the sweep, 147x on the density, 18.5x on the run** |
 | `search` | `alpha_expansion`, 32x32: Python Dinic `_augment` 28.8%, `_levels` 18.8%, `expand` 24.0% | 72% | FFI: `maxflow_rust` as the inner solver | 3x or more on the expansion | its energies, exact; **acted on by [#528](https://github.com/michaelJwilson/snakes_and_ladders/issues/528), below** |
-| `search` | `potts_mcmc` single-site, 32x32: `_single_site_sweep` 45.8% | 46% | none: the Rust backend exists and is opt-in (#287) | — | not changed by default |
+| `search` | `potts_mcmc` single-site, 32x32: `_single_site_sweep` 45.8% | 46% | FFI: the Rust backend exists and was opt-in (#287) | — | **acted on by [#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599), below: the default, on an exact pin** |
 | `opt` | `hmc.sample`, 1,000 draws on the length-64 chain: `torch.logsumexp` 32.0% (512,000 calls, one per position per evaluation), `log_partition` 9.6%; the fit at length 64: 26.6% | 42% | call overhead: reassociate the homogeneous transfer-matrix product by repeated squaring, 6 products for 64 positions | 1.5–2x on the run | the sequential recursion at 1e-12 relative and central differences for the gradient; not acted on |
 | `opt` | `fit` on the tree, 20 taxa x 500 sites: `run_backward` 45.2%, `_post_order` 22.9%; no Python-level call per site | — | none: the objective is one torch pass over sites | — | met by construction |
 | `sim`, `likelihood` pruning, Fitch, `budget.compare`, `fit_surrogate`, Rust/FFI | every remaining loop under 10% of a run that is itself milliseconds: `sample_rows` kernel 74.4% of a 0.4 ms call with 19% in its wrapper, `pruning_rust` kernel 86.5%, `FactorGraph.__init__` 22.4% of 31 ms building the 32x32 graph | — | none | — | recorded, not ported |
@@ -1108,7 +1110,9 @@ error analysis needs. So the compiled sweep is the *same chain*, not a chain
 of the same law — 8 of 8 runs at 16x16 and 32x32 over four seeds agree on
 every state and every log-density, 76,800 draws, and the handing back is
 pinned by driving it with a guard wide enough to take every site. That is
-what lets the kernel be the default, where the Rust sampling sweep is opt-in.
+what lets the kernel be the default, and
+[#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599), below, is the same
+construction in `src/potts.rs`.
 
 **Re-profiled after, the ranking inverts.** At 32x32 `log_density` carries
 **47.8%** of the compiled run and its generator expression a further 12.0%,
@@ -1159,6 +1163,71 @@ call, so a caller that samples many graphs pays it every time and a long chain
 amortizes it. It is the next candidate on this path and is not carried here.
 Four readings on this host agree to within one point, the last two of them
 with `ps` showing nothing but the job.
+
+**The Rust sampling sweep is the default, on the same construction**
+([#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599)). `src/potts.rs`
+decides a site only where the draw clears every cumulative boundary by 16
+units of the last place per state — four times the bound the error analysis
+needs — returns the flat position of the first site it declines, and the
+oracle's own site update, factored out of `_single_site_sweep`, decides that
+one before the kernel resumes. `sample_potts` gains the `backend` argument it
+lacked; it, `anneal_potts`, `parallel_tempering` and `adapt_ladder_potts`
+default to `Backend.RUST`.
+
+| 100 sweeps / steps, median of five | oracle | Rust | ratio |
+| --- | --- | --- | --- |
+| `sample_potts`, 16x16 | 292.2 ms | **2.7 ms** | **109.8x** |
+| `sample_potts`, 32x32 | 1,201.9 ms | **8.5 ms** | **140.9x** |
+| `anneal_potts`, 16x16 | 344.5 ms | 25.0 ms | 13.8x |
+| `anneal_potts`, 32x32 | 1,381.6 ms | 79.9 ms | 17.3x |
+| `parallel_tempering`, 4 x 20, 16x16 | 260.5 ms | 7.3 ms | 35.8x |
+| `parallel_tempering`, 4 x 20, 32x32 | 1,066.0 ms | 23.9 ms | 44.7x |
+| `adapt_ladder_potts`, 10 sweeps, 16x16 | 324.6 ms | 8.8 ms | 36.9x |
+| `adapt_ladder_potts`, 10 sweeps, 32x32 | 1,288.9 ms | 26.8 ms | 48.1x |
+
+One reading, one thread per process, 1-minute load 1.0 to 2.0 on the 4-core
+host, which carried one other job. Two further readings of `sample_potts`
+alone, medians of nine, gave **121.2x / 152.0x** at a load of 0.97 and
+**110.7x / 140.1x** at 1.9, so the two extents are 110–121x and 140–152x
+over three runs. Annealing trails because the per-sweep energy the schedule needs is
+NumPy either way. The cluster moves are not ported and are unchanged; the
+comparison between move sets is therefore run on `Backend.PYTHON`, in
+`test_potts_mcmc_bench.py`, `test_ground_state_bench.py` and
+`profile_hotpaths.py`, so it stays a statement about move sets.
+
+**The chain is the oracle's, state for state.** 48 runs — two extents, four
+seeds, two alphabets, with a field and without, 100 sweeps each — agree on
+every recorded configuration, and the kernel handed **0 of 2,457,600** sites
+back. So `_GUARD` is free at 16 and narrowing it toward 4 buys nothing, which
+is what [#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599) asked to be
+measured. On the same 48 runs the *unguarded* kernel also matched, so on this
+host the two `exp` implementations never moved a decision: the guard is what
+makes the agreement a bound rather than a property of this `libm` and this
+NumPy build. Every autocorrelation time, goodness-of-fit p-value and notebook
+output above is therefore unmoved, which the search regression suite (481
+passed) is the check on.
+
+**Every kernel releases the GIL**
+([#604](https://github.com/michaelJwilson/snakes_and_ladders/issues/604)). Nine of the ten
+`#[pyfunction]`s wrap their inner call in `Python::detach`; `double` is a
+placeholder integer multiply and does not. Each already extracted its slices
+and then touched no Python object, so `Ungil` makes a Python object inside
+the closure a compile error rather than a crash.
+
+| `oxi.single_site_sweeps`, 32x32, 200 sweeps | held | released | control |
+| --- | --- | --- | --- |
+| 1 thread | 13.3 ms, 1.00x | 13.1 ms, 1.00x | 1.00x |
+| 2 threads | 25.8 ms, 1.03x | 13.4 ms, **1.96x** | 1.87x |
+| 4 threads | 50.8 ms, 1.05x | 14.2 ms, **3.70x** | 3.19x |
+
+Throughput against one thread, medians of five, `OMP_NUM_THREADS=1` so one
+thread is one core; the control is a 700x700 NumPy matmul, which releases the
+GIL already. Held, four times the work cost **3.82x** the wall — serialization
+exactly. No serial timing moves, and none should: this is throughput under
+`backend="threads"`, not latency. What it buys is that `DEV.md`'s documented
+`"threads"` case has eligible sites for the first time; which callers clear
+the 2x bar through `snakes_and_ladders.parallel` is not measured here and is
+what remains of #604.
 
 **Bounds with proofs, certified rather than trusted**
 ([#308](https://github.com/michaelJwilson/snakes_and_ladders/issues/308)). A
@@ -1651,8 +1720,8 @@ burn-in fit, and three chains on a Gaussian surrogate --- Hamiltonian,
 annealed and tempered. **The `Initializer` protocol needed no change** for the
 last three, as it needed none for `kmeans++` at
 [#262](https://github.com/michaelJwilson/snakes_and_ladders/issues/262); they land
-as `FromChain`, `FromAnnealing` and `FromTempering`, and `SEAMS.md` lists them
-as its consumers. Cost is counted in passes over the data rather than seconds,
+as `FromChain`, `FromAnnealing` and `FromTempering`, three more consumers of
+the one protocol. Cost is counted in passes over the data rather than seconds,
 which is what makes a 144-pass seeding comparable to a 6-pass fit.
 
 **At 100 components on 4,000 observations the likelihood prefers the seeding
@@ -3270,7 +3339,7 @@ exist.
 
 **Incompleteness at 0.5.0 (issue #400).** `TICKETS.md` carried twelve bullets naming a closed issue. Five described work that had landed and are removed: the textbook's pruning, forward-backward and sum-product derivations (#326, 45 citations in the textbook), the refusal of an unidentifiable fit (#122), the required checks on every pull request (#273), the references and blue-sky directions (#360), and the 0.5.0 audit with the `scipy` question it left standing (#376). Five name work that remains with the carrier closed and are re-pointed: the profiling at the declared sizes, the efficiency assessment, the audit's four unmet targets and the parallelism sites beyond the first three go to #405; the discrete fixture no baseline solves goes to #406. Two keep a closed number for a reason the bullet states. Two reductions were measured and declined: the six emission families share 270 lines over six methods, every line the family's own distribution rather than scaffolding, and the QA renderers' argument handling is already `qa.runner`'s, leaving one line each. The notebooks' Further Work sections cited nine closed issues, three of them features that have since landed and are corrected here: the hidden Markov notebook said Viterbi and the forward-backward posteriors were not built and the coupled notebook that no path is decoded, when both landed with #175 and #173, so the gap is coverage and #407 carries the sections; the Potts notebook's four bullets cited #278, which closed without the lattice pass, and now cite #404. The corrections are prose, so no notebook re-executed.
 
-**Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. `SEAMS.md`, regenerated by `infra/seams_survey.py`, lists 11 protocols and 4 shared contracts: 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
+**Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
@@ -3302,6 +3371,36 @@ each read by one simulator, both below the three-consumer rule. One merge was
 taken: fourteen sites across seven modules reduced a score vector by
 `logsumexp(values[None, :], axis=1)[0]`, which is `axis=0`.
 `docs/experiments/016` and `017` carry the runs.
+
+**Message schedules (issue #592).** The order messages go in is an interface,
+`likelihood/schedule.py`, where it was two branches of an `if`. Five schedules
+declare a `Guarantee` of three values rather than a boolean, because the
+leaf-to-root pass alone is exact where it speaks and silent elsewhere and
+neither "exact" nor "approximate" says that: **`upward` returns all of `log Z`
+for 1.71x less work** than the two-pass schedule (85.8 ms against 146.4 ms on a
+1,000-variable chain), agreeing with it to one unit in the last place and with
+`likelihood.pruning.log_likelihood` --- an oracle sharing no code --- to 1e-13
+relative over seven sites. A marginal a schedule does not compute is absent
+rather than wrong, and `downward` reports `nan` for `log Z` rather than the
+nearest available number. `sim.factor_graph`'s six adapters already reach every
+graph class, so one seam covers the Potts lattice, the HMM chain, the tree, the
+coupled model, the Tanner graph and the trellis with no seventh adapter.
+
+The refactor is bitwise on the two schedules that predate it, asserted on a
+200-leaf star and a 50-node caterpillar as well as the suite's chains. It also
+uncovered a real defect: `sum_product(graph, schedule="tree")` ran **flooding**,
+because a plain string compares equal to a `StrEnum` member without being it and
+the branch used `is`.
+
+The cost the ticket named was only half recovered, and the half is recorded
+rather than rounded up. Carrying the axis from the breadth-first walk instead of
+a `list.index` scan paid **nothing** --- a chain's factors have degree two, so
+the scan it replaced was over two elements. Building the group arrays once per
+shape instead of once per level paid **1.21x** on the plan (64.2 to 52.9 ms at
+2,000 variables), taking its share of the run from 24.9 to 20.8 per cent. What
+remains has no hotspot: it is Python bookkeeping proportional to the edges, and
+removing it would mean vectorising the level assignment wholesale.
+`docs/experiments/018` carries the run.
 
 ## Consistency audit at 0.4.0
 
@@ -3400,6 +3499,56 @@ Two remain, and neither is an enumeration that was not attempted:
 | phylogenetic tree, general time-reversible | the distance start (`FromDistances` on `log_det_distance`) | no test of either significant kind names it as a start | a missing test rather than a missing oracle: `enumerate_topologies` is already the oracle the row would use (#364) |
 | phylogenetic tree, Jukes–Cantor | the learned surrogate (`fit_surrogate`) | simulated truth: the maximized likelihood of each enumerated topology | the target a surrogate is trained and scored against is itself a fit, so there is no exact answer to hold it to |
 | any problem at the release tier | the HMM, the mixture, the test functions, the lattice and the code | simulated truth only at that tier | out of #393's scope: a branch-and-bound bound for trees past eight taxa (#329); a boundary contraction for lattices past the transfer-matrix width; density evolution beyond the erasure channel for the code (#340 part 2) |
+
+## Two Python paths above a Rust kernel ([#598](https://github.com/michaelJwilson/snakes_and_ladders/issues/598))
+
+Every number below is a median of seven on an idle host — 1-minute load average
+0.00, `OMP_NUM_THREADS=1`, nothing else running. The ticket's own profile was
+taken with two test suites on 4 cores and is withdrawn; what it claimed and what
+a quiet host says are recorded together, because the gap is the finding.
+
+**`likelihood.potts.log_weights`** scored each edge with one NumPy call per
+element. Below `GATHER_BELOW` = 128 configurations it gathers instead.
+
+| path | before | after |
+| --- | --- | --- |
+| `log_weights`, one configuration, 16x16 | 1.405 ms | **0.019 ms (72x)** |
+| `log_weights`, one configuration, 32x32 | 5.449 ms | **0.033 ms (166x)** |
+| `anneal_potts`, 200 steps, 16x16, `Backend.RUST` | 47.8 ms | 46.4 ms, **unchanged** |
+| `anneal_potts`, 200 steps, 32x32, `Backend.RUST` | 158.5 ms | 157.7 ms, **unchanged** |
+
+The function is two orders of magnitude faster and the run that calls it is
+not. The ticket put `energies` at 84% of `anneal_potts`; 200 steps at 5.449 ms
+is 1,090 ms against a whole run of 158.5 ms, so the per-step term cannot have
+been 84% of the run containing it. Where the 158 ms goes is
+[#608](https://github.com/michaelJwilson/snakes_and_ladders/issues/608).
+
+The crossover is measured rather than chosen: over lattices from 18 to 2,048
+edges the gather wins 1.68–2.77x at 128 configurations and 2.4–5.4x below 96,
+and runs 0.72–1.70x at 256, so the threshold sits below the mixed region.
+
+**`search.maxflow.FlowNetwork.from_arcs`** builds a network with no Python call
+per arc. It is the smaller half by an order of magnitude. The 8x8 row is a
+validation size, not an optimization size, and is printed for completeness
+rather than as a result:
+
+| network build, `Backend.RUST` | `add_edge` loop | `from_arcs` |
+| --- | --- | --- |
+| 8x8, 3 / 5 states, 112 edges (a gate size) | 0.254 / 0.265 ms | 0.390 / 0.351 ms (0.7 / 0.8x) |
+| 16x16, 3 / 5 states, 480 edges | 1.059 / 1.098 ms | 0.966 / 1.089 ms (1.1 / 1.0x) |
+| 32x32, 3 / 5 states, 1,984 edges | 4.860 / 4.760 ms | 4.046 / 4.176 ms (1.2 / 1.1x) |
+
+End to end, `alpha_expansion` runs 18.8 → 16.4 ms and 30.0 → 27.9 ms at 16x16
+for 3 and 5 labels, and 74.0 → 62.4 ms and 172.0 → 142.9 ms at 32x32:
+**1.08–1.20x**. The ticket's 53.0% / 12.1% split was measured under the same
+load as the withdrawn profile and is withdrawn with it.
+
+So the two halves are kept for different reasons. The gather is kept because it
+is 72–166x on its own shape. The network build is kept for the layout — one
+construction against 76,928 `add_edge` calls, pinned arc for arc on 320
+networks — and **not** for a speed claim: 1.2x at the largest size measured,
+slower below 16x16, and no threshold was added because `alpha_expansion` is not
+run at 8x8 in anger.
 
 ## Concurrency shape before a thread pool ([#612](https://github.com/michaelJwilson/snakes_and_ladders/issues/612))
 

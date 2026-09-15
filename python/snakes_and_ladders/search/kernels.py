@@ -11,11 +11,10 @@ loop would match only to the last place.
 
 That exactness is why these are ``numba`` rather than Rust. Root
 ``CLAUDE.md``'s backend rule admits one compiled path per measurement; the
-Rust extension already carries the Potts *sampling* sweep, whose agreement
-with its oracle can only be distributional
-(:mod:`snakes_and_ladders.search.potts_mcmc_rust`), and a second copy of that
-reasoning is what the rule exists to refuse. A kernel whose pin is exact
-carries no such cost and lives here.
+Rust extension already carries the Potts *sampling* sweep
+(:mod:`snakes_and_ladders.search.potts_mcmc_rust`), and a second copy of it
+is what the rule exists to refuse. A kernel whose pin is exact carries no
+such cost and lives here.
 
 Issue #561's sweep over the factor graph is here on that same test rather
 than on being deterministic. A heat-bath draw exponentiates, and ``libm``'s
@@ -121,7 +120,8 @@ def gibbs_sweep_sites(
     the kernel returns that position without touching ``state``, and the
     NumPy path decides that one site. That is what makes the compiled sweep
     the *same chain* rather than a chain of the same law, and it is why this
-    kernel is the default where the Rust sampling sweep is opt-in
+    kernel is the default. Issue #599 has since carried the same
+    construction into the Rust sampling sweep, which is the default too
     (:mod:`snakes_and_ladders.search.backend`).
 
     ``guard`` sets that boundary in units of the last place, per state:

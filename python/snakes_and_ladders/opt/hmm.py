@@ -43,6 +43,7 @@ from snakes_and_ladders.emissions import (
     pooled_variance_floor,
 )
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
+from snakes_and_ladders.opt.objective import Objective
 
 # How far apart the emission rows start, in unconstrained units. Large
 # enough to leave the stationary point, small enough not to preselect an
@@ -61,7 +62,7 @@ _MINIMUM_COUNT_MEAN = 0.5
 _RATE_MARGIN = 1e-6
 
 
-class _HmmObjective:
+class _HmmObjective(Objective):
     """The part of an HMM objective that does not know what a state emits.
 
     The initial distribution and the transition matrix are simplex-valued

@@ -99,3 +99,14 @@ in this module. It is referenced here, never restated. What follows is local.
   bracket's ends are stated with their cost class: a bound reaching one size
   and not another is two bounds, and the suite says which one refereed a
   number.
+
+- **A schedule declares what it guarantees, and a caller that wants less asks
+  for it.** `likelihood/schedule.py` holds the order messages go in;
+  `message_passing.py` holds their arithmetic. A schedule carries a
+  `Guarantee` of three values, not a boolean, because the leaf-to-root pass
+  alone is exact where it speaks and silent elsewhere, and neither "exact" nor
+  "approximate" says that. A marginal a schedule does not compute is **absent**
+  from `Marginals.variable` rather than present and wrong, so reading one
+  raises. A schedule that cannot reach `log Z` reports `nan` rather than the
+  nearest available number. Suboptimal orders are first-class: being unable to
+  ask for one hides what the exact one buys (issue #592).

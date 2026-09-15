@@ -26,7 +26,10 @@ from snakes_and_ladders.likelihood.hmm_paths import (
 from snakes_and_ladders.likelihood.message_passing import sum_product
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.likelihood.spatio_sequential import enumerate_spatio_sequential
-from snakes_and_ladders.opt.schedule import Constant, Exponential
+from snakes_and_ladders.opt.schedule import (
+    ConstantTempSchedule,
+    ExponentialTempSchedule,
+)
 from snakes_and_ladders.search import gibbs
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.gibbs import (
@@ -399,7 +402,7 @@ def test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_do
     graph = fixture("frustrated_lattice", "ci").params.lattice()
     target = float(minimum_frustrated_edges(graph))
     factor_graph = from_potts(graph, np.zeros(2))
-    schedule = Exponential(2.0, 0.05, 200)
+    schedule = ExponentialTempSchedule(2.0, 0.05, 200)
     generic = specialised = 0
     for seed in range(6):
         annealed = anneal_factor_graph(
@@ -468,7 +471,7 @@ def test_the_topology_move_at_temperature_one_samples_the_enumerated_flat_prior_
     run = anneal_topology(
         alignment,
         k,
-        Constant(1.0, 6000),
+        ConstantTempSchedule(1.0, 6000),
         np.random.default_rng(7),
         topologies[0],
         scores=cache,
@@ -507,7 +510,7 @@ def test_the_annealed_topology_move_reaches_the_enumerated_best() -> None:
         run = anneal_topology(
             alignment,
             k,
-            Exponential(2.0, 0.02, 60),
+            ExponentialTempSchedule(2.0, 0.02, 60),
             np.random.default_rng(seed),
             start,
             scores=cache,

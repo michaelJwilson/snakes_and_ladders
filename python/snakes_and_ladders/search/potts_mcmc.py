@@ -37,7 +37,7 @@ Montanari ch. 2).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
@@ -45,7 +45,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from snakes_and_ladders.opt.schedule import AdaptedLadder, Schedule, adapt_ladder
+from snakes_and_ladders.opt.schedule import AdaptedLadder, TempSchedule, adapt_ladder
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energies, heat_bath_log_weights, site_field
@@ -68,6 +68,17 @@ __all__ = [
     "sample_potts",
     "tempered",
 ]
+
+
+#: How far from a cumulative boundary a draw must land for the Rust sweep to
+#: decide a site itself, in units of the last place per state. NumPy's ``exp``
+#: and ``libm``'s differ by at most one such unit, the cumulative sum carries
+#: that difference across at most ``n_states`` additions, and scaling the draw
+#: by the last entry carries it once more: four units per state bounds it, and
+#: this is four times that. The same width, on the same derivation, as
+#: `gibbs._GUARD` (issues #561, #599); two consumers, so it is stated in each
+#: rather than made a seam.
+_GUARD = 16.0
 
 
 class PottsMove(StrEnum):
@@ -229,6 +240,7 @@ def sample_potts(
     thin: int = 1,
     *,
     temperature: float = 1.0,
+    backend: Backend = Backend.RUST,
 ) -> PottsChain:
     """Run one chain and return the configuration after every sweep.
 
@@ -263,6 +275,12 @@ def sample_potts(
         declared. Implemented as :func:`tempered` model scaling, so the
         cluster moves' bond probabilities and the field accept step are
         tempered by the same division as the heat bath.
+    backend : Backend
+        Which implementation runs the **heat-bath** sweep; the cluster moves
+        have one and ignore it. The chain is the same either way, state for
+        state, which is what makes
+        :data:`~snakes_and_ladders.search.backend.Backend.RUST` the default
+        (:func:`_sweep_at`, issue #599).
 
     Returns
     -------
@@ -288,14 +306,24 @@ def sample_potts(
     graph, field = tempered(graph, field, temperature)
     rows = site_field(field, graph.n_nodes)
     n_states = int(rows.shape[1])
-    state = rng.integers(0, n_states, size=graph.n_nodes)
+    # Contiguous `int64` because the kernel borrows this buffer rather than
+    # copying it; `integers` already returns one here, so this asserts the
+    # layout rather than paying for it.
+    state = np.ascontiguousarray(
+        rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
+    )
     offsets, neighbours, couplings = graph.compressed_adjacency()
+    sweep = (
+        _sweep_at(rows, offsets, neighbours, couplings, backend)
+        if move is PottsMove.SINGLE_SITE
+        else None
+    )
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
     cluster_total, cluster_count = 0, 0
     for step in range(-burn_in * thin, n_sweeps * thin):
-        if move is PottsMove.SINGLE_SITE:
-            _single_site_sweep(state, rows, offsets, neighbours, couplings, rng)
+        if sweep is not None:
+            sweep(state, rng, 1.0)
         elif move is PottsMove.SWENDSEN_WANG:
             _swendsen_wang_sweep(state, graph, rows, rng)
         else:
@@ -350,11 +378,11 @@ class AnnealedPotts:
 def anneal_potts(
     graph: PottsGraph,
     field: np.ndarray,
-    schedule: Schedule,
+    schedule: TempSchedule,
     rng: np.random.Generator,
     *,
     move: PottsMove = PottsMove.SINGLE_SITE,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -381,19 +409,18 @@ def anneal_potts(
         The instance. Couplings of either sign.
     field : np.ndarray
         External field, shape ``(n_states,)``.
-    schedule : Schedule
+    schedule : TempSchedule
         Temperature per sweep. Its length is the budget.
     rng : np.random.Generator
         Source of every draw, the start included. Passed in rather than
         seeded here, for the reason :func:`sample_potts` gives.
 
     backend : Backend
-        :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` runs the oracle
-        sweep; :data:`~snakes_and_ladders.search.backend.Backend.RUST` runs the
-        extension's, on the same uniforms in the same order. Opt-in rather
-        than default for the reason :mod:`snakes_and_ladders.search.potts_mcmc_rust`
-        gives: the two agree distributionally, not draw for draw, so the
-        default path keeps every committed chain unchanged.
+        :data:`~snakes_and_ladders.search.backend.Backend.RUST` runs the
+        extension's sweep and is the default;
+        :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` runs the
+        oracle that pins it. The two produce the same chain state for state,
+        on the same uniforms in the same order (:func:`_sweep_at`).
 
     Returns
     -------
@@ -408,7 +435,9 @@ def anneal_potts(
         raise ValueError(msg)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
-    state = rng.integers(0, int(rows.shape[1]), size=graph.n_nodes)
+    state = np.ascontiguousarray(
+        rng.integers(0, int(rows.shape[1]), size=graph.n_nodes), dtype=np.int64
+    )
     offsets, neighbours, couplings = graph.compressed_adjacency()
 
     best_state = state.copy()
@@ -522,7 +551,7 @@ def parallel_tempering(
     burn_in: int = 0,
     thin: int = 1,
     *,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> TemperedChains:
     """Replicas at fixed temperatures, exchanging configurations by Metropolis.
 
@@ -555,8 +584,9 @@ def parallel_tempering(
     n_sweeps, burn_in, thin : int
         As :func:`sample_potts`, applied per replica.
     backend : Backend
-        As :func:`anneal_potts`: the oracle sweep by default, the Rust sweep
-        on request, each replica on its own child generator either way.
+        As :func:`anneal_potts`: the Rust sweep by default, the oracle that
+        pins it on request, each replica on its own child generator either
+        way.
 
     Returns
     -------
@@ -585,8 +615,13 @@ def parallel_tempering(
     betas = [1.0 / temperature for temperature in temperatures]
     children = rng.spawn(n_replicas)
     n_states = int(rows.shape[1])
-    states = np.stack(
-        [child.integers(0, n_states, size=graph.n_nodes) for child in children]
+    # One contiguous `int64` row per replica: the kernel borrows a row of
+    # this block rather than copying it.
+    states = np.ascontiguousarray(
+        np.stack(
+            [child.integers(0, n_states, size=graph.n_nodes) for child in children]
+        ),
+        dtype=np.int64,
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
 
@@ -636,7 +671,7 @@ def adapt_ladder_potts(
     max_rounds: int,
     max_replicas: int,
     *,
-    backend: Backend = Backend.PYTHON,
+    backend: Backend = Backend.RUST,
 ) -> AdaptedLadder:
     """A ladder for :func:`parallel_tempering`, from its own exchange acceptances.
 
@@ -689,6 +724,17 @@ def _sweep_at(
     where the Python sweep applies it, so the two agree bitwise at every
     temperature rather than only at 1.0 (issue #571).
 
+    **The two produce the same chain, not a chain of the same law**, which is
+    why :data:`~snakes_and_ladders.search.backend.Backend.RUST` is the default
+    (issue #599). Every step of the conditional is the arithmetic NumPy
+    performs, operation for operation, but ``exp`` is not: NumPy computes it
+    by its own SIMD polynomial and the kernel by ``libm``, and one draw across
+    a boundary that moved in the last place sends two chains apart. So the
+    kernel decides a site only where the draw clears every cumulative boundary
+    by :data:`_GUARD` units of the last place per state, returns the position
+    of the first site it declines, and :func:`_site_update` --- the oracle's
+    own update --- decides that one before the kernel resumes.
+
     The adjacency arrives as the compressed rows both backends read, built
     once by the caller: the Python sweep indexes them and the kernel takes
     them across the boundary without marshalling (issue #277).
@@ -714,27 +760,50 @@ def _sweep_at(
         # here rather than per sweep.
         contiguous_field = np.ascontiguousarray(rows, dtype=np.float64)
         contiguous_couplings = np.ascontiguousarray(couplings, dtype=np.float64)
+        # The lists `_site_update` indexes on a hand-back, converted once per
+        # run rather than per sweep: the kernel hands a site back so rarely
+        # that a per-sweep conversion would cost more than the sweep.
+        bounds = offsets.tolist()
+        incident, weights = neighbours.tolist(), contiguous_couplings.tolist()
 
         def rust_sweep(
             state: np.ndarray, rng: np.random.Generator, beta: float
         ) -> None:
-            draws = np.ascontiguousarray(rng.random(state.shape[0]), dtype=np.float64)
-            # `beta` is passed rather than multiplied into the arguments. The
-            # Python sweep scales the accumulated local field, so scaling the
-            # parts instead computes `beta * h + sum (beta * J)` against its
-            # `(h + sum J) * beta` -- equal in real arithmetic, not bitwise,
-            # which cost agreement at every temperature but 1.0 (issue #571).
-            # It also drops two whole-array temporaries per sweep.
-            oxi_snakes_and_ladders.single_site_sweeps(
-                state,
-                contiguous_field,
-                offsets,
-                neighbours,
-                contiguous_couplings,
-                draws,
-                1,
-                beta,
-            )
+            n_nodes = state.shape[0]
+            draws = np.ascontiguousarray(rng.random(n_nodes), dtype=np.float64)
+            node = 0
+            while node < n_nodes:
+                # `beta` is passed rather than multiplied into the arguments.
+                # The Python sweep scales the accumulated local field, so
+                # scaling the parts instead computes `beta * h + sum (beta *
+                # J)` against its `(h + sum J) * beta` -- equal in real
+                # arithmetic, not bitwise, which cost agreement at every
+                # temperature but 1.0 (issue #571). It also drops two
+                # whole-array temporaries per sweep.
+                node = oxi_snakes_and_ladders.single_site_sweeps(
+                    state,
+                    contiguous_field,
+                    offsets,
+                    neighbours,
+                    contiguous_couplings,
+                    draws,
+                    1,
+                    beta,
+                    _GUARD,
+                    node,
+                )
+                if node < n_nodes:
+                    _site_update(
+                        state,
+                        rows,
+                        incident,
+                        weights,
+                        bounds,
+                        node,
+                        float(draws[node]),
+                        beta,
+                    )
+                    node += 1
 
         return rust_sweep
     msg = f"the heat-bath sweep has no {backend} backend"
@@ -776,15 +845,39 @@ def _single_site_sweep(
     bounds = offsets.tolist()
     incident, weights = neighbours.tolist(), couplings.tolist()
     for node in range(state.shape[0]):
-        local = heat_bath_log_weights(
-            rows[node], state, incident, weights, bounds[node], bounds[node + 1], beta
+        _site_update(
+            state, rows, incident, weights, bounds, node, float(draws[node]), beta
         )
-        local -= local.max()
-        cumulative = np.cumsum(np.exp(local))
-        # One uniform and a search, rather than `rng.choice` per site: this
-        # is the baseline the cluster algorithms are timed against, so its
-        # constant factor decides how large a lattice the comparison reaches.
-        state[node] = np.searchsorted(cumulative, float(draws[node]) * cumulative[-1])
+
+
+def _site_update(
+    state: np.ndarray,
+    rows: np.ndarray,
+    incident: Sequence[int],
+    weights: Sequence[float],
+    bounds: Sequence[int],
+    node: int,
+    draw: float,
+    beta: float,
+) -> None:
+    """One site redrawn from its exact conditional, in place.
+
+    The whole of the oracle's update, factored out so the Rust sweep's
+    hand-back path decides its site by calling this rather than a copy of it
+    (issue #599). ``incident``, ``weights`` and ``bounds`` are the compressed
+    rows as the lists `sim.potts.heat_bath_log_weights` measured as cheaper to
+    index than array rows.
+
+    One uniform and a search, rather than ``rng.choice`` per site: this is the
+    baseline the cluster algorithms are timed against, so its constant factor
+    decides how large a lattice the comparison reaches.
+    """
+    local = heat_bath_log_weights(
+        rows[node], state, incident, weights, bounds[node], bounds[node + 1], beta
+    )
+    local -= local.max()
+    cumulative = np.cumsum(np.exp(local))
+    state[node] = np.searchsorted(cumulative, draw * cumulative[-1])
 
 
 def _swendsen_wang_sweep(

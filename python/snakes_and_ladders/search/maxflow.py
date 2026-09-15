@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from snakes_and_ladders.incidence import SparseIncidence
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energies
 
@@ -58,8 +59,10 @@ class FlowNetwork:
     the layout rule is about.
 
     ``add_edge`` also appends, which offsets cannot do without knowing the
-    degrees first, so a contiguous store here would be a second structure
-    built after the fact rather than the store itself.
+    degrees first. :meth:`from_arcs` is the case where they *are* known --- a
+    caller holding every arc at once --- and it groups them with the same
+    counting sort :class:`snakes_and_ladders.incidence.SparseIncidence` does,
+    then hands back the list of lists Dinic wants (issue #598).
     """
 
     n_nodes: int
@@ -70,6 +73,87 @@ class FlowNetwork:
     def __post_init__(self) -> None:
         if not self.outgoing:
             self.outgoing = [[] for _ in range(self.n_nodes)]
+
+    @classmethod
+    def from_arcs(
+        cls,
+        n_nodes: int,
+        tail: np.ndarray,
+        head: np.ndarray,
+        capacity: np.ndarray,
+        reverse: np.ndarray,
+    ) -> FlowNetwork:
+        """Every arc at once, in the order :meth:`add_edge` would have appended them.
+
+        The same network as calling :meth:`add_edge` once per row, built
+        without a Python call per arc.
+        :func:`snakes_and_ladders.search.alpha_expansion.expand` builds one
+        network per label per cycle and made 76,928 of those calls on a 32x32
+        lattice at four labels --- 53.0 per cent of the run against the Rust
+        cut kernel's 12.1 (issue #598).
+
+        The arc order is the contract, not an implementation detail: a
+        minimum cut need not be unique, and the tests pin the Python and Rust
+        solvers to the same labelling, so a different order could return a
+        different cut of the same capacity.
+
+        Parameters
+        ----------
+        n_nodes : int
+            Nodes the network spans.
+        tail, head : np.ndarray
+            One row per edge: the arc runs ``tail -> head``.
+        capacity, reverse : np.ndarray
+            The forward and back arc capacity of each edge.
+
+        Returns
+        -------
+        FlowNetwork
+
+        Raises
+        ------
+        ValueError
+            If the four arrays differ in length, or any capacity is negative
+            --- the same refusal :meth:`add_edge` makes, and for the same
+            reason.
+        """
+        tail = np.asarray(tail, dtype=np.int64)
+        head = np.asarray(head, dtype=np.int64)
+        forward = np.asarray(capacity, dtype=np.float64)
+        backward = np.asarray(reverse, dtype=np.float64)
+        if not (tail.shape == head.shape == forward.shape == backward.shape):
+            msg = (
+                f"tail, head, capacity and reverse must agree in shape, got "
+                f"{tail.shape}, {head.shape}, {forward.shape}, {backward.shape}"
+            )
+            raise ValueError(msg)
+        if bool(np.any(forward < 0.0)) or bool(np.any(backward < 0.0)):
+            msg = "capacities must be non-negative"
+            raise ValueError(msg)
+
+        n_arcs = 2 * tail.size
+        target = np.empty(n_arcs, dtype=np.int64)
+        target[0::2], target[1::2] = head, tail
+        capacities = np.empty(n_arcs, dtype=np.float64)
+        capacities[0::2], capacities[1::2] = forward, backward
+        # Arc `2 * e` leaves the tail and arc `2 * e + 1` the head, which is
+        # the order `add_edge` appends them in.
+        leaves = np.empty(n_arcs, dtype=np.int64)
+        leaves[0::2], leaves[1::2] = tail, head
+        grouped = SparseIncidence.from_pairs(
+            n_nodes, n_arcs, leaves, np.arange(n_arcs, dtype=np.int64)
+        )
+        return cls(
+            n_nodes=n_nodes,
+            target=target.tolist(),
+            capacity=capacities.tolist(),
+            outgoing=[
+                grouped.indices[start:stop].tolist()
+                for start, stop in zip(
+                    grouped.offsets[:-1], grouped.offsets[1:], strict=True
+                )
+            ],
+        )
 
     def add_edge(
         self, source: int, sink: int, capacity: float, reverse: float = 0.0

@@ -30,7 +30,7 @@ from snakes_and_ladders.learn.critic import Critic, fit_critic, state_features
 from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, TrainablePolicy
 from snakes_and_ladders.learn.rollout import rollout
-from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.opt.schedule import TempSchedule
 
 
 @dataclass(frozen=True)
@@ -165,7 +165,7 @@ def ppo[S, A](
     critic_steps: int = 50,
     entropy_coefficient: float = 0.0,
     behaviour: EpsilonGreedyPolicy | None = None,
-    epsilon_schedule: Schedule | None = None,
+    epsilon_schedule: TempSchedule | None = None,
 ) -> PPOTraining:
     """Collect a batch, refit the critic, then ``epochs`` clipped policy steps on that batch.
 

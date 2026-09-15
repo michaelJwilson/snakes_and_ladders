@@ -27,10 +27,9 @@ import checks_ledger  # noqa: E402
 import gate_changed_tests  # noqa: E402
 import gate_new_seams  # noqa: E402
 import problems_tables  # noqa: E402
-import seams_survey  # noqa: E402
 
 #: What ``infra/ledgers.sh`` writes, and what must therefore never be tracked.
-DERIVED = (checks_ledger.LEDGER, seams_survey.LEDGER, problems_tables.GENERATED)
+DERIVED = (checks_ledger.LEDGER, problems_tables.GENERATED)
 
 MARKED = (
     "import pytest\n\n\n"
@@ -136,45 +135,66 @@ def test_the_seam_gate_sees_only_the_protocols_the_branch_adds(
     assert gate_new_seams.added_protocols("main") == [("opt.objective", "New")]
 
 
+def _declared(docstring: str) -> str:
+    """One module's source declaring ``New``, with ``docstring`` inside it."""
+    return (
+        "from typing import Protocol\n\n\n"
+        f'class New(Protocol):\n    """{docstring}"""\n'
+    )
+
+
 @pytest.mark.structural
-def test_the_seam_gate_refuses_a_protocol_the_catalogue_does_not_know(
+def test_the_seam_gate_counts_the_modules_that_name_the_protocol(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # An unlisted protocol is invisible to `SEAMS.md` and so to the consumer
-    # rule, which is the case this gate exists for. One listed with a stated
-    # reason passes on that reason, as the rule says it may.
+    # The consumer count is a property of the import graph and not of the
+    # class tree, which is why it lives in the gate rather than in the
+    # catalogue issue #586 deleted. Three consuming modules admit the seam;
+    # the module declaring it never counts as one of them.
+    sources = {
+        "opt.objective": _declared("An objective."),
+        "a": "from snakes_and_ladders.opt.objective import New\n",
+        "b": "New\n",
+        "c": "Newer\n",
+    }
     monkeypatch.setattr(
         gate_new_seams, "added_protocols", lambda _: [("opt.objective", "New")]
     )
-    monkeypatch.setattr(seams_survey, "survey", list)
+    monkeypatch.setattr(gate_new_seams, "source_modules", lambda: sources)
 
-    assert "is not in seams_survey.SEAMS" in gate_new_seams.verdicts("main")[0]
+    assert gate_new_seams.consumers("opt.objective", "New", sources) == ("a", "b")
+    assert "2 consuming modules, 3 required" in gate_new_seams.verdicts("main")[0]
 
-    kept = seams_survey.Seam("opt.objective", "New", "protocol", "#418 will add two")
-    monkeypatch.setattr(
-        seams_survey,
-        "survey",
-        lambda: [seams_survey.Row(kept, ("go",), ("A",), ("m",), ())],
-    )
+    sources["c"] = "New\n"
 
     assert gate_new_seams.verdicts("main") == []
 
 
 @pytest.mark.structural
-def test_the_seam_gate_refuses_a_protocol_under_the_rule_with_no_reason(
+def test_the_seam_gate_takes_the_reason_from_the_declaration_itself(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    bare = seams_survey.Seam("opt.objective", "New", "protocol")
+    # Where the reason lives is the whole of issue #586's argument: the
+    # declaration is the record, so the gate reads the class's own docstring
+    # and a reader reads the same words in the same place. The reason stops at
+    # its paragraph, so one written above a ``Parameters`` section does not
+    # swallow it.
+    reason = f"{gate_new_seams.REASON} issue #418 will add two.\n\n    Parameters"
+    sources = {"opt.objective": _declared(reason), "a": "New\n"}
     monkeypatch.setattr(
         gate_new_seams, "added_protocols", lambda _: [("opt.objective", "New")]
     )
-    monkeypatch.setattr(
-        seams_survey,
-        "survey",
-        lambda: [seams_survey.Row(bare, ("go",), ("A",), ("m",), ())],
-    )
+    monkeypatch.setattr(gate_new_seams, "source_modules", lambda: sources)
 
-    assert "1 consumers, 3 required" in gate_new_seams.verdicts("main")[0]
+    assert (
+        gate_new_seams.reason_for("opt.objective", "New", sources)
+        == "issue #418 will add two."
+    )
+    assert gate_new_seams.verdicts("main") == []
+
+    sources["opt.objective"] = _declared("An objective, with no reason stated.")
+
+    assert "states no" in gate_new_seams.verdicts("main")[0]
 
 
 @pytest.mark.structural

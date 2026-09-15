@@ -436,6 +436,7 @@ fn borrowed<'a, T: numpy::Element>(
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
 pub fn class_posteriors(
+    py: Python<'_>,
     totals: PyReadonlyArray1<'_, u16>,
     successes: PyReadonlyArray1<'_, u16>,
     labels: PyReadonlyArray1<'_, i64>,
@@ -455,29 +456,40 @@ pub fn class_posteriors(
         total: borrowed(&total_table, "total_table")?,
         success: borrowed(&success_table, "success_table")?,
     };
-    class_posteriors_into(
-        CoupledShape {
-            n_positions,
-            n_nodes,
-            n_classes,
-            n_states,
-        },
-        &tables,
-        borrowed(&totals, "totals")?,
-        borrowed(&successes, "successes")?,
-        borrowed(&labels, "labels")?,
-        borrowed(&log_initial, "log_initial")?,
-        borrowed(&log_transition, "log_transition")?,
-        posterior
-            .as_slice_mut()
-            .map_err(|_| PyValueError::new_err("posterior must be C-contiguous"))?,
-        pairwise
-            .as_slice_mut()
-            .map_err(|_| PyValueError::new_err("pairwise must be C-contiguous"))?,
-        log_evidence
-            .as_slice_mut()
-            .map_err(|_| PyValueError::new_err("log_evidence must be C-contiguous"))?,
-    )
+    let shape = CoupledShape {
+        n_positions,
+        n_nodes,
+        n_classes,
+        n_states,
+    };
+    let totals = borrowed(&totals, "totals")?;
+    let successes = borrowed(&successes, "successes")?;
+    let labels = borrowed(&labels, "labels")?;
+    let log_initial = borrowed(&log_initial, "log_initial")?;
+    let log_transition = borrowed(&log_transition, "log_transition")?;
+    let posterior = posterior
+        .as_slice_mut()
+        .map_err(|_| PyValueError::new_err("posterior must be C-contiguous"))?;
+    let pairwise = pairwise
+        .as_slice_mut()
+        .map_err(|_| PyValueError::new_err("pairwise must be C-contiguous"))?;
+    let log_evidence = log_evidence
+        .as_slice_mut()
+        .map_err(|_| PyValueError::new_err("log_evidence must be C-contiguous"))?;
+    py.detach(|| {
+        class_posteriors_into(
+            shape,
+            &tables,
+            totals,
+            successes,
+            labels,
+            log_initial,
+            log_transition,
+            posterior,
+            pairwise,
+            log_evidence,
+        )
+    })
     .map_err(PyValueError::new_err)
 }
 
@@ -491,6 +503,7 @@ pub fn class_posteriors(
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
 pub fn external_field(
+    py: Python<'_>,
     totals: PyReadonlyArray1<'_, u16>,
     successes: PyReadonlyArray1<'_, u16>,
     total_table: PyReadonlyArray1<'_, f64>,
@@ -506,22 +519,20 @@ pub fn external_field(
         total: borrowed(&total_table, "total_table")?,
         success: borrowed(&success_table, "success_table")?,
     };
-    external_field_into(
-        CoupledShape {
-            n_positions,
-            n_nodes,
-            n_classes,
-            n_states,
-        },
-        &tables,
-        borrowed(&totals, "totals")?,
-        borrowed(&successes, "successes")?,
-        borrowed(&weights, "weights")?,
-        field
-            .as_slice_mut()
-            .map_err(|_| PyValueError::new_err("field must be C-contiguous"))?,
-    )
-    .map_err(PyValueError::new_err)
+    let shape = CoupledShape {
+        n_positions,
+        n_nodes,
+        n_classes,
+        n_states,
+    };
+    let totals = borrowed(&totals, "totals")?;
+    let successes = borrowed(&successes, "successes")?;
+    let weights = borrowed(&weights, "weights")?;
+    let field = field
+        .as_slice_mut()
+        .map_err(|_| PyValueError::new_err("field must be C-contiguous"))?;
+    py.detach(|| external_field_into(shape, &tables, totals, successes, weights, field))
+        .map_err(PyValueError::new_err)
 }
 
 #[cfg(test)]

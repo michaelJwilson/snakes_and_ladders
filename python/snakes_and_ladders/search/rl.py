@@ -49,6 +49,7 @@ from enum import StrEnum
 import numpy as np
 import torch
 
+from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.likelihood.pruning_torch import branch_order
@@ -209,7 +210,7 @@ def standardize(rows: torch.Tensor) -> torch.Tensor:
     )
 
 
-class TopologyEnvironment:
+class TopologyEnvironment(Environment[Topology, Topology]):
     """Tree search as a Markov decision process.
 
     Parameters
