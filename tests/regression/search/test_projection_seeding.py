@@ -31,7 +31,7 @@ from snakes_and_ladders.opt.initialize import (
     Initializer,
 )
 from snakes_and_ladders.opt.mixture import kmeans_plus_plus
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.projection import (
     PASSES_PER_GRADIENT,
     SEEDINGS,
@@ -228,7 +228,8 @@ def test_the_chain_starts_satisfy_the_initializer_seam() -> None:
 
     assert isinstance(FromChain(2, 1e-3, generator), Initializer)
     assert isinstance(
-        FromAnnealing(Exponential(1.0, 1.0, 1), 1e-3, generator), Initializer
+        FromAnnealing(ExponentialTempSchedule(1.0, 1.0, 1), 1e-3, generator),
+        Initializer,
     )
     assert isinstance(FromTempering((1.0, 2.0), 2, 1e-3, generator), Initializer)
 

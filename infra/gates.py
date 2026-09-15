@@ -71,10 +71,13 @@ MAIN_GATE = Gate(
     budget_seconds=300,
 )
 
-#: Every tier, unbounded, at the release gate.
+#: Every tier, unbounded, at the release gate. Written out as a tautology
+#: rather than left unfiltered: `pyproject.toml` deselects `release` by
+#: default, so an absent `-m` now means the per-PR tier and this gate has to
+#: say what it selects.
 RELEASE_GATE = Gate(
     name="release",
-    marker_expression=None,
+    marker_expression="release or not release",
     coverage_floor=90,
     runs_in="infra/release.sh",
     budget_seconds=None,

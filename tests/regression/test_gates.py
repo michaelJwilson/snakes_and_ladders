@@ -379,3 +379,23 @@ def test_the_guard_fails_on_a_copy_that_drifted(tmp_path: Path) -> None:
     assert len(rows) == len(gates.REVIEW_GATE.rows) - 1
     assert _exported_caps(without_a_row) == {"SAL_DURATION_CAP": 11}
     assert _registered_markers(reworded)["edge_case"] != gates.KIND_MARKERS["edge_case"]
+
+
+@pytest.mark.structural
+def test_the_default_marker_filter_is_the_tier_the_main_gate_runs() -> None:
+    """`addopts` deselects `release`, and says so with the main gate's words.
+
+    The default and `gates.MAIN_GATE.marker_expression` are one decision written
+    twice --- what a command with no `-m` selects --- so they are held equal
+    rather than left to drift. The release gate overrides it, which
+    :func:`test_the_release_gate_runs_every_tier` reads from the same source.
+
+    The failure this guards is silent: `infra/release.sh` ran a bare `pytest`
+    to mean every tier, and a default filter turns that into the per-PR tier
+    without erroring, so the release gate would pass having run none of the
+    tests it exists for.
+    """
+    configuration = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    addopts = configuration["tool"]["pytest"]["ini_options"]["addopts"]
+
+    assert _selection(addopts) == (gates.MAIN_GATE.marker_expression, None), addopts

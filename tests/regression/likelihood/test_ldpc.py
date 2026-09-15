@@ -33,7 +33,7 @@ from snakes_and_ladders.likelihood.ldpc import (
     exact_decoding,
 )
 from snakes_and_ladders.likelihood.message_passing import (
-    MessageSchedule,
+    MessageScheduleName,
     max_product,
     sum_product,
 )
@@ -121,7 +121,7 @@ def test_sum_product_is_exact_on_a_cycle_free_code(channel: Channel) -> None:
     assert graph.is_tree()
 
     decoded = decode(code, llr, early_stop=False, max_iterations=20, tolerance=1e-14)
-    general = sum_product(graph, schedule=MessageSchedule.TREE)
+    general = sum_product(graph, schedule=MessageScheduleName.TREE)
     exact = exact_decoding(code, llr)
 
     assert exact.n_codewords == 2**15
@@ -153,7 +153,7 @@ def test_min_sum_is_max_product_and_the_ml_codeword_on_a_cycle_free_code(
         tolerance=1e-14,
     )
     assignment, general = max_product(
-        from_parity_check(code, llr), schedule=MessageSchedule.TREE
+        from_parity_check(code, llr), schedule=MessageScheduleName.TREE
     )
     exact = exact_decoding(code, llr)
 
@@ -221,7 +221,10 @@ def test_flooding_reaches_the_general_fixed_point_on_a_loopy_code(
 
     decoded = decode(code, llr, early_stop=False, max_iterations=3000, tolerance=1e-12)
     general = sum_product(
-        graph, schedule=MessageSchedule.FLOODING, tolerance=1e-12, max_iterations=3000
+        graph,
+        schedule=MessageScheduleName.FLOODING,
+        tolerance=1e-12,
+        max_iterations=3000,
     )
 
     assert decoded.residual <= 1e-12

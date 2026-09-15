@@ -58,6 +58,7 @@ See Jang, Gu & Poole (2017); Maddison, Mnih & Teh (2017).
 from __future__ import annotations
 
 import itertools
+from abc import abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
@@ -98,6 +99,9 @@ class RelaxedObjective(Protocol):
     the optimizer are written against this and never against a Potts chain or
     an HMM. A third discrete space means writing one of these, not a second
     optimizer.
+
+    Under the seam rule: the relaxation driver's argument, with two
+    implementers in its module.
     """
 
     @property
@@ -110,17 +114,19 @@ class RelaxedObjective(Protocol):
         """States available at each site."""
         ...
 
+    @abstractmethod
     def relaxed(self, probabilities: torch.Tensor) -> torch.Tensor:
         """The score on the simplex, differentiable in ``probabilities``."""
         ...
 
+    @abstractmethod
     def discrete(self, configuration: Configuration) -> float:
         """The score of one configuration, computed without the relaxation."""
         ...
 
 
 @dataclass(frozen=True)
-class RelaxedPotts:
+class RelaxedPotts(RelaxedObjective):
     """The Potts chain's score, extended to the simplex.
 
     ``J * sum_t sum_a P[t, a] P[t+1, a] + sum_t sum_a P[t, a] h[a]``, which at
@@ -149,7 +155,7 @@ class RelaxedPotts:
 
 
 @dataclass(frozen=True)
-class RelaxedHmmPath:
+class RelaxedHmmPath(RelaxedObjective):
     """An HMM hidden path's joint log-probability, extended to the simplex.
 
     ``log P(path, observations)`` read on the simplex: the initial and

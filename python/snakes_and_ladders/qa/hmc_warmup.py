@@ -34,6 +34,7 @@ from snakes_and_ladders.opt.hmc import (
     effective_sample_size,
     sample,
 )
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.runner import figure_main
 from snakes_and_ladders.qa.style import (
@@ -84,7 +85,7 @@ SEED = 20260914
 
 
 @dataclass(frozen=True)
-class CorrelatedGaussian:
+class CorrelatedGaussian(Objective):
     """``-log N(mean, covariance)`` up to a constant, over an unconstrained vector.
 
     The analytic target: its mean and covariance are the declared constants

@@ -6,7 +6,7 @@ serves the Potts lattice, the hidden Markov chain, a tree at one site and the
 coupled model alike, through the adapters that already exist -- no sampler
 knows what the variables mean. Tempering multiplies every factor's log table
 by ``beta``, which is the same graph with its tables scaled; annealing is the
-sweep on a :class:`~snakes_and_ladders.opt.schedule.Schedule`, returning the
+sweep on a :class:`~snakes_and_ladders.opt.schedule.TempSchedule`, returning the
 best state visited.
 
 Three things are held fixed from the specialised samplers. The single-site
@@ -44,7 +44,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.opt.schedule import TempSchedule
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
 from snakes_and_ladders.search.topology import (
@@ -467,7 +467,7 @@ def sample_factor_graph(
 
 def anneal_factor_graph(
     graph: FactorGraph,
-    schedule: Schedule,
+    schedule: TempSchedule,
     rng: np.random.Generator,
     *,
     start: np.ndarray | None = None,
@@ -602,7 +602,7 @@ class AnnealedTopology:
 def anneal_topology(
     alignment: Mapping[str, np.ndarray],
     k: int,
-    schedule: Schedule,
+    schedule: TempSchedule,
     rng: np.random.Generator,
     start: Topology,
     *,

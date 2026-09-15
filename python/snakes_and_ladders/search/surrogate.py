@@ -23,7 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 import numpy as np
 import torch
 
-from snakes_and_ladders.bound import Bound
+from snakes_and_ladders.bound import Bound, Surrogate
 from snakes_and_ladders.learn.surrogate import CalibratedBound, Examples, Fitted
 from snakes_and_ladders.likelihood.features import (
     LATTICE_FEATURE_NAMES,
@@ -272,7 +272,7 @@ def shuffle_children(topology: Topology, rng: np.random.Generator) -> Topology:
     )
 
 
-class LearnedTreeSurrogate:
+class LearnedTreeSurrogate(Surrogate):
     """A fit, or a calibrated bound made from one, as the ``Surrogate`` a search ranks by."""
 
     def __init__(

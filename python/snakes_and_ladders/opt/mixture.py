@@ -41,10 +41,11 @@ from snakes_and_ladders.emissions import (
     pooled_variance_floor,
 )
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
+from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.objective import Objective
 
 
-class GaussianMixtureObjective:
+class GaussianMixtureObjective(Objective):
     """Negative log-likelihood of independent observations from a mixture.
 
     Parameters
@@ -597,7 +598,7 @@ def seeding_guarantee(n_centres: int) -> float:
     return 8.0 * (math.log(n_centres) + 2.0)
 
 
-class KMeansPlusPlus:
+class KMeansPlusPlus(Initializer):
     """Starting points seeded from the data by k-means++.
 
     The initializer #251 could not write, because nothing then read its

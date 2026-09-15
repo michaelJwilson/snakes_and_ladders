@@ -11,6 +11,12 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# Issue #556: the shared `.venv` carries dependencies, not the project, so
+# `PYTHONPATH` is the only route to the package and no script can repoint a
+# global editable install at its own worktree. Exported here rather than left
+# to the caller, so this script operates on the tree it lives in whatever the
+# environment says.
+export PYTHONPATH="$repo_root/python${PYTHONPATH:+:$PYTHONPATH}"
 
 # Matches build_documents.sh: matplotlib embeds SOURCE_DATE_EPOCH, so a
 # figure timed without it is not the figure the build produces.

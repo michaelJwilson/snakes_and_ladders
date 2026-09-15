@@ -44,6 +44,7 @@ from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.numerics_rust import sample_rows
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
+from snakes_and_ladders.opt.objective import Objective
 
 _REQUIRED_FIELDS = frozenset(
     {"seed", "n_chains", "chain_length", "n_states", "coupling", "field"}
@@ -270,7 +271,7 @@ def log_partition_graph(
     return torch.logsumexp(coupling * agreements + counts @ field, dim=0)
 
 
-class PottsLatticeObjective:
+class PottsLatticeObjective(Objective):
     """Negative log-likelihood of Potts configurations on a graph.
 
     The lattice counterpart of :class:`PottsObjective`, the same shape: an
@@ -404,7 +405,7 @@ class PottsLatticeObjective:
         )
 
 
-class PottsObjective:
+class PottsObjective(Objective):
     """Negative log-likelihood of Potts chains, as an :class:`~snakes_and_ladders.opt.objective.Objective`.
 
     Parameters

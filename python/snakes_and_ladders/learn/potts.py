@@ -43,6 +43,7 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 import torch
 
+from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.opt.potts import PottsParams
 
 # (site, new_state): flip one site to a state it is not already in.
@@ -50,7 +51,7 @@ Flip = tuple[int, int]
 Configuration = tuple[int, ...]
 
 
-class PottsLandscape:
+class PottsLandscape(Environment[Configuration, Flip]):
     """Single-flip search over a 1-D Potts chain at known parameters.
 
     Parameters

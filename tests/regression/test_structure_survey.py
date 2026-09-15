@@ -1,10 +1,10 @@
 """What `infra/appraise_structures.py` claims, held to the tree (issue #586).
 
 The survey exists because the two it joins --- `infra/duplication_survey.py`
-and `infra/seams_survey.py` --- carry hand-written lists, so they re-count
-what is known and discover nothing. A derived survey earns that only if it is
-held to what the hand lists already found *and* shown to report something they
-do not, which is what this file asserts.
+and the deleted `infra/seams_survey.py` --- carried hand-written lists, so they
+re-counted what was known and discovered nothing. A derived survey earns that
+only if it is held to what the hand lists already found *and* shown to report
+something they do not, which is what this file asserts.
 
 The false-positive cases are the important half. A survey of shapes that
 matches on substrings measures names: the first draft of the layout classifier
@@ -25,7 +25,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 import appraise_structures  # noqa: E402
-import seams_survey  # noqa: E402
+
+#: The four data contracts `infra/seams_survey.py` declared by hand before
+#: issue #586 deleted it. Written out here rather than imported, because the
+#: hand list is exactly what that ticket removed and this assertion is the
+#: record that the derived walk still covers everything it named.
+HAND_LISTED_CONTRACTS = (
+    "sim.factor_graph.FactorGraph",
+    "sim.hmm.HmmParams",
+    "opt.potts.PottsParams",
+    "sim.spatio_sequential.SpatioSequentialParams",
+)
 
 
 @pytest.fixture(scope="module")
@@ -47,9 +57,8 @@ def test_the_walk_recovers_every_contract_the_hand_list_names(
     # The gate on replacing a hand list: the derivation finds at least what the
     # list did. Protocols are not here and are not meant to be -- they name
     # behaviour, and this walk is over types that carry state -- so the
-    # comparison is against `CONTRACTS`, which is the state-carrying half.
-    named = {f"{seam.module}.{seam.name}" for seam in seams_survey.CONTRACTS}
-    assert named, "seams_survey declares no contracts; this test lost its subject"
+    # comparison is against the contracts, which are the state-carrying half.
+    named = set(HAND_LISTED_CONTRACTS)
 
     derived = {structure.qualified for structure in found}
 
