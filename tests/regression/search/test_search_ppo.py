@@ -19,7 +19,7 @@ from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, LinearPolicy
 from snakes_and_ladders.learn.ppo import ppo
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
-from snakes_and_ladders.opt.schedule import Linear
+from snakes_and_ladders.opt.schedule import LinearTempSchedule
 from snakes_and_ladders.qa.rl_tree_policy import BATCH, HORIZON, ITERATIONS, STARTS
 from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
@@ -104,7 +104,11 @@ def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
             behaviour = (
                 EpsilonGreedyPolicy(policy, 0.2) if label == "ppo-epsilon" else None
             )
-            schedule = Linear(0.3, 0.02, ITERATIONS) if label == "ppo-epsilon" else None
+            schedule = (
+                LinearTempSchedule(0.3, 0.02, ITERATIONS)
+                if label == "ppo-epsilon"
+                else None
+            )
             ppo(
                 environment,
                 policy,

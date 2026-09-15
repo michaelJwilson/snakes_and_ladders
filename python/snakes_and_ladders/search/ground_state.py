@@ -48,11 +48,11 @@ import numpy as np
 
 from snakes_and_ladders.likelihood.message_passing import (
     ConvergenceError,
-    MessageSchedule,
+    MessageScheduleName,
     max_product,
 )
 from snakes_and_ladders.opt.budget import Budget, Outcome
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_beta_swap,
     alpha_expansion,
@@ -297,7 +297,7 @@ def _anneal(
     run = anneal_potts(
         rung.graph,
         rung.field,
-        Exponential(ANNEAL_START, ANNEAL_END, steps),
+        ExponentialTempSchedule(ANNEAL_START, ANNEAL_END, steps),
         rng,
         move=move,
     )
@@ -492,7 +492,7 @@ def run_max_product(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
     start = time.perf_counter()
     try:
         assignment, _ = max_product(
-            graph, schedule=MessageSchedule.FLOODING, max_iterations=iterations
+            graph, schedule=MessageScheduleName.FLOODING, max_iterations=iterations
         )
     except ConvergenceError:
         return MethodRun(

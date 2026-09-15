@@ -90,3 +90,5 @@ that needs one skips without it, so the core install carries none of them.
 - **One implementation agent per four cores**, the document build counted as
   a process, and an agent waits for its own long job in the foreground: a job
   it detaches ends its turn and nothing resumes it (issue #369).
+
+*   **The shared environment carries dependencies, not the project.** On a host with many worktrees the `.venv` is one directory symlinked into all of them, so an editable install is a single mutable path that can name only one — every other worktree then imports a stranger's working copy, silently and with the wrong answer. Sync with `--no-install-project` and let `PYTHONPATH` be the only route: a missing one is then `ModuleNotFoundError`, which stops, rather than a successful run of the wrong code. Every script in `infra/` exports `PYTHONPATH` from its own location for the same reason — a rule the repository's own scripts can break is not a control. **Repair such an environment by adding what is missing, never by re-syncing it**: a sync wide enough to restore the packages also rewrites the one pointer, so the cure for one fault is the other (issue #556).

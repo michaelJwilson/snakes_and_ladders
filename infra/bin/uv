@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Refuse the `uv` subcommands that write a shared environment.
+#
+# Issue #615. On this host one `.venv` is a real directory in the main clone
+# and a symlink in every other worktree, so `uv sync` without `--all-extras`
+# uninstalls, for all 55 worktrees at once, every package outside the extras it
+# was given. It took 15 of 24 declared requirements twice, and nothing failed
+# until hours later in whatever reached for one first.
+#
+# The test is the symlink, and only the symlink. A real `.venv` directory is
+# one environment with one owner, which is what every CI job builds and what
+# `INSTALL.md`'s first sync creates before a symlink exists; those are
+# untouched. A symlinked `.venv` is shared, and no `uv` invocation may write
+# it --- including `uv sync --all-extras`, which restores the packages but
+# reinstalls the project as an editable path, a single mutable pointer the
+# other worktrees then follow into a stranger's working copy (issue #556).
+# `infra/repair_environment.py` adds without removing and names no project,
+# which is why the refusal points there instead.
+#
+# Install by putting this directory ahead of the real `uv` on `PATH`;
+# `infra/new_worktree.sh` emits the line and `DEV.md` carries it. Its reach is
+# therefore exactly `PYTHONPATH`'s: a shell that has neither is a shell that
+# already imports the wrong worktree.
+set -euo pipefail
+
+self_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+
+# `infra/repair_environment.py` is issue #556's, and lands with it. Until
+# then this guard can still refuse; it just has no repair to name, and says
+# so rather than printing a path that is not there.
+repair=$(cd -- "$self_dir/.." && pwd -P)/repair_environment.py
+if [ ! -f "$repair" ]; then
+  repair="(infra/repair_environment.py, which lands with issue #556)"
+fi
+
+# The real `uv`: the first one on `PATH` that is not this shim.
+real=""
+saved_ifs=$IFS
+IFS=:
+for entry in $PATH; do
+  IFS=$saved_ifs
+  candidate=${entry:-.}/uv
+  if [ -x "$candidate" ] && [ "$(cd -- "$(dirname -- "$candidate")" && pwd -P)" != "$self_dir" ]; then
+    real=$candidate
+    break
+  fi
+  IFS=:
+done
+IFS=$saved_ifs
+
+if [ -z "$real" ]; then
+  echo "uv-guard: no uv on PATH besides the guard at $self_dir" >&2
+  exit 127
+fi
+
+# `uv`'s global options that consume the token after them, so that token is
+# never mistaken for the subcommand. A name absent here can only cost a
+# refusal of a command that was not a subcommand, never a permitted write.
+takes_value() {
+  case $1 in
+    --cache-dir | --color | --config-file | --directory | --project | \
+      --python | --python-preference | --index | --index-url | --default-index | \
+      --extra-index-url | --find-links | --no-binary-package | --no-build-package | \
+      --refresh-package | --allow-insecure-host | --managed-python) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+subcommand=""
+directory=""
+skip=0
+for argument in "$@"; do
+  if [ "$skip" = 1 ]; then
+    case $pending in
+      --directory | --project) directory=$argument ;;
+    esac
+    skip=0
+    continue
+  fi
+  case $argument in
+    --*=*)
+      case ${argument%%=*} in
+        --directory | --project) directory=${argument#*=} ;;
+      esac
+      ;;
+    -*)
+      if takes_value "$argument"; then
+        pending=$argument
+        skip=1
+      fi
+      ;;
+    *)
+      subcommand=$argument
+      break
+      ;;
+  esac
+done
+
+# `uv run` is refused only when it would sync. `UV_NO_SYNC=1`, `--no-sync` and
+# `--frozen` each already stop that, which is what `DEV.md` asks every script
+# to export, so the guard turns that convention into a precondition rather
+# than replacing it.
+run_would_sync() {
+  case " $* " in
+    *" --no-sync "* | *" --frozen "*) return 1 ;;
+  esac
+  case ${UV_NO_SYNC:-} in
+    "" | 0 | false) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+case $subcommand in
+  sync | add | remove) ;;
+  run) run_would_sync "$@" || exec "$real" "$@" ;;
+  *) exec "$real" "$@" ;;
+esac
+
+# The environment this invocation would write: `UV_PROJECT_ENVIRONMENT` if it
+# is set, else `.venv` beside the nearest `pyproject.toml` at or above the
+# working directory.
+environment=${UV_PROJECT_ENVIRONMENT:-}
+if [ -z "$environment" ]; then
+  root=$(cd -- "${directory:-.}" && pwd -P)
+  while [ ! -e "$root/pyproject.toml" ] && [ "$root" != "/" ]; do
+    root=$(dirname -- "$root")
+  done
+  environment=$root/.venv
+fi
+
+if [ ! -L "$environment" ]; then
+  exec "$real" "$@"
+fi
+
+cat >&2 <<MESSAGE
+uv-guard: refusing \`uv $subcommand\` --- $environment is a symlink to
+  $(readlink -- "$environment")
+which every worktree on this host shares. A sync narrower than the extras
+already installed uninstalls the rest for all of them (issue #615); a sync
+with \`--all-extras\` repoints the shared editable install (issue #556).
+
+  To add what is missing:  $repair
+  To sync an environment of your own:
+      UV_PROJECT_ENVIRONMENT=/path/to/real/venv uv $subcommand ...
+MESSAGE
+exit 1
