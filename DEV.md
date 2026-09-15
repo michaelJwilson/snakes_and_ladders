@@ -82,6 +82,8 @@ Pull requests change `docs/tex/` and never `docs/paper.pdf` or `docs/textbook.pd
 
 **The documents build on the push to `main`, and that is not licence to commit what the build produced.** A normal pull request still must not change either PDF, and the `lint` job refuses one that does; only a **Rebuild the documents** pull request may. A merge builds the documents to find out whether the sources still typeset --- the PDFs it writes are byproducts of a runner and are thrown away with it, exactly as a local build's are reverted (below).
 
+**A pull request that touches a document input typesets it, without the renders.** The job ran only on the push to `main` until issue #625, where a method note set `H H^T = 0` in text mode: `pdflatex` stopped, no PDF was produced, and the pull request carrying it was green because the one job that would have caught it does not run there. A pull request now runs the same job when it changes `docs/tex/`, `PROBLEMS.md`, `infra/problems_tables.py`, `infra/build_documents.sh`, `python/snakes_and_ladders/qa/` or the workflow; every other pull request pays one checkout and a `git diff`. What it runs is `--no-figures`: issue #488's decision was about the **renders**, 431.8 s against the LaTeX's 15.8 s, and they stay on the merge. The 15.8 s half comes back, because it is the half that answers whether the sources still typeset.
+
 Building on merge rather than per pull request is issue #488: at 15.8 s of LaTeX plus 431.8 s of renders (issue #433, and every manifest entry since #490 and #492) the build is the wrong cost on the path a merge waits for, and a document that only built at a release would accumulate a release's worth of breakage. On merge the blame window is one commit wide, so a red `documents` on `main` is a defect to fix and never a known-bad background state.
 
 **Citation integrity** --- a cited figure exists, a cited label is defined in the document that cites it, a `\cite` has an entry in `docs/tex/references.bib`, and every bibliography entry closes its braces --- is `infra/check_citations.py`, called by `infra/build_documents.sh` before `latexmk`, so the `documents` job and a contributor's `infra/validate.sh` take one path. It is text and existence, no render, and costs **55 ms over both documents** (timed 2026-09-09 on the 4-core host at load 9.4, so an upper bound) against the build's 15.8 s. `latexmk` reports the same three failures in its log and the job still greps for it, but only after both documents are typeset and without saying which document defined the label the other could not find (issue #249). The bibliography's brace walk is the fourth claim: a merge dropped an entry's closing brace during the 0.5.0 union and it was repaired by hand, and an entry that runs into the next one stops resolving while the file still reads as text.
@@ -114,7 +116,7 @@ One row of that table needs a rule, the row both rewritten every run and tracked
 
 ### Continuous Integration
 
-Ten checks run via GitHub Actions (`.github/workflows/ci.yml`). Nine run on a pull request against `main` and are required; `documents` runs on the push to `main` instead (see Documents), where its failure is `main` red:
+Ten checks run via GitHub Actions (`.github/workflows/ci.yml`). Nine run on every pull request against `main` and are required; `documents` runs on a pull request only when it changes a document input, and in full on the push to `main` (see Documents), where its failure is `main` red:
 
 | Job | Execution |
 | --- | --- |
