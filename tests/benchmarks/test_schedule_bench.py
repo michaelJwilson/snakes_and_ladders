@@ -16,7 +16,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.message_passing import MessageSchedule, sum_product
+from snakes_and_ladders.likelihood.message_passing import (
+    MessageScheduleName,
+    sum_product,
+)
 from snakes_and_ladders.likelihood.schedule import Layout
 from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, Variable
 
@@ -73,7 +76,7 @@ def test_tree_schedule_benchmark(
     benchmark: BenchmarkFixture, graph: FactorGraph
 ) -> None:
     # The whole call, so the plan's share stays visible as the denominator.
-    marginals = benchmark(lambda: sum_product(graph, schedule=MessageSchedule.TREE))
+    marginals = benchmark(lambda: sum_product(graph, schedule=MessageScheduleName.TREE))
 
     assert marginals.exact
 

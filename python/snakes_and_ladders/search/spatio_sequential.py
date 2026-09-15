@@ -53,7 +53,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     labelled_log_likelihood,
 )
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
-from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.opt.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_expansion,
     energy,
@@ -192,7 +192,7 @@ def label_step(
     solver: LabelSolver,
     *,
     field: np.ndarray | None = None,
-    wolff_schedule: Schedule | None = None,
+    wolff_schedule: TempSchedule | None = None,
     wolff_moves_per_step: int = 4,
 ) -> np.ndarray:
     """One label block: the ground state of the Potts model in the field, by ``solver``.
@@ -255,7 +255,7 @@ def fit_spatio_sequential(
     n_blocks: int = 10,
     labels: np.ndarray | None = None,
     fit_parameters: bool = True,
-    wolff_schedule: Schedule | None = None,
+    wolff_schedule: TempSchedule | None = None,
     backend: CoupledBackend = NUMPY_BACKEND,
 ) -> SpatioSequentialFit:
     """Block-coordinate ascent on ``log p(x, l | theta)``.
@@ -278,7 +278,7 @@ def fit_spatio_sequential(
     fit_parameters : bool
         ``False`` holds ``params`` fixed and runs the label block alone, the
         setting in which the label step is pinned against enumeration.
-    wolff_schedule : Schedule | None
+    wolff_schedule : TempSchedule | None
         Required by the Wolff solver.
     backend : CoupledBackend
         Which E step computes the class posteriors, the field and the labelled
@@ -422,7 +422,7 @@ def graph_burn_in(
     params: SpatioSequentialParams,
     observations: np.ndarray,
     rng: np.random.Generator,
-    schedule: Schedule,
+    schedule: TempSchedule,
     *,
     wolff_moves_per_step: int = 4,
 ) -> SpatioSequentialFit:

@@ -24,13 +24,13 @@ from snakes_and_ladders.likelihood.message_passing import sum_product
 from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.likelihood.schedule import (
     SCHEDULES,
-    DownwardSchedule,
-    FloodingSchedule,
+    DownwardMessageSchedule,
+    FloodingMessageSchedule,
     Guarantee,
-    MessageSchedule,
-    SequentialSchedule,
-    TreeSchedule,
-    UpwardSchedule,
+    MessageScheduleName,
+    SequentialMessageSchedule,
+    TreeMessageSchedule,
+    UpwardMessageSchedule,
     resolve,
 )
 from snakes_and_ladders.sim.factor_graph import (
@@ -91,13 +91,13 @@ def _lattice(extent: int = 3, cardinality: int = 2) -> FactorGraph:
 
 @pytest.mark.structural
 def test_every_registered_name_resolves_to_its_class() -> None:
-    assert set(SCHEDULES) == {str(member) for member in MessageSchedule}
+    assert set(SCHEDULES) == {str(member) for member in MessageScheduleName}
     for kind in (
-        TreeSchedule,
-        UpwardSchedule,
-        DownwardSchedule,
-        FloodingSchedule,
-        SequentialSchedule,
+        TreeMessageSchedule,
+        UpwardMessageSchedule,
+        DownwardMessageSchedule,
+        FloodingMessageSchedule,
+        SequentialMessageSchedule,
     ):
         assert isinstance(resolve(kind().name), kind)
         assert resolve(kind()) is not None
@@ -112,8 +112,8 @@ def test_a_schedule_named_by_a_plain_string_is_the_one_asked_for() -> None:
     graph = _chain(6)
 
     named = sum_product(graph, schedule="tree")
-    member = sum_product(graph, schedule=MessageSchedule.TREE)
-    instance = sum_product(graph, schedule=TreeSchedule())
+    member = sum_product(graph, schedule=MessageScheduleName.TREE)
+    instance = sum_product(graph, schedule=TreeMessageSchedule())
 
     assert named.log_partition == member.log_partition == instance.log_partition
     assert named.guarantee is Guarantee.EXACT

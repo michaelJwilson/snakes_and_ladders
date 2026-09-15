@@ -26,7 +26,7 @@ from snakes_and_ladders.likelihood.message_passing import (
     ConvergenceError,
     Guarantee,
     Marginals,
-    MessageSchedule,
+    MessageScheduleName,
 )
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph
@@ -91,7 +91,7 @@ def _tree_order(graph: FactorGraph) -> list[tuple[str, str, bool]]:
 
 def _run(
     graph: FactorGraph,
-    schedule: MessageSchedule,
+    schedule: MessageScheduleName,
     maximum: bool,
     damping: float,
     tolerance: float,
@@ -114,7 +114,7 @@ def _run(
                 total = total + to_variable[(factor.name, name)]
         return total
 
-    if schedule is MessageSchedule.TREE:
+    if schedule is MessageScheduleName.TREE:
         if not graph.is_tree():
             msg = "the tree schedule is exact only on a tree; this graph has a cycle or is disconnected"
             raise ValueError(msg)
@@ -218,7 +218,7 @@ def _beliefs(
     return beliefs_v, beliefs_f, -free_energy
 
 
-def _guarantee(schedule: MessageSchedule) -> Guarantee:
+def _guarantee(schedule: MessageScheduleName) -> Guarantee:
     """The guarantee the reference's two schedules carry (issue #592).
 
     The reference implements the two orders that predate the schedule seam.
@@ -226,9 +226,9 @@ def _guarantee(schedule: MessageSchedule) -> Guarantee:
     rather than returning a `Marginals` labelled with a guarantee nothing
     computed.
     """
-    if schedule is MessageSchedule.TREE:
+    if schedule is MessageScheduleName.TREE:
         return Guarantee.EXACT
-    if schedule is MessageSchedule.FLOODING:
+    if schedule is MessageScheduleName.FLOODING:
         return Guarantee.APPROXIMATE
     msg = f"the reference implements tree and flooding only, not {schedule}"
     raise ValueError(msg)
@@ -237,7 +237,7 @@ def _guarantee(schedule: MessageSchedule) -> Guarantee:
 def sum_product(
     graph: FactorGraph,
     *,
-    schedule: MessageSchedule = MessageSchedule.TREE,
+    schedule: MessageScheduleName = MessageScheduleName.TREE,
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
@@ -269,7 +269,7 @@ def sum_product(
 def max_product(
     graph: FactorGraph,
     *,
-    schedule: MessageSchedule = MessageSchedule.TREE,
+    schedule: MessageScheduleName = MessageScheduleName.TREE,
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,

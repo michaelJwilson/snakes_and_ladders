@@ -26,11 +26,15 @@ schedule was the only part that did not generalise; over :class:`~snakes_and_lad
 now does, and `tests/regression/likelihood/test_schedule.py` runs every
 schedule against every adapter rather than asserting that it would work.
 
-**Why the long name.** `snakes_and_ladders.opt.schedule.Schedule` is an
-annealing schedule --- an unrelated thing under the same short name --- and
-one documented package cannot carry two, because every cross-reference to
-either then resolves two ways and the ``-W`` docs build refuses it. The
-concrete schedules below need no such care: no other `TreeSchedule` exists.
+**Two families of schedule, named apart.** This package schedules two
+unrelated things: *messages*, here, and *temperatures*, in
+:mod:`snakes_and_ladders.opt.schedule`. They were both called ``Schedule``,
+which read as one concept and was not --- and which a documented package
+cannot carry twice, since every cross-reference to either then resolves two
+ways and the ``-W`` docs build refuses it. So each family carries its half in
+its name: :class:`MessageSchedule` and :class:`TreeMessageSchedule` here,
+``TempSchedule`` and ``LinearTempSchedule`` there. The name says which thing
+is being ordered, which is the question a reader of either actually has.
 
 **Why a base class and not a `Protocol`.** Five modules call through this ---
 ``message_passing``, ``message_passing_reference``, ``belief_propagation``,
@@ -61,7 +65,7 @@ class Guarantee(StrEnum):
 
     PARTIAL = "partial"
     """Exact, but not everywhere: some marginals are undefined rather than
-    approximate, and :meth:`MessagePassingSchedule.defined` says which are not. Reading an
+    approximate, and :meth:`MessageSchedule.defined` says which are not. Reading an
     undefined one raises rather than returning a number that looks like a
     posterior."""
 
@@ -70,11 +74,11 @@ class Guarantee(StrEnum):
     tree at convergence, an approximation elsewhere."""
 
 
-class MessageSchedule(StrEnum):
+class MessageScheduleName(StrEnum):
     """The schedules by name, for a caller that does not want to import one.
 
     ``sum_product(graph, schedule="upward")`` and
-    ``sum_product(graph, schedule=UpwardSchedule())`` are the same call;
+    ``sum_product(graph, schedule=UpwardMessageSchedule())`` are the same call;
     :func:`resolve` takes either. A sixth schedule is addable without touching
     this enum, which is the point of the seam --- the enum is a convenience,
     not the registry's authority.
@@ -262,8 +266,8 @@ class Layout:
 
         Returned as two lists rather than one, because the halves are
         separately askable (issue #592):
-        :class:`UpwardSchedule` is the first and :class:`DownwardSchedule` the
-        second, and concatenating them is :class:`TreeSchedule`.
+        :class:`UpwardMessageSchedule` is the first and :class:`DownwardMessageSchedule` the
+        second, and concatenating them is :class:`TreeMessageSchedule`.
         """
         n_variables = len(self.cardinality)
         n_nodes = n_variables + len(self.factor_edges)
@@ -434,7 +438,7 @@ class Layout:
         return self.edge_variable[edge]
 
 
-class MessagePassingSchedule(ABC):
+class MessageSchedule(ABC):
     """An order over the messages, and what that order guarantees."""
 
     #: The name :func:`resolve` registers it under.
@@ -496,7 +500,7 @@ class MessagePassingSchedule(ABC):
 
 
 @dataclass(frozen=True)
-class TreeSchedule(MessagePassingSchedule):
+class TreeMessageSchedule(MessageSchedule):
     """Leaves to root, then root to leaves. Exact, and refused off a tree."""
 
     name: str = "tree"
@@ -516,7 +520,7 @@ class TreeSchedule(MessagePassingSchedule):
 
 
 @dataclass(frozen=True)
-class UpwardSchedule(MessagePassingSchedule):
+class UpwardMessageSchedule(MessageSchedule):
     """The leaf-to-root pass alone: Felsenstein pruning.
 
     ``log Z`` is exact after it --- that is what pruning computes --- and so
@@ -564,12 +568,12 @@ class UpwardSchedule(MessagePassingSchedule):
 
 
 @dataclass(frozen=True)
-class DownwardSchedule(MessagePassingSchedule):
+class DownwardMessageSchedule(MessageSchedule):
     """The root-to-leaf pass alone, from the priors.
 
     Valid message passing over a well-defined order, and *not* a posterior:
     each belief is conditioned on what lies above its node and on nothing
-    below it. Kept because it is the other half of :class:`TreeSchedule` ---
+    below it. Kept because it is the other half of :class:`TreeMessageSchedule` ---
     upward then downward must reproduce it exactly --- and because an
     ablation that says what the second pass contributes is worth being able
     to run.
@@ -609,7 +613,7 @@ class DownwardSchedule(MessagePassingSchedule):
 
 
 @dataclass(frozen=True)
-class FloodingSchedule(MessagePassingSchedule):
+class FloodingMessageSchedule(MessageSchedule):
     """Every message at once from the previous sweep's values: Jacobi."""
 
     name: str = "flooding"
@@ -629,7 +633,7 @@ class FloodingSchedule(MessagePassingSchedule):
 
 
 @dataclass(frozen=True)
-class SequentialSchedule(MessagePassingSchedule):
+class SequentialMessageSchedule(MessageSchedule):
     """One message at a time, each from the newest values: Gauss-Seidel.
 
     Flooding reads every message from the previous sweep; this reads each from
@@ -655,23 +659,23 @@ class SequentialSchedule(MessagePassingSchedule):
             yield from sweep
 
 
-#: Every schedule this module offers, by the name :class:`MessageSchedule`
+#: Every schedule this module offers, by the name :class:`MessageScheduleName`
 #: uses. A sixth is registered by adding it here; nothing else changes.
-SCHEDULES: dict[str, MessagePassingSchedule] = {
+SCHEDULES: dict[str, MessageSchedule] = {
     schedule.name: schedule
     for schedule in (
-        TreeSchedule(),
-        UpwardSchedule(),
-        DownwardSchedule(),
-        FloodingSchedule(),
-        SequentialSchedule(),
+        TreeMessageSchedule(),
+        UpwardMessageSchedule(),
+        DownwardMessageSchedule(),
+        FloodingMessageSchedule(),
+        SequentialMessageSchedule(),
     )
 }
 
 
 def resolve(
-    schedule: MessagePassingSchedule | MessageSchedule | str,
-) -> MessagePassingSchedule:
+    schedule: MessageSchedule | MessageScheduleName | str,
+) -> MessageSchedule:
     """A :class:`~snakes_and_ladders.likelihood.schedule.Schedule` from itself, its enum member, or its name.
 
     Raises
@@ -679,7 +683,7 @@ def resolve(
     ValueError
         If the name is not registered, listing the ones that are.
     """
-    if isinstance(schedule, MessagePassingSchedule):
+    if isinstance(schedule, MessageSchedule):
         return schedule
     key = str(schedule)
     if key not in SCHEDULES:
@@ -690,17 +694,17 @@ def resolve(
 
 __all__ = [
     "SCHEDULES",
-    "DownwardSchedule",
+    "DownwardMessageSchedule",
     "FactorSends",
-    "FloodingSchedule",
+    "FloodingMessageSchedule",
     "Guarantee",
     "Layout",
-    "MessagePassingSchedule",
     "MessageSchedule",
-    "SequentialSchedule",
+    "MessageScheduleName",
+    "SequentialMessageSchedule",
     "Step",
-    "TreeSchedule",
-    "UpwardSchedule",
+    "TreeMessageSchedule",
+    "UpwardMessageSchedule",
     "VariableBeliefs",
     "VariableSends",
     "resolve",
