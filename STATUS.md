@@ -3400,3 +3400,52 @@ Two remain, and neither is an enumeration that was not attempted:
 | phylogenetic tree, general time-reversible | the distance start (`FromDistances` on `log_det_distance`) | no test of either significant kind names it as a start | a missing test rather than a missing oracle: `enumerate_topologies` is already the oracle the row would use (#364) |
 | phylogenetic tree, Jukes–Cantor | the learned surrogate (`fit_surrogate`) | simulated truth: the maximized likelihood of each enumerated topology | the target a surrogate is trained and scored against is itself a fit, so there is no exact answer to hold it to |
 | any problem at the release tier | the HMM, the mixture, the test functions, the lattice and the code | simulated truth only at that tier | out of #393's scope: a branch-and-bound bound for trees past eight taxa (#329); a boundary contraction for lattices past the transfer-matrix width; density evolution beyond the erasure channel for the code (#340 part 2) |
+
+## Two Python paths above a Rust kernel ([#598](https://github.com/michaelJwilson/snakes_and_ladders/issues/598))
+
+Every number below is a median of seven on an idle host — 1-minute load average
+0.00, `OMP_NUM_THREADS=1`, nothing else running. The ticket's own profile was
+taken with two test suites on 4 cores and is withdrawn; what it claimed and what
+a quiet host says are recorded together, because the gap is the finding.
+
+**`likelihood.potts.log_weights`** scored each edge with one NumPy call per
+element. Below `GATHER_BELOW` = 128 configurations it gathers instead.
+
+| path | before | after |
+| --- | --- | --- |
+| `log_weights`, one configuration, 16x16 | 1.405 ms | **0.019 ms (72x)** |
+| `log_weights`, one configuration, 32x32 | 5.449 ms | **0.033 ms (166x)** |
+| `anneal_potts`, 200 steps, 16x16, `Backend.RUST` | 47.8 ms | 46.4 ms, **unchanged** |
+| `anneal_potts`, 200 steps, 32x32, `Backend.RUST` | 158.5 ms | 157.7 ms, **unchanged** |
+
+The function is two orders of magnitude faster and the run that calls it is
+not. The ticket put `energies` at 84% of `anneal_potts`; 200 steps at 5.449 ms
+is 1,090 ms against a whole run of 158.5 ms, so the per-step term cannot have
+been 84% of the run containing it. Where the 158 ms goes is
+[#608](https://github.com/michaelJwilson/snakes_and_ladders/issues/608).
+
+The crossover is measured rather than chosen: over lattices from 18 to 2,048
+edges the gather wins 1.68–2.77x at 128 configurations and 2.4–5.4x below 96,
+and runs 0.72–1.70x at 256, so the threshold sits below the mixed region.
+
+**`search.maxflow.FlowNetwork.from_arcs`** builds a network with no Python call
+per arc. It is the smaller half by an order of magnitude, and it regresses at
+the smallest size:
+
+| network build, `Backend.RUST` | `add_edge` loop | `from_arcs` |
+| --- | --- | --- |
+| 8x8, 3 / 5 states, 112 edges | 0.254 / 0.265 ms | 0.390 / 0.351 ms (**0.7 / 0.8x**) |
+| 16x16, 3 / 5 states, 480 edges | 1.059 / 1.098 ms | 0.966 / 1.089 ms (1.1 / 1.0x) |
+| 32x32, 3 / 5 states, 1,984 edges | 4.860 / 4.760 ms | 4.046 / 4.176 ms (1.2 / 1.1x) |
+
+End to end, `alpha_expansion` runs 18.8 → 16.4 ms and 30.0 → 27.9 ms at 16x16
+for 3 and 5 labels, and 74.0 → 62.4 ms and 172.0 → 142.9 ms at 32x32:
+**1.08–1.20x**. The ticket's 53.0% / 12.1% split was measured under the same
+load as the withdrawn profile and is withdrawn with it.
+
+So the two halves are kept for different reasons. The gather is kept because it
+is 72–166x on its own shape. The network build is kept for the layout — one
+construction against 76,928 `add_edge` calls, pinned arc for arc on 320
+networks — and **not** for a speed claim: 1.2x at the largest size measured,
+slower below 16x16, and no threshold was added because `alpha_expansion` is not
+run at 8x8 in anger.
