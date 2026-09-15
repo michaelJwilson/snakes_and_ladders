@@ -10,7 +10,7 @@ Guidance for Claude Code when working in this repository.
 5.  **Maintain formatting:** Apply naming, terminology, notation and syntax consistently.
 6.  **CLAUDE.md edits are rare** Do not add technical details to CLAUDE.md files, but principles.  These edits are rare, as (lack of) principles become apparent.
 7.  **Maintain tone** maintain tone of this document throughout the repository and associated work.
-8.  **Open with a TL;DR:** every ticket, pull request, plan and review opens with at most two lines carrying the result — the number, the decision, or what broke — before any context, and those two lines do not grow with the body.
+8.  **Open with a TL;DR:** every ticket, pull request, plan and review opens with the result — the number, the decision, or what broke — in O(1) lines before any context, so the opening does not grow with the body.
  
 These rules are paramount for this repository: e.g. every document, `CLAUDE.md`, docstring, comment, commit message, PR, and plan or comment posted to thread. They are stated here, rarely repeated elsewhere.
 
