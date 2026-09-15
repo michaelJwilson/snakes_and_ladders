@@ -147,7 +147,7 @@ class _Fitted:
     evaluations: int
 
 
-class _Counting:
+class _Counting(Objective):
     """An objective that counts its evaluations; the protocol otherwise."""
 
     def __init__(self, inner: Objective) -> None:
@@ -168,7 +168,7 @@ class _Counting:
         return self.inner(theta)
 
 
-class _Restricted:
+class _Restricted(Objective):
     """``inner`` on the coordinates ``free``, every other one held at ``base``.
 
     Partial re-optimization (issue #408): a move changes a handful of branches,

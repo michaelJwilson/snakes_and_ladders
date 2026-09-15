@@ -21,7 +21,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     map_labelling,
 )
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus, kmeans_plus_plus
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.spatio_sequential import (
     LabelSolver,
     fit_spatio_sequential,
@@ -35,7 +35,7 @@ from snakes_and_ladders.sim.spatio_sequential import (
     simulate_spatio_sequential,
 )
 
-WOLFF = Exponential(2.0, 0.2, 12)
+WOLFF = ExponentialTempSchedule(2.0, 0.2, 12)
 
 
 def _planted_lattice() -> tuple[SpatioSequentialParams, np.ndarray]:
@@ -83,7 +83,7 @@ def test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels(
     assert hits >= 4, hits
 
 
-BURN_IN = Exponential(4.0, 1.0, 30)
+BURN_IN = ExponentialTempSchedule(4.0, 1.0, 30)
 
 
 def _enumerated_log_posterior(
@@ -220,14 +220,14 @@ def test_the_annealed_start_beats_every_cold_solver_at_equal_blocks() -> None:
                 np.random.default_rng(seed),
                 solver=solver,
                 n_blocks=10,
-                wolff_schedule=Exponential(3.0, 0.3, 30),
+                wolff_schedule=ExponentialTempSchedule(3.0, 0.3, 30),
             )
             accuracy[solver.value].append(label_accuracy(fit.labels, planted, 2))
         warm = graph_burn_in(
             params,
             data.observations,
             np.random.default_rng(seed),
-            Exponential(4.0, 1.0, 30),
+            ExponentialTempSchedule(4.0, 1.0, 30),
         )
         polished = fit_spatio_sequential(
             warm.params,

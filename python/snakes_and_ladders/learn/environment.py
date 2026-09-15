@@ -30,6 +30,7 @@ single episode evaluates the whole neighbourhood at every step.
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -51,6 +52,7 @@ class Environment[S, A](Protocol):
     protocol can only ``isinstance``-check methods, and the check is used.
     """
 
+    @abstractmethod
     def reset(self, rng: np.random.Generator) -> S:
         """Draw a starting state.
 
@@ -67,6 +69,7 @@ class Environment[S, A](Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def actions(self, state: S) -> Sequence[A]:
         """The moves available in ``state``.
 
@@ -75,6 +78,7 @@ class Environment[S, A](Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def step(self, state: S, action: A) -> tuple[S, float]:
         """Apply ``action`` and return the next state and its reward.
 
@@ -83,6 +87,7 @@ class Environment[S, A](Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def features(self, state: S, actions: Sequence[A]) -> torch.Tensor:
         """Features of each available action, shape ``(len(actions), n)``.
 
@@ -97,10 +102,12 @@ class Environment[S, A](Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def n_features(self) -> int:
         """Width of the feature vector :meth:`features` returns."""
         ...  # pragma: no cover
 
+    @abstractmethod
     def is_terminal(self, state: S) -> bool:
         """Whether the episode ends on reaching ``state``.
 

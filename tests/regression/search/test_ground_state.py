@@ -26,7 +26,7 @@ import itertools
 import numpy as np
 import pytest
 from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search import ground_state
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_beta_swap,
@@ -186,7 +186,7 @@ def test_the_field_accept_step_rejects(move: PottsMove) -> None:
     run = anneal_potts(
         rung.graph,
         rung.field,
-        Exponential(2.0, 0.05, 40),
+        ExponentialTempSchedule(2.0, 0.05, 40),
         np.random.default_rng(551),
         move=move,
     )
@@ -293,7 +293,7 @@ def test_the_rust_sweep_runs_the_per_site_field_and_matches_the_oracle() -> None
         anneal_potts(
             rung.graph,
             rung.field,
-            Exponential(2.0, 0.05, 8),
+            ExponentialTempSchedule(2.0, 0.05, 8),
             np.random.default_rng(1),
             backend=backend,
         )

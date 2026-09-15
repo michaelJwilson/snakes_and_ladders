@@ -7,6 +7,11 @@
 # judged (issue #401), 164 collection errors from a real `.venv` directory
 # rather than the symlink (issue #404), and two worktrees without the compiled
 # extension. Each step below is one of those failures.
+#
+# The symlink this makes is also what a `uv sync` narrower than the extras
+# installed would strip for all of them at once, so the last line emitted puts
+# `infra/bin` --- the guard that refuses that --- ahead of `uv` on `PATH`
+# (issue #615).
 set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
@@ -24,17 +29,30 @@ git -C "$main" fetch --quiet --no-tags origin
 git -C "$main" worktree add -b "$branch" "$path" "$base"
 ln -s "$main/.venv" "$path/.venv"
 
+# Copy an extension only if it is newer than every `src/*.rs`; otherwise build
+# one. The old loop took the *first* `.so` it found anywhere, and a stale build
+# imports fine and fails only when something calls the changed signature --
+# which is why the check below is on mtime and not on import (issue #556). At
+# filing, 121 of 154 extensions across the worktrees predated the newest
+# `src/*.rs`.
+newest_source=$(ls -t "$main"/src/*.rs | head -1)
 extension=""
 for tree in "$main" $(git -C "$main" worktree list --porcelain | sed -n 's/^worktree //p'); do
   for candidate in "$tree"/python/snakes_and_ladders/*.so; do
-    if [ -f "$candidate" ]; then extension=$candidate; break 2; fi
+    if [ -f "$candidate" ] && [ "$candidate" -nt "$newest_source" ]; then
+      extension=$candidate; break 2
+    fi
   done
 done
 if [ -z "$extension" ]; then
-  echo "no compiled extension in any worktree; build one with maturin" >&2
-  exit 1
+  echo "no extension newer than $newest_source; building one (about 13 s incremental)" >&2
+  (cd "$path" && cargo build --release) || exit 1
+  built=$(ls "$path"/target/release/liboxi_snakes_and_ladders.* 2>/dev/null | head -1)
+  [ -n "$built" ] || { echo "cargo build produced no library" >&2; exit 1; }
+  cp "$built" "$path/python/snakes_and_ladders/oxi_snakes_and_ladders.cpython-312-x86_64-linux-gnu.so"
+else
+  cp "$extension" "$path/python/snakes_and_ladders/"
 fi
-cp "$extension" "$path/python/snakes_and_ladders/"
 
 # The import must resolve here and not in a sibling, which is issue #401.
 resolved=$(cd "$path" && PYTHONPATH="$path/python" UV_NO_SYNC=1 \
@@ -45,4 +63,5 @@ case "$resolved" in
 esac
 
 echo "$branch at $path, from $base, importing $resolved"
+echo "export PATH=$main/infra/bin:\$PATH"
 echo "export PYTHONPATH=$path/python"

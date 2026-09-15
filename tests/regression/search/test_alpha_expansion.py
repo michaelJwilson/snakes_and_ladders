@@ -22,15 +22,23 @@ import numpy as np
 import pytest
 from snakes_and_ladders.search.alpha_expansion import (
     UNIFORM_POTTS_BOUND,
+    _expansion_network,
+    _infinite_capacity,
+    _site_field,
     alpha_expansion,
     energy,
     expand,
     iterated_conditional_modes,
 )
 from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.search.maxflow import FlowNetwork, ising_ground_state
 from snakes_and_ladders.search.maxflow import energy as binary_energy
-from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.graph import (
+    BoundaryCondition,
+    PottsGraph,
+    erdos_renyi_graph,
+    lattice_graph,
+)
 
 sys.setrecursionlimit(50_000)
 
@@ -304,3 +312,84 @@ def test_expansion_has_no_numba_backend() -> None:
 
     with pytest.raises(ValueError, match="no numba minimum-cut backend"):
         alpha_expansion(graph, np.zeros(3), 3, backend=Backend.NUMBA)
+
+
+def _network_by_hand(
+    graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int
+) -> FlowNetwork:
+    """The ``add_edge`` loop `_expansion_network` replaces, kept as its oracle.
+
+    Issue #598 vectorized the build. The construction is intricate enough --- a
+    variable number of arcs per edge, auxiliaries numbered in encounter order
+    --- that the vectorized form is checked against this transcription rather
+    than against its own reasoning.
+    """
+    disagreeing = {
+        position
+        for position, (first, second) in enumerate(graph.edges)
+        if labelling[first] != labelling[second]
+    }
+    source, sink = graph.n_nodes, graph.n_nodes + 1
+    network = FlowNetwork(n_nodes=graph.n_nodes + 2 + len(disagreeing))
+    infinite = _infinite_capacity(graph, values)
+    for node in range(graph.n_nodes):
+        switch_cost = -float(values[node, alpha])
+        keep_cost = (
+            infinite
+            if labelling[node] == alpha
+            else -float(values[node, labelling[node]])
+        )
+        offset = min(keep_cost, switch_cost)
+        network.add_edge(source, node, switch_cost - offset)
+        network.add_edge(node, sink, keep_cost - offset)
+    auxiliary = graph.n_nodes + 2
+    for position, ((first, second), coupling) in enumerate(graph.weighted_edges()):
+        first_differs = coupling if labelling[first] != alpha else 0.0
+        second_differs = coupling if labelling[second] != alpha else 0.0
+        if position not in disagreeing:
+            network.add_edge(first, second, first_differs, reverse=first_differs)
+            continue
+        network.add_edge(first, auxiliary, first_differs, reverse=first_differs)
+        network.add_edge(second, auxiliary, second_differs, reverse=second_differs)
+        network.add_edge(auxiliary, sink, coupling)
+        auxiliary += 1
+    return network
+
+
+@pytest.mark.oracle
+def test_the_vectorized_network_is_the_loops_network_arc_for_arc() -> None:
+    rng = np.random.default_rng(598)
+    checked = 0
+    for shape in ((3, 3), (4, 4), (5, 4)):
+        for boundary in (BoundaryCondition.OPEN, BoundaryCondition.PERIODIC):
+            graph = lattice_graph(shape, boundary, 0.8)
+            for n_states in (2, 3, 5):
+                values = _site_field(graph, rng.normal(size=(graph.n_nodes, n_states)))
+                for _ in range(3):
+                    labelling = rng.integers(0, n_states, size=graph.n_nodes)
+                    for alpha in range(n_states):
+                        wanted = _network_by_hand(graph, values, labelling, alpha)
+                        built = _expansion_network(graph, values, labelling, alpha)
+                        assert built.n_nodes == wanted.n_nodes
+                        assert built.target == wanted.target
+                        assert built.capacity == wanted.capacity
+                        assert built.outgoing == wanted.outgoing
+                        checked += 1
+    assert checked == 3 * 2 * (2 + 3 + 5) * 3, checked
+
+
+@pytest.mark.oracle
+def test_the_vectorized_network_holds_on_a_graph_that_is_not_a_lattice() -> None:
+    # The lattice is regular; the build indexes by edge position, so an
+    # irregular graph is where an off-by-one in the auxiliary numbering shows.
+    rng = np.random.default_rng(1598)
+    for _ in range(15):
+        graph = erdos_renyi_graph(12, 0.35, 0.6, rng)
+        values = _site_field(graph, rng.normal(size=(graph.n_nodes, 4)))
+        labelling = rng.integers(0, 4, size=graph.n_nodes)
+        for alpha in range(4):
+            wanted = _network_by_hand(graph, values, labelling, alpha)
+            built = _expansion_network(graph, values, labelling, alpha)
+            assert built.target == wanted.target
+            assert built.capacity == wanted.capacity
+            assert built.outgoing == wanted.outgoing

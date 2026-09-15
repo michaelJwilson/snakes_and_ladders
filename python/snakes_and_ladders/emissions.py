@@ -39,6 +39,7 @@ to draw a sequence.
 from __future__ import annotations
 
 import math
+from abc import abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar, runtime_checkable
@@ -137,6 +138,9 @@ class CountEmissionFamily(Protocol):
     Poisson, above one for the negative binomial and the beta-binomial. The
     moments are a protocol so a test can range over the families and assert
     that bracketing.
+
+    Under the seam rule: the count families' shared moments, which bracket
+    equidispersion in five families and carry a per-channel pair (issue #399).
     """
 
     @property
@@ -185,6 +189,7 @@ class EmissionFamily(Protocol):
         """Type an observation is carried in: integral or floating point."""
         ...  # pragma: no cover
 
+    @abstractmethod
     def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         """Draw one observation per entry of ``states``.
 
@@ -202,6 +207,7 @@ class EmissionFamily(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def log_density(self, observations: torch.Tensor) -> torch.Tensor:
         """Score every observation under every state.
 
@@ -219,6 +225,7 @@ class EmissionFamily(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """``D_phi(T(y), mu_state)``: the divergence of this family's log-partition.
 
@@ -244,6 +251,7 @@ class EmissionFamily(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def validate(self, observations: np.ndarray) -> None:
         """Raise if ``observations`` cannot have come from this family.
 
@@ -254,6 +262,7 @@ class EmissionFamily(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def reestimate(
         self, observations: torch.Tensor, posterior: torch.Tensor
     ) -> Reestimate[EmissionFamily]:
@@ -275,6 +284,7 @@ class EmissionFamily(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def alignment_key(self) -> torch.Tensor:
         """Per-state signature the hidden-state permutation is matched on.
 
@@ -288,12 +298,13 @@ class EmissionFamily(Protocol):
         """
         ...  # pragma: no cover
 
+    @abstractmethod
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
         """This family's parameters under the names the model states them in."""
         ...  # pragma: no cover
 
 
-class CategoricalEmission:
+class CategoricalEmission(EmissionFamily):
     """A symbol drawn from a per-state distribution over a fixed alphabet.
 
     Parameters
@@ -422,7 +433,7 @@ class CategoricalEmission:
         return {"log_emission": self._log_matrix}
 
 
-class GaussianEmission:
+class GaussianEmission(EmissionFamily):
     """A real observation drawn from ``Normal(mean[state], scale[state])``.
 
     The family whose likelihood has **no maximum**. With ``mean[s]`` on a
@@ -710,7 +721,7 @@ def _weighted_moments(
     return mean, (weights * (column - mean) ** 2).sum(dim=0) / mass
 
 
-class NegativeBinomialEmission:
+class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
     """A count drawn from ``NegativeBinomial(dispersion[state], mean[state])``.
 
     Counts are a third data shape, and modelling them as a symbol or a real
@@ -940,7 +951,7 @@ class NegativeBinomialEmission:
         return {"dispersion": self._dispersion, "mean": self._mean}
 
 
-class PoissonEmission:
+class PoissonEmission(EmissionFamily, CountEmissionFamily):
     """A count drawn from ``Poisson(mean[state])``: the equidispersed case.
 
     The family with no dispersion parameter. It is the ``r -> inf`` limit of
@@ -1035,7 +1046,7 @@ class PoissonEmission:
         return {"mean": self._mean}
 
 
-class BinomialEmission:
+class BinomialEmission(EmissionFamily, CountEmissionFamily):
     """A count of successes in ``trials[state]`` attempts, each with ``p[state]``.
 
     The **under**-dispersed case: ``Var = n p (1 - p) < n p``. Every other
@@ -1193,7 +1204,7 @@ class BinomialEmission:
         return {"probability": self._probability}
 
 
-class BetaBinomialEmission:
+class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
     """A count of successes in ``trials[state]`` attempts with a random rate.
 
     ``p`` drawn from ``Beta(a, b)`` per observation, then a binomial count:
@@ -1391,7 +1402,7 @@ class BetaBinomialEmission:
         return {"alpha": self._alpha, "beta": self._beta}
 
 
-class CountPairEmission:
+class CountPairEmission(EmissionFamily, CountEmissionFamily):
     """A total count and the successes within it, as one observation.
 
     The emission a coverage-and-allele-count assay produces: a depth ``n``

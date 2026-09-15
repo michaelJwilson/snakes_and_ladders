@@ -28,7 +28,7 @@ from snakes_and_ladders.likelihood.hmm_paths import (
 from snakes_and_ladders.likelihood.message_passing import (
     ConvergenceError,
     Marginals,
-    MessageSchedule,
+    MessageScheduleName,
     max_product,
     sum_product,
 )
@@ -124,7 +124,7 @@ def test_flooding_on_the_loopy_lattice_is_belief_propagation() -> None:
     reference = belief_propagation(LOOPY, FIELD, damping=0.5, tolerance=1e-12)
 
     result = sum_product(
-        from_potts(LOOPY, FIELD), schedule=MessageSchedule.FLOODING, tolerance=1e-12
+        from_potts(LOOPY, FIELD), schedule=MessageScheduleName.FLOODING, tolerance=1e-12
     )
 
     assert not result.exact
@@ -141,7 +141,7 @@ def test_the_tree_schedule_refuses_a_loopy_graph() -> None:
     assert not graph.is_tree()
 
     with pytest.raises(ValueError, match="tree schedule"):
-        sum_product(graph, schedule=MessageSchedule.TREE)
+        sum_product(graph, schedule=MessageScheduleName.TREE)
 
 
 @pytest.mark.edge_case
@@ -149,7 +149,7 @@ def test_flooding_refuses_when_it_has_not_converged() -> None:
     with pytest.raises(ConvergenceError):
         sum_product(
             from_potts(LOOPY, FIELD),
-            schedule=MessageSchedule.FLOODING,
+            schedule=MessageScheduleName.FLOODING,
             max_iterations=1,
         )
 
@@ -159,7 +159,9 @@ def test_flooding_refuses_when_it_has_not_converged() -> None:
 def test_damping_outside_the_unit_interval_is_refused(damping: float) -> None:
     with pytest.raises(ValueError, match="damping"):
         sum_product(
-            from_potts(LOOPY, FIELD), schedule=MessageSchedule.FLOODING, damping=damping
+            from_potts(LOOPY, FIELD),
+            schedule=MessageScheduleName.FLOODING,
+            damping=damping,
         )
 
 
@@ -508,12 +510,12 @@ def test_flooding_reproduces_the_dictionary_oracle_bitwise(graph: FactorGraph) -
     assert not graph.is_tree()
 
     _assert_same_marginals(
-        sum_product(graph, schedule=MessageSchedule.FLOODING),
-        reference.sum_product(graph, schedule=MessageSchedule.FLOODING),
+        sum_product(graph, schedule=MessageScheduleName.FLOODING),
+        reference.sum_product(graph, schedule=MessageScheduleName.FLOODING),
     )
-    assignment, marginals = max_product(graph, schedule=MessageSchedule.FLOODING)
+    assignment, marginals = max_product(graph, schedule=MessageScheduleName.FLOODING)
     expected_assignment, expected = reference.max_product(
-        graph, schedule=MessageSchedule.FLOODING
+        graph, schedule=MessageScheduleName.FLOODING
     )
     assert assignment == expected_assignment
     _assert_same_marginals(marginals, expected)

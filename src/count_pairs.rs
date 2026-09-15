@@ -232,6 +232,7 @@ pub fn simulate_count_pairs_into(
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
 pub fn simulate_count_pairs(
+    py: Python<'_>,
     seed: u64,
     states: PyReadonlyArray1<'_, i64>,
     labels: PyReadonlyArray1<'_, i64>,
@@ -257,20 +258,26 @@ pub fn simulate_count_pairs(
         alpha: alpha.as_slice().map_err(|_| contiguous("alpha"))?,
         beta: beta.as_slice().map_err(|_| contiguous("beta"))?,
     };
-    simulate_count_pairs_into(
-        seed,
-        states.as_slice().map_err(|_| contiguous("states"))?,
-        labels.as_slice().map_err(|_| contiguous("labels"))?,
-        &families,
-        n_positions,
-        n_nodes,
-        n_classes,
-        n_states,
-        totals.as_slice_mut().map_err(|_| contiguous("totals"))?,
-        successes
-            .as_slice_mut()
-            .map_err(|_| contiguous("successes"))?,
-    )
+    let states = states.as_slice().map_err(|_| contiguous("states"))?;
+    let labels = labels.as_slice().map_err(|_| contiguous("labels"))?;
+    let totals = totals.as_slice_mut().map_err(|_| contiguous("totals"))?;
+    let successes = successes
+        .as_slice_mut()
+        .map_err(|_| contiguous("successes"))?;
+    py.detach(|| {
+        simulate_count_pairs_into(
+            seed,
+            states,
+            labels,
+            &families,
+            n_positions,
+            n_nodes,
+            n_classes,
+            n_states,
+            totals,
+            successes,
+        )
+    })
     .map_err(PyValueError::new_err)
 }
 

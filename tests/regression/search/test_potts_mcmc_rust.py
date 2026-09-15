@@ -1,18 +1,18 @@
-"""The Rust single-site sampler, refereed by the distribution it converges to.
+"""The Rust single-site sampler, refereed twice: by the distribution it
+converges to, and by the oracle's own chain.
 
 Issue #246. `search/CLAUDE.md`: a sampler is validated by the distribution it
 converges to, never by inspection -- a chain that visibly moves is what a
 sampler with a broken accept step also does. So this compares the Rust backend
-against the *exact enumerated* Boltzmann distribution, not against the Python
-oracle's chain.
+against the *exact enumerated* Boltzmann distribution.
 
-**Not bitwise, and not against the oracle's output.** Rust's `f64::exp` agrees
-with NumPy's to within a unit in the last place rather than exactly, and
-`np.searchsorted` is a threshold: one draw across a boundary that moved by 1
-ulp picks a different state, and from that step the chains are unrelated. Two
-implementations of a stochastic process can only be compared by what they
-converge to, which is why this file enumerates the truth rather than diffing
-two chains.
+**And state for state against the oracle, which issue #599 is what buys.**
+Rust's `f64::exp` agrees with NumPy's to within a unit in the last place
+rather than exactly, and `np.searchsorted` is a threshold, so the kernel
+decides a site only where the draw clears every cumulative boundary by
+`potts_mcmc._GUARD` units of the last place per state and hands the rest to
+NumPy. The enumeration test stays, because it is what would catch a guard
+that decided the wrong site rather than declining it.
 
 The fixture, the significance and the thinning are `test_potts_mcmc.py`'s, so
 the two backends are held to one standard: a 2x2 two-state lattice has 16
@@ -27,9 +27,14 @@ import itertools
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.potts import log_weights
+from snakes_and_ladders.search import potts_mcmc
+from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.search.potts_mcmc import _GUARD, PottsMove
+from snakes_and_ladders.search.potts_mcmc import sample_potts as oracle_sample_potts
 from snakes_and_ladders.search.potts_mcmc_rust import sample_potts
 from snakes_and_ladders.search.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import site_field
 
 SIGNIFICANCE = 0.001
 SWEEPS = 10_000
@@ -193,4 +198,154 @@ def test_a_state_outside_the_alphabet_is_refused() -> None:
             np.array([0.5]),
             1,
             1.0,
+            _GUARD,
+            0,
+        )
+
+
+# --- the exact pin: the same chain, not a chain of the same law (#599) -------
+
+#: The extents and seeds #561 pinned the Gibbs kernel over, at the alphabets
+#: and fields this sampler is declared on. 20 sweeps each, so a divergence has
+#: somewhere to show: one draw across a moved boundary sends the two chains
+#: apart and every later sweep differs, not just the site that crossed.
+PIN_EXTENTS = (8, 16)
+PIN_SEEDS = (1, 2, 3, 4)
+PIN_SWEEPS = 20
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("extent", PIN_EXTENTS, ids=lambda e: f"{e}x{e}")
+@pytest.mark.parametrize("seed", PIN_SEEDS)
+@pytest.mark.parametrize("states", [2, 3])
+def test_the_rust_chain_is_the_oracle_s_chain_state_for_state(
+    extent: int, seed: int, states: int
+) -> None:
+    """Every recorded configuration, not a distribution over them.
+
+    This is what makes :data:`~snakes_and_ladders.search.backend.Backend.RUST`
+    the default without moving a committed number: a chain of the same law
+    would move every autocorrelation figure `STATUS.md` pins.
+    """
+    graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 0.4)
+    field = np.linspace(0.6, -0.4, states)
+
+    python = oracle_sample_potts(
+        graph,
+        field,
+        PottsMove.SINGLE_SITE,
+        np.random.default_rng(seed),
+        PIN_SWEEPS,
+        backend=Backend.PYTHON,
+    )
+    rust = oracle_sample_potts(
+        graph,
+        field,
+        PottsMove.SINGLE_SITE,
+        np.random.default_rng(seed),
+        PIN_SWEEPS,
+        backend=Backend.RUST,
+    )
+
+    np.testing.assert_array_equal(python.states, rust.states)
+
+
+@pytest.mark.edge_case
+def test_a_guard_wide_enough_hands_every_site_back() -> None:
+    """The hand-back path itself, which no realistic draw reaches.
+
+    A guard covering the whole cumulative sum leaves the kernel unable to
+    decide any site, so it returns the position it started at every time and
+    NumPy decides all of them. The chain that comes out is still the oracle's,
+    which is what says the two halves of the sweep join up (issue #599, and
+    #561's test of the same shape).
+    """
+    from snakes_and_ladders import oxi_snakes_and_ladders
+
+    graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.7)
+    rows = site_field(WITH_FIELD, graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+
+    rng = np.random.default_rng(3)
+    state = np.ascontiguousarray(rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64)
+    handed_back = 0
+    for _ in range(5):
+        draws = np.ascontiguousarray(rng.random(graph.n_nodes), dtype=np.float64)
+        node = 0
+        while node < graph.n_nodes:
+            node = oxi_snakes_and_ladders.single_site_sweeps(
+                state, rows, offsets, neighbours, couplings, draws, 1, 1.0, 1e18, node
+            )
+            if node < graph.n_nodes:
+                handed_back += 1
+                potts_mcmc._site_update(
+                    state,
+                    rows,
+                    neighbours.tolist(),
+                    couplings.tolist(),
+                    offsets.tolist(),
+                    node,
+                    float(draws[node]),
+                    1.0,
+                )
+                node += 1
+
+    assert handed_back == 5 * graph.n_nodes
+
+    expected = oracle_sample_potts(
+        graph,
+        WITH_FIELD,
+        PottsMove.SINGLE_SITE,
+        np.random.default_rng(3),
+        5,
+        backend=Backend.PYTHON,
+    )
+    np.testing.assert_array_equal(state, expected.states[-1])
+
+
+@pytest.mark.edge_case
+def test_the_kernel_refuses_a_negative_guard() -> None:
+    """A guard is a width, and a negative one would decide every site."""
+    from snakes_and_ladders import oxi_snakes_and_ladders
+
+    with pytest.raises(ValueError, match="guard must be >= 0"):
+        oxi_snakes_and_ladders.single_site_sweeps(
+            np.zeros(1, dtype=np.int64),
+            np.zeros((1, 2)),
+            np.array([0, 0], dtype=np.int64),
+            np.array([], dtype=np.int64),
+            np.array([], dtype=np.float64),
+            np.array([0.5]),
+            1,
+            1.0,
+            -1.0,
+            0,
+        )
+
+
+@pytest.mark.structural
+def test_the_default_guard_hands_nothing_back_on_a_realistic_chain() -> None:
+    """The rate the port is worth measuring at, pinned as an absence.
+
+    `_GUARD` is a hand-back *threshold*, so narrowing it toward the derived
+    bound of four units per state is what would buy speed. It buys nothing:
+    the kernel decided every one of these sites itself. A regression that
+    started handing sites back would be a correctness change dressed as a
+    slowdown, so it is asserted rather than left to the benchmark.
+    """
+    from snakes_and_ladders import oxi_snakes_and_ladders
+
+    graph = lattice_graph((8, 8), BoundaryCondition.PERIODIC, 0.4)
+    rows = site_field(WITH_FIELD, graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+
+    rng = np.random.default_rng(11)
+    state = np.ascontiguousarray(rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64)
+    for _ in range(50):
+        draws = np.ascontiguousarray(rng.random(graph.n_nodes), dtype=np.float64)
+        assert (
+            oxi_snakes_and_ladders.single_site_sweeps(
+                state, rows, offsets, neighbours, couplings, draws, 1, 1.0, _GUARD, 0
+            )
+            == graph.n_nodes
         )

@@ -37,10 +37,11 @@ from pathlib import Path
 import torch
 
 from snakes_and_ladders.fixtures import load_declared
+from snakes_and_ladders.opt.objective import Objective
 
 
 @dataclass(frozen=True)
-class Rosenbrock:
+class Rosenbrock(Objective):
     """``sum_i b (x_{i+1} - x_i^2)^2 + (a - x_i)^2``, minimized at ``(a, ..., a)`` (``eq:rosenbrock``).
 
     The valley is curved and its floor is nearly flat, so the gradient points
@@ -102,7 +103,7 @@ class Rosenbrock:
 
 
 @dataclass(frozen=True)
-class Rastrigin:
+class Rastrigin(Objective):
     """``10 n + sum_i (x_i^2 - 10 cos(2 pi x_i))``, minimized at the origin (``eq:rastrigin``).
 
     A quadratic bowl with a cosine ripple: roughly ``10 ** n`` local minima,
@@ -151,7 +152,7 @@ HIMMELBLAU_MINIMA = (
 
 
 @dataclass(frozen=True)
-class Himmelblau:
+class Himmelblau(Objective):
     """``(x^2 + y - 11)^2 + (x + y^2 - 7)^2``, with four equal global minima (``eq:himmelblau``).
 
     Two dimensions only. The four minima all have value 0, so "the" optimum

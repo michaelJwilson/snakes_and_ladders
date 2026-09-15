@@ -19,16 +19,16 @@ import pytest
 import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.opt.schedule import (
-    Constant,
-    Cosine,
-    Exponential,
-    Linear,
-    Schedule,
+    ConstantTempSchedule,
+    CosineTempSchedule,
+    ExponentialTempSchedule,
+    LinearTempSchedule,
+    TempSchedule,
     adapt_ladder,
     temperatures,
 )
 
-CURVES = [Linear, Exponential, Cosine]
+CURVES = [LinearTempSchedule, ExponentialTempSchedule, CosineTempSchedule]
 ENDPOINTS = [(4.0, 0.05, 50), (0.1, 3.0, 7), (2.5, 2.5, 12), (1.0, 1e-3, 2)]
 
 
@@ -36,7 +36,7 @@ ENDPOINTS = [(4.0, 0.05, 50), (0.1, 3.0, 7), (2.5, 2.5, 12), (1.0, 1e-3, 2)]
 @pytest.mark.parametrize("curve", CURVES)
 @pytest.mark.parametrize(("start", "end", "n_steps"), ENDPOINTS)
 def test_both_endpoints_are_reached_exactly_at_the_declared_steps(
-    curve: type[Linear], start: float, end: float, n_steps: int
+    curve: type[LinearTempSchedule], start: float, end: float, n_steps: int
 ) -> None:
     # `==`, not a tolerance. A schedule that ends at `end * (1 - 1e-16)` is
     # not at `end`, and a consumer comparing "did we reach the target
@@ -52,7 +52,7 @@ def test_both_endpoints_are_reached_exactly_at_the_declared_steps(
 @pytest.mark.parametrize("curve", CURVES)
 @pytest.mark.parametrize(("start", "end"), [(4.0, 0.05), (0.1, 3.0)])
 def test_the_curve_is_strictly_monotone_in_the_declared_direction(
-    curve: type[Linear], start: float, end: float
+    curve: type[LinearTempSchedule], start: float, end: float
 ) -> None:
     values = np.array(temperatures(curve(start, end, 40)))
     steps = np.diff(values)
@@ -63,7 +63,7 @@ def test_the_curve_is_strictly_monotone_in_the_declared_direction(
 @pytest.mark.edge_case
 @pytest.mark.parametrize("curve", CURVES)
 def test_a_step_outside_the_schedule_is_refused_not_clamped(
-    curve: type[Linear],
+    curve: type[LinearTempSchedule],
 ) -> None:
     # The off-by-one no downstream test localizes: a consumer that runs one
     # iteration longer than it declared would, under clamping, sit at the
@@ -79,24 +79,24 @@ def test_a_step_outside_the_schedule_is_refused_not_clamped(
 
 @pytest.mark.structural
 def test_a_constant_schedule_is_constant_and_the_default_is_temperature_one() -> None:
-    schedule = Constant(1.0, 25)
+    schedule = ConstantTempSchedule(1.0, 25)
 
     assert temperatures(schedule) == [1.0] * 25
-    assert isinstance(schedule, Schedule)
+    assert isinstance(schedule, TempSchedule)
 
 
 @pytest.mark.parametrize(
     "schedule",
     [
-        Constant(1.0, 3),
-        Linear(1.0, 0.5, 3),
-        Exponential(1.0, 0.5, 3),
-        Cosine(1.0, 0.5, 3),
+        ConstantTempSchedule(1.0, 3),
+        LinearTempSchedule(1.0, 0.5, 3),
+        ExponentialTempSchedule(1.0, 0.5, 3),
+        CosineTempSchedule(1.0, 0.5, 3),
     ],
 )
 @pytest.mark.structural
 def test_every_schedule_satisfies_the_protocol(schedule: object) -> None:
-    assert isinstance(schedule, Schedule)
+    assert isinstance(schedule, TempSchedule)
 
 
 @pytest.mark.edge_case
@@ -105,19 +105,19 @@ def test_a_non_positive_temperature_is_refused(bad: float) -> None:
     # At zero every acceptance ratio is 0 or 1 and the chain is a descent;
     # NaN compares false to everything and would pass a `<= 0` check.
     with pytest.raises(ValueError, match="positive temperature"):
-        Constant(bad, 5)
+        ConstantTempSchedule(bad, 5)
     with pytest.raises(ValueError, match="positive temperature"):
-        Linear(1.0, bad, 5)
+        LinearTempSchedule(1.0, bad, 5)
     with pytest.raises(ValueError, match="positive temperature"):
-        Exponential(bad, 1.0, 5)
+        ExponentialTempSchedule(bad, 1.0, 5)
 
 
 @pytest.mark.edge_case
 def test_an_empty_schedule_is_refused() -> None:
     with pytest.raises(ValueError, match="at least one step"):
-        Constant(1.0, 0)
+        ConstantTempSchedule(1.0, 0)
     with pytest.raises(ValueError, match="at least one step"):
-        Cosine(1.0, 0.5, 0)
+        CosineTempSchedule(1.0, 0.5, 0)
 
 
 @pytest.mark.structural
@@ -125,9 +125,9 @@ def test_a_one_step_schedule_must_have_one_temperature() -> None:
     # `t = 0 / 0` otherwise; and a schedule that starts at 2 and ends at 1 in
     # a single step has no step at which either could be true.
     with pytest.raises(ValueError, match="one-step schedule has one temperature"):
-        Linear(2.0, 1.0, 1)
+        LinearTempSchedule(2.0, 1.0, 1)
 
-    assert Linear(2.0, 2.0, 1)(0) == 2.0
+    assert LinearTempSchedule(2.0, 2.0, 1)(0) == 2.0
 
 
 @pytest.mark.structural
@@ -135,7 +135,7 @@ def test_the_exponential_schedule_has_a_constant_ratio() -> None:
     # The characterization independent of the formula: geometric means the
     # ratio of successive temperatures never changes, and its value is the
     # `gamma` torch's ExponentialLR would need to land at `end`.
-    values = np.array(temperatures(Exponential(4.0, 0.05, 50)))
+    values = np.array(temperatures(ExponentialTempSchedule(4.0, 0.05, 50)))
     ratios = values[1:] / values[:-1]
 
     assert_allclose(ratios, (0.05 / 4.0) ** (1.0 / 49.0), rtol=1e-12)
@@ -143,7 +143,7 @@ def test_the_exponential_schedule_has_a_constant_ratio() -> None:
 
 @pytest.mark.mathematical
 def test_the_linear_schedule_has_a_constant_difference() -> None:
-    values = np.array(temperatures(Linear(4.0, 0.05, 50)))
+    values = np.array(temperatures(LinearTempSchedule(4.0, 0.05, 50)))
 
     assert_allclose(np.diff(values), (0.05 - 4.0) / 49.0, rtol=1e-12)
 
@@ -180,7 +180,9 @@ def test_linear_mirrors_torch_linear_lr() -> None:
         total_iters=n_steps - 1,
     )
 
-    assert_allclose(temperatures(Linear(start, end, n_steps)), expected, rtol=1e-12)
+    assert_allclose(
+        temperatures(LinearTempSchedule(start, end, n_steps)), expected, rtol=1e-12
+    )
 
 
 @pytest.mark.structural
@@ -194,7 +196,7 @@ def test_exponential_mirrors_torch_exponential_lr() -> None:
     )
 
     assert_allclose(
-        temperatures(Exponential(start, end, n_steps)), expected, rtol=1e-12
+        temperatures(ExponentialTempSchedule(start, end, n_steps)), expected, rtol=1e-12
     )
 
 
@@ -212,7 +214,7 @@ def test_cosine_mirrors_torch_cosine_annealing_lr() -> None:
         T_max=n_steps - 1,
         eta_min=end,
     )
-    realized = temperatures(Cosine(start, end, n_steps))
+    realized = temperatures(CosineTempSchedule(start, end, n_steps))
 
     assert_allclose(realized, expected, rtol=1e-10)
     assert realized[0] == start

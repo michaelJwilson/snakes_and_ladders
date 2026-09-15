@@ -30,7 +30,7 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.opt.hmc import anneal, sample
-from snakes_and_ladders.opt.schedule import Constant
+from snakes_and_ladders.opt.schedule import ConstantTempSchedule
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.max_cut import goemans_williamson
 from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
@@ -108,7 +108,9 @@ def _hmc_draw(generator: torch.Generator) -> tuple[float, ...]:
 
 
 def _anneal_draw(generator: torch.Generator) -> tuple[float, ...]:
-    annealed = anneal(GAUSSIAN, Constant(1.0, 4), generator, step_size=0.2, n_steps=5)
+    annealed = anneal(
+        GAUSSIAN, ConstantTempSchedule(1.0, 4), generator, step_size=0.2, n_steps=5
+    )
     return tuple(float(v) for v in annealed.final)
 
 

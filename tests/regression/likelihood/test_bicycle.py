@@ -15,7 +15,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.ldpc import decode, exact_decoding
-from snakes_and_ladders.likelihood.message_passing import MessageSchedule, sum_product
+from snakes_and_ladders.likelihood.message_passing import (
+    MessageScheduleName,
+    sum_product,
+)
 from snakes_and_ladders.sim.factor_graph import from_parity_check
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.ldpc import (
@@ -101,7 +104,10 @@ def test_the_decoder_reaches_the_general_fixed_point_on_the_bicycle_graph() -> N
 
     decoded = decode(code, llr, early_stop=False, max_iterations=3000, tolerance=1e-12)
     general = sum_product(
-        graph, schedule=MessageSchedule.FLOODING, tolerance=1e-12, max_iterations=3000
+        graph,
+        schedule=MessageScheduleName.FLOODING,
+        tolerance=1e-12,
+        max_iterations=3000,
     )
 
     marginals = np.array(

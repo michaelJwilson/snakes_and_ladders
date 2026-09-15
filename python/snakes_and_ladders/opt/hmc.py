@@ -62,13 +62,13 @@ from dataclasses import dataclass
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.opt.schedule import TempSchedule
 
 DEFAULT_STEPS = 20
 
 
 @dataclass(frozen=True)
-class WithGaussianPrior:
+class WithGaussianPrior(Objective):
     """An objective plus an isotropic Gaussian log prior, so it has a posterior.
 
     A bare negative log-likelihood read as a log density is a posterior under
@@ -599,7 +599,7 @@ class Annealed:
 
 def anneal(
     objective: Objective,
-    schedule: Schedule,
+    schedule: TempSchedule,
     generator: torch.Generator,
     *,
     step_size: float,
@@ -621,7 +621,7 @@ def anneal(
         What to minimize. Read as an energy, so ``T`` is physical; a negative
         log-likelihood here is a power posterior and the caller should know
         which they meant.
-    schedule : Schedule
+    schedule : TempSchedule
         Temperature per proposal. Its length is the budget in proposals;
         ``force_evaluations`` on the result is the budget in gradients.
     generator : torch.Generator
@@ -923,7 +923,7 @@ def _gradient(objective: Objective, theta: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass(frozen=True)
-class _Scaled:
+class _Scaled(Objective):
     """``objective`` in the coordinates ``phi = theta / scale``.
 
     Hamiltonian dynamics with a diagonal mass ``M`` on ``theta`` is the

@@ -241,13 +241,13 @@ jobs:
       # a change `select_tests` mis-attributes is one of the things they catch.
       - name: Critical gate
         run: uv run pytest -m critical -q
-      # CHECKS.md, SEAMS.md and the textbook's applicability tables are
-      # written from the tree and are not committed (issue #425). This
-      # regenerates all three -- a generator that no longer runs fails here --
-      # and then fails if regenerating rewrote a *tracked* file, which is a
-      # committed copy that has gone stale. It runs in this job rather than in
-      # `lint` because the seams survey imports the package, gymnasium
-      # included, and only this job's environment has it.
+      # CHECKS.md and the textbook's applicability tables are written from
+      # the tree and are not committed (issue #425). This regenerates both --
+      # a generator that no longer runs fails here -- and then fails if
+      # regenerating rewrote a *tracked* file, which is a committed copy that
+      # has gone stale. It runs in this job rather than in `lint` because the
+      # applicability tables import the package, gymnasium included, and only
+      # this job's environment has it.
       - name: Generated ledgers regenerate to a no-op
         run: infra/ledgers.sh --check
       # The ledgers are Markdown and nobody can browse them in the tree any
@@ -256,7 +256,7 @@ jobs:
       - name: Publish the ledgers to the run summary
         if: always()
         run: |
-          for ledger in CHECKS.md SEAMS.md; do
+          for ledger in CHECKS.md; do
             [ -f "$ledger" ] || continue
             printf '<details><summary>%s</summary>\n\n' "$ledger" >>"$GITHUB_STEP_SUMMARY"
             cat "$ledger" >>"$GITHUB_STEP_SUMMARY"
