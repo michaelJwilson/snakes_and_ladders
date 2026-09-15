@@ -1176,8 +1176,8 @@ default to `Backend.RUST`.
 
 | 100 sweeps / steps, median of five | oracle | Rust | ratio |
 | --- | --- | --- | --- |
-| `sample_potts`, 16x16 | 302.5 ms | **2.7 ms** | **110.7x** |
-| `sample_potts`, 32x32 | 1,192.0 ms | **8.5 ms** | **140.1x** |
+| `sample_potts`, 16x16 | 292.2 ms | **2.7 ms** | **109.8x** |
+| `sample_potts`, 32x32 | 1,201.9 ms | **8.5 ms** | **140.9x** |
 | `anneal_potts`, 16x16 | 344.5 ms | 25.0 ms | 13.8x |
 | `anneal_potts`, 32x32 | 1,381.6 ms | 79.9 ms | 17.3x |
 | `parallel_tempering`, 4 x 20, 16x16 | 260.5 ms | 7.3 ms | 35.8x |
@@ -1185,10 +1185,11 @@ default to `Backend.RUST`.
 | `adapt_ladder_potts`, 10 sweeps, 16x16 | 324.6 ms | 8.8 ms | 36.9x |
 | `adapt_ladder_potts`, 10 sweeps, 32x32 | 1,288.9 ms | 26.8 ms | 48.1x |
 
-One thread per process, 1-minute load 1.0 to 2.0 on the 4-core host, which
-carried one other job. A quieter reading (load 0.97) gave `sample_potts` at
-**121.2x** and **152.0x**, so the two extents are 111–121x and 140–152x over
-two runs. Annealing trails because the per-sweep energy the schedule needs is
+One reading, one thread per process, 1-minute load 1.0 to 2.0 on the 4-core
+host, which carried one other job. Two further readings of `sample_potts`
+alone, medians of nine, gave **121.2x / 152.0x** at a load of 0.97 and
+**110.7x / 140.1x** at 1.9, so the two extents are 110–121x and 140–152x
+over three runs. Annealing trails because the per-sweep energy the schedule needs is
 NumPy either way. The cluster moves are not ported and are unchanged; the
 comparison between move sets is therefore run on `Backend.PYTHON`, in
 `test_potts_mcmc_bench.py`, `test_ground_state_bench.py` and
