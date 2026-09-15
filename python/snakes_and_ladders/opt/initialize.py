@@ -44,7 +44,7 @@ import torch
 
 from snakes_and_ladders.opt import hmc
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.opt.schedule import TempSchedule
 
 
 @runtime_checkable
@@ -279,7 +279,7 @@ class FromAnnealing:
 
     Parameters
     ----------
-    schedule : Schedule
+    schedule : TempSchedule
         Temperature per proposal; its length is the budget in proposals.
     step_size : float
         Leapfrog step, positive.
@@ -291,7 +291,7 @@ class FromAnnealing:
 
     def __init__(
         self,
-        schedule: Schedule,
+        schedule: TempSchedule,
         step_size: float,
         generator: torch.Generator,
         n_steps: int = hmc.DEFAULT_STEPS,

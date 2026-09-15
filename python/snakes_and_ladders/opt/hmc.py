@@ -62,7 +62,7 @@ from dataclasses import dataclass
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.schedule import Schedule
+from snakes_and_ladders.opt.schedule import TempSchedule
 
 DEFAULT_STEPS = 20
 
@@ -599,7 +599,7 @@ class Annealed:
 
 def anneal(
     objective: Objective,
-    schedule: Schedule,
+    schedule: TempSchedule,
     generator: torch.Generator,
     *,
     step_size: float,
@@ -621,7 +621,7 @@ def anneal(
         What to minimize. Read as an energy, so ``T`` is physical; a negative
         log-likelihood here is a power posterior and the caller should know
         which they meant.
-    schedule : Schedule
+    schedule : TempSchedule
         Temperature per proposal. Its length is the budget in proposals;
         ``force_evaluations`` on the result is the budget in gradients.
     generator : torch.Generator

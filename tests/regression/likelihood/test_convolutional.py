@@ -26,7 +26,7 @@ from snakes_and_ladders.likelihood.convolutional import (
     viterbi,
 )
 from snakes_and_ladders.likelihood.message_passing import (
-    MessageSchedule,
+    MessageScheduleName,
     max_product,
     sum_product,
 )
@@ -162,7 +162,7 @@ def test_the_trellis_graph_is_a_chain_and_sum_product_gives_bcjr() -> None:
     graph = from_trellis(trellis, systematic, parity)
 
     assert graph.is_tree()
-    marginals = sum_product(graph, schedule=MessageSchedule.TREE)
+    marginals = sum_product(graph, schedule=MessageScheduleName.TREE)
     decoding = bcjr(trellis, systematic, parity)
 
     assert marginals.exact
@@ -190,7 +190,7 @@ def test_max_product_on_the_trellis_graph_gives_the_viterbi_path() -> None:
         systematic, parity = _received(trellis, message, 1.0, rng)
         graph = from_trellis(trellis, systematic, parity)
 
-        assignment, _ = max_product(graph, schedule=MessageSchedule.TREE)
+        assignment, _ = max_product(graph, schedule=MessageScheduleName.TREE)
         path = [assignment[f"s{t}"] for t in range(systematic.size + 1)]
         from_graph = np.array(
             [
@@ -302,7 +302,9 @@ def test_an_impossible_edge_is_a_finite_floor_and_not_minus_infinity() -> None:
     systematic, parity = _received(trellis, message, 1.0, rng)
     graph = from_trellis(trellis, systematic, parity)
 
-    assert np.isfinite(sum_product(graph, schedule=MessageSchedule.TREE).log_partition)
+    assert np.isfinite(
+        sum_product(graph, schedule=MessageScheduleName.TREE).log_partition
+    )
 
     hard = FactorGraph(
         graph.variables,
@@ -319,5 +321,5 @@ def test_an_impossible_edge_is_a_finite_floor_and_not_minus_infinity() -> None:
     )
 
     assert not np.isfinite(
-        sum_product(hard, schedule=MessageSchedule.TREE).log_partition
+        sum_product(hard, schedule=MessageScheduleName.TREE).log_partition
     )

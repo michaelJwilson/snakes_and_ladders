@@ -22,7 +22,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.opt.schedule import Exponential
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import PottsMove, anneal_potts
@@ -85,7 +85,7 @@ def test_annealed_move_set_benchmark(
         anneal_potts,
         graph,
         field,
-        Exponential(2.0, 0.05, STEPS),
+        ExponentialTempSchedule(2.0, 0.05, STEPS),
         np.random.default_rng(551),
         move=move,
     )

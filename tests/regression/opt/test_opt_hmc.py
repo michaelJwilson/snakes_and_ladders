@@ -38,7 +38,10 @@ from snakes_and_ladders.opt.hmc import (
 )
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
-from snakes_and_ladders.opt.schedule import Constant, Exponential
+from snakes_and_ladders.opt.schedule import (
+    ConstantTempSchedule,
+    ExponentialTempSchedule,
+)
 
 from tests._objective_checks import AnalyticGaussian, Counted
 from tests._scale import stress_only
@@ -564,7 +567,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     )
     annealed = anneal(
         GAUSSIAN,
-        Constant(1.0, 200),
+        ConstantTempSchedule(1.0, 200),
         generator=torch.Generator().manual_seed(5),
         step_size=0.2,
         n_steps=10,
@@ -582,7 +585,7 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
     start = torch.tensor([4.0, 3.0], dtype=torch.float64)
     result = anneal(
         GAUSSIAN,
-        Exponential(4.0, 0.01, 300),
+        ExponentialTempSchedule(4.0, 0.01, 300),
         generator=torch.Generator().manual_seed(2),
         step_size=0.2,
         n_steps=10,

@@ -25,6 +25,12 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# Issue #556: the shared `.venv` carries dependencies, not the project, so
+# `PYTHONPATH` is the only route to the package and no script can repoint a
+# global editable install at its own worktree. Exported here rather than left
+# to the caller, so this script operates on the tree it lives in whatever the
+# environment says.
+export PYTHONPATH="$repo_root/python${PYTHONPATH:+:$PYTHONPATH}"
 
 check=0
 case "${1-}" in
@@ -37,10 +43,10 @@ esac
 # since there is none. A generator that cannot write -- a catalogue symbol it
 # cannot name, a pairing with no note -- fails here, which is the other half
 # of what the old per-file `--check` bought.
-uv run python infra/checks_ledger.py --write
-uv run python infra/seams_survey.py --write
-uv run python infra/problems_tables.py --write
-uv run python infra/gates.py --write
+uv run --no-sync python infra/checks_ledger.py --write
+uv run --no-sync python infra/seams_survey.py --write
+uv run --no-sync python infra/problems_tables.py --write
+uv run --no-sync python infra/gates.py --write
 
 if [ "$check" = 0 ]; then
   exit 0
