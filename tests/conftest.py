@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from pathlib import Path
 
 for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_variable, "1")
@@ -40,12 +41,19 @@ for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 import pytest  # noqa: E402
 
 from tests._durations import key_over_cap, over_cap  # noqa: E402
+from tests._extension import stale_extension  # noqa: E402
 
 DURATIONS = pytest.StashKey[list[tuple[str, float, frozenset[str]]]]()
 
 
 def pytest_configure(config: pytest.Config) -> None:
     config.stash[DURATIONS] = []
+    # Before a test is collected, not after a suite has run: a stale extension
+    # fails the tests that call the signature it predates, which reads as the
+    # change under test breaking them (issue #630, `tests/_extension.py`).
+    refusal = stale_extension(Path(__file__).resolve().parent.parent)
+    if refusal:
+        raise pytest.UsageError(refusal)
 
 
 def distributed(config: pytest.Config) -> bool:
