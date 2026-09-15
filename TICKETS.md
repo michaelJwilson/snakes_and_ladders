@@ -17,9 +17,9 @@ parenthesis the only way a ticket is cited.
 - Support the different lattice types (#231)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code (#340)
-- Quantum LDPC codes over the bicycle construction, whose classical half
-  landed: syndrome decoding with degeneracy, and the success criterion that
-  replaces agreement with the maximum-likelihood codeword (#362)
+- Correlated `X` and `Z` errors on the CSS code, whose one sector landed: a
+  depolarizing channel couples the two, so the decoder decodes a quaternary
+  alphabet on one graph rather than a binary alphabet on two (#362)
 - Move `PottsParams`/`load_potts_params` out of `snakes_and_ladders.opt.potts`, so
   `simulate_chains` can call the general graph sampler instead of its own copy
   of the exact open-chain recursion (#186)
