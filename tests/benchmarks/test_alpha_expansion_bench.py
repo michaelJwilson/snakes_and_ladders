@@ -17,16 +17,18 @@ import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.search.alpha_expansion import (
+    _expansion_network,
+    _site_field,
     alpha_expansion,
     iterated_conditional_modes,
 )
 from snakes_and_ladders.search.backend import Backend
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 sys.setrecursionlimit(50_000)
 
 
-def _problem(extent: int, n_states: int) -> tuple[object, np.ndarray]:
+def _problem(extent: int, n_states: int) -> tuple[PottsGraph, np.ndarray]:
     graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 1.2)
     rng = np.random.default_rng(extent * 10 + n_states)
     return graph, rng.normal(size=(graph.n_nodes, n_states))
@@ -73,3 +75,24 @@ def test_single_site_descent_benchmark(
         backend=backend,
     )
     assert np.isfinite(energy)
+
+
+@pytest.mark.parametrize("n_states", [3, 5])
+@pytest.mark.parametrize("extent", [8, 16, 32])
+def test_the_expansion_network_build_benchmark(
+    benchmark: BenchmarkFixture, extent: int, n_states: int
+) -> None:
+    """Building the network, apart from solving it (issue #598).
+
+    The half of :func:`~snakes_and_ladders.search.alpha_expansion.expand` the
+    Rust cut kernel does not touch, timed on its own so the split between
+    building and solving is a number rather than a profile reading.
+    """
+    graph, values = _problem(extent, n_states)
+    field = _site_field(graph, values)
+    rng = np.random.default_rng(598)
+    labelling = rng.integers(0, n_states, size=graph.n_nodes)
+
+    built = benchmark(_expansion_network, graph, field, labelling, 0)
+
+    assert built.n_nodes >= graph.n_nodes + 2

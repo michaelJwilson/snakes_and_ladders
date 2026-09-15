@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.likelihood.potts import (
+    GATHER_BELOW,
     ExactPotts,
     enumerate_potts,
     log_weights,
@@ -167,3 +168,68 @@ def test_a_zero_coupling_lattice_factorizes_into_independent_sites() -> None:
     assert _relative(exact.log_partition, graph.n_nodes * single) < RELATIVE_TOLERANCE
     independent = np.tile(np.exp(FIELD) / np.exp(FIELD).sum(), (graph.n_nodes, 1))
     np.testing.assert_allclose(exact.single_site, independent, atol=1e-12)
+
+
+@pytest.mark.oracle
+def test_the_two_log_weight_routes_score_the_same_model() -> None:
+    # `log_weights` scores every edge in one gather below `GATHER_BELOW`
+    # configurations and loops over them above it (issue #598). The two sum
+    # the same terms in a different order, so they agree to floating point
+    # and not bitwise -- the precedent `maxflow.energy` set, which pins to
+    # 1e-12 relative and realizes 7.7e-14.
+    rng = np.random.default_rng(598)
+    worst = 0.0
+    for shape, n_states in (((3, 3), 2), ((4, 4), 3), ((5, 4), 4)):
+        for boundary in (BoundaryCondition.OPEN, BoundaryCondition.PERIODIC):
+            graph = lattice_graph(shape, boundary, 0.73)
+            field = rng.normal(size=(graph.n_nodes, n_states))
+            configurations = rng.integers(
+                0, n_states, size=(GATHER_BELOW - 1, graph.n_nodes)
+            )
+            gathered = log_weights(graph, field, configurations)
+            # The same rows, forced down the loop by padding past the
+            # threshold and reading back only the rows that were asked for.
+            padded = np.concatenate([configurations] * 3)
+            assert padded.shape[0] >= GATHER_BELOW
+            looped = log_weights(graph, field, padded)[: GATHER_BELOW - 1]
+            worst = max(
+                worst, float(np.max(np.abs(gathered - looped) / np.abs(looped)))
+            )
+    assert worst < 1e-12, worst
+
+
+@pytest.mark.mathematical
+def test_one_configuration_scores_what_the_model_defines() -> None:
+    # The single-configuration case is the one issue #598 is about, and it is
+    # checked against the definition rather than against the other branch:
+    # the field term of each site plus the coupling of each agreeing edge.
+    rng = np.random.default_rng(1598)
+    graph = lattice_graph((4, 3), BoundaryCondition.OPEN, 0.9)
+    field = rng.normal(size=(graph.n_nodes, 3))
+    state = rng.integers(0, 3, size=graph.n_nodes)
+
+    expected = sum(float(field[node, state[node]]) for node in range(graph.n_nodes))
+    expected += sum(
+        coupling
+        for (first, second), coupling in graph.weighted_edges()
+        if state[first] == state[second]
+    )
+
+    assert float(log_weights(graph, field, state[None])[0]) == pytest.approx(
+        expected, rel=1e-12
+    )
+
+
+@pytest.mark.structural
+def test_the_endpoint_arrays_are_the_graphs_own_edges_and_are_read_only() -> None:
+    graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, 0.5)
+    first, second, coupling = graph.endpoints
+
+    assert [(int(a), int(b)) for a, b in zip(first, second, strict=True)] == list(
+        graph.edges
+    )
+    assert coupling.tolist() == list(graph.coupling)
+    assert graph.endpoints is graph.endpoints, "derived once, then reused"
+    for array in graph.endpoints:
+        with pytest.raises(ValueError, match="read-only"):
+            array[0] = array[0]
