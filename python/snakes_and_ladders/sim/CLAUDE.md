@@ -50,7 +50,10 @@ in this module. It is referenced here, never restated. What follows is local.
 
 - **The Potts model is one adjacency, one energy and one conditional, and
   they live here.** `PottsGraph.compressed_adjacency` is the only neighbour
-  structure, `energies` the only scorer, `heat_bath_log_weights` the only
+  structure --- derived once per graph through
+  `snakes_and_ladders.incidence.SparseIncidence`, the layout `ParityCheck`
+  and `FactorGraph` also hold, and handed to every caller read-only ---
+  `energies` the only scorer, `heat_bath_log_weights` the only
   conditional; six modules restated one of the three before issue #277. They
   are in `sim/` because `search/` may import `sim/` and `sim/` may not import
   back, so anything the simulator needs has to be reachable from here. The

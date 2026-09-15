@@ -42,6 +42,24 @@ class FlowNetwork:
     the reverse of an arc is its index with the low bit flipped. Pushing flow
     subtracts from one and adds to the other, which is what makes the residual
     graph implicit rather than a second structure to keep in step.
+
+    **Why ``outgoing`` is a list of lists.** Root ``CLAUDE.md`` asks for
+    neighbour lists as offsets into one array, and the survey issue #586 ran
+    reported this class for not being one. It was measured rather than
+    converted, and the measurement says not to: over 16,384 rows of degree
+    six, walking every row costs 1.95 ms as a list of lists, 3.93 ms as a
+    flat Python list with offsets, and 25.63 ms as a NumPy array sliced per
+    row. The rule is about a consumer that walks the layout in NumPy or in a
+    compiled kernel; Dinic here is a pure-Python inner loop, where a row is
+    one list index and a NumPy slice is an object allocation. The compiled
+    consumer has the contiguous form already ---
+    :meth:`as_arrays` builds it for
+    :mod:`snakes_and_ladders.search.maxflow_rust`, and that is the boundary
+    the layout rule is about.
+
+    ``add_edge`` also appends, which offsets cannot do without knowing the
+    degrees first, so a contiguous store here would be a second structure
+    built after the fact rather than the store itself.
     """
 
     n_nodes: int

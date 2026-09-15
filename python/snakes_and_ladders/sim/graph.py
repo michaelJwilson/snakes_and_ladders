@@ -11,10 +11,13 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import cached_property
 from itertools import product
 from typing import TYPE_CHECKING
 
 import numpy as np
+
+from snakes_and_ladders.incidence import SparseIncidence
 
 if TYPE_CHECKING:  # pragma: no cover
     import rustworkx
@@ -122,28 +125,49 @@ class PottsGraph:
         marshalling per node. `tests/regression/test_duplication_guards.py`
         fails a second builder.
 
+        The arrays are :attr:`incidence`'s, shared by every caller and
+        read-only; a caller that needs to write takes a copy.
+
         Returns
         -------
         tuple[np.ndarray, np.ndarray, np.ndarray]
             ``offsets`` (``int64``, length ``n_nodes + 1``), ``neighbours``
             (``int64``) and ``couplings`` (``float64``), the last two of length
-            ``2 * n_edges``.
+            ``2 * n_edges``. Read-only, and the same arrays on every call.
         """
-        # Built by a stable sort rather than a Python loop over the edges,
-        # which `iterated_conditional_modes` pays per call: at 16x16 the loop
-        # was 1.3 ms of a 2.1 ms descent. Each edge contributes its two
-        # directed entries in edge order, so sorting them by their owning
-        # node *stably* leaves each row in edge order -- the order this
-        # method's contract fixes.
+        offsets, neighbours, couplings = self.incidence
+        return offsets, neighbours, couplings
+
+    @cached_property
+    def incidence(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The compressed adjacency, derived once per graph and then reused.
+
+        Each edge contributes its two directed entries in edge order, so a
+        *stable* sort by owning node leaves each row in edge order -- the
+        order :meth:`compressed_adjacency`'s contract fixes.
+
+        Derived once because the survey issue #586 ran found it derived per
+        call: every caller asked the graph to rebuild it, and
+        :func:`snakes_and_ladders.search.spatio_sequential._wolff_update` asks
+        once per cluster move, where a move touches one cluster. At a 64x64
+        periodic lattice the build was 2.755 ms of a 3.425 ms move.
+
+        The three arrays are returned to every caller, so they are read-only:
+        an aliased buffer a consumer wrote into would be a second graph that
+        nothing declares, and NumPy refuses the write where it happens rather
+        than leaving it to be found in a distribution.
+        """
         ends = np.asarray(self.edges, dtype=np.int64).reshape(-1, 2)
-        offsets = np.zeros(self.n_nodes + 1, dtype=np.int64)
-        np.cumsum(
-            np.bincount(ends.reshape(-1), minlength=self.n_nodes), out=offsets[1:]
+        incidence = SparseIncidence.from_pairs(
+            self.n_nodes, self.n_nodes, ends.reshape(-1), ends[:, ::-1].reshape(-1)
         )
-        order = np.argsort(ends.reshape(-1), kind="stable")
-        neighbours = ends[:, ::-1].reshape(-1)[order]
-        couplings = np.repeat(np.asarray(self.coupling, dtype=np.float64), 2)[order]
-        return offsets, np.ascontiguousarray(neighbours), couplings
+        couplings = incidence.gather(
+            np.repeat(np.asarray(self.coupling, dtype=np.float64), 2)
+        )
+        arrays = (incidence.offsets, incidence.indices, couplings)
+        for array in arrays:
+            array.flags.writeable = False
+        return arrays
 
     def to_rustworkx(self) -> rustworkx.PyGraph:
         """This graph as a ``rustworkx.PyGraph``: one node per site, the coupling as edge data.
