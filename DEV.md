@@ -362,7 +362,10 @@ go through it, each taking `workers=` explicitly — `opt.fit.fit_from` (starts)
   pays there, and no pool reached 2×. Serial and workers then run at the
   same count on one machine, which keeps the two bitwise equal. A
   site whose task body is a `torch` op above the parallel grain, or a Rust
-  kernel under `allow_threads`, is the case for `backend="threads"`; a Python
+  kernel with the GIL released, is the case for `backend="threads"` — and
+  every kernel of `oxi_snakes_and_ladders` releases it (`Python::detach`,
+  PyO3 0.29's name for `allow_threads`) since issue #604, so that case has
+  eligible sites. A Python
   loop that holds the GIL is the case for `"processes"`, at the cost of
   pickling the task and result and of spawning the pool (the `spawn` start
   method, the one that works with `torch` and on Apple Silicon: workers

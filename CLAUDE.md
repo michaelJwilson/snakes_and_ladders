@@ -10,6 +10,7 @@ Guidance for Claude Code when working in this repository.
 5.  **Maintain formatting:** Apply naming, terminology, notation and syntax consistently.
 6.  **CLAUDE.md edits are rare** Do not add technical details to CLAUDE.md files, but principles.  These edits are rare, as (lack of) principles become apparent.
 7.  **Maintain tone** maintain tone of this document throughout the repository and associated work.
+8.  **Open with a TL;DR:** every ticket, pull request, plan and review opens with the result — the number, the decision, or what broke — in O(1) lines before any context, so the opening does not grow with the body.
  
 These rules are paramount for this repository: e.g. every document, `CLAUDE.md`, docstring, comment, commit message, PR, and plan or comment posted to thread. They are stated here, rarely repeated elsewhere.
 
@@ -73,6 +74,7 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 *   **Allocation.** Preallocate and reuse buffers across sweeps.
 *   **The FFI boundary.** Cross it once per call with contiguous arrays.
 *   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — should utilize `snakes_and_ladders.parallel`.
+*   **The GIL.** A compiled kernel that touches no Python object releases it, or the thread backend cannot use it. Held, four Python threads took 3.82x the wall of one on the Potts sweep — serialization exactly; released, 1.08x, for a throughput of 3.70x beside a NumPy control's 3.19x (#604).
 *   **Compiled backends.** `njit` for ease, Rust carries the load.
 
 ## Testing & Quality Assurance

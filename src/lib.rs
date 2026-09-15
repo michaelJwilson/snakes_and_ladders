@@ -1,3 +1,18 @@
+//! The `oxi_snakes_and_ladders` extension: the kernels root `CLAUDE.md`'s
+//! backend rule admits, each beside the NumPy oracle that pins it.
+//!
+//! **Every kernel releases the GIL.** PyO3 holds it for the whole body of a
+//! `#[pyfunction]` unless the body gives it up, and these need none: each
+//! extracts `as_slice()` from its arrays and then touches no Python object,
+//! so the work runs inside `Python::detach` and `Ungil` makes a
+//! Python object in that closure a compile error. Before this, four Python
+//! threads calling `single_site_sweeps` took 4.03x the wall of one --
+//! serialization exactly (issue #604). It changes no arithmetic and no
+//! single-call timing; what it buys is `snakes_and_ladders.parallel`'s
+//! `backend="threads"`, which `DEV.md` documents and which had no eligible
+//! site in the package. [`double`] is the exception: a placeholder integer
+//! multiply, where the release would cost more than the body.
+
 use pyo3::prelude::*;
 
 pub mod count_pairs;
