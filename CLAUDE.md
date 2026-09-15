@@ -69,7 +69,7 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 *   **Allocation.** Preallocate and reuse buffers across sweeps.
 *   **The FFI boundary.** Cross it once per call with contiguous arrays.
 *   **Parallel over independent tasks.** A loop of independent bodies — starts, seeds, replicates — should utilize `snakes_and_ladders.parallel`.
-*   **The GIL.** A compiled kernel that touches no Python object releases it, or the thread backend cannot use it. Held, four Python threads took 4.03x the wall of one on the Potts sweep — serialization exactly, against a NumPy control at 1.90x.
+*   **The GIL.** A compiled kernel that touches no Python object releases it, or the thread backend cannot use it. Held, four Python threads took 3.82x the wall of one on the Potts sweep — serialization exactly; released, 1.08x, for a throughput of 3.70x beside a NumPy control's 3.19x (#604).
 *   **Compiled backends.** `njit` for ease, Rust carries the load.
 
 ## Testing & Quality Assurance
