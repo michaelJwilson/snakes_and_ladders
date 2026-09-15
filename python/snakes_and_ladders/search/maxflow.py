@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import energies
 
 
 @dataclass
@@ -261,21 +262,15 @@ def energy(
     generalized to a per-node field. With a shared field the two agree
     exactly, which a test pins --- so the generalization cannot drift from the
     model the rest of the repository fits.
+
+    The arithmetic is :func:`snakes_and_ladders.sim.potts.energies`, whose
+    gather-and-dot over the edges this module supplied when issue #341
+    measured the per-edge loop at 92% of the self time; what stays here is
+    the **two-state refusal** :func:`site_field` carries, since a cut solves
+    ``k = 2`` and a caller reaching this with more states is asking the wrong
+    module (issue #277).
     """
-    values = site_field(graph, field_values)
-    total = values[np.arange(graph.n_nodes), configurations].sum(axis=-1)
-    if graph.edges:
-        # One gather over every edge rather than a Python-level term per edge:
-        # issue #341 measured the loop at 92% of this function's self time,
-        # and #336 found it the term left in the Rust ground state's wall clock.
-        # The edge terms are then summed by ``dot`` rather than left to right
-        # in edge order as `likelihood.potts.log_weights` sums them, so the
-        # two agree to rounding -- 1e-12 relative in the test -- and no
-        # longer bitwise.
-        ends = np.asarray(graph.edges, dtype=np.int64)
-        agree = configurations[..., ends[:, 0]] == configurations[..., ends[:, 1]]
-        total = total + agree.astype(float) @ np.asarray(graph.coupling, dtype=float)
-    return -np.asarray(total)
+    return energies(graph, site_field(graph, field_values), configurations)
 
 
 def ising_ground_state(

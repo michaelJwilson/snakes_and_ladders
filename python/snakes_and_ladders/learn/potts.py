@@ -153,6 +153,13 @@ class PottsLandscape:
             if not (0 <= first < n_nodes and 0 <= second < n_nodes):
                 msg = f"edge {(first, second)} names a node outside [0, {n_nodes})"
                 raise ValueError(msg)
+        # Not `PottsGraph.compressed_adjacency`, which issue #277 made the
+        # one adjacency the Potts samplers and solvers share. Two reasons,
+        # either sufficient: `learn/` imports no application module (`DEV.md`,
+        # asserted by test), and this walk carries no coupling -- the
+        # landscape holds one shared `J` -- so the shared builder would have
+        # to grow a flag to serve it, which is how a seam starts serving
+        # nobody.
         neighbours: list[list[int]] = [[] for _ in range(n_nodes)]
         for first, second in edges:
             neighbours[first].append(second)

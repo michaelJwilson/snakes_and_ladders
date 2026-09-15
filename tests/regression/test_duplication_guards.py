@@ -1,4 +1,4 @@
-"""The duplications issues #230 and #413 closed, asserted rather than remembered.
+"""The duplications issues #230, #413 and #277 closed, asserted rather than remembered.
 
 A consolidation that nothing enforces is a consolidation with a half-life.
 Each of the three below was written between four and twelve times before it
@@ -32,12 +32,21 @@ PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 LOGSUMEXP_OWNER = "numerics.py"
 TRANSITION_OWNER = "sim/potts.py"
 EDGE_ITERATION_OWNER = "sim/graph.py"
+ADJACENCY_OWNER = "sim/graph.py"
 ENUMERATION_OWNER = "enumeration.py"
 
 PRIVATE_LOGSUMEXP = re.compile(r"^def _logsumexp\(", re.MULTILINE)
 OPEN_CODED_EDGES = re.compile(r"zip\(\s*\w+\.edges,\s*\w+\.coupling")
 CAP_LITERAL = re.compile(r"^\s*MAX_ENUMERABLE\w* = \d", re.MULTILINE)
 SQUARE_TRANSITION = re.compile(r"log\(\s*1(\.0)?\s*\+\s*(np\.|numpy\.|math\.)?sqrt")
+#: The annotation every list-of-lists adjacency carries. It is the whole
+#: catch rather than half of one: the builders all start from an empty
+#: comprehension, which `mypy --strict` refuses without a type, so a copy
+#: cannot enter the package unannotated. A `torch.Tensor` coupling does not
+#: match, which is deliberate --- `likelihood.surrogate.tree_log_partition`
+#: walks a tree whose couplings carry gradients, and the compressed rows are
+#: `float64` arrays that would cut the autodiff graph.
+NEIGHBOUR_LISTS = re.compile(r"list\[list\[tuple\[int, ?float\]\]\]")
 
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
@@ -92,6 +101,22 @@ def test_no_module_walks_edges_and_couplings_by_hand() -> None:
 
 @pytest.mark.critical
 @pytest.mark.structural
+def test_the_adjacency_is_built_in_one_place() -> None:
+    # Seven builders of one object: `potts_mcmc._adjacency`,
+    # `potts_mcmc_rust.flatten_adjacency`, open-coded copies in
+    # `ground_state`, `alpha_expansion`, `sim.potts` and
+    # `spatio_sequential`, and `PottsGraph.compressed_adjacency` itself --
+    # the sixth found by this guard rather than by the survey. The copies
+    # agreed, so nothing failed; what they cost was the layout root
+    # `CLAUDE.md` names -- a pointer chase and a Python float per neighbour
+    # where the compressed rows are a stride (issue #277). `learn/potts.py`
+    # keeps its own, without couplings: `learn/` imports no application
+    # module, and its call site says so.
+    assert _offenders(NEIGHBOUR_LISTS, ADJACENCY_OWNER) == []
+
+
+@pytest.mark.critical
+@pytest.mark.structural
 def test_the_enumeration_cap_is_defined_once() -> None:
     # Four thresholds in three units before this: 200_000 configurations,
     # 200_000 paths, 20 nodes, and a docstring-only `n <= 6` that nothing
@@ -125,6 +150,7 @@ def test_each_guard_fails_on_violating_source() -> None:
         PRIVATE_LOGSUMEXP: "def _logsumexp(values, axis):\n    return values\n",
         OPEN_CODED_EDGES: "for e, c in zip(graph.edges, graph.coupling, strict=True):\n",
         CAP_LITERAL: "MAX_ENUMERABLE_THINGS = 200_000\n",
+        NEIGHBOUR_LISTS: "neighbours: list[list[tuple[int, float]]] = []\n",
         # Split so this module is not its own offender: the guard reads the
         # suite, and a literal here would match.
         SQUARE_TRANSITION: "TRANSITION = math.log(1.0 + " + "math.sqrt(3.0))\n",
@@ -133,6 +159,9 @@ def test_each_guard_fails_on_violating_source() -> None:
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
         OPEN_CODED_EDGES: "for edge, coupling in graph.weighted_edges():\n",
         CAP_LITERAL: "from snakes_and_ladders.enumeration import refuse_oversized\n",
+        NEIGHBOUR_LISTS: (
+            "offsets, neighbours, couplings = graph.compressed_adjacency()\n"
+        ),
         SQUARE_TRANSITION: 'print(f"at J_c = ln(1 + sqrt(3)) = {coupling:.4f}")\n',
     }
 

@@ -370,9 +370,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.qa.likelihood_footprint
    :members:
 
-.. automodule:: snakes_and_ladders.qa.jc_transition
-   :members:
-
 .. automodule:: snakes_and_ladders.qa.backend_agreement
    :members:
 
@@ -425,6 +422,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.qa.coupled_labelling
+   :members:
+
+.. automodule:: snakes_and_ladders.qa.hmc_warmup
    :members:
 
 .. automodule:: snakes_and_ladders.scripts

@@ -1,0 +1,47 @@
+% Two moves on one fixture tree, drawn by hand for Section~\ref{sec:phylo:search}.
+% Input by textbook.tex; a sketch and not a rendered figure, so it is outside
+% the figure cache and the render cap, which govern generated output only.
+%
+% Each panel is one unrooted topology on five taxa, drawn as three internal
+% nodes on a spine with pendant edges. The macro takes the five leaf labels in
+% the order (upper-left, lower-left, top-middle, upper-right, lower-right).
+\providecommand{\moveleafpanel}[6]{%
+  \begin{scope}[xshift=#1]
+    \coordinate (u) at (0.0, 0); \coordinate (v) at (0.85, 0);
+    \coordinate (w) at (1.7, 0);
+    \draw[fglink] (u) -- (v) -- (w);
+    \draw[fglink] (u) -- ++(-0.65, 0.6) node[fgnote, anchor=south east] {#2};
+    \draw[fglink] (u) -- ++(-0.65,-0.6) node[fgnote, anchor=north east] {#3};
+    \draw[fglink] (v) -- ++( 0.0, 0.8) node[fgnote, anchor=south] {#4};
+    \draw[fglink] (w) -- ++( 0.65, 0.6) node[fgnote, anchor=south west] {#5};
+    \draw[fglink] (w) -- ++( 0.65,-0.6) node[fgnote, anchor=north west] {#6};
+  \end{scope}}
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[scale=0.95]
+  \node[font=\footnotesize, anchor=east] at (-1.0, 1.4) {NNI};
+  \moveleafpanel{0cm}{A}{B}{C}{D}{E}
+  \draw[->, thick] (2.85, 0) -- node[font=\footnotesize, above] {$e_1$} (3.75, 0);
+  \moveleafpanel{4.3cm}{A}{C}{B}{D}{E}
+  \draw[->, thick] (7.15, 0) -- node[font=\footnotesize, above] {$e_2$} (8.05, 0);
+  \moveleafpanel{8.6cm}{A}{C}{D}{B}{E}
+  \begin{scope}[yshift=-3.4cm]
+    \node[font=\footnotesize, anchor=east] at (-1.0, 1.4) {SPR};
+    \moveleafpanel{0cm}{A}{B}{C}{D}{E}
+    \draw[->, thick] (2.85, 0) -- node[font=\footnotesize, above] {$B$} (3.75, 0);
+    \moveleafpanel{4.3cm}{A}{C}{D}{B}{E}
+    \draw[->, thick] (7.15, 0) -- node[font=\footnotesize, above] {$D$} (8.05, 0);
+    \moveleafpanel{8.6cm}{A}{D}{C}{B}{E}
+  \end{scope}
+\end{tikzpicture}
+\caption{Three successive states of one five-taxon topology under each move
+set, from the same start. Above: two nearest-neighbour interchanges, each
+swapping the subtrees adjacent to the named internal edge, so exactly one
+bipartition changes per step. Below: two prune-and-regraft moves, each
+detaching the named taxon and reattaching it at another edge. The first
+regraft reaches in one move the topology the interchanges reach in two --- it
+is the rightmost panel above --- which is what the containment
+$\neighbourhood_{\mathrm{NNI}} \subset \neighbourhood_{\mathrm{SPR}}$ buys,
+at a neighbourhood of $2(n-3)(2n-7) = 12$ candidates against $2(n-3) = 4$.}
+\label{fig:nnispr}
+\end{figure}

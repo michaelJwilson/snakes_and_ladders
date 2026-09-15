@@ -27,8 +27,7 @@ import itertools
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.search.potts_mcmc import _adjacency
-from snakes_and_ladders.search.potts_mcmc_rust import flatten_adjacency, sample_potts
+from snakes_and_ladders.search.potts_mcmc_rust import sample_potts
 from snakes_and_ladders.search.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
@@ -126,26 +125,36 @@ def test_the_test_would_catch_a_sampler_that_ignored_the_field() -> None:
 
 
 @pytest.mark.structural
-def test_the_flattened_adjacency_is_the_oracle_s_own() -> None:
-    """Both backends read the same neighbour structure.
+def test_the_kernel_reads_the_graph_s_own_adjacency() -> None:
+    """Both backends read the same neighbour structure, because there is one.
 
-    `flatten_adjacency` is built from `potts_mcmc._adjacency` rather than from
-    the edge list, so the two cannot disagree about which nodes are adjacent --
-    a disagreement that would show up as a distributional failure with no
-    indication of where it came from.
+    The kernel took a second builder (`flatten_adjacency`) until issue #277
+    retired it; it now takes `PottsGraph.compressed_adjacency`, which the
+    Python sweep indexes. Two builders cannot disagree about which nodes are
+    adjacent when there is one -- a disagreement that would have shown up as
+    a distributional failure with no indication of where it came from.
     """
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.4)
-    offsets, neighbours, couplings = flatten_adjacency(graph)
-    expected = _adjacency(graph)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+
+    degree = np.zeros(graph.n_nodes, dtype=np.int64)
+    for first, second in graph.edges:
+        degree[first] += 1
+        degree[second] += 1
 
     assert len(offsets) == graph.n_nodes + 1
-    assert int(offsets[-1]) == sum(len(incident) for incident in expected)
-    for node, incident in enumerate(expected):
+    assert int(offsets[-1]) == 2 * len(graph.edges)
+    assert np.array_equal(np.diff(offsets), degree)
+    for node in range(graph.n_nodes):
         start, end = int(offsets[node]), int(offsets[node + 1])
-        assert [
-            (int(n), float(c))
-            for n, c in zip(neighbours[start:end], couplings[start:end], strict=True)
-        ] == incident
+        for neighbour, coupling in zip(
+            neighbours[start:end], couplings[start:end], strict=True
+        ):
+            assert (node, int(neighbour)) in graph.edges or (
+                int(neighbour),
+                node,
+            ) in graph.edges
+            assert float(coupling) in graph.coupling
 
 
 @pytest.mark.structural
@@ -177,10 +186,11 @@ def test_a_state_outside_the_alphabet_is_refused() -> None:
     with pytest.raises(ValueError, match=r"expected \[0, 2\)"):
         oxi_snakes_and_ladders.single_site_sweeps(
             np.array([5], dtype=np.int64),
-            np.zeros(2),
+            np.zeros((1, 2)),
             np.array([0, 0], dtype=np.int64),
             np.array([], dtype=np.int64),
             np.array([], dtype=np.float64),
             np.array([0.5]),
             1,
+            1.0,
         )

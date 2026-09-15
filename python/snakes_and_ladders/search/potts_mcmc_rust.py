@@ -35,44 +35,9 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.search.potts_mcmc import PottsChain, _adjacency
+from snakes_and_ladders.search.potts_mcmc import PottsChain
 from snakes_and_ladders.sim.graph import PottsGraph
-
-
-def flatten_adjacency(
-    graph: PottsGraph,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The graph's adjacency in compressed-row form, for the kernel.
-
-    Built from :func:`snakes_and_ladders.search.potts_mcmc._adjacency` rather
-    than from the edges directly, so the two backends cannot disagree about
-    which neighbours a node has: the oracle's own structure is what crosses.
-
-    Parameters
-    ----------
-    graph : PottsGraph
-        The graph to flatten.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
-        ``offsets`` of length ``n_nodes + 1``, and ``neighbours`` and
-        ``couplings`` of length ``2 * n_edges``, indexed in step.
-    """
-    neighbours = _adjacency(graph)
-    offsets = np.zeros(graph.n_nodes + 1, dtype=np.int64)
-    for node, incident in enumerate(neighbours):
-        offsets[node + 1] = offsets[node] + len(incident)
-
-    flat_neighbours = np.empty(int(offsets[-1]), dtype=np.int64)
-    flat_couplings = np.empty(int(offsets[-1]), dtype=np.float64)
-    position = 0
-    for incident in neighbours:
-        for neighbour, coupling in incident:
-            flat_neighbours[position] = neighbour
-            flat_couplings[position] = coupling
-            position += 1
-    return offsets, flat_neighbours, flat_couplings
+from snakes_and_ladders.sim.potts import site_field
 
 
 def sample_potts(
@@ -123,12 +88,21 @@ def sample_potts(
         If the kernel refuses its arguments -- a state outside the alphabet, a
         ragged adjacency, or a draw count that does not match the sweeps.
     """
-    n_states = int(field.shape[0])
-    offsets, neighbours, couplings = flatten_adjacency(graph)
+    # `-1` rather than `0`: the field arrives shared as `(k,)` or per-site as
+    # `(n_nodes, k)`, and the alphabet is the last axis either way (issue
+    # #571). The adjacency comes from the one builder (issue #277).
+    n_states = int(field.shape[-1])
+    offsets, neighbours, couplings = graph.compressed_adjacency()
     state = np.ascontiguousarray(
         rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
     )
-    contiguous_field = np.ascontiguousarray(field, dtype=np.float64)
+    # The kernel takes one field row per site (issue #571). A shared field
+    # arrives here as a single row, so it is widened once, outside the loop,
+    # rather than per sweep.
+    contiguous_field = np.ascontiguousarray(
+        site_field(field, graph.n_nodes) if field.ndim == 1 else field,
+        dtype=np.float64,
+    )
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
     for step in range(-burn_in * thin, n_sweeps * thin):
@@ -136,7 +110,7 @@ def sample_potts(
         # the uniforms are consumed in the same order.
         draws = np.ascontiguousarray(rng.random(graph.n_nodes), dtype=np.float64)
         oxi_snakes_and_ladders.single_site_sweeps(
-            state, contiguous_field, offsets, neighbours, couplings, draws, 1
+            state, contiguous_field, offsets, neighbours, couplings, draws, 1, 1.0
         )
         if step >= 0 and (step + 1) % thin == 0:
             recorded[step // thin] = state

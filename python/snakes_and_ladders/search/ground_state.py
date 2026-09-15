@@ -359,15 +359,14 @@ def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
     steps = max(1, budget.size // rung.visits_per_sweep)
     start = time.perf_counter()
     labelling = rng.integers(0, rung.n_states, size=rung.n_nodes)
-    neighbours: list[list[tuple[int, float]]] = [[] for _ in range(rung.n_nodes)]
-    for (first, second), coupling in rung.graph.weighted_edges():
-        neighbours[first].append((second, coupling))
-        neighbours[second].append((first, coupling))
+    offsets, neighbour_index, edge_couplings = rung.graph.compressed_adjacency()
+    bounds = offsets.tolist()
+    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
     for _ in range(steps):
         for node in rng.permutation(rung.n_nodes):
             local = -rung.field[node].copy()
-            for neighbour, coupling in neighbours[node]:
-                local[labelling[neighbour]] -= coupling
+            for position in range(bounds[node], bounds[node + 1]):
+                local[labelling[neighbours[position]]] -= couplings[position]
             labelling[node] = int(np.argmin(local))
     return MethodRun(
         labelling=labelling,

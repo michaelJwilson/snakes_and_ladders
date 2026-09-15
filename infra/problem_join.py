@@ -56,10 +56,19 @@ DOCUMENTS = (TEX_DIR / "paper.tex", TEXTBOOK)
 RELEASE_TEMPLATE = REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "release.yml"
 MANIFEST = REPO_ROOT / "python" / "snakes_and_ladders" / "qa" / "manifest.py"
 
-#: The heading a problem statement carries. Read rather than a hand-kept list,
-#: so a statement added to the textbook joins without a second edit here.
+#: The shape a problem statement has. Read rather than a hand-kept list, so a
+#: statement added to the textbook joins without a second edit here, and read
+#: from the document's structure rather than from a prefix in its heading: the
+#: statements are the sections of the problems part that open on a model, and
+#: the part's other sections --- the notation, the two framing sections and
+#: the applicability table --- do not.
+_PROBLEMS_PART = re.compile(
+    r"\\part\{The Problems\}(.*?)\\part\{The Algorithms\}", re.DOTALL
+)
 _STATEMENT = re.compile(
-    r"\\section\{Problem Statement:\s*([^}]*)\}\s*\n\\label\{(sec:[a-z0-9]+)\}"
+    r"\\section\{([^}]*)\}\s*\n\\label\{(sec:[a-z0-9]+)\}"
+    r"(?:(?!\\section\{).)*?\\subsection\{The model\}",
+    re.DOTALL,
 )
 #: The key a catalogue row carries, in its ``Statement`` cell. Unbackticked,
 #: because every backticked name in the table is resolved as a symbol by
@@ -88,9 +97,10 @@ def statements(textbook: Path = TEXTBOOK) -> dict[str, str]:
     dict[str, str]
         Keyed by the section's ``\\label``, in the order they are stated.
     """
-    return {
-        key: title.strip() for title, key in _STATEMENT.findall(textbook.read_text())
-    }
+    part = _PROBLEMS_PART.search(textbook.read_text())
+    if part is None:
+        return {}
+    return {key: title.strip() for title, key in _STATEMENT.findall(part.group(1))}
 
 
 def registry(catalogue: Path = CATALOGUE) -> list[tuple[str, str]]:

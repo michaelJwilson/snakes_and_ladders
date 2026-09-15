@@ -15,6 +15,7 @@
 % --- Continuous parameters ------------------------------------------------
 \newcommand{\Q}{\mathbf{Q}}              % a rate matrix
 \newcommand{\Pmat}{\mathbf{P}}           % a transition probability matrix
+\newcommand{\transfer}{\mathsf{T}}       % a transfer matrix over columns
 \newcommand{\SubMat}{\mathbf{S}}         % a symmetric exchangeability matrix
 \newcommand{\bpi}{\boldsymbol{\pi}}      % a stationary or initial distribution
 \newcommand{\branch}{\boldsymbol{\tau}}  % branch lengths
@@ -24,8 +25,12 @@
 % --- Data and objectives --------------------------------------------------
 \newcommand{\data}{\mathbf{D}}           % observed data
 \newcommand{\objective}{\mathcal{L}}     % the scalar being optimized
-\newcommand{\energy}{H}                  % a Hamiltonian
+\newcommand{\energy}{\mathcal{H}}        % a Hamiltonian, script H: the
+                                         % parity-check matrix is bold H
+                                         % and the Hadamard matrix italic
 \newcommand{\hidden}{\mathbf{Z}}         % a hidden state path
+\newcommand{\Prob}{\mathbb{P}}           % a probability
+\newcommand{\indicator}{\mathbf{1}}      % one where its condition holds
 \newcommand{\emission}{\mathcal{E}}      % an emission family
 \newcommand{\parity}{\mathbf{H}}        % a parity-check matrix, bold
 \newcommand{\hadamard}{H}               % the Sylvester-Hadamard matrix, italic

@@ -109,14 +109,18 @@ class PottsGraph:
 
         Neighbour ``j`` of node ``i`` sits at ``neighbours[offsets[i]:offsets[i + 1]]``
         with the coupling on that edge at the same position of ``couplings``,
-        in the graph's edge order from each end -- the same order the
-        list-of-lists adjacency the samplers' oracles walk has, so a kernel
-        reading this consumes its draws in the oracle's order.
+        in the graph's edge order from each end. That order is part of the
+        contract: a sweep consumes one draw per site in it, so a permutation
+        would change which draw a site sees without changing any distribution
+        a chi-square could catch.
 
-        One contiguous array instead of a list of Python lists is the layout
-        rule root ``CLAUDE.md`` states: a neighbour walk is then a stride
-        rather than a pointer chase, and it is what a compiled kernel can take
-        without marshalling per node.
+        **This is the package's only adjacency.** Six builders returned this
+        object in two shapes until issue #277 retired five of them; one
+        contiguous array instead of a list of Python lists is the layout rule
+        root ``CLAUDE.md`` states, so a neighbour walk is a stride rather
+        than a pointer chase, and it is what a compiled kernel takes without
+        marshalling per node. `tests/regression/test_duplication_guards.py`
+        fails a second builder.
 
         Returns
         -------
@@ -125,23 +129,21 @@ class PottsGraph:
             (``int64``) and ``couplings`` (``float64``), the last two of length
             ``2 * n_edges``.
         """
-        degree = np.zeros(self.n_nodes, dtype=np.int64)
-        for first, second in self.edges:
-            degree[first] += 1
-            degree[second] += 1
+        # Built by a stable sort rather than a Python loop over the edges,
+        # which `iterated_conditional_modes` pays per call: at 16x16 the loop
+        # was 1.3 ms of a 2.1 ms descent. Each edge contributes its two
+        # directed entries in edge order, so sorting them by their owning
+        # node *stably* leaves each row in edge order -- the order this
+        # method's contract fixes.
+        ends = np.asarray(self.edges, dtype=np.int64).reshape(-1, 2)
         offsets = np.zeros(self.n_nodes + 1, dtype=np.int64)
-        np.cumsum(degree, out=offsets[1:])
-        neighbours = np.empty(int(offsets[-1]), dtype=np.int64)
-        couplings = np.empty(int(offsets[-1]), dtype=np.float64)
-        cursor = offsets[:-1].copy()
-        for (first, second), coupling in self.weighted_edges():
-            neighbours[cursor[first]] = second
-            couplings[cursor[first]] = coupling
-            cursor[first] += 1
-            neighbours[cursor[second]] = first
-            couplings[cursor[second]] = coupling
-            cursor[second] += 1
-        return offsets, neighbours, couplings
+        np.cumsum(
+            np.bincount(ends.reshape(-1), minlength=self.n_nodes), out=offsets[1:]
+        )
+        order = np.argsort(ends.reshape(-1), kind="stable")
+        neighbours = ends[:, ::-1].reshape(-1)[order]
+        couplings = np.repeat(np.asarray(self.coupling, dtype=np.float64), 2)[order]
+        return offsets, np.ascontiguousarray(neighbours), couplings
 
     def to_rustworkx(self) -> rustworkx.PyGraph:
         """This graph as a ``rustworkx.PyGraph``: one node per site, the coupling as edge data.
