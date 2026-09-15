@@ -59,8 +59,8 @@ from snakes_and_ladders.likelihood.schedule import (
     FloodingSchedule,
     Guarantee,
     Layout,
+    MessagePassingSchedule,
     MessageSchedule,
-    Schedule,
     Step,
     VariableSends,
     resolve,
@@ -234,12 +234,12 @@ def _apply(
 
 def _run(
     graph: FactorGraph,
-    schedule: Schedule | MessageSchedule | str,
+    schedule: MessagePassingSchedule | MessageSchedule | str,
     maximum: bool,
     damping: float,
     tolerance: float,
     max_iterations: int,
-) -> tuple[Layout, np.ndarray, np.ndarray, int, Schedule, float]:
+) -> tuple[Layout, np.ndarray, np.ndarray, int, MessagePassingSchedule, float]:
     """Messages in both directions as edge rows, the sweeps run, and the schedule.
 
     One loop for every schedule (issue #592). A bounded schedule's plan is
@@ -294,7 +294,7 @@ def _run(
     raise ConvergenceError(msg)
 
 
-def _sweep_length(plan: Schedule, layout: Layout) -> int:
+def _sweep_length(plan: MessagePassingSchedule, layout: Layout) -> int:
     """How many steps make one sweep, so a residual is compared over a full pass.
 
     Flooding sends everything in one step, so its sweep is one; a sequential
@@ -370,7 +370,7 @@ def _beliefs(
 def sum_product(
     graph: FactorGraph,
     *,
-    schedule: Schedule | MessageSchedule | str = MessageSchedule.TREE,
+    schedule: MessagePassingSchedule | MessageSchedule | str = MessageSchedule.TREE,
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
@@ -404,7 +404,7 @@ def sum_product(
 def max_product(
     graph: FactorGraph,
     *,
-    schedule: Schedule | MessageSchedule | str = MessageSchedule.TREE,
+    schedule: MessagePassingSchedule | MessageSchedule | str = MessageSchedule.TREE,
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
@@ -432,22 +432,24 @@ def max_product(
     )
 
 
-#: What this module offers, re-exports included. Declared rather than left
-#: implicit: a bare re-export is a private name under ``mypy --strict``, so
-#: `MessageSchedule` --- which every caller of `sum_product` names, and which
-#: moved to `schedule` in issue #592 --- would stop type-checking at the call
-#: site while the functions beside it passed.
+#: What this module offers. Declared rather than left implicit: a bare
+#: re-export is a private name under ``mypy --strict``, so `MessageSchedule`
+#: --- which every caller of `sum_product` names, and which moved to
+#: `schedule` in issue #592 --- would stop type-checking at the call site
+#: while the functions beside it passed.
+#:
+#: `MessagePassingSchedule`, `Layout` and `Step` are *not* here though this module imports
+#: them: they are `schedule`'s interface, and listing them gave Sphinx a
+#: second target for each, which made every `MessagePassingSchedule` reference ambiguous
+#: against `opt.schedule.Schedule` and failed the `-W` docs build.
 __all__ = [
     "DEFAULT_DAMPING",
     "DEFAULT_MAX_ITERATIONS",
     "DEFAULT_TOLERANCE",
     "ConvergenceError",
     "Guarantee",
-    "Layout",
     "Marginals",
     "MessageSchedule",
-    "Schedule",
-    "Step",
     "max_product",
     "sum_product",
 ]

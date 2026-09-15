@@ -13,7 +13,7 @@ is exact and the others are not, but being unable to *ask* for another hides
 what the exact one buys: the leaf-to-root half alone is Felsenstein pruning
 and gives ``log Z`` for half the messages, and the root-to-leaf half alone is
 what the second pass contributes. So a schedule declares a
-:class:`Guarantee` rather than a boolean, and a caller that wants a cheaper
+:class:`~snakes_and_ladders.likelihood.schedule.Guarantee` rather than a boolean, and a caller that wants a cheaper
 or a partial answer asks for it instead of reading a field that quietly means
 something narrower than it says.
 
@@ -22,9 +22,15 @@ carries six adapters --- ``from_potts``, ``from_hmm``, ``from_tree``,
 ``from_coupled``, ``from_parity_check``, ``from_trellis`` --- so the Potts
 lattice, the hidden Markov chain, the phylogenetic tree, the coupled model,
 the Tanner graph and the trellis already land on one representation. The
-schedule was the only part that did not generalise; over :class:`Layout` it
+schedule was the only part that did not generalise; over :class:`~snakes_and_ladders.likelihood.schedule.Layout` it
 now does, and `tests/regression/likelihood/test_schedule.py` runs every
 schedule against every adapter rather than asserting that it would work.
+
+**Why the long name.** `snakes_and_ladders.opt.schedule.Schedule` is an
+annealing schedule --- an unrelated thing under the same short name --- and
+one documented package cannot carry two, because every cross-reference to
+either then resolves two ways and the ``-W`` docs build refuses it. The
+concrete schedules below need no such care: no other `TreeSchedule` exists.
 
 **Why a base class and not a `Protocol`.** Five modules call through this ---
 ``message_passing``, ``message_passing_reference``, ``belief_propagation``,
@@ -55,7 +61,7 @@ class Guarantee(StrEnum):
 
     PARTIAL = "partial"
     """Exact, but not everywhere: some marginals are undefined rather than
-    approximate, and :meth:`Schedule.defined` says which are not. Reading an
+    approximate, and :meth:`MessagePassingSchedule.defined` says which are not. Reading an
     undefined one raises rather than returning a number that looks like a
     posterior."""
 
@@ -428,7 +434,7 @@ class Layout:
         return self.edge_variable[edge]
 
 
-class Schedule(ABC):
+class MessagePassingSchedule(ABC):
     """An order over the messages, and what that order guarantees."""
 
     #: The name :func:`resolve` registers it under.
@@ -490,7 +496,7 @@ class Schedule(ABC):
 
 
 @dataclass(frozen=True)
-class TreeSchedule(Schedule):
+class TreeSchedule(MessagePassingSchedule):
     """Leaves to root, then root to leaves. Exact, and refused off a tree."""
 
     name: str = "tree"
@@ -510,7 +516,7 @@ class TreeSchedule(Schedule):
 
 
 @dataclass(frozen=True)
-class UpwardSchedule(Schedule):
+class UpwardSchedule(MessagePassingSchedule):
     """The leaf-to-root pass alone: Felsenstein pruning.
 
     ``log Z`` is exact after it --- that is what pruning computes --- and so
@@ -558,7 +564,7 @@ class UpwardSchedule(Schedule):
 
 
 @dataclass(frozen=True)
-class DownwardSchedule(Schedule):
+class DownwardSchedule(MessagePassingSchedule):
     """The root-to-leaf pass alone, from the priors.
 
     Valid message passing over a well-defined order, and *not* a posterior:
@@ -603,7 +609,7 @@ class DownwardSchedule(Schedule):
 
 
 @dataclass(frozen=True)
-class FloodingSchedule(Schedule):
+class FloodingSchedule(MessagePassingSchedule):
     """Every message at once from the previous sweep's values: Jacobi."""
 
     name: str = "flooding"
@@ -623,7 +629,7 @@ class FloodingSchedule(Schedule):
 
 
 @dataclass(frozen=True)
-class SequentialSchedule(Schedule):
+class SequentialSchedule(MessagePassingSchedule):
     """One message at a time, each from the newest values: Gauss-Seidel.
 
     Flooding reads every message from the previous sweep; this reads each from
@@ -651,7 +657,7 @@ class SequentialSchedule(Schedule):
 
 #: Every schedule this module offers, by the name :class:`MessageSchedule`
 #: uses. A sixth is registered by adding it here; nothing else changes.
-SCHEDULES: dict[str, Schedule] = {
+SCHEDULES: dict[str, MessagePassingSchedule] = {
     schedule.name: schedule
     for schedule in (
         TreeSchedule(),
@@ -663,15 +669,17 @@ SCHEDULES: dict[str, Schedule] = {
 }
 
 
-def resolve(schedule: Schedule | MessageSchedule | str) -> Schedule:
-    """A :class:`Schedule` from itself, its enum member, or its name.
+def resolve(
+    schedule: MessagePassingSchedule | MessageSchedule | str,
+) -> MessagePassingSchedule:
+    """A :class:`~snakes_and_ladders.likelihood.schedule.Schedule` from itself, its enum member, or its name.
 
     Raises
     ------
     ValueError
         If the name is not registered, listing the ones that are.
     """
-    if isinstance(schedule, Schedule):
+    if isinstance(schedule, MessagePassingSchedule):
         return schedule
     key = str(schedule)
     if key not in SCHEDULES:
@@ -687,8 +695,8 @@ __all__ = [
     "FloodingSchedule",
     "Guarantee",
     "Layout",
+    "MessagePassingSchedule",
     "MessageSchedule",
-    "Schedule",
     "SequentialSchedule",
     "Step",
     "TreeSchedule",
