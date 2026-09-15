@@ -76,8 +76,8 @@ def ising_ground_state(
     states = oxi_snakes_and_ladders.ising_ground_state(
         graph.n_nodes,
         np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
-        np.asarray(graph.edges, dtype=np.int64).reshape(-1),
-        np.asarray(graph.coupling, dtype=np.float64),
+        graph.edge_index.reshape(-1),
+        graph.edge_coupling,
     )
     configuration = np.asarray(states, dtype=np.int64)
     return configuration, float(energy(graph, values, configuration))
