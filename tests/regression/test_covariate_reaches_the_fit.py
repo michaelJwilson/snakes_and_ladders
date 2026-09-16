@@ -91,8 +91,8 @@ _START = np.array([1.0, 6.0])
 def test_baum_welch_told_the_exposure_recovers_the_planted_rates() -> None:
     """The claim the threading is for: the fit reaches the rate that generated it.
 
-    Recovers 1.97 and 8.81 against a planted 2.0 and 9.0, over an exposure
-    spanning a factor of 16.
+    Recovers 1.9688 and 8.8088 against a planted 2.0 and 9.0, over a
+    ``U(0.25, 4)`` exposure whose draw here spans 15.8x.
     """
     counts, exposure, _ = _two_state_chain(_RATE, _SPREAD, _LENGTH, _SEED)
 
@@ -106,8 +106,8 @@ def test_the_same_fit_without_the_exposure_misses_them() -> None:
     """And the claim that it is worth something: withheld, the same fit misses.
 
     Not a failure to converge --- it converges, to the rate averaged over the
-    exposures it was not told about: 4.15 and 18.59, a factor of 2.1 high,
-    which is the mean of a ``U(0.25, 4)`` exposure. The bound is stated as a
+    exposures it was not told about: 4.1505 and 18.5904, factors of 2.075 and
+    2.066 high against an ``E[U(0.25, 4)]`` of 2.125. The bound is stated as a
     floor the untold fit must exceed, so this fails if the covariate ever
     stops reaching the family and the test above starts passing for the wrong
     reason.
@@ -149,15 +149,21 @@ def test_a_constant_exposure_of_one_fits_inside_the_declared_tolerance() -> None
 
     The scoring is bitwise, as above, so the divergence is the emission M step:
     `reestimate` under a covariate reduces in a different order, and 200
-    iterations compound it. How much depends on the reduction, so it depends on
-    the thread count --- **5.1e-14, 9.9e-14 and 1.5e-13 at 2, 4 and 1-or-8
-    threads**. Every one of those is two orders inside the 1e-11 declared for a
-    float64 comparison, which is the trade `CLAUDE.md` permits where the only
-    cost of a justified change is bitwise agreement.
+    iterations compound it.
 
-    Bounded at a tenth of the declared tolerance: an order clear of the worst
-    of those measurements, so a real drift fails here rather than hiding under
-    the floor, and a thread count nobody chose does not.
+    **Under this suite it is 1.5e-13.** `tests/conftest.py` pins
+    `OMP_NUM_THREADS` to 1 (`DEV.md`, one process is one core), so the
+    reduction is serial here and in CI. The figure is worth stating with its
+    thread count because it does not survive one: the same fit reads 5.1e-14 at
+    two threads and 9.9e-14 at four, since a split reduction sums in a
+    different order again. A reading taken outside the suite's pinned thread is
+    a reading of a different configuration.
+
+    Every one of those is two orders inside the 1e-11 declared for a float64
+    comparison, which is the trade `CLAUDE.md` permits where the only cost of a
+    justified change is bitwise agreement. The bound is a tenth of that
+    tolerance, 6.6x the serial reading, so a real drift fails here rather than
+    hiding under the floor while a thread count nobody chose does not.
     """
     counts, _, _ = _two_state_chain(_RATE, spread=1.0, length=400, seed=5)
 
@@ -168,9 +174,9 @@ def test_a_constant_exposure_of_one_fits_inside_the_declared_tolerance() -> None
     moved = float(np.abs(told_nothing / told_ones - 1.0).max())
     assert moved < 0.1 * CROSS_DEVICE_RTOL_FLOAT64, (
         f"a covariate of ones moved the fit {moved:.2e}, against a declared "
-        f"{CROSS_DEVICE_RTOL_FLOAT64:.0e}; it was 1.5e-13 at its worst over "
-        "thread counts 1 to 8 when written, and a drift toward the floor is "
-        "the tolerance starting to hide something"
+        f"{CROSS_DEVICE_RTOL_FLOAT64:.0e}; it was 1.5e-13 at the single thread "
+        "this suite pins when written, and a drift toward the floor is the "
+        "tolerance starting to hide something"
     )
 
 
