@@ -16,13 +16,21 @@ densities 188.1 s (98.3%). Everything else --- forward--backward, the
 ``einsum``, the boundary --- is under 4%. The measured speedups are in
 ``STATUS.md``.
 
-**The counts index a table instead of calling `lgamma`.** Both channels'
+**A table row indexes a table instead of calling `lgamma`.** Both channels'
 observations are integers in a range of a few thousand, so
 ``log p(count | class, state)`` is a function of an integer and is tabulated
 once per call by the families themselves. The kernel then does two loads and
 an add where the oracle does three ``lgamma`` calls, and the tables are the
 oracle's own arithmetic rather than a second implementation of it. The tables
-are count-major, ``[count, M, K]``, for the reason ``src/coupled.rs`` states.
+are row-major, ``[row, M, K]``, for the reason ``src/coupled.rs`` states.
+
+**Under a covariate the row is not the count** (issue #658). The density is
+then a function of the count *and* the exposure or trial count it is scored
+against, so there is no table indexed by the count alone. The distinct pairs
+are tabulated instead and each observation carries the row it falls in --- the
+smallest exact table, never more rows than observations, and collapsing to the
+count table when the covariate is constant. The kernel is unchanged: it never
+knew what the index meant, only that the table was built from it.
 
 **One crossing per call, contiguous.** The counts cross as the ``(S, V)``
 arrays they are already held in, cast to ``uint16`` --- which is the same
@@ -71,50 +79,126 @@ def _families(params: SpatioSequentialParams) -> list[IndependentCountPair]:
     return families
 
 
-def emission_tables(
-    params: SpatioSequentialParams, observations: np.ndarray
+def _channel_rows(
+    families: list[IndependentCountPair],
+    params: SpatioSequentialParams,
+    values: np.ndarray,
+    covariate: np.ndarray | None,
+    channel: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Both channels' log-density for every class, state and count in the data.
+    """One channel's table, and the row each observation falls in.
 
-    Parameters
-    ----------
-    params : SpatioSequentialParams
-        Its emissions the two-channel families.
-    observations : np.ndarray
-        Shape ``(S, n_nodes, 2)``; only the largest count in each channel is
-        read, since that is the extent each table must cover.
+    Without a covariate the row **is** the count, the table is count-major and
+    the extent is the largest count plus one --- exactly what this module
+    tabulated before issue #658, and the same numbers.
 
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray]
-        The first channel's table and the second's, each ``(count, M, K)``
-        contiguous ``float64``.
+    With one, the density is a function of the count *and* the covariate, so
+    there is no table indexed by the count alone. The distinct ``(count,
+    covariate)`` pairs are tabulated instead and each observation carries the
+    row it falls in. That is the smallest table that is still exact: it never
+    exceeds one row per observation, and it collapses to the count table when
+    the covariate is constant. An exposure that is a per-vertex library size
+    repeated down the positions --- the case this is for --- has as many rows
+    as it has distinct pairs, not as many as it has observations.
+
+    The rows are the families' own arithmetic either way, which is the property
+    that keeps this a table rather than a second implementation of the oracle.
     """
-    families = _families(params)
-    tables = []
-    for channel in (TOTAL, SUCCESSES):
-        extent = int(observations[..., channel].max()) + 1
+    if covariate is None:
+        extent = int(values.max()) + 1
         counts = torch.arange(extent, dtype=torch.float64)
         table = np.empty((extent, params.n_classes, params.n_states))
         for m, family in enumerate(families):
             side = family.total if channel == TOTAL else family.successes
             table[:, m, :] = side.log_density(counts).numpy()
-        tables.append(np.ascontiguousarray(table))
-    return tables[0], tables[1]
+        return np.ascontiguousarray(table), values
+    pairs = np.stack([values.reshape(-1), covariate.reshape(-1)], axis=1)
+    unique, rows = np.unique(pairs, axis=0, return_inverse=True)
+    table = np.empty((unique.shape[0], params.n_classes, params.n_states))
+    counts = torch.as_tensor(unique[:, 0], dtype=torch.float64)
+    exposure = torch.as_tensor(unique[:, 1], dtype=torch.float64)[:, None]
+    for m, family in enumerate(families):
+        side = family.total if channel == TOTAL else family.successes
+        table[:, m, :] = side.log_density(counts, covariate=exposure).numpy()
+    return np.ascontiguousarray(table), rows.reshape(values.shape)
+
+
+def emission_tables(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Both channels' log-density for every class, state and table row.
+
+    Parameters
+    ----------
+    params : SpatioSequentialParams
+        Its emissions the two-channel families, and the covariate the rows are
+        tabulated against where it carries one.
+    observations : np.ndarray
+        Shape ``(S, n_nodes, 2)``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        The first channel's table and the second's, each ``(row, M, K)``
+        contiguous ``float64``. Use :func:`table_rows` for the indices.
+    """
+    return emission_rows(params, observations)[2:]
+
+
+def table_rows(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Both channels' table row for every observation, ``uint32``, position-major."""
+    return emission_rows(params, observations)[:2]
+
+
+def emission_rows(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """The rows and the tables together, since neither is meaningful alone.
+
+    A row index is only interpretable against the table it was built with, so
+    the two are returned from one call rather than derived twice from the same
+    inputs and trusted to agree (issue #658).
+
+    Returns
+    -------
+    tuple of four np.ndarray
+        The total's rows, the successes' rows, the total's table and the
+        successes' table.
+    """
+    families = _families(params)
+    covariate = params.covariate
+    out = []
+    for channel in (TOTAL, SUCCESSES):
+        table, rows = _channel_rows(
+            families,
+            params,
+            observations[..., channel],
+            None if covariate is None else covariate[..., channel],
+            channel,
+        )
+        out.append((np.ascontiguousarray(rows, dtype=np.uint32), table))
+    return out[0][0], out[1][0], out[0][1], out[1][1]
 
 
 def _counts(observations: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Both channels as contiguous ``uint16``, or a refusal naming the overflow."""
+    """Both channels as contiguous ``uint32``, or a refusal naming the overflow.
+
+    Kept for a caller that tabulates by count and indexes with the counts
+    themselves; :func:`emission_rows` is what the two entry points use, since
+    under a covariate the index is a table row and not a count (issue #658).
+    """
     largest = int(observations.max())
-    if largest > np.iinfo(np.uint16).max:
+    if largest > np.iinfo(np.uint32).max:
         msg = (
             f"a count of {largest} does not fit uint16; the kernel indexes a "
             f"table by the count, so a range this wide is a different kernel"
         )
         raise ValueError(msg)
     return (
-        np.ascontiguousarray(observations[..., TOTAL], dtype=np.uint16),
-        np.ascontiguousarray(observations[..., SUCCESSES], dtype=np.uint16),
+        np.ascontiguousarray(observations[..., TOTAL], dtype=np.uint32),
+        np.ascontiguousarray(observations[..., SUCCESSES], dtype=np.uint32),
     )
 
 
@@ -142,8 +226,7 @@ def class_posteriors(
         The posterior ``(M, S, K)``, the pairwise ``(M, S - 1, K, K)`` and the
         per-class log evidence ``(M,)``.
     """
-    totals, successes = _counts(observations)
-    total_table, success_table = emission_tables(params, observations)
+    totals, successes, total_table, success_table = emission_rows(params, observations)
     n_positions, n_nodes = observations.shape[:2]
     posterior = np.empty((params.n_classes, n_positions, params.n_states))
     pairwise = np.empty(
@@ -199,8 +282,7 @@ def external_field(
     """
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
-    totals, successes = _counts(observations)
-    total_table, success_table = emission_tables(params, observations)
+    totals, successes, total_table, success_table = emission_rows(params, observations)
     n_positions, n_nodes = observations.shape[:2]
     field = np.empty((n_nodes, params.n_classes))
     # (M, S, K) to (S, M, K): the kernel wants one position's weights

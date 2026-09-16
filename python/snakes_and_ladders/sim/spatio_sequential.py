@@ -76,9 +76,12 @@ class SpatioSequentialParams:
     emissions : tuple[EmissionFamily, ...]
         One family per class, each over ``K`` states.
     covariate : np.ndarray | None
-        What each observation is scored *against*, shape ``(S, n_nodes)`` ---
-        an exposure for a rate family, a trial count for a bounded one
-        (issue #652). It belongs to the observation and not to the class, so
+        What each observation is scored *against* --- an exposure for a rate
+        family, a trial count for a bounded one (issue #652). Its leading two
+        axes are ``(S, n_nodes)`` as the observations' are, followed by
+        whatever the family takes: none for a scalar observation, a channel
+        axis for the two-channel count emission, which takes one covariate per
+        channel (issue #658). It belongs to the observation and not to the class, so
         every class's family reads the same array. ``None``, the default, is
         the model every construction before this field described: the
         families condition on nothing.
@@ -148,10 +151,19 @@ class SpatioSequentialParams:
         if self.covariate is not None:
             covariate = np.asarray(self.covariate, dtype=float)
             expected = (self.n_positions, self.graph.n_nodes)
-            if covariate.shape != expected:
+            # The leading two axes are position and node, as the observations'
+            # are. What follows them is the family's own: a scalar-observation
+            # family carries none, and the two-channel count emission carries
+            # a channel axis, one covariate per channel (issue #658). Checking
+            # only the leading two is the same latitude `gated_log_density`
+            # gives the observations, and for the same reason -- what the
+            # trailing axes mean is the family's to say, not this class's.
+            if covariate.shape[:2] != expected:
                 msg = (
-                    f"covariate has shape {covariate.shape}, expected {expected} "
-                    "-- one value per position and node, as the observations are"
+                    f"covariate has shape {covariate.shape}, expected "
+                    f"{expected} in its leading two axes -- one value per "
+                    "position and node, as the observations are, with whatever "
+                    "trailing axes the emission family takes"
                 )
                 raise ValueError(msg)
             object.__setattr__(self, "covariate", covariate)

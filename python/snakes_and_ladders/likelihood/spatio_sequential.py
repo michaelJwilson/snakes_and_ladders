@@ -270,6 +270,39 @@ def _blocks(members: np.ndarray) -> Iterator[np.ndarray]:
         yield members[start : start + VERTEX_BLOCK]
 
 
+def covariate_block(
+    params: SpatioSequentialParams, members: np.ndarray
+) -> torch.Tensor | None:
+    """``params.covariate`` for one block of vertices, ready for a family.
+
+    Every seam here slices the covariate the way it slices the observations ---
+    a column selection over the vertex axis. Written once because three seams
+    do it, and a covariate sliced differently from the block it accompanies is
+    a fit conditioning on the wrong exposures that converges anyway (#658).
+
+    The trailing singleton the single-channel families broadcast over their
+    states with is added **only** where the covariate has no axes of its own.
+    A covariate that carries the family's axes --- the two-channel count
+    emission's one-per-channel (#658) --- is passed through as it is, because
+    the singleton then belongs inside each channel and
+    :func:`~snakes_and_ladders.sim.count_pairs.split_covariate` is what puts
+    it there. Appending it here instead makes a ``(S, V, 2)`` covariate
+    ``(S, V, 2, 1)``, which broadcasts against the wrong axis and was how this
+    was first written.
+
+    Returns
+    -------
+    torch.Tensor | None
+        ``(S, len(members), 1)`` for a scalar-observation family and
+        ``(S, len(members), ...)`` for one with its own axes, or ``None``
+        where the params carry no covariate.
+    """
+    if params.covariate is None:
+        return None
+    block = params.covariate[:, members]
+    return torch.as_tensor(block[..., None] if block.ndim == 2 else block)
+
+
 def class_log_density(
     params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
 ) -> np.ndarray:
@@ -294,11 +327,7 @@ def class_log_density(
         for block in _blocks(np.flatnonzero(labels == m)):
             scores = family.log_density(
                 torch.as_tensor(observations[:, block], dtype=family.observation_dtype),
-                covariate=(
-                    None
-                    if params.covariate is None
-                    else torch.as_tensor(params.covariate[:, block, None])
-                ),
+                covariate=covariate_block(params, block),
             )  # (S, block, K)
             density[m] += scores.detach().numpy().sum(axis=1)
     return density
@@ -357,6 +386,15 @@ def external_field(
 
     ``posterior`` defaults to the E step at ``labels``; passing one computed
     under other parameters is the ``theta'`` of the equation.
+
+    This scores through its **own** ``log_density`` rather than through
+    :func:`class_log_density`, so threading ``params.covariate`` here is not
+    tidiness (issue #658):
+    :func:`~snakes_and_ladders.search.spatio_sequential.fit_spatio_sequential`
+    passes a ``posterior`` computed *with* the covariate, and until this the
+    field was computed *without* --- so the step proposed labels under one
+    model and accepted them under another. The ascent stays monotone either
+    way, which is why nothing failed.
     """
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
@@ -369,7 +407,8 @@ def external_field(
     for m, family in enumerate(params.emissions):
         for block in _blocks(every):
             scores = family.log_density(
-                torch.as_tensor(observations[:, block], dtype=family.observation_dtype)
+                torch.as_tensor(observations[:, block], dtype=family.observation_dtype),
+                covariate=covariate_block(params, block),
             )  # (S, block, K)
             field[block, m] = -np.einsum(
                 "sbk,sk->b", scores.detach().numpy(), posterior[m]
@@ -453,6 +492,10 @@ def marginal_log_likelihood_torch(
 
     The left side of the M-step identity of the textbook's coupled-model section: its gradient with respect to a
     family's parameters is what the posterior-weighted score must equal.
+
+    It conditions on ``params.covariate`` like every other seam (issue #658):
+    an identity checked between a covaried score and an uncovaried likelihood
+    is an identity between two different models.
     """
     labels = np.asarray(labels, dtype=np.int64)
     log_transition = torch.log(torch.as_tensor(params.transition))
@@ -460,7 +503,8 @@ def marginal_log_likelihood_torch(
     for m, family in enumerate(params.emissions):
         members = np.flatnonzero(labels == m)
         scores = family.log_density(
-            torch.as_tensor(observations[:, members], dtype=family.observation_dtype)
+            torch.as_tensor(observations[:, members], dtype=family.observation_dtype),
+            covariate=covariate_block(params, members),
         )  # (S, n_m, K)
         density = scores.sum(dim=1)[None]  # (1, S, K)
         total = total + forward_log_likelihood_from_density(

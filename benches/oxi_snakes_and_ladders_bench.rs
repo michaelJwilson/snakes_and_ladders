@@ -259,11 +259,11 @@ fn bench_class_posteriors(c: &mut Criterion) {
         total: &total,
         success: &success,
     };
-    let totals: Vec<u16> = (0..n_positions * n_nodes)
-        .map(|index| (index % extent) as u16)
+    let totals: Vec<u32> = (0..n_positions * n_nodes)
+        .map(|index| (index % extent) as u32)
         .collect();
-    let successes: Vec<u16> = (0..n_positions * n_nodes)
-        .map(|index| ((index * 7) % extent) as u16)
+    let successes: Vec<u32> = (0..n_positions * n_nodes)
+        .map(|index| ((index * 7) % extent) as u32)
         .collect();
     let labels: Vec<i64> = (0..n_nodes).map(|v| (v % n_classes) as i64).collect();
     let log_initial = vec![-(n_states as f64).ln(); n_classes * n_states];

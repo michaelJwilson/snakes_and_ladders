@@ -234,5 +234,10 @@ def test_the_map_labelling_has_the_largest_labelled_joint() -> None:
 def test_forward_backward_refuses_an_empty_chain_and_mismatched_shapes() -> None:
     with pytest.raises(ValueError, match="T >= 1"):
         forward_backward(np.zeros((0, 2)), np.zeros(2), np.zeros((2, 2)))
-    with pytest.raises(ValueError, match="do not match"):
+    # #656 split one refusal into two, so this names the initial distribution's
+    # and `test_varying_transition_kernel.py` names the kernel's. The old
+    # message read "log_initial ... and log_transition ... do not match", and
+    # this regex still matched it after the split stopped mentioning both --- a
+    # merge went red on exactly that.
+    with pytest.raises(ValueError, match="log_initial .* does not match"):
         forward_backward(np.zeros((3, 2)), np.zeros(3), np.zeros((2, 2)))

@@ -74,12 +74,30 @@ impl CoupledShape {
     }
 }
 
+/// A table row index as a `usize`.
+///
+/// `usize::from` is not defined for `u32` --- `usize` may be 32 bits --- and
+/// the rows are validated against the table's extent before any of this runs,
+/// so the widening is stated once here rather than as a cast at four sites.
+#[inline]
+fn row_index(row: u32) -> usize {
+    row as usize
+}
+
 /// The emission log-density of every class and state, tabulated by count.
 ///
-/// `total[(y * M + m) * K + k]` is `log p(y | class m, state k)` in the first
-/// channel and `success[(z * M + m) * K + k]` the same in the second. A count
-/// past a table's extent is a caller error and is refused, never clamped: the
-/// table is built from the counts it will be indexed by.
+/// `total[(y * M + m) * K + k]` is `log p(row y | class m, state k)` in the
+/// first channel and `success[(z * M + m) * K + k]` the same in the second. A
+/// row past a table's extent is a caller error and is refused, never clamped:
+/// the table is built from the rows it will be indexed by.
+///
+/// A *row* is whatever the caller tabulated. Without a covariate it is the
+/// count itself, which is what this kernel indexed by before issue #658 and
+/// still does, bit for bit. With one, the density is a function of the count
+/// *and* the covariate, so the caller tabulates the distinct pairs and hands
+/// the row each observation falls in. The kernel is the same two loads and an
+/// add either way: it never knew what the index meant, only that the table was
+/// built from it.
 pub struct EmissionTables<'a> {
     /// The first channel's table, `n_totals * M * K`.
     pub total: &'a [f64],
@@ -92,8 +110,8 @@ impl EmissionTables<'_> {
     fn validate(
         &self,
         shape: &CoupledShape,
-        totals: &[u16],
-        successes: &[u16],
+        totals: &[u32],
+        successes: &[u32],
     ) -> Result<(), String> {
         let block = shape.block();
         if block == 0 {
@@ -111,7 +129,7 @@ impl EmissionTables<'_> {
             }
             let extent = table.len() / block;
             match counts.iter().max() {
-                Some(&largest) if usize::from(largest) >= extent => {
+                Some(&largest) if row_index(largest) >= extent => {
                     return Err(format!(
                         "a {name} count of {largest} is past the table's extent {extent}"
                     ));
@@ -130,8 +148,8 @@ impl EmissionTables<'_> {
 fn class_log_density(
     shape: &CoupledShape,
     tables: &EmissionTables<'_>,
-    totals: &[u16],
-    successes: &[u16],
+    totals: &[u32],
+    successes: &[u32],
     labels: &[i64],
     density: &mut [f64],
 ) {
@@ -142,8 +160,8 @@ fn class_log_density(
         let row = s * n_nodes;
         for v in 0..n_nodes {
             let m = labels[v] as usize;
-            let total = &tables.total[usize::from(totals[row + v]) * block + m * n_states..];
-            let success = &tables.success[usize::from(successes[row + v]) * block + m * n_states..];
+            let total = &tables.total[row_index(totals[row + v]) * block + m * n_states..];
+            let success = &tables.success[row_index(successes[row + v]) * block + m * n_states..];
             let into = &mut density[(m * n_positions + s) * n_states..][..n_states];
             for k in 0..n_states {
                 into[k] += total[k] + success[k];
@@ -245,8 +263,9 @@ fn forward_backward(
 ///
 /// # Parameters
 /// - `shape`: `S`, `V`, `M`, `K`.
-/// - `tables`: the count-indexed emission log-densities.
-/// - `totals`, `successes`: `S * V` counts, position-major.
+/// - `tables`: the row-indexed emission log-densities.
+/// - `totals`, `successes`: `S * V` table rows, position-major --- the counts
+///   themselves where the caller tabulated by count.
 /// - `labels`: one class per vertex, entries in `[0, M)`.
 /// - `log_initial`: `M * K`.
 /// - `log_transition`: `M * K * K`, rows the source state.
@@ -260,8 +279,8 @@ fn forward_backward(
 pub fn class_posteriors_into(
     shape: CoupledShape,
     tables: &EmissionTables<'_>,
-    totals: &[u16],
-    successes: &[u16],
+    totals: &[u32],
+    successes: &[u32],
     labels: &[i64],
     log_initial: &[f64],
     log_transition: &[f64],
@@ -328,8 +347,8 @@ pub fn class_posteriors_into(
 pub fn external_field_into(
     shape: CoupledShape,
     tables: &EmissionTables<'_>,
-    totals: &[u16],
-    successes: &[u16],
+    totals: &[u32],
+    successes: &[u32],
     weights: &[f64],
     field: &mut [f64],
 ) -> Result<(), String> {
@@ -377,8 +396,8 @@ pub fn external_field_into(
             for s in 0..n_positions {
                 let row = s * n_nodes;
                 let weight = &weights[s * block..][..block];
-                let total = &tables.total[usize::from(totals[row + v]) * block..][..block];
-                let success = &tables.success[usize::from(successes[row + v]) * block..][..block];
+                let total = &tables.total[row_index(totals[row + v]) * block..][..block];
+                let success = &tables.success[row_index(successes[row + v]) * block..][..block];
                 for (m, cell) in into.iter_mut().enumerate() {
                     let mut accumulated = 0.0;
                     for k in 0..n_states {
@@ -396,8 +415,8 @@ pub fn external_field_into(
 fn check_inputs(
     shape: &CoupledShape,
     tables: &EmissionTables<'_>,
-    totals: &[u16],
-    successes: &[u16],
+    totals: &[u32],
+    successes: &[u32],
     labels: &[i64],
 ) -> Result<(), String> {
     if shape.n_positions == 0 || shape.n_nodes == 0 {
@@ -455,8 +474,8 @@ fn borrowed<'a, T: numpy::Element>(
 #[allow(clippy::too_many_arguments)]
 pub fn class_posteriors(
     py: Python<'_>,
-    totals: PyReadonlyArray1<'_, u16>,
-    successes: PyReadonlyArray1<'_, u16>,
+    totals: PyReadonlyArray1<'_, u32>,
+    successes: PyReadonlyArray1<'_, u32>,
     labels: PyReadonlyArray1<'_, i64>,
     total_table: PyReadonlyArray1<'_, f64>,
     success_table: PyReadonlyArray1<'_, f64>,
@@ -522,8 +541,8 @@ pub fn class_posteriors(
 #[allow(clippy::too_many_arguments)]
 pub fn external_field(
     py: Python<'_>,
-    totals: PyReadonlyArray1<'_, u16>,
-    successes: PyReadonlyArray1<'_, u16>,
+    totals: PyReadonlyArray1<'_, u32>,
+    successes: PyReadonlyArray1<'_, u32>,
     total_table: PyReadonlyArray1<'_, f64>,
     success_table: PyReadonlyArray1<'_, f64>,
     weights: PyReadonlyArray1<'_, f64>,
@@ -579,8 +598,8 @@ mod tests {
             total: &total,
             success: &success,
         };
-        let totals = [0u16, 1, 1, 0];
-        let successes = [0u16, 0, 0, 0];
+        let totals = [0u32, 1, 1, 0];
+        let successes = [0u32, 0, 0, 0];
         let labels = [0i64, 0];
         let log_initial = [(0.5f64).ln(), (0.5f64).ln()];
         let log_transition = [(0.7f64).ln(), (0.3f64).ln(), (0.4f64).ln(), (0.6f64).ln()];
@@ -615,8 +634,8 @@ mod tests {
             total: &total,
             success: &success,
         };
-        let totals = [0u16, 2, 1, 0];
-        let successes = [0u16, 0, 0, 0];
+        let totals = [0u32, 2, 1, 0];
+        let successes = [0u32, 0, 0, 0];
         let labels = [0i64, 0];
         let mut posterior = vec![0.0; 4];
         let mut pairwise = vec![0.0; 4];
@@ -645,8 +664,8 @@ mod tests {
             total: &total,
             success: &success,
         };
-        let totals = [0u16, 1, 1, 0];
-        let successes = [0u16, 0, 0, 0];
+        let totals = [0u32, 1, 1, 0];
+        let successes = [0u32, 0, 0, 0];
         // One class, two states, two positions: put all the weight on state 0.
         let weights = [1.0, 0.0, 1.0, 0.0];
         let mut field = vec![0.0; 2];
