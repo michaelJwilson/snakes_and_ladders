@@ -40,10 +40,10 @@ import torch
 
 from snakes_and_ladders.emissions import (
     BetaBinomialEmission,
+    CovariateNotSupportedError,
     EmissionFamily,
     NegativeBinomialEmission,
     Reestimate,
-    refuse_covariate,
 )
 from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
@@ -56,6 +56,62 @@ TOTAL = 0
 
 #: Channel index of the success count, the beta-binomial one.
 SUCCESSES = 1
+
+
+def split_covariate(
+    family: object, covariate: torch.Tensor | None
+) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    """One covariate per channel, from the axis the observation already has.
+
+    #631 refused a covariate on a pair family because "the two channels would
+    each need their own --- an exposure for the total, a trial count for the
+    successes --- and one tensor cannot be both". It can, with the channel axis
+    (issue #658): a covariate is ``(..., 2)`` exactly as an observation is,
+    channel ``TOTAL`` the exposure the count is scored against and channel
+    ``SUCCESSES`` the trials the successes are out of, and it splits where the
+    observation splits.
+
+    Each slice gains the trailing singleton the single-channel families
+    broadcast over their states with, so what reaches
+    :class:`~snakes_and_ladders.emissions.NegativeBinomialEmission` and
+    :class:`~snakes_and_ladders.emissions.BetaBinomialEmission` is the shape
+    they already document.
+
+    A covariate *without* the channel axis is still refused, because that is
+    the tensor #631 was right about: nothing says which channel it belongs to,
+    and a family that guesses conditions half the model on the wrong number.
+
+    **The neutral covariate is not ones.** It is ones for the total, whose
+    exposure multiplies a rate, and the family's own declared ``trials`` for
+    the successes, whose covariate replaces a trial count. A caller passing
+    ones to both does not get the uncovaried model back --- it gets a
+    beta-binomial asked for more successes than trials, which scores ``-inf``.
+    The two channels condition on different kinds of thing, which is the whole
+    reason one tensor could not be both.
+
+    Returns
+    -------
+    tuple[torch.Tensor | None, torch.Tensor | None]
+        The total's and the successes', or ``(None, None)`` for ``None``.
+
+    Raises
+    ------
+    CovariateNotSupportedError
+        If ``covariate`` does not carry the two-channel axis.
+    """
+    if covariate is None:
+        return None, None
+    if covariate.ndim == 0 or covariate.shape[-1] != 2:
+        name = type(family).__name__
+        msg = (
+            f"{name} takes one covariate per channel, shape (..., 2) as its "
+            f"observations are: channel {TOTAL} the total's exposure and channel "
+            f"{SUCCESSES} the successes' trial count. Got "
+            f"{tuple(covariate.shape)}, which names no channel -- the tensor "
+            "that cannot be both (#631, #658)."
+        )
+        raise CovariateNotSupportedError(msg)
+    return covariate[..., TOTAL, None], covariate[..., SUCCESSES, None]
 
 
 class IndependentCountPair(EmissionFamily):
@@ -133,24 +189,33 @@ class IndependentCountPair(EmissionFamily):
     ) -> np.ndarray:
         """Draw one pair per entry of ``states``, shape ``states.shape + (2,)``.
 
-        A covariate is refused here rather than forwarded: the two channels
-        would each need their own --- an exposure for the total, a trial count
-        for the successes --- and one tensor cannot be both (issue #631).
+        ``covariate`` is one per channel, as :func:`split_covariate` describes:
+        the total is drawn against its exposure and the successes out of their
+        trial count, so a planted instance can be drawn under a varying one
+        (issue #658).
         """
-        refuse_covariate(self, covariate)
+        exposure, trials = split_covariate(self, covariate)
         return np.stack(
-            [self._total.sample(states, rng), self._successes.sample(states, rng)],
+            [
+                self._total.sample(states, rng, covariate=exposure),
+                self._successes.sample(states, rng, covariate=trials),
+            ],
             axis=-1,
         )
 
     def log_density(
         self, observations: torch.Tensor, covariate: torch.Tensor | None = None
     ) -> torch.Tensor:
-        """The pair's log-density under every state: the two channels' sum."""
-        refuse_covariate(self, covariate)
+        """The pair's log-density under every state: the two channels' sum.
+
+        ``covariate`` splits where the observation splits
+        (:func:`split_covariate`), so each channel is scored against its own
+        (issue #658).
+        """
+        exposure, trials = split_covariate(self, covariate)
         return self._total.log_density(
-            observations[..., TOTAL]
-        ) + self._successes.log_density(observations[..., SUCCESSES])
+            observations[..., TOTAL], covariate=exposure
+        ) + self._successes.log_density(observations[..., SUCCESSES], covariate=trials)
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """The pair's divergence under every state: the two channels' sum.
@@ -189,10 +254,19 @@ class IndependentCountPair(EmissionFamily):
         either channel. ``converged`` is therefore the conjunction and
         ``at_boundary`` the disjunction, with the larger iteration count and
         residual of the two.
+
+        ``covariate`` splits by channel, so each channel re-estimates against
+        the same one it was scored against --- a fit that scores against an
+        exposure and re-estimates without it is fitting two different models
+        (issue #658).
         """
-        refuse_covariate(self, covariate)
-        first = self._total.reestimate(observations[..., TOTAL], posterior)
-        second = self._successes.reestimate(observations[..., SUCCESSES], posterior)
+        exposure, trials = split_covariate(self, covariate)
+        first = self._total.reestimate(
+            observations[..., TOTAL], posterior, covariate=exposure
+        )
+        second = self._successes.reestimate(
+            observations[..., SUCCESSES], posterior, covariate=trials
+        )
         return Reestimate(
             emissions=IndependentCountPair(first.emissions, second.emissions),
             converged=first.converged and second.converged,
