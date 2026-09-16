@@ -275,7 +275,10 @@ class SimulatedSpatioSequential:
         ``k_{s,m}``, shape ``(M, S)``, entries in ``[0, K)``; every class's
         chain is drawn, whether or not a node belongs to it.
     observations : np.ndarray
-        ``x_{sn}``, shape ``(S, n_nodes)``, in the emission families' dtype.
+        ``x_{sn}``, shape ``(S, n_nodes)`` for a scalar-observation family and
+        ``(S, n_nodes, ...)`` for one carrying axes of its own --- the
+        two-channel count pair of :mod:`snakes_and_ladders.sim.count_pairs` is
+        ``(S, n_nodes, 2)`` (issue #672). In the emission families' dtype.
     params : SpatioSequentialParams
         The generating truth.
     """
@@ -362,13 +365,24 @@ def simulate_spatio_sequential(
         # belongs to it (issue #658). Without this no planted instance exists
         # under a varying covariate, and a fit conditioned on one has nothing
         # to recover.
-        drawn_obs = family.sample(
-            emitting, rng, covariate=_drawing_covariate(params, nodes)
-        ).reshape(params.n_positions, nodes.size)
+        flat = family.sample(emitting, rng, covariate=_drawing_covariate(params, nodes))
+        # Only the leading axis is the flattened draw; what follows belongs to
+        # the family and is carried through rather than assumed absent, which
+        # is what lets a pair family be drawn here at all (issue #672).
+        drawn_obs = flat.reshape(params.n_positions, nodes.size, *flat.shape[1:])
         for column, node in enumerate(nodes):
             columns[int(node)] = drawn_obs[:, column]
     first = next(iter(columns.values()))
-    observations = np.empty((params.n_positions, n_nodes), dtype=first.dtype)
+    channels = tuple(first.shape[1:])
+    for vertex, column_values in columns.items():
+        if tuple(column_values.shape[1:]) != channels:
+            msg = (
+                f"vertex {vertex} draws an observation of shape "
+                f"{column_values.shape[1:]} where another draws {channels}; one "
+                f"instance holds one observation shape across its classes"
+            )
+            raise ValueError(msg)
+    observations = np.empty((params.n_positions, n_nodes, *channels), dtype=first.dtype)
     for index, column_values in columns.items():
         observations[:, index] = column_values
     return SimulatedSpatioSequential(
@@ -406,17 +420,25 @@ def _drawing_covariate(
     observation carries its own trailing axes keeps them after the flatten,
     which is why the reshape names only the leading axis.
 
+    The singleton the single-channel families broadcast over their states with
+    is added **only** where the covariate has no axes of its own, the rule
+    :func:`_scoring_covariate` states. Appending it to a per-channel covariate
+    makes ``(S * n_m, 2)`` into ``(S * n_m, 2, 1)``, whose last axis names no
+    channel, and
+    :func:`snakes_and_ladders.sim.count_pairs.split_covariate` refuses it ---
+    which is how a pair family could not be drawn here at all (issue #672).
+
     Returns
     -------
     torch.Tensor | None
-        ``(S * n_m, 1)`` for a scalar-observation family, ``(S * n_m, ..., 1)``
+        ``(S * n_m, 1)`` for a scalar-observation family, ``(S * n_m, ...)``
         for one with its own axes, or ``None`` where the params carry none.
     """
     if params.covariate is None:
         return None
     block = params.covariate[:, nodes]
     flat = block.reshape(-1, *block.shape[2:])
-    return torch.as_tensor(flat[..., None])
+    return torch.as_tensor(flat[..., None] if block.ndim == 2 else flat)
 
 
 def gated_log_density(

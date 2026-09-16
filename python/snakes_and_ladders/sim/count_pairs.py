@@ -301,6 +301,14 @@ def aggregate(family: IndependentCountPair, factor: int) -> IndependentCountPair
     member of the family to the truth and the declared misspecification a coarse
     instance carries.
 
+    Under a covariate the exactness of the first channel is conditional in the
+    same way: a sum of ``f`` counts drawn at exposures ``e_1 .. e_f`` is
+    ``NB(f r, (sum e_i) mu)`` only where those exposures agree, so a covariate
+    that varies *within* a bin makes the total channel the closest family
+    member too. The covariate itself is summed over the bin by
+    :func:`binned_model`, since that is the exposure the binned count was drawn
+    at (issue #671).
+
     Parameters
     ----------
     family : IndependentCountPair
@@ -373,12 +381,29 @@ def binned_model(params: SpatioSequentialParams, factor: int) -> SpatioSequentia
     return replace(
         params,
         n_positions=params.n_positions // factor,
+        covariate=_binned_covariate(params.covariate, factor),
         emissions=tuple(
             aggregate(family, factor)
             for family in params.emissions
             if isinstance(family, IndependentCountPair)
         ),
     )
+
+
+def _binned_covariate(covariate: np.ndarray | None, factor: int) -> np.ndarray | None:
+    """The covariate of a binned instance: the fine one summed over each bin.
+
+    Both channels add under the aggregation --- exposures because the rate of a
+    sum of counts is the sum of their rates, trial counts because a sum of
+    binomials over a shared rate is binomial in the summed trials --- so this
+    is the same reduction :func:`coarsen` applies to the counts themselves, on
+    the leading axis alone (issue #671).
+    """
+    if covariate is None:
+        return None
+    return covariate.reshape(
+        covariate.shape[0] // factor, factor, *covariate.shape[1:]
+    ).sum(axis=1)
 
 
 @dataclass(frozen=True)
@@ -609,10 +634,35 @@ def chain_states(
     return np.asarray(walk % n_states, dtype=np.int64)
 
 
+def vertex_covariate(params: SpatioSequentialParams, node: int) -> torch.Tensor | None:
+    """``params.covariate`` for one vertex, as a draw over its ``S`` positions wants it.
+
+    The count-pair simulators draw a vertex at a time from a stream of its own,
+    so the slice is a column and not a block: ``(S, 2)``, one covariate per
+    channel, which :func:`split_covariate` separates. No singleton is appended
+    --- the covariate already carries the family's channel axis, and the
+    singleton belongs inside each channel (issue #671).
+
+    Returns
+    -------
+    torch.Tensor | None
+        ``(S, ...)`` with the covariate's own trailing axes, or ``None`` where
+        the params carry none.
+    """
+    if params.covariate is None:
+        return None
+    return torch.as_tensor(params.covariate[:, node])
+
+
 def simulate_count_pairs(
     declared: SpatioSequentialCountsParams,
 ) -> CountPairInstance:
     """Draw the fine instance: the planted labels, every class's chain, and every vertex's counts.
+
+    Where ``declared.model`` carries a covariate the draw is made under it,
+    vertex by vertex (issue #671); where it carries none every total is drawn
+    at unit exposure and every success count out of its state's declared
+    trials, which is what this simulator has always drawn.
 
     **A stream per vertex.** Vertex ``v``'s counts come from
     ``default_rng([seed, v])`` and the chains from ``default_rng([seed, V])``,
@@ -655,7 +705,14 @@ def simulate_count_pairs(
     for node in range(n_nodes):
         family = params.emissions[int(labels[node])]
         drawn = family.sample(
-            states[int(labels[node])], np.random.default_rng([declared.seed, node])
+            states[int(labels[node])],
+            np.random.default_rng([declared.seed, node]),
+            # This vertex's column of the covariate, `(S, 2)`: one per channel,
+            # which `split_covariate` separates into the exposure the total is
+            # drawn against and the trial count the successes come out of
+            # (issue #671). A column is what the stream draws, so it is what is
+            # sliced here.
+            covariate=vertex_covariate(params, node),
         )
         if drawn.max() > np.iinfo(np.uint16).max:
             msg = (
@@ -723,6 +780,7 @@ def coarsen(fine: CountPairInstance, factor: int) -> CountPairInstance:
         params=replace(
             fine.params,
             n_positions=n_positions // factor,
+            covariate=_binned_covariate(fine.params.covariate, factor),
             emissions=families,
         ),
         labels=fine.labels,

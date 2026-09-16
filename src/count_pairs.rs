@@ -48,6 +48,20 @@ use rand_distr::{Beta, Binomial, Distribution, Gamma, Poisson};
 /// the transposed write over 64 contiguous entries.
 const VERTEX_BLOCK: usize = 64;
 
+/// One covariate per channel, each `S * V` position-major as the outputs are.
+///
+/// The total's is an exposure multiplying the negative-binomial mean and the
+/// successes' replaces the beta-binomial's declared trial count, which is what
+/// `snakes_and_ladders.sim.count_pairs.split_covariate` means by one covariate
+/// per channel (issue #671). A `None` covariate is a draw at unit exposure and
+/// the declared trials, the values this kernel drew before one existed.
+pub struct CountPairCovariate<'a> {
+    /// Exposure `e_{s,v}`, positive.
+    pub exposure: &'a [f64],
+    /// Trial count `n_{s,v}`, non-negative.
+    pub trials: &'a [f64],
+}
+
 /// The emission parameters of every class and state, as five flat `(M, K)` tables.
 pub struct CountPairFamilies<'a> {
     /// Negative-binomial `r`.
@@ -102,6 +116,7 @@ pub fn simulate_count_pairs_into(
     states: &[i64],
     labels: &[i64],
     families: &CountPairFamilies<'_>,
+    covariate: Option<&CountPairCovariate<'_>>,
     n_positions: usize,
     n_nodes: usize,
     n_classes: usize,
@@ -160,6 +175,23 @@ pub fn simulate_count_pairs_into(
     {
         return Err(format!("every state must lie in [0, {n_states})"));
     }
+    if let Some(given) = covariate {
+        for (name, values) in [("exposure", given.exposure), ("trials", given.trials)] {
+            if values.len() != n_positions * n_nodes {
+                return Err(format!(
+                    "the {name} covariate has {} entries, expected S * V = {}",
+                    values.len(),
+                    n_positions * n_nodes
+                ));
+            }
+        }
+        if given.exposure.iter().any(|&e| e.is_nan() || e <= 0.0) {
+            return Err("every exposure must be positive".to_string());
+        }
+        if given.trials.iter().any(|&n| n.is_nan() || n < 0.0) {
+            return Err("every trial count must be non-negative".to_string());
+        }
+    }
 
     // One distribution object per (class, state) rather than per draw: the
     // negative binomial is a gamma mixture of Poissons, so its shape and
@@ -193,12 +225,22 @@ pub fn simulate_count_pairs_into(
             let into_successes = &mut scratch_successes[column * n_positions..][..n_positions];
             for s in 0..n_positions {
                 let index = class * n_states + states[class * n_positions + s] as usize;
-                let mean = gamma[index].sample(&mut rng).max(f64::MIN_POSITIVE);
+                let at = s * n_nodes + vertex;
+                // The exposure scales the drawn gamma rather than the
+                // distribution: `c * Gamma(r, mu / r)` is `Gamma(r, c mu / r)`
+                // exactly, so the per-(class, state) objects above stay and a
+                // covariate costs one multiply rather than a construction per
+                // draw (issue #671).
+                let mean = (gamma[index].sample(&mut rng)
+                    * covariate.map_or(1.0, |given| given.exposure[at]))
+                .max(f64::MIN_POSITIVE);
                 let count = Poisson::new(mean)
                     .map_err(|error| error.to_string())?
                     .sample(&mut rng) as u64;
                 let probability = rate[index].sample(&mut rng);
-                let drawn = Binomial::new(families.trials[index] as u64, probability)
+                let trial_count =
+                    covariate.map_or(families.trials[index], |given| given.trials[at]);
+                let drawn = Binomial::new(trial_count as u64, probability)
                     .map_err(|error| error.to_string())?
                     .sample(&mut rng);
                 if count > largest || drawn > largest {
@@ -241,6 +283,8 @@ pub fn simulate_count_pairs(
     trials: PyReadonlyArray1<'_, f64>,
     alpha: PyReadonlyArray1<'_, f64>,
     beta: PyReadonlyArray1<'_, f64>,
+    exposure: Option<PyReadonlyArray1<'_, f64>>,
+    trial_counts: Option<PyReadonlyArray1<'_, f64>>,
     n_positions: usize,
     n_nodes: usize,
     n_classes: usize,
@@ -260,6 +304,21 @@ pub fn simulate_count_pairs(
     };
     let states = states.as_slice().map_err(|_| contiguous("states"))?;
     let labels = labels.as_slice().map_err(|_| contiguous("labels"))?;
+    // Both channels or neither: one alone would be a draw conditioned on half
+    // a covariate, which is not a model anybody declared (issue #671).
+    let covariate = match (&exposure, &trial_counts) {
+        (Some(given), Some(counts)) => Some(CountPairCovariate {
+            exposure: given.as_slice().map_err(|_| contiguous("exposure"))?,
+            trials: counts.as_slice().map_err(|_| contiguous("trial_counts"))?,
+        }),
+        (None, None) => None,
+        _ => {
+            return Err(PyValueError::new_err(
+                "the covariate is one per channel: pass both exposure and \
+                 trial_counts, or neither",
+            ))
+        }
+    };
     let totals = totals.as_slice_mut().map_err(|_| contiguous("totals"))?;
     let successes = successes
         .as_slice_mut()
@@ -270,6 +329,7 @@ pub fn simulate_count_pairs(
             states,
             labels,
             &families,
+            covariate.as_ref(),
             n_positions,
             n_nodes,
             n_classes,
@@ -307,6 +367,7 @@ mod tests {
                 alpha: &alpha,
                 beta: &beta,
             },
+            None,
             n_positions,
             n_nodes,
             1,
@@ -365,6 +426,103 @@ mod tests {
     }
 
     #[test]
+    fn the_exposure_scales_the_total_and_the_covariate_sizes_the_successes() {
+        // The two channels' covariates have different jobs, so each is checked
+        // against the quantity it is supposed to move: the exposure multiplies
+        // the negative binomial's mean, and the trial count replaces the
+        // declared one, which bounds the success count outright (issue #671).
+        let n_positions = 400;
+        let n_nodes = 8;
+        let draws = (n_positions * n_nodes) as f64;
+        let states = vec![0i64; n_positions];
+        let labels = vec![0i64; n_nodes];
+        let families = CountPairFamilies {
+            dispersion: &[8.0],
+            mean: &[40.0],
+            trials: &[30.0],
+            alpha: &[6.0],
+            beta: &[14.0],
+        };
+
+        let mut plain_totals = vec![0u16; n_positions * n_nodes];
+        let mut plain_successes = vec![0u16; n_positions * n_nodes];
+        simulate_count_pairs_into(
+            7,
+            &states,
+            &labels,
+            &families,
+            None,
+            n_positions,
+            n_nodes,
+            1,
+            1,
+            &mut plain_totals,
+            &mut plain_successes,
+        )
+        .unwrap();
+
+        let mut totals = vec![0u16; n_positions * n_nodes];
+        let mut successes = vec![0u16; n_positions * n_nodes];
+        let covariate = CountPairCovariate {
+            exposure: &vec![3.0; n_positions * n_nodes],
+            trials: &vec![4.0; n_positions * n_nodes],
+        };
+        simulate_count_pairs_into(
+            7,
+            &states,
+            &labels,
+            &families,
+            Some(&covariate),
+            n_positions,
+            n_nodes,
+            1,
+            1,
+            &mut totals,
+            &mut successes,
+        )
+        .unwrap();
+
+        let mean = |counts: &[u16]| counts.iter().map(|&c| f64::from(c)).sum::<f64>() / draws;
+        // 3 x 40 = 120, within 3% of the sample mean over 3,200 draws.
+        assert!((mean(&plain_totals) - 40.0).abs() < 40.0 * 0.03);
+        assert!((mean(&totals) - 120.0).abs() < 120.0 * 0.03);
+        // Four trials at a 0.3 rate: 1.2, and never above four.
+        assert!(successes.iter().all(|&y| y <= 4));
+        assert!((mean(&successes) - 1.2).abs() < 1.2 * 0.08);
+        assert!(plain_successes.iter().any(|&y| y > 4));
+    }
+
+    #[test]
+    fn a_covariate_of_the_wrong_length_is_refused() {
+        let mut totals = vec![0u16; 2];
+        let mut successes = vec![0u16; 2];
+        let refused = simulate_count_pairs_into(
+            1,
+            &[0],
+            &[0, 0],
+            &CountPairFamilies {
+                dispersion: &[1.0],
+                mean: &[10.0],
+                trials: &[5.0],
+                alpha: &[1.0],
+                beta: &[1.0],
+            },
+            Some(&CountPairCovariate {
+                exposure: &[1.0, 1.0],
+                trials: &[1.0],
+            }),
+            1,
+            2,
+            1,
+            1,
+            &mut totals,
+            &mut successes,
+        );
+
+        assert!(refused.unwrap_err().contains("expected S * V = 2"));
+    }
+
+    #[test]
     fn a_negative_dispersion_is_refused() {
         let mut totals = vec![0u16; 2];
         let mut successes = vec![0u16; 2];
@@ -381,6 +539,7 @@ mod tests {
                 alpha: &[1.0],
                 beta: &[1.0],
             },
+            None,
             1,
             2,
             1,
