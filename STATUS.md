@@ -3440,6 +3440,37 @@ exist.
 
 **Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
+**Generalized belief propagation at #689.** The plaquette regions see the
+4-cycles the Bethe approximation cannot, and the measurement is what the ticket
+was for. On the 3x3 lattice at three states, against exhaustive enumeration of
+all 19,683 configurations (2026-09-16, 4-core host):
+
+| `J` | exact `log Z` | Bethe error | Kikuchi error | factor | sweeps B/K | ms B/K |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.3 | 1.538947 | 8.53e-04 | **3.65e-08** | 23,378x | 49 / 372 | 58.7 / 277.3 |
+| 0.6 | 3.483551 | 1.11e-02 | **6.66e-06** | 1,672x | 69 / 380 | 76.0 / 280.0 |
+| 0.9 | 5.924288 | 2.99e-02 | **7.75e-05** | 386x | 87 / 394 | 95.5 / 291.4 |
+| 1.2 | 8.845411 | 3.13e-02 | **2.41e-04** | 130x | 86 / 402 | 96.5 / 305.5 |
+
+**Both halves of the case.** The ratio is three to four orders of magnitude and
+the cost is **3.7x the wall clock** --- 5.5x the sweeps over tables of 81
+entries rather than 9 --- so the plaquette buys its accuracy at a stated price
+rather than at none. **The advantage decays with coupling**, 23,378x at
+`J = 0.3` to 130x at `J = 1.2`: deep in the ordered phase both approximations
+concentrate on the same configuration and what Bethe neglects stops mattering,
+which is also why Kikuchi is not the tool for a ground state.
+
+The construction is refereed by the case it generalizes rather than by its own
+claim: at the Bethe region graph `-F_K` is `log Z` to **8.9e-16** on a chain
+and the value `likelihood.message_passing` reports to **1.8e-10** on a 3x3 and
+a 4x4, and the parent-to-child updates find that module's fixed point to
+**1.65e-10**. The singleton counting numbers come out `1 - d` --- -1, -2, -3 on
+a 3x3 --- with the closed form written nowhere.
+
+**Kikuchi is not a bound**, and nothing here is read as one: mean field bounds
+`log Z`, Bethe and Kikuchi are stationary points of a non-convex functional and
+may fall either side. Every claim above is accuracy against an exact referee.
+
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
 more members. `role:incidence` is 12 members over 78 consuming references --- one

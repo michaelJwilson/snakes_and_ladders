@@ -21,10 +21,13 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.likelihood.belief_propagation import ConvergenceError
 from snakes_and_ladders.likelihood.message_passing import Marginals, sum_product
+from snakes_and_ladders.likelihood.potts import enumerate_potts
 from snakes_and_ladders.likelihood.region_graph import (
     RegionGraph,
     bethe_region_graph,
+    generalized_belief_propagation,
     kikuchi_free_energy,
     lattice_plaquettes,
     region_graph,
@@ -190,3 +193,91 @@ def test_a_region_graph_that_counts_a_variable_twice_is_refused() -> None:
 
     with pytest.raises(ValueError, match="counts every variable exactly once"):
         twice.check()
+
+
+@pytest.mark.oracle
+@pytest.mark.potts_chain
+def test_the_updates_find_the_exact_beliefs_on_a_tree() -> None:
+    # On a chain the region graph is a tree and the fixed point is the exact
+    # one, so the beliefs are marginals and equality against message passing
+    # under the tree schedule is the right assertion.
+    graph = _graph((6,), 0.4)
+    exact = sum_product(graph, schedule="tree")
+
+    settled = generalized_belief_propagation(bethe_region_graph(graph))
+
+    for name, marginal in exact.variable.items():
+        assert settled.beliefs[(name,)] == pytest.approx(
+            np.asarray(marginal), abs=1e-11
+        )
+    assert settled.kikuchi_log_partition == pytest.approx(
+        exact.log_partition, rel=1e-12
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.potts_lattice
+def test_the_updates_find_the_bethe_fixed_point_on_a_loop() -> None:
+    # The referee for the algorithm, as the reduction is for the energy: on the
+    # Bethe region graph these updates and `message_passing`'s flooding
+    # schedule are two routes to one fixed point, so they must agree. A wrong
+    # message set that still converged would land somewhere else.
+    graph = _graph((3, 3), 0.6)
+    loopy = sum_product(graph, schedule="flooding")
+
+    settled = generalized_belief_propagation(bethe_region_graph(graph))
+
+    worst = max(
+        float(np.abs(settled.beliefs[(name,)] - np.asarray(marginal)).max())
+        for name, marginal in loopy.variable.items()
+    )
+    assert worst < 1e-8
+    assert settled.kikuchi_log_partition == pytest.approx(loopy.log_partition, rel=1e-9)
+
+
+@pytest.mark.oracle
+@pytest.mark.potts_lattice
+def test_the_plaquette_regions_are_nearer_the_truth_than_the_pairwise_ones() -> None:
+    # The claim the ticket exists to test, against exhaustive enumeration of
+    # all 3**9 configurations. Asserted as an ordering rather than pinned to a
+    # digit: what is established is that seeing the 4-cycles helps, and by how
+    # much is a measurement `STATUS.md` carries, since it moves with the
+    # coupling -- 23,000x at J = 0.3 and 130x at J = 1.2 on this instance.
+    coupling = 0.6
+    lattice = lattice_graph((3, 3), BoundaryCondition.OPEN, coupling)
+    gauge = FIELD - np.log(float(np.exp(FIELD).sum()))
+    graph = from_potts(lattice, gauge)
+    exact = enumerate_potts(lattice, gauge)
+
+    bethe = generalized_belief_propagation(bethe_region_graph(graph))
+    kikuchi = generalized_belief_propagation(
+        region_graph(graph, lattice_plaquettes((3, 3))), damping=0.7
+    )
+
+    pairwise_error = abs(bethe.kikuchi_log_partition - exact.log_partition)
+    plaquette_error = abs(kikuchi.kikuchi_log_partition - exact.log_partition)
+    assert plaquette_error < pairwise_error / 100.0
+    assert kikuchi.iterations > bethe.iterations
+
+
+@pytest.mark.edge_case
+@pytest.mark.potts_lattice
+def test_damping_that_freezes_every_message_is_refused() -> None:
+    # At damping 1 no message moves, so the residual is zero on the first sweep
+    # and every graph "converges" -- a silent wrong answer rather than a loud
+    # one, which is the same refusal `belief_propagation` carries.
+    regions = bethe_region_graph(_graph((3, 3), 0.6))
+
+    with pytest.raises(ValueError, match=r"damping must be in \[0, 1\)"):
+        generalized_belief_propagation(regions, damping=1.0)
+
+
+@pytest.mark.edge_case
+@pytest.mark.potts_lattice
+def test_a_run_that_does_not_settle_raises_rather_than_reporting() -> None:
+    # A free energy read off messages that never settled estimates nothing, and
+    # the caller cannot tell it from one that did.
+    regions = bethe_region_graph(_graph((4, 4), 1.5))
+
+    with pytest.raises(ConvergenceError):
+        generalized_belief_propagation(regions, damping=0.0, max_iterations=2)

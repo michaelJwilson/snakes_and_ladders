@@ -8,13 +8,14 @@ free energy is the same expression over *larger* regions --- on a square
 lattice, the plaquettes, which are exactly the 4-cycles Bethe cannot see
 (`sim/graph.py`, issue #172).
 
-**This module is the structure and the energy, not the algorithm.** What a
-region graph is, which ones are valid, and what a set of beliefs over them
-costs; the parent-to-child updates that look for a stationary point come next.
-That split is deliberate: the free energy has an oracle --- at the Bethe
-region graph it *is* ``eq:bethe-factor``, which
+**The structure, the energy, and the algorithm, in that order.** What a region
+graph is, which ones are valid, what a set of beliefs over them costs, and
+then the parent-to-child updates that look for a stationary point. The order
+is the refereeing: the free energy has an oracle --- at the Bethe region graph
+it *is* ``eq:bethe-factor``, which
 :mod:`snakes_and_ladders.likelihood.message_passing` already computes --- so
-it can be refereed before anything iterates.
+it is checked before anything iterates, and the iteration is then checked
+against the same module's fixed point.
 
 **Kikuchi is not a bound, and nothing here may be read as one.** Mean field
 bounds ``log Z`` from below; Bethe and Kikuchi are stationary points of a
@@ -44,6 +45,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.likelihood.belief_propagation import ConvergenceError
+from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 
 
@@ -402,3 +405,182 @@ def lattice_plaquettes(shape: tuple[int, int]) -> list[frozenset[str]]:
         for row in range(rows - 1)
         for column in range(columns - 1)
     ]
+
+
+@dataclass(frozen=True)
+class RegionBeliefs:
+    """What generalized belief propagation returns, from a run that converged.
+
+    Parameters
+    ----------
+    beliefs : dict[tuple[str, ...], np.ndarray]
+        One normalized belief per region, keyed by the region's variables.
+    kikuchi_log_partition : float
+        ``-F_K`` at these beliefs. ``log Z`` exactly where the region graph is
+        a tree; an approximation otherwise, and **not** a bound in either
+        direction.
+    iterations : int
+        Sweeps taken. Reported beside every deviation, so a run that only just
+        settled is visible --- the plaquette graph takes five times the sweeps
+        of the pairwise one and that is part of what it costs.
+    residual : float
+        The largest change in any log message on the final sweep.
+    """
+
+    beliefs: dict[tuple[str, ...], np.ndarray]
+    kikuchi_log_partition: float
+    iterations: int
+    residual: float
+
+
+def _region_tables(regions: RegionGraph) -> list[np.ndarray]:
+    """``log f_R`` per region: every factor inside it, on its axes."""
+    cardinality = {v.name: v.cardinality for v in regions.graph.variables}
+    scopes = {f.name: tuple(f.variables) for f in regions.graph.factors}
+    tables = {f.name: f.log_table for f in regions.graph.factors}
+    out: list[np.ndarray] = []
+    for region in regions.regions:
+        shape = tuple(cardinality[name] for name in region.variables)
+        accumulated = np.zeros(shape, dtype=np.float64)
+        for name in region.factors:
+            accumulated = accumulated + _broadcast(
+                tables[name], scopes[name], region.variables
+            )
+        out.append(accumulated)
+    return out
+
+
+def generalized_belief_propagation(
+    regions: RegionGraph,
+    *,
+    damping: float = 0.5,
+    tolerance: float = 1e-12,
+    max_iterations: int = 2_000,
+) -> RegionBeliefs:
+    """Parent-to-child messages to a stationary point of the Kikuchi energy.
+
+    A region's belief is its own factors times every message entering its
+    closure from outside, and a message is updated by the mismatch it is there
+    to remove: a parent's belief marginalized onto a child must equal the
+    child's. At a fixed point every parent and child agree, which is the
+    constraint set the region-based free energy is stationary under, and on
+    the Bethe region graph the fixed point is belief propagation's --- which
+    is how this is refereed, since `message_passing` already finds that one.
+
+    **Non-convergence raises.** A free energy read off messages that never
+    settled estimates nothing, and the caller cannot tell it from one that
+    did (`likelihood/CLAUDE.md`). Damping is the knob; a looser tolerance to
+    admit a result is what root `CLAUDE.md` forbids.
+
+    Parameters
+    ----------
+    regions : RegionGraph
+        Checked on construction, so every variable and factor is counted once.
+    damping : float
+        Fraction of the previous message kept, in the log domain. The
+        plaquette graph wants more than the pairwise one: 0.5 settles the
+        Bethe region graph and larger regions settle more slowly and more
+        surely.
+    tolerance : float
+        Converged when the largest change in any log message falls to or below
+        this.
+    max_iterations : int
+        Sweeps before refusing.
+
+    Returns
+    -------
+    RegionBeliefs
+        The beliefs and ``-F_K`` at them.
+
+    Raises
+    ------
+    ValueError
+        If ``damping`` is outside ``[0, 1)``, where at 1 no message moves and
+        every graph would "converge" on the first sweep.
+    ConvergenceError
+        If the residual is still above ``tolerance`` at ``max_iterations``.
+    """
+    if not 0.0 <= damping < 1.0:
+        msg = (
+            f"damping must be in [0, 1), got {damping}: at 1 no message ever "
+            "updates and the residual is zero on the first sweep"
+        )
+        raise ValueError(msg)
+
+    keys = [region.variables for region in regions.regions]
+    log_factor = _region_tables(regions)
+    inside = [
+        {
+            other
+            for other, region in enumerate(regions.regions)
+            if set(region.variables) <= set(keys[index])
+        }
+        for index in range(len(regions.regions))
+    ]
+    edges = [
+        (parent, child)
+        for child, parents in enumerate(regions.parents)
+        for parent in parents
+    ]
+    # Every message entering a region's closure from outside it: those are the
+    # ones its belief is missing, and the ones a parent's belief already has.
+    entering = {
+        index: [
+            edge
+            for edge in edges
+            if edge[1] in inside[index] and edge[0] not in inside[index]
+        ]
+        for index in range(len(regions.regions))
+    }
+    messages = {edge: np.zeros(log_factor[edge[1]].shape) for edge in edges}
+
+    def belief(index: int) -> np.ndarray:
+        accumulated = log_factor[index].copy()
+        for edge in entering[index]:
+            accumulated = accumulated + _broadcast(
+                messages[edge], keys[edge[1]], keys[index]
+            )
+        normalized: np.ndarray = accumulated - logsumexp(
+            accumulated.reshape(-1), axis=0
+        )
+        return normalized
+
+    residual = np.inf
+    taken = 0
+    for iteration in range(1, max_iterations + 1):
+        beliefs = [belief(index) for index in range(len(regions.regions))]
+        residual = 0.0
+        for parent, child in edges:
+            shared = [name for name in keys[parent] if name in set(keys[child])]
+            summed = tuple(
+                axis
+                for axis, name in enumerate(keys[parent])
+                if name not in set(keys[child])
+            )
+            marginal = (
+                logsumexp(beliefs[parent], axis=summed) if summed else beliefs[parent]
+            )
+            marginal = np.transpose(marginal, [shared.index(n) for n in keys[child]])
+            proposal = messages[(parent, child)] + (1.0 - damping) * (
+                marginal - beliefs[child]
+            )
+            proposal = proposal - logsumexp(proposal.reshape(-1), axis=0)
+            residual = max(
+                residual, float(np.abs(proposal - messages[(parent, child)]).max())
+            )
+            messages[(parent, child)] = proposal
+        if residual <= tolerance:
+            taken = iteration
+            break
+    else:
+        raise ConvergenceError(max_iterations, float(residual), tolerance)
+
+    settled = {
+        keys[index]: np.exp(belief(index)) for index in range(len(regions.regions))
+    }
+    return RegionBeliefs(
+        beliefs=settled,
+        kikuchi_log_partition=-kikuchi_free_energy(regions, settled),
+        iterations=taken,
+        residual=float(residual),
+    )
