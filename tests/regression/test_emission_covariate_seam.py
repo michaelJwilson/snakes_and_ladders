@@ -8,10 +8,11 @@ halves --- that ``None`` changes no behaviour, and that a covariate is
 different likelihood than the caller asked for, and the failure would read as
 a worse recovery rather than as an error.
 
-The families that will condition on one, ``NegativeBinomialEmission`` and
-``BetaBinomialEmission``, refuse it here too: the path exists before the
-mathematics does, and accepting an argument that does nothing would be exactly
-the silent change this guards against.
+``BetaBinomialEmission`` has since taken its trial count (step 3) and is no
+longer listed. ``NegativeBinomialEmission`` still refuses one: the path exists
+before the mathematics does, and accepting an argument that does nothing would
+be exactly the silent change this guards against. It leaves this list in the
+step that gives it an exposure.
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.emissions import (
-    BetaBinomialEmission,
     BinomialEmission,
     CategoricalEmission,
     CountPairEmission,
@@ -42,11 +42,6 @@ def _families() -> list[EmissionFamily]:
         NegativeBinomialEmission(torch.tensor([2.0, 5.0]), torch.tensor([1.0, 4.0])),
         PoissonEmission(torch.tensor([1.0, 4.0])),
         BinomialEmission(torch.tensor([10.0, 10.0]), torch.tensor([0.3, 0.7])),
-        BetaBinomialEmission(
-            torch.tensor([10.0, 10.0]),
-            torch.tensor([2.0, 5.0]),
-            torch.tensor([5.0, 2.0]),
-        ),
     ]
 
 

@@ -139,6 +139,74 @@ class CovariateNotSupportedError(TypeError):
     """
 
 
+def trial_count(covariate: torch.Tensor | None, declared: torch.Tensor) -> torch.Tensor:
+    """The trial count to score at: the covariate's, or the declared one.
+
+    The covariate **overrides** ``declared`` rather than replacing it. A family
+    keeps a per-state trial count so :attr:`BetaBinomialEmission.mean` and
+    :attr:`~BetaBinomialEmission.variance` keep a value; a covariate says what
+    the count actually was for each observation (issue #631).
+
+    **The shape is the whole cost.** ``_beta_binomial_log_density`` is nine
+    ``lgamma`` calls, and PyTorch evaluates each on its own operand's shape and
+    broadcasts at the ``+``, not before. A covariate shaped ``(..., 1)``
+    broadcasts along the state axis and leaves three terms at ``n_obs * K``,
+    which is what the per-state count costs today. Materialised ``(..., K)`` by
+    the caller, all nine become ``n_obs * K`` and the term count triples.
+
+    Parameters
+    ----------
+    covariate : torch.Tensor | None
+        One trial count per observation, trailing axis of length one.
+    declared : torch.Tensor
+        The family's per-state count, shape ``(n_states,)``.
+
+    Returns
+    -------
+    torch.Tensor
+
+    Raises
+    ------
+    ValueError
+        If the covariate does not end in a singleton axis, or is not a
+        positive integer count.
+    """
+    if covariate is None:
+        return declared
+    if covariate.ndim == 0 or covariate.shape[-1] != 1:
+        msg = (
+            f"a trial count per observation must end in a singleton axis so it "
+            f"broadcasts along the states, got {tuple(covariate.shape)}; a "
+            f"count materialised per state triples the lgamma term count"
+        )
+        raise ValueError(msg)
+    return validated_trials(covariate, declared)
+
+
+def validated_trials(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
+    """``covariate`` as trial counts, in ``declared``'s dtype.
+
+    The support check alone, without :func:`trial_count`'s trailing-axis rule.
+    An M step flattens its covariate over sequences and positions and never
+    broadcasts it along the states, so that rule would refuse the shape the
+    protocol documents for :meth:`EmissionFamily.reestimate`.
+
+    Returns
+    -------
+    torch.Tensor
+
+    Raises
+    ------
+    ValueError
+        If a count is not a positive integer.
+    """
+    counts = covariate.to(declared.dtype)
+    if bool(((counts < 1) | (counts != counts.floor())).any()):
+        msg = "every trial count must be a positive integer"
+        raise ValueError(msg)
+    return counts
+
+
 def refuse_covariate(family: object, covariate: torch.Tensor | None) -> None:
     """Raise unless ``covariate`` is ``None``.
 
@@ -1384,8 +1452,12 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
 
     @property
     def n_states(self) -> int:
-        """Hidden states this family emits from."""
-        return int(self._trials.shape[0])
+        """Hidden states this family emits from.
+
+        Read off ``alpha``, not ``trials``: the trial count may be supplied per
+        observation and says nothing about how many states there are (#631).
+        """
+        return int(self._alpha.shape[0])
 
     @property
     def is_discrete(self) -> bool:
@@ -1437,20 +1509,35 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         rng: np.random.Generator,
         covariate: torch.Tensor | None = None,
     ) -> np.ndarray:
-        """Draw a rate from the Beta, then a binomial count at that rate."""
-        refuse_covariate(self, covariate)
+        """Draw a rate from the Beta, then a binomial count at that rate.
+
+        ``covariate`` supplies one trial count per draw, shape ``(n_draws, 1)``;
+        without it each draw takes its emitting state's declared count.
+        """
         rate = rng.beta(self._alpha.numpy()[states], self._beta.numpy()[states])
-        return np.asarray(
-            rng.binomial(self._trials.numpy()[states].astype(np.int64), rate)
+        counts = (
+            self._trials.numpy()[states]
+            if covariate is None
+            else trial_count(covariate, self._trials).reshape(-1).numpy()
         )
+        return np.asarray(rng.binomial(counts.astype(np.int64), rate))
 
     def log_density(
         self, observations: torch.Tensor, covariate: torch.Tensor | None = None
     ) -> torch.Tensor:
-        """``log C(n, y) + log B(y + a, n - y + b) - log B(a, b)``."""
-        refuse_covariate(self, covariate)
+        """``log C(n, y) + log B(y + a, n - y + b) - log B(a, b)``.
+
+        ``covariate`` is the trial count per observation, shape ``(..., 1)``;
+        see :func:`trial_count` for why that axis is not optional. An
+        observation above its own trial count scores ``-inf`` rather than
+        raising, on the joint form's precedent: the support is a property of
+        the pair, and a sequence carrying one impossible site is scored, not
+        refused.
+        """
+        trials = trial_count(covariate, self._trials)
         counts = observations.unsqueeze(-1).to(self._trials.dtype)
-        return _beta_binomial_log_density(counts, self._trials, self._alpha, self._beta)
+        scores = _beta_binomial_log_density(counts, trials, self._alpha, self._beta)
+        return torch.where(counts > trials, torch.full_like(scores, -torch.inf), scores)
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """The log-density gap to the best rate at this concentration.
@@ -1495,9 +1582,14 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             the bound this data identifies it over, the iterations taken, and
             the relative change at the last step.
         """
-        refuse_covariate(self, covariate)
+        per_observation = covariate is not None
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
+        supplied = (
+            validated_trials(covariate, self._trials).reshape(-1)
+            if covariate is not None
+            else self._trials
+        )
 
         alpha = torch.empty(self.n_states, dtype=torch.float64)
         beta = torch.empty(self.n_states, dtype=torch.float64)
@@ -1510,7 +1602,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             solved = _solve_beta_binomial(
                 values,
                 weights[:, state],
-                float(self._trials[state]),
+                supplied if per_observation else float(self._trials[state]),
                 float(self._alpha[state]) / total,
                 total,
             )
@@ -1533,7 +1625,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         return torch.stack([self.mean, self.variance], dim=1)
 
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
-        """``alpha`` and ``beta``. The trial count is a constant."""
+        """``alpha`` and ``beta``. The trial count is conditioned on, never fitted."""
         return {"alpha": self._alpha, "beta": self._beta}
 
 
@@ -2239,8 +2331,25 @@ def _effective_trials(trials: float | torch.Tensor, weights: torch.Tensor) -> fl
     so the bound is taken at the *posterior-weighted mean* depth: the bound
     scales as ``n - 1``, and those same weights set each observation's
     contribution to the concentration's score.
+
+    **A constant per-observation count reduces exactly**, rather than through
+    that mean: it *is* a fixed trial count, and the weighted mean of a constant
+    is only the constant to within rounding, which would move the bracket
+    ``identifiable_concentration_bound`` returns for no reason.
+
+    It does **not** make the M step bitwise, and the reason is data-dependent.
+    The score functions sum ``w_i f(y_i, n_i)`` over a vector ``n`` rather than
+    folding a scalar, so the summation order differs; on some draws the
+    alternating bisection still lands on the same root and on others the fitted
+    ``alpha`` moves a **relative 1.0e-06**, four orders outside
+    ``_solve_beta_binomial``'s own 1e-10 tolerance. Issue #648 carries that.
+    Scoring *is* bitwise --- one broadcast expression with no reduction --- and
+    is the half of #631's bit-for-bit claim that holds today.
     """
     if isinstance(trials, torch.Tensor):
+        first = trials.reshape(-1)[0]
+        if bool((trials == first).all()):
+            return float(first)
         return float((weights * trials).sum() / weights.sum())
     return trials
 
