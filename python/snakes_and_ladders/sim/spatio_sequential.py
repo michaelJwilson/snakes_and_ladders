@@ -70,13 +70,26 @@ class SpatioSequentialParams:
     beta : float
         Inverse temperature on the spatial prior of ``eq:joint``.
     self_transition : float | np.ndarray
-        The circulant self-transition rate ``t``, shared by every class. A
-        scalar is one kernel for the whole chain; a ``(S - 1,)`` array is one
-        rate per transition, which is the varying kernel #656 gave
-        ``forward_backward`` and #658 brings to the spatial model. It stays a
-        rate rather than a matrix because a circulant is what this model's
-        kernel is: what varies with position is the stickiness, not the
-        preference between states.
+        The per-class kernel, in one of three forms (issue #658):
+
+        ``float``
+            The circulant self-transition rate ``t``, one kernel for the whole
+            chain, built by :func:`circulant_transition`. Every construction
+            before #658 passed this, and it stays the default.
+        ``(K, K)``
+            One matrix for the whole chain, row stochastic and **not**
+            required to be circulant. A kernel assembled from parts --- a base
+            over one latent and a kernel over another, combined into the
+            product space --- is not a circulant at any rate, so the rate above
+            cannot express one even when it does not vary.
+        ``(S - 1, K, K)``
+            One matrix per transition, the same matrices the chain recursions
+            take since #656.
+
+        The name is the rate's, and the two matrix forms outgrow it. They are
+        read as the kernel itself, and how a caller assembled one --- from a
+        base and a phase, from a distance between sites --- is the caller's;
+        this carries the result and does not reconstruct it.
     initial : np.ndarray
         ``Pi``, shape ``(M, K)``, one initial distribution per class.
     emissions : tuple[EmissionFamily, ...]
@@ -130,18 +143,22 @@ class SpatioSequentialParams:
         if self.n_positions < 1:
             msg = f"a chain needs at least one position, got {self.n_positions}"
             raise ValueError(msg)
-        rate = np.asarray(self.self_transition, dtype=float)
-        if rate.ndim == 0:
-            circulant_transition(self.n_states, float(rate))  # validates both
-        elif rate.shape != (max(self.n_positions - 1, 0),):
+        given = np.asarray(self.self_transition, dtype=float)
+        steps = max(self.n_positions - 1, 0)
+        square = (self.n_states, self.n_states)
+        if given.ndim == 0:
+            circulant_transition(self.n_states, float(given))  # validates both
+        elif given.shape in (square, (steps, *square)):
+            if (given < 0).any() or not np.allclose(given.sum(axis=-1), 1.0):
+                msg = "every row of every transition must be a distribution"
+                raise ValueError(msg)
+        else:
             msg = (
-                f"self_transition has shape {rate.shape}, expected a scalar or "
-                f"({max(self.n_positions - 1, 0)},) -- one rate per transition"
+                f"self_transition has shape {given.shape}, expected a scalar "
+                f"rate, {square} one matrix for the chain, or {(steps, *square)} "
+                "one matrix per transition"
             )
             raise ValueError(msg)
-        else:
-            for value in rate:
-                circulant_transition(self.n_states, float(value))
         initial = np.asarray(self.initial, dtype=float)
         if initial.shape != (self.n_classes, self.n_states):
             msg = (
@@ -197,10 +214,10 @@ class SpatioSequentialParams:
         ``K * (K - 1)``: the model that varies is how sticky the chain is at
         each position, not which states it prefers to move between.
         """
-        rate = np.asarray(self.self_transition, dtype=float)
-        if rate.ndim == 0:
-            return circulant_transition(self.n_states, float(rate))
-        return np.stack([circulant_transition(self.n_states, float(t)) for t in rate])
+        given = np.asarray(self.self_transition, dtype=float)
+        if given.ndim == 0:
+            return circulant_transition(self.n_states, float(given))
+        return given
 
     def scaled_graph(self) -> PottsGraph:
         """The graph with ``beta * J`` as couplings: the prior at temperature one."""

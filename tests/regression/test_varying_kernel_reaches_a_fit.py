@@ -94,6 +94,45 @@ def test_a_per_step_kernel_is_held_and_a_single_matrix_is_fitted() -> None:
     assert not torch.allclose(fitted, start)
 
 
+@pytest.mark.structural
+@pytest.mark.critical
+def test_a_held_kernel_comes_back_bitwise_and_unnormalized() -> None:
+    """ "Held" means the caller's values, not a copy that agrees to a tolerance.
+
+    `torch.equal` against a normalized kernel cannot tell holding from a
+    round trip: an implementation that exponentiated, renormalized and took
+    the log of a kernel whose rows already sum to one would return values that
+    pass it. So the kernel handed in here **does not** normalize --- its rows
+    sum to 1.4 --- and it must come back with that, to the bit.
+
+    A fit that renormalizes returns rows summing to one and fails on the sum;
+    a fit that round-trips through `exp` and `log` returns 1.4 to within a few
+    ulps and fails on `torch.equal`. Both are the failure this names: a fit
+    that holds a kernel and returns a drifted copy passes "it held it" and is
+    still wrong, because the caller's next iteration is over different
+    numbers than the one it asked for.
+    """
+    length = 40
+    stay = np.full(length - 1, 0.9)
+    observations = _chain(stay, length, seed=7)
+    # Rows summing to 1.4, and deliberately not a probability kernel. Nothing
+    # in the recursion requires one --- it is a log-domain weight --- so a fit
+    # that holds this is the only one that returns it.
+    given = torch.log(
+        torch.as_tensor(
+            np.stack([np.array([[0.9, 0.5], [0.5, 0.9]])] * (length - 1)),
+            dtype=torch.float64,
+        )
+    )
+
+    held, _ = _fit(observations, given)
+
+    assert torch.equal(held, given)
+    np.testing.assert_array_equal(
+        torch.exp(held).sum(dim=2).numpy(), np.full((length - 1, 2), 1.4)
+    )
+
+
 @pytest.mark.simulated_truth
 def test_the_held_kernel_explains_the_data_better_than_a_constant_one() -> None:
     """And it is worth holding: the varying truth beats the best single matrix.
@@ -125,26 +164,57 @@ def test_a_kernel_of_the_wrong_length_is_refused_by_the_fit() -> None:
 
 
 @pytest.mark.structural
-def test_the_spatial_params_take_a_rate_per_transition() -> None:
-    """`transition` is `(K, K)` for a scalar and `(S - 1, K, K)` for a vector.
+def test_the_spatial_params_take_a_matrix_for_the_chain_or_one_per_transition() -> None:
+    """`(K, K)` and `(S - 1, K, K)` are the forms; the scalar rate stays the default.
 
-    A rate per step stays a circulant: what varies with position is how sticky
-    the chain is, not which states it prefers, so it is one number per step and
-    not `K * (K - 1)`.
+    The matrix forms are read as the kernel itself. A kernel assembled from
+    parts --- a base over one latent and a kernel over another, combined into
+    the product space --- is not a circulant at any rate, so the scalar could
+    not express one **even when it does not vary along the chain**. That
+    constant case is what `(K, K)` is for, and it is the one a caller reaches
+    first.
+
+    How a caller assembled a kernel is the caller's; this carries the result
+    and does not reconstruct it.
     """
     from dataclasses import replace
 
     params = canonical_spatio_sequential()
-    assert params.transition.shape == (params.n_states, params.n_states)
+    steps, k = params.n_positions - 1, params.n_states
+    assert params.transition.shape == (k, k)
 
-    rates = np.linspace(0.6, 0.9, params.n_positions - 1)
-    varying = replace(params, self_transition=rates)
-    assert varying.transition.shape == (
-        params.n_positions - 1,
-        params.n_states,
-        params.n_states,
+    base = np.array([[0.8, 0.2], [0.3, 0.7]])
+    switch = np.array([[0.9, 0.1], [0.1, 0.9]])
+    constant = switch @ base
+    # Genuinely not a circulant: reversing one row does not give the other.
+    assert not np.allclose(constant[0], constant[1][::-1])
+
+    one = replace(params, self_transition=constant)
+    assert one.transition.shape == (k, k)
+    np.testing.assert_array_equal(one.transition, constant)
+
+    stack = np.stack(
+        [
+            np.array([[1 - s, s], [s, 1 - s]]) @ base
+            for s in np.linspace(0.05, 0.4, steps)
+        ]
     )
-    np.testing.assert_allclose(varying.transition.sum(axis=2), 1.0)
+    many = replace(params, self_transition=stack)
+    assert many.transition.shape == (steps, k, k)
+    np.testing.assert_array_equal(many.transition, stack)
 
-    with pytest.raises(ValueError, match="one rate per transition"):
-        replace(params, self_transition=np.array([0.5, 0.5]))
+
+@pytest.mark.edge_case
+def test_a_transition_that_is_not_row_stochastic_is_refused() -> None:
+    """Either matrix form is a kernel, so its rows are distributions."""
+    from dataclasses import replace
+
+    params = canonical_spatio_sequential()
+    steps, k = params.n_positions - 1, params.n_states
+
+    with pytest.raises(ValueError, match="must be a distribution"):
+        replace(params, self_transition=np.full((k, k), 0.9))
+    with pytest.raises(ValueError, match="must be a distribution"):
+        replace(params, self_transition=np.full((steps, k, k), 0.9))
+    with pytest.raises(ValueError, match="one matrix per transition"):
+        replace(params, self_transition=np.full((steps + 3, k, k), 0.5))
