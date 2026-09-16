@@ -396,13 +396,12 @@ def simulate_spatio_sequential(
 def _scoring_covariate(params: SpatioSequentialParams) -> torch.Tensor | None:
     """``params.covariate`` ready to score every vertex against.
 
-    The trailing singleton the single-channel families broadcast over their
-    states with is added only where the covariate has no axes of its own; one
-    that carries the family's own axes is passed through, because the singleton
-    then belongs inside each of them and the family is what puts it there
-    (issue #658). The same rule as
-    :func:`snakes_and_ladders.likelihood.spatio_sequential.covariate_block`,
-    stated here because ``sim`` does not import ``likelihood``.
+    The singleton is added only where the covariate has no axes of its own,
+    the contract :mod:`snakes_and_ladders.emissions` states and enforces
+    (issues #658, #677). Both this and
+    :func:`snakes_and_ladders.likelihood.spatio_sequential.covariate_block`
+    obey it, and neither restates it: ``sim`` cannot import ``likelihood``, so
+    the rule lives where the families that consume the covariate are.
     """
     if params.covariate is None:
         return None
@@ -420,11 +419,10 @@ def _drawing_covariate(
     observation carries its own trailing axes keeps them after the flatten,
     which is why the reshape names only the leading axis.
 
-    The singleton the single-channel families broadcast over their states with
-    is added **only** where the covariate has no axes of its own, the rule
-    :func:`_scoring_covariate` states. Appending it to a per-channel covariate
-    makes ``(S * n_m, 2)`` into ``(S * n_m, 2, 1)``, whose last axis names no
-    channel, and
+    The singleton is added **only** where the covariate has no axes of its own
+    (:mod:`snakes_and_ladders.emissions`). Appending it to a per-channel
+    covariate makes ``(S * n_m, 2)`` into ``(S * n_m, 2, 1)``, whose last axis
+    names no channel, and
     :func:`snakes_and_ladders.sim.count_pairs.split_covariate` refuses it ---
     which is how a pair family could not be drawn here at all (issue #672).
 

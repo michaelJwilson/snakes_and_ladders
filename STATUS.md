@@ -3455,6 +3455,42 @@ nothing at the 19,998-bit instance the ticket names --- against a decode paid
 per iteration. `ParityCheck`'s five fields and `compressed_adjacency`'s three
 arrays are bitwise unchanged, and the arrays are now shared and read-only.
 
+**Data structures at #677.** The survey read **218** classes and **8** clusters
+and did not name `Ragged` once, the largest addition since #586 wrote it. Two
+blindnesses, both in the tool. The classifier knew `offsets` and `indptr` and
+not the third spelling of one relation --- lengths beside one flat payload,
+offsets derived --- so `ragged.Ragged` was filed as carrying no layout;
+`role:incidence` is **14 members over 84 consuming references** with it and
+`sim.hmm.SimulatedHmmDataset` in, against 12 over 81. The corroboration rule
+of #586 is what keeps that from over-matching: a payload partner is required,
+so `HmmParams.lengths` stays a declaration rather than a layout, and `sizes`
+is refused as a length field because it is a histogram in
+`search.potts_mcmc.ClusterCounter` and a set of problem sizes in
+`search.ground_state.Rung` and `sim.potts.SpatioOnlyParams` --- the
+`restarts`-for-`starts` failure one spelling later. Second, a finding printed
+only inside a cluster, so a cost on a class sharing its shape with nobody was
+derived and dropped: **nine findings** were invisible, on
+`likelihood.schedule.Layout`, `search.gibbs._Indexed` (three between them),
+`learn.surrogate.Examples`, `learn.surrogate._Batch`,
+`emissions.NegativeBinomialEmission`, `learn.potts.PottsEnvironment` and
+`sandbox.pruning_burn._Flattened`; they are #690's to price. One finding the
+change raised was priced here and declined: `Ragged` rebuilds its offsets per
+call in a Python scan, **39.3 us** on the 600-segment `hmm/ci` batch against
+**335.11 ms** for one Baum-Welch iteration over it --- **0.012%**, and the
+NumPy `cumsum` that would replace it saves 6 us of that (2026-09-16). A ratio
+with no effect size, so it is recorded as measured rather than asked again.
+Reading `self.offsets` is no longer counted as deriving them, which had
+reported two costs where `Ragged` pays one. The covariate rule five seams
+restated --- add the broadcast singleton only where the covariate carries no
+axes of its own --- is stated once in `snakes_and_ladders.emissions`, which is
+what enforces it, and the seams point there; replacing them is #691. One
+finding was considered and declined on the survey's own rule: `suffix:Params`
+is 16 members over 38 references and
+`sim.count_pairs.SpatioSequentialCountsParams` holds a `SpatioSequentialParams`
+where no other row holds a params, but a `suffix:` key says the names agree and
+nothing calls the sixteen polymorphically, so there is no seam to write ---
+`DEV.md`'s three consumers are three consumers *through* a contract.
+
 Three proposals under the ticket were measured and declined, which is the half
 a survey exists to produce. `search.maxflow.FlowNetwork` keeps its list of
 lists: over 16,384 rows of degree six a Dinic row walk is 1.95 ms as lists,
