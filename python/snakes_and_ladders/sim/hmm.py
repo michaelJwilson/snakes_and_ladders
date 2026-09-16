@@ -180,6 +180,15 @@ def load_hmm_params(path: Path) -> HmmParams:
 
     n_states = int(raw["n_states"])
     n_symbols = int(raw["n_symbols"])
+    # Both guards predate the `lengths` spelling and were lost with the field
+    # that was beside them (#667). They are not shape checks: a one-state chain
+    # has no transition to identify and a one-symbol alphabet carries no
+    # information, and both declare arrays that are internally consistent, so
+    # `_stochastic` below passes them and the fixture is accepted.
+    for name, size in (("n_states", n_states), ("n_symbols", n_symbols)):
+        if size < 2:
+            msg = f"{path}: {name} must be >= 2, got {size}"
+            raise ValueError(msg)
     # One spelling. `n_sequences` chains of a shared `sequence_length` is the
     # equal-length case of `lengths`, so a fixture writes the lengths and the
     # loader reads them; there is nothing to keep consistent (issue #666).
