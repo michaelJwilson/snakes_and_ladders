@@ -138,7 +138,9 @@ def hmm_coverage(
     boundary = 0
     for replicate in range(replicates):
         drawn = replace(
-            params, seed=params.seed + 7919 * replicate, n_sequences=n_sequences
+            params,
+            seed=params.seed + 7919 * replicate,
+            lengths=(params.sequence_length,) * n_sequences,
         )
         objective = HmmObjective(
             simulate_sequences(drawn).observations, drawn.n_states, drawn.n_symbols

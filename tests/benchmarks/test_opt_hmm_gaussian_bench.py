@@ -29,8 +29,7 @@ def _objective() -> tuple[GaussianHmmObjective, torch.Tensor]:
     scale = np.full(categorical.n_states, 1.0)
     params = HmmParams(
         n_states=categorical.n_states,
-        sequence_length=categorical.sequence_length,
-        n_sequences=categorical.n_sequences,
+        lengths=categorical.lengths,
         initial=categorical.initial,
         transition=categorical.transition,
         emissions=GaussianEmission(mean, scale, 1e-12),

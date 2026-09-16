@@ -24,6 +24,7 @@ import torch
 
 from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
 from snakes_and_ladders.fixtures import load_declared
+from snakes_and_ladders.ragged import MINIMUM_LENGTH
 from snakes_and_ladders.sim.factor_graph import FactorGraph, from_coupled
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import simulate_potts
@@ -132,6 +133,7 @@ class SpatioSequentialParams:
     initial: np.ndarray
     emissions: tuple[EmissionFamily, ...]
     covariate: np.ndarray | None = None
+    segments: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
         if any(coupling < 0.0 for coupling in self.graph.coupling):
@@ -143,6 +145,29 @@ class SpatioSequentialParams:
         if self.n_positions < 1:
             msg = f"a chain needs at least one position, got {self.n_positions}"
             raise ValueError(msg)
+        if self.segments is not None:
+            # `n_positions` stays the total, so the kernel stack and the
+            # observation shape are what they always were; what the segments
+            # add is where the chain restarts (issue #666).
+            short = [
+                (index, length)
+                for index, length in enumerate(self.segments)
+                if length < MINIMUM_LENGTH
+            ]
+            if short:
+                index, length = short[0]
+                msg = (
+                    f"segment {index} has length {length}; a segment carries at "
+                    f"least {MINIMUM_LENGTH} positions, since one position is an "
+                    "initial distribution and no transition (issue #666)"
+                )
+                raise ValueError(msg)
+            if sum(self.segments) != self.n_positions:
+                msg = (
+                    f"segments sum to {sum(self.segments)} and the chain has "
+                    f"{self.n_positions} positions; they must tile it exactly"
+                )
+                raise ValueError(msg)
         given = np.asarray(self.self_transition, dtype=float)
         steps = max(self.n_positions - 1, 0)
         square = (self.n_states, self.n_states)
@@ -201,6 +226,16 @@ class SpatioSequentialParams:
                 )
                 raise ValueError(msg)
             object.__setattr__(self, "covariate", covariate)
+
+    @property
+    def segment_lengths(self) -> tuple[int, ...]:
+        """The chain's segments, which is one whole chain where none is declared.
+
+        Undeclared, the model is what it has always been: a single chain of
+        `n_positions`. Declared, the chain restarts at each boundary, and the
+        number of boundaries is part of the problem rather than of its size.
+        """
+        return self.segments if self.segments is not None else (self.n_positions,)
 
     @property
     def transition(self) -> np.ndarray:
@@ -302,11 +337,19 @@ def simulate_spatio_sequential(
     transition = params.transition
     states = np.empty((params.n_classes, params.n_positions), dtype=np.int64)
     for m in range(params.n_classes):
-        states[m, 0] = rng.choice(params.n_states, p=params.initial[m])
-        for s in range(1, params.n_positions):
-            states[m, s] = rng.choice(
-                params.n_states, p=transition[int(states[m, s - 1])]
-            )
+        at = 0
+        # The chain restarts at each segment: the first position of every one
+        # is drawn from the initial distribution, not from the transition out
+        # of the position before it, which belongs to another chain entirely
+        # (issue #666). With no segments declared this is one pass and the
+        # draws are the ones this simulator has always made.
+        for length in params.segment_lengths:
+            states[m, at] = rng.choice(params.n_states, p=params.initial[m])
+            for s in range(at + 1, at + length):
+                states[m, s] = rng.choice(
+                    params.n_states, p=transition[int(states[m, s - 1])]
+                )
+            at += length
 
     columns: dict[int, np.ndarray] = {}
     for m, family in enumerate(params.emissions):
@@ -511,4 +554,9 @@ def load_spatio_sequential_params(path: Path) -> SpatioSequentialParams:
         self_transition=float(raw["self_transition"]),
         initial=np.asarray(raw["initial"], dtype=np.float64),
         emissions=emissions,
+        # Optional: a fixture that declares no segmentation is one chain, which
+        # is every instance that existed before #666.
+        segments=(
+            tuple(int(one) for one in raw["segments"]) if "segments" in raw else None
+        ),
     )

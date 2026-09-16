@@ -31,8 +31,7 @@ def _params(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
     emission = rng.dirichlet(np.ones(n_symbols), size=n_states)
     return HmmParams(
         n_states=n_states,
-        sequence_length=length,
-        n_sequences=1,
+        lengths=(length,) * 1,
         initial=initial,
         transition=transition,
         emissions=CategoricalEmission(emission),
@@ -140,8 +139,7 @@ def test_a_deterministic_chain_makes_both_decoders_agree() -> None:
     # distinction.
     params = HmmParams(
         n_states=2,
-        sequence_length=5,
-        n_sequences=1,
+        lengths=(5,) * 1,
         initial=np.array([0.999, 0.001]),
         transition=np.array([[0.999, 0.001], [0.001, 0.999]]),
         emissions=CategoricalEmission(np.array([[0.999, 0.001], [0.001, 0.999]])),

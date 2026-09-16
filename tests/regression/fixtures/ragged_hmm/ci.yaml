@@ -1,0 +1,34 @@
+model: hidden-markov
+oracle: enumeration
+
+# The HMM at segments of unequal length (issue #666). The same model as
+# `hmm/ci.yaml` --- one parameter set, one transition matrix --- declared at an
+# instance whose chains do not share a length, which is the thing a single
+# shared length cannot express.
+#
+# The segmentation is the point and is declared rather than inherited from
+# whatever a simulator emits. `lengths` is chosen so the three cases a padded
+# implementation gets wrong are all present: the shortest a segment may be (2),
+# a run of equal lengths, and one segment long enough that padding the rest up
+# to it wastes most of a rectangular block. 2 + 9 + 9 + 9 + 60 = 89 positions
+# in 5 segments, so the batch took 84 transitions and not 88 --- four
+# boundaries are restarts at the initial distribution, not steps.
+#
+# Padding this to the longest would be 300 positions for 89 real ones, 70.3%
+# waste, which is why the compiled path walks the segments in place.
+seed: 20260916
+n_states: 3
+n_symbols: 4
+lengths: [2, 9, 9, 9, 60]
+initial: [0.5, 0.3, 0.2]
+transition:
+  - [0.70, 0.20, 0.10]
+  - [0.15, 0.75, 0.10]
+  - [0.20, 0.20, 0.60]
+emission:
+  - [0.70, 0.15, 0.10, 0.05]
+  - [0.05, 0.65, 0.20, 0.10]
+  - [0.10, 0.10, 0.25, 0.55]
+
+# As `hmm/ci.yaml`: a Monte Carlo tolerance, not a numerical one.
+tolerance: 0.02

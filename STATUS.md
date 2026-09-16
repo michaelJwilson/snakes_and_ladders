@@ -3753,3 +3753,80 @@ The upper-bound guard changed with the premise: a module selected for a problem
 must spell the problem's name **or** import code the catalogue says defines it.
 It re-reads `PROBLEMS.md` by regex where the scan uses `ast`, so the two
 readings still share no code.
+
+## Chains of unequal length, and what padding costs ([#666](https://github.com/michaelJwilson/snakes_and_ladders/issues/666))
+
+A batch of chains is not one long chain. The recursions restart at each
+boundary, so the number of boundaries is part of the problem rather than of its
+size, and `snakes_and_ladders.ragged.Ragged` carries the segments end to end
+with their lengths. A segment of one position is refused: it is all initial
+distribution and no transition.
+
+**There is one recursion, not two.** `baum_welch_family` takes either shape and
+the rectangular form converts; the route it replaced is conserved in
+`sandbox.rectangular_hmm` and referees the equal-length case **bit for bit**.
+88 existing HMM tests pass unchanged through the new path.
+
+**The compiled kernel pads nothing, and that is the whole finding.** The Python
+path pads to the longest segment and masks, which buys one batched step per
+position of the longest; `src/ragged.rs` walks the segments in place. Which
+wins is a question about the *lengths*, not about the language. Every number is
+a best of five on this host at `OMP_NUM_THREADS=1`, `torch` single-threaded,
+four states:
+
+| segments | total | padding waste | torch | Rust | ratio |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 64 x 500 | 32,000 | 0.0% | 93.14 ms | **33.41 ms** | 2.8x |
+| 200 mixed, 5 to 400 | 41,546 | 47.8% | 121.63 ms | **43.37 ms** | 2.8x |
+| 63 x 30 and 1 x 2000 | 3,890 | 97.0% | 386.42 ms | **3.98 ms** | **97.1x** |
+
+**The third row is the one to read, and it is not a Rust result.** At 3,890
+positions the padded path takes 386 ms, while at 41,546 positions --- ten times
+the data --- it takes 122 ms. The cost follows the *longest* segment times the
+segment count, which is 128,000 padded positions for 3,890 real ones. A single
+long segment among short ones is therefore the shape where the Python path is
+worst, and it is the shape the downstream consumer has.
+
+The per-segment NumPy oracle runs 980 ms, 1,311 ms and 128 ms on the same
+three, so it referees and does not compete. The compiled kernel is pinned to it
+at a relative `1e-11` on the marginals, the transition counts and the evidence.
+
+**Two keys, not two problems** (#666 step 4). `ragged_hmm` and
+`spatio_sequential_ragged` join the HMM and coupled rows: each model is
+unchanged and only its instance's segmentation differs, which is what
+`PROBLEMS.md` means by a row with two keys. `ragged_hmm/ci` declares 2, 9, 9, 9
+and 60 --- the shortest a segment may be, a run of equal lengths, and one long
+enough that a padded block would be 70.3% padding --- so the batch takes 84
+transitions rather than 88. `spatio_sequential_ragged/ci` splits the same S = 6
+chain as 2 and 4, so enumeration still referees it.
+
+`SpatioSequentialParams` gains `segments`, and the simulator draws the first
+position of every segment from the initial distribution rather than from the
+transition out of the position before it, which belongs to another chain. With
+none declared the draws are the ones it has always made.
+
+**The HMM fixture loader now takes `lengths` or the rectangular pair, and
+exactly one.** A fixture that declared both could contradict itself.
+
+**`lengths` is the only declaration of a batch's shape.** `hmm/ci.yaml` now
+writes its 600 chains of 15 as the lengths themselves, and `HmmParams` derives
+`n_sequences` and `sequence_length` rather than storing them --- a second field
+for a derived fact is a field that can disagree, and on a ragged batch there is
+no shared length to hold. Asking a ragged instance for `sequence_length`
+**raises**; an earlier draft returned the longest, which is the quiet wrong
+number the segmentation exists to prevent.
+
+**The draws did not move.** The simulator groups segments by length and draws
+each group as it always did, so the equal-length case is one group and the same
+RNG stream: `hmm/ci` reproduces its states and observations byte for byte
+against the old spelling, which is checked rather than assumed.
+
+**What is left is the coupled scorer, and it is named rather than deferred
+vaguely.** `sim.spatio_sequential` draws the declared segments; the enumeration
+oracle and the message-passing fit in `likelihood.spatio_sequential` still
+score the chain as one, at eight sites reading `n_positions`. Until they carry
+the segmentation, a fit at `spatio_sequential_ragged` would optimize a
+likelihood the instance does not have, so the three pairings that need it say
+exactly that in `docs/tex/method_notes.yaml`, and the work is issue #669. `ragged_hmm`'s two say something
+different: a path sampler over segments is the unsegmented sampler run S times,
+and a bound over 89 positions costs more than the exact evaluation.

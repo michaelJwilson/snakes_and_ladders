@@ -76,8 +76,7 @@ def _two_state(emissions: object, seed: int = 5) -> np.ndarray:
     """Observations from a two-state HMM over one emission family."""
     params = HmmParams(
         n_states=2,
-        sequence_length=8,
-        n_sequences=40,
+        lengths=(8,) * 40,
         initial=INITIAL,
         transition=TRANSITION,
         emissions=emissions,  # type: ignore[arg-type]
