@@ -46,8 +46,7 @@ def _hmm(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
     rng = np.random.default_rng(seed)
     return HmmParams(
         n_states=n_states,
-        sequence_length=length,
-        n_sequences=1,
+        lengths=(length,) * 1,
         initial=rng.dirichlet(np.ones(n_states)),
         transition=rng.dirichlet(np.ones(n_states), size=n_states),
         emissions=CategoricalEmission(rng.dirichlet(np.ones(n_symbols), size=n_states)),

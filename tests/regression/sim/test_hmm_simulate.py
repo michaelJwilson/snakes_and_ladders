@@ -113,7 +113,9 @@ def test_realized_state_occupancy_matches_the_stationary_distribution() -> None:
     # so what remains to check is the stationary distribution itself: the
     # left eigenvector of the transition matrix A at eigenvalue 1.
     params = load_hmm_params(FIXTURE)
-    dataset = simulate_sequences(replace(params, sequence_length=_MIXING_LENGTH))
+    dataset = simulate_sequences(
+        replace(params, lengths=(_MIXING_LENGTH,) * params.n_sequences)
+    )
 
     eigenvalues, eigenvectors = np.linalg.eig(params.transition.T)
     stationary_index = int(np.argmin(np.abs(eigenvalues - 1.0)))

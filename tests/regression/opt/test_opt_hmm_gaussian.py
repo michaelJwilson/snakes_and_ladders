@@ -64,8 +64,7 @@ def _params(
     """A Gaussian HMM fixture over ``emissions``."""
     return HmmParams(
         n_states=2,
-        sequence_length=length,
-        n_sequences=n_sequences,
+        lengths=(length,) * n_sequences,
         initial=INITIAL,
         transition=TRANSITION,
         emissions=emissions,
@@ -124,8 +123,7 @@ def test_the_forward_recursion_matches_enumeration_over_every_path(
     )
     params = HmmParams(
         n_states=n_states,
-        sequence_length=length,
-        n_sequences=1,
+        lengths=(length,) * 1,
         initial=rng.dirichlet(np.ones(n_states)),
         transition=rng.dirichlet(np.ones(n_states), size=n_states),
         emissions=truth,
@@ -154,8 +152,7 @@ def test_the_evidence_of_a_continuous_emission_can_exceed_one() -> None:
     truth = GaussianEmission(np.array([0.0, 10.0]), np.array([0.02, 1.0]), INERT_FLOOR)
     params = HmmParams(
         n_states=2,
-        sequence_length=4,
-        n_sequences=1,
+        lengths=(4,) * 1,
         initial=np.array([1.0 - 1e-12, 1e-12]),
         transition=np.array([[1.0 - 1e-12, 1e-12], [1e-12, 1.0 - 1e-12]]),
         emissions=truth,

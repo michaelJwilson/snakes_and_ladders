@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders.sim import fixtures
+from snakes_and_ladders.sim.hmm import simulate_sequences
 from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 
 
@@ -57,3 +58,37 @@ def test_the_coupled_simulator_restarts_at_every_boundary() -> None:
     )
     assert declared.segment_lengths == (2, 4)
     assert whole.segment_lengths == (declared.n_positions,)
+
+
+@pytest.mark.critical
+@pytest.mark.simulated_truth
+def test_the_simulator_draws_the_declared_segments() -> None:
+    """A ragged instance simulates, and the batch it returns is its segments.
+
+    The rectangular batch has no shape to hold unequal chains, so the arrays
+    come back flat and `batch` reads them. Equal chains keep their rectangle,
+    which is what every fixture that predates this expects.
+    """
+    ragged = simulate_sequences(fixtures.fixture("ragged_hmm", "ci").params)
+    assert not ragged.rectangular
+    assert ragged.observations.ndim == 1
+    assert ragged.batch.lengths == (2, 9, 9, 9, 60)
+    assert [len(one) for one in ragged.batch.segments()] == [2, 9, 9, 9, 60]
+
+    rectangular = simulate_sequences(fixtures.fixture("hmm", "ci").params)
+    assert rectangular.rectangular
+    assert rectangular.observations.shape == (600, 15)
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_a_ragged_instance_has_no_single_sequence_length() -> None:
+    """Asking for *the* length of unequal chains is a question with no answer.
+
+    An earlier draft returned the longest, which is the quiet wrong number the
+    segmentation exists to make impossible.
+    """
+    params = fixtures.fixture("ragged_hmm", "ci").params
+    with pytest.raises(ValueError, match="do not share one"):
+        _ = params.sequence_length
+    assert fixtures.fixture("hmm", "ci").params.sequence_length == 15

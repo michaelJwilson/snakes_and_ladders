@@ -3808,8 +3808,25 @@ none declared the draws are the ones it has always made.
 **The HMM fixture loader now takes `lengths` or the rectangular pair, and
 exactly one.** A fixture that declared both could contradict itself.
 
-**Deferred, and stated rather than left to be noticed:** `simulate_sequences`
-still returns a rectangular batch, so the declared ragged instance is drawn
-from its parameters by the test that fits it. A ragged simulator, and the
-optimizer and seeding pairings that wait on it, are listed in
-`docs/tex/method_notes.yaml` with their reasons.
+**`lengths` is the only declaration of a batch's shape.** `hmm/ci.yaml` now
+writes its 600 chains of 15 as the lengths themselves, and `HmmParams` derives
+`n_sequences` and `sequence_length` rather than storing them --- a second field
+for a derived fact is a field that can disagree, and on a ragged batch there is
+no shared length to hold. Asking a ragged instance for `sequence_length`
+**raises**; an earlier draft returned the longest, which is the quiet wrong
+number the segmentation exists to prevent.
+
+**The draws did not move.** The simulator groups segments by length and draws
+each group as it always did, so the equal-length case is one group and the same
+RNG stream: `hmm/ci` reproduces its states and observations byte for byte
+against the old spelling, which is checked rather than assumed.
+
+**What is left is the coupled scorer, and it is named rather than deferred
+vaguely.** `sim.spatio_sequential` draws the declared segments; the enumeration
+oracle and the message-passing fit in `likelihood.spatio_sequential` still
+score the chain as one, at eight sites reading `n_positions`. Until they carry
+the segmentation, a fit at `spatio_sequential_ragged` would optimize a
+likelihood the instance does not have, so the three pairings that need it say
+exactly that in `docs/tex/method_notes.yaml`. `ragged_hmm`'s two say something
+different: a path sampler over segments is the unsegmented sampler run S times,
+and a bound over 89 positions costs more than the exact evaluation.

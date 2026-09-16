@@ -263,25 +263,28 @@ untested pairings:
   ragged_hmm / surrogates: >-
     A surrogate stands in for an evaluation whose cost is the reason to avoid
     it, and this instance is 89 positions: the exact evaluation is cheaper than
-    any bound over it. The pairing is declared where the segmentation is
-    measured at scale, not here (issue #666).
+    any bound over it. The pairing belongs where the segmentation is measured
+    at scale (issue #666).
   ragged_hmm / samplers: >-
-    The instance exists to exercise the segmentation, and a sampler over a
-    segmented chain draws each segment independently, which is the unsegmented
-    sampler run S times rather than a claim about boundaries. It is declared
-    here and not run (issue #666).
-  spatio_sequential_ragged / samplers: >-
-    As the sequential instance above: the block move a coupled sampler makes is
-    within a segment, so the segmentation adds no claim a sampler could pin
-    that the unsegmented instance does not already carry (issue #666).
+    A path sampler over a segmented chain draws each segment independently,
+    which is the unsegmented sampler run S times rather than a claim about
+    boundaries. What a boundary does to a path is already pinned by the
+    closed-form difference in `tests/regression/opt/test_ragged_hmm.py`
+    (issue #666).
   spatio_sequential_ragged / initializers: >-
-    A seeding is scored on the fit it starts, and the coupled fit at a
-    segmented chain is itself deferred here; seeding it would be scoring a
-    start against nothing (issue #666).
+    A seeding is scored on the fit it starts, and the coupled fit does not yet
+    read the segmentation: `likelihood.spatio_sequential` scores the chain as
+    one. Seeding it would be scoring a start against the wrong likelihood
+    (issue #666).
   spatio_sequential_ragged / optimizers: >-
-    The coupled fit at this instance is refereed by enumeration, which is the
-    claim the fixture was declared for; the optimizer comparison at a segmented
-    chain is deferred with the ragged simulator it needs (issue #666).
+    The same: the simulator draws the declared segments but the coupled scorer
+    and its enumeration oracle still treat the chain as one, so a fit at this
+    instance would optimize a likelihood the instance does not have. Carrying
+    the segmentation through `likelihood.spatio_sequential` is what this waits
+    on, and it is the last piece of issue #666.
+  spatio_sequential_ragged / samplers: >-
+    As above, and for the same reason: a block move over a segmented chain
+    needs the scorer to know where the blocks end (issue #666).
   planted_glass / samplers: >-
     The instance exists to defeat descent, and what it is pinned against is
     descent. Separating a sampler from descent on it is the comparison it was

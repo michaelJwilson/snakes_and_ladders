@@ -313,8 +313,7 @@ def ambiguous_hmm() -> HmmParams:
     """
     return HmmParams(
         n_states=2,
-        sequence_length=int(AMBIGUOUS_OBSERVATIONS.shape[0]),
-        n_sequences=1,
+        lengths=(int(AMBIGUOUS_OBSERVATIONS.shape[0]),) * 1,
         initial=np.array([0.5, 0.5]),
         transition=np.array([[0.72, 0.28], [0.28, 0.72]]),
         emissions=CategoricalEmission(np.array([[0.83, 0.17], [0.17, 0.83]])),

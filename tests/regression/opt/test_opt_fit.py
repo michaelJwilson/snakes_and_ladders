@@ -205,7 +205,7 @@ def test_hmm_interval_coverage_approaches_nominal_with_sample_size() -> None:
     total = 0
     for replicate in range(15):
         params = replace(
-            base, seed=base.seed + 7919 * replicate, n_sequences=4 * base.n_sequences
+            base, seed=base.seed + 7919 * replicate, lengths=base.lengths * 4
         )
         objective = HmmObjective(
             simulate_sequences(params).observations, params.n_states, params.n_symbols
@@ -304,7 +304,7 @@ def test_an_estimate_on_the_boundary_has_no_interval() -> None:
     # is the whole point of checking the conditioning rather than trusting
     # the inversion to fail.
     base = load_hmm_params(HMM_FIXTURE)
-    params = replace(base, n_sequences=30, sequence_length=5)
+    params = replace(base, lengths=(5,) * 30)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )

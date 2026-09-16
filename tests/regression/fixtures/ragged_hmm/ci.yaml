@@ -3,8 +3,8 @@ oracle: enumeration
 
 # The HMM at segments of unequal length (issue #666). The same model as
 # `hmm/ci.yaml` --- one parameter set, one transition matrix --- declared at an
-# instance whose chains do not share a length, which is the thing that
-# instance cannot express.
+# instance whose chains do not share a length, which is the thing a single
+# shared length cannot express.
 #
 # The segmentation is the point and is declared rather than inherited from
 # whatever a simulator emits. `lengths` is chosen so the three cases a padded
