@@ -349,6 +349,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox.pruning_burn
    :members:
 
+.. automodule:: snakes_and_ladders.sandbox.count_emissions
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 
