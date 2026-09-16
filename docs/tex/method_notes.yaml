@@ -275,16 +275,16 @@ untested pairings:
     A seeding is scored on the fit it starts, and the coupled fit does not yet
     read the segmentation: `likelihood.spatio_sequential` scores the chain as
     one. Seeding it would be scoring a start against the wrong likelihood
-    (issue #666).
+    (issue #669).
   spatio_sequential_ragged / optimizers: >-
     The same: the simulator draws the declared segments but the coupled scorer
     and its enumeration oracle still treat the chain as one, so a fit at this
     instance would optimize a likelihood the instance does not have. Carrying
     the segmentation through `likelihood.spatio_sequential` is what this waits
-    on, and it is the last piece of issue #666.
+    on, and it is issue #669.
   spatio_sequential_ragged / samplers: >-
     As above, and for the same reason: a block move over a segmented chain
-    needs the scorer to know where the blocks end (issue #666).
+    needs the scorer to know where the blocks end (issue #669).
   planted_glass / samplers: >-
     The instance exists to defeat descent, and what it is pinned against is
     descent. Separating a sampler from descent on it is the comparison it was

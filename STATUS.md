@@ -3827,6 +3827,6 @@ oracle and the message-passing fit in `likelihood.spatio_sequential` still
 score the chain as one, at eight sites reading `n_positions`. Until they carry
 the segmentation, a fit at `spatio_sequential_ragged` would optimize a
 likelihood the instance does not have, so the three pairings that need it say
-exactly that in `docs/tex/method_notes.yaml`. `ragged_hmm`'s two say something
+exactly that in `docs/tex/method_notes.yaml`, and the work is issue #669. `ragged_hmm`'s two say something
 different: a path sampler over segments is the unsegmented sampler run S times,
 and a bound over 89 positions costs more than the exact evaluation.
