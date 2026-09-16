@@ -109,13 +109,27 @@ ORACLE_COLUMNS = (
 #: each; a test with neither marker runs at the CI tier.
 TIERS = ("ci", "stress", "release")
 
-#: How a fixture is named in a test: as a registry problem and tier, as a
-#: problem parameterized over every tier it declares, or as the file's path.
-#: All three are read, because a pairing must not read as untested for the
-#: way its test spells the fixture (issue #382).
-_FIXTURE_CALL = re.compile(r'(?<!at_)fixture\(\s*"([a-z_0-9]+)"\s*,\s*"([a-z]+)"')
+#: How a fixture is named in a test: through one of the registry's entry
+#: points that take a problem and a tier, as a problem parameterized over
+#: every tier it declares, or as the file's path. All three are read, because
+#: a pairing must not read as untested for the way its test spells the fixture
+#: (issue #382).
+_REGISTRY_CALLS = ("fixture", "path_of", "baseline_path", "baseline")
+_FIXTURE_CALL = re.compile(
+    r"(?<!at_)(?:"
+    + "|".join(_REGISTRY_CALLS)
+    + r')\(\s*"([a-z_0-9]+)"\s*,\s*"([a-z]+)"'
+)
+#: A ``StrEnum`` member *is* its string, so ``Scale.CI`` names the CI tier as
+#: plainly as ``"ci"`` does; 19 tests in the suite spell it that way. Resolved
+#: only when the member's lowercased name is a tier ``DEV.md`` declares, so an
+#: unrelated enum is left alone rather than guessed at.
+_SCALE_MEMBER = re.compile(r"\bScale\.([A-Z_]+)\b")
 _AT_FIXTURE_CALL = re.compile(r'at_fixture\(\s*"[a-z_0-9]+"\s*,\s*"([a-z_0-9]+)"')
-_FIXTURE_PATH = re.compile(r"([a-z_0-9]+)/([a-z]+)\.yaml")
+#: A path is preceded by a quote or a separator, never by a backslash: the
+#: escaped ``tree\_jc/release.yaml`` a LaTeX assertion carries would
+#: otherwise read as a problem named ``_jc``.
+_FIXTURE_PATH = re.compile(r"(?<![a-z_0-9\\])([a-z_0-9]+)/([a-z]+)\.yaml")
 
 #: How a cell is marked: pinned by an oracle; by the simulated truth only,
 #: an oracle wanted; by neither significant kind, an oracle wanted.
@@ -406,6 +420,69 @@ def _tier(markers: set[str]) -> str:
     return "ci"
 
 
+def _constants(source: str) -> dict[str, str]:
+    """The module-level names a file binds to a bare string, ``name -> value``.
+
+    A file that writes ``PROBLEM = "planted_glass"`` and then
+    ``fixture(PROBLEM, TIER)`` is naming its fixture as plainly as one that
+    inlines the literal, and reading only the literal form attributes the file
+    to no problem at all --- the defect issue #640 is about, one level down.
+    Tuple assignments are read because ``PROBLEM, TIER = "x", "ci"`` is the
+    common spelling; an attribute value such as ``Scale.CI`` binds nothing and
+    is left to the call's own regex, which then does not match and costs only
+    a tier.
+
+    Returns
+    -------
+    dict[str, str]
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+    found: dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        targets, values = node.targets[0], node.value
+        pairs: list[tuple[ast.expr, ast.expr]] = []
+        if isinstance(targets, ast.Tuple) and isinstance(values, ast.Tuple):
+            pairs = list(zip(targets.elts, values.elts, strict=False))
+        else:
+            pairs = [(targets, values)]
+        for target, value in pairs:
+            if (
+                isinstance(target, ast.Name)
+                and isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+            ):
+                found[target.id] = value.value
+    return found
+
+
+def _with_constants(source: str) -> str:
+    """``source`` with every module-level string constant spelled out.
+
+    Rewriting the text rather than walking the calls keeps one reading of a
+    fixture call --- the regexes below --- instead of two that can disagree.
+
+    Returns
+    -------
+    str
+    """
+    resolved = _SCALE_MEMBER.sub(
+        lambda match: f'"{match.group(1).lower()}"'
+        if match.group(1).lower() in TIERS
+        else match.group(0),
+        source,
+    )
+    bound = _constants(resolved)
+    if not bound:
+        return resolved
+    pattern = re.compile(r"\b(" + "|".join(map(re.escape, bound)) + r")\b")
+    return pattern.sub(lambda match: f'"{bound[match.group(1)]}"', resolved)
+
+
 def fixtures_named(source: str) -> set[tuple[str, str]]:
     """The ``(problem, tier)`` fixtures a test file names, however it names them.
 
@@ -420,9 +497,10 @@ def fixtures_named(source: str) -> set[tuple[str, str]]:
         A tier of ``""`` means the file named the problem without a tier ---
         ``at_fixture`` parameterizes over every tier the problem declares.
     """
-    found = set(_FIXTURE_CALL.findall(source))
-    found |= {(problem, "") for problem in _AT_FIXTURE_CALL.findall(source)}
-    return found | set(_FIXTURE_PATH.findall(source))
+    resolved = _with_constants(source)
+    found = set(_FIXTURE_CALL.findall(resolved))
+    found |= {(problem, "") for problem in _AT_FIXTURE_CALL.findall(resolved)}
+    return found | set(_FIXTURE_PATH.findall(resolved))
 
 
 def fixture_tiers(problem: str, directory: Path = FIXTURES) -> list[str]:
