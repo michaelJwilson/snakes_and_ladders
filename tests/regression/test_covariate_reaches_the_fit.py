@@ -181,14 +181,22 @@ def test_a_constant_exposure_of_one_fits_inside_the_declared_tolerance() -> None
 
 
 @pytest.mark.structural
-@pytest.mark.critical
-def test_the_spatial_params_carry_the_covariate_to_both_seams() -> None:
-    """`gated_log_density` and `class_log_density` both read `params.covariate`.
+def test_the_spatial_seams_run_and_the_covariate_field_is_validated() -> None:
+    """What this actually checks: both seams run uncovaried, and the field validates.
 
-    The canonical instance is categorical, which refuses a covariate, so the
-    claim is made where it can be: the two seams agree with each other on the
-    scores, and both change when the params' covariate does. A count family
-    would be a second fixture for the same assertion.
+    It does **not** check that either seam reads `params.covariate`, and its
+    name and docstring said it did until #658 caught them. The canonical
+    instance is categorical, which refuses a covariate, so there is no fixture
+    here to make that claim against --- which under No Coverage Theatre means
+    the claim is a gap to ticket, not a sentence to write over an `isfinite`.
+    #658 item 5 carries the gap, and its item 2 is what a covariate-carrying
+    spatial fixture here would have failed against: `external_field` scores
+    with its own unthreaded `log_density`, and `fit_spatio_sequential` feeds it
+    a posterior computed *with* the covariate.
+
+    The `critical` marker is gone with the claim. A test that gates early has
+    to be one whose failure means the rest is not worth running; this one's
+    failure means an import broke.
     """
     from dataclasses import replace
 
