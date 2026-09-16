@@ -1123,8 +1123,10 @@ def baum_welch_family(
     Parameters
     ----------
     observations : np.ndarray
-        Observations, shape ``(n_sequences, length)``. Symbol indices or real
-        values, as the family says.
+        Observations, shape ``(n_sequences, length)`` followed by whatever
+        trailing axes the family's observation carries --- none for a scalar
+        observation, a channel axis for a family over a pair of counts.
+        Symbol indices or real values, as the family says.
     emissions : EmissionFamily
         Starting emission family.
     max_iterations : int
@@ -1147,8 +1149,8 @@ def baum_welch_family(
         standing a covariate has, and for the same reason. Given a single
         matrix it fits that matrix, exactly as before.
     covariate : np.ndarray | None
-        What each observation is scored against, shape ``(n_sequences,
-        length)`` -- an exposure for a rate family, a trial count for a
+        What each observation is scored against, carrying the observations'
+        leading ``(n_sequences, length)`` -- an exposure for a rate family, a trial count for a
         bounded one (issue #652). It reaches both seams of the loop, the E
         step's scoring and the emission M step, because a fit that scores
         against an exposure and re-estimates without it is fitting two
@@ -1170,7 +1172,13 @@ def baum_welch_family(
         rather than clamped away.
     """
     data = torch.as_tensor(observations, dtype=emissions.observation_dtype)
-    n_sequences, length = data.shape
+    # The leading two axes are the sequence and the position. What follows them
+    # is the family's own: none where an observation is a scalar, and one or
+    # more where it is not --- a family over a pair of counts carries a channel
+    # axis. Unpacking the whole shape refused every such family outright, so a
+    # family could be made to condition on a covariate and still not be
+    # fittable here (issue #658).
+    n_sequences, length = data.shape[:2]
     m = emissions.n_states
     varying = log_transition.shape != (m, m)
     if varying and log_transition.shape != (max(length - 1, 0), m, m):
@@ -1183,11 +1191,16 @@ def baum_welch_family(
     kernels = (
         log_transition if varying else log_transition.expand(max(length - 1, 0), m, m)
     )
-    exposure = (
-        None
-        if covariate is None
-        else torch.as_tensor(covariate, dtype=torch.float64)[..., None]
-    )
+    # The trailing singleton the single-channel families broadcast over their
+    # states with is added only where the covariate has no axes of its own; a
+    # covariate carrying the family's axes is passed through, because the
+    # singleton then belongs inside each of them and the family is what puts it
+    # there (issue #658).
+    exposure: torch.Tensor | None = None
+    if covariate is not None:
+        exposure = torch.as_tensor(covariate, dtype=torch.float64)
+        if exposure.ndim == data.ndim == 2:
+            exposure = exposure[..., None]
 
     previous = -float("inf")
     log_likelihood = previous
