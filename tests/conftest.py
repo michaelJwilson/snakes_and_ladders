@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from pathlib import Path
 
 for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_variable, "1")
@@ -48,6 +49,7 @@ for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 import pytest  # noqa: E402
 
 from tests._durations import key_over_cap, over_cap  # noqa: E402
+from tests._extension import stale_extension  # noqa: E402
 from tests._problems import (  # noqa: E402
     CACHE_KEY,
     fixtures_named_in,
@@ -69,6 +71,13 @@ PROBLEM_MARKER = (
 
 def pytest_configure(config: pytest.Config) -> None:
     config.stash[DURATIONS] = []
+    # First, and before #619's registration below: a stale extension fails the
+    # tests that call the signature it predates, which reads as the change
+    # under test breaking them (issue #630, `tests/_extension.py`). Everything
+    # after it is measuring the wrong binary.
+    refusal = stale_extension(Path(__file__).resolve().parent.parent)
+    if refusal:
+        raise pytest.UsageError(refusal)
     # A fixture directory named `critical`, `key`, `stress` or `release` would
     # register a second marker of that name and then be applied by the hook to
     # every module that loads it --- and `tests/_durations.py` reads
