@@ -25,15 +25,23 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.search import maxflow_rust
 from snakes_and_ladders.search.maxflow import ising_ground_state, site_field
-from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim import fixtures
+from snakes_and_ladders.sim.graph import PottsGraph, lattice_graph
 
 # The Python blocking flow recurses to the depth of the level graph; the Rust
 # one uses an explicit stack. This raise is itself part of what the port buys.
 sys.setrecursionlimit(50_000)
 
 
+#: `potts_lattice/ci`'s boundary and coupling, read rather than restated
+#: (issue #622). Its declared extent is 3 and these cells measure 16, 32 and
+#: 64, so the extent stays a parameter and only the lattice's definition is
+#: read; 0.6 is the value that was written here.
+PARAMS = fixtures.fixture("potts_lattice", "ci").params
+
+
 def _problem(extent: int) -> tuple[PottsGraph, np.ndarray]:
-    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
+    graph = lattice_graph((extent, extent), PARAMS.boundary, PARAMS.coupling)
     rng = np.random.default_rng(extent)
     return graph, rng.normal(size=(graph.n_nodes, 2))
 

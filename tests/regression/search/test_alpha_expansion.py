@@ -50,6 +50,7 @@ def _enumerated(graph: PottsGraph, field_values: np.ndarray, n_states: int) -> f
     )
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(2, 2), (3, 3), (4, 3)])
 @pytest.mark.parametrize("coupling", [0.0, 0.5, 1.5])
@@ -71,6 +72,7 @@ def test_two_labels_reproduce_the_exact_minimum_cut(
         assert realized == pytest.approx(exact, abs=1e-9)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_multi_state_energy_agrees_with_the_two_state_one() -> None:
     # The generalization must reduce to what `maxflow` already validates, or
@@ -151,6 +153,7 @@ def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None
         assert achieved <= 1.0 + 1e-9
 
 
+@pytest.mark.critical
 @pytest.mark.simulated_truth
 def test_expansion_beats_single_site_descent_past_enumeration() -> None:
     # Where the move set earns its complexity. At the sizes enumeration reaches
@@ -196,6 +199,7 @@ def test_single_site_descent_settles_at_a_local_minimum() -> None:
             assert energy(graph, field_values, candidate) >= settled - 1e-12
 
 
+@pytest.mark.critical
 @pytest.mark.edge_case
 @pytest.mark.oracle
 def test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term() -> None:
@@ -254,6 +258,7 @@ def test_an_already_optimal_start_makes_no_moves() -> None:
 # --- the compiled descent kernel -----------------------------------------------
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize("seed", range(6))
 def test_the_numba_descent_reproduces_the_python_one_bitwise(seed: int) -> None:
@@ -286,6 +291,7 @@ def test_descent_has_no_rust_backend() -> None:
         )
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize("seed", range(6))
 @pytest.mark.parametrize("n_states", [2, 4])
@@ -356,6 +362,7 @@ def _network_by_hand(
     return network
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_vectorized_network_is_the_loops_network_arc_for_arc() -> None:
     rng = np.random.default_rng(598)
@@ -378,6 +385,7 @@ def test_the_vectorized_network_is_the_loops_network_arc_for_arc() -> None:
     assert checked == 3 * 2 * (2 + 3 + 5) * 3, checked
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_vectorized_network_holds_on_a_graph_that_is_not_a_lattice() -> None:
     # The lattice is regular; the build indexes by edge position, so an

@@ -1,6 +1,9 @@
 """Suite-wide configuration: one process is one core, slow tests are named, and no benchmark runs distributed.
 
-Three things; the first two are issue #372's and the third is issue #405's.
+Five things: two are issue #372's, and one each issues #405's, #614's and
+#635's. A sixth, the refusal of a compiled extension older than the Rust it
+was built from (issue #630), is documented where it is raised rather than
+here, because what a reader needs at that point is the repair.
 
 **One process is one core.** The BLAS behind NumPy and PyTorch starts a
 thread per core, so one test process reads as four on the load average and
@@ -18,6 +21,22 @@ so does a ``key`` test over that (``tests/_durations.py``).
 `DEV.md`'s rule against timing on its runners, and prints ``--durations``
 instead.
 
+**A test is selectable by the problem it exercises.** Issue #614. Every test
+module's fixture calls are read at collection (``tests/_problems.py``) and one
+marker per problem named is added to its items, so ``pytest -m potts_lattice``
+selects that problem across `search/` and `likelihood/` at once and no author
+tags anything. The names are registered below with the rest, so
+``--strict-markers`` refuses a typo, and they are a third axis: ``-m
+"potts_lattice and critical"`` is the intersection.
+
+**An early-gate test is never scale-marked out of the tier.** Issue #635.
+``-m critical`` replaces ``addopts``' ``-m "not release"`` rather than
+intersecting with it, so a test carrying both `critical` and a scale marker
+runs in the early gate and not in a bare `pytest` --- the opposite of what
+each marker asks for. The scale markers come from the fixture file through
+``tests/_scale.py`` and never appear as a decorator, so this is read from the
+collected items and refused at collection (``tests/_durations.py``).
+
 **A benchmark is never collected under ``pytest-xdist``.** ``pytest-benchmark``
 disables itself whenever a run is distributed and says so in a line of its
 header, so a distributed run collects the 212 benchmark tests, passes every
@@ -33,19 +52,105 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from pathlib import Path
 
 for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_variable, "1")
 
 import pytest  # noqa: E402
 
-from tests._durations import key_over_cap, over_cap  # noqa: E402
+from tests._durations import (  # noqa: E402
+    key_over_cap,
+    outside_the_tier,
+    over_cap,
+)
+from tests._extension import stale_extension  # noqa: E402
+from tests._problems import (  # noqa: E402
+    CACHE_KEY,
+    fixtures_named_in,
+    problem_names,
+    restore,
+    snapshot,
+)
 
 DURATIONS = pytest.StashKey[list[tuple[str, float, frozenset[str]]]]()
 
 
+#: What a problem marker says of itself, once registered.
+PROBLEM_MARKER = (
+    "{problem}: exercises the {problem} fixture, from the registry call the "
+    "test module already makes; added at collection, never by an author "
+    "(tests/_problems.py, issue #614)"
+)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     config.stash[DURATIONS] = []
+    # First, and before #619's registration below: a stale extension fails the
+    # tests that call the signature it predates, which reads as the change
+    # under test breaking them (issue #630, `tests/_extension.py`). Everything
+    # after it is measuring the wrong binary.
+    refusal = stale_extension(Path(__file__).resolve().parent.parent)
+    if refusal:
+        raise pytest.UsageError(refusal)
+    # A fixture directory named `critical`, `key`, `stress` or `release` would
+    # register a second marker of that name and then be applied by the hook to
+    # every module that loads it --- and `tests/_durations.py` reads
+    # `iter_markers()` to decide what the duration cap exempts, so a directory
+    # name would start excusing tests from it. Refuse rather than collide.
+    reserved = {
+        line.split(":", 1)[0].strip() for line in config.getini("markers") if line
+    }
+    for problem in problem_names():
+        if problem in reserved:
+            message = (
+                f"fixture directory {problem!r} collides with the marker of that "
+                f"name; rename the directory (issue #614)"
+            )
+            raise pytest.UsageError(message)
+        config.addinivalue_line("markers", PROBLEM_MARKER.format(problem=problem))
+    cache = getattr(config, "cache", None)
+    if cache is not None:
+        restore(cache.get(CACHE_KEY, None))
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    """Mark each item with the problems its module loads.
+
+    ``tryfirst`` because `pytest`'s own mark plugin deselects on ``-m`` from
+    this same hook: a marker added after that runs has been added to an item
+    already thrown away, and ``-m potts_lattice`` would select nothing while
+    looking like it worked. The order is pinned by
+    ``tests/regression/test_problem_markers.py``, which runs the selection
+    rather than trusting registration order.
+
+    What each module names is written back to `pytest`'s cache here, so the
+    next invocation reads 232 file stats rather than 232 parses.
+    """
+    for item in items:
+        path = getattr(item, "path", None)
+        if path is None:
+            continue
+        for problem in fixtures_named_in(path):
+            item.add_marker(problem)
+
+    conflicts = outside_the_tier(
+        (item.nodeid, frozenset(marker.name for marker in item.iter_markers()))
+        for item in items
+    )
+    if conflicts:
+        raise pytest.UsageError("\n".join([EARLY_GATE_CONFLICT, *conflicts]))
+
+    cache = getattr(config, "cache", None)
+    if cache is not None and not hasattr(config, "workerinput"):
+        # The controller only: `pytest-xdist`'s workers share one cache
+        # directory, and several processes writing one JSON file is a corrupt
+        # file rather than a faster session.
+        cache.set(CACHE_KEY, snapshot())
 
 
 def distributed(config: pytest.Config) -> bool:
@@ -65,6 +170,15 @@ def distributed(config: pytest.Config) -> bool:
     if getattr(config.option, "numprocesses", None):
         return True
     return str(config.getoption("dist", "no")) != "no"
+
+
+#: What a run collecting a scale-marked critical test is told. The refusal is
+#: at collection because the conflict is one of selection, not of a result.
+EARLY_GATE_CONFLICT = (
+    "a test gates early and is also scale-marked out of the per-PR tier, so "
+    "-m critical runs it and a bare pytest does not (tests/_durations.py, "
+    "issue #635):"
+)
 
 
 #: What a benchmark reaching a distributed run is told. Read by the guard's

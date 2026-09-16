@@ -42,6 +42,7 @@
 use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 /// Sites per tile in the message pass.
 ///
@@ -170,33 +171,114 @@ pub fn pruning_log_likelihood_impl(
 
     let n_rows = leaf_states.len() / n_sites;
 
+    // Bounds-check every leaf row before the windows start: a window runs
+    // inside a `par_chunks_mut` closure, which cannot `?` out of this
+    // function, and one rule for both arms beats two.
+    for (idx, &row) in leaf_row.iter().enumerate() {
+        if children[idx].is_empty() && (row < 0 || row as usize >= n_rows) {
+            return Err(format!(
+                "leaf at node {idx} has leaf_row {row}, expected [0, {n_rows})"
+            ));
+        }
+    }
+
+    // **Sites are the axis, and the sum over them is not.** A site's
+    // likelihood depends on no other site, so a window of sites can run the
+    // whole post-order traversal alone. What cannot be split is the last
+    // line: `total += ln(L_s) + scale_s` left to right over every site. So a
+    // window writes its own `ln(L_s) + scale_s` into `per_site[s]` and never
+    // adds anything up, and one sequential pass below sums `per_site` in
+    // index order -- the serial path's sum, to the bit, for the price of one
+    // `f64` per site and a pass over it (issue #627).
+    //
+    // A `fold`/`reduce` over an indexed parallel iterator would have been the
+    // obvious shape and would still reassociate: combining partials in index
+    // order is `(a+b)+(c+d)`, not `((a+b)+c)+d`.
+    let mut per_site = vec![0.0f64; n_sites];
+    let window = if n_sites >= PARALLEL_ABOVE {
+        n_sites.div_ceil(rayon::current_num_threads().max(1))
+    } else {
+        n_sites
+    };
+    let outcome: Result<(), String> = per_site
+        .par_chunks_mut(window)
+        .enumerate()
+        .map(|(index, into)| {
+            traverse_window(
+                branch_length,
+                children,
+                leaf_states,
+                n_sites,
+                leaf_row,
+                k,
+                pi,
+                rescale,
+                index * window,
+                into,
+            )
+        })
+        .collect();
+    outcome?;
+
+    let mut total_log_likelihood = 0.0f64;
+    for &value in per_site.iter() {
+        total_log_likelihood += value;
+    }
+    Ok(total_log_likelihood)
+}
+
+/// Sites below this run the traversal once, on one thread.
+///
+/// Measured, not chosen: `STATUS.md` carries what the pool costs on each side
+/// of this line, against issue #627's 117.64 ms at 8 taxa and 200,000 sites.
+const PARALLEL_ABOVE: usize = 20_000;
+
+/// The post-order traversal over one window of sites.
+///
+/// `into` receives `ln(L_s) + log_scale_s` for each site of the window, in
+/// site order, and nothing is summed here: the caller owns the reduction, so
+/// that the arithmetic does not depend on how many threads ran.
+#[allow(clippy::too_many_arguments)]
+fn traverse_window(
+    branch_length: &[f64],
+    children: &[Vec<usize>],
+    leaf_states: &[i64],
+    n_sites: usize,
+    leaf_row: &[i64],
+    k: usize,
+    pi: &[f64],
+    rescale: bool,
+    site_start: usize,
+    into: &mut [f64],
+) -> Result<(), String> {
+    let n_nodes = children.len();
+    let n_window = into.len();
+
     let mut partials: Vec<Vec<f64>> = Vec::with_capacity(n_nodes);
-    let mut log_scale = vec![0.0f64; n_sites];
+    let mut log_scale = vec![0.0f64; n_window];
     // Two scratch rows reused for the whole traversal rather than allocated
     // per node: one holds the message a child sends for one state over one
     // tile of sites, one the per-site scale factor.
-    let mut message = vec![0.0f64; TILE.min(n_sites)];
-    let mut scale = vec![0.0f64; n_sites];
+    let mut message = vec![0.0f64; TILE.min(n_window)];
+    let mut scale = vec![0.0f64; n_window];
 
     for idx in 0..n_nodes {
         let is_leaf = children[idx].is_empty();
         let partial = if is_leaf {
-            let row = leaf_row[idx];
-            if row < 0 || row as usize >= n_rows {
-                return Err(format!(
-                    "leaf at node {idx} has leaf_row {row}, expected [0, {n_rows})"
-                ));
-            }
-            let start = row as usize * n_sites;
-            let states = &leaf_states[start..start + n_sites];
-            let mut partial = vec![0.0f64; k * n_sites];
+            // The row is bounds-checked by the caller; the window reads its
+            // own slice of it, `n_sites` being the full stride.
+            let row = leaf_row[idx] as usize;
+            let start = row * n_sites + site_start;
+            let states = &leaf_states[start..start + n_window];
+            let mut partial = vec![0.0f64; k * n_window];
             for (s, &state) in states.iter().enumerate() {
                 if state < 0 || state as usize >= k {
                     return Err(format!(
-                        "leaf at node {idx}, site {s} has state {state}, expected [0, {k})"
+                        "leaf at node {idx}, site {} has state {state}, expected [0, {k})",
+                        site_start + s
                     ));
                 }
-                partial[state as usize * n_sites + s] = 1.0;
+                partial[state as usize * n_window + s] = 1.0;
             }
             partial
         } else {
@@ -225,7 +307,7 @@ pub fn pruning_log_likelihood_impl(
                 .map(|&child_idx| jc_transition_probabilities(branch_length[child_idx], k))
                 .collect();
 
-            let mut partial = vec![0.0f64; k * n_sites];
+            let mut partial = vec![0.0f64; k * n_window];
             // Sites in tiles, so a child's `k` rows and the parent's `k` rows
             // for one tile are live together in L1 while the `k * k` passes
             // over them run. Untiled, the sites-contiguous layout reads each
@@ -233,8 +315,8 @@ pub fn pruning_log_likelihood_impl(
             // 200,000 sites that traffic ate the whole of what vectorizing
             // the loop bought -- measured, and the numbers are in `STATUS.md`.
             let mut start = 0usize;
-            while start < n_sites {
-                let width = TILE.min(n_sites - start);
+            while start < n_window {
+                let width = TILE.min(n_window - start);
                 for (position, transition) in transitions.iter().enumerate() {
                     let child_partial = &partials[children[idx][position]];
                     // message[i, s] = sum_j P_ij(t) * L_child(j, s) --
@@ -246,7 +328,7 @@ pub fn pruning_log_likelihood_impl(
                         let sent = &mut message[..width];
                         for j in 0..k {
                             let probability = transition[i * k + j];
-                            let offset = j * n_sites + start;
+                            let offset = j * n_window + start;
                             let child_row = &child_partial[offset..offset + width];
                             if j == 0 {
                                 for (value, &child) in sent.iter_mut().zip(child_row) {
@@ -258,7 +340,7 @@ pub fn pruning_log_likelihood_impl(
                                 }
                             }
                         }
-                        let offset = i * n_sites + start;
+                        let offset = i * n_window + start;
                         let row = &mut partial[offset..offset + width];
                         if position == 0 {
                             row.copy_from_slice(sent);
@@ -282,9 +364,9 @@ pub fn pruning_log_likelihood_impl(
             }
 
             if rescale {
-                scale.copy_from_slice(&partial[0..n_sites]);
+                scale.copy_from_slice(&partial[0..n_window]);
                 for i in 1..k {
-                    let row = &partial[i * n_sites..(i + 1) * n_sites];
+                    let row = &partial[i * n_window..(i + 1) * n_window];
                     for (largest, &value) in scale.iter_mut().zip(row) {
                         *largest = largest.max(value);
                     }
@@ -307,7 +389,7 @@ pub fn pruning_log_likelihood_impl(
                     }
                 }
                 for i in 0..k {
-                    let row = &mut partial[i * n_sites..(i + 1) * n_sites];
+                    let row = &mut partial[i * n_window..(i + 1) * n_window];
                     for (value, &reciprocal) in row.iter_mut().zip(scale.iter()) {
                         *value *= reciprocal;
                     }
@@ -321,22 +403,25 @@ pub fn pruning_log_likelihood_impl(
     // eq:root, reusing `scale` as the per-site accumulator: one contiguous
     // pass per state rather than a k-long reduction per site.
     let root_partial = &partials[n_nodes - 1];
-    for (site, &value) in scale.iter_mut().zip(&root_partial[0..n_sites]) {
+    for (site, &value) in scale.iter_mut().zip(&root_partial[0..n_window]) {
         *site = value * pi[0];
     }
     for i in 1..k {
-        let row = &root_partial[i * n_sites..(i + 1) * n_sites];
+        let row = &root_partial[i * n_window..(i + 1) * n_window];
         let weight = pi[i];
         for (site, &value) in scale.iter_mut().zip(row) {
             *site += value * weight;
         }
     }
-    let mut total_log_likelihood = 0.0f64;
-    for (&site_likelihood, &scaled) in scale.iter().zip(log_scale.iter()) {
-        total_log_likelihood += site_likelihood.ln() + scaled;
+    // Per site, not summed: the caller adds these up in index order, so the
+    // total does not depend on how the sites were divided.
+    for ((slot, &site_likelihood), &scaled) in
+        into.iter_mut().zip(scale.iter()).zip(log_scale.iter())
+    {
+        *slot = site_likelihood.ln() + scaled;
     }
 
-    Ok(total_log_likelihood)
+    Ok(())
 }
 
 /// PyO3 boundary for [`pruning_log_likelihood_impl`], `Err` mapped to a
@@ -385,6 +470,100 @@ pub fn pruning_log_likelihood(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A balanced tree with `n_leaves` leaves and random states, for the
+    /// agreement tests below.
+    fn fixture(
+        n_leaves: usize,
+        n_sites: usize,
+        k: usize,
+    ) -> (Vec<f64>, Vec<Vec<usize>>, Vec<i64>, Vec<i64>) {
+        let n_nodes = 2 * n_leaves - 1;
+        let mut children: Vec<Vec<usize>> = vec![Vec::new(); n_leaves];
+        for i in 0..n_leaves - 1 {
+            children.push(vec![2 * i, 2 * i + 1]);
+        }
+        // A fixed multiplicative generator, so the fixture is the same on
+        // every host and no dependency is added for it.
+        let mut state = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let branch_length: Vec<f64> = (0..n_nodes)
+            .map(|_| 0.05 + (next() % 1000) as f64 / 10_000.0)
+            .collect();
+        let leaf_states: Vec<i64> = (0..n_leaves * n_sites)
+            .map(|_| (next() % k as u64) as i64)
+            .collect();
+        let leaf_row: Vec<i64> = (0..n_nodes)
+            .map(|i| if i < n_leaves { i as i64 } else { -1 })
+            .collect();
+        (branch_length, children, leaf_states, leaf_row)
+    }
+
+    /// Splitting the sites must not move a bit of the answer.
+    ///
+    /// The whole point of writing `ln(L_s) + scale_s` per site and summing
+    /// sequentially: the result cannot depend on how many threads ran, so a
+    /// run on a 4-core host and a run on a 64-core one agree exactly. A
+    /// `fold`/`reduce` would not have this property, which is why the
+    /// benchmark carries both and only this one is called (issue #627).
+    #[test]
+    fn test_the_total_does_not_depend_on_how_the_sites_were_divided() {
+        let (k, n_sites) = (4usize, 50_000usize);
+        let pi = vec![0.25; k];
+        let (branch_length, children, leaf_states, leaf_row) = fixture(4, n_sites, k);
+        let observations = || LeafObservations {
+            states: &leaf_states,
+            n_sites,
+            row: &leaf_row,
+        };
+        let whole = traverse_and_sum(&branch_length, &children, observations(), k, &pi, n_sites);
+        for window in [n_sites, n_sites / 2 + 1, n_sites / 3 + 1, 1024] {
+            let split = traverse_and_sum(&branch_length, &children, observations(), k, &pi, window);
+            assert_eq!(
+                whole.to_bits(),
+                split.to_bits(),
+                "window {window} gave {split}, not {whole}"
+            );
+        }
+    }
+
+    /// The traversal at a chosen window width, summed the caller's way.
+    fn traverse_and_sum(
+        branch_length: &[f64],
+        children: &[Vec<usize>],
+        observations: LeafObservations<'_>,
+        k: usize,
+        pi: &[f64],
+        window: usize,
+    ) -> f64 {
+        let n_sites = observations.n_sites;
+        let mut per_site = vec![0.0f64; n_sites];
+        for (index, into) in per_site.chunks_mut(window).enumerate() {
+            traverse_window(
+                branch_length,
+                children,
+                observations.states,
+                n_sites,
+                observations.row,
+                k,
+                pi,
+                true,
+                index * window,
+                into,
+            )
+            .unwrap();
+        }
+        let mut total = 0.0f64;
+        for &value in per_site.iter() {
+            total += value;
+        }
+        total
+    }
 
     #[test]
     fn test_jc_transition_probabilities_rows_sum_to_one() {

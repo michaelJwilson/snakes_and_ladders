@@ -153,7 +153,7 @@ def belief_propagation(
         source[2 * position], target[2 * position] = first, second
         source[2 * position + 1], target[2 * position + 1] = second, first
     reverse = np.arange(2 * n_edges) ^ 1
-    edge_coupling = np.repeat(np.asarray(graph.coupling, dtype=float), 2)
+    edge_coupling = np.repeat(graph.edge_coupling, 2)
 
     # log psi_ij(a, b) for each directed edge: J on the diagonal, 0 elsewhere.
     identity = np.eye(n_states)

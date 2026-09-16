@@ -19,14 +19,27 @@ from snakes_and_ladders.likelihood.turbo import (
     noise_scale,
     split_streams,
 )
+from snakes_and_ladders.sim import fixtures
 from snakes_and_ladders.sim.convolutional import TurboCode, turbo_code
 
-ITERATIONS = 8
+#: The declared turbo instance (`turbo/stress.yaml`), read rather than restated
+#: (issue #622): the (7, 5) generators, memory 2 and seed 233 below are its
+#: fields. The declared message length is 256; 1,024 is this module's own
+#: second point, which is why the length stays a parameter.
+PARAMS = fixtures.fixture("turbo", "stress").params
+
+ITERATIONS = PARAMS.iterations
 
 
 def _instance(message_length: int) -> tuple[TurboCode, np.ndarray]:
     """The code and one received word at 1 dB, under fixed seeds."""
-    code = turbo_code(0o7, 0o5, 2, message_length, np.random.default_rng(233))
+    code = turbo_code(
+        PARAMS.feedback,
+        PARAMS.feedforward,
+        PARAMS.memory,
+        message_length,
+        np.random.default_rng(PARAMS.seed),
+    )
     sigma = noise_scale(1.0, code.rate)
     rng = np.random.default_rng(9)
     received = 1.0 + sigma * rng.standard_normal(code.block_length)

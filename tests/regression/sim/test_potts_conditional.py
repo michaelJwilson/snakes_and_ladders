@@ -18,16 +18,21 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim import fixtures
+from snakes_and_ladders.sim.graph import lattice_graph
 from snakes_and_ladders.sim.potts import (
     heat_bath_log_weights,
     simulate_potts,
     site_field,
 )
 
-#: `potts_lattice/ci`'s instance, which the pinned draws below were taken on.
-LATTICE = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.6)
-FIELD = np.array([0.30, -0.10, -0.20])
+#: `potts_lattice/ci`'s instance, which the pinned draws below were taken on
+#: --- read from the registry rather than rebuilt from its literals (issue
+#: #622). The graph is edge for edge the one the draws were taken on, and the
+#: field is the declared array, so nothing below moves.
+PARAMS = fixtures.fixture("potts_lattice", "ci").params
+LATTICE = lattice_graph(PARAMS.shape, PARAMS.boundary, PARAMS.coupling)
+FIELD = PARAMS.field
 
 #: The first four configurations each sweep drew **before** the conditional
 #: was extracted, at the seeds named in the calls below.

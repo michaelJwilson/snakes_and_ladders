@@ -47,6 +47,7 @@
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 /// The shape of one coupled E step.
 ///
@@ -295,6 +296,13 @@ pub fn class_posteriors_into(
     class_log_density(&shape, tables, totals, successes, labels, &mut density);
     let per_class = n_positions * n_states;
     let per_class_pairs = n_positions.saturating_sub(1) * n_states * n_states;
+    // **Serial, and measured to be right.** `m` is a clean axis --- each class
+    // writes its own slice of `posterior`, `pairwise` and `log_evidence`, and
+    // nothing is summed across them --- so a `rayon` port was written and
+    // benchmarked. It ran **26.703 ms against this loop's 23.064 ms, 0.86x**:
+    // ten items against four cores, and `forward_backward` allocates per
+    // class, so the pool costs more than it saves. Declined by measurement
+    // (issue #627), and recorded in `STATUS.md` so it is not proposed again.
     for m in 0..n_classes {
         log_evidence[m] = forward_backward(
             &density[m * per_class..][..per_class],
@@ -353,24 +361,34 @@ pub fn external_field_into(
         ));
     }
 
-    field.fill(0.0);
-    for s in 0..n_positions {
-        let row = s * n_nodes;
-        let weight = &weights[s * block..][..block];
-        for v in 0..n_nodes {
-            let total = &tables.total[usize::from(totals[row + v]) * block..][..block];
-            let success = &tables.success[usize::from(successes[row + v]) * block..][..block];
-            let into = &mut field[v * shape.n_classes..][..shape.n_classes];
-            for (m, cell) in into.iter_mut().enumerate() {
-                let mut accumulated = 0.0;
-                for k in 0..n_states {
-                    let index = m * n_states + k;
-                    accumulated += (total[index] + success[index]) * weight[index];
+    // **The axis is `v`, not `s`.** Read by cost alone the outer loop looks
+    // like the one to split -- 5,041 positions against 200 vertices -- but it
+    // is the loop that *accumulates*: every `s` adds into `field[v]`, so
+    // splitting it reassociates a sum the oracles pin. Inverting the loops
+    // gives each `v` its own `field[v * M..][..M]` to write and leaves the sum
+    // over `s` sequential inside it, in the same order and so to the same
+    // bits. 200 items against 4 cores is ample; the reassociated version
+    // would have been faster and wrong (issue #627).
+    field
+        .par_chunks_mut(shape.n_classes)
+        .enumerate()
+        .for_each(|(v, into)| {
+            into.fill(0.0);
+            for s in 0..n_positions {
+                let row = s * n_nodes;
+                let weight = &weights[s * block..][..block];
+                let total = &tables.total[usize::from(totals[row + v]) * block..][..block];
+                let success = &tables.success[usize::from(successes[row + v]) * block..][..block];
+                for (m, cell) in into.iter_mut().enumerate() {
+                    let mut accumulated = 0.0;
+                    for k in 0..n_states {
+                        let index = m * n_states + k;
+                        accumulated += (total[index] + success[index]) * weight[index];
+                    }
+                    *cell -= accumulated;
                 }
-                *cell -= accumulated;
             }
-        }
-    }
+        });
     Ok(())
 }
 
