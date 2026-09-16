@@ -200,6 +200,38 @@ def sampled(carried: tuple[Module, ...], take: int = SAMPLE) -> tuple[Module, ..
     return tuple(ranked[:take])
 
 
+#: What a tooltip carries before it is cut, in characters. A PDF viewer wraps
+#: the text itself, but an unbounded docstring paragraph fills the screen.
+TIP_WIDTH = 160
+
+
+def _tip(module: Module) -> str:
+    r"""The module's docstring summary, as text safe for LaTeX *and* for PDF.
+
+    The tooltip crosses two escapes, which is what makes it fiddly: LaTeX reads
+    it as a macro argument first, and only then is it written into a PDF
+    literal string. A first attempt escaped for PDF alone and LaTeX read the
+    `\(` as math mode.
+
+    So the text is reduced to what is safe in both. Parentheses become brackets,
+    which removes the only PDF escape that was needed; the LaTeX specials
+    ``\ # $ % & { } ^ ~`` are dropped, since none of them carries meaning a
+    tooltip needs; and ``_`` is emitted as ``\string_``, because module names
+    are full of it and it is subscript to LaTeX in text mode. Non-ASCII goes:
+    the annotation declares no encoding, so a viewer would print mojibake.
+    """
+    text = module.summary or "no module docstring"
+    claim = f" ({', '.join(module.milestones)})" if module.milestones else ""
+    text = f"{module.name}{claim} -- {text}"
+    text = text.encode("ascii", "ignore").decode("ascii")
+    if len(text) > TIP_WIDTH:
+        text = text[: TIP_WIDTH - 3].rstrip() + "..."
+    text = text.replace("(", "[").replace(")", "]")
+    for character in "\\#$%&{}^~":
+        text = text.replace(character, "")
+    return text.replace("_", r"\string_")
+
+
 def _label(module: Module) -> str:
     """A node's text: the module, and the roadmap claim that is its role.
 
@@ -221,7 +253,7 @@ def _label(module: Module) -> str:
 
 
 #: Radii, in millimetres: concern ring, package ring, leaf ring.
-CONCERN_R, PACKAGE_R, LEAF_R = 26.0, 60.0, 96.0
+CONCERN_R, PACKAGE_R, LEAF_R = 34.0, 72.0, 104.0
 
 #: Degrees left clear between the two concerns' wedges, each side, so the
 #: branches read as two rather than one circle.
@@ -323,8 +355,14 @@ def placed(
                 x, y = _polar(LEAF_R, bearing)
                 flip = 90.0 < bearing % 360.0 < 270.0
                 rotation = bearing + 180.0 if flip else bearing
-                style = f"leaf, {short}leaf, {'flipped' if flip else 'plain'}"
-                nodes.append((x, y, style, _label(module), rotation, package_at))
+                # The leaf takes its *package's* colour, not its concern's, so
+                # a branch reads as one family at a glance.
+                style = f"leaf, {key}leaf, {'flipped' if flip else 'plain'}"
+                # The label is wrapped in `\tip`, which the document defines as
+                # a `\pdfannot` over the text's own box: hovering a module in a
+                # PDF reader shows its docstring (issue #664).
+                text = rf"\tip{{{_label(module)}}}{{{_tip(module)}}}"
+                nodes.append((x, y, style, text, rotation, package_at))
     return nodes
 
 
@@ -336,12 +374,19 @@ def tree(found: tuple[Module, ...] | None = None) -> str:
         f"at ({x:.2f}mm,{y:.2f}mm) {{{label}}};"
         for index, (x, y, style, label, rotation, _) in enumerate(nodes)
     ]
+    # An edge is drawn in its parent's colour and stops short of both nodes, so
+    # it never runs under a bubble or into a label.
     lines.extend(
-        f"\\draw[edge] (n{parent}) -- (n{index});"
+        f"\\draw[edge, {_hue(nodes[parent][2])}edge] (n{parent}) -- (n{index});"
         for index, (*_, parent) in enumerate(nodes)
         if parent >= 0
     )
     return "\n".join(lines)
+
+
+def _hue(style: str) -> str:
+    """The colour key a node's style carries, for an edge leaving it."""
+    return style.rsplit(", ", 1)[-1].removesuffix("leaf") if ", " in style else style
 
 
 def node_count(found: tuple[Module, ...] | None = None) -> int:

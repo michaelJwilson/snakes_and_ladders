@@ -17,12 +17,15 @@ sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 from mind_map import (  # noqa: E402
     APPLICATION,
+    COLLAPSED,
     NODE_CAP,
     PACKAGE,
+    _tip,
     modules,
     node_count,
     placed,
     roadmap_milestones,
+    sampled,
     tree,
 )
 
@@ -111,3 +114,37 @@ def test_the_layout_is_a_tree_and_is_deterministic() -> None:
     for index, (*_, parent) in enumerate(nodes):
         assert parent < index, "a node precedes its parent"
     assert tree() == tree(), "two renderings disagree"
+
+
+@pytest.mark.structural
+def test_every_drawn_leaf_carries_its_docstring_as_a_tooltip() -> None:
+    """The hover text is the module's own summary, escaped for both readers.
+
+    It crosses two escapes and a first attempt failed on the second: the text
+    is a LaTeX macro argument before it is a PDF literal string, so ``\\(`` was
+    read as math mode. Parentheses become brackets and the LaTeX specials go,
+    which is what this pins.
+
+    Only a **drawn** leaf can carry one. `qa` is collapsed to a counted node
+    and five sampled modules, so its other 24 appear nowhere on the page --- a
+    first version of this guard asked for all 139 and failed on that.
+    """
+    body = tree()
+    drawn = [
+        one
+        for one in modules()
+        if one.package not in COLLAPSED
+        or one
+        in sampled(tuple(other for other in modules() if other.package == one.package))
+    ]
+    assert len(drawn) < len(modules()), (
+        "nothing is collapsed; the sample is not exercised"
+    )
+    for one in drawn:
+        tip = _tip(one)
+        assert tip in body, f"{one.name} has no tooltip"
+        assert "(" not in tip, f"{one.name}: an unescaped opening parenthesis"
+        assert ")" not in tip, f"{one.name}: an unescaped closing parenthesis"
+        for special in "#$%&{}^~":
+            assert special not in tip, f"{one.name}: LaTeX special {special!r}"
+        assert tip.isascii(), f"{one.name}: non-ASCII reaches the PDF string"

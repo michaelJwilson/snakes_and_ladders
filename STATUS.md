@@ -3774,3 +3774,13 @@ about 15 mm, so a horizontal label collides with its neighbour by a factor of
 three. A label rotated to run radially outward is bounded by its *height*,
 about 2 mm, and fits with room to spare. Past the top of the circle it is
 turned through 180 degrees so it does not read upside down.
+
+**Hovering a module shows its docstring**, as a transparent PDF annotation over
+each label --- 115 of them, one per drawn leaf. `\pdfannot` is a pdfTeX
+primitive so this needs no package: `pdfcomment` is the idiomatic route and is
+absent here, with `soul`, `soulpos`, `zref-abspage` and `marginnote`. The text
+crosses two escapes, LaTeX's before the PDF's, which is where a first attempt
+failed: parentheses become brackets, the LaTeX specials are dropped and `_` is
+written `\string_`. Support is the reader's --- Acrobat and most desktop
+readers show it, Chrome's viewer and pdf.js do not --- so the page states every
+role without it.

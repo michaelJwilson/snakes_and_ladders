@@ -1,80 +1,102 @@
-% The mind map (issue #664). One page, radial: `snakes_and_ladders` at the
-% centre, the two concerns around it, the packages beyond, and every module on
-% the outer ring.
-%
-% The tree is `docs/tex/generated/mind_map.tex`, written by `infra/mind_map.py`
-% and not committed --- a drawn copy of the tree is what `SEAMS.md` was before
-% issue #601 deleted it. Every coordinate is computed there; nothing here
-% places a node. Each branch takes a wedge proportional to the leaves it
-% carries, so every leaf gets the same angle, and a leaf's label runs radially
-% outward because 115 horizontal labels 3.1 degrees apart would collide.
-%
-% Plain TikZ: `forest` would pack a tree but its `environ`, `trimspaces` and
-% `elocalloc` are absent from this TeX Live, and TikZ `graphdrawing` needs
-% LuaLaTeX where the build runs pdflatex.
 \documentclass[a3paper,landscape]{article}
-\usepackage[a3paper,landscape,margin=8mm]{geometry}
+\usepackage[a3paper,landscape,margin=6mm]{geometry}
 \usepackage[T1]{fontenc}
+\usepackage[scaled=0.94]{helvet}
+\renewcommand{\familydefault}{\sfdefault}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usetikzlibrary{shapes.geometric}
 
-% Application is one hue family, infrastructure another: the separation root
-% CLAUDE.md insists on is the first thing the page should show.
-\definecolor{appink}{HTML}{0B3C5D}
-\definecolor{infink}{HTML}{5B3A29}
-\definecolor{claim}{HTML}{1D4ED8}
+% One hue per internal node, and a leaf takes its package's. Nine packages, so
+% nine hues spaced around the wheel rather than nine shades of one: the point
+% of the colour is to say which branch a name belongs to from across the page.
+\definecolor{centrehue}{HTML}{1F2933}
+\definecolor{apphue}{HTML}{18435A}
+\definecolor{infrahue}{HTML}{6B4423}
+\definecolor{simhue}{HTML}{2A9D8F}
+\definecolor{likelihoodhue}{HTML}{2F6FB3}
+\definecolor{opthue}{HTML}{5B5BD6}
+\definecolor{searchhue}{HTML}{8E5BC9}
+\definecolor{learnhue}{HTML}{C0498B}
+\definecolor{qahue}{HTML}{D98C2B}
+\definecolor{sandboxhue}{HTML}{7A9A3B}
+\definecolor{scriptshue}{HTML}{A5673F}
+\definecolor{toplevelhue}{HTML}{5C7080}
+\definecolor{claim}{HTML}{6B7785}
 \definecolor{unclaimed}{HTML}{B02020}
-\definecolor{rule}{HTML}{B8C2CE}
 
-\definecolor{csim}{HTML}{BFD8E8}
-\definecolor{clikelihood}{HTML}{A9C9DE}
-\definecolor{copt}{HTML}{93BAD4}
-\definecolor{csearch}{HTML}{7DABCA}
-\definecolor{clearn}{HTML}{679CC0}
-\definecolor{cqa}{HTML}{E8D5BF}
-\definecolor{csandbox}{HTML}{DFC6A9}
-\definecolor{cscripts}{HTML}{D6B793}
-\definecolor{ctoplevel}{HTML}{CDA87D}
+% Hovering a module shows its docstring. `\pdfannot` is a pdfTeX primitive, so
+% this needs no package: `pdfcomment` would be the idiomatic route and is absent
+% from this TeX Live, along with `soul`, `soulpos`, `zref-abspage` and
+% `marginnote`. The annotation is a zero-width, fully transparent /Square laid
+% over the label's own box, which is what a reader hovers.
+%
+% Support is the reader's, not ours: Acrobat and most desktop readers show
+% /Contents on hover; Chrome's built-in viewer and Firefox's pdf.js ignore it.
+% The page is readable without a tooltip either way, which is why this is an
+% addition and not the way a role is conveyed.
+\newsavebox{\tipbox}
+\newcommand{\tip}[2]{%
+  \sbox{\tipbox}{#1}%
+  \pdfannot width \wd\tipbox height \ht\tipbox depth \dp\tipbox {%
+    /Subtype /Square /F 4 /CA 0 /IC [] /C []
+    /BS << /W 0 >> /Contents (#2)%
+  }%
+  \usebox{\tipbox}%
+}
+
+% A bubble is a light wash of its hue with the hue itself as its rule; a leaf
+% is the hue darkened, as ink. An edge leaves in its parent's hue and stops
+% short of both ends, so it never runs under a bubble or into a name. The
+% styles are written out rather than built by a macro: TikZ parses a key before
+% expanding what is inside it, and `\bubble{apphue}` reached xcolor as the
+% literal colour name `fill=apphue`.
 
 \pagestyle{empty}
 
 \begin{document}
-\begin{center}
-  {\Large\bfseries snakes\_and\_ladders, as a map}\\[2pt]
-  {\small Two concerns, nine packages, 139 modules. A module's role is the
-   roadmap milestone \texttt{STATUS.md} records it under;
-   \textcolor{unclaimed}{$\circ$} marks an application module none names.
-   Infrastructure carries no milestone by design.}
-\end{center}
-\vfill
+\noindent
 \begin{center}
 \begin{tikzpicture}[
-  every node/.style={font=\tiny, inner sep=1.1pt},
-  centre/.style={ellipse, draw=appink, fill=appink, text=white,
-                 font=\small\bfseries, inner xsep=5pt, inner ysep=3.5pt},
-  concern/.style={ellipse, draw=none, text=white, font=\footnotesize\bfseries\scshape,
-                  inner xsep=4pt, inner ysep=2.6pt},
-  app/.style={fill=appink},
-  infra/.style={fill=infink},
-  package/.style={ellipse, draw=rule, font=\scriptsize\bfseries, text=black,
-                  inner xsep=3pt, inner ysep=2pt},
-  sim/.style={fill=csim}, likelihood/.style={fill=clikelihood},
-  opt/.style={fill=copt}, search/.style={fill=csearch},
-  learn/.style={fill=clearn}, qa/.style={fill=cqa},
-  sandbox/.style={fill=csandbox}, scripts/.style={fill=cscripts},
-  toplevel/.style={fill=ctoplevel},
-  % A leaf takes the concern's colour as ink, never as fill: filling it
-  % paints a dark box under dark text and the name cannot be read.
-  leaf/.style={inner sep=0.6pt},
-  appleaf/.style={text=appink},
-  infraleaf/.style={text=infink},
-  plain/.style={anchor=west, xshift=1.2mm},
-  flipped/.style={anchor=east, xshift=-1.2mm},
-  edge/.style={rule, line width=0.3pt},
+  every node/.style={font=\scriptsize, inner sep=1.4pt},
+  centre/.style={ellipse, fill=centrehue, draw=none, text=white,
+                 font=\large\bfseries, inner xsep=7pt, inner ysep=5pt},
+  concern/.style={ellipse, font=\small\bfseries, inner xsep=6pt, inner ysep=3.6pt,
+                  line width=0.7pt},
+  package/.style={ellipse, font=\footnotesize\bfseries, inner xsep=5pt,
+                  inner ysep=2.8pt, line width=0.6pt},
+  app/.style={fill=apphue!14, draw=apphue!85, text=apphue!72!black},
+  infra/.style={fill=infrahue!14, draw=infrahue!85, text=infrahue!72!black},
+  sim/.style={fill=simhue!14, draw=simhue!85, text=simhue!72!black},
+  likelihood/.style={fill=likelihoodhue!14, draw=likelihoodhue!85, text=likelihoodhue!72!black},
+  opt/.style={fill=opthue!14, draw=opthue!85, text=opthue!72!black},
+  search/.style={fill=searchhue!14, draw=searchhue!85, text=searchhue!72!black},
+  learn/.style={fill=learnhue!14, draw=learnhue!85, text=learnhue!72!black},
+  qa/.style={fill=qahue!14, draw=qahue!85, text=qahue!72!black},
+  sandbox/.style={fill=sandboxhue!14, draw=sandboxhue!85, text=sandboxhue!72!black},
+  scripts/.style={fill=scriptshue!14, draw=scriptshue!85, text=scriptshue!72!black},
+  toplevel/.style={fill=toplevelhue!14, draw=toplevelhue!85, text=toplevelhue!72!black},
+  leaf/.style={font=\tiny, inner sep=0.6pt},
+  simleaf/.style={text=simhue!78!black},
+  likelihoodleaf/.style={text=likelihoodhue!78!black},
+  optleaf/.style={text=opthue!78!black},
+  searchleaf/.style={text=searchhue!78!black},
+  learnleaf/.style={text=learnhue!78!black},
+  qaleaf/.style={text=qahue!78!black},
+  sandboxleaf/.style={text=sandboxhue!78!black},
+  scriptsleaf/.style={text=scriptshue!78!black},
+  toplevelleaf/.style={text=toplevelhue!78!black},
+  plain/.style={anchor=west, xshift=1.6mm},
+  flipped/.style={anchor=east, xshift=-1.6mm},
+  edge/.style={line width=0.75pt, shorten >=1.6mm, shorten <=1.0mm},
+  centreedge/.style={draw=centrehue!55}, appedge/.style={draw=apphue!55},
+  infraedge/.style={draw=infrahue!55}, simedge/.style={draw=simhue!60},
+  likelihoodedge/.style={draw=likelihoodhue!60}, optedge/.style={draw=opthue!60},
+  searchedge/.style={draw=searchhue!60}, learnedge/.style={draw=learnhue!60},
+  qaedge/.style={draw=qahue!60}, sandboxedge/.style={draw=sandboxhue!60},
+  scriptsedge/.style={draw=scriptshue!60}, topleveledge/.style={draw=toplevelhue!60},
 ]
 \input{generated/mind_map}
 \end{tikzpicture}
 \end{center}
-\vfill
 \end{document}
