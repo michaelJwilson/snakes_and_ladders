@@ -189,11 +189,18 @@ def factor_graph_log_density(
     fix, and the sum runs left to right over factors in graph order.
 
     That order is the whole of the pin. Floating-point addition is not
-    associative, so a pairwise or vectorized sum would move the last place of
-    every recorded log-density; this accumulates the same terms in the same
-    sequence as the oracle and reproduces it **bitwise**. No exponential is
-    taken, so nothing here depends on which ``exp``
-    :func:`gibbs_sweep_sites` had to bound.
+    associative, so a pairwise or vectorized sum may move the last place of a
+    recorded log-density; this accumulates the same terms in the same sequence
+    as the oracle and reproduces it **bitwise**. No exponential is taken, so
+    nothing here depends on which ``exp`` :func:`gibbs_sweep_sites` had to
+    bound.
+
+    **The pin is not a cost, which #651 established by measuring it.** Gathering
+    the offsets and calling ``np.sum`` is *slower* at every size from a thousand
+    factors to a million --- 0.60x to 0.77x, the extra array and its second pass
+    costing more than fusing the accumulate saves --- so the ordered form is
+    also the fast one and nothing is traded for the reproduction.
+    ``tests/benchmarks/test_factor_density_sum_bench.py`` holds both.
     """
     total = 0.0
     for factor in range(factor_start.shape[0]):
