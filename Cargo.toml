@@ -21,6 +21,14 @@ burn-autodiff = { version = "0.18", default-features = false, features = ["std"]
 burn-ndarray = { version = "0.18", default-features = false, features = ["std"], optional = true }
 burn-tensor = { version = "0.18", default-features = false, features = ["std"], optional = true }
 numpy = "0.29"
+# Data parallelism over the independent axis of four kernels, ranked on an
+# idle host in issue #627. Dual MIT / Apache-2.0, the pairing `pyo3` and
+# `numpy` already carry, and the crate the `tokio` maintainers send CPU-bound
+# work to (issue #612). What it is used for is a `par_chunks_mut` or a
+# `par_iter` over *disjoint* output, never a parallel sum: every kernel below
+# writes each result exactly once and the reduction, where there is one, stays
+# sequential so the arithmetic is the serial path's.
+rayon = "1.11"
 pyo3 = { version = "0.29", features = ["extension-module"] }
 rand = "0.10.2"
 rand_chacha = "0.10.0"
