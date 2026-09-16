@@ -150,6 +150,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.potts
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.region_graph
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.belief_propagation
    :members:
 
