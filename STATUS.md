@@ -567,6 +567,20 @@ comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
+**A chain's transition kernel may be a function of position**
+([#654](https://github.com/michaelJwilson/snakes_and_ladders/pull/654)).
+`forward_backward`, `sample_path` and `forward_log_likelihood_from_density`
+take either one `(K, K)` matrix for the whole chain or `(T - 1, K, K)`, one per
+transition, so a spacing between sites or a rate that varies along the sequence
+has a signature to arrive through. The constant form is a stride-zero view and
+the choice is hoisted out of the recursion, so it sums the same terms in the
+same order: the single-matrix result is reproduced **bitwise** in evidence,
+posterior, pairwise and sampled path, and the constant path costs 0.990x of the
+recursion that preceded it at `T = 100,000`, `K = 8`. The varying form costs
+1.044x there and 512 B against 48.83 MiB in the kernel argument, which is why
+both shapes stay. The new path is pinned against a path enumeration that shares
+no recursion with it, and a planted two-regime kernel is recovered per regime
+from the pairwise posteriors where the pooled estimate matches neither.
 **A covariate reaches the families from a fit, not only from a test**
 ([#657](https://github.com/michaelJwilson/snakes_and_ladders/pull/657)).
 #631's exposure and trial count were reachable only by a test that built a

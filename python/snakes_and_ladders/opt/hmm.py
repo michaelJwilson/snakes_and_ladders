@@ -887,7 +887,11 @@ def forward_log_likelihood_from_density(
     log_initial : torch.Tensor
         Log initial distribution, shape ``(m,)``.
     log_transition : torch.Tensor
-        Log transition matrix, shape ``(m, m)``.
+        Log transition matrix. Either ``(m, m)``, one kernel for the whole
+        chain, or ``(length - 1, m, m)``, one per step, so a kernel that is a
+        function of position can be written down (issue #653). The step axis
+        is shared across the batch: the kernel varies along the sequence, not
+        between sequences.
 
     Returns
     -------
@@ -895,11 +899,43 @@ def forward_log_likelihood_from_density(
         Scalar: the summed log-likelihood over sequences, differentiable with
         respect to every parameter. **Not** bounded above by zero where the
         emission family is continuous, since it then sums densities.
+
+    Raises
+    ------
+    ValueError
+        If ``log_transition`` is neither shape.
+
+    Notes
+    -----
+    The constant form is expanded to the step axis with
+    :meth:`torch.Tensor.expand`, a stride-zero view rather than a copy, and the
+    choice between the two is hoisted out of the recursion, so the constant
+    case indexes nothing and sees the same numbers in the same order --- the
+    result is the one this function returned before the second shape was
+    admitted, bitwise. The ``length``-fold memory the varying form costs is
+    paid only by a caller who asks for it. The same reasoning and the
+    measurement behind the hoist are in
+    :func:`snakes_and_ladders.likelihood.forward_backward.step_kernels`.
     """
+    length, n_states = log_density.shape[1], log_density.shape[2]
+    constant: torch.Tensor | None = None
+    if log_transition.shape == (n_states, n_states):
+        kernels = log_transition.expand(max(length - 1, 0), n_states, n_states)
+        constant = log_transition
+    elif log_transition.shape == (max(length - 1, 0), n_states, n_states):
+        kernels = log_transition
+    else:
+        msg = (
+            f"log_transition {tuple(log_transition.shape)} is neither "
+            f"({n_states}, {n_states}) nor ({max(length - 1, 0)}, {n_states}, "
+            f"{n_states}) for a chain of {length} positions over {n_states} states"
+        )
+        raise ValueError(msg)
     alpha = log_initial.unsqueeze(0) + log_density[:, 0]
-    for t in range(1, log_density.shape[1]):
+    for t in range(1, length):
+        step = kernels[t - 1] if constant is None else constant
         alpha = (
-            torch.logsumexp(alpha.unsqueeze(2) + log_transition.unsqueeze(0), dim=1)
+            torch.logsumexp(alpha.unsqueeze(2) + step.unsqueeze(0), dim=1)
             + log_density[:, t]
         )
     return torch.logsumexp(alpha, dim=1).sum()
