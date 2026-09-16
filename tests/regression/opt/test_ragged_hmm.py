@@ -10,11 +10,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import PoissonEmission
+from snakes_and_ladders.emissions import CategoricalEmission, PoissonEmission
 from snakes_and_ladders.likelihood.forward_backward import forward_backward
 from snakes_and_ladders.opt.hmm import baum_welch_family
 from snakes_and_ladders.ragged import Ragged
 from snakes_and_ladders.sandbox.rectangular_hmm import baum_welch_rectangular
+from snakes_and_ladders.sim import fixtures
 
 #: One chain, two states, a sticky kernel and well-separated rates.
 STATES = 2
@@ -136,3 +137,43 @@ def test_a_segment_of_one_position_never_reaches_the_fit() -> None:
     """Refused at the carrier, which is where the shape is declared."""
     with pytest.raises(ValueError, match="at least 2 positions"):
         Ragged(_draw((2, 1), seed=1)[:3], (2, 1))
+
+
+@pytest.mark.critical
+@pytest.mark.simulated_truth
+def test_the_declared_ragged_instance_recovers_its_transition() -> None:
+    """The fixture, loaded, simulated at its own segmentation, and fitted.
+
+    `sim.hmm.simulate_sequences` still returns a rectangular batch, so the
+    segments are drawn here from the declared parameters rather than by it. A
+    ragged simulator is deferred and noted on #666; what this pins is that the
+    **declared instance** is fitted through the registry, not a literal.
+    """
+    declared = fixtures.fixture("ragged_hmm", "ci").params
+    lengths = declared.segment_lengths
+    rng = np.random.default_rng(declared.seed)
+
+    drawn = []
+    for length in lengths:
+        state = int(rng.choice(declared.n_states, p=declared.initial))
+        for _ in range(length):
+            drawn.append(int(declared.emissions.sample(np.array([state]), rng)[0]))
+            state = int(rng.choice(declared.n_states, p=declared.transition[state]))
+    batch = Ragged(np.asarray(drawn, dtype=np.float64), lengths)
+
+    start = CategoricalEmission(
+        np.full((declared.n_states, declared.emissions.matrix.shape[1]), 0.25)
+    )
+    fit = baum_welch_family(
+        batch,
+        torch.log(torch.as_tensor(declared.initial)),
+        torch.log(torch.as_tensor(declared.transition)),
+        start,
+        max_iterations=50,
+    )
+    # The batch took one transition fewer per boundary, and the fit is over
+    # that many: what is asserted is that it ran on the declared instance and
+    # improved on its start, not a tolerance this fixture cannot support at 89
+    # positions.
+    assert fit.log_likelihood > -np.inf
+    assert sum(lengths) - len(lengths) == 84

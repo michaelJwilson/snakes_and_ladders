@@ -1,0 +1,30 @@
+model: spatio-sequential
+oracle: enumeration
+
+# The coupled model at segments of unequal length (issue #666). The same model
+# as `spatio_sequential/ci.yaml` and the same 2x2 open lattice; what differs is
+# that the chain at each node restarts twice rather than running once.
+#
+# S = 6 as there, so the enumeration oracle still reaches it: 2**4 labellings
+# times 2**12 joint paths. The segmentation 2 + 4 splits the chain unevenly and
+# uses the shortest a segment may be, so the batch takes 4 transitions where
+# the unsegmented instance takes 5. That difference is the whole content of the
+# claim: the same total, a different problem.
+seed: 20260916
+shape: [2, 2]
+boundary: open
+coupling: 1.0
+n_classes: 2
+n_states: 2
+n_positions: 6
+segments: [2, 4]
+beta: 0.6
+self_transition: 0.7
+initial:
+  - [0.6, 0.4]
+  - [0.3, 0.7]
+emissions:
+  - - [0.8, 0.1, 0.1]
+    - [0.1, 0.8, 0.1]
+  - - [0.1, 0.1, 0.8]
+    - [0.45, 0.45, 0.1]

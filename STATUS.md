@@ -3790,3 +3790,26 @@ worst, and it is the shape the downstream consumer has.
 The per-segment NumPy oracle runs 980 ms, 1,311 ms and 128 ms on the same
 three, so it referees and does not compete. The compiled kernel is pinned to it
 at a relative `1e-11` on the marginals, the transition counts and the evidence.
+
+**Two keys, not two problems** (#666 step 4). `ragged_hmm` and
+`spatio_sequential_ragged` join the HMM and coupled rows: each model is
+unchanged and only its instance's segmentation differs, which is what
+`PROBLEMS.md` means by a row with two keys. `ragged_hmm/ci` declares 2, 9, 9, 9
+and 60 --- the shortest a segment may be, a run of equal lengths, and one long
+enough that a padded block would be 70.3% padding --- so the batch takes 84
+transitions rather than 88. `spatio_sequential_ragged/ci` splits the same S = 6
+chain as 2 and 4, so enumeration still referees it.
+
+`SpatioSequentialParams` gains `segments`, and the simulator draws the first
+position of every segment from the initial distribution rather than from the
+transition out of the position before it, which belongs to another chain. With
+none declared the draws are the ones it has always made.
+
+**The HMM fixture loader now takes `lengths` or the rectangular pair, and
+exactly one.** A fixture that declared both could contradict itself.
+
+**Deferred, and stated rather than left to be noticed:** `simulate_sequences`
+still returns a rectangular batch, so the declared ragged instance is drawn
+from its parameters by the test that fits it. A ragged simulator, and the
+optimizer and seeding pairings that wait on it, are listed in
+`docs/tex/method_notes.yaml` with their reasons.

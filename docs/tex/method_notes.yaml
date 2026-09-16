@@ -260,6 +260,28 @@
 # `tests/regression/docs/test_problems_tables.py` holds this block to that
 # list, so a pairing loses its reason only by gaining a test.
 untested pairings:
+  ragged_hmm / surrogates: >-
+    A surrogate stands in for an evaluation whose cost is the reason to avoid
+    it, and this instance is 89 positions: the exact evaluation is cheaper than
+    any bound over it. The pairing is declared where the segmentation is
+    measured at scale, not here (issue #666).
+  ragged_hmm / samplers: >-
+    The instance exists to exercise the segmentation, and a sampler over a
+    segmented chain draws each segment independently, which is the unsegmented
+    sampler run S times rather than a claim about boundaries. It is declared
+    here and not run (issue #666).
+  spatio_sequential_ragged / samplers: >-
+    As the sequential instance above: the block move a coupled sampler makes is
+    within a segment, so the segmentation adds no claim a sampler could pin
+    that the unsegmented instance does not already carry (issue #666).
+  spatio_sequential_ragged / initializers: >-
+    A seeding is scored on the fit it starts, and the coupled fit at a
+    segmented chain is itself deferred here; seeding it would be scoring a
+    start against nothing (issue #666).
+  spatio_sequential_ragged / optimizers: >-
+    The coupled fit at this instance is refereed by enumeration, which is the
+    claim the fixture was declared for; the optimizer comparison at a segmented
+    chain is deferred with the ragged simulator it needs (issue #666).
   planted_glass / samplers: >-
     The instance exists to defeat descent, and what it is pinned against is
     descent. Separating a sampler from descent on it is the comparison it was

@@ -624,6 +624,17 @@ own divergence.
 A hidden path $\hidden = (z_1, \dots, z_T)$ over $k$ states evolves by an
 initial distribution $\bpi$ and a transition matrix $\mathbf{A}$; each position
 emits an observation from an emission family $\emission$ indexed by its state.
+
+A \emph{batch} of such paths is not one longer path. Where the data is
+segmented into $S$ chains of lengths $T_1, \dots, T_S$, each chain restarts at
+$\bpi$ rather than continuing through $\mathbf{A}$, so the batch takes
+$\sum_s (T_s - 1) = T - S$ transitions and not $T - 1$. The segmentation is
+therefore part of the model and not a detail of its storage: at a fixed total
+$T$, a single chain and twenty short ones assign different probabilities to the
+same observations, because a state change \emph{across} a boundary is free
+where the same change one position earlier costs $\log A_{ij}$. A segment of
+one position carries an initial distribution and no transition, and is excluded
+as degenerate.
 The evidence marginalizes $k^T$ paths.
 
 \paragraph{Supported sizes.}

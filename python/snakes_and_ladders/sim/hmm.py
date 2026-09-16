@@ -25,8 +25,6 @@ from snakes_and_ladders.numerics_rust import sample_rows
 _REQUIRED_FIELDS = frozenset(
     {
         "seed",
-        "n_sequences",
-        "sequence_length",
         "n_states",
         "n_symbols",
         "initial",
@@ -76,6 +74,17 @@ class HmmParams:
     emissions: EmissionFamily
     seed: int
     tolerance: float
+    #: The chains' own lengths where they differ, and `None` where they do not.
+    #: `sequence_length` is then the longest rather than the shared one, which
+    #: is what a rectangular reader would otherwise silently assume (#666).
+    lengths: tuple[int, ...] | None = None
+
+    @property
+    def segment_lengths(self) -> tuple[int, ...]:
+        """One length per chain: the declared segmentation, or equal chains."""
+        if self.lengths is not None:
+            return self.lengths
+        return (self.sequence_length,) * self.n_sequences
 
     @property
     def emission(self) -> np.ndarray:
@@ -140,7 +149,28 @@ def load_hmm_params(path: Path) -> HmmParams:
 
     n_states = int(raw["n_states"])
     n_symbols = int(raw["n_symbols"])
-    sequence_length = int(raw["sequence_length"])
+    # A fixture declares its chains one of two ways, and `lengths` is the
+    # general one: `n_sequences` chains of `sequence_length` is what it says
+    # when they happen to be equal (issue #666). Exactly one spelling, so a
+    # fixture cannot declare a segmentation and then contradict it.
+    ragged = "lengths" in raw
+    rectangular = "n_sequences" in raw or "sequence_length" in raw
+    if ragged == rectangular:
+        msg = (
+            f"{path}: declare either `lengths`, or `n_sequences` with "
+            "`sequence_length`; a fixture states its chains once"
+        )
+        raise ValueError(msg)
+    if ragged:
+        lengths = tuple(int(one) for one in raw["lengths"])
+        if any(one < 2 for one in lengths):
+            msg = f"{path}: every segment carries at least 2 positions, got {lengths}"
+            raise ValueError(msg)
+        n_sequences, sequence_length = len(lengths), max(lengths)
+    else:
+        lengths = None
+        n_sequences = int(raw["n_sequences"])
+        sequence_length = int(raw["sequence_length"])
     if n_states < 2:
         msg = f"{path}: n_states must be >= 2, got {n_states}"
         raise ValueError(msg)
@@ -160,7 +190,8 @@ def load_hmm_params(path: Path) -> HmmParams:
     return HmmParams(
         n_states=n_states,
         sequence_length=sequence_length,
-        n_sequences=int(raw["n_sequences"]),
+        n_sequences=n_sequences,
+        lengths=lengths,
         initial=initial,
         transition=transition,
         emissions=CategoricalEmission(emission),
