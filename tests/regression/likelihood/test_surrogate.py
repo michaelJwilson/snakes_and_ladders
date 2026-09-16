@@ -167,6 +167,7 @@ def _site_log_likelihoods(
     return values
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_site_fitch_scores_sum_to_the_fitch_score() -> None:
     alignment, k, _ = _alignment()
@@ -219,6 +220,7 @@ def test_tree_features_are_invariant_to_child_order() -> None:
 # --- lattices -----------------------------------------------------------------
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize("shape", [(2, 3), (3, 3)])
 def test_mean_field_and_spanning_tree_bounds_sandwich_log_z(
@@ -274,6 +276,7 @@ def test_lattice_bounds_differentiate_like_finite_differences() -> None:
             assert float(field.grad[i]) == pytest.approx(central, rel=1e-6, abs=1e-8)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_ground_state_bracket_contains_the_enumerated_minimum() -> None:
     rng = np.random.default_rng(5)

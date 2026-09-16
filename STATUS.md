@@ -3599,3 +3599,40 @@ faster than the one without it.
 The maximum-flow network and `double` are unchanged, as they must be: neither
 is touched, and `max_flow_expansion_network/32x32` reads 396.93 us against
 385.89 us, inside the spread.
+
+## A graph owns its array form ([#623](https://github.com/michaelJwilson/snakes_and_ladders/issues/623))
+
+`PottsGraph` stores its edges as a tuple of pairs, which is what a fixture
+declares, and no consumer uses that: every one of them indexes an array by it.
+Fifteen call sites across seven modules wrote `np.asarray(graph.edges)` or
+`np.asarray(graph.coupling)` *inside* a function, so a 200-step run paid the
+conversion 604 times ---
+[#608](https://github.com/michaelJwilson/snakes_and_ladders/issues/608)
+measured that at **81% of `anneal_potts` at 32x32**, against the Rust kernel's
+8%. `edge_index` and `edge_coupling` derive it once, as `cached_property`.
+
+Medians of seven, one BLAS thread, on an idle 4-core host, the same script run
+against `main` and against this branch:
+
+| run | `main` | this branch | ratio |
+| --- | --- | --- | --- |
+| `anneal_potts`, 200 steps, 32x32, `Backend.RUST` | 159.9 ms | **27.6 ms** | **5.79x** |
+| `anneal_potts`, 200 steps, 16x16, `Backend.RUST` | 45.9 ms | **11.1 ms** | **4.14x** |
+| `alpha_expansion`, 32x32, 5 labels | 70.1 ms | 55.1 ms | 1.27x |
+| `alpha_expansion`, 32x32, 3 labels | 46.8 ms | 36.4 ms | 1.29x |
+| `alpha_expansion`, 16x16, 5 labels | 15.7 ms | 12.7 ms | 1.24x |
+| `alpha_expansion`, 16x16, 3 labels | 9.8 ms | 7.8 ms | 1.26x |
+
+**The prediction and the measurement agree, which is the point of stating
+both.** A term at 81% of a run predicts `1 / (1 - 0.81)` = 5.3x once it is
+gone; the measurement is 5.79x. That is also what settles the #598 dispute
+recorded above: #609 made `log_weights` 72--166x faster and moved
+`anneal_potts` not at all, because the run's time was in the conversion rather
+than in that function. This is the change that moves it.
+
+**The cached arrays are handed out unwritable.** A `cached_property` returns
+the same object to every caller and the graph is frozen, so a consumer writing
+through one would corrupt every later call silently; `setflags(write=False)`
+makes it a `ValueError` at the write. It decides a real case rather than a
+hypothetical one: `torch.as_tensor` shares a writable NumPy buffer, so the two
+surrogate call sites copy explicitly instead.

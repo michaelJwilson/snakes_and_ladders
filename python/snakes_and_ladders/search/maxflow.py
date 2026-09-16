@@ -414,7 +414,7 @@ def ising_ground_state(
         returns nothing rather than a lattice-shaped wrong answer.
     """
     values = site_field(graph, field_values)
-    couplings = np.asarray(graph.coupling, dtype=float)
+    couplings = graph.edge_coupling
     if couplings.size and couplings.min() < 0.0:
         msg = (
             f"every coupling must be non-negative, got {couplings.min()}: a "
@@ -450,4 +450,4 @@ def cut_energy(graph: PottsGraph, field_values: np.ndarray, cut_value: float) ->
     """
     values = site_field(graph, field_values)
     offsets = (-values).min(axis=1)
-    return cut_value + float(offsets.sum()) - float(np.asarray(graph.coupling).sum())
+    return cut_value + float(offsets.sum()) - float(graph.edge_coupling.sum())

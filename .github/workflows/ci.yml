@@ -241,6 +241,19 @@ jobs:
       # a change `select_tests` mis-attributes is one of the things they catch.
       - name: Critical gate
         run: uv run pytest -m critical -q
+      # The tier's own coverage floor (issue #635), measured here rather than
+      # on the gate above: instrumentation costs about 4x -- 15.9 s bare
+      # against 61.56 s under `--cov` on the reference host -- and the gate
+      # exists to be fast. So the tier runs twice, once to gate and once to
+      # measure, and the second run's report is what
+      # `tests/regression/test_critical_coverage.py` reads. It skips where
+      # there is no report, so a local `-m critical` pays nothing.
+      - name: Critical tier coverage floor
+        run: |
+          uv run pytest -m critical -q \
+            --cov=snakes_and_ladders \
+            --cov-report=json:coverage-critical.json >/dev/null
+          uv run pytest tests/regression/test_critical_coverage.py -q
       # CHECKS.md and the textbook's applicability tables are written from
       # the tree and are not committed (issue #425). This regenerates both --
       # a generator that no longer runs fails here -- and then fails if

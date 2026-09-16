@@ -95,3 +95,42 @@ def key_over_cap(
         f"the key instance is the largest that fits it"
         for seconds, node_id in sorted(offenders, reverse=True)
     ]
+
+
+def outside_the_tier(
+    items: Iterable[tuple[str, frozenset[str]]],
+) -> list[str]:
+    """Name the early-gate tests a scale marker puts outside the per-PR tier.
+
+    `critical` and the scale markers answer different questions, and a test
+    carrying both answers them inconsistently: it says "gate on this" and "do
+    not run this per pull request" at once. ``-m critical`` settles it the
+    wrong way --- a later ``-m`` *replaces* ``addopts``' ``-m "not release"``
+    rather than intersecting with it (`DEV.md`), so the early gate wins and a
+    release-tier case runs in it.
+
+    **Read from collected items, not from the source.** A scale marker is
+    attached by ``tests/_scale.at_bin`` and ``at_scale`` from the fixture
+    file's own declaration, so no decorator says ``release`` and an `ast` scan
+    of the tree --- which is how `tests/regression/test_test_kinds.py` reads
+    markers, for its own good reasons --- sees a test that is not there. Issue
+    #635 added a `critical` marker to one such test and put 91.4 s of a
+    `release` case into a 42 s gate.
+
+    Parameters
+    ----------
+    items : Iterable[tuple[str, frozenset[str]]]
+        Per collected item: its node id and the names of the markers on it.
+
+    Returns
+    -------
+    list[str]
+        One line per offender, in collection order; empty when no early-gate
+        test is scale-marked out of the tier.
+    """
+    return [
+        f"{node_id}: gates early and is {'/'.join(sorted(markers & OUTSIDE_THE_TIER))}; "
+        f"a critical test runs per pull request, so drop one of the two"
+        for node_id, markers in items
+        if "critical" in markers and markers & OUTSIDE_THE_TIER
+    ]
