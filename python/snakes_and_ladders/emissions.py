@@ -129,6 +129,156 @@ class Reestimate(Generic[FamilyT_co]):
     residual: float = 0.0
 
 
+class CovariateNotSupportedError(TypeError):
+    """A family was given a per-observation covariate it cannot condition on.
+
+    Refused rather than ignored. A covariate silently dropped is a model
+    fitted to a different likelihood than the caller asked for, and the
+    failure would show up as a recovery that is merely worse rather than as an
+    error (root ``CLAUDE.md``: no silent behaviour changes).
+    """
+
+
+def trial_count(covariate: torch.Tensor | None, declared: torch.Tensor) -> torch.Tensor:
+    """The trial count to score at: the covariate's, or the declared one.
+
+    The covariate **overrides** ``declared`` rather than replacing it. A family
+    keeps a per-state trial count so :attr:`BetaBinomialEmission.mean` and
+    :attr:`~BetaBinomialEmission.variance` keep a value; a covariate says what
+    the count actually was for each observation (issue #631).
+
+    **The shape is the whole cost.** ``_beta_binomial_log_density`` is nine
+    ``lgamma`` calls, and PyTorch evaluates each on its own operand's shape and
+    broadcasts at the ``+``, not before. A covariate shaped ``(..., 1)``
+    broadcasts along the state axis and leaves three terms at ``n_obs * K``,
+    which is what the per-state count costs today. Materialised ``(..., K)`` by
+    the caller, all nine become ``n_obs * K`` and the term count triples.
+
+    Parameters
+    ----------
+    covariate : torch.Tensor | None
+        One trial count per observation, trailing axis of length one.
+    declared : torch.Tensor
+        The family's per-state count, shape ``(n_states,)``.
+
+    Returns
+    -------
+    torch.Tensor
+
+    Raises
+    ------
+    ValueError
+        If the covariate does not end in a singleton axis, or is not a
+        positive integer count.
+    """
+    if covariate is None:
+        return declared
+    if covariate.ndim == 0 or covariate.shape[-1] != 1:
+        msg = (
+            f"a trial count per observation must end in a singleton axis so it "
+            f"broadcasts along the states, got {tuple(covariate.shape)}; a "
+            f"count materialised per state triples the lgamma term count"
+        )
+        raise ValueError(msg)
+    return validated_trials(covariate, declared)
+
+
+def exposure(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
+    """The exposure to scale the rate by, shaped to broadcast along the states.
+
+    The offset half of :func:`trial_count`, and the same layout rule for the
+    same reason: shaped ``(..., 1)`` it broadcasts along the state axis, and
+    materialised ``(..., n_states)`` by the caller it makes every term of the
+    density ``n_obs * n_states`` (issue #631).
+
+    Returns
+    -------
+    torch.Tensor
+
+    Raises
+    ------
+    ValueError
+        If the covariate does not end in a singleton axis, or is not positive.
+    """
+    if covariate.ndim == 0 or covariate.shape[-1] != 1:
+        msg = (
+            f"an exposure per observation must end in a singleton axis so it "
+            f"broadcasts along the states, got {tuple(covariate.shape)}"
+        )
+        raise ValueError(msg)
+    return validated_exposure(covariate, declared)
+
+
+def validated_exposure(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
+    """``covariate`` as exposures, in ``declared``'s dtype.
+
+    The positivity check alone, without :func:`exposure`'s trailing-axis rule,
+    for the M step --- which flattens over sequences and positions and never
+    broadcasts along the states.
+
+    Returns
+    -------
+    torch.Tensor
+
+    Raises
+    ------
+    ValueError
+        If an exposure is not strictly positive.
+    """
+    offsets = covariate.to(declared.dtype)
+    if bool((offsets <= 0.0).any()):
+        msg = "every exposure must be strictly positive"
+        raise ValueError(msg)
+    return offsets
+
+
+def validated_trials(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
+    """``covariate`` as trial counts, in ``declared``'s dtype.
+
+    The support check alone, without :func:`trial_count`'s trailing-axis rule.
+    An M step flattens its covariate over sequences and positions and never
+    broadcasts it along the states, so that rule would refuse the shape the
+    protocol documents for :meth:`EmissionFamily.reestimate`.
+
+    Returns
+    -------
+    torch.Tensor
+
+    Raises
+    ------
+    ValueError
+        If a count is not a positive integer.
+    """
+    counts = covariate.to(declared.dtype)
+    if bool(((counts < 1) | (counts != counts.floor())).any()):
+        msg = "every trial count must be a positive integer"
+        raise ValueError(msg)
+    return counts
+
+
+def refuse_covariate(family: object, covariate: torch.Tensor | None) -> None:
+    """Raise unless ``covariate`` is ``None``.
+
+    Public because an implementer outside this module calls it ---
+    :class:`~snakes_and_ladders.sim.count_pairs.IndependentCountPair` is the
+    eighth :class:`EmissionFamily` and does not live here.
+
+    Raises
+    ------
+    CovariateNotSupportedError
+        If a covariate is supplied.
+    """
+    if covariate is None:
+        return
+    name = type(family).__name__
+    msg = (
+        f"{name} conditions on no per-observation covariate; pass None. An "
+        "exposure or a trial count per observation is issue #631, and lands on "
+        "NegativeBinomialEmission and BetaBinomialEmission."
+    )
+    raise CovariateNotSupportedError(msg)
+
+
 @runtime_checkable
 class CountEmissionFamily(Protocol):
     """An emission family over the non-negative integers, which has moments.
@@ -190,7 +340,12 @@ class EmissionFamily(Protocol):
         ...  # pragma: no cover
 
     @abstractmethod
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
         """Draw one observation per entry of ``states``.
 
         Parameters
@@ -199,6 +354,11 @@ class EmissionFamily(Protocol):
             Emitting state per draw, shape ``(n_draws,)``.
         rng : np.random.Generator
             Generator, passed in rather than seeded here (``sim/CLAUDE.md``).
+        covariate : torch.Tensor | None
+            One conditioning value per draw, shape ``(n_draws,)``. Conditioned
+            on and never fitted. A family that cannot use one raises
+            :class:`CovariateNotSupportedError` rather than dropping it
+            (issue #631).
 
         Returns
         -------
@@ -208,13 +368,20 @@ class EmissionFamily(Protocol):
         ...  # pragma: no cover
 
     @abstractmethod
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Score every observation under every state.
 
         Parameters
         ----------
         observations : torch.Tensor
             Observations of any leading shape ``(...)``.
+        covariate : torch.Tensor | None
+            One conditioning value per observation, shape ``(..., 1)`` so it
+            broadcasts along the state axis rather than being materialised per
+            state (issue #631). A family that cannot use one raises
+            :class:`CovariateNotSupportedError`.
 
         Returns
         -------
@@ -264,7 +431,10 @@ class EmissionFamily(Protocol):
 
     @abstractmethod
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[EmissionFamily]:
         """The Baum-Welch M step for this family alone.
 
@@ -275,6 +445,10 @@ class EmissionFamily(Protocol):
         posterior : torch.Tensor
             State posteriors ``P(state_t | observations)`` as probabilities,
             shape ``(n_sequences, length, n_states)``.
+        covariate : torch.Tensor | None
+            One conditioning value per observation, shape
+            ``(n_sequences, length)``. A family that cannot use one raises
+            :class:`CovariateNotSupportedError`.
 
         Returns
         -------
@@ -375,12 +549,21 @@ class CategoricalEmission(EmissionFamily):
         """Emission matrix as probabilities, shape ``(n_states, n_symbols)``."""
         return self._matrix
 
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
         """Draw one symbol per entry of ``states`` by inverse-CDF sampling."""
+        refuse_covariate(self, covariate)
         return sample_rows(rng, self._matrix.numpy(), states)
 
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Gather ``log B[:, symbol]`` for every observation."""
+        refuse_covariate(self, covariate)
         return self._log_matrix.t()[observations]
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
@@ -406,13 +589,17 @@ class CategoricalEmission(EmissionFamily):
             raise ValueError(msg)
 
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[CategoricalEmission]:
         """Normalized expected symbol counts, in log space.
 
         Closed form, so the record it returns carries no convergence to
         report: this is the case the seam was designed against.
         """
+        refuse_covariate(self, covariate)
         mask = torch.nn.functional.one_hot(
             observations.reshape(-1).to(torch.long), self.n_symbols
         ).to(posterior.dtype)
@@ -531,7 +718,12 @@ class GaussianEmission(EmissionFamily):
         """Variance at or below which a re-estimate is refused."""
         return self._variance_floor
 
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
         """Draw one real observation per entry of ``states``.
 
         Returns
@@ -541,13 +733,16 @@ class GaussianEmission(EmissionFamily):
             ``(n_draws, n_channels)`` otherwise --- the per-state row is
             indexed whole, so every channel of one draw is drawn together.
         """
+        refuse_covariate(self, covariate)
         return np.asarray(
             rng.normal(
                 loc=self._mean.numpy()[states], scale=self._scale.numpy()[states]
             )
         )
 
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """The Normal log-density of every observation under every state.
 
         Unbounded above: as a scale shrinks with its mean on an observation,
@@ -566,6 +761,7 @@ class GaussianEmission(EmissionFamily):
             Shape ``(..., n_states)``. The channels are independent given the
             state, so a multi-channel score is the sum over them.
         """
+        refuse_covariate(self, covariate)
         values = observations.to(self._mean.dtype)
         if self._mean.ndim == 1:
             return _normal_log_density(values.unsqueeze(-1) - self._mean, self._scale)
@@ -639,7 +835,10 @@ class GaussianEmission(EmissionFamily):
             raise ValueError(msg)
 
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[GaussianEmission]:
         """Posterior-weighted mean and variance, in closed form.
 
@@ -651,6 +850,7 @@ class GaussianEmission(EmissionFamily):
             likelihood is unbounded in that direction, so a clamped fit would
             report a point estimate at a degenerate optimum (issue #122).
         """
+        refuse_covariate(self, covariate)
         weights = posterior.reshape(-1, self.n_states)
         mass = weights.sum(dim=0)
         values = observations.reshape(-1, self.n_channels).to(posterior.dtype)
@@ -837,30 +1037,67 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
 
     @property
     def mean(self) -> torch.Tensor:
-        """Per-state ``mu``, shape ``(n_states,)``."""
+        """Per-state ``mu``, shape ``(n_states,)``.
+
+        **The state's own rate, and what recovery targets.** Under an exposure
+        the *emission's* mean at observation ``i`` in state ``k`` is
+        ``e_i mu_k``; ``mu_k`` is the per-state association that survives it,
+        and is the parameter fitted and recovered. So this property keeps a
+        value under a varying exposure rather than losing one (issue #631):
+        the exposure is conditioned on, never fitted, and an exposure of one
+        is the reference the family declares itself at.
+        """
         return self._mean
 
     @property
     def variance(self) -> torch.Tensor:
-        """``mu + mu**2 / r``, the relation that makes this a count model."""
+        """``mu + mu**2 / r``, the relation that makes this a count model.
+
+        At unit exposure, for the reason :attr:`mean` gives. At exposure
+        ``e_i`` the emission's variance is ``e_i mu + (e_i mu)**2 / r``, which
+        the relation still holds for, one rate over.
+        """
         return self._mean + self._mean**2 / self._dispersion
 
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-        """Draw one count per entry of ``states``."""
-        r = self._dispersion.numpy()[states]
-        mu = self._mean.numpy()[states]
-        return np.asarray(rng.negative_binomial(r, r / (r + mu)))
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
+        """Draw one count per entry of ``states``.
 
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
-        """The negative binomial log-probability of every count under every state."""
+        ``covariate`` is the exposure per draw, shape ``(n_draws, 1)``; the
+        rate is ``e_i mu_k``. Without it every draw is at unit exposure.
+        """
+        r = self._dispersion.numpy()[states]
+        rate = self._mean.numpy()[states]
+        if covariate is not None:
+            rate = rate * exposure(covariate, self._mean).reshape(-1).numpy()
+        return np.asarray(rng.negative_binomial(r, r / (r + rate)))
+
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """The negative binomial log-probability of every count under every state.
+
+        ``covariate`` is the exposure per observation, shape ``(..., 1)`` so it
+        broadcasts along the state axis; the rate scored at is ``e_i mu_k``.
+        Where the exposure is constant the two models are the same model,
+        absorbing it as ``log mu - log(c)``, which is what makes the conserved
+        family a referee for this one (issue #631).
+        """
         counts = observations.unsqueeze(-1).to(self._mean.dtype)
-        total = self._dispersion + self._mean
+        rate = self._mean
+        if covariate is not None:
+            rate = exposure(covariate, self._mean) * self._mean
+        total = self._dispersion + rate
         return (
             torch.lgamma(counts + self._dispersion)
             - torch.lgamma(self._dispersion)
             - torch.lgamma(counts + 1.0)
             + self._dispersion * torch.log(self._dispersion / total)
-            + counts * torch.log(self._mean / total)
+            + counts * torch.log(rate / total)
         )
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
@@ -892,7 +1129,10 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         _validate_counts(observations)
 
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[NegativeBinomialEmission]:
         """The M step: a closed form for the mean, and a solve for the dispersion.
 
@@ -913,15 +1153,33 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         """
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
-        mass = weights.sum(dim=0)
-        mean = (weights * values.unsqueeze(-1)).sum(dim=0) / mass
+        offsets = (
+            None
+            if covariate is None
+            else validated_exposure(covariate, self._mean).reshape(-1)
+        )
+        # Both sums are matmuls: the same numbers as
+        # `(weights * v.unsqueeze(-1)).sum(0)` with no `(n_obs, n_states)`
+        # temporary, BLAS-backed. At the coupled model's declared scale that
+        # temporary is 80.7 MB per call. A matmul reduces in a different order,
+        # so this costs the bitwise agreement with the conserved family and
+        # lands a relative 4.0e-16 instead -- five orders inside the 1e-11 this
+        # repository declares for a float64 comparison, which is the trade root
+        # `CLAUDE.md` permits and this measurement is the price of (#649).
+        mass = _weighted_mass(weights, offsets)
+        mean = (weights.T @ values) / mass
 
         dispersion = torch.empty_like(mean)
         boundary = False
         iterations = 0
         residual = 0.0
         for state in range(self.n_states):
-            solved = _solve_dispersion(values, weights[:, state], float(mean[state]))
+            # Formed once per state, outside the bisection: the solve is at
+            # fixed `mu`, so `e * mu` does not move across its ~50 steps.
+            rate = (
+                float(mean[state]) if offsets is None else offsets * float(mean[state])
+            )
+            solved = _solve_dispersion(values, weights[:, state], rate)
             dispersion[state] = solved.value
             boundary = boundary or solved.at_boundary
             iterations = max(iterations, solved.iterations)
@@ -1001,12 +1259,21 @@ class PoissonEmission(EmissionFamily, CountEmissionFamily):
         """Equal to the mean. The defining property, and the one tested."""
         return self._mean
 
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
         """Draw one count per entry of ``states``."""
+        refuse_covariate(self, covariate)
         return np.asarray(rng.poisson(self._mean.numpy()[states]))
 
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """``y log(lambda) - lambda - log(y!)``."""
+        refuse_covariate(self, covariate)
         counts = observations.unsqueeze(-1).to(self._mean.dtype)
         return counts * torch.log(self._mean) - self._mean - torch.lgamma(counts + 1.0)
 
@@ -1029,9 +1296,13 @@ class PoissonEmission(EmissionFamily, CountEmissionFamily):
         _validate_counts(observations)
 
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[PoissonEmission]:
         """The posterior-weighted mean, in closed form."""
+        refuse_covariate(self, covariate)
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
         mean = (weights * values.unsqueeze(-1)).sum(dim=0) / weights.sum(dim=0)
@@ -1132,8 +1403,14 @@ class BinomialEmission(EmissionFamily, CountEmissionFamily):
         """``n p (1 - p)``, strictly below the mean."""
         return self._trials * self._probability * (1.0 - self._probability)
 
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
         """Draw one count per entry of ``states``."""
+        refuse_covariate(self, covariate)
         return np.asarray(
             rng.binomial(
                 self._trials.numpy()[states].astype(np.int64),
@@ -1141,8 +1418,11 @@ class BinomialEmission(EmissionFamily, CountEmissionFamily):
             )
         )
 
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """``log C(n, y) + y log p + (n - y) log(1 - p)``."""
+        refuse_covariate(self, covariate)
         counts = observations.unsqueeze(-1).to(self._trials.dtype)
         return (
             torch.lgamma(self._trials + 1.0)
@@ -1184,9 +1464,13 @@ class BinomialEmission(EmissionFamily, CountEmissionFamily):
             raise ValueError(msg)
 
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[BinomialEmission]:
         """``p = weighted mean / n``, in closed form; ``n`` is not estimated."""
+        refuse_covariate(self, covariate)
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
         mean = (weights * values.unsqueeze(-1)).sum(dim=0) / weights.sum(dim=0)
@@ -1262,8 +1546,12 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
 
     @property
     def n_states(self) -> int:
-        """Hidden states this family emits from."""
-        return int(self._trials.shape[0])
+        """Hidden states this family emits from.
+
+        Read off ``alpha``, not ``trials``: the trial count may be supplied per
+        observation and says nothing about how many states there are (#631).
+        """
+        return int(self._alpha.shape[0])
 
     @property
     def is_discrete(self) -> bool:
@@ -1309,17 +1597,41 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             self._trials * rate * (1.0 - rate) * (self._trials + total) / (1.0 + total)
         )
 
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-        """Draw a rate from the Beta, then a binomial count at that rate."""
-        rate = rng.beta(self._alpha.numpy()[states], self._beta.numpy()[states])
-        return np.asarray(
-            rng.binomial(self._trials.numpy()[states].astype(np.int64), rate)
-        )
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
+        """Draw a rate from the Beta, then a binomial count at that rate.
 
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
-        """``log C(n, y) + log B(y + a, n - y + b) - log B(a, b)``."""
+        ``covariate`` supplies one trial count per draw, shape ``(n_draws, 1)``;
+        without it each draw takes its emitting state's declared count.
+        """
+        rate = rng.beta(self._alpha.numpy()[states], self._beta.numpy()[states])
+        counts = (
+            self._trials.numpy()[states]
+            if covariate is None
+            else trial_count(covariate, self._trials).reshape(-1).numpy()
+        )
+        return np.asarray(rng.binomial(counts.astype(np.int64), rate))
+
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """``log C(n, y) + log B(y + a, n - y + b) - log B(a, b)``.
+
+        ``covariate`` is the trial count per observation, shape ``(..., 1)``;
+        see :func:`trial_count` for why that axis is not optional. An
+        observation above its own trial count scores ``-inf`` rather than
+        raising, on the joint form's precedent: the support is a property of
+        the pair, and a sequence carrying one impossible site is scored, not
+        refused.
+        """
+        trials = trial_count(covariate, self._trials)
         counts = observations.unsqueeze(-1).to(self._trials.dtype)
-        return _beta_binomial_log_density(counts, self._trials, self._alpha, self._beta)
+        scores = _beta_binomial_log_density(counts, trials, self._alpha, self._beta)
+        return torch.where(counts > trials, torch.full_like(scores, -torch.inf), scores)
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
         """The log-density gap to the best rate at this concentration.
@@ -1350,7 +1662,10 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             raise ValueError(msg)
 
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[BetaBinomialEmission]:
         """Alternating bisection for ``(a, b)``; see :func:`_solve_beta_binomial`.
 
@@ -1361,8 +1676,14 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             the bound this data identifies it over, the iterations taken, and
             the relative change at the last step.
         """
+        per_observation = covariate is not None
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
+        supplied = (
+            validated_trials(covariate, self._trials).reshape(-1)
+            if covariate is not None
+            else self._trials
+        )
 
         alpha = torch.empty(self.n_states, dtype=torch.float64)
         beta = torch.empty(self.n_states, dtype=torch.float64)
@@ -1375,7 +1696,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             solved = _solve_beta_binomial(
                 values,
                 weights[:, state],
-                float(self._trials[state]),
+                supplied if per_observation else float(self._trials[state]),
                 float(self._alpha[state]) / total,
                 total,
             )
@@ -1398,7 +1719,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         return torch.stack([self.mean, self.variance], dim=1)
 
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
-        """``alpha`` and ``beta``. The trial count is a constant."""
+        """``alpha`` and ``beta``. The trial count is conditioned on, never fitted."""
         return {"alpha": self._alpha, "beta": self._beta}
 
 
@@ -1573,7 +1894,12 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         )
         return torch.stack([depth_variance, success], dim=1)
 
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
         """Draw one ``(total, successes)`` pair per entry of ``states``.
 
         The total is drawn first and the successes second, so the two forms
@@ -1585,6 +1911,7 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         np.ndarray
             Shape ``(n_draws, 2)``.
         """
+        refuse_covariate(self, covariate)
         totals = self._total.sample(states, rng)
         if self._joint:
             rate = rng.beta(self._alpha.numpy()[states], self._beta.numpy()[states])
@@ -1593,7 +1920,9 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             successes = self._success.sample(states, rng)
         return np.stack([totals, successes], axis=-1)
 
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Score every pair under every state.
 
         Parameters
@@ -1606,6 +1935,7 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         torch.Tensor
             Shape ``(..., n_states)``.
         """
+        refuse_covariate(self, covariate)
         values = observations.to(self._alpha.dtype)
         totals = values[..., 0].unsqueeze(-1)
         successes = values[..., 1].unsqueeze(-1)
@@ -1687,7 +2017,10 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
         self._success.validate(values[..., 1])
 
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[CountPairEmission]:
         """The M step: each channel's own, on the trials the form supplies.
 
@@ -1705,6 +2038,7 @@ class CountPairEmission(EmissionFamily, CountEmissionFamily):
             were, at the boundary if either was, and reporting the larger
             iteration count and residual of the two.
         """
+        refuse_covariate(self, covariate)
         values = observations.reshape(-1, self.N_CHANNELS).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
         totals, successes = values[:, 0], values[:, 1]
@@ -2091,8 +2425,25 @@ def _effective_trials(trials: float | torch.Tensor, weights: torch.Tensor) -> fl
     so the bound is taken at the *posterior-weighted mean* depth: the bound
     scales as ``n - 1``, and those same weights set each observation's
     contribution to the concentration's score.
+
+    **A constant per-observation count reduces exactly**, rather than through
+    that mean: it *is* a fixed trial count, and the weighted mean of a constant
+    is only the constant to within rounding, which would move the bracket
+    ``identifiable_concentration_bound`` returns for no reason.
+
+    It does **not** make the M step bitwise, and the reason is data-dependent.
+    The score functions sum ``w_i f(y_i, n_i)`` over a vector ``n`` rather than
+    folding a scalar, so the summation order differs; on some draws the
+    alternating bisection still lands on the same root and on others the fitted
+    ``alpha`` moves a **relative 1.0e-06**, four orders outside
+    ``_solve_beta_binomial``'s own 1e-10 tolerance. Issue #648 carries that.
+    Scoring *is* bitwise --- one broadcast expression with no reduction --- and
+    is the half of #631's bit-for-bit claim that holds today.
     """
     if isinstance(trials, torch.Tensor):
+        first = trials.reshape(-1)[0]
+        if bool((trials == first).all()):
+            return float(first)
         return float((weights * trials).sum() / weights.sum())
     return trials
 
@@ -2155,7 +2506,10 @@ class _SolvedDispersion:
 
 
 def _weighted_dispersion_score(
-    values: torch.Tensor, weights: torch.Tensor, dispersion: float, mean: float
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    dispersion: float,
+    mean: float | torch.Tensor,
 ) -> float:
     """The posterior-weighted score in ``r``, with the mean profiled out.
 
@@ -2163,23 +2517,48 @@ def _weighted_dispersion_score(
     term in ``(mu - y_t) / (r + mu)`` that appears in the full derivative
     vanishes because ``mu`` is the weighted mean of ``y``, which is what
     "profiled out" buys.
+
+    Under an exposure ``mean`` is the **rate** ``e_t mu`` per observation, and
+    the last term stops factoring out of the sum: it is
+    ``sum_t w_t log(r / (r + e_t mu))``. The profiling identity still holds,
+    because the closed form for ``mu`` under an exposure is
+    ``sum_t w_t y_t / sum_t w_t e_t`` (issue #631).
     """
     r = torch.tensor(dispersion, dtype=values.dtype)
-    return float(
-        (weights * (torch.digamma(values + r) - torch.digamma(r))).sum()
-        + weights.sum() * math.log(dispersion / (dispersion + mean))
-    )
+    weighted = (weights * (torch.digamma(values + r) - torch.digamma(r))).sum()
+    if isinstance(mean, torch.Tensor):
+        return float(
+            weighted + (weights * torch.log(dispersion / (dispersion + mean))).sum()
+        )
+    return float(weighted + weights.sum() * math.log(dispersion / (dispersion + mean)))
 
 
 def _solve_dispersion(
     values: torch.Tensor,
     weights: torch.Tensor,
-    mean: float,
+    mean: float | torch.Tensor,
     *,
     tolerance: float = 1e-12,
 ) -> _SolvedDispersion:
-    """Maximize the weighted likelihood in ``r`` by bisection on ``log r``."""
-    upper = identifiable_dispersion_bound(mean, float(weights.sum()))
+    """Maximize the weighted likelihood in ``r`` by bisection on ``log r``.
+
+    ``mean`` is a per-state mean, or the **rate** ``e_t mu`` per observation
+    under an exposure. It is formed once by the caller rather than rebuilt
+    here, because the solve is at fixed ``mu`` and the product does not move
+    across the bisection's steps.
+
+    **That buys nothing measurable, and the measurement is the point.** Issue
+    #631 predicted the repeated multiply would dominate. At ``n = 200,000`` and
+    45 bisection steps it is **1.2 ms** against the two ``digamma`` calls per
+    step at **97.8 ms**, in a solve of roughly **270 ms** --- under half a
+    percent. Root ``CLAUDE.md``'s profile-first rule says a term that small
+    pays for no optimization, so this form is kept for being the clearer one
+    and not for a speed-up it does not deliver. The term that would pay is the
+    ``digamma`` pair.
+    """
+    upper = identifiable_dispersion_bound(
+        _effective_rate(mean, weights), float(weights.sum())
+    )
     lower = upper * _DISPERSION_BRACKET_RATIO
     if _weighted_dispersion_score(values, weights, upper, mean) > 0.0:
         return _SolvedDispersion(upper, at_boundary=True, iterations=0, residual=0.0)
@@ -2203,6 +2582,51 @@ def _solve_dispersion(
         residual=abs(_weighted_dispersion_score(values, weights, dispersion, mean))
         / float(weights.sum()),
     )
+
+
+def _weighted_mass(weights: torch.Tensor, offsets: torch.Tensor | None) -> torch.Tensor:
+    """``sum_t w_t e_t`` per state: the denominator of the profiled mean.
+
+    Three forms, and the middle one is why this is a function. Without an
+    exposure it is the posterior mass. With a **constant** exposure it is
+    ``e sum_t w_t`` exactly, because a constant factors out of the sum --- and
+    forming it as a matmul instead leaves a one-ULP residue, which is enough to
+    lose the bit-for-bit agreement with the conserved family at ``e = 1`` that
+    issue #631 asks for. With a varying one it is ``weights.T @ offsets``: the
+    same number as ``(weights * offsets.unsqueeze(-1)).sum(0)`` with no
+    ``(n_obs, n_states)`` temporary, and BLAS-backed.
+
+    Returns
+    -------
+    torch.Tensor
+        Shape ``(n_states,)``.
+    """
+    if offsets is None:
+        return weights.sum(dim=0)
+    first = offsets.reshape(-1)[0]
+    if bool((offsets == first).all()):
+        return weights.sum(dim=0) * first
+    return weights.T @ offsets
+
+
+def _effective_rate(mean: float | torch.Tensor, weights: torch.Tensor) -> float:
+    """The one mean :func:`identifiable_dispersion_bound` is read at.
+
+    A per-state mean is itself. A per-observation rate has no single value, so
+    the bound is taken at the *posterior-weighted mean* rate, which is the
+    construction :func:`_effective_trials` already uses one family over. A
+    constant rate reduces exactly, for the reason given there.
+
+    Returns
+    -------
+    float
+    """
+    if not isinstance(mean, torch.Tensor):
+        return mean
+    first = mean.reshape(-1)[0]
+    if bool((mean == first).all()):
+        return float(first)
+    return float((weights * mean).sum() / weights.sum())
 
 
 def identifiable_dispersion_bound(mean: float, weight: float) -> float:

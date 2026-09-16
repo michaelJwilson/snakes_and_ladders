@@ -385,6 +385,29 @@ too ill-conditioned to invert. Those replicates are counted rather than
 dropped, since excluding them unannounced would select for the well-behaved
 samples.
 
+**Count emissions condition on a per-observation covariate.** The negative
+binomial takes an exposure and the beta-binomial a trial count, conditioned on
+and never fitted
+([#631](https://github.com/michaelJwilson/snakes_and_ladders/issues/631)). The
+rate is `e_i mu_k`, so `mu_k` stays the state's own association and the moments
+keep a value under a varying covariate. The pre-covariate families are
+conserved in `sandbox.count_emissions`, hash-frozen over 27 definitions, and
+referee the new ones by an identity rather than a tolerance: at a constant
+covariate the two are the same model, absorbing it as `log mu - log(c)`, and
+scoring agrees **bitwise**. Recovery carries the regime the conserved families
+cannot express --- planted `mu = 2.5, r = 3.0` fits 2.52, 2.99 over an
+eightfold exposure spread, and `a = 3.0, b = 7.0` fits 2.96, 7.03 over a
+sixteenfold trial-count spread --- and withholding the exposure recovers the
+*average* rate instead, reading the spread it would have explained as
+overdispersion at `r = 1.73`. Two measurements corrected the ticket's own
+runtime analysis: the rate hoisted out of the dispersion bisection is 1.2 ms
+against `digamma`'s 97.8 ms in a 270 ms solve, under half a percent and left
+alone per the profile-first rule; and the profiled mean written as a
+matrix-vector product is **13.72x** at the declared scale, 54.9 ms to 4.0 ms,
+dropping an 80.7 MB intermediate for a relative 2.7e-16 --- five orders inside
+the declared 1e-11, which is the first use of `CLAUDE.md`'s bitwise-to-tolerance
+rule ([#649](https://github.com/michaelJwilson/snakes_and_ladders/issues/649)).
+
 **Count emissions: the dispersion axis, bracketed.** Four count families join
 the seam — binomial below equidispersion, Poisson exactly at it, negative
 binomial and beta-binomial above

@@ -17,6 +17,14 @@ and is principle.
   nothing behind but the adapter that fronts the framework. Its regression
   tests move with it and keep passing: they are what the adapter is pinned
   against.
+- **A route also moves in when it is superseded in capability, not in speed.**
+  The rule above measures; this one does not, because there is nothing to
+  measure: the replacement expresses something the conserved route cannot, and
+  is not faster. What it must still be is a *referee* — the conserved route
+  answers a case the replacement also answers, and the pull request states
+  which case and pins the two against each other there. A route conserved
+  under this clause with no such case is not conserved, it is abandoned, and
+  the rule above applies instead.
 - **A declined route moves in only if it was finished.** Clean, scoped to a
   question that was posed, and refereed by tests that still pass — an
   abandoned half-attempt is not conserved, it is reported.
@@ -29,3 +37,15 @@ and is principle.
 - **Nothing should be deleted.** An oracle that is slow is still the oracle; an
   oracle nothing tests against is a gap to file as a ticket, not a file to
   remove.
+
+## What is conserved here, and on which rule
+
+Three rules admit a route, and each conserved module names the one it came in
+on and the case it referees. The numbers stay where they are produced --- the
+pull request that made the move, and `STATUS.md` where they are evidence.
+
+| Module | Rule | The case it referees |
+| --- | --- | --- |
+| `tropical` | declined | topology search where enumeration gives the optimum (#408) |
+| `pruning_burn` | replaced on a hot path | the taped gradient the route that replaced it is pinned against (#449) |
+| `count_emissions` | superseded in capability | a constant covariate, where the covariate-aware families must reproduce these bit for bit (#631) |

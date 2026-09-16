@@ -43,6 +43,7 @@ from snakes_and_ladders.emissions import (
     EmissionFamily,
     NegativeBinomialEmission,
     Reestimate,
+    refuse_covariate,
 )
 from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
@@ -124,15 +125,29 @@ class IndependentCountPair(EmissionFamily):
         """Floating point, as both channels' ``lgamma`` terms require."""
         return torch.float64
 
-    def sample(self, states: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-        """Draw one pair per entry of ``states``, shape ``states.shape + (2,)``."""
+    def sample(
+        self,
+        states: np.ndarray,
+        rng: np.random.Generator,
+        covariate: torch.Tensor | None = None,
+    ) -> np.ndarray:
+        """Draw one pair per entry of ``states``, shape ``states.shape + (2,)``.
+
+        A covariate is refused here rather than forwarded: the two channels
+        would each need their own --- an exposure for the total, a trial count
+        for the successes --- and one tensor cannot be both (issue #631).
+        """
+        refuse_covariate(self, covariate)
         return np.stack(
             [self._total.sample(states, rng), self._successes.sample(states, rng)],
             axis=-1,
         )
 
-    def log_density(self, observations: torch.Tensor) -> torch.Tensor:
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """The pair's log-density under every state: the two channels' sum."""
+        refuse_covariate(self, covariate)
         return self._total.log_density(
             observations[..., TOTAL]
         ) + self._successes.log_density(observations[..., SUCCESSES])
@@ -162,7 +177,10 @@ class IndependentCountPair(EmissionFamily):
         self._successes.validate(observations[..., SUCCESSES])
 
     def reestimate(
-        self, observations: torch.Tensor, posterior: torch.Tensor
+        self,
+        observations: torch.Tensor,
+        posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,
     ) -> Reestimate[IndependentCountPair]:
         """Each channel's own M step, reported together.
 
@@ -172,6 +190,7 @@ class IndependentCountPair(EmissionFamily):
         ``at_boundary`` the disjunction, with the larger iteration count and
         residual of the two.
         """
+        refuse_covariate(self, covariate)
         first = self._total.reestimate(observations[..., TOTAL], posterior)
         second = self._successes.reestimate(observations[..., SUCCESSES], posterior)
         return Reestimate(
