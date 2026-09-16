@@ -10,6 +10,7 @@ of the code under test.
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from itertools import product
 from pathlib import Path
@@ -237,7 +238,10 @@ def test_realized_path_posterior_matches_brute_force_enumeration() -> None:
     [
         ("n_states: 3", "n_states: 1", "n_states must be >= 2"),
         ("n_symbols: 4", "n_symbols: 1", "n_symbols must be >= 2"),
-        ("sequence_length: 15", "sequence_length: 1", "sequence_length must be >= 2"),
+        # The lengths themselves, since #666: the fixture no longer carries a
+        # `sequence_length` to edit, and a batch is refused for its shortest
+        # chain rather than for a declared field.
+        ("lengths: [\n  15,", "lengths: [\n  1,", "every chain carries at least 2"),
         ("initial: [0.5, 0.3, 0.2]", "initial: [0.5, 0.3]", "initial has shape"),
         ("initial: [0.5, 0.3, 0.2]", "initial: [0.5, 0.3, 0.9]", "initial rows sum to"),
     ],
@@ -248,6 +252,19 @@ def test_a_malformed_fixture_is_refused(
     path = tmp_path / "hmm.yaml"
     path.write_text(FIXTURE.read_text().replace(replace, with_))
     with pytest.raises(ValueError, match=message):
+        load_hmm_params(path)
+
+
+@pytest.mark.edge_case
+def test_a_batch_of_no_chains_is_refused(tmp_path: Path) -> None:
+    # Not a substitution like the cases above: emptying the list means
+    # replacing the whole block, and the guard it reaches reads `lengths`
+    # before any distribution's shape is checked.
+    path = tmp_path / "hmm.yaml"
+    path.write_text(
+        re.sub(r"lengths: \[[^\]]*\]", "lengths: []", FIXTURE.read_text(), flags=re.S)
+    )
+    with pytest.raises(ValueError, match="a batch needs at least one chain"):
         load_hmm_params(path)
 
 
