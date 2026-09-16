@@ -39,6 +39,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.parallel
    :members:
 
+.. automodule:: snakes_and_ladders.ragged
+   :members:
+
 .. automodule:: snakes_and_ladders.numerics_rust
    :members:
 
