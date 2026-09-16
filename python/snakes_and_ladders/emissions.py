@@ -1158,15 +1158,16 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             if covariate is None
             else validated_exposure(covariate, self._mean).reshape(-1)
         )
-        # The exposure path forms its denominator as `weights.T @ offsets`:
-        # the same number as `(weights * offsets.unsqueeze(-1)).sum(0)` with no
-        # `(n_obs, n_states)` temporary, BLAS-backed. The numerator keeps the
-        # expression it had, although the same rewrite applies to it: a matmul
-        # sums in a different order, and doing it here costs the bit-for-bit
-        # agreement with the conserved family that is this ticket's Done-when
-        # (#631). Removing that temporary for every caller is #650.
+        # Both sums are matmuls: the same numbers as
+        # `(weights * v.unsqueeze(-1)).sum(0)` with no `(n_obs, n_states)`
+        # temporary, BLAS-backed. At the coupled model's declared scale that
+        # temporary is 80.7 MB per call. A matmul reduces in a different order,
+        # so this costs the bitwise agreement with the conserved family and
+        # lands a relative 4.0e-16 instead -- five orders inside the 1e-11 this
+        # repository declares for a float64 comparison, which is the trade root
+        # `CLAUDE.md` permits and this measurement is the price of (#649).
         mass = _weighted_mass(weights, offsets)
-        mean = (weights * values.unsqueeze(-1)).sum(dim=0) / mass
+        mean = (weights.T @ values) / mass
 
         dispersion = torch.empty_like(mean)
         boundary = False
@@ -2542,11 +2543,18 @@ def _solve_dispersion(
     """Maximize the weighted likelihood in ``r`` by bisection on ``log r``.
 
     ``mean`` is a per-state mean, or the **rate** ``e_t mu`` per observation
-    under an exposure. It is formed once by the caller and passed in rather
-    than rebuilt here: the solve is at fixed ``mu``, so ``e * mu`` does not
-    change across the roughly fifty bisection steps, and computing it inside
-    the score would be that many needless ``n_obs``-length multiplies per
-    state. Invisible at a fixture size and asymptotically wasteful (#631).
+    under an exposure. It is formed once by the caller rather than rebuilt
+    here, because the solve is at fixed ``mu`` and the product does not move
+    across the bisection's steps.
+
+    **That buys nothing measurable, and the measurement is the point.** Issue
+    #631 predicted the repeated multiply would dominate. At ``n = 200,000`` and
+    45 bisection steps it is **1.2 ms** against the two ``digamma`` calls per
+    step at **97.8 ms**, in a solve of roughly **270 ms** --- under half a
+    percent. Root ``CLAUDE.md``'s profile-first rule says a term that small
+    pays for no optimization, so this form is kept for being the clearer one
+    and not for a speed-up it does not deliver. The term that would pay is the
+    ``digamma`` pair.
     """
     upper = identifiable_dispersion_bound(
         _effective_rate(mean, weights), float(weights.sum())

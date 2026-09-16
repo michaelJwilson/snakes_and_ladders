@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.emissions import NegativeBinomialEmission
+from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.sandbox.count_emissions import (
     NegativeBinomialEmission as Conserved,
 )
@@ -59,9 +60,14 @@ def test_a_constant_exposure_is_the_conserved_family_at_a_rescaled_mean() -> Non
 def test_unit_exposure_changes_nothing_in_scoring_or_the_m_step(
     observations: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
-    # `e = 1` is the degenerate case and must not merely agree to a tolerance.
-    # The M step needs the constant-exposure mass to factor out exactly to get
-    # here: formed as a matmul instead it leaves a one-ULP residue in the mean.
+    # `e = 1` is the degenerate case. **Scoring is bitwise** and stays the
+    # strongest claim available. The M step backs off to the repository's
+    # declared float64 tolerance, because its profiled mean is now a matmul --
+    # 13.72x faster at the declared scale and 80.7 MB of temporary lighter --
+    # and a matmul reduces in a different order. Measured 2.7e-16 relative,
+    # five orders inside the 1e-11 declared; root `CLAUDE.md` permits that
+    # trade and forbids loosening a bound to admit a result, so the bound here
+    # is the declared one and not one fitted to this measurement (#649).
     counts, posterior = observations
     live = NegativeBinomialEmission(DISPERSION, MEAN)
     conserved = Conserved(DISPERSION, MEAN)
@@ -74,8 +80,10 @@ def test_unit_exposure_changes_nothing_in_scoring_or_the_m_step(
         live.log_density(counts[0], torch.ones(300, 1, dtype=torch.float64)),
         conserved.log_density(counts[0]),
     )
-    assert torch.equal(fitted.mean, reference.mean)
-    assert torch.equal(fitted.dispersion, reference.dispersion)
+    assert torch.allclose(fitted.mean, reference.mean, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+    assert torch.allclose(
+        fitted.dispersion, reference.dispersion, rtol=CROSS_DEVICE_RTOL_FLOAT64
+    )
 
 
 @pytest.mark.critical

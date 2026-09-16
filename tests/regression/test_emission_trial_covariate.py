@@ -81,12 +81,13 @@ def test_the_m_step_at_a_constant_covariate_agrees_to_a_tolerance(
 
 @pytest.mark.critical
 @pytest.mark.oracle
-def test_no_covariate_is_the_conserved_family_bitwise(
+def test_no_covariate_is_the_conserved_family(
     observations: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
-    # The path every existing caller takes is untouched, in scoring and in the
-    # M step, which is what makes this an extension rather than a second
-    # implementation.
+    # The path every existing caller takes, which is what makes this an
+    # extension rather than a second implementation. The beta-binomial's M step
+    # is still bitwise -- #649's matmul rewrite is in the negative binomial's
+    # profiled mean, which this family does not have.
     counts, posterior = observations
     live = BetaBinomialEmission(TRIALS, ALPHA, BETA)
     conserved = Conserved(TRIALS, ALPHA, BETA)
