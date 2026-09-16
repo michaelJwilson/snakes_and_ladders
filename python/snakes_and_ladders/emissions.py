@@ -1305,7 +1305,14 @@ class PoissonEmission(EmissionFamily, CountEmissionFamily):
         refuse_covariate(self, covariate)
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
-        mean = (weights * values.unsqueeze(-1)).sum(dim=0) / weights.sum(dim=0)
+        # `weights.T @ values` is the same number as the elementwise form
+        # with no `(n_obs, n_states)` intermediate -- 80.7 MB at the declared
+        # scale, where it is 8.55x faster, 54.6 ms to 6.4 ms. A matmul reduces
+        # in a different order, so this lands a relative 1.3e-14 from the
+        # elementwise fit: three orders inside the 1e-11 this repository
+        # declares for a float64 comparison, which is the trade root
+        # `CLAUDE.md` permits (#649, #651).
+        mean = (weights.T @ values) / weights.sum(dim=0)
         return Reestimate(PoissonEmission(mean))
 
     def alignment_key(self) -> torch.Tensor:
@@ -1473,7 +1480,14 @@ class BinomialEmission(EmissionFamily, CountEmissionFamily):
         refuse_covariate(self, covariate)
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
-        mean = (weights * values.unsqueeze(-1)).sum(dim=0) / weights.sum(dim=0)
+        # `weights.T @ values` is the same number as the elementwise form
+        # with no `(n_obs, n_states)` intermediate -- 80.7 MB at the declared
+        # scale, where it is 8.55x faster, 54.6 ms to 6.4 ms. A matmul reduces
+        # in a different order, so this lands a relative 1.3e-14 from the
+        # elementwise fit: three orders inside the 1e-11 this repository
+        # declares for a float64 comparison, which is the trade root
+        # `CLAUDE.md` permits (#649, #651).
+        mean = (weights.T @ values) / weights.sum(dim=0)
         probability = (mean / self._trials).clamp(
             _PROBABILITY_MARGIN, 1.0 - _PROBABILITY_MARGIN
         )
