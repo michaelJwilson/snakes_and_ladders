@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.learn.potts import Configuration, PottsLandscape, optimum
+from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment, optimum
 from snakes_and_ladders.learn.relaxed import (
     MINIMUM_TEMPERATURE,
     RelaxationMode,
@@ -48,8 +48,8 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 HARD = (-0.9, np.array([0.4, 0.35, -0.6]), 7)
 
 
-def _landscape() -> PottsLandscape:
-    return PottsLandscape(*HARD)
+def _landscape() -> PottsEnvironment:
+    return PottsEnvironment(*HARD)
 
 
 def _hmm(length: int = 8) -> tuple[RelaxedHmmPath, HmmParams, np.ndarray]:
@@ -88,7 +88,7 @@ def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
     # A relaxation that disagrees with the discrete score at a one-hot is a
     # different model, and every measurement made against it transfers to
     # nothing.
-    landscape = PottsLandscape(-0.9, np.array([0.4, 0.35, -0.6]), 5)
+    landscape = PottsEnvironment(-0.9, np.array([0.4, 0.35, -0.6]), 5)
     objective = RelaxedPotts(landscape)
 
     for candidate in itertools.product(range(3), repeat=5):

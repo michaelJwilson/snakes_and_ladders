@@ -22,7 +22,7 @@ import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
@@ -41,8 +41,8 @@ FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"
 BRANCH_LENGTH = 0.1629
 
 
-def _potts(chain_length: int = 4) -> tuple[PottsLandscape, int]:
-    landscape = PottsLandscape(coupling=0.75, field=FIELD, chain_length=chain_length)
+def _potts(chain_length: int = 4) -> tuple[PottsEnvironment, int]:
+    landscape = PottsEnvironment(coupling=0.75, field=FIELD, chain_length=chain_length)
     return landscape, chain_length * (landscape.n_states - 1)
 
 

@@ -19,7 +19,7 @@ import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.learn.exact import exact_policy_gradient
 from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import rollout
 
@@ -30,8 +30,8 @@ _HORIZON = 6
 _BATCH = 32
 
 
-def _landscape() -> PottsLandscape:
-    return PottsLandscape(_COUPLING, _FIELD, _CHAIN_LENGTH)
+def _landscape() -> PottsEnvironment:
+    return PottsEnvironment(_COUPLING, _FIELD, _CHAIN_LENGTH)
 
 
 def test_one_episode_benchmark(benchmark: BenchmarkFixture) -> None:

@@ -66,7 +66,7 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import torch
 
-from snakes_and_ladders.learn.potts import Configuration, PottsLandscape
+from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment
 
 #: Below this the softmax saturates in float64 and the gradient underflows, so
 #: a smaller temperature is refused rather than silently returning a stalled
@@ -130,12 +130,12 @@ class RelaxedPotts(RelaxedObjective):
     """The Potts chain's score, extended to the simplex.
 
     ``J * sum_t sum_a P[t, a] P[t+1, a] + sum_t sum_a P[t, a] h[a]``, which at
-    a one-hot is :meth:`snakes_and_ladders.learn.potts.PottsLandscape.energy` exactly. The
+    a one-hot is :meth:`snakes_and_ladders.learn.potts.PottsEnvironment.energy` exactly. The
     parameters are read off the landscape rather than re-declared, so the
     extension cannot drift from what it extends.
     """
 
-    landscape: PottsLandscape
+    landscape: PottsEnvironment
 
     @property
     def n_sites(self) -> int:

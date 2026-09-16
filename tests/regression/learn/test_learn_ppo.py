@@ -28,7 +28,7 @@ from snakes_and_ladders.learn.critic import Critic, n_state_features
 from snakes_and_ladders.learn.exact import exact_expected_return
 from snakes_and_ladders.learn.policy import LinearPolicy, MLPPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsLandscape,
+    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -46,15 +46,15 @@ from snakes_and_ladders.sim.fixtures import baseline, fixture
 FIELD = np.array([0.4, -0.1, -0.3])
 
 
-def _landscape() -> PottsLandscape:
-    return PottsLandscape(coupling=0.75, field=FIELD, chain_length=4)
+def _landscape() -> PottsEnvironment:
+    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
-def _states(landscape: PottsLandscape) -> list[tuple[int, ...]]:
+def _states(landscape: PottsEnvironment) -> list[tuple[int, ...]]:
     return list(enumerate_configurations(landscape.n_states, landscape.chain_length))
 
 
-def _reached(landscape: PottsLandscape, policy: LinearPolicy | MLPPolicy) -> float:
+def _reached(landscape: PottsEnvironment, policy: LinearPolicy | MLPPolicy) -> float:
     best = optimum(landscape)[1]
     rng = np.random.default_rng(1)
     return float(
@@ -73,7 +73,7 @@ def _reached(landscape: PottsLandscape, policy: LinearPolicy | MLPPolicy) -> flo
     )
 
 
-def _mean_return(landscape: PottsLandscape, policy: LinearPolicy | MLPPolicy) -> float:
+def _mean_return(landscape: PottsEnvironment, policy: LinearPolicy | MLPPolicy) -> float:
     return float(
         np.mean(
             [
@@ -272,11 +272,11 @@ SIBLING_ITERATIONS = 15
 SIBLING_BATCH = 32
 
 
-def _declared_landscape() -> PottsLandscape:
+def _declared_landscape() -> PottsEnvironment:
     """The declared chain as a single-flip search at the enumerable length."""
     record = baseline(*DECLARED)
     params = fixture(*DECLARED).params
-    return PottsLandscape(
+    return PottsEnvironment(
         coupling=params.coupling,
         field=params.field,
         chain_length=int(

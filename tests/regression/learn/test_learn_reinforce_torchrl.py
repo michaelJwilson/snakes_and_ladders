@@ -34,7 +34,7 @@ import pytest
 import torch
 from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.reinforce import surrogate_loss
 
 torchrl = pytest.importorskip("torchrl")
@@ -55,7 +55,7 @@ BASELINES = (0.0, 0.5, -1.25)
 
 
 def _landscape() -> Environment[tuple[int, ...], tuple[int, int]]:
-    return PottsLandscape(coupling=0.75, field=FIELD, chain_length=4)
+    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
 def _greedy_episode(

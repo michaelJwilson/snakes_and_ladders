@@ -51,7 +51,7 @@ Flip = tuple[int, int]
 Configuration = tuple[int, ...]
 
 
-class PottsLandscape(Environment[Configuration, Flip]):
+class PottsEnvironment(Environment[Configuration, Flip]):
     """Single-flip search over a 1-D Potts chain at known parameters.
 
     Parameters
@@ -111,7 +111,7 @@ class PottsLandscape(Environment[Configuration, Flip]):
         field: np.ndarray,
         edges: Sequence[tuple[int, int]],
         n_nodes: int,
-    ) -> PottsLandscape:
+    ) -> PottsEnvironment:
         """The same landscape over an arbitrary graph rather than a chain.
 
         A chain is the case ``edges == [(0, 1), (1, 2), ...]``, so this is a
@@ -140,7 +140,7 @@ class PottsLandscape(Environment[Configuration, Flip]):
 
         Returns
         -------
-        PottsLandscape
+        PottsEnvironment
             The landscape over that graph.
 
         Raises
@@ -169,7 +169,7 @@ class PottsLandscape(Environment[Configuration, Flip]):
         return landscape
 
     @classmethod
-    def from_params(cls, params: PottsParams) -> PottsLandscape:
+    def from_params(cls, params: PottsParams) -> PottsEnvironment:
         """Build the landscape a Potts fixture describes.
 
         The same yaml that supplies ``snakes_and_ladders.opt``'s reference objective, read
@@ -351,7 +351,7 @@ def enumerate_configurations(
     return itertools.product(range(n_states), repeat=chain_length)
 
 
-def optimum(landscape: PottsLandscape) -> tuple[Configuration, float]:
+def optimum(landscape: PottsEnvironment) -> tuple[Configuration, float]:
     """The global maximum of the landscape, by exhaustive enumeration.
 
     The independent oracle for "did the search find the best configuration".

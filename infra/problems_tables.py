@@ -243,8 +243,8 @@ ALGORITHMS: dict[str, str] = {
     "sandbox.tropical.optimize": "relaxation",
     "sandbox.tropical.quartet_table": "relaxation",
     "search.rl.TopologyEnvironment": "policy learning",
-    "learn.potts.PottsLandscape": "policy learning",
-    "learn.hmm.StatePathLandscape": "policy learning",
+    "learn.potts.PottsEnvironment": "policy learning",
+    "learn.hmm.HmmEnvironment": "policy learning",
     "learn.surrogate.fit_surrogate": "policy learning",
 }
 

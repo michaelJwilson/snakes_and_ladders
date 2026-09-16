@@ -18,7 +18,7 @@ import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsLandscape,
+    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -31,8 +31,8 @@ FIELD = np.array([0.4, -0.1, -0.3])
 FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 
 
-def _landscape(chain_length: int = 4) -> PottsLandscape:
-    return PottsLandscape(coupling=0.75, field=FIELD, chain_length=chain_length)
+def _landscape(chain_length: int = 4) -> PottsEnvironment:
+    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=chain_length)
 
 
 # --- the model ------------------------------------------------------------
@@ -108,7 +108,7 @@ def test_shifting_the_field_leaves_every_reward_unchanged() -> None:
     # canonicalized on load and a reader is entitled to know whether the
     # landscape depended on it. It does not.
     base = _landscape()
-    shifted = PottsLandscape(0.75, FIELD + 1.7, 4)
+    shifted = PottsEnvironment(0.75, FIELD + 1.7, 4)
     for state in itertools.islice(enumerate_configurations(3, 4), 25):
         for action in base.actions(state):
             assert_allclose(
@@ -189,7 +189,7 @@ def test_the_fixture_yaml_builds_the_same_landscape() -> None:
     # One model, two roles: the yaml that supplies `snakes_and_ladders.opt`'s reference
     # objective read as a search problem instead of a fitting problem.
     params = load_potts_params(FIXTURE)
-    landscape = PottsLandscape.from_params(params)
+    landscape = PottsEnvironment.from_params(params)
     assert landscape.n_states == params.n_states
     assert landscape.chain_length == params.chain_length
     assert_allclose(
@@ -210,7 +210,7 @@ def test_an_unusable_landscape_is_rejected(
     coupling: float, field: np.ndarray, chain_length: int, message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        PottsLandscape(coupling, field, chain_length)
+        PottsEnvironment(coupling, field, chain_length)
 
 
 @pytest.mark.structural
@@ -239,7 +239,7 @@ def test_the_vectorized_features_are_the_scalar_deltas_exactly() -> None:
     # and stays as the oracle. Exact, because both are integer counts and one
     # subtraction of the same two floats -- realized deviation 0.0 over 200
     # random states.
-    landscape = PottsLandscape(0.75, np.array([0.4, -0.1, -0.3]), chain_length=5)
+    landscape = PottsEnvironment(0.75, np.array([0.4, -0.1, -0.3]), chain_length=5)
     rng = np.random.default_rng(0)
 
     for _ in range(50):

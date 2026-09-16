@@ -10,7 +10,7 @@ that is not a lattice behind it.
 **The parameters arrive as plain arrays.** ``learn/CLAUDE.md`` forbids
 importing ``snakes_and_ladders.sim``, so this module never sees an ``HmmParams``; a caller
 in ``snakes_and_ladders.search`` --- which may import both halves --- unpacks one. That is
-the same reason :meth:`PottsLandscape.on_graph` takes an edge list rather
+the same reason :meth:`PottsEnvironment.on_graph` takes an edge list rather
 than a ``PottsGraph``.
 
 **The objective is the joint log-probability of a path and the observations
@@ -35,7 +35,7 @@ Revision = tuple[int, int]
 Path = tuple[int, ...]
 
 
-class StatePathLandscape(Environment[Path, Revision]):
+class HmmEnvironment(Environment[Path, Revision]):
     """Search over hidden state paths, one position at a time.
 
     Parameters
@@ -242,7 +242,7 @@ def enumerate_paths(n_states: int, length: int) -> Iterator[Path]:
     return itertools.product(range(n_states), repeat=length)
 
 
-def optimum(landscape: StatePathLandscape) -> tuple[Path, float]:
+def optimum(landscape: HmmEnvironment) -> tuple[Path, float]:
     """The maximum-a-posteriori path, by exhaustive enumeration.
 
     Returns

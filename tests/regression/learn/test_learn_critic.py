@@ -36,7 +36,7 @@ from snakes_and_ladders.learn.exact import (
 )
 from snakes_and_ladders.learn.policy import LinearPolicy, MLPPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsLandscape,
+    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -46,8 +46,8 @@ FIELD = np.array([0.4, -0.1, -0.3])
 HORIZON = 3
 
 
-def _landscape() -> PottsLandscape:
-    return PottsLandscape(coupling=0.75, field=FIELD, chain_length=4)
+def _landscape() -> PottsEnvironment:
+    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
 def _policy(weights: list[float]) -> LinearPolicy:
@@ -56,7 +56,7 @@ def _policy(weights: list[float]) -> LinearPolicy:
     return policy
 
 
-def _states(landscape: PottsLandscape) -> list[tuple[int, ...]]:
+def _states(landscape: PottsEnvironment) -> list[tuple[int, ...]]:
     return list(enumerate_configurations(landscape.n_states, landscape.chain_length))
 
 

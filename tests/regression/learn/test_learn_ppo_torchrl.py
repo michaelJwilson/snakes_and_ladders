@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import rollout
 
 torchrl = pytest.importorskip("torchrl")
@@ -52,8 +52,8 @@ ROLLOUTS = (
 )
 
 
-def _landscape() -> PottsLandscape:
-    return PottsLandscape(coupling=0.75, field=FIELD, chain_length=4)
+def _landscape() -> PottsEnvironment:
+    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
 @pytest.mark.oracle
@@ -103,7 +103,7 @@ def test_the_advantages_are_torchrl_s_gae_at_gamma_one(
 
 
 def _decisions(
-    landscape: PottsLandscape, policy: LinearPolicy, seed: int, episodes: int
+    landscape: PottsEnvironment, policy: LinearPolicy, seed: int, episodes: int
 ) -> tuple[list[tuple[tuple[int, ...], ...]], torch.Tensor, torch.Tensor, list[int]]:
     """Episodes under ``policy``, with every decision's neighbourhood features and the index taken."""
     rng = np.random.default_rng(seed)

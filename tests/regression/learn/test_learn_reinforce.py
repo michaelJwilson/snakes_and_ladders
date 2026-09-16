@@ -27,7 +27,7 @@ from snakes_and_ladders.learn.exact import (
 )
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsLandscape,
+    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -55,8 +55,8 @@ _GRADIENT_TOLERANCE = 1e-8
 _ESTIMATOR_TOLERANCE = 0.10
 
 
-def _landscape() -> PottsLandscape:
-    return PottsLandscape(0.75, FIELD, CHAIN_LENGTH)
+def _landscape() -> PottsEnvironment:
+    return PottsEnvironment(0.75, FIELD, CHAIN_LENGTH)
 
 
 def _policy(weights: list[float]) -> LinearPolicy:

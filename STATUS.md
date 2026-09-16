@@ -970,7 +970,7 @@ sites) and the `qa`/`infra` row are recorded as not measured.
 | --- | --- | --- | --- | --- | --- |
 | `likelihood` | `message_passing` flooding, 8x8: `logsumexp` per message 17.6%, ufunc reduce 14.7%, `graph.neighbours` scan 9.3%, `_run` 9.3%, `_normalize` 7.6% (3x3: 19.1 / 15.8 / 10.2%) | 58% Python per message | layout, allocation, vectorization | to within 3x of `belief_propagation` | the dictionary implementation, bitwise |
 | `likelihood` | `message_passing` tree schedule, chain 200: `graph.neighbours` scan 15.7%, `graph.degree` scan 10.6% (400,000 calls), `logsumexp` 9.7% | 36% | layout, call overhead (two quadratic scans) | to within 2x of the forward recursion | the same, bitwise |
-| `learn` | `PottsLandscape.features`, 60 x 32 episodes on the length-8 chain: 23.5%, with 520,968 ufunc reductions from its loop over sites; `policy.sample` 4.0% | 23.5% | vectorization | under 20% of the run | `_deltas`, exact |
+| `learn` | `PottsEnvironment.features`, 60 x 32 episodes on the length-8 chain: 23.5%, with 520,968 ufunc reductions from its loop over sites; `policy.sample` 4.0% | 23.5% | vectorization | under 20% of the run | `_deltas`, exact |
 | `search` | `maxflow.energy`, 32x32 x 64 configurations: the per-edge Python loop 91.6% (16x16: 93.0%) | 92% | vectorization | 5–10x on one configuration | `potts.log_weights`, 1e-12 relative |
 | `search` | `spr_neighbours` at 20 taxa: 128.7 ms for 1,122 candidates, `build` and its generator 44%, `visit` 28% | 10% of one `infer` step (1.28 s); 67% of one candidate fit (193 ms) | allocation (a `Node` tree per new key) | at most 2x on the neighbourhood, under 5% of a step | not ported: under the 10% rule per step |
 | `search` | `gibbs.sample_factor_graph`, 32x32: `conditional` 42.0%, `gibbs_sweep` 17.0%, `log_density` 9.7% (16x16: 40.8 / 18.6 / 9.2%) | 69% | compiled backend over the #341 edge layout | ~10x, from the Potts `numba` sweep's 7x | draw for draw on the same uniforms; **acted on by [#561](https://github.com/michaelJwilson/snakes_and_ladders/issues/561) and [#563](https://github.com/michaelJwilson/snakes_and_ladders/issues/563), below: 122x on the sweep, 147x on the density, 18.5x on the run** |
@@ -988,7 +988,7 @@ computes:
 | `message_passing` flooding on the 8x8 lattice: messages as rows of two preallocated `(n_edges, width)` arrays, factors grouped by table shape and axis with their tables stacked once, one vectorized pass per group per sweep | bitwise against `message_passing_reference` (the dictionary implementation, kept) on every marginal and every schedule, 51 iterations both; `log Z` to 1e-12 relative | 514.6 ms, **75x** `belief_propagation` (6.88 ms) | **12.38 ms, 1.8x** |
 | `message_passing` tree schedule on the 200-step chain: the same kernels grouped by height and depth, breadth-first, so a 2,000-step chain no longer exceeds the recursion limit | bitwise as above; the 2,000-step chain against the forward recursion to 1e-12 | 29.75 ms, **9.5x** the forward recursion (3.14 ms) | **14.77 ms, 4.7x** — the 2x target is not met: 800 levels at 10–15 µs of NumPy dispatch each is the floor of this layout |
 | `maxflow.energy`: one gather over the edges and a `dot` | `log_weights` to 1e-12 relative (realized 7.7e-14; no longer bitwise, the edge terms sum in a different order) | 0.59 / 2.36 / 8.37 ms on one configuration at extents 16 / 32 / 64; 2.70 ms on 64 configurations at 32x32 | **0.08 / 0.28 / 1.00 ms (7.7–8.6x)**, below the Rust cut kernel at every extent; **1.14 ms (2.4x)** |
-| `PottsLandscape.features`: one gather from a padded neighbour table, and `is_terminal` reading it instead of `_deltas` per action | `array_equal` to `_deltas`, unchanged | REINFORCE 60 x 32 episodes on the length-8 chain 2.43 s; one gradient update on the length-4 chain 27.31 ms | **1.85 s (1.32x)**; **23.99 ms**; `features` 23.5% of the run to 11.5%, `policy.sample` 5.4% — Python per action sits at the 20% line rather than under it |
+| `PottsEnvironment.features`: one gather from a padded neighbour table, and `is_terminal` reading it instead of `_deltas` per action | `array_equal` to `_deltas`, unchanged | REINFORCE 60 x 32 episodes on the length-8 chain 2.43 s; one gradient update on the length-4 chain 27.31 ms | **1.85 s (1.32x)**; **23.99 ms**; `features` 23.5% of the run to 11.5%, `policy.sample` 5.4% — Python per action sits at the 20% line rather than under it |
 
 No `numba` or Rust port was reached: on every loop acted on the vectorized
 pass carried the gain, and the profile of what remains is dispatch per level
@@ -3117,7 +3117,7 @@ and from the module that implements it, so the guard of #274 resolves them.
 - That a learned policy beats any baseline on the instance
   [#406](https://github.com/michaelJwilson/snakes_and_ladders/issues/406) declared. `planted_glass/ci` is a
   problem a baseline does not solve — the first the repository carries — and
-  no policy has been run on it. `snakes_and_ladders.learn.potts.PottsLandscape.on_graph`
+  no policy has been run on it. `snakes_and_ladders.learn.potts.PottsEnvironment.on_graph`
   takes one scalar coupling across every edge, deliberately, so that the
   greedy searcher stays inside the policy class; the instance's difficulty is
   its per-edge signs, which that constructor cannot express.
@@ -3465,7 +3465,7 @@ triples, the eight entry points becoming adapters.
 | `search.topology.enumerate_topologies` | every unrooted topology by stepwise insertion | distinct, and stays | the `(2n-5)!!` count |
 | `search.max_cut.enumerate_max_cut` | every two-state assignment, best cut kept | product enumeration with a score, one side fixed | the lowest-energy configuration of `enumerate_potts` at two states |
 | `learn.potts.enumerate_configurations`, `learn.hmm.enumerate_paths` | `itertools.product` over states and sites | two identical copies, neither under #230's enumeration cap | equality of the sequences |
-| `learn.potts.optimum`, `learn.hmm.optimum`, `learn.relaxed.enumerate_optimum` | argmax over the product with a lexicographic tie rule | three copies of one kernel | each other's result on shared instances; `RelaxedPotts.discrete` equals `PottsLandscape.energy` |
+| `learn.potts.optimum`, `learn.hmm.optimum`, `learn.relaxed.enumerate_optimum` | argmax over the product with a lexicographic tie rule | three copies of one kernel | each other's result on shared instances; `RelaxedPotts.discrete` equals `PottsEnvironment.energy` |
 | `likelihood.potts.enumerate_potts` | log weights over the product, then marginals | one algorithm, graph type | its own pin: the transfer matrix on a chain to machine precision |
 | `likelihood.hmm_paths.enumerate_hidden_paths` | log joints over the product, then the evidence, posteriors and both decodings | one algorithm, chain type | its own pin: the forward recursion to 1e-12 |
 | `likelihood.spatio_sequential.enumerate_spatio_sequential` | log joints over labellings times paths, then three posteriors | one algorithm, coupled type | its own pin: the per-class forward recursion at a relative gap of 0.0 |

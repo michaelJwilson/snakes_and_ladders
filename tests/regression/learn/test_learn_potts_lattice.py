@@ -1,6 +1,6 @@
 """The Potts landscape over a graph rather than a chain.
 
-`PottsLandscape.on_graph` is a second constructor and not a second class: the
+`PottsEnvironment.on_graph` is a second constructor and not a second class: the
 energy, the move set, the features and the reward are shared with the chain,
 and only the adjacency differs. So most of what could break is already
 covered by `test_learn_potts.py`, and what is checked here is the part that
@@ -26,7 +26,7 @@ from snakes_and_ladders.learn.exact import (
 )
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsLandscape,
+    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -38,10 +38,10 @@ COUPLING = 0.75
 _GRADIENT_TOLERANCE = 1e-8
 
 
-def _lattice(shape: tuple[int, ...], boundary: BoundaryCondition) -> PottsLandscape:
+def _lattice(shape: tuple[int, ...], boundary: BoundaryCondition) -> PottsEnvironment:
     """The landscape over a lattice, with the graph unpacked at the boundary."""
     graph = lattice_graph(shape, boundary=boundary, coupling=COUPLING)
-    return PottsLandscape.on_graph(COUPLING, FIELD, graph.edges, graph.n_nodes)
+    return PottsEnvironment.on_graph(COUPLING, FIELD, graph.edges, graph.n_nodes)
 
 
 @pytest.mark.oracle
@@ -50,7 +50,7 @@ def test_a_chain_built_as_a_graph_is_the_chain() -> None:
     # constructors disagreed anywhere, the generalization would have changed
     # the reference instance every existing result rests on.
     length = 5
-    chain = PottsLandscape(COUPLING, FIELD, length)
+    chain = PottsEnvironment(COUPLING, FIELD, length)
     as_graph = _lattice((length,), BoundaryCondition.OPEN)
 
     for state in enumerate_configurations(3, length):
@@ -144,4 +144,4 @@ def test_the_enumerated_gradient_matches_central_differences_on_a_lattice() -> N
 @pytest.mark.edge_case
 def test_an_edge_naming_a_missing_node_is_refused() -> None:
     with pytest.raises(ValueError, match=r"outside \[0, 3\)"):
-        PottsLandscape.on_graph(COUPLING, FIELD, [(0, 3)], 3)
+        PottsEnvironment.on_graph(COUPLING, FIELD, [(0, 3)], 3)

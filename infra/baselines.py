@@ -59,7 +59,7 @@ from snakes_and_ladders.inputs import library_versions, module_closure
 from snakes_and_ladders.learn.exact import exact_expected_return
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsLandscape,
+    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -298,10 +298,10 @@ def tree_surrogate_baseline(loaded: Fixture) -> dict[str, Measurement]:
     }
 
 
-def potts_landscape(loaded: Fixture) -> PottsLandscape:
+def potts_landscape(loaded: Fixture) -> PottsEnvironment:
     """The declared Potts chain as a single-flip search, at an enumerable length."""
     params = loaded.params
-    return PottsLandscape(
+    return PottsEnvironment(
         coupling=params.coupling, field=params.field, chain_length=RL_CHAIN_LENGTH
     )
 

@@ -20,7 +20,7 @@ import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 
 # Same rule, same wording, same reason as `tests/regression/test_opt_objective.py`.
@@ -33,8 +33,8 @@ FORBIDDEN_PREFIXES = (
 FIELD = np.array([0.4, -0.1, -0.3])
 
 
-def _landscape(chain_length: int = 4) -> PottsLandscape:
-    return PottsLandscape(coupling=0.75, field=FIELD, chain_length=chain_length)
+def _landscape(chain_length: int = 4) -> PottsEnvironment:
+    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=chain_length)
 
 
 def _imported_modules(source: Path) -> set[str]:

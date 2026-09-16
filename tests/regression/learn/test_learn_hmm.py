@@ -19,7 +19,7 @@ from snakes_and_ladders.learn.exact import (
     exact_policy_gradient,
     finite_difference_gradient,
 )
-from snakes_and_ladders.learn.hmm import StatePathLandscape, enumerate_paths, optimum
+from snakes_and_ladders.learn.hmm import HmmEnvironment, enumerate_paths, optimum
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.rollout import greedy_rollout
 
@@ -48,8 +48,8 @@ _GRADIENT_TOLERANCE = 1e-8
 _NON_TERMINAL_START = (0, 0, 0, 0, 0, 1)
 
 
-def _landscape() -> StatePathLandscape:
-    return StatePathLandscape(INITIAL, TRANSITION, EMISSION, OBSERVATIONS)
+def _landscape() -> HmmEnvironment:
+    return HmmEnvironment(INITIAL, TRANSITION, EMISSION, OBSERVATIONS)
 
 
 @pytest.mark.oracle
@@ -182,4 +182,4 @@ def test_a_malformed_landscape_is_refused(
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        StatePathLandscape(initial, transition, emission, observations)
+        HmmEnvironment(initial, transition, emission, observations)
