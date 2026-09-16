@@ -3714,3 +3714,42 @@ through one would corrupt every later call silently; `setflags(write=False)`
 makes it a `ValueError` at the write. It decides a real case rather than a
 hypothetical one: `torch.as_tensor` shares a writable NumPy buffer, so the two
 surrogate call sites copy explicitly instead.
+
+## The problem axis reads imports, not only fixture calls ([#622](https://github.com/michaelJwilson/snakes_and_ladders/issues/622))
+
+#619 derived a per-problem selection from the registry call a test module
+makes. Measured over the tree, it missed more than it found.
+
+| | before | after |
+| --- | ---: | ---: |
+| modules carrying no problem marker | 138 of 258 | **70** |
+| of those, application or benchmark code | 78 | **16** |
+
+Both modules #614 names as its motivation --- `search/test_maxflow.py` and
+`search/test_alpha_expansion.py`, "that problem's ground-state tests" --- were
+among the 78, so a green `-m potts_lattice` run over a broken solver was the
+failure the axis was opened to prevent and did not.
+
+Neither loads a fixture, and neither can. They *sweep*: `test_alpha_expansion.py`
+builds 15 lattices, each chosen for the property under test --- zero coupling,
+a dominant one, a negative one, a periodic boundary. There is no single declared
+instance to load, and declaring 15 fixtures to carry 15 deliberate variations
+would make the registry a list of test arguments.
+
+The second reading is over the module's **imports**, against `PROBLEMS.md`'s
+**Defines** column. That file already stated the rule --- *a test module
+importing any of it exercises the problem* --- and `tests/_problems.py` did not
+implement it, so the catalogue's own sentence was untrue. It is held by
+`test_problems_catalogue.py`, which resolves every symbol a row names, so the
+reading is as current as the code rather than a second map to maintain. A
+module-level `PROBLEM = "<name>"` constant was the alternative and is the map
+this work removes, one level up: rewrite a module's model, forget the constant,
+and the axis is confidently wrong rather than visibly empty.
+
+One catalogue gap fell out. `opt.potts` is "a 1-D Potts chain in an external
+field" in its own first line and no row named it; it now defines `potts_chain`.
+
+The upper-bound guard changed with the premise: a module selected for a problem
+must spell the problem's name **or** import code the catalogue says defines it.
+It re-reads `PROBLEMS.md` by regex where the scan uses `ast`, so the two
+readings still share no code.
