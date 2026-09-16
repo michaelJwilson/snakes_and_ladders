@@ -44,6 +44,7 @@ from snakes_and_ladders.emissions import (
 )
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.ragged import Ragged
 
 # How far apart the emission rows start, in unconstrained units. Large
 # enough to leave the stationary point, small enough not to preselect an
@@ -1105,15 +1106,21 @@ def baum_welch(
 
 
 def baum_welch_family(
-    observations: np.ndarray,
+    observations: np.ndarray | Ragged,
     log_initial: torch.Tensor,
     log_transition: torch.Tensor,
     emissions: EmissionFamily,
     max_iterations: int = 500,
     tolerance: float = 1e-12,
-    covariate: np.ndarray | None = None,
+    covariate: np.ndarray | Ragged | None = None,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
+
+    Takes a rectangular ``(n_sequences, length, ...)`` array as it always has,
+    or a `Ragged` batch whose segments differ in length. There is one recursion
+    underneath either: the rectangular form converts, and the route it replaced
+    is conserved in `sandbox.rectangular_hmm` as the referee of that case
+    (issue #666).
 
     The E step is the model: forward and backward messages in log space,
     identical whatever a state emits, and so is the M step for the initial
@@ -1171,14 +1178,33 @@ def baum_welch_family(
         degenerate optimum rather than a convergence, and is reported as such
         rather than clamped away.
     """
-    data = torch.as_tensor(observations, dtype=emissions.observation_dtype)
+    # One batch form, and a rectangular argument converts to it (issue #666).
+    # The segments are padded to the longest and masked; the mask is not a
+    # convenience but the whole of the claim that padding never reaches a
+    # likelihood, so it is applied in the E step *and*, through `gamma`, in the
+    # emission M step. The conserved rectangular route in `sandbox` referees
+    # the equal-length case bit for bit.
+    batch = (
+        observations
+        if isinstance(observations, Ragged)
+        else Ragged.from_rectangular(np.asarray(observations))
+    )
+    # Zero is a value every family admits and every padded position is masked
+    # out of the arithmetic below, so the fill is arbitrary and never scored.
+    block, present = batch.padded(fill=0)
     # The leading two axes are the sequence and the position. What follows them
     # is the family's own: none where an observation is a scalar, and one or
     # more where it is not --- a family over a pair of counts carries a channel
     # axis. Unpacking the whole shape refused every such family outright, so a
     # family could be made to condition on a covariate and still not be
     # fittable here (issue #658).
-    n_sequences, length = data.shape[:2]
+    data = torch.as_tensor(block, dtype=emissions.observation_dtype)
+    mask = torch.as_tensor(present)
+    n_sequences, length = batch.n_segments, batch.longest
+    #: The last live position of each segment, which is where its chain ends.
+    final = torch.as_tensor(batch.lengths, dtype=torch.long) - 1
+    rows = torch.arange(n_sequences)
+    steps = torch.arange(length)
     m = emissions.n_states
     varying = log_transition.shape != (m, m)
     if varying and log_transition.shape != (max(length - 1, 0), m, m):
@@ -1198,7 +1224,17 @@ def baum_welch_family(
     # there (issue #658).
     exposure: torch.Tensor | None = None
     if covariate is not None:
-        exposure = torch.as_tensor(covariate, dtype=torch.float64)
+        # The covariate is segmented exactly as the observations are, and is
+        # padded with one rather than zero: it multiplies a rate or replaces a
+        # trial count, and zero would be a division where the mask has not yet
+        # removed the row (issue #658's neutral value, issue #666's padding).
+        carried = (
+            covariate
+            if isinstance(covariate, Ragged)
+            else Ragged.from_rectangular(np.asarray(covariate))
+        )
+        given, _ = carried.padded(fill=1)
+        exposure = torch.as_tensor(given, dtype=torch.float64)
         if exposure.ndim == data.ndim == 2:
             exposure = exposure[..., None]
 
@@ -1208,6 +1244,11 @@ def baum_welch_family(
     for _ in range(max_iterations):
         # --- E step: forward and backward messages in log space ----------
         emit = emissions.log_density(data, covariate=exposure)
+        # A padded position scores log 1, so it adds nothing wherever it is
+        # reached. Its `alpha` beyond the segment's end is still nonsense, which
+        # is why the evidence is gathered at each segment's own last position
+        # rather than read off the block's last column.
+        emit = torch.where(mask.unsqueeze(2), emit, torch.zeros_like(emit))
         alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
         alpha[:, 0] = log_initial.unsqueeze(0) + emit[:, 0]
         for t in range(1, length):
@@ -1221,20 +1262,37 @@ def baum_welch_family(
         beta = torch.zeros((n_sequences, length, m), dtype=log_initial.dtype)
         for t in range(length - 2, -1, -1):
             kernel = kernels[t] if varying else log_transition
-            beta[:, t] = torch.logsumexp(
+            onward = torch.logsumexp(
                 kernel.unsqueeze(0) + (emit[:, t + 1] + beta[:, t + 1]).unsqueeze(1),
                 dim=2,
             )
+            # At or past a segment's last position the chain has ended: beta is
+            # one, not whatever the next column carries. This is the backward
+            # half of "the recursions restart at each boundary".
+            ended = (t >= final).unsqueeze(1)
+            beta[:, t] = torch.where(ended, torch.zeros_like(onward), onward)
 
-        evidence = torch.logsumexp(alpha[:, -1], dim=1)
+        evidence = torch.logsumexp(alpha[rows, final], dim=1)
         log_likelihood = float(evidence.sum())
 
-        gamma = alpha + beta - evidence[:, None, None]
-        xi = (
+        gamma = torch.where(
+            mask.unsqueeze(2),
+            alpha + beta - evidence[:, None, None],
+            torch.full_like(alpha, -float("inf")),
+        )
+        # A pair spans positions t and t+1, so it exists only where t is before
+        # the segment's last position. The pair that would straddle a boundary
+        # is not a transition the model took and is not counted as one.
+        pairs = (steps[:-1] < final.unsqueeze(1))[:, :, None, None]
+        xi = torch.where(
+            pairs,
             alpha[:, :-1].unsqueeze(3)
             + kernels.unsqueeze(0)
             + (emit[:, 1:] + beta[:, 1:]).unsqueeze(2)
-            - evidence[:, None, None, None]
+            - evidence[:, None, None, None],
+            torch.full(
+                (n_sequences, length - 1, m, m), -float("inf"), dtype=alpha.dtype
+            ),
         )
 
         # --- M step: normalized expected counts, then the family's own ---
