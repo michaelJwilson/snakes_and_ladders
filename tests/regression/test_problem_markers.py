@@ -31,6 +31,8 @@ import pytest
 from tests._problems import (
     NAMES_FIRST,
     NAMES_SECOND,
+    _defining_code,
+    _imported_code,
     fixtures_named_in,
     problem_names,
     restore,
@@ -383,7 +385,7 @@ def test_a_damaged_cache_is_ignored_rather_than_raised_on() -> None:
 
 @pytest.fixture(scope="module")
 def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Four modules naming a problem four ways, outside the real tree.
+    """Five modules naming a problem four ways, and one naming none.
 
     Nothing here is executed: the runs below are ``--collect-only``, and the
     scan is static, so a call to an undefined name is exactly as readable as a
@@ -395,13 +397,13 @@ def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
     (directory / "conftest.py").write_text(
         f"import sys\n\nsys.path.insert(0, {str(REPO_ROOT)!r})\n"
         f"sys.path.insert(0, {str(REPO_ROOT / 'infra')!r})\n\n"
-        "from test_kinds import KINDS, SCHEDULING  # noqa: E402\n"
+        "from test_kinds import KINDS, SCHEDULING, SUBJECTS  # noqa: E402\n"
         "from tests.conftest import (  # noqa: E402,F401\n"
         "    pytest_collection_modifyitems,\n"
         ")\n"
         "from tests.conftest import pytest_configure as _configure  # noqa: E402\n\n\n"
         "def pytest_configure(config):\n"
-        "    for name in KINDS + SCHEDULING:\n"
+        "    for name in KINDS + SCHEDULING + SUBJECTS:\n"
         '        config.addinivalue_line("markers", name)\n'
         "    _configure(config)\n"
     )
@@ -412,6 +414,11 @@ def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     (directory / "test_computed.py").write_text(
         f"def test_computed(name: str) -> None:\n    {CALL}(name, 'ci')\n"
+    )
+    # Names no problem and imports no defining code: the `infra` case.
+    (directory / "test_shared.py").write_text(
+        "from snakes_and_ladders.numerics import sample_rows\n\n\n"
+        "def test_shared() -> None:\n    sample_rows\n"
     )
     (directory / "test_typo.py").write_text(
         "import pytest\n\n\n@pytest.mark.potts_latice\ndef test_typo() -> None:\n"
@@ -499,3 +506,52 @@ def test_a_misspelled_problem_marker_fails_collection(mini_suite: Path) -> None:
     """
     status, _ = _collected(mini_suite, "potts_lattice", "test_typo.py")
     assert status != 0, "an unregistered problem marker was accepted"
+
+
+@pytest.mark.structural
+def test_a_module_naming_no_problem_is_selected_by_infra(mini_suite: Path) -> None:
+    """ "Unmarked" is not a state a module can be in (issue #622).
+
+    It used to be, and it meant two things at once: the module exercises
+    shared machinery and has nothing to name, or the scan failed to see what
+    it exercises. Nothing told them apart. Run for real over the mini suite,
+    as the problem markers are: `-m infra` selects the module that names no
+    problem and nothing else, so the marker partitions rather than labels.
+    """
+    files = ("test_literal.py", "test_shared.py")
+    _, infra = _collected(mini_suite, "infra", *files)
+    _, potts = _collected(mini_suite, "potts_lattice", *files)
+
+    assert infra == {"test_shared.py::test_shared"}
+    assert potts == {
+        "test_literal.py::test_gating",
+        "test_literal.py::test_plain",
+    }
+
+
+@pytest.mark.structural
+def test_an_infra_module_imports_no_code_that_defines_a_problem() -> None:
+    """The `infra` marker is a claim about the module, and this is the claim.
+
+    A module carries `infra` because its imports reach nothing `PROBLEMS.md`
+    attributes to a problem. Asserted the other way round here: if an
+    unmarked module *does* import defining code, the scan and the catalogue
+    disagree and one of them is wrong --- either the module exercises a
+    problem the axis is missing, or the catalogue attributes a module it
+    should not. Both are defects, and both are silent without this.
+    """
+    defining = {name for name, _ in _defining_code()}
+    offenders = []
+    for path in _modules():
+        if fixtures_named_in(path):
+            continue
+        imported = _imported_code(ast.parse(path.read_text()))
+        reached = sorted(
+            name
+            for name in defining
+            if any(one == name or one.startswith(f"{name}.") for one in imported)
+        )
+        if reached:
+            offenders.append(f"{path.relative_to(REPO_ROOT)} imports {reached}")
+
+    assert not offenders, "\n".join(offenders)
