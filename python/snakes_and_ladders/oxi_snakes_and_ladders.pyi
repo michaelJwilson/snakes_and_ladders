@@ -114,3 +114,12 @@ def simulate_count_pairs(
     totals: np.ndarray,
     successes: np.ndarray,
 ) -> None: ...
+def ragged_posteriors(
+    log_density: np.ndarray,
+    lengths: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    gamma: np.ndarray,
+    counts: np.ndarray,
+    evidence: np.ndarray,
+) -> None: ...

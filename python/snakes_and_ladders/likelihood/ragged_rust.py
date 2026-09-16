@@ -81,8 +81,12 @@ def posteriors_oracle(
     at = 0
     for index, segment in enumerate(log_density.segments()):
         run = forward_backward(segment, log_initial, log_transition)
-        gamma[at : at + len(segment)] = run.posterior
+        # `forward_backward` returns probabilities; this returns logs, which
+        # is what the accumulator below needs and what the compiled kernel
+        # carries. Converting here keeps the comparison in one space.
+        with np.errstate(divide="ignore"):
+            gamma[at : at + len(segment)] = np.log(run.posterior)
+            counts = np.logaddexp(counts, np.log(run.pairwise.sum(axis=0)))
         evidence[index] = run.log_evidence
-        counts = np.logaddexp(counts, run.pairwise.sum(axis=0))
         at += len(segment)
     return gamma, counts, evidence
