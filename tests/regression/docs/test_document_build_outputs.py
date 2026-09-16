@@ -235,7 +235,7 @@ def test_the_uncommitted_rows_are_the_ones_git_cannot_carry() -> None:
 
 
 @pytest.mark.structural
-def test_the_two_pdfs_are_the_paths_the_gates_name() -> None:
+def test_every_built_pdf_is_a_path_the_gates_name() -> None:
     """Only the PDFs need a rule, and both gates that enforce it name both.
 
     A byproduct cannot be committed and a re-rendered figure should be. The PDFs

@@ -84,7 +84,7 @@ carries_base() { git merge-base --is-ancestor "$base" HEAD; }
 
 pdfs_are_the_base_s() {
   local changed
-  changed="$(git diff --name-only "$base"...HEAD -- docs/paper.pdf docs/textbook.pdf)"
+  changed="$(git diff --name-only --diff-filter=M "$base"...HEAD -- docs/paper.pdf docs/textbook.pdf docs/mind_map.pdf)"
   if [ "$rebuild" = 1 ]; then
     [ -n "$changed" ] || { echo "  a rebuild that changed neither PDF" >&2; return 1; }
   else

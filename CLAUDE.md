@@ -39,7 +39,7 @@ This file is authoritative. Each of the remainder has a defined task:
 | `DEV.md` | Layout, the CI jobs, repository settings, the CI budget, how a change is reviewed |
 | `RELEASE.md` | Cutting a release: what it is cut against, the preconditions, the steps, who runs each, and what it costs |
 | `REFERENCES.md` | The texts and papers each part of the work is cited against |
-| `docs/tex/` | The academic paper reporting results, and the textbook of problem statements, algorithms, and properties that define them |
+| `docs/tex/` | The academic paper reporting results, the textbook of problem statements, algorithms, and properties that define them, and the mind map of the package, which is the one document that names code |
 | `docs/nb/` | One worked notebook per problem, from the fixture (of given size) to likelihood, optimization and learned policy |
 
 Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, `qa/`, `sandbox/`, and `docs/` with each carrying their own `CLAUDE.md` of specific details.  All are subject to the same **writing style, and rules** as defined in this doc.  `ROADMAP.md`, `STATUS.md` and `TICKETS.md` plan and trackat a level at a higher level. `DEV.md` and `INSTALL.md` are detailed, e.g. step by step.  There may be some light repetion betwen the two then.

@@ -1,0 +1,45 @@
+% The package map (issue #664). One page: two concerns, the packages, and the
+% modules, each labelled with the roadmap milestone `STATUS.md` claims it under.
+%
+% The tree is `docs/tex/generated/mind_map.tex`, written by
+% `infra/package_map.py` and not committed --- a drawn copy of the tree is what
+% `SEAMS.md` was before issue #601 deleted it.
+%
+% Plain TikZ, and the rows are computed by the generator. `forest` would pack
+% the tree and was the first choice, but its `environ`, `trimspaces` and
+% `elocalloc` are absent from this TeX Live; TikZ `graphdrawing` needs
+% LuaLaTeX and the build runs pdflatex. Nothing here is hand-placed either way.
+\documentclass[a3paper,landscape]{article}
+\usepackage[a3paper,landscape,margin=10mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{tikz}
+\usepackage{xcolor}
+
+\definecolor{unclaimed}{HTML}{B02020}
+\definecolor{rule}{HTML}{A8B2BE}
+\definecolor{claim}{HTML}{1D4ED8}
+\definecolor{ink}{HTML}{10151C}
+
+\pagestyle{empty}
+
+\begin{document}
+\begin{center}
+  {\Large\bfseries The package, and what each module is claimed against}\\[3pt]
+  {\small A module's role is the roadmap milestone \texttt{STATUS.md} records it
+   under; \textcolor{unclaimed}{$\circ$} marks an application module none names.\\ Infrastructure carries no milestone by design.}
+\end{center}
+\vfill
+\begin{center}
+\begin{tikzpicture}[
+  every node/.style={font=\tiny, inner sep=1.0pt, text=ink},
+  root/.style={font=\small\bfseries, anchor=west},
+  concern/.style={font=\small\scshape, anchor=west},
+  package/.style={font=\footnotesize\bfseries, anchor=west},
+  module/.style={anchor=west, font=\tiny},
+  edge/.style={rule, line width=0.35pt},
+]
+\input{generated/mind_map}
+\end{tikzpicture}
+\end{center}
+\vfill
+\end{document}
