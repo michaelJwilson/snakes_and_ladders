@@ -205,10 +205,14 @@ def test_a_row_reads_its_key_and_its_defining_code(tmp_path: Path) -> None:
     # The two hand-written columns, read from a table of one row. `Defines`
     # names code and fills no column of either table -- a simulator is not a
     # method -- and is read here so one reader parses the catalogue.
+    #
+    # The statement is a real label, and it has to be. An invented one reads
+    # as a citation to `test_document_labels.py`, which fails any label no
+    # document defines -- including one written only to explain this comment.
     catalogue = tmp_path / "PROBLEMS.md"
     catalogue.write_text(
         "| Problem | Key | Statement | Defines |\n| --- | --- | --- | --- |\n"
-        "| Made up | `potts_chain`, `potts_lattice` | `sec:aaa` | `sim.nothing` |\n"
+        "| Made up | `potts_chain`, `potts_lattice` | `sec:potts` | `sim.nothing` |\n"
     )
 
     assert problems_tables.catalogue_rows(catalogue) == [
