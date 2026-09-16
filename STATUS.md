@@ -581,6 +581,24 @@ recursion that preceded it at `T = 100,000`, `K = 8`. The varying form costs
 both shapes stay. The new path is pinned against a path enumeration that shares
 no recursion with it, and a planted two-regime kernel is recovered per regime
 from the pairwise posteriors where the pooled estimate matches neither.
+**A covariate reaches the families from a fit, not only from a test**
+([#657](https://github.com/michaelJwilson/snakes_and_ladders/pull/657)).
+#631's exposure and trial count were reachable only by a test that built a
+family directly. Three seams now thread one: the spatial params carry a
+`(S, n_nodes)` covariate that `gated_log_density`, `class_log_density` and the
+spatial M step each slice the way they slice the observations;
+`baum_welch_family` takes a `(n_sequences, length)` one and reaches both the E
+step's scoring and the emission M step; and the HMM objectives store one beside
+their observations. The end-to-end referee is #631's recovery raised from the
+family to the fit: over a `U(0.25, 4)` exposure whose draw spans 15.8x, a
+negative-binomial Baum-Welch **told** the exposure recovers a planted 2.0 and
+9.0 as **1.9688 and 8.8088**, and the same fit on the same data **not told** it
+converges to **4.1505 and 18.5904** — the rate averaged over the exposures,
+factors of 2.075 and 2.066 against an `E[U(0.25, 4)]` of 2.125. A constant
+exposure of ones scores bitwise and moves a 200-iteration fit 1.5e-13 at the
+single thread `tests/conftest.py` pins, two orders inside the declared 1e-11;
+the same fit reads 5.1e-14 at two threads and 9.9e-14 at four, so the figure is
+stated with the thread count it was taken at.
 
 **Felsenstein pruning: three CPU backends, one oracle.** Vectorized NumPy is
 the reference, with per-node rescaling accumulated in log space
