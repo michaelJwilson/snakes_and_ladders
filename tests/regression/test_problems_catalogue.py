@@ -24,27 +24,72 @@ sys.path.insert(0, str(REPO_ROOT / "infra"))
 import checks_ledger  # noqa: E402
 
 PROBLEMS = REPO_ROOT / "PROBLEMS.md"
-SYMBOL = re.compile(r"`([^`]+)`")
+FIXTURES = REPO_ROOT / "tests" / "regression" / "fixtures"
+PACKAGE = "snakes_and_ladders."
+#: The two hand-written columns: a bare fixture key, and code under the
+#: package named without its prefix.
+KEY_CELL = re.compile(r"`([a-z_0-9]+)`")
+DEFINES_CELL = re.compile(r"`([a-z_]+\.[A-Za-z0-9_.]+)`")
+
+
+def _rows() -> list[tuple[str, list[str], list[str]]]:
+    """``(problem, keys, defining names)`` per row of the catalogue."""
+    found = []
+    for line in PROBLEMS.read_text().splitlines():
+        if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 4:
+            continue
+        found.append(
+            (cells[0], KEY_CELL.findall(cells[1]), DEFINES_CELL.findall(cells[3]))
+        )
+    return found
 
 
 def _resolves(symbol: str) -> bool:
-    """A repository path, or an importable dotted name."""
+    """A repository path, an importable module, or a symbol one defines.
+
+    The module is tried first: `Defines` names a module wherever the module
+    belongs to one problem, and a submodule is not an attribute of its package
+    until something imports it, so the attribute reading alone refuses
+    `learn.hmm` (issue #640).
+    """
     if "/" in symbol or symbol.endswith((".md", ".yaml", ".ipynb")):
         return (REPO_ROOT / symbol).exists()
+    try:
+        importlib.import_module(symbol)
+    except ImportError:
+        pass
+    else:
+        return True
     module_path, _, attribute = symbol.rpartition(".")
     try:
         return hasattr(importlib.import_module(module_path), attribute)
-    except ModuleNotFoundError:
+    except ImportError:
         return False
 
 
 @pytest.mark.structural
-def test_every_symbol_in_the_problem_catalogue_resolves() -> None:
-    symbols = SYMBOL.findall(PROBLEMS.read_text())
-    assert len(symbols) > 40, "the catalogue lost its table"
+def test_every_defining_name_in_the_catalogue_resolves() -> None:
+    # Read from the `Defines` column rather than from every backtick in the
+    # file (issue #640): the minimal table backticks a fixture key, a LaTeX
+    # label and a column name too, and none of those is a dotted symbol.
+    names = [name for _, _, defines in _rows() for name in defines]
+    assert len(names) > 40, "the catalogue lost its table"
 
-    missing = sorted({s for s in symbols if not _resolves(s)})
-    assert missing == [], f"PROBLEMS.md names symbols that do not exist: {missing}"
+    missing = sorted({name for name in names if not _resolves(f"{PACKAGE}{name}")})
+    assert missing == [], f"PROBLEMS.md names code that does not exist: {missing}"
+
+
+@pytest.mark.structural
+def test_every_key_in_the_catalogue_declares_a_fixture() -> None:
+    # A key is the fixture directory and the marker, which are one name. A key
+    # naming no directory is a marker no test can carry.
+    missing = sorted(
+        {key for _, keys, _ in _rows() for key in keys if not (FIXTURES / key).is_dir()}
+    )
+    assert missing == [], f"PROBLEMS.md keys name no fixture: {missing}"
 
 
 @pytest.mark.structural

@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
 from profile_harness import format_table, self_time_table
 from snakes_and_ladders.learn.policy import LinearPolicy
-from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
 from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
@@ -371,7 +371,7 @@ def search_sections(mid: bool) -> list[Section]:
 
 def learn_sections(mid: bool) -> list[Section]:
     chain_length, iterations = (8, 60) if mid else (4, 10)
-    landscape = PottsLandscape(
+    environment = PottsEnvironment(
         0.75, np.array([0.4, -0.1, -0.3]), chain_length=chain_length
     )
     _, alignment = _alignment(5, 1_000)
@@ -380,7 +380,7 @@ def learn_sections(mid: bool) -> list[Section]:
 
     def _reinforce() -> None:
         reinforce(
-            landscape,
+            environment,
             LinearPolicy(2),
             np.random.default_rng(0),
             iterations=iterations,

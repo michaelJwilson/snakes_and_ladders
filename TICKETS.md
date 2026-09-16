@@ -88,7 +88,7 @@ parenthesis the only way a ticket is cited.
 - A learning environment over a per-edge coupling, so a policy can be run on
   the instance no baseline solves. `planted_glass/ci` landed under #406 —
   single-site descent reaches its enumerated ground state from 0.079 of
-  starts — and `learn.potts.PottsLandscape.on_graph` takes one scalar
+  starts — and `learn.potts.PottsEnvironment.on_graph` takes one scalar
   coupling across every edge, so nothing in `learn` can express it
 - Beat random-restart descent, not one descent. Restarts reach
   `planted_glass/ci`'s ground state on every seed at 50 restarts, as they

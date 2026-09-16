@@ -119,7 +119,7 @@ def greedy_rollout[S, A](
 
     This is hill climbing, and it is the baseline ``ROADMAP.md``'s
     Milestone 8 requires a learned policy to beat --- the same rule
-    ``snakes_and_ladders.search.infer`` applies to topologies, on a landscape small enough
+    ``snakes_and_ladders.search.infer`` applies to topologies, on a environment small enough
     that the answer can be checked against exhaustive enumeration.
 
     It takes no ``rng``: given a start it is deterministic, with ties broken

@@ -254,7 +254,7 @@ def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
     # The path `snakes_and_ladders.learn.rollout.rollout` takes through the
     # environment. At a large positive weight the policy is effectively greedy,
     # so the two agree -- the zero-temperature limit checked on the Potts
-    # landscape, now on trees.
+    # environment, now on trees.
     environment, _, alignment = _environment()
     start = next(iter(enumerate_topologies(sorted(alignment))))
     policy = LinearPolicy(1)

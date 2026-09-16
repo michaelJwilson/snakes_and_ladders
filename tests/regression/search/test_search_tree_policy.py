@@ -1,4 +1,4 @@
-"""What a learned policy does on a landscape hill climbing does not solve.
+"""What a learned policy does on a environment hill climbing does not solve.
 
 Milestone 2.1's phylogenetic half asks whether a learned proposal policy beats
 hill climbing. Issue #177 supplied a fixture on which hill climbing fails, so
@@ -119,7 +119,7 @@ def test_every_episode_ends_where_no_move_improves(
 ) -> None:
     # The claim the null result rests on. If an episode could end with an
     # improving move still on the table, the comparison would measure HORIZON
-    # rather than the landscape, and a longer budget might change the answer.
+    # rather than the environment, and a longer budget might change the answer.
     policy = LinearPolicy(environment.n_features())
     reinforce(
         environment,

@@ -96,7 +96,7 @@ cannot support.
 ## The instances
 
 The count is the point: an interface justified by one model is shaped by that
-model, so this one carries an energy landscape, a decoding problem, and — in
+model, so this one carries an energy environment, a decoding problem, and — in
 `sal.search`, which may import both halves — a topology search. None of them
 takes an application type. The caller unpacks a model into index and
 log-probability arrays, because the no-application-imports rule admits no

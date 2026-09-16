@@ -1,4 +1,4 @@
-"""A Potts landscape searched by single-site flips: reference environment.
+"""A Potts environment searched by single-site flips: reference environment.
 
 Not phylogenetics, and that is its job -- the same job ``snakes_and_ladders.opt.potts``
 does for :class:`~snakes_and_ladders.opt.objective.Objective`. An interface justified by
@@ -10,7 +10,7 @@ structural instead of rhetorical: the same Potts chain is ``snakes_and_ladders.o
 reference **objective**, fitted continuously, and ``snakes_and_ladders.learn``'s
 reference **environment**, searched discretely. One model, both halves of
 the problem this repository is about. Local search over an Ising or Potts
-landscape is classical (Newman & Barkema, ch. 3).
+environment is classical (Newman & Barkema, ch. 3).
 
 The model is the one ``snakes_and_ladders.opt.potts`` documents, read as an energy to be
 maximized over configurations at *known* parameters::
@@ -26,7 +26,7 @@ episode costs microseconds rather than seconds.
 
 * Adding a constant ``c`` to every entry of ``h`` shifts ``E`` by ``L * c``
   for every configuration alike, so it leaves every *reward* unchanged --
-  a reward is a difference. The landscape is therefore insensitive to the
+  a reward is a difference. The environment is therefore insensitive to the
   gauge ``snakes_and_ladders.opt.potts`` has to fix, and a test pins that.
 * ``delta_energy = J * agreement_delta + field_delta`` exactly, so the two
   features below span the reward. A greedy searcher is the weight vector
@@ -51,7 +51,7 @@ Flip = tuple[int, int]
 Configuration = tuple[int, ...]
 
 
-class PottsLandscape(Environment[Configuration, Flip]):
+class PottsEnvironment(Environment[Configuration, Flip]):
     """Single-flip search over a 1-D Potts chain at known parameters.
 
     Parameters
@@ -111,8 +111,8 @@ class PottsLandscape(Environment[Configuration, Flip]):
         field: np.ndarray,
         edges: Sequence[tuple[int, int]],
         n_nodes: int,
-    ) -> PottsLandscape:
-        """The same landscape over an arbitrary graph rather than a chain.
+    ) -> PottsEnvironment:
+        """The same environment over an arbitrary graph rather than a chain.
 
         A chain is the case ``edges == [(0, 1), (1, 2), ...]``, so this is a
         second constructor and not a second class: the energy, the move set,
@@ -140,8 +140,8 @@ class PottsLandscape(Environment[Configuration, Flip]):
 
         Returns
         -------
-        PottsLandscape
-            The landscape over that graph.
+        PottsEnvironment
+            The environment over that graph.
 
         Raises
         ------
@@ -149,7 +149,7 @@ class PottsLandscape(Environment[Configuration, Flip]):
             If ``n_nodes < 2``, or an edge names a node outside
             ``[0, n_nodes)``.
         """
-        landscape = cls(coupling, field, n_nodes)
+        environment = cls(coupling, field, n_nodes)
         for first, second in edges:
             if not (0 <= first < n_nodes and 0 <= second < n_nodes):
                 msg = f"edge {(first, second)} names a node outside [0, {n_nodes})"
@@ -158,19 +158,19 @@ class PottsLandscape(Environment[Configuration, Flip]):
         # one adjacency the Potts samplers and solvers share. Two reasons,
         # either sufficient: `learn/` imports no application module (`DEV.md`,
         # asserted by test), and this walk carries no coupling -- the
-        # landscape holds one shared `J` -- so the shared builder would have
+        # environment holds one shared `J` -- so the shared builder would have
         # to grow a flag to serve it, which is how a seam starts serving
         # nobody.
         neighbours: list[list[int]] = [[] for _ in range(n_nodes)]
         for first, second in edges:
             neighbours[first].append(second)
             neighbours[second].append(first)
-        landscape._set_neighbours(tuple(tuple(row) for row in neighbours))
-        return landscape
+        environment._set_neighbours(tuple(tuple(row) for row in neighbours))
+        return environment
 
     @classmethod
-    def from_params(cls, params: PottsParams) -> PottsLandscape:
-        """Build the landscape a Potts fixture describes.
+    def from_params(cls, params: PottsParams) -> PottsEnvironment:
+        """Build the environment a Potts fixture describes.
 
         The same yaml that supplies ``snakes_and_ladders.opt``'s reference objective, read
         as a search problem instead of a fitting problem.
@@ -194,7 +194,7 @@ class PottsLandscape(Environment[Configuration, Flip]):
         Exposed because :mod:`snakes_and_ladders.learn.relaxed` evaluates the same score on
         the simplex and must read the parameters rather than re-declare them:
         a relaxation built on a second copy of ``J`` and ``h`` would drift
-        from the landscape it claims to extend.
+        from the environment it claims to extend.
         """
         return self._coupling
 
@@ -203,7 +203,7 @@ class PottsLandscape(Environment[Configuration, Flip]):
         """The true ``h``, as a copy.
 
         A copy rather than the array, so a caller cannot mutate the
-        landscape's parameters after an agent has been trained against them.
+        environment's parameters after an agent has been trained against them.
         """
         return self._field.copy()
 
@@ -351,8 +351,8 @@ def enumerate_configurations(
     return itertools.product(range(n_states), repeat=chain_length)
 
 
-def optimum(landscape: PottsLandscape) -> tuple[Configuration, float]:
-    """The global maximum of the landscape, by exhaustive enumeration.
+def optimum(environment: PottsEnvironment) -> tuple[Configuration, float]:
+    """The global maximum of the environment, by exhaustive enumeration.
 
     The independent oracle for "did the search find the best configuration".
     Affordable only because the reference instance is deliberately small.
@@ -365,9 +365,9 @@ def optimum(landscape: PottsLandscape) -> tuple[Configuration, float]:
     """
     best_state, best_energy = None, -np.inf
     for candidate in enumerate_configurations(
-        landscape.n_states, landscape.chain_length
+        environment.n_states, environment.chain_length
     ):
-        energy = landscape.energy(candidate)
+        energy = environment.energy(candidate)
         if energy > best_energy:
             best_state, best_energy = candidate, energy
     assert best_state is not None

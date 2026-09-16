@@ -451,7 +451,7 @@ class TopologyEnvironment(Environment[Topology, Topology]):
         the improvement each move would buy. The policy is then a Boltzmann
         distribution over moves whose single weight is an inverse
         temperature, so the greedy searcher is its zero-temperature limit
-        exactly as on the Potts landscape, and what the agent can learn is
+        exactly as on the Potts environment, and what the agent can learn is
         precisely *how much* it should accept a move that loses
         log-likelihood in order to reach a better local maximum --- the
         question ``sec:policy-gradient`` of ``docs/tex/textbook.tex`` raises

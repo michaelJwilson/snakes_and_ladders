@@ -75,6 +75,20 @@
     nothing.
 
 "Potts lattice in a per-site field":
+  samplers: >-
+    The lattice's sampler applies unchanged: a per-site field changes the
+    energy and not the move. What the row adds is the rung the sampler is
+    scored at --- the exact normalizer at nine and at 72 sites, and at
+    5{,}041 the energy a discrete solver reaches, since nothing enumerates
+    there. No experiment: a statement about where the sampler is refereed,
+    not about where it wins.
+  optimizers: >-
+    The minimum cut is exact at 5{,}041 sites, where a per-site field leaves
+    the couplings submodular and the alphabet is two; above two states only
+    alpha expansion applies. Its factor-of-two bracket is stated for a
+    non-negative energy and this one is negative, so the bracket is checked
+    shifted, and only at nine sites where the optimum is enumerated rather
+    than bounded.
   surrogates: >-
     The rung decides which surrogate is even defined. Enumeration and the
     column transfer matrix give the exact normalizer at nine and at 72 sites,
@@ -85,7 +99,7 @@
     over the sites and one over the edges brackets instead --- looser by an
     order of magnitude, and the only bracket available.
 
-"Frustrated Potts: triangular antiferromagnet, planted spin glass":
+"Frustrated Potts: triangular antiferromagnet":
   samplers: >-
     No sampler of its own: the lattice's samplers apply unchanged, and the
     cluster moves refuse the negative couplings these instances are built
@@ -194,6 +208,13 @@
     uniform seeding lands in it on 10; what it buys past the basin is
     nothing, since expectation--maximization reaches the same optimum from
     either start.
+  samplers: >-
+    Annealed Hamiltonian proposals are the only sampler the row declares, and
+    the continuous parameters are why: the discrete problems' single-site
+    sweep has no counterpart over a mean and a covariance. No experiment
+    separates it from the restarts and tempering the optimizer note reports,
+    so the pairing is here because the sampler runs on this instance, not
+    because it is known to win on it.
   optimizers: >-
     Restarts reach the best-known optimum from 7 of 40 starts against
     tempering's 4 and annealing's 1 at 3,000 evaluations (experiment 004);
@@ -239,19 +260,6 @@
 # `tests/regression/docs/test_problems_tables.py` holds this block to that
 # list, so a pairing loses its reason only by gaining a test.
 untested pairings:
-  mixture / initializers: >-
-    Seeding is refereed against the exact optimal k-means cost over a range of
-    sample sizes; the declared instance is the one the seeding figure and
-    experiment 004 measure.
-  mixture / optimizers: >-
-    Expectation-maximization is pinned against the gradient fit on mixtures
-    built per test, where the two are given the same observations at several
-    sizes; the declared instance carries the comparison at the release budget.
-  planted_glass / optimizers: >-
-    Descent is measured on the declared instance and the ground state is
-    enumerated, but the annealer and the exact cut are not: the cut refuses a
-    non-submodular energy and the annealer's own claims are pinned on the
-    lattice, at sizes chosen for the sampler rather than for this instance.
   planted_glass / samplers: >-
     The instance exists to defeat descent, and what it is pinned against is
     descent. Separating a sampler from descent on it is the comparison it was
@@ -278,10 +286,6 @@ untested pairings:
     The distance and spectral starts are exercised on the search fixtures,
     where a topology can be enumerated; these alignments referee the simulator
     and the likelihood.
-  tree_jc / optimizers: >-
-    The model fit and the parsimony search run on the search fixtures for the
-    same reason; what these alignments referee is the simulator and the
-    evaluators.
   tree_scale / samplers: >-
     The leaf-count rungs have no enumerable topology to referee an annealed
     chain against, and recovering the simulated tree is the search's claim
