@@ -54,12 +54,12 @@ FIELD = np.array([0.4, -0.1, -0.3])
 BASELINES = (0.0, 0.5, -1.25)
 
 
-def _landscape() -> Environment[tuple[int, ...], tuple[int, int]]:
+def _environment() -> Environment[tuple[int, ...], tuple[int, int]]:
     return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
 def _greedy_episode(
-    landscape: Environment[tuple[int, ...], tuple[int, int]],
+    environment: Environment[tuple[int, ...], tuple[int, int]],
     policy: LinearPolicy,
     start: tuple[int, ...],
     steps: int,
@@ -68,10 +68,10 @@ def _greedy_episode(
     states, actions, rewards = [start], [], []
     state = start
     for _ in range(steps):
-        available = landscape.actions(state)
-        scores = landscape.features(state, available) @ policy.weights
+        available = environment.actions(state)
+        scores = environment.features(state, available) @ policy.weights
         action = available[int(torch.argmax(scores.detach()))]
-        state, reward = landscape.step(state, action)
+        state, reward = environment.step(state, action)
         actions.append(action)
         rewards.append(reward)
         states.append(state)
@@ -84,20 +84,20 @@ def _greedy_episode(
 
 
 def _episodes(
-    landscape: Environment[tuple[int, ...], tuple[int, int]],
+    environment: Environment[tuple[int, ...], tuple[int, int]],
     policy: LinearPolicy,
     seed: int,
     count: int,
 ) -> list[Episode[tuple[int, ...], tuple[int, int]]]:
     rng = np.random.default_rng(seed)
     return [
-        _greedy_episode(landscape, policy, landscape.reset(rng), 3)
+        _greedy_episode(environment, policy, environment.reset(rng), 3)
         for _ in range(count)
     ]
 
 
 def _decisions(
-    landscape: Environment[tuple[int, ...], tuple[int, int]],
+    environment: Environment[tuple[int, ...], tuple[int, int]],
     episodes: list[Episode[tuple[int, ...], tuple[int, int]]],
     baseline: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -106,8 +106,8 @@ def _decisions(
     for episode in episodes:
         returns = episode.returns_to_go()
         for step, action in enumerate(episode.actions):
-            available = landscape.actions(episode.states[step])
-            features.append(landscape.features(episode.states[step], available))
+            available = environment.actions(episode.states[step])
+            features.append(environment.features(episode.states[step], available))
             taken.append(available.index(action))
             advantages.append(returns[step] - baseline)
     # Every neighbourhood on the chain has the same width, so no padding and
@@ -141,14 +141,14 @@ def _actor(policy: LinearPolicy) -> ProbabilisticTensorDictSequential:
 def test_the_surrogate_loss_and_its_gradient_are_torchrl_s_reinforce_loss(
     baseline: float,
 ) -> None:
-    landscape = _landscape()
+    environment = _environment()
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.3, -0.6], dtype=torch.float64))
-    episodes = _episodes(landscape, policy, seed=0, count=12)
-    ours = surrogate_loss(landscape, policy, episodes, baseline)
+    episodes = _episodes(environment, policy, seed=0, count=12)
+    ours = surrogate_loss(environment, policy, episodes, baseline)
     (our_gradient,) = torch.autograd.grad(ours, policy.weights, retain_graph=True)
 
-    features, taken, advantages = _decisions(landscape, episodes, baseline)
+    features, taken, advantages = _decisions(environment, episodes, baseline)
     # The mean-over-decisions to mean-over-episodes factor is exercised only
     # if the two counts differ, which is what makes the mapping a claim.
     assert len(taken) > len(episodes) > 1

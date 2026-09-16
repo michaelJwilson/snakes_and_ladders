@@ -3,7 +3,7 @@
 The value of a third instance is that it is not a lattice. `snakes_and_ladders.opt`'s
 model-agnosticism is measured rather than asserted --- four instances run
 against `Objective` unchanged --- and `snakes_and_ladders.learn.Environment` has until now
-had one. So what is checked here is not only that this landscape is correct
+had one. So what is checked here is not only that this environment is correct
 but that the *estimator, the policy and the rollout code needed no change to
 carry it*, which is the claim `learn/CLAUDE.md` makes for the interface.
 """
@@ -24,7 +24,7 @@ from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.rollout import greedy_rollout
 
 # Deliberately asymmetric: a near-uniform transition or emission makes the
-# hidden states nearly exchangeable, and a search on an almost-flat landscape
+# hidden states nearly exchangeable, and a search on an almost-flat environment
 # measures the fixture rather than the method (`hmm/ci.yaml` says the same
 # of the fitting fixture).
 INITIAL = np.log(np.array([0.5, 0.3, 0.2]))
@@ -48,7 +48,7 @@ _GRADIENT_TOLERANCE = 1e-8
 _NON_TERMINAL_START = (0, 0, 0, 0, 0, 1)
 
 
-def _landscape() -> HmmEnvironment:
+def _environment() -> HmmEnvironment:
     return HmmEnvironment(INITIAL, TRANSITION, EMISSION, OBSERVATIONS)
 
 
@@ -57,14 +57,14 @@ def test_the_local_reward_matches_re_evaluating_the_joint_probability() -> None:
     # The failure this class is most exposed to: an O(1) update that
     # disagrees with a full evaluation would be invisible to any test that
     # only checked the search improved.
-    landscape = _landscape()
+    environment = _environment()
     rng = np.random.default_rng(0)
     for _ in range(30):
-        state = landscape.reset(rng)
-        for action in landscape.actions(state):
-            successor, reward = landscape.step(state, action)
+        state = environment.reset(rng)
+        for action in environment.actions(state):
+            successor, reward = environment.step(state, action)
             assert reward == pytest.approx(
-                landscape.energy(successor) - landscape.energy(state), abs=1e-12
+                environment.energy(successor) - environment.energy(state), abs=1e-12
             )
 
 
@@ -72,13 +72,13 @@ def test_the_local_reward_matches_re_evaluating_the_joint_probability() -> None:
 def test_the_features_span_the_reward_so_greedy_is_in_the_policy_class() -> None:
     # `learn/CLAUDE.md` requires it. Here the reward is the plain sum of the
     # two features, so the greedy weights carry no parameter at all.
-    landscape = _landscape()
-    state = landscape.reset(np.random.default_rng(1))
-    actions = landscape.actions(state)
-    features = landscape.features(state, actions)
+    environment = _environment()
+    state = environment.reset(np.random.default_rng(1))
+    actions = environment.actions(state)
+    features = environment.features(state, actions)
 
-    rewards = np.array([landscape.step(state, action)[1] for action in actions])
-    scored = (features @ landscape.greedy_weights()).numpy()
+    rewards = np.array([environment.step(state, action)[1] for action in actions])
+    scored = (features @ environment.greedy_weights()).numpy()
 
     assert_allclose(scored, rewards, atol=1e-12)
 
@@ -93,12 +93,14 @@ def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
     # 729 paths, so "did the search find the best one" has an answer. Greedy
     # is not guaranteed to reach it and the realized rate is what is
     # reported, not an assumption that it does.
-    landscape = _landscape()
-    _, best = optimum(landscape)
+    environment = _environment()
+    _, best = optimum(environment)
     rng = np.random.default_rng(2)
     reached = [
-        landscape.energy(
-            greedy_rollout(landscape, landscape.reset(rng), EPISODE_HORIZON).states[-1]
+        environment.energy(
+            greedy_rollout(environment, environment.reset(rng), EPISODE_HORIZON).states[
+                -1
+            ]
         )
         for _ in range(40)
     ]
@@ -112,15 +114,15 @@ def test_hill_climbing_reaches_the_enumerated_optimum() -> None:
 def test_the_enumerated_gradient_matches_central_differences() -> None:
     # The oracle that makes this an *instance* rather than a second class
     # with the same method names: `snakes_and_ladders.learn.exact` carries it unchanged
-    # from the Potts landscape, and the agreement it reaches here is the
+    # from the Potts environment, and the agreement it reaches here is the
     # same claim at 1.5e-11 that one reports.
-    landscape = _landscape()
+    environment = _environment()
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.6, -0.3], dtype=torch.float64))
     start = _NON_TERMINAL_START
 
-    analytic = exact_policy_gradient(landscape, policy, start, EXACT_HORIZON)
-    numerical = finite_difference_gradient(landscape, policy, start, EXACT_HORIZON)
+    analytic = exact_policy_gradient(environment, policy, start, EXACT_HORIZON)
+    numerical = finite_difference_gradient(environment, policy, start, EXACT_HORIZON)
 
     assert_allclose(
         analytic.detach().numpy(),
@@ -134,17 +136,17 @@ def test_the_enumerated_gradient_matches_central_differences() -> None:
 def test_the_expected_return_is_finite_and_improves_with_greedy_weights() -> None:
     # Not "the return went up": both quantities are *enumerated*, so this is
     # an exact comparison of two closed forms rather than a training curve.
-    landscape = _landscape()
+    environment = _environment()
     start = _NON_TERMINAL_START
     uniform = LinearPolicy(2)
     greedy = LinearPolicy(2)
-    greedy.set_weights(landscape.greedy_weights() * 4.0)
+    greedy.set_weights(environment.greedy_weights() * 4.0)
 
     under_uniform = float(
-        exact_expected_return(landscape, uniform, start, EXACT_HORIZON).detach()
+        exact_expected_return(environment, uniform, start, EXACT_HORIZON).detach()
     )
     under_greedy = float(
-        exact_expected_return(landscape, greedy, start, EXACT_HORIZON).detach()
+        exact_expected_return(environment, greedy, start, EXACT_HORIZON).detach()
     )
 
     assert np.isfinite(under_uniform)
@@ -174,7 +176,7 @@ def test_the_expected_return_is_finite_and_improves_with_greedy_weights() -> Non
         (INITIAL, TRANSITION, EMISSION, np.array([0, 9]), r"lie in \[0, 4\)"),
     ],
 )
-def test_a_malformed_landscape_is_refused(
+def test_a_malformed_environment_is_refused(
     initial: np.ndarray,
     transition: np.ndarray,
     emission: np.ndarray,

@@ -46,39 +46,43 @@ from snakes_and_ladders.sim.fixtures import baseline, fixture
 FIELD = np.array([0.4, -0.1, -0.3])
 
 
-def _landscape() -> PottsEnvironment:
+def _environment() -> PottsEnvironment:
     return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
-def _states(landscape: PottsEnvironment) -> list[tuple[int, ...]]:
-    return list(enumerate_configurations(landscape.n_states, landscape.chain_length))
+def _states(environment: PottsEnvironment) -> list[tuple[int, ...]]:
+    return list(
+        enumerate_configurations(environment.n_states, environment.chain_length)
+    )
 
 
-def _reached(landscape: PottsEnvironment, policy: LinearPolicy | MLPPolicy) -> float:
-    best = optimum(landscape)[1]
+def _reached(environment: PottsEnvironment, policy: LinearPolicy | MLPPolicy) -> float:
+    best = optimum(environment)[1]
     rng = np.random.default_rng(1)
     return float(
         np.mean(
             [
                 abs(
-                    landscape.energy(
-                        rollout(landscape, policy, rng, 6, start=s).states[-1]
+                    environment.energy(
+                        rollout(environment, policy, rng, 6, start=s).states[-1]
                     )
                     - best
                 )
                 < 1e-9
-                for s in _states(landscape)
+                for s in _states(environment)
             ]
         )
     )
 
 
-def _mean_return(landscape: PottsEnvironment, policy: LinearPolicy | MLPPolicy) -> float:
+def _mean_return(
+    environment: PottsEnvironment, policy: LinearPolicy | MLPPolicy
+) -> float:
     return float(
         np.mean(
             [
-                float(exact_expected_return(landscape, policy, s, 3).detach())
-                for s in _states(landscape)
+                float(exact_expected_return(environment, policy, s, 3).detach())
+                for s in _states(environment)
             ]
         )
     )
@@ -110,24 +114,27 @@ def test_generalized_advantages_reduce_to_their_two_limits() -> None:
 def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() -> None:
     # Every ratio is one, so min(rho A, clip(rho) A) = A and the gradient of
     # the clipped objective is the advantage-weighted score function.
-    landscape = _landscape()
+    environment = _environment()
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.3, -0.6], dtype=torch.float64))
     critic = Critic(
-        n_state_features(landscape),
+        n_state_features(environment),
         hidden=None,
         generator=torch.Generator().manual_seed(0),
     )
     rng = np.random.default_rng(0)
-    episodes = [rollout(landscape, policy, rng, 3) for _ in range(40)]
-    advantages = episode_advantages(landscape, episodes, critic, lam=1.0)
-    old = [t.detach() for t in _log_probabilities(landscape, policy, episodes)]
+    episodes = [rollout(environment, policy, rng, 3) for _ in range(40)]
+    advantages = episode_advantages(environment, episodes, critic, lam=1.0)
+    old = [t.detach() for t in _log_probabilities(environment, policy, episodes)]
     loss, fraction = ppo_loss(
-        _log_probabilities(landscape, policy, episodes), old, advantages, clip=math.inf
+        _log_probabilities(environment, policy, episodes),
+        old,
+        advantages,
+        clip=math.inf,
     )
     (ppo_gradient,) = torch.autograd.grad(loss, policy.weights)
     (ac_gradient,) = torch.autograd.grad(
-        advantage_surrogate_loss(landscape, policy, episodes, advantages),
+        advantage_surrogate_loss(environment, policy, episodes, advantages),
         policy.weights,
     )
     torch.testing.assert_close(ppo_gradient, ac_gradient)
@@ -135,7 +142,7 @@ def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() 
     # Moving the policy makes ratios differ from one and the clip bind.
     policy.set_weights(torch.tensor([2.0, -3.0], dtype=torch.float64))
     _, moved = ppo_loss(
-        _log_probabilities(landscape, policy, episodes), old, advantages, clip=0.2
+        _log_probabilities(environment, policy, episodes), old, advantages, clip=0.2
     )
     assert moved > 0.0
     with pytest.raises(ValueError, match="clip must be positive"):
@@ -152,16 +159,16 @@ def test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matc
     # with mean exact return 2.21; PPO from 96.3% with 2.28; greedy from
     # 80.2%. At a quarter of the budget (480 episodes) REINFORCE reaches it
     # from 32.1% and PPO from 87.7%. Asserted at the margins below.
-    landscape = _landscape()
+    environment = _environment()
     ppo_policy = LinearPolicy(2)
-    before = _mean_return(landscape, ppo_policy)
+    before = _mean_return(environment, ppo_policy)
     critic = Critic(
-        n_state_features(landscape),
+        n_state_features(environment),
         hidden=None,
         generator=torch.Generator().manual_seed(0),
     )
     training = ppo(
-        landscape,
+        environment,
         ppo_policy,
         critic,
         np.random.default_rng(0),
@@ -171,25 +178,25 @@ def test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matc
     )
     assert training.episodes == 1920
     assert len(training.clipped_fraction) == 60
-    after = _mean_return(landscape, ppo_policy)
+    after = _mean_return(environment, ppo_policy)
     assert after > before
     reinforce_policy = LinearPolicy(2)
     reinforce(
-        landscape,
+        environment,
         reinforce_policy,
         np.random.default_rng(0),
         iterations=60,
         batch=32,
         max_steps=6,
     )
-    assert _reached(landscape, ppo_policy) >= _reached(landscape, reinforce_policy)
-    assert _reached(landscape, ppo_policy) >= 72 / 81
+    assert _reached(environment, ppo_policy) >= _reached(environment, reinforce_policy)
+    assert _reached(environment, ppo_policy) >= 72 / 81
     short_ppo, short_reinforce = LinearPolicy(2), LinearPolicy(2)
     ppo(
-        landscape,
+        environment,
         short_ppo,
         Critic(
-            n_state_features(landscape),
+            n_state_features(environment),
             hidden=None,
             generator=torch.Generator().manual_seed(0),
         ),
@@ -199,14 +206,16 @@ def test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matc
         max_steps=6,
     )
     reinforce(
-        landscape,
+        environment,
         short_reinforce,
         np.random.default_rng(0),
         iterations=15,
         batch=32,
         max_steps=6,
     )
-    assert _reached(landscape, short_ppo) > _reached(landscape, short_reinforce) + 0.3
+    assert (
+        _reached(environment, short_ppo) > _reached(environment, short_reinforce) + 0.3
+    )
 
 
 @pytest.mark.release
@@ -215,15 +224,15 @@ def test_an_mlp_policy_trained_by_ppo_reaches_the_optimum() -> None:
     # Measured 97.5% of the 81 starts with mean exact return 2.55, against
     # the linear policy's 96.3% and 2.28: the deeper scorer can represent the
     # worsening move a chain needs, which the two linear features cannot.
-    landscape = _landscape()
+    environment = _environment()
     policy = MLPPolicy(2, hidden=8, generator=torch.Generator().manual_seed(0))
     critic = Critic(
-        n_state_features(landscape),
+        n_state_features(environment),
         hidden=None,
         generator=torch.Generator().manual_seed(0),
     )
     ppo(
-        landscape,
+        environment,
         policy,
         critic,
         np.random.default_rng(0),
@@ -232,21 +241,21 @@ def test_an_mlp_policy_trained_by_ppo_reaches_the_optimum() -> None:
         max_steps=6,
         learning_rate=0.01,
     )
-    assert _reached(landscape, policy) >= 72 / 81
-    assert _mean_return(landscape, policy) > 2.3
+    assert _reached(environment, policy) >= 72 / 81
+    assert _mean_return(environment, policy) > 2.3
 
 
 @pytest.mark.edge_case
 def test_ppo_refuses_a_non_positive_budget() -> None:
-    landscape = _landscape()
+    environment = _environment()
     critic = Critic(
-        n_state_features(landscape),
+        n_state_features(environment),
         hidden=None,
         generator=torch.Generator().manual_seed(0),
     )
     with pytest.raises(ValueError, match="must be >= 1"):
         ppo(
-            landscape,
+            environment,
             LinearPolicy(2),
             critic,
             np.random.default_rng(0),
@@ -272,7 +281,7 @@ SIBLING_ITERATIONS = 15
 SIBLING_BATCH = 32
 
 
-def _declared_landscape() -> PottsEnvironment:
+def _declared_environment() -> PottsEnvironment:
     """The declared chain as a single-flip search at the enumerable length."""
     record = baseline(*DECLARED)
     params = fixture(*DECLARED).params
@@ -295,18 +304,18 @@ def test_ppo_raises_the_recorded_expected_return_and_stays_ahead_of_reinforce() 
     # above the recorded one and PPO must still be ahead of REINFORCE at a
     # matched budget, which is the claim, not the exact number.
     record = baseline(*DECLARED)
-    landscape = _declared_landscape()
+    environment = _declared_environment()
     before = record.value("untrained_expected_return")
     assert record.value("untrained_reached") < 0.2
 
     policy = LinearPolicy(2)
     critic = Critic(
-        n_state_features(landscape),
+        n_state_features(environment),
         hidden=None,
         generator=torch.Generator().manual_seed(0),
     )
     training = ppo(
-        landscape,
+        environment,
         policy,
         critic,
         np.random.default_rng(0),
@@ -318,13 +327,13 @@ def test_ppo_raises_the_recorded_expected_return_and_stays_ahead_of_reinforce() 
 
     baselined = LinearPolicy(2)
     reinforce(
-        landscape,
+        environment,
         baselined,
         np.random.default_rng(0),
         iterations=SIBLING_ITERATIONS,
         batch=SIBLING_BATCH,
         max_steps=6,
     )
-    assert _mean_return(landscape, policy) > before + 1.0
-    assert _reached(landscape, policy) > _reached(landscape, baselined) + 0.3
-    assert _reached(landscape, policy) > record.value("untrained_reached") + 0.5
+    assert _mean_return(environment, policy) > before + 1.0
+    assert _reached(environment, policy) > _reached(environment, baselined) + 0.3
+    assert _reached(environment, policy) > record.value("untrained_reached") + 0.5

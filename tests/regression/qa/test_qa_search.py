@@ -76,19 +76,19 @@ def _params(path: Path) -> SimulationParams:
 
 
 @pytest.mark.structural
-def test_trajectory_caption_reports_the_landscape_it_was_given() -> None:
+def test_trajectory_caption_reports_the_environment_it_was_given() -> None:
     params = _params(TRAJECTORY_FIXTURE)
     trajectories = {
         "nni": [(0, -9000.0), (14, -8775.5)],
         "spr": [(0, -9000.0), (48, -8775.5)],
     }
-    landscape = np.array([-9000.0, -8900.0, -8817.1, -8775.5])
+    environment = np.array([-9000.0, -8900.0, -8817.1, -8775.5])
 
     _, caption = search_trajectory.build_figure(
-        trajectories, -8775.5, landscape, -8775.5, params
+        trajectories, -8775.5, environment, -8775.5, params
     )
 
-    assert f"All {landscape.size} unrooted topologies" in caption
+    assert f"All {environment.size} unrooted topologies" in caption
     assert "41.6 log units" in caption
     assert str(params.seed) in caption
 
@@ -128,17 +128,17 @@ def test_trajectory_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
 
 @pytest.mark.oracle
 @pytest.mark.release
-def test_the_landscape_is_every_topology_sorted_ascending() -> None:
+def test_the_environment_is_every_topology_sorted_ascending() -> None:
     # The oracle the figure rests on: 6 taxa is 105 unrooted topologies, and
     # the panel is meaningless if the sweep missed any.
-    _, truth, landscape, reached = search_trajectory.search_trajectories(
+    _, truth, environment, reached = search_trajectory.search_trajectories(
         _params(TRAJECTORY_FIXTURE)
     )
 
-    assert landscape.size == 105
-    assert list(landscape) == sorted(landscape)
-    assert reached == pytest.approx(landscape[-1], abs=1e-5)
-    assert truth == pytest.approx(landscape[-1], abs=1e-5)
+    assert environment.size == 105
+    assert list(environment) == sorted(environment)
+    assert reached == pytest.approx(environment[-1], abs=1e-5)
+    assert truth == pytest.approx(environment[-1], abs=1e-5)
 
 
 # --- the topology comparison --------------------------------------------

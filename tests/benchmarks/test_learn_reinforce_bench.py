@@ -30,17 +30,17 @@ _HORIZON = 6
 _BATCH = 32
 
 
-def _landscape() -> PottsEnvironment:
+def _environment() -> PottsEnvironment:
     return PottsEnvironment(_COUPLING, _FIELD, _CHAIN_LENGTH)
 
 
 def test_one_episode_benchmark(benchmark: BenchmarkFixture) -> None:
     """What a training run spends its time in."""
-    landscape = _landscape()
+    environment = _environment()
     policy = LinearPolicy(2)
     rng = np.random.default_rng(0)
 
-    episode = benchmark(rollout, landscape, policy, rng, _HORIZON)
+    episode = benchmark(rollout, environment, policy, rng, _HORIZON)
 
     # Benchmarks assert shape only; correctness is pinned in the regression
     # counterpart.
@@ -49,11 +49,11 @@ def test_one_episode_benchmark(benchmark: BenchmarkFixture) -> None:
 
 def test_one_gradient_update_benchmark(benchmark: BenchmarkFixture) -> None:
     """One batch of episodes and the backward pass over them."""
-    landscape = _landscape()
+    environment = _environment()
 
     def update() -> None:
         reinforce(
-            landscape,
+            environment,
             LinearPolicy(2),
             np.random.default_rng(0),
             iterations=1,
@@ -66,9 +66,9 @@ def test_one_gradient_update_benchmark(benchmark: BenchmarkFixture) -> None:
 
 def test_enumerated_gradient_benchmark(benchmark: BenchmarkFixture) -> None:
     """The oracle, whose cost bounds how far the exact checks can go."""
-    landscape = _landscape()
+    environment = _environment()
     policy = LinearPolicy(2)
 
-    gradient = benchmark(exact_policy_gradient, landscape, policy, (2, 1, 1, 0), 3)
+    gradient = benchmark(exact_policy_gradient, environment, policy, (2, 1, 1, 0), 3)
 
     assert gradient.shape == (2,)

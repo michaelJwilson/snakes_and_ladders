@@ -42,8 +42,10 @@ BRANCH_LENGTH = 0.1629
 
 
 def _potts(chain_length: int = 4) -> tuple[PottsEnvironment, int]:
-    landscape = PottsEnvironment(coupling=0.75, field=FIELD, chain_length=chain_length)
-    return landscape, chain_length * (landscape.n_states - 1)
+    environment = PottsEnvironment(
+        coupling=0.75, field=FIELD, chain_length=chain_length
+    )
+    return environment, chain_length * (environment.n_states - 1)
 
 
 def _tree() -> tuple[TopologyEnvironment, int]:
@@ -99,12 +101,12 @@ def _candidates_scored[S, A](environment: Environment[S, A], states: list[S]) ->
 
 @pytest.mark.structural
 def test_the_potts_adapter_passes_gymnasium_s_environment_checker() -> None:
-    landscape, n_max = _potts()
+    environment, n_max = _potts()
     with warnings.catch_warnings():
         # The checker warns that the environment has no `spec` and so no
         # registered render modes; neither is a claim this adapter makes.
         warnings.simplefilter("ignore", UserWarning)
-        check_env(GymnasiumEnvironment(landscape, n_max=n_max, max_steps=8))
+        check_env(GymnasiumEnvironment(environment, n_max=n_max, max_steps=8))
 
 
 @pytest.mark.structural
@@ -123,18 +125,18 @@ def test_the_tree_adapter_passes_gymnasium_s_environment_checker() -> None:
 def test_an_episode_on_the_potts_chain_is_the_same_through_both_interfaces(
     seed: int,
 ) -> None:
-    landscape, n_max = _potts()
+    environment, n_max = _potts()
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.3, 0.9], dtype=torch.float64))
-    episode = rollout(landscape, policy, np.random.default_rng(seed), max_steps=6)
+    episode = rollout(environment, policy, np.random.default_rng(seed), max_steps=6)
     states, rewards, evaluations, terminated, truncated = _round_trip(
-        landscape, n_max, policy, seed, max_steps=6
+        environment, n_max, policy, seed, max_steps=6
     )
     assert states == list(episode.states)
     assert_allclose(rewards, episode.rewards, atol=1e-12)
     assert terminated == episode.terminated
     assert truncated == (not episode.terminated)
-    assert evaluations == _candidates_scored(landscape, list(episode.states))
+    assert evaluations == _candidates_scored(environment, list(episode.states))
 
 
 @pytest.mark.structural
@@ -159,14 +161,14 @@ def test_an_episode_on_the_tree_is_the_same_through_both_interfaces(
 
 @pytest.mark.structural
 def test_the_observation_is_the_neighbourhood_s_features_padded_with_zeros() -> None:
-    landscape, n_max = _potts()
-    adapter = GymnasiumEnvironment(landscape, n_max=n_max + 3, max_steps=5)
+    environment, n_max = _potts()
+    adapter = GymnasiumEnvironment(environment, n_max=n_max + 3, max_steps=5)
     observation, info = adapter.reset(seed=2)
-    available = landscape.actions(adapter.state)
+    available = environment.actions(adapter.state)
     assert info["action_mask"].sum() == len(available) == n_max
     assert_allclose(
         observation[: len(available)],
-        landscape.features(adapter.state, available).numpy(),
+        environment.features(adapter.state, available).numpy(),
         atol=0.0,
     )
     assert not observation[len(available) :].any()
@@ -181,12 +183,12 @@ def test_the_observation_is_the_neighbourhood_s_features_padded_with_zeros() -> 
 def test_the_episode_truncates_at_the_decision_budget() -> None:
     # Weights that make downhill moves likely, so the episode does not
     # terminate before the budget bites -- the rollout test's construction.
-    landscape, n_max = _potts(chain_length=8)
+    environment, n_max = _potts(chain_length=8)
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([-1.0, -1.0], dtype=torch.float64))
-    episode = rollout(landscape, policy, np.random.default_rng(1), max_steps=3)
+    episode = rollout(environment, policy, np.random.default_rng(1), max_steps=3)
     states, rewards, _, terminated, truncated = _round_trip(
-        landscape, n_max, policy, 1, max_steps=3
+        environment, n_max, policy, 1, max_steps=3
     )
     assert not episode.terminated
     assert truncated
@@ -197,11 +199,11 @@ def test_the_episode_truncates_at_the_decision_budget() -> None:
 
 @pytest.mark.structural
 def test_the_episode_terminates_at_a_local_optimum() -> None:
-    landscape, n_max = _potts()
+    environment, n_max = _potts()
     policy = LinearPolicy(2)
-    policy.set_weights(landscape.greedy_weights() * 50.0)
+    policy.set_weights(environment.greedy_weights() * 50.0)
     start = (2, 1, 1, 0)
-    adapter = GymnasiumEnvironment(landscape, n_max=n_max, max_steps=50)
+    adapter = GymnasiumEnvironment(environment, n_max=n_max, max_steps=50)
     observation, info = adapter.reset(seed=2, options={"start": start})
     assert adapter.state == start
     steps = 0
@@ -213,10 +215,10 @@ def test_the_episode_terminates_at_a_local_optimum() -> None:
         steps += 1
     assert terminated
     assert not truncated
-    assert landscape.is_terminal(adapter.state)
+    assert environment.is_terminal(adapter.state)
     assert steps < 50
     episode = rollout(
-        landscape, policy, np.random.default_rng(2), max_steps=50, start=start
+        environment, policy, np.random.default_rng(2), max_steps=50, start=start
     )
     assert adapter.state == episode.states[-1]
     assert steps == len(episode.actions)
@@ -224,10 +226,10 @@ def test_the_episode_terminates_at_a_local_optimum() -> None:
 
 @pytest.mark.edge_case
 def test_a_start_at_a_local_optimum_is_terminal_before_any_decision() -> None:
-    landscape, n_max = _potts()
+    environment, n_max = _potts()
     optimum = (0, 0, 0, 0)
-    assert landscape.is_terminal(optimum)
-    adapter = GymnasiumEnvironment(landscape, n_max=n_max, max_steps=5)
+    assert environment.is_terminal(optimum)
+    adapter = GymnasiumEnvironment(environment, n_max=n_max, max_steps=5)
     _, info = adapter.reset(seed=0, options={"start": optimum})
     # What `rollout` reads to take no action; Gymnasium has no slot for it.
     assert info["terminal"]
@@ -235,21 +237,21 @@ def test_a_start_at_a_local_optimum_is_terminal_before_any_decision() -> None:
     # loses, and the episode is then wherever that move landed.
     _, reward, terminated, _, _ = adapter.step(0)
     assert reward < 0.0
-    assert terminated == landscape.is_terminal(adapter.state)
+    assert terminated == environment.is_terminal(adapter.state)
 
 
 @pytest.mark.edge_case
 def test_an_unknown_reset_option_is_refused() -> None:
-    landscape, n_max = _potts()
-    adapter = GymnasiumEnvironment(landscape, n_max=n_max, max_steps=5)
+    environment, n_max = _potts()
+    adapter = GymnasiumEnvironment(environment, n_max=n_max, max_steps=5)
     with pytest.raises(ValueError, match="reset options are"):
         adapter.reset(seed=0, options={"seed": 3})
 
 
 @pytest.mark.edge_case
 def test_a_masked_action_is_refused_without_moving() -> None:
-    landscape, n_max = _potts()
-    adapter = GymnasiumEnvironment(landscape, n_max=n_max + 2, max_steps=4)
+    environment, n_max = _potts()
+    adapter = GymnasiumEnvironment(environment, n_max=n_max + 2, max_steps=4)
     _, info = adapter.reset(seed=1)
     before = adapter.state
     assert not info["action_mask"][n_max]
@@ -266,26 +268,26 @@ def test_a_masked_action_is_refused_without_moving() -> None:
 
 @pytest.mark.edge_case
 def test_a_neighbourhood_wider_than_n_max_is_refused() -> None:
-    landscape, n_max = _potts()
-    adapter = GymnasiumEnvironment(landscape, n_max=n_max - 1, max_steps=4)
+    environment, n_max = _potts()
+    adapter = GymnasiumEnvironment(environment, n_max=n_max - 1, max_steps=4)
     with pytest.raises(ValueError, match="exceeds n_max"):
         adapter.reset(seed=0)
 
 
 @pytest.mark.edge_case
 def test_a_non_positive_width_or_budget_is_refused() -> None:
-    landscape, n_max = _potts()
+    environment, n_max = _potts()
     with pytest.raises(ValueError, match="n_max must be >= 1"):
-        GymnasiumEnvironment(landscape, n_max=0, max_steps=4)
+        GymnasiumEnvironment(environment, n_max=0, max_steps=4)
     with pytest.raises(ValueError, match="max_steps must be >= 1"):
-        GymnasiumEnvironment(landscape, n_max=n_max, max_steps=0)
+        GymnasiumEnvironment(environment, n_max=n_max, max_steps=0)
 
 
 @pytest.mark.edge_case
 def test_the_state_is_unavailable_before_the_first_reset() -> None:
-    landscape, n_max = _potts()
+    environment, n_max = _potts()
     with pytest.raises(RuntimeError, match="call reset"):
-        _ = GymnasiumEnvironment(landscape, n_max=n_max, max_steps=4).state
+        _ = GymnasiumEnvironment(environment, n_max=n_max, max_steps=4).state
 
 
 @pytest.mark.structural

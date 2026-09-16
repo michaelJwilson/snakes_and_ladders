@@ -1,4 +1,4 @@
-"""The Potts landscape over a graph rather than a chain.
+"""The Potts environment over a graph rather than a chain.
 
 `PottsEnvironment.on_graph` is a second constructor and not a second class: the
 energy, the move set, the features and the reward are shared with the chain,
@@ -39,7 +39,7 @@ _GRADIENT_TOLERANCE = 1e-8
 
 
 def _lattice(shape: tuple[int, ...], boundary: BoundaryCondition) -> PottsEnvironment:
-    """The landscape over a lattice, with the graph unpacked at the boundary."""
+    """The environment over a lattice, with the graph unpacked at the boundary."""
     graph = lattice_graph(shape, boundary=boundary, coupling=COUPLING)
     return PottsEnvironment.on_graph(COUPLING, FIELD, graph.edges, graph.n_nodes)
 
@@ -64,14 +64,14 @@ def test_the_local_reward_matches_re_evaluating_the_energy_on_a_lattice() -> Non
     # A 3x3 open lattice has interior sites with four neighbours, which the
     # chain never exercises: its delta only ever sums two terms. An O(degree)
     # update that dropped a neighbour would pass every chain test.
-    landscape = _lattice((3, 3), BoundaryCondition.OPEN)
+    environment = _lattice((3, 3), BoundaryCondition.OPEN)
     rng = np.random.default_rng(0)
     for _ in range(20):
-        state = landscape.reset(rng)
-        for action in landscape.actions(state):
-            successor, reward = landscape.step(state, action)
+        state = environment.reset(rng)
+        for action in environment.actions(state):
+            successor, reward = environment.step(state, action)
             assert reward == pytest.approx(
-                landscape.energy(successor) - landscape.energy(state), abs=1e-12
+                environment.energy(successor) - environment.energy(state), abs=1e-12
             )
 
 
@@ -80,25 +80,27 @@ def test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary() -> Non
     # Periodic wrapping gives every site the same degree and makes a
     # 2-extent dimension list the same pair twice, as a doubled bond. Both
     # are adjacency the chain cannot produce.
-    landscape = _lattice((2, 3), BoundaryCondition.PERIODIC)
+    environment = _lattice((2, 3), BoundaryCondition.PERIODIC)
     rng = np.random.default_rng(1)
     for _ in range(20):
-        state = landscape.reset(rng)
-        for action in landscape.actions(state):
-            successor, reward = landscape.step(state, action)
+        state = environment.reset(rng)
+        for action in environment.actions(state):
+            successor, reward = environment.step(state, action)
             assert reward == pytest.approx(
-                landscape.energy(successor) - landscape.energy(state), abs=1e-12
+                environment.energy(successor) - environment.energy(state), abs=1e-12
             )
 
 
 @pytest.mark.mathematical
 def test_the_features_span_the_reward_on_a_lattice() -> None:
-    landscape = _lattice((3, 3), BoundaryCondition.OPEN)
-    state = landscape.reset(np.random.default_rng(2))
-    actions = landscape.actions(state)
+    environment = _lattice((3, 3), BoundaryCondition.OPEN)
+    state = environment.reset(np.random.default_rng(2))
+    actions = environment.actions(state)
 
-    scored = (landscape.features(state, actions) @ landscape.greedy_weights()).numpy()
-    rewards = np.array([landscape.step(state, action)[1] for action in actions])
+    scored = (
+        environment.features(state, actions) @ environment.greedy_weights()
+    ).numpy()
+    rewards = np.array([environment.step(state, action)[1] for action in actions])
 
     assert_allclose(scored, rewards, atol=1e-12)
 
@@ -107,11 +109,13 @@ def test_the_features_span_the_reward_on_a_lattice() -> None:
 def test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice() -> None:
     # 3**9 = 19,683 configurations, the same size #170's simulator validates
     # against, so the best configuration is an enumerated fact.
-    landscape = _lattice((3, 3), BoundaryCondition.OPEN)
-    _, best = optimum(landscape)
+    environment = _lattice((3, 3), BoundaryCondition.OPEN)
+    _, best = optimum(environment)
     rng = np.random.default_rng(3)
     reached = [
-        landscape.energy(greedy_rollout(landscape, landscape.reset(rng), 30).states[-1])
+        environment.energy(
+            greedy_rollout(environment, environment.reset(rng), 30).states[-1]
+        )
         for _ in range(30)
     ]
 
@@ -124,14 +128,14 @@ def test_the_enumerated_gradient_matches_central_differences_on_a_lattice() -> N
     # The oracle that makes this an instance rather than a lookalike:
     # `snakes_and_ladders.learn.exact` carries it unchanged from the chain. A 2x2 lattice
     # keeps |A| ** horizon affordable at 8 actions and horizon 2.
-    landscape = _lattice((2, 2), BoundaryCondition.OPEN)
+    environment = _lattice((2, 2), BoundaryCondition.OPEN)
     policy = LinearPolicy(2)
     policy.set_weights(torch.tensor([0.5, 0.25], dtype=torch.float64))
     start = (0, 1, 2, 0)
-    assert not landscape.is_terminal(start), "a terminal start has no gradient"
+    assert not environment.is_terminal(start), "a terminal start has no gradient"
 
-    analytic = exact_policy_gradient(landscape, policy, start, 2)
-    numerical = finite_difference_gradient(landscape, policy, start, 2)
+    analytic = exact_policy_gradient(environment, policy, start, 2)
+    numerical = finite_difference_gradient(environment, policy, start, 2)
 
     assert_allclose(
         analytic.detach().numpy(),

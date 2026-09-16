@@ -2678,7 +2678,7 @@ only its own reward is rejected at 71%. A score-function estimator with a sign
 error is wrong by a factor and still trains, so the sampled return is a
 diagnostic rather than a result.
 
-**Learning is demonstrated where it can be refereed.** On the Potts landscape
+**Learning is demonstrated where it can be refereed.** On the Potts environment
 the reward decomposes exactly into the two features the policy scores, which
 puts hill climbing *inside* the policy class as the weight vector proportional
 to `(J, 1)`. The learned policy reaches the enumerated optimum from 86.6% of
@@ -2731,7 +2731,7 @@ comparison above was stated against, and nothing measured here beats it.
 
 **All three problem classes are now MDPs.**
 `snakes_and_ladders.learn.Environment` had one instance, a 1-D Potts chain. It
-now carries the Potts landscape over an arbitrary graph — the chain is the
+now carries the Potts environment over an arbitrary graph — the chain is the
 one-dimensional case of the same class — and the hidden Markov state path,
 whose objective is a decoding problem rather than an energy. Both are pinned
 against the enumerated estimator oracle carried over unchanged from the chain,

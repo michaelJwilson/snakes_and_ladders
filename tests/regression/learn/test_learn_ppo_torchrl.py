@@ -52,7 +52,7 @@ ROLLOUTS = (
 )
 
 
-def _landscape() -> PottsEnvironment:
+def _environment() -> PottsEnvironment:
     return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=4)
 
 
@@ -103,16 +103,16 @@ def test_the_advantages_are_torchrl_s_gae_at_gamma_one(
 
 
 def _decisions(
-    landscape: PottsEnvironment, policy: LinearPolicy, seed: int, episodes: int
+    environment: PottsEnvironment, policy: LinearPolicy, seed: int, episodes: int
 ) -> tuple[list[tuple[tuple[int, ...], ...]], torch.Tensor, torch.Tensor, list[int]]:
     """Episodes under ``policy``, with every decision's neighbourhood features and the index taken."""
     rng = np.random.default_rng(seed)
-    rolled = [rollout(landscape, policy, rng, 3) for _ in range(episodes)]
+    rolled = [rollout(environment, policy, rng, 3) for _ in range(episodes)]
     features, taken, owner = [], [], []
     for index, episode in enumerate(rolled):
         for state, action in zip(episode.states, episode.actions, strict=False):
-            available = landscape.actions(state)
-            features.append(landscape.features(state, available))
+            available = environment.actions(state)
+            features.append(environment.features(state, available))
             taken.append(available.index(action))
             owner.append(index)
     # Every neighbourhood on the chain has the same width, so no padding and
@@ -139,10 +139,10 @@ def _log_probabilities(
 @pytest.mark.oracle
 @pytest.mark.parametrize("clip", [0.1, 0.2, 0.5])
 def test_the_clipped_objective_and_its_gradient_are_torchrl_s(clip: float) -> None:
-    landscape = _landscape()
+    environment = _environment()
     collector = LinearPolicy(2)
     collector.set_weights(torch.tensor([0.1, 0.2], dtype=torch.float64))
-    _, features, taken, owner = _decisions(landscape, collector, seed=0, episodes=12)
+    _, features, taken, owner = _decisions(environment, collector, seed=0, episodes=12)
     old = _log_probabilities(collector, features, taken).detach()
     n_episodes = max(owner) + 1
     rng = np.random.default_rng(1)

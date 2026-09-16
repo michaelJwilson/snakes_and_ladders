@@ -112,7 +112,7 @@ def test_every_descent_failure_stops_at_a_genuine_local_minimum(
 ) -> None:
     # The difference between a hard instance and a truncated run. If a descent
     # stopped with an improving flip still available, the failure would
-    # measure the sweep budget rather than the landscape.
+    # measure the sweep budget rather than the environment.
     best = record.value("enumerated_ground_energy")
     failures = [
         labelling
