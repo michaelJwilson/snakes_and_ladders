@@ -282,13 +282,23 @@ def class_log_density(
     The sum is accumulated over blocks of members rather than over
     :func:`gated_log_density`'s whole table, which is what keeps it usable at
     the sizes `ROADMAP.md` declares; see :data:`VERTEX_BLOCK`.
+
+    ``params.covariate`` is sliced by the same block as the observations, so a
+    family scores each member against that member's own exposure (issue #652).
+    The block is a column selection, which is why the covariate is stored with
+    the observations' axes and not the class's.
     """
     labels = np.asarray(labels, dtype=np.int64)
     density = np.zeros((params.n_classes, params.n_positions, params.n_states))
     for m, family in enumerate(params.emissions):
         for block in _blocks(np.flatnonzero(labels == m)):
             scores = family.log_density(
-                torch.as_tensor(observations[:, block], dtype=family.observation_dtype)
+                torch.as_tensor(observations[:, block], dtype=family.observation_dtype),
+                covariate=(
+                    None
+                    if params.covariate is None
+                    else torch.as_tensor(params.covariate[:, block])
+                ),
             )  # (S, block, K)
             density[m] += scores.detach().numpy().sum(axis=1)
     return density

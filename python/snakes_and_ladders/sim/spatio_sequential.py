@@ -75,6 +75,22 @@ class SpatioSequentialParams:
         ``Pi``, shape ``(M, K)``, one initial distribution per class.
     emissions : tuple[EmissionFamily, ...]
         One family per class, each over ``K`` states.
+    covariate : np.ndarray | None
+        What each observation is scored *against*, shape ``(S, n_nodes)`` ---
+        an exposure for a rate family, a trial count for a bounded one
+        (issue #652). It belongs to the observation and not to the class, so
+        every class's family reads the same array. ``None``, the default, is
+        the model every construction before this field described: the
+        families condition on nothing.
+
+        It lives on the params rather than on the family for the two reasons
+        #631 refused it there: ``log_density`` is documented for any leading
+        shape, so a family cannot know how to broadcast a stored covariate;
+        and ``reestimate`` returns a new family, so a family would carry the
+        dataset through every M step. Neither applies here --- these params
+        *are* the instance, and the spatial M step rebuilds them with
+        ``replace(params, emissions=...)``, which preserves every other field
+        by construction.
 
     Raises
     ------
@@ -93,6 +109,7 @@ class SpatioSequentialParams:
     self_transition: float
     initial: np.ndarray
     emissions: tuple[EmissionFamily, ...]
+    covariate: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if any(coupling < 0.0 for coupling in self.graph.coupling):
@@ -128,6 +145,16 @@ class SpatioSequentialParams:
                     f"expected {self.n_states}"
                 )
                 raise ValueError(msg)
+        if self.covariate is not None:
+            covariate = np.asarray(self.covariate, dtype=float)
+            expected = (self.n_positions, self.graph.n_nodes)
+            if covariate.shape != expected:
+                msg = (
+                    f"covariate has shape {covariate.shape}, expected {expected} "
+                    "-- one value per position and node, as the observations are"
+                )
+                raise ValueError(msg)
+            object.__setattr__(self, "covariate", covariate)
 
     @property
     def transition(self) -> np.ndarray:
@@ -255,6 +282,11 @@ def gated_log_density(
     ``(S, n_nodes, 2)`` --- so only the two this function indexes are
     unpacked here.
 
+    ``params.covariate`` reaches every family here, which is the only route a
+    caller has to condition a score on an exposure or a trial count
+    (issue #652). It is the observations' own ``(S, n_nodes)``, so it needs no
+    reshaping to sit beside them.
+
     Returns
     -------
     np.ndarray
@@ -262,9 +294,11 @@ def gated_log_density(
     """
     n_positions, n_nodes = observations.shape[:2]
     table = np.empty((n_nodes, n_positions, params.n_classes, params.n_states))
+    covariate = None if params.covariate is None else torch.as_tensor(params.covariate)
     for m, family in enumerate(params.emissions):
         scores = family.log_density(
-            torch.as_tensor(observations, dtype=family.observation_dtype)
+            torch.as_tensor(observations, dtype=family.observation_dtype),
+            covariate=covariate,
         )  # (S, n_nodes, K)
         table[:, :, m, :] = scores.detach().numpy().transpose(1, 0, 2)
     return table
