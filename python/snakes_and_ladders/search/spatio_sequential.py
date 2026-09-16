@@ -108,6 +108,13 @@ def m_step(
 
     A class with no members keeps its emissions: there is nothing to
     re-estimate them from, and its chain posterior is its prior.
+
+    ``params.covariate`` is selected by the same members and moved by the same
+    axis as the observations (issue #652). That pairing is the one place this
+    module can go quietly wrong: a covariate sliced differently from the block
+    it accompanies is a fit that conditions on the wrong exposures and
+    converges anyway, which is why it is written as one expression beside the
+    block rather than assembled apart from it.
     """
     labels = np.asarray(labels, dtype=np.int64)
     emissions: list[EmissionFamily] = []
@@ -119,10 +126,19 @@ def m_step(
         block = torch.as_tensor(
             np.moveaxis(observations[:, members], 1, 0), dtype=family.observation_dtype
         )  # (n_m, S), plus any channel axes the family's observation carries
+        exposure = (
+            None
+            if params.covariate is None
+            else torch.as_tensor(
+                np.moveaxis(params.covariate[:, members], 1, 0)[..., None]
+            )
+        )  # (n_m, S, 1), the same members moved the same way
         weights = torch.as_tensor(posteriors.posterior[m])[None].expand(
             members.size, -1, -1
         )  # (n_m, S, K)
-        emissions.append(family.reestimate(block, weights).emissions)
+        emissions.append(
+            family.reestimate(block, weights, covariate=exposure).emissions
+        )
     initial = np.maximum(posteriors.posterior[:, 0, :], 1e-12)
     initial = initial / initial.sum(axis=1, keepdims=True)
     if params.n_positions > 1:

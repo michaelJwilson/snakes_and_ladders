@@ -297,7 +297,7 @@ def class_log_density(
                 covariate=(
                     None
                     if params.covariate is None
-                    else torch.as_tensor(params.covariate[:, block])
+                    else torch.as_tensor(params.covariate[:, block, None])
                 ),
             )  # (S, block, K)
             density[m] += scores.detach().numpy().sum(axis=1)

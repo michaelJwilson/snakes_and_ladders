@@ -567,6 +567,23 @@ comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
+**A covariate reaches the families from a fit, not only from a test**
+([#657](https://github.com/michaelJwilson/snakes_and_ladders/pull/657)).
+#631's exposure and trial count were reachable only by a test that built a
+family directly. Three seams now thread one: the spatial params carry a
+`(S, n_nodes)` covariate that `gated_log_density`, `class_log_density` and the
+spatial M step each slice the way they slice the observations;
+`baum_welch_family` takes a `(n_sequences, length)` one and reaches both the E
+step's scoring and the emission M step; and the HMM objectives store one beside
+their observations. The end-to-end referee is #631's recovery raised from the
+family to the fit: over an exposure spanning a factor of 16, a
+negative-binomial Baum-Welch **told** the exposure recovers a planted 2.0 and
+9.0 as **1.97 and 8.81**, and the same fit on the same data **not told** it
+converges to **4.15 and 18.59** — the rate averaged over the exposures, a
+factor of 2.1 high. A constant exposure of ones scores bitwise and moves a
+200-iteration fit 5.1e-14 to 1.5e-13 across thread counts 1 to 8, two orders
+inside the declared 1e-11.
+
 **Felsenstein pruning: three CPU backends, one oracle.** Vectorized NumPy is
 the reference, with per-node rescaling accumulated in log space
 ([#66](https://github.com/michaelJwilson/snakes_and_ladders/pull/66)); differentiable

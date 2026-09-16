@@ -77,10 +77,21 @@ class _HmmObjective(Objective):
         n_states: int,
         observation_dtype: torch.dtype,
         dtype: torch.dtype,
+        covariate: np.ndarray | None = None,
     ) -> None:
         self._observations = torch.as_tensor(observations, dtype=observation_dtype)
         self._n_states = n_states
         self._dtype = dtype
+        # Beside the observations, and for the same reason they are here: it is
+        # fixed for the life of the objective, where the family is rebuilt from
+        # `theta` on every call and so cannot hold it (issue #652). A family
+        # that conditions on nothing refuses a covariate rather than ignoring
+        # it, so this stays `None` unless a caller passes one.
+        self._covariate = (
+            None
+            if covariate is None
+            else torch.as_tensor(covariate, dtype=torch.float64)[..., None]
+        )
 
     @property
     def _n_emission_parameters(self) -> int:
@@ -174,7 +185,9 @@ class _HmmObjective(Objective):
         """Negative log-likelihood of every observed sequence."""
         transitions = self._transition_parameters(theta)
         return -forward_log_likelihood_from_density(
-            self.emissions(theta).log_density(self._observations),
+            self.emissions(theta).log_density(
+                self._observations, covariate=self._covariate
+            ),
             transitions["log_initial"],
             transitions["log_transition"],
         )
@@ -202,8 +215,9 @@ class HmmObjective(_HmmObjective):
         n_states: int,
         n_symbols: int,
         dtype: torch.dtype = torch.float64,
+        covariate: np.ndarray | None = None,
     ) -> None:
-        super().__init__(observations, n_states, torch.long, dtype)
+        super().__init__(observations, n_states, torch.long, dtype, covariate)
         self._n_symbols = n_symbols
 
     @property
@@ -315,8 +329,9 @@ class GaussianHmmObjective(_HmmObjective):
         observations: np.ndarray,
         n_states: int,
         dtype: torch.dtype = torch.float64,
+        covariate: np.ndarray | None = None,
     ) -> None:
-        super().__init__(observations, n_states, torch.float64, dtype)
+        super().__init__(observations, n_states, torch.float64, dtype, covariate)
         self._variance_floor = pooled_variance_floor(observations)
 
     @property
@@ -441,8 +456,9 @@ class _CountHmmObjective(_HmmObjective):
         observations: np.ndarray,
         n_states: int,
         dtype: torch.dtype = torch.float64,
+        covariate: np.ndarray | None = None,
     ) -> None:
-        super().__init__(observations, n_states, torch.float64, dtype)
+        super().__init__(observations, n_states, torch.float64, dtype, covariate)
 
     def _location_quantiles(self) -> torch.Tensor:
         """Evenly spaced quantiles of the pooled observations, one per state."""
@@ -534,8 +550,9 @@ class BinomialHmmObjective(_CountHmmObjective):
         n_states: int,
         trials: np.ndarray,
         dtype: torch.dtype = torch.float64,
+        covariate: np.ndarray | None = None,
     ) -> None:
-        super().__init__(observations, n_states, dtype)
+        super().__init__(observations, n_states, dtype, covariate)
         self._trials = torch.as_tensor(trials, dtype=torch.float64).reshape(-1)
 
     @property
@@ -601,8 +618,9 @@ class BetaBinomialHmmObjective(_CountHmmObjective):
         n_states: int,
         trials: np.ndarray,
         dtype: torch.dtype = torch.float64,
+        covariate: np.ndarray | None = None,
     ) -> None:
-        super().__init__(observations, n_states, dtype)
+        super().__init__(observations, n_states, dtype, covariate)
         self._trials = torch.as_tensor(trials, dtype=torch.float64).reshape(-1)
 
     @property
@@ -714,8 +732,9 @@ class NegativeBinomialHmmObjective(_HmmObjective):
         observations: np.ndarray,
         n_states: int,
         dtype: torch.dtype = torch.float64,
+        covariate: np.ndarray | None = None,
     ) -> None:
-        super().__init__(observations, n_states, torch.float64, dtype)
+        super().__init__(observations, n_states, torch.float64, dtype, covariate)
 
     @property
     def _n_emission_parameters(self) -> int:
@@ -1056,6 +1075,7 @@ def baum_welch_family(
     emissions: EmissionFamily,
     max_iterations: int = 500,
     tolerance: float = 1e-12,
+    covariate: np.ndarray | None = None,
 ) -> EmFit:
     """Baum-Welch over any emission family, with no autodiff involved.
 
@@ -1079,6 +1099,14 @@ def baum_welch_family(
         Stop when the log-likelihood improves by less than this *relative*
         to its magnitude -- absolute would not transfer across data sizes
         (``DEV.md``, issue #111).
+    covariate : np.ndarray | None
+        What each observation is scored against, shape ``(n_sequences,
+        length)`` -- an exposure for a rate family, a trial count for a
+        bounded one (issue #652). It reaches both seams of the loop, the E
+        step's scoring and the emission M step, because a fit that scores
+        against an exposure and re-estimates without it is fitting two
+        different models. ``None`` is the model this function had before.
+        The family broadcasts a covariate along the states, so it wants a trailing singleton axis; the covariate is stored with the observations' own axes and the singleton is added here, where the observation layout is known. A caller should not have to carry a shape that exists for the family's broadcast.
 
     Returns
     -------
@@ -1097,13 +1125,18 @@ def baum_welch_family(
     data = torch.as_tensor(observations, dtype=emissions.observation_dtype)
     n_sequences, length = data.shape
     m = emissions.n_states
+    exposure = (
+        None
+        if covariate is None
+        else torch.as_tensor(covariate, dtype=torch.float64)[..., None]
+    )
 
     previous = -float("inf")
     log_likelihood = previous
     at_boundary = False
     for _ in range(max_iterations):
         # --- E step: forward and backward messages in log space ----------
-        emit = emissions.log_density(data)
+        emit = emissions.log_density(data, covariate=exposure)
         alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
         alpha[:, 0] = log_initial.unsqueeze(0) + emit[:, 0]
         for t in range(1, length):
@@ -1140,7 +1173,7 @@ def baum_welch_family(
         log_transition = transition_counts - torch.logsumexp(
             transition_counts, dim=1, keepdim=True
         )
-        step = emissions.reestimate(data, torch.exp(gamma))
+        step = emissions.reestimate(data, torch.exp(gamma), covariate=exposure)
         if not step.converged:
             msg = (
                 f"the emission M step did not settle after {step.iterations} "

@@ -284,8 +284,7 @@ def gated_log_density(
 
     ``params.covariate`` reaches every family here, which is the only route a
     caller has to condition a score on an exposure or a trial count
-    (issue #652). It is the observations' own ``(S, n_nodes)``, so it needs no
-    reshaping to sit beside them.
+    (issue #652). The family broadcasts a covariate along the states, so it wants a trailing singleton axis; the covariate is stored with the observations' own axes and the singleton is added here, where the observation layout is known. A caller should not have to carry a shape that exists for the family's broadcast.
 
     Returns
     -------
@@ -294,7 +293,11 @@ def gated_log_density(
     """
     n_positions, n_nodes = observations.shape[:2]
     table = np.empty((n_nodes, n_positions, params.n_classes, params.n_states))
-    covariate = None if params.covariate is None else torch.as_tensor(params.covariate)
+    covariate = (
+        None
+        if params.covariate is None
+        else torch.as_tensor(params.covariate[..., None])
+    )
     for m, family in enumerate(params.emissions):
         scores = family.log_density(
             torch.as_tensor(observations, dtype=family.observation_dtype),
