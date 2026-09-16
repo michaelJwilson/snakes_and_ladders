@@ -25,6 +25,7 @@ was before issue #601 deleted it: a copy that goes stale in silence.
 from __future__ import annotations
 
 import ast
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -219,72 +220,111 @@ def _label(module: Module) -> str:
     return leaf
 
 
-#: Millimetres between a panel's columns, and between rows.
-COLUMN, ROW = 30, 2.5
+#: Radii, in millimetres: concern ring, package ring, leaf ring.
+CONCERN_R, PACKAGE_R, LEAF_R = 26.0, 60.0, 96.0
 
-#: Where the second concern's panel starts. The two are laid side by side
-#: rather than stacked: 127 rows in one column is 60 cm and two pages, and the
-#: maintainer asked for one (issue #664).
-PANEL = 120
+#: Degrees left clear between the two concerns' wedges, each side, so the
+#: branches read as two rather than one circle.
+GAP = 7.0
+
+
+def _wedges(
+    weights: dict[str, int], gap: float = GAP
+) -> dict[str, tuple[float, float]]:
+    """``key -> (start, end)`` degrees, each wedge proportional to its weight.
+
+    Splitting the circle evenly would waste it: `application` draws 95 leaves
+    against `infrastructure`'s 20, so equal halves give one branch four times
+    the room per leaf. Proportional wedges give **every leaf the same angle**,
+    which is the quantity that decides whether labels collide (issue #664).
+    """
+    total = sum(weights.values()) or 1
+    free = 360.0 - gap * len(weights)
+    spans: dict[str, tuple[float, float]] = {}
+    cursor = 0.0
+    for key, weight in weights.items():
+        span = free * weight / total
+        spans[key] = (cursor + gap / 2, cursor + gap / 2 + span)
+        cursor += span + gap
+    return spans
+
+
+def _polar(radius: float, degrees: float) -> tuple[float, float]:
+    """Millimetre ``(x, y)`` at a radius and a bearing, zero to the right."""
+    angle = math.radians(degrees)
+    return radius * math.cos(angle), radius * math.sin(angle)
 
 
 def placed(
     found: tuple[Module, ...] | None = None,
-) -> list[tuple[float, float, str, str, int]]:
-    """``(x, y, kind, label, parent)`` in millimetres, laid out here.
+) -> list[tuple[float, float, str, str, float, int]]:
+    """``(x, y, style, label, rotation, parent)`` for every node, radially.
 
-    One panel per concern, side by side. Within a panel a leaf takes the next
-    row and a package sits at the mean of its modules' rows, so the column is
-    the depth and the row is the packing. Parentage is recorded as each node is
-    made rather than inferred from geometry: a nearest-row guess reconnects the
-    wrong package the moment two are adjacent.
+    A mind map, not an indented tree: the package at the centre, the two
+    concerns around it, the packages beyond them, and the modules on the outer
+    ring. Each branch takes a wedge proportional to the leaves it carries, so
+    every leaf gets the same angle.
 
-    `forest` would pack this and was the first choice. It is not usable here:
-    `forest.sty` ships in this TeX Live but `environ.sty`, `trimspaces.sty` and
-    `elocalloc.sty` do not, so it cannot load without installing TeX packages,
-    which this work is not permitted to do. TikZ's `graphdrawing` is the other
-    automatic option and needs LuaLaTeX, where the build runs pdflatex.
+    **A leaf's label is rotated to run radially outward**, and that is what
+    makes 115 of them fit. Horizontal labels collide by the ratio of their
+    width to the arc between them --- 3.1 degrees at a 96 mm radius is 5.2 mm
+    of arc against a ~15 mm name --- while a radial label is constrained by its
+    *height*, about 2 mm. Past the top of the circle a label would read upside
+    down, so it is turned through 180 degrees and anchored on its other end.
+
+    The layout is computed here; nothing in the document places a node.
     """
     found = modules() if found is None else found
-    nodes: list[tuple[float, float, str, str, int]] = []
-    for panel, concern in enumerate(("application", "infrastructure")):
-        members = tuple(one for one in found if one.concern == concern)
-        left = panel * PANEL
-        concern_at = len(nodes)
-        nodes.append((left, 0.0, "concern", concern, -1))
-        row, package_rows = 1.4, []
-        for package in sorted({one.package for one in members}):
-            carried = tuple(one for one in members if one.package == package)
-            shown = sampled(carried) if package in COLLAPSED else carried
-            package_at = len(nodes)
-            name = (package or "top level").replace("_", r"\_")
-            head = (
-                rf"{name}~{{\tiny {len(carried)} modules}}"
+    drawn = {
+        concern: {
+            package: (
+                sampled(tuple(one for one in found if one.package == package))
                 if package in COLLAPSED
-                else name
+                else tuple(one for one in found if one.package == package)
             )
-            nodes.append((left + COLUMN, 0.0, "package", head, concern_at))
-            leaves = []
-            for module in shown:
-                nodes.append(
-                    (
-                        left + 2 * COLUMN,
-                        -row * ROW,
-                        "module",
-                        _label(module),
-                        package_at,
-                    )
-                )
-                leaves.append(-row * ROW)
-                row += 1.0
-            middle = sum(leaves) / len(leaves) if leaves else -row * ROW
-            x, _, kind, label, parent = nodes[package_at]
-            nodes[package_at] = (x, middle, kind, label, parent)
-            package_rows.append(middle)
-            row += 0.9
-        centre = sum(package_rows) / len(package_rows) if package_rows else 0.0
-        x, _, kind, label, parent = nodes[concern_at]
-        nodes[concern_at] = (x, centre, kind, label, parent)
+            for package in sorted(
+                {one.package for one in found if one.concern == concern}
+            )
+        }
+        for concern in ("application", "infrastructure")
+    }
+    weights = {
+        concern: sum(len(shown) for shown in packages.values())
+        for concern, packages in drawn.items()
+    }
+    nodes: list[tuple[float, float, str, str, float, int]] = []
+    nodes.append((0.0, 0.0, "centre", r"snakes\_and\_ladders", 0.0, -1))
+
+    for concern, (low, high) in _wedges(weights).items():
+        packages = drawn[concern]
+        short = "app" if concern == "application" else "infra"
+        concern_at = len(nodes)
+        x, y = _polar(CONCERN_R, (low + high) / 2)
+        nodes.append((x, y, f"concern, {short}", concern, 0.0, 0))
+        inner = _wedges(
+            {package: len(shown) for package, shown in packages.items()}, gap=2.0
+        )
+        for package, (start, stop) in inner.items():
+            shown = packages[package]
+            span = (stop - start) * (high - low) / 360.0
+            first = low + (start / 360.0) * (high - low)
+            package_at = len(nodes)
+            key = (package or "toplevel").replace("_", "")
+            name = (package or "top level").replace("_", r"\_")
+            carried = sum(
+                one.package == package and one.concern == concern for one in found
+            )
+            head = rf"{name}~{{\tiny {carried}}}" if package in COLLAPSED else name
+            middle = first + span / 2
+            x, y = _polar(PACKAGE_R, middle)
+            nodes.append((x, y, f"package, {key}", head, 0.0, concern_at))
+            for index, module in enumerate(shown):
+                bearing = first + span * (index + 0.5) / max(len(shown), 1)
+                x, y = _polar(LEAF_R, bearing)
+                flip = 90.0 < bearing % 360.0 < 270.0
+                rotation = bearing + 180.0 if flip else bearing
+                style = f"leaf, {short}leaf, {'flipped' if flip else 'plain'}"
+                nodes.append((x, y, style, _label(module), rotation, package_at))
     return nodes
 
 
@@ -292,12 +332,13 @@ def tree(found: tuple[Module, ...] | None = None) -> str:
     """The TikZ body: one node per entry, one edge per parent."""
     nodes = placed(found)
     lines = [
-        f"\\node[{kind}] (n{index}) at ({x:.2f}mm,{y:.2f}mm) {{{label}}};"
-        for index, (x, y, kind, label, _) in enumerate(nodes)
+        f"\\node[{style}, rotate={rotation:.2f}] (n{index}) "
+        f"at ({x:.2f}mm,{y:.2f}mm) {{{label}}};"
+        for index, (x, y, style, label, rotation, _) in enumerate(nodes)
     ]
     lines.extend(
-        f"\\draw[edge] (n{parent}.east) -- ++(4mm,0) |- (n{index}.west);"
-        for index, (_, _, _, _, parent) in enumerate(nodes)
+        f"\\draw[edge] (n{parent}) -- (n{index});"
+        for index, (*_, parent) in enumerate(nodes)
         if parent >= 0
     )
     return "\n".join(lines)

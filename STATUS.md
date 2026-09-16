@@ -3761,6 +3761,16 @@ above are after that fix.
 **`forest` was the intended typesetting and is not usable.** `forest.sty` ships
 in this TeX Live, but `environ.sty`, `trimspaces.sty` and `elocalloc.sty` do
 not, so it cannot load without installing TeX packages. TikZ `graphdrawing`
-needs LuaLaTeX where the build runs pdflatex. The rows are computed in the
-generator instead and emitted as plain TikZ, so no `.tex` places a node and no
-dependency was added.
+needs LuaLaTeX where the build runs pdflatex. The polar coordinates are
+computed in the generator instead and emitted as plain TikZ, so no `.tex`
+places a node and no dependency was added.
+
+**The map is radial, and two numbers decide whether that is readable.** Each
+branch takes a wedge proportional to the leaves it carries --- `application`
+draws 95 against `infrastructure`'s 20, so equal halves would give one branch
+four times the room per leaf --- which leaves every leaf the same **3.1
+degrees**. At the 96 mm leaf radius that is 5.2 mm of arc against a name of
+about 15 mm, so a horizontal label collides with its neighbour by a factor of
+three. A label rotated to run radially outward is bounded by its *height*,
+about 2 mm, and fits with room to spare. Past the top of the circle it is
+turned through 180 degrees so it does not read upside down.

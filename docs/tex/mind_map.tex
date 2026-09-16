@@ -1,42 +1,77 @@
-% The package map (issue #664). One page: two concerns, the packages, and the
-% modules, each labelled with the roadmap milestone `STATUS.md` claims it under.
+% The mind map (issue #664). One page, radial: `snakes_and_ladders` at the
+% centre, the two concerns around it, the packages beyond, and every module on
+% the outer ring.
 %
-% The tree is `docs/tex/generated/mind_map.tex`, written by
-% `infra/package_map.py` and not committed --- a drawn copy of the tree is what
-% `SEAMS.md` was before issue #601 deleted it.
+% The tree is `docs/tex/generated/mind_map.tex`, written by `infra/mind_map.py`
+% and not committed --- a drawn copy of the tree is what `SEAMS.md` was before
+% issue #601 deleted it. Every coordinate is computed there; nothing here
+% places a node. Each branch takes a wedge proportional to the leaves it
+% carries, so every leaf gets the same angle, and a leaf's label runs radially
+% outward because 115 horizontal labels 3.1 degrees apart would collide.
 %
-% Plain TikZ, and the rows are computed by the generator. `forest` would pack
-% the tree and was the first choice, but its `environ`, `trimspaces` and
-% `elocalloc` are absent from this TeX Live; TikZ `graphdrawing` needs
-% LuaLaTeX and the build runs pdflatex. Nothing here is hand-placed either way.
+% Plain TikZ: `forest` would pack a tree but its `environ`, `trimspaces` and
+% `elocalloc` are absent from this TeX Live, and TikZ `graphdrawing` needs
+% LuaLaTeX where the build runs pdflatex.
 \documentclass[a3paper,landscape]{article}
-\usepackage[a3paper,landscape,margin=10mm]{geometry}
+\usepackage[a3paper,landscape,margin=8mm]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage{tikz}
 \usepackage{xcolor}
+\usetikzlibrary{shapes.geometric}
 
-\definecolor{unclaimed}{HTML}{B02020}
-\definecolor{rule}{HTML}{A8B2BE}
+% Application is one hue family, infrastructure another: the separation root
+% CLAUDE.md insists on is the first thing the page should show.
+\definecolor{appink}{HTML}{0B3C5D}
+\definecolor{infink}{HTML}{5B3A29}
 \definecolor{claim}{HTML}{1D4ED8}
-\definecolor{ink}{HTML}{10151C}
+\definecolor{unclaimed}{HTML}{B02020}
+\definecolor{rule}{HTML}{B8C2CE}
+
+\definecolor{csim}{HTML}{BFD8E8}
+\definecolor{clikelihood}{HTML}{A9C9DE}
+\definecolor{copt}{HTML}{93BAD4}
+\definecolor{csearch}{HTML}{7DABCA}
+\definecolor{clearn}{HTML}{679CC0}
+\definecolor{cqa}{HTML}{E8D5BF}
+\definecolor{csandbox}{HTML}{DFC6A9}
+\definecolor{cscripts}{HTML}{D6B793}
+\definecolor{ctoplevel}{HTML}{CDA87D}
 
 \pagestyle{empty}
 
 \begin{document}
 \begin{center}
-  {\Large\bfseries The package, and what each module is claimed against}\\[3pt]
-  {\small A module's role is the roadmap milestone \texttt{STATUS.md} records it
-   under; \textcolor{unclaimed}{$\circ$} marks an application module none names.\\ Infrastructure carries no milestone by design.}
+  {\Large\bfseries snakes\_and\_ladders, as a map}\\[2pt]
+  {\small Two concerns, nine packages, 139 modules. A module's role is the
+   roadmap milestone \texttt{STATUS.md} records it under;
+   \textcolor{unclaimed}{$\circ$} marks an application module none names.
+   Infrastructure carries no milestone by design.}
 \end{center}
 \vfill
 \begin{center}
 \begin{tikzpicture}[
-  every node/.style={font=\tiny, inner sep=1.0pt, text=ink},
-  root/.style={font=\small\bfseries, anchor=west},
-  concern/.style={font=\small\scshape, anchor=west},
-  package/.style={font=\footnotesize\bfseries, anchor=west},
-  module/.style={anchor=west, font=\tiny},
-  edge/.style={rule, line width=0.35pt},
+  every node/.style={font=\tiny, inner sep=1.1pt},
+  centre/.style={ellipse, draw=appink, fill=appink, text=white,
+                 font=\small\bfseries, inner xsep=5pt, inner ysep=3.5pt},
+  concern/.style={ellipse, draw=none, text=white, font=\footnotesize\bfseries\scshape,
+                  inner xsep=4pt, inner ysep=2.6pt},
+  app/.style={fill=appink},
+  infra/.style={fill=infink},
+  package/.style={ellipse, draw=rule, font=\scriptsize\bfseries, text=black,
+                  inner xsep=3pt, inner ysep=2pt},
+  sim/.style={fill=csim}, likelihood/.style={fill=clikelihood},
+  opt/.style={fill=copt}, search/.style={fill=csearch},
+  learn/.style={fill=clearn}, qa/.style={fill=cqa},
+  sandbox/.style={fill=csandbox}, scripts/.style={fill=cscripts},
+  toplevel/.style={fill=ctoplevel},
+  % A leaf takes the concern's colour as ink, never as fill: filling it
+  % paints a dark box under dark text and the name cannot be read.
+  leaf/.style={inner sep=0.6pt},
+  appleaf/.style={text=appink},
+  infraleaf/.style={text=infink},
+  plain/.style={anchor=west, xshift=1.2mm},
+  flipped/.style={anchor=east, xshift=-1.2mm},
+  edge/.style={rule, line width=0.3pt},
 ]
 \input{generated/mind_map}
 \end{tikzpicture}

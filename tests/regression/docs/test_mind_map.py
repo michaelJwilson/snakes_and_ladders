@@ -98,10 +98,16 @@ def test_every_claimed_milestone_is_one_the_roadmap_declares() -> None:
 
 @pytest.mark.structural
 def test_the_layout_is_a_tree_and_is_deterministic() -> None:
-    """Every node but the two concerns has one parent, and two runs agree."""
+    """One centre, every other node parented, and two runs agree.
+
+    The map is radial: `snakes_and_ladders` at the centre, the two concerns
+    around it, the packages beyond and the modules on the outer ring. An
+    earlier draft laid the concerns as two side-by-side panels and this guard
+    asserted two roots; the shape changed and so did the claim.
+    """
     nodes = placed()
     roots = [index for index, (*_, parent) in enumerate(nodes) if parent < 0]
-    assert len(roots) == 2, "one root per concern panel"
+    assert roots == [0], "the centre is the one root"
     for index, (*_, parent) in enumerate(nodes):
         assert parent < index, "a node precedes its parent"
     assert tree() == tree(), "two renderings disagree"
