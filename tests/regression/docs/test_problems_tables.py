@@ -43,17 +43,33 @@ def test_the_generated_file_names_no_code(generated: str) -> None:
     ] == []
 
 
+#: The one row whose tests name no oracle the tables can place. Its claimed
+#: oracle was a catalogue cell no test backed, which deriving the tables from
+#: the suite is what exposed; issue #646 carries the gap. Named rather than
+#: counted, so a second row joining it fails here.
+WITHOUT_AN_ORACLE = ("Count-pair coupled spatio-sequential model",)
+
+
 @pytest.mark.structural
-def test_every_catalogue_row_has_an_algorithm_and_an_oracle(generated: str) -> None:
-    # A row with no oracle would be a problem nothing referees, which the
-    # catalogue's own preamble forbids.
+def test_every_catalogue_row_reaches_an_algorithm_and_names_its_oracle_gap(
+    generated: str,
+) -> None:
+    # Derived rather than claimed since issue #640: a row's methods are the
+    # ones its own tests reach. A row reaching no oracle is a problem nothing
+    # independent referees, so it is listed above and ticketed -- not asserted
+    # away by a cell, which is how the one below went unnoticed.
     text = generated
     # Twice for the algorithm and oracle tables, once per method family.
     appearances = 2 + len(problems_tables.METHOD_FAMILIES)
+    without = []
     for problem, symbols in problems_tables.rows():
-        assert problems_tables.unnamed(symbols) == [], problem
-        assert any(s in problems_tables.ORACLES for s in symbols), problem
+        assert symbols, problem
+        assert any(s in problems_tables.ALGORITHMS for s in symbols), problem
+        if not any(s in problems_tables.ORACLES for s in symbols):
+            without.append(problem)
         assert text.count(problems_tables._tex_text(problem)) == appearances, problem
+
+    assert tuple(without) == WITHOUT_AN_ORACLE
 
 
 @pytest.mark.structural
@@ -165,14 +181,36 @@ def test_a_pairing_with_no_note_is_refused() -> None:
 
 
 @pytest.mark.edge_case
-def test_a_symbol_the_generator_cannot_name_is_refused(tmp_path: Path) -> None:
-    # Guards the guard: the failure mode is a table quietly narrower than the
-    # catalogue, so an unnamed symbol must raise rather than be skipped.
+def test_a_family_the_suite_runs_and_no_note_claims_is_refused() -> None:
+    # Guards the guard, and the direction reversed with issue #640. The
+    # catalogue no longer inventories a problem's methods, so it can no longer
+    # name one the tables cannot place; what it can now do is go quiet about a
+    # family that is *running*. The notes carry the claim and the suite the
+    # coverage, so a family the suite reaches with no note must raise.
+    silent = {
+        problem: {
+            name: note
+            for name, note in families.items()
+            if (problem, name) != ("Gaussian mixture", "optimizers")
+        }
+        for problem, families in problems_tables.notes().items()
+    }
+
+    with pytest.raises(problems_tables.MissingNoteError, match="Gaussian mixture"):
+        problems_tables.method_cells(note_map=silent)
+
+
+@pytest.mark.edge_case
+def test_a_row_reads_its_key_and_its_defining_code(tmp_path: Path) -> None:
+    # The two hand-written columns, read from a table of one row. `Defines`
+    # names code and fills no column of either table -- a simulator is not a
+    # method -- and is read here so one reader parses the catalogue.
     catalogue = tmp_path / "PROBLEMS.md"
     catalogue.write_text(
-        "| Problem | Simulate |\n| --- | --- |\n"
-        "| Made up | `snakes_and_ladders.no_such.symbol` |\n"
+        "| Problem | Key | Statement | Defines |\n| --- | --- | --- | --- |\n"
+        "| Made up | `potts_chain`, `potts_lattice` | `sec:aaa` | `sim.nothing` |\n"
     )
-    with pytest.raises(problems_tables.UnnamedSymbolError, match="no_such.symbol"):
-        problems_tables.render(catalogue)
-    assert problems_tables.rows(catalogue) == [("Made up", ["no_such.symbol"])]
+
+    assert problems_tables.catalogue_rows(catalogue) == [
+        ("Made up", ["potts_chain", "potts_lattice"], ["sim.nothing"])
+    ]

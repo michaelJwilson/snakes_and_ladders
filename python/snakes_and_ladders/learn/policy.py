@@ -266,7 +266,7 @@ class EpsilonGreedyPolicy(Policy):
     With probability ``epsilon`` it draws uniformly from the available
     actions, and otherwise takes the wrapped policy's greedy action. The
     uniform draw is what makes it able to accept a *worsening* move, which is
-    the property issue #194 exists for: on a rugged landscape every episode
+    the property issue #194 exists for: on a rugged environment every episode
     otherwise ends at the first state no action improves, so an agent chooses
     which local optimum to enter and can never leave one.
 

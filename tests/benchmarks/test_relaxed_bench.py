@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.learn.potts import PottsLandscape
+from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.relaxed import (
     RelaxationMode,
     RelaxedPotts,
@@ -28,7 +28,9 @@ from snakes_and_ladders.learn.relaxed import (
 
 
 def _objective(chain_length: int) -> RelaxedPotts:
-    return RelaxedPotts(PottsLandscape(-0.9, np.array([0.4, 0.35, -0.6]), chain_length))
+    return RelaxedPotts(
+        PottsEnvironment(-0.9, np.array([0.4, 0.35, -0.6]), chain_length)
+    )
 
 
 @pytest.mark.parametrize("chain_length", [8, 32, 128])
@@ -41,8 +43,8 @@ def test_relaxed_score_benchmark(
     value = benchmark(objective.relaxed, probabilities)
 
     assert float(value) == pytest.approx(
-        objective.landscape.coupling * (chain_length - 1) / 3.0
-        + chain_length * float(objective.landscape.field.mean())
+        objective.environment.coupling * (chain_length - 1) / 3.0
+        + chain_length * float(objective.environment.field.mean())
     )
 
 

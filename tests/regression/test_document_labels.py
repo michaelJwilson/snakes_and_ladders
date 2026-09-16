@@ -57,7 +57,6 @@ def defined_labels(documents: tuple[Path, ...] = DOCUMENTS) -> set[str]:
 DOCUMENT_FIXTURES = (
     Path(__file__).resolve(),
     REPO_ROOT / "tests" / "regression" / "docs" / "test_citation_integrity.py",
-    REPO_ROOT / "tests" / "regression" / "docs" / "test_problem_join.py",
 )
 
 
@@ -98,9 +97,10 @@ def test_every_label_the_code_cites_is_defined_in_a_document() -> None:
 
 @pytest.mark.structural
 def test_every_document_fixture_is_one() -> None:
-    # The exemption list is edited by hand, so it has gone stale twice: the
-    # citation checker's tests and then the problem-join tests each turned
-    # this file red on the day they landed. An entry earns its place by
+    # The exemption list is edited by hand, so it has gone stale three times:
+    # the citation checker's tests and then the problem-join tests each turned
+    # this file red on the day they landed, and the join's removal left an
+    # entry behind that no longer authors anything. An entry earns its place by
     # authoring document text -- writing a `\label{` into a document it
     # builds -- so that property is checked rather than trusted, and an
     # entry that stops authoring one is reported instead of silently

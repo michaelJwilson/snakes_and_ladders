@@ -1,4 +1,4 @@
-"""The Potts landscape: its physics, its oracle, and the two gauges in it.
+"""The Potts environment: its physics, its oracle, and the two gauges in it.
 
 The environment is only usable as a reference instance if its reward is the
 energy difference it claims. So the ``O(1)`` local update is pinned
@@ -18,7 +18,7 @@ import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsLandscape,
+    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -31,8 +31,8 @@ FIELD = np.array([0.4, -0.1, -0.3])
 FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 
 
-def _landscape(chain_length: int = 4) -> PottsLandscape:
-    return PottsLandscape(coupling=0.75, field=FIELD, chain_length=chain_length)
+def _environment(chain_length: int = 4) -> PottsEnvironment:
+    return PottsEnvironment(coupling=0.75, field=FIELD, chain_length=chain_length)
 
 
 # --- the model ------------------------------------------------------------
@@ -42,10 +42,10 @@ def _landscape(chain_length: int = 4) -> PottsLandscape:
 def test_energy_matches_its_definition_term_by_term() -> None:
     # E(s) = J * (agreeing adjacent pairs) + sum of the field at each site,
     # written out here independently of the implementation's loop.
-    landscape = _landscape()
+    environment = _environment()
     state = (2, 2, 0, 1)
     expected = 0.75 * 1 + (FIELD[2] + FIELD[2] + FIELD[0] + FIELD[1])
-    assert_allclose(landscape.energy(state), expected, atol=1e-12)
+    assert_allclose(environment.energy(state), expected, atol=1e-12)
 
 
 @pytest.mark.oracle
@@ -53,12 +53,12 @@ def test_the_local_reward_equals_a_full_energy_difference() -> None:
     # The step function updates two bonds and one site rather than
     # re-evaluating E. Every state, every action: at this size the claim can
     # be checked exhaustively instead of sampled.
-    landscape = _landscape()
+    environment = _environment()
     for state in enumerate_configurations(3, 4):
-        base = landscape.energy(state)
-        for action in landscape.actions(state):
-            successor, reward = landscape.step(state, action)
-            assert_allclose(reward, landscape.energy(successor) - base, atol=1e-12)
+        base = environment.energy(state)
+        for action in environment.actions(state):
+            successor, reward = environment.step(state, action)
+            assert_allclose(reward, environment.energy(successor) - base, atol=1e-12)
 
 
 @pytest.mark.mathematical
@@ -66,20 +66,20 @@ def test_the_features_span_the_reward_exactly() -> None:
     # delta_energy = J * agreement_delta + field_delta, which is why the
     # greedy searcher is inside the policy class. If this ever stopped
     # holding, `greedy_weights` would silently stop being greedy.
-    landscape = _landscape()
-    weights = landscape.greedy_weights()
+    environment = _environment()
+    weights = environment.greedy_weights()
     for state in itertools.islice(enumerate_configurations(3, 4), 20):
-        actions = landscape.actions(state)
-        scores = landscape.features(state, actions) @ weights
-        rewards = [landscape.step(state, action)[1] for action in actions]
+        actions = environment.actions(state)
+        scores = environment.features(state, actions) @ weights
+        rewards = [environment.step(state, action)[1] for action in actions]
         assert_allclose(scores.numpy(), rewards, atol=1e-12)
 
 
 @pytest.mark.oracle
 def test_the_neighbourhood_has_one_flip_per_site_and_alternative_state() -> None:
-    landscape = _landscape(chain_length=5)
+    environment = _environment(chain_length=5)
     state = (0, 1, 2, 0, 1)
-    actions = landscape.actions(state)
+    actions = environment.actions(state)
     assert len(actions) == 5 * (3 - 1)
     assert len(set(actions)) == len(actions)
     assert all(value != state[site] for site, value in actions)
@@ -87,13 +87,13 @@ def test_the_neighbourhood_has_one_flip_per_site_and_alternative_state() -> None
 
 @pytest.mark.structural
 def test_a_terminal_state_is_one_no_flip_improves() -> None:
-    landscape = _landscape()
+    environment = _environment()
     for state in enumerate_configurations(3, 4):
         improvable = any(
-            landscape.step(state, action)[1] > 0.0
-            for action in landscape.actions(state)
+            environment.step(state, action)[1] > 0.0
+            for action in environment.actions(state)
         )
-        assert landscape.is_terminal(state) is not improvable
+        assert environment.is_terminal(state) is not improvable
 
 
 # --- the gauge ------------------------------------------------------------
@@ -106,9 +106,9 @@ def test_shifting_the_field_leaves_every_reward_unchanged() -> None:
     # costs nothing: a shift moves every configuration's energy by L * c, so
     # every *difference* is untouched. Recorded because the fixture is
     # canonicalized on load and a reader is entitled to know whether the
-    # landscape depended on it. It does not.
-    base = _landscape()
-    shifted = PottsLandscape(0.75, FIELD + 1.7, 4)
+    # environment depended on it. It does not.
+    base = _environment()
+    shifted = PottsEnvironment(0.75, FIELD + 1.7, 4)
     for state in itertools.islice(enumerate_configurations(3, 4), 25):
         for action in base.actions(state):
             assert_allclose(
@@ -128,31 +128,33 @@ def test_enumeration_produces_every_configuration_exactly_once() -> None:
 
 @pytest.mark.oracle
 def test_the_optimum_is_the_best_of_every_configuration() -> None:
-    landscape = _landscape()
-    state, energy = optimum(landscape)
+    environment = _environment()
+    state, energy = optimum(environment)
     energies = [
-        landscape.energy(candidate) for candidate in enumerate_configurations(3, 4)
+        environment.energy(candidate) for candidate in enumerate_configurations(3, 4)
     ]
     assert_allclose(energy, max(energies), atol=1e-12)
-    assert_allclose(landscape.energy(state), energy, atol=1e-12)
+    assert_allclose(environment.energy(state), energy, atol=1e-12)
     # The optimum must be a fixed point of the search, or "reached the
     # optimum" and "stopped improving" would be different events.
-    assert landscape.is_terminal(state)
+    assert environment.is_terminal(state)
 
 
 @pytest.mark.structural
-def test_the_landscape_is_hard_enough_to_be_worth_searching() -> None:
+def test_the_environment_is_hard_enough_to_be_worth_searching() -> None:
     # Measured: greedy hill climbing stalls below the global optimum from 16
-    # of the 81 starting configurations. A landscape greedy always solved
+    # of the 81 starting configurations. A environment greedy always solved
     # would make every comparison against it vacuous -- the trap issue #128
     # found in the 6-taxon tree fixture, where the optimum led the runner-up
     # by 41.6 log units and both move sets reached it every time. Asserting
     # only that *some* start stalls: the count is the measurement, and
     # pinning it would break on any harmless change to tie-breaking.
-    landscape = _landscape()
-    best = optimum(landscape)[1]
+    environment = _environment()
+    best = optimum(environment)[1]
     stalled = sum(
-        abs(landscape.energy(greedy_rollout(landscape, start, 50).states[-1]) - best)
+        abs(
+            environment.energy(greedy_rollout(environment, start, 50).states[-1]) - best
+        )
         > 1e-9
         for start in enumerate_configurations(3, 4)
     )
@@ -166,18 +168,18 @@ def test_the_landscape_is_hard_enough_to_be_worth_searching() -> None:
 def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
     # Not a convenience: it is what makes "the agent beat hill climbing" a
     # statement about learning rather than about two unrelated algorithms.
-    landscape = _landscape()
+    environment = _environment()
     policy = LinearPolicy(2)
-    policy.set_weights(landscape.greedy_weights() * 50.0)
+    policy.set_weights(environment.greedy_weights() * 50.0)
     for start in itertools.islice(enumerate_configurations(3, 4), 15):
-        expected = greedy_rollout(landscape, start, max_steps=20)
+        expected = greedy_rollout(environment, start, max_steps=20)
         state = start
         taken: list[tuple[int, int]] = []
-        while not landscape.is_terminal(state) and len(taken) < 20:
-            actions = landscape.actions(state)
-            index = policy.greedy(landscape.features(state, actions))
+        while not environment.is_terminal(state) and len(taken) < 20:
+            actions = environment.actions(state)
+            index = policy.greedy(environment.features(state, actions))
             taken.append(actions[index])
-            state, _ = landscape.step(state, actions[index])
+            state, _ = environment.step(state, actions[index])
         assert tuple(taken) == expected.actions
 
 
@@ -185,15 +187,15 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
 
 
 @pytest.mark.structural
-def test_the_fixture_yaml_builds_the_same_landscape() -> None:
+def test_the_fixture_yaml_builds_the_same_environment() -> None:
     # One model, two roles: the yaml that supplies `snakes_and_ladders.opt`'s reference
     # objective read as a search problem instead of a fitting problem.
     params = load_potts_params(FIXTURE)
-    landscape = PottsLandscape.from_params(params)
-    assert landscape.n_states == params.n_states
-    assert landscape.chain_length == params.chain_length
+    environment = PottsEnvironment.from_params(params)
+    assert environment.n_states == params.n_states
+    assert environment.chain_length == params.chain_length
     assert_allclose(
-        landscape.greedy_weights().numpy(), [params.coupling, 1.0], atol=1e-12
+        environment.greedy_weights().numpy(), [params.coupling, 1.0], atol=1e-12
     )
 
 
@@ -206,29 +208,29 @@ def test_the_fixture_yaml_builds_the_same_landscape() -> None:
         (0.5, FIELD, 1, "chain_length must be >= 2"),
     ],
 )
-def test_an_unusable_landscape_is_rejected(
+def test_an_unusable_environment_is_rejected(
     coupling: float, field: np.ndarray, chain_length: int, message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        PottsLandscape(coupling, field, chain_length)
+        PottsEnvironment(coupling, field, chain_length)
 
 
 @pytest.mark.structural
 def test_reset_draws_a_configuration_of_the_right_shape() -> None:
-    landscape = _landscape(chain_length=6)
-    state = landscape.reset(np.random.default_rng(0))
+    environment = _environment(chain_length=6)
+    state = environment.reset(np.random.default_rng(0))
     assert len(state) == 6
     assert all(0 <= value < 3 for value in state)
-    assert state == landscape.reset(np.random.default_rng(0))
+    assert state == environment.reset(np.random.default_rng(0))
 
 
 @pytest.mark.structural
 def test_features_have_one_row_per_action() -> None:
-    landscape = _landscape()
+    environment = _environment()
     state = (0, 1, 2, 0)
-    actions = landscape.actions(state)
-    features = landscape.features(state, actions)
-    assert features.shape == (len(actions), landscape.n_features())
+    actions = environment.actions(state)
+    features = environment.features(state, actions)
+    assert features.shape == (len(actions), environment.n_features())
     assert features.dtype == torch.float64
 
 
@@ -239,14 +241,14 @@ def test_the_vectorized_features_are_the_scalar_deltas_exactly() -> None:
     # and stays as the oracle. Exact, because both are integer counts and one
     # subtraction of the same two floats -- realized deviation 0.0 over 200
     # random states.
-    landscape = PottsLandscape(0.75, np.array([0.4, -0.1, -0.3]), chain_length=5)
+    environment = PottsEnvironment(0.75, np.array([0.4, -0.1, -0.3]), chain_length=5)
     rng = np.random.default_rng(0)
 
     for _ in range(50):
-        state = landscape.reset(rng)
-        actions = landscape.actions(state)
-        fast = landscape.features(state, actions).numpy()
-        slow = np.array([landscape._deltas(state, action) for action in actions])
+        state = environment.reset(rng)
+        actions = environment.actions(state)
+        fast = environment.features(state, actions).numpy()
+        slow = np.array([environment._deltas(state, action) for action in actions])
 
         assert fast.shape == (len(actions), 2)
         assert np.array_equal(fast, slow)

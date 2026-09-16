@@ -33,6 +33,7 @@ import ast
 import re
 import sys
 from collections.abc import Iterable
+from functools import cache
 from pathlib import Path
 
 import checks_ledger
@@ -109,13 +110,27 @@ ORACLE_COLUMNS = (
 #: each; a test with neither marker runs at the CI tier.
 TIERS = ("ci", "stress", "release")
 
-#: How a fixture is named in a test: as a registry problem and tier, as a
-#: problem parameterized over every tier it declares, or as the file's path.
-#: All three are read, because a pairing must not read as untested for the
-#: way its test spells the fixture (issue #382).
-_FIXTURE_CALL = re.compile(r'(?<!at_)fixture\(\s*"([a-z_0-9]+)"\s*,\s*"([a-z]+)"')
+#: How a fixture is named in a test: through one of the registry's entry
+#: points that take a problem and a tier, as a problem parameterized over
+#: every tier it declares, or as the file's path. All three are read, because
+#: a pairing must not read as untested for the way its test spells the fixture
+#: (issue #382).
+_REGISTRY_CALLS = ("fixture", "path_of", "baseline_path", "baseline")
+_FIXTURE_CALL = re.compile(
+    r"(?<!at_)(?:"
+    + "|".join(_REGISTRY_CALLS)
+    + r')\(\s*"([a-z_0-9]+)"\s*,\s*"([a-z]+)"'
+)
+#: A ``StrEnum`` member *is* its string, so ``Scale.CI`` names the CI tier as
+#: plainly as ``"ci"`` does; 19 tests in the suite spell it that way. Resolved
+#: only when the member's lowercased name is a tier ``DEV.md`` declares, so an
+#: unrelated enum is left alone rather than guessed at.
+_SCALE_MEMBER = re.compile(r"\bScale\.([A-Z_]+)\b")
 _AT_FIXTURE_CALL = re.compile(r'at_fixture\(\s*"[a-z_0-9]+"\s*,\s*"([a-z_0-9]+)"')
-_FIXTURE_PATH = re.compile(r"([a-z_0-9]+)/([a-z]+)\.yaml")
+#: A path is preceded by a quote or a separator, never by a backslash: the
+#: escaped ``tree\_jc/release.yaml`` a LaTeX assertion carries would
+#: otherwise read as a problem named ``_jc``.
+_FIXTURE_PATH = re.compile(r"(?<![a-z_0-9\\])([a-z_0-9]+)/([a-z]+)\.yaml")
 
 #: How a cell is marked: pinned by an oracle; by the simulated truth only,
 #: an oracle wanted; by neither significant kind, an oracle wanted.
@@ -243,8 +258,8 @@ ALGORITHMS: dict[str, str] = {
     "sandbox.tropical.optimize": "relaxation",
     "sandbox.tropical.quartet_table": "relaxation",
     "search.rl.TopologyEnvironment": "policy learning",
-    "learn.potts.PottsLandscape": "policy learning",
-    "learn.hmm.StatePathLandscape": "policy learning",
+    "learn.potts.PottsEnvironment": "policy learning",
+    "learn.hmm.HmmEnvironment": "policy learning",
     "learn.surrogate.fit_surrogate": "policy learning",
 }
 
@@ -280,6 +295,11 @@ ORACLES: dict[str, str] = {
 }
 
 _SYMBOL = re.compile(r"`([^`]+)`")
+#: The two cells the tables read. A key is a bare fixture directory; a
+#: defining name carries a dot and no package prefix, since the catalogue
+#: names code under the package and says so once rather than per cell.
+_KEY_CELL = re.compile(r"`([a-z_0-9]+)`")
+_DEFINES_CELL = re.compile(r"`([a-z_]+\.[A-Za-z0-9_.]+)`")
 #: A fixture named by a catalogue row: the problem, then the tier.
 _CATALOGUE_FIXTURE = re.compile(
     r"tests/regression/fixtures/([a-z_0-9]+)/([a-z]+)\.yaml"
@@ -288,32 +308,6 @@ _CATALOGUE_FIXTURE = re.compile(
 
 class UnnamedSymbolError(ValueError):
     """A catalogue symbol this module cannot name as an algorithm or an oracle."""
-
-
-def rows(catalogue: Path = CATALOGUE) -> list[tuple[str, list[str]]]:
-    """``(problem, symbols)`` per table row of the catalogue, in order.
-
-    Only backticked names under the package count; a path names a fixture or
-    a notebook and fills no column.
-    """
-    found: list[tuple[str, list[str]]] = []
-    for line in catalogue.read_text().splitlines():
-        if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        problem, rest = cells[0], " ".join(cells[1:])
-        symbols = [
-            name[len(PACKAGE) :]
-            for name in _SYMBOL.findall(rest)
-            if name.startswith(PACKAGE)
-        ]
-        found.append((problem, symbols))
-    return found
-
-
-def unnamed(symbols: list[str]) -> list[str]:
-    """The symbols neither table names, sorted."""
-    return sorted({s for s in symbols if s not in ALGORITHMS and s not in ORACLES})
 
 
 # --- what the suite says referees each symbol ---------------------------------
@@ -406,6 +400,69 @@ def _tier(markers: set[str]) -> str:
     return "ci"
 
 
+def _constants(source: str) -> dict[str, str]:
+    """The module-level names a file binds to a bare string, ``name -> value``.
+
+    A file that writes ``PROBLEM = "planted_glass"`` and then
+    ``fixture(PROBLEM, TIER)`` is naming its fixture as plainly as one that
+    inlines the literal, and reading only the literal form attributes the file
+    to no problem at all --- the defect issue #640 is about, one level down.
+    Tuple assignments are read because ``PROBLEM, TIER = "x", "ci"`` is the
+    common spelling; an attribute value such as ``Scale.CI`` binds nothing and
+    is left to the call's own regex, which then does not match and costs only
+    a tier.
+
+    Returns
+    -------
+    dict[str, str]
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+    found: dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        targets, values = node.targets[0], node.value
+        pairs: list[tuple[ast.expr, ast.expr]] = []
+        if isinstance(targets, ast.Tuple) and isinstance(values, ast.Tuple):
+            pairs = list(zip(targets.elts, values.elts, strict=False))
+        else:
+            pairs = [(targets, values)]
+        for target, value in pairs:
+            if (
+                isinstance(target, ast.Name)
+                and isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+            ):
+                found[target.id] = value.value
+    return found
+
+
+def _with_constants(source: str) -> str:
+    """``source`` with every module-level string constant spelled out.
+
+    Rewriting the text rather than walking the calls keeps one reading of a
+    fixture call --- the regexes below --- instead of two that can disagree.
+
+    Returns
+    -------
+    str
+    """
+    resolved = _SCALE_MEMBER.sub(
+        lambda match: f'"{match.group(1).lower()}"'
+        if match.group(1).lower() in TIERS
+        else match.group(0),
+        source,
+    )
+    bound = _constants(resolved)
+    if not bound:
+        return resolved
+    pattern = re.compile(r"\b(" + "|".join(map(re.escape, bound)) + r")\b")
+    return pattern.sub(lambda match: f'"{bound[match.group(1)]}"', resolved)
+
+
 def fixtures_named(source: str) -> set[tuple[str, str]]:
     """The ``(problem, tier)`` fixtures a test file names, however it names them.
 
@@ -420,9 +477,10 @@ def fixtures_named(source: str) -> set[tuple[str, str]]:
         A tier of ``""`` means the file named the problem without a tier ---
         ``at_fixture`` parameterizes over every tier the problem declares.
     """
-    found = set(_FIXTURE_CALL.findall(source))
-    found |= {(problem, "") for problem in _AT_FIXTURE_CALL.findall(source)}
-    return found | set(_FIXTURE_PATH.findall(source))
+    resolved = _with_constants(source)
+    found = set(_FIXTURE_CALL.findall(resolved))
+    found |= {(problem, "") for problem in _AT_FIXTURE_CALL.findall(resolved)}
+    return found | set(_FIXTURE_PATH.findall(resolved))
 
 
 def fixture_tiers(problem: str, directory: Path = FIXTURES) -> list[str]:
@@ -632,7 +690,14 @@ def untested_notes(path: Path = METHOD_NOTES) -> dict[str, str]:
 def catalogue_rows(
     catalogue: Path = CATALOGUE,
 ) -> list[tuple[str, list[str], list[str]]]:
-    """``(problem, fixture problems, symbols)`` per row of the catalogue.
+    """``(problem, fixture keys, defining code)`` per row of the catalogue.
+
+    The two hand-written columns the tables need. **Key** is the fixture
+    directory and the marker, which are one name; a row with two keys is one
+    problem declared at two instances. **Defines** is the code that is this
+    problem and no other, which the tables do not place in a column --- a
+    simulator is not a method --- and which is read here so one reader parses
+    the table.
 
     Returns
     -------
@@ -643,42 +708,96 @@ def catalogue_rows(
         if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        problem, rest = cells[0], " ".join(cells[1:])
-        symbols = [
-            name[len(PACKAGE) :]
-            for name in _SYMBOL.findall(rest)
-            if name.startswith(PACKAGE)
-        ]
-        fixtures = sorted({match[0] for match in _CATALOGUE_FIXTURE.findall(rest)})
-        found.append((problem, fixtures, symbols))
+        if len(cells) < 4:
+            continue
+        found.append(
+            (
+                cells[0],
+                sorted(set(_KEY_CELL.findall(cells[1]))),
+                sorted(set(_DEFINES_CELL.findall(cells[3]))),
+            )
+        )
     return found
 
 
-def untested_pairs(catalogue: Path = CATALOGUE) -> list[tuple[str, str]]:
-    """``(fixture problem, method family)`` pairings no significant test makes.
+@cache
+def applied(catalogue: Path = CATALOGUE) -> dict[str, frozenset[str]]:
+    """``problem -> the methods its own tests reach``, read from the suite.
 
-    The catalogue says a problem carries a family; the registry says the
-    problem has an instance; the suite says which tests name both. A pairing
-    the first two assert and the third does not is what "every compatible
-    method is applied to every supported problem" is checked by, and each one
-    is either given a test or a reason in
-    ``docs/tex/method_notes.yaml``.
+    The catalogue no longer inventories a problem's methods (issue #640), so
+    the tables derive them: a method is applied to a problem when a test of
+    either significant kind names a symbol of the method and a fixture of one
+    of the problem's keys. The reading is the suite's, which is what the
+    tables were always meant to report --- the inventory only ever claimed it.
+
+    Returns
+    -------
+    dict[str, frozenset[str]]
+        Keyed by row title, holding the symbols either table can place.
+    """
+    by_symbol = fixtures_by_symbol()
+    reached: dict[str, set[str]] = {}
+    for symbol, problems in by_symbol.items():
+        if symbol not in ALGORITHMS and symbol not in ORACLES:
+            continue
+        for problem in problems:
+            reached.setdefault(problem, set()).add(symbol)
+    return {
+        title: frozenset().union(*(reached.get(key, set()) for key in keys))
+        if keys
+        else frozenset()
+        for title, keys, _ in catalogue_rows(catalogue)
+    }
+
+
+def rows(catalogue: Path = CATALOGUE) -> list[tuple[str, list[str]]]:
+    """``(problem, symbols)`` per table row, the symbols derived from the suite.
+
+    Returns
+    -------
+    list[tuple[str, list[str]]]
+    """
+    reached = applied(catalogue)
+    return [
+        (title, sorted(reached.get(title, frozenset())))
+        for title, _, _ in catalogue_rows(catalogue)
+    ]
+
+
+def untested_pairs(
+    catalogue: Path = CATALOGUE, note_map: dict[str, dict[str, str]] | None = None
+) -> list[tuple[str, str]]:
+    """``(fixture key, method family)`` pairings claimed but not made.
+
+    "Every compatible method is applied to every supported problem" is a
+    claim, and the two halves of it now come from two places, which is what
+    stops the check being circular. **The claim** is
+    ``docs/tex/method_notes.yaml``: a note for a problem and a family says the
+    family applies there. **The coverage** is the suite: a test of either
+    significant kind naming a symbol of the family and a fixture of the
+    problem's key. A pairing the first asserts and the second does not is
+    listed, with the reason it is untested, and loses its entry only by
+    gaining a test (issue #382).
 
     Returns
     -------
     list[tuple[str, str]]
         Sorted, without repeats.
     """
+    known = notes() if note_map is None else note_map
     by_symbol = fixtures_by_symbol()
+    of_family = {
+        name: {symbol for symbol in ALGORITHMS if family(symbol) == name}
+        for name in METHOD_FAMILIES
+    }
     found = set()
-    for _, fixtures, symbols in catalogue_rows(catalogue):
-        for name in METHOD_FAMILIES:
-            here = [symbol for symbol in symbols if family(symbol) == name]
-            if not here:
-                continue
-            for problem in fixtures:
-                if not any(problem in by_symbol.get(symbol, ()) for symbol in here):
-                    found.add((problem, name))
+    for title, keys, _ in catalogue_rows(catalogue):
+        for name in known.get(title, {}):
+            for key in keys:
+                if not any(
+                    key in by_symbol.get(symbol, ()) for symbol in of_family[name]
+                ):
+                    found.add((key, name))
     return sorted(found)
 
 
@@ -715,15 +834,16 @@ def method_cells(
 ) -> list[tuple[str, str, str, str, str]]:
     """``(problem, family, tier, referee, note)`` for every problem and family.
 
-    Every pairing appears: one the suite names with no test of either
-    significant kind is ``untested``, and one the catalogue has no symbol for
-    is ``--``. Omitting either would make the table read as though the
+    Every pairing appears: one the notes claim that no test of either
+    significant kind makes is ``untested``, and one nothing claims and nothing
+    tests is ``--``. Omitting either would make the table read as though the
     question had not been asked.
 
     Raises
     ------
     MissingNoteError
-        If a pairing the catalogue carries has no note.
+        If the suite applies a family to a problem the notes do not claim.
+        The table cannot go quiet about a method that is running.
     """
     known = notes() if note_map is None else note_map
     pins = referees()
@@ -734,7 +854,7 @@ def method_cells(
             note = known.get(problem, {}).get(name, "")
             if here and not note:
                 msg = (
-                    f"{problem!r} has {name} in PROBLEMS.md and no note in "
+                    f"{problem!r} runs {name} in the suite and has no note in "
                     f"{METHOD_NOTES.name}; add one saying when the family wins here"
                 )
                 raise MissingNoteError(msg)
@@ -745,7 +865,8 @@ def method_cells(
                 referee = "oracle"
             elif "simulated_truth" in kinds:
                 referee = r"truth$^{\dagger}$"
-            elif here:
+            elif note:
+                # Claimed by the notes and reached by no significant test.
                 referee = "untested"
             else:
                 referee = "--"
@@ -831,13 +952,15 @@ def render(catalogue: Path = CATALOGUE) -> str:
         If the catalogue names a symbol neither dictionary can place. The
         table cannot be silently narrower than the catalogue.
     """
-    missing: list[str] = []
-    for _, symbols in rows(catalogue):
-        missing += unnamed(symbols)
-    if missing:
+    unclaimed = sorted(
+        f"{problem} / {name}"
+        for problem, name, _, referee, note in method_cells(catalogue)
+        if referee not in ("--", "untested") and not note
+    )
+    if unclaimed:
         msg = (
-            f"PROBLEMS.md names {sorted(set(missing))}, which infra/problems_tables.py "
-            "cannot place in either table; add each to ALGORITHMS or ORACLES"
+            f"the suite applies {unclaimed} and {METHOD_NOTES.name} claims neither; "
+            "the table cannot be narrower than what is running"
         )
         raise UnnamedSymbolError(msg)
 

@@ -1,7 +1,7 @@
 """QA figure: what hill climbing does, and what it was choosing between.
 
 Two claims, and they need each other. A trajectory alone shows a search
-improving without saying whether it stopped anywhere good; a landscape alone
+improving without saying whether it stopped anywhere good; a environment alone
 shows the problem without saying whether the search solved it.
 
 Panel (a) is the search trajectory: maximized log-likelihood against
@@ -87,20 +87,20 @@ def search_trajectories(
         ]
         reached = max(reached, result.log_likelihood)
 
-    landscape = np.array(
+    environment = np.array(
         sorted(
             score_topology(topology, alignment, params.k)
             for topology in enumerate_topologies(sorted(alignment))
         )
     )
     truth = score_topology(params.tau, alignment, params.k)
-    return trajectories, truth, landscape, reached
+    return trajectories, truth, environment, reached
 
 
 def build_figure(
     trajectories: dict[str, list[tuple[int, float]]],
     truth: float,
-    landscape: np.ndarray,
+    environment: np.ndarray,
     reached: float,
     params: SimulationParams,
 ) -> tuple[Figure, str]:
@@ -112,7 +112,7 @@ def build_figure(
         Per-move-set ``(fits, log-likelihood)`` pairs.
     truth : float
         The generating tree's own maximized log-likelihood.
-    landscape : np.ndarray
+    environment : np.ndarray
         Every enumerated topology's score, ascending.
     reached : float
         The best score any search reached.
@@ -155,8 +155,8 @@ def build_figure(
 
         style = series_style(2)
         axes[1].plot(
-            np.arange(1, landscape.size + 1),
-            landscape,
+            np.arange(1, environment.size + 1),
+            environment,
             marker=style["marker"],
             linestyle="none",
             color=style["color"],
@@ -177,7 +177,7 @@ def build_figure(
         axes[1].set_title("(b) every topology", loc="left")
         fig.tight_layout()
 
-    gap = float(landscape[-1] - landscape[-2])
+    gap = float(environment[-1] - environment[-2])
     caption = (
         f"Hill climbing over tree topologies, scoring every candidate with the "
         f"same model-agnostic optimizer used for the Potts and hidden Markov "
@@ -185,7 +185,7 @@ def build_figure(
         f"{latex_integer(params.n_sites)} sites, seed {params.seed}. "
         f"(a) Log-likelihood against candidate fits spent, from a randomly "
         f"drawn starting topology; the dotted line is the generating tree's "
-        f"own score. (b) All {landscape.size} unrooted topologies on this leaf "
+        f"own score. (b) All {environment.size} unrooted topologies on this leaf "
         f"set, scored and ranked, with the search's endpoint dashed. Below 8 "
         f"taxa this enumeration is affordable, which is what makes "
         f"the phrase found the best tree a checkable claim rather than an "

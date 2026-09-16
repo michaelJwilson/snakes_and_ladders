@@ -1,7 +1,7 @@
 """Single-position search over a hidden Markov state path at known parameters.
 
 The third instance of :class:`~snakes_and_ladders.learn.environment.Environment`, beside
-the Potts landscape and (in ``snakes_and_ladders.search``) the tree. It exists for the same
+the Potts environment and (in ``snakes_and_ladders.search``) the tree. It exists for the same
 reason ``snakes_and_ladders.opt`` keeps a Potts chain and an HMM beside branch lengths: an
 interface justified by one model is shaped by that model, and the only way to
 show that :class:`Environment` is not shaped by lattices is to put something
@@ -10,7 +10,7 @@ that is not a lattice behind it.
 **The parameters arrive as plain arrays.** ``learn/CLAUDE.md`` forbids
 importing ``snakes_and_ladders.sim``, so this module never sees an ``HmmParams``; a caller
 in ``snakes_and_ladders.search`` --- which may import both halves --- unpacks one. That is
-the same reason :meth:`PottsLandscape.on_graph` takes an edge list rather
+the same reason :meth:`PottsEnvironment.on_graph` takes an edge list rather
 than a ``PottsGraph``.
 
 **The objective is the joint log-probability of a path and the observations
@@ -35,7 +35,7 @@ Revision = tuple[int, int]
 Path = tuple[int, ...]
 
 
-class StatePathLandscape(Environment[Path, Revision]):
+class HmmEnvironment(Environment[Path, Revision]):
     """Search over hidden state paths, one position at a time.
 
     Parameters
@@ -197,7 +197,7 @@ class StatePathLandscape(Environment[Path, Revision]):
         """The weight vector whose policy is greedy, up to temperature.
 
         The reward is the plain sum of the two features, so ``(1, 1)`` scores
-        exactly by reward. Unlike the Potts landscape, whose weights are
+        exactly by reward. Unlike the Potts environment, whose weights are
         ``(J, 1)``, this carries no parameter --- which makes it the cleaner
         of the two recovery targets.
         """
@@ -242,7 +242,7 @@ def enumerate_paths(n_states: int, length: int) -> Iterator[Path]:
     return itertools.product(range(n_states), repeat=length)
 
 
-def optimum(landscape: StatePathLandscape) -> tuple[Path, float]:
+def optimum(environment: HmmEnvironment) -> tuple[Path, float]:
     """The maximum-a-posteriori path, by exhaustive enumeration.
 
     Returns
@@ -253,8 +253,8 @@ def optimum(landscape: StatePathLandscape) -> tuple[Path, float]:
     """
     best_path: Path | None = None
     best_energy = -float("inf")
-    for path in enumerate_paths(landscape.n_states, landscape.length):
-        energy = landscape.energy(path)
+    for path in enumerate_paths(environment.n_states, environment.length):
+        energy = environment.energy(path)
         if energy > best_energy:
             best_path, best_energy = path, energy
     assert best_path is not None

@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.learn.potts import Configuration, PottsLandscape, optimum
+from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment, optimum
 from snakes_and_ladders.learn.relaxed import (
     MINIMUM_TEMPERATURE,
     RelaxationMode,
@@ -48,8 +48,8 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 HARD = (-0.9, np.array([0.4, 0.35, -0.6]), 7)
 
 
-def _landscape() -> PottsLandscape:
-    return PottsLandscape(*HARD)
+def _environment() -> PottsEnvironment:
+    return PottsEnvironment(*HARD)
 
 
 def _hmm(length: int = 8) -> tuple[RelaxedHmmPath, HmmParams, np.ndarray]:
@@ -88,12 +88,12 @@ def test_the_potts_relaxation_is_exact_at_every_corner() -> None:
     # A relaxation that disagrees with the discrete score at a one-hot is a
     # different model, and every measurement made against it transfers to
     # nothing.
-    landscape = PottsLandscape(-0.9, np.array([0.4, 0.35, -0.6]), 5)
-    objective = RelaxedPotts(landscape)
+    environment = PottsEnvironment(-0.9, np.array([0.4, 0.35, -0.6]), 5)
+    objective = RelaxedPotts(environment)
 
     for candidate in itertools.product(range(3), repeat=5):
         relaxed = float(objective.relaxed(one_hot(candidate, 3)))
-        assert relaxed == pytest.approx(landscape.energy(candidate), rel=1e-11)
+        assert relaxed == pytest.approx(environment.energy(candidate), rel=1e-11)
 
 
 @pytest.mark.oracle
@@ -140,7 +140,7 @@ def test_the_expected_discrete_score_equals_the_score_at_the_marginals(
     # algebra with the closed form. It licenses the deterministic relaxation:
     # it approximates nothing.
     torch.manual_seed(seed)
-    for objective in (RelaxedPotts(_landscape()), _hmm(length=7)[0]):
+    for objective in (RelaxedPotts(_environment()), _hmm(length=7)[0]):
         logits = torch.randn(
             (objective.n_sites, objective.n_states), dtype=torch.float64
         )
@@ -208,7 +208,7 @@ def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> No
     # a vertex, so the relaxed optimum cannot exceed the discrete one: what a
     # relaxed search loses is lost to local optima of the ascent, never to the
     # relaxation.
-    objective = RelaxedPotts(_landscape())
+    objective = RelaxedPotts(_environment())
     _, best = enumerate_optimum(objective)
     generator = torch.Generator().manual_seed(4)
 
@@ -226,7 +226,7 @@ def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> No
 def test_the_two_objectives_satisfy_the_protocol() -> None:
     # Estimators, exact gradient and optimizer are written against
     # `RelaxedObjective`, never against a Potts chain or an HMM.
-    assert isinstance(RelaxedPotts(_landscape()), RelaxedObjective)
+    assert isinstance(RelaxedPotts(_environment()), RelaxedObjective)
     assert isinstance(_hmm(length=4)[0], RelaxedObjective)
 
 
@@ -256,7 +256,7 @@ def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     #
     # The run below uses 2000 draws to stay inside the CI budget, so it
     # asserts the *ordering*, which is stable, rather than the numbers above.
-    objective = RelaxedPotts(_landscape())
+    objective = RelaxedPotts(_environment())
     torch.manual_seed(0)
     logits = 0.5 * torch.randn(
         (objective.n_sites, objective.n_states), dtype=torch.float64
@@ -288,7 +288,7 @@ def test_more_samples_cut_the_variance_and_leave_the_bias() -> None:
     # The distinction the two are reported separately for: averaging is a
     # variance reduction and not a bias reduction, so a method that fails
     # because of bias cannot be fixed by drawing more.
-    objective = RelaxedPotts(_landscape())
+    objective = RelaxedPotts(_environment())
     torch.manual_seed(0)
     logits = 0.5 * torch.randn(
         (objective.n_sites, objective.n_states), dtype=torch.float64
@@ -317,7 +317,7 @@ def test_more_samples_cut_the_variance_and_leave_the_bias() -> None:
 def test_the_exact_gradient_matches_a_finite_difference() -> None:
     # The reference every estimator is measured against needs its own check,
     # or a bias measurement is only evidence that two wrong things differ.
-    objective = RelaxedPotts(_landscape())
+    objective = RelaxedPotts(_environment())
     torch.manual_seed(1)
     logits = 0.5 * torch.randn(
         (objective.n_sites, objective.n_states), dtype=torch.float64
@@ -366,15 +366,15 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     # configuration until the end. Matched are the restart count and the
     # seeds. The relaxation already wins at 25 gradient steps (15/40,
     # p = 0.0064), so the advantage is not bought with the larger budget.
-    landscape = _landscape()
-    objective = RelaxedPotts(landscape)
-    _, best = optimum(landscape)
+    environment = _environment()
+    objective = RelaxedPotts(environment)
+    _, best = optimum(environment)
 
     greedy = np.array(
         [
-            landscape.energy(
+            environment.energy(
                 greedy_rollout(
-                    landscape, landscape.reset(np.random.default_rng(seed)), 200
+                    environment, environment.reset(np.random.default_rng(seed)), 200
                 ).states[-1]
             )
             > best - 1e-9
@@ -405,15 +405,15 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
 def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
     # Reported as a tie because it is one, the precedent #193 set for the tree
     # policy.
-    landscape = _landscape()
-    objective = RelaxedPotts(landscape)
-    _, best = optimum(landscape)
+    environment = _environment()
+    objective = RelaxedPotts(environment)
+    _, best = optimum(environment)
 
     greedy = np.array(
         [
-            landscape.energy(
+            environment.energy(
                 greedy_rollout(
-                    landscape, landscape.reset(np.random.default_rng(seed)), 200
+                    environment, environment.reset(np.random.default_rng(seed)), 200
                 ).states[-1]
             )
             > best - 1e-9
@@ -560,7 +560,7 @@ def test_annealing_reaches_the_final_temperature_during_optimization() -> None:
     # Both schedules are supported because the fixed-`tau` sweep is the
     # measurement and annealing the practice. Checked here: the annealed run
     # anneals rather than silently holding `temperature`.
-    objective = RelaxedPotts(_landscape())
+    objective = RelaxedPotts(_environment())
 
     fixed = optimize(
         objective,

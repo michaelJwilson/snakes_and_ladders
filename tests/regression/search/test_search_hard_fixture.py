@@ -153,7 +153,7 @@ def test_every_nni_failure_stops_at_a_genuine_local_optimum(
 ) -> None:
     # The difference between a hard fixture and too short an episode. If a
     # run stopped with an improving move still available, the failure would
-    # measure HORIZON rather than the landscape.
+    # measure HORIZON rather than the environment.
     environment = _environment(params, alignment, MoveSet.NNI)
     best = _enumerated_maximum(environment, alignment)
     endpoints = _endpoints(environment, params.seed)

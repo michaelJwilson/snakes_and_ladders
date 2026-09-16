@@ -59,7 +59,7 @@ from snakes_and_ladders.inputs import library_versions, module_closure
 from snakes_and_ladders.learn.exact import exact_expected_return
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
-    PottsLandscape,
+    PottsEnvironment,
     enumerate_configurations,
     optimum,
 )
@@ -298,35 +298,41 @@ def tree_surrogate_baseline(loaded: Fixture) -> dict[str, Measurement]:
     }
 
 
-def potts_landscape(loaded: Fixture) -> PottsLandscape:
+def potts_environment(loaded: Fixture) -> PottsEnvironment:
     """The declared Potts chain as a single-flip search, at an enumerable length."""
     params = loaded.params
-    return PottsLandscape(
+    return PottsEnvironment(
         coupling=params.coupling, field=params.field, chain_length=RL_CHAIN_LENGTH
     )
 
 
-def potts_landscape_baseline(loaded: Fixture) -> dict[str, Measurement]:
+def potts_environment_baseline(loaded: Fixture) -> dict[str, Measurement]:
     """What an untrained policy achieves on the enumerable Potts chain.
 
     The optimum is a sum over every configuration and so is the expected
     return of a policy, which is why both are computed here rather than twice
     per training test.
     """
-    landscape = potts_landscape(loaded)
-    states = list(enumerate_configurations(landscape.n_states, landscape.chain_length))
+    environment = potts_environment(loaded)
+    states = list(
+        enumerate_configurations(environment.n_states, environment.chain_length)
+    )
     untrained = LinearPolicy(2)
     generator = np.random.default_rng(1)
     reached = float(
         np.mean(
             [
                 abs(
-                    landscape.energy(
+                    environment.energy(
                         rollout(
-                            landscape, untrained, generator, RL_ROLLOUT_HORIZON, start=s
+                            environment,
+                            untrained,
+                            generator,
+                            RL_ROLLOUT_HORIZON,
+                            start=s,
                         ).states[-1]
                     )
-                    - optimum(landscape)[1]
+                    - optimum(environment)[1]
                 )
                 < 1e-9
                 for s in states
@@ -338,7 +344,7 @@ def potts_landscape_baseline(loaded: Fixture) -> dict[str, Measurement]:
             [
                 float(
                     exact_expected_return(
-                        landscape, untrained, s, RL_RETURN_HORIZON
+                        environment, untrained, s, RL_RETURN_HORIZON
                     ).detach()
                 )
                 for s in states
@@ -349,7 +355,7 @@ def potts_landscape_baseline(loaded: Fixture) -> dict[str, Measurement]:
     return {
         "enumerated_optimum": Measurement(
             algorithm="exhaustive enumeration of every configuration of the chain",
-            value=float(optimum(landscape)[1]),
+            value=float(optimum(environment)[1]),
             seed=None,
             budget=chain,
             rtol=None,
@@ -553,7 +559,7 @@ SPECS: tuple[BaselineSpec, ...] = (
             "snakes_and_ladders.learn.potts",
             "snakes_and_ladders.learn.rollout",
         ),
-        compute=potts_landscape_baseline,
+        compute=potts_environment_baseline,
     ),
 )
 

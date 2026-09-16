@@ -66,7 +66,7 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import torch
 
-from snakes_and_ladders.learn.potts import Configuration, PottsLandscape
+from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment
 
 #: Below this the softmax saturates in float64 and the gradient underflows, so
 #: a smaller temperature is refused rather than silently returning a stalled
@@ -130,28 +130,28 @@ class RelaxedPotts(RelaxedObjective):
     """The Potts chain's score, extended to the simplex.
 
     ``J * sum_t sum_a P[t, a] P[t+1, a] + sum_t sum_a P[t, a] h[a]``, which at
-    a one-hot is :meth:`snakes_and_ladders.learn.potts.PottsLandscape.energy` exactly. The
-    parameters are read off the landscape rather than re-declared, so the
+    a one-hot is :meth:`snakes_and_ladders.learn.potts.PottsEnvironment.energy` exactly. The
+    parameters are read off the environment rather than re-declared, so the
     extension cannot drift from what it extends.
     """
 
-    landscape: PottsLandscape
+    environment: PottsEnvironment
 
     @property
     def n_sites(self) -> int:
-        return self.landscape.chain_length
+        return self.environment.chain_length
 
     @property
     def n_states(self) -> int:
-        return self.landscape.n_states
+        return self.environment.n_states
 
     def relaxed(self, probabilities: torch.Tensor) -> torch.Tensor:
-        field = torch.from_numpy(self.landscape.field)
+        field = torch.from_numpy(self.environment.field)
         agreement = (probabilities[:-1] * probabilities[1:]).sum()
-        return self.landscape.coupling * agreement + (probabilities * field).sum()
+        return self.environment.coupling * agreement + (probabilities * field).sum()
 
     def discrete(self, configuration: Configuration) -> float:
-        return self.landscape.energy(configuration)
+        return self.environment.energy(configuration)
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-"""QA figure: what a learned policy can and cannot do on a rugged tree landscape.
+"""QA figure: what a learned policy can and cannot do on a rugged tree environment.
 
 Milestone 2.1's phylogenetic half asks whether a learned proposal policy beats
 hill climbing. On the 6-taxon fixture the question is unaskable, because greedy
@@ -6,7 +6,7 @@ reaches the enumerated optimum from every start. Issue #177 supplied a fixture
 where it does not. This figure reports what happened when a policy was trained
 on it, and it is a negative result.
 
-Panel (a) is the landscape: every unrooted topology scored and sorted, with the
+Panel (a) is the environment: every unrooted topology scored and sorted, with the
 states no single NNI move improves marked. Panel (b) is the answer: the
 policy's success rate over independent training seeds against greedy's, both at
 the same per-episode budget from the same starting topologies.
@@ -218,11 +218,11 @@ def build_figure(
     with letter_style():
         figure, axes = plt.subplots(1, 2, figsize=ONE_COLUMN_WIDE)
 
-        landscape = series_style(0)
+        environment = series_style(0)
         axes[0].plot(
             np.arange(1, len(scores) + 1),
             scores,
-            color=landscape["color"],
+            color=environment["color"],
             linewidth=1.0,
             label="all topologies",
         )
@@ -265,7 +265,7 @@ def build_figure(
         figure.tight_layout()
 
     caption = (
-        "A learned policy against hill climbing on a landscape where hill "
+        "A learned policy against hill climbing on a environment where hill "
         "climbing fails, and why the answer is a null result. Fixture: "
         f"{latex_integer(len(scores))} unrooted topologies on "
         f"{latex_integer(n_taxa)} taxa, "
