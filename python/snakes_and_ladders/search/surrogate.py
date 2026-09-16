@@ -198,7 +198,7 @@ def strip_log_partition_target() -> LatticeTarget:
         if shape is None or boundary is None or len(shape) != 2:
             msg = f"the strip oracle needs a 2-D lattice, got shape {shape}"
             raise ValueError(msg)
-        couplings = np.asarray(graph.coupling, dtype=float)
+        couplings = graph.edge_coupling
         if couplings.size and float(couplings.max() - couplings.min()) > 0.0:
             msg = "the strip oracle takes one uniform coupling"
             raise ValueError(msg)
@@ -250,7 +250,7 @@ def lattice_examples(
         features.append(lattice_features(graph, field))
         targets.append(target(graph, field))
         tokens.append(lattice_tokens(graph, field))
-        adjacency.append(np.array(graph.edges, dtype=np.int64).reshape(-1, 2))
+        adjacency.append(graph.edge_index)
     return Examples(
         torch.stack(features),
         torch.tensor(targets, dtype=torch.float64),

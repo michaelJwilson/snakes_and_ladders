@@ -249,9 +249,11 @@ def _tree_arguments(
 def _edge_tensors(
     graph: PottsGraph, couplings: torch.Tensor | None
 ) -> tuple[np.ndarray, torch.Tensor]:
-    pairs = np.array(graph.edges, dtype=np.int64).reshape(-1, 2)
+    pairs = graph.edge_index
     if couplings is None:
-        couplings = torch.as_tensor(np.asarray(graph.coupling, dtype=float))
+        # `.copy()`: the graph's cached array is unwritable, and a tensor
+        # sharing it would reach back into the cache on any in-place op.
+        couplings = torch.as_tensor(graph.edge_coupling.copy())
     if couplings.shape != (pairs.shape[0],):
         msg = f"one coupling per edge: expected {pairs.shape[0]}, got {tuple(couplings.shape)}"
         raise ValueError(msg)
@@ -424,7 +426,9 @@ def decoupled_ground_energy(graph: PottsGraph, field: torch.Tensor) -> torch.Ten
     (``eq:decoupled-energy-bound``).
     """
     rows = site_rows(field, graph.n_nodes)
-    couplings = torch.as_tensor(np.asarray(graph.coupling, dtype=float))
+    # `.copy()`: the graph's cached array is unwritable, and a tensor sharing
+    # it would reach back into the cache on any in-place op.
+    couplings = torch.as_tensor(graph.edge_coupling.copy())
     return -rows.max(dim=1).values.sum() - couplings.clamp_min(0.0).sum()
 
 
@@ -472,7 +476,7 @@ def ground_state_energy_bounds(
     scaled_field = site_rows(
         torch.as_tensor(np.asarray(field, dtype=float) * beta), graph.n_nodes
     )
-    scaled_couplings = torch.as_tensor(np.asarray(graph.coupling, dtype=float) * beta)
+    scaled_couplings = torch.as_tensor(graph.edge_coupling * beta)
     lower_log_z = float(
         mean_field_log_partition(graph, scaled_field, couplings=scaled_couplings)
     )

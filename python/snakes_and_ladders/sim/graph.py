@@ -37,6 +37,24 @@ class BoundaryCondition(StrEnum):
     PERIODIC = "periodic"
 
 
+def _read_only(values: np.ndarray) -> np.ndarray:
+    """Mark a cached derived array unwritable, and return it.
+
+    A `cached_property` hands the *same* array to every caller, so a consumer
+    that writes through it corrupts the graph for every later call --- and the
+    graph is frozen, so nothing else about it can change under a caller. The
+    flag turns that from silent corruption into a `ValueError` at the write.
+
+    It also decides a real case: `torch.as_tensor` on a writable NumPy array
+    shares its buffer, so an in-place tensor op would reach back into the
+    cache. Against an unwritable one PyTorch copies instead (with a warning
+    the callers here avoid by copying explicitly), which is the behaviour the
+    consumers want.
+    """
+    values.setflags(write=False)
+    return values
+
+
 @dataclass(frozen=True)
 class PottsGraph:
     """An undirected graph carrying a per-edge Potts coupling.
@@ -88,6 +106,35 @@ class PottsGraph:
             if not (0 <= first < self.n_nodes and 0 <= second < self.n_nodes):
                 msg = f"edge {edge} names a node outside [0, {self.n_nodes})"
                 raise ValueError(msg)
+
+    @cached_property
+    def edge_index(self) -> np.ndarray:
+        """The edges as an ``(n_edges, 2)`` array of node indices, derived once.
+
+        `edges` is a tuple of pairs, which is what a fixture declares and what
+        `__post_init__` validates, and is not what any consumer uses: every one
+        of them indexes an array by it. Converting is ``O(n_edges)`` and
+        allocates, so a consumer that writes ``np.asarray(graph.edges)`` inside
+        a function pays that on every call --- 604 of those conversions were
+        81% of a 200-step `anneal_potts` at 32x32 (issue #623).
+
+        Empty is ``(0, 2)`` rather than ``(0,)``, so a caller may index the
+        columns of a graph with no edges without a special case.
+        """
+        if not self.edges:
+            return _read_only(np.empty((0, 2), dtype=np.int64))
+
+        return _read_only(np.asarray(self.edges, dtype=np.int64).reshape(-1, 2))
+
+    @cached_property
+    def edge_coupling(self) -> np.ndarray:
+        """The couplings as a ``float64`` array, in the graph's edge order.
+
+        The companion to :attr:`edge_index`, and derived for the same reason:
+        one coupling per edge is this class's invariant, so the array form is
+        the class's to hold rather than each consumer's to rebuild.
+        """
+        return _read_only(np.asarray(self.coupling, dtype=np.float64))
 
     def weighted_edges(self) -> Iterator[tuple[tuple[int, int], float]]:
         """Yield each edge with the coupling on it, in the graph's edge order.

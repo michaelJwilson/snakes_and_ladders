@@ -300,7 +300,7 @@ def alpha_expansion(
     ValueError
         If a coupling is negative, or the cap is reached.
     """
-    couplings = np.asarray(graph.coupling, dtype=float)
+    couplings = graph.edge_coupling
     if couplings.size and couplings.min() < 0.0:
         msg = (
             f"every coupling must be non-negative, got {couplings.min()}: the "
@@ -433,7 +433,7 @@ def _infinite_capacity(graph: PottsGraph, values: np.ndarray) -> float:
     bookkeeping, since subtracting it leaves a residual of ``nan``. This is
     larger than every alternative cut by construction and stays finite.
     """
-    return 1.0 + float(np.abs(values).sum()) + float(np.asarray(graph.coupling).sum())
+    return 1.0 + float(np.abs(values).sum()) + float(graph.edge_coupling.sum())
 
 
 def _site_field(
@@ -577,7 +577,7 @@ def alpha_beta_swap(
         finite state space makes the second impossible on a correct
         implementation, as it is for :func:`alpha_expansion`.
     """
-    couplings = np.asarray(graph.coupling, dtype=float)
+    couplings = graph.edge_coupling
     if couplings.size and couplings.min() < 0.0:
         msg = (
             f"every coupling must be non-negative, got {couplings.min()}: the "

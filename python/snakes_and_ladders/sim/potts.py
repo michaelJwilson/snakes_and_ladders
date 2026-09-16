@@ -132,9 +132,9 @@ def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.nda
         # edge: issue #341 measured that loop at 92% of this function's self
         # time, and #336 found it the term left in the Rust ground state's
         # wall clock.
-        ends = np.asarray(graph.edges, dtype=np.int64)
+        ends = graph.edge_index
         agree = states[..., ends[:, 0]] == states[..., ends[:, 1]]
-        total = total + agree.astype(float) @ np.asarray(graph.coupling, dtype=float)
+        total = total + agree.astype(float) @ graph.edge_coupling
     return -np.asarray(total)
 
 
