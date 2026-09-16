@@ -183,6 +183,55 @@ def trial_count(covariate: torch.Tensor | None, declared: torch.Tensor) -> torch
     return validated_trials(covariate, declared)
 
 
+def exposure(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
+    """The exposure to scale the rate by, shaped to broadcast along the states.
+
+    The offset half of :func:`trial_count`, and the same layout rule for the
+    same reason: shaped ``(..., 1)`` it broadcasts along the state axis, and
+    materialised ``(..., n_states)`` by the caller it makes every term of the
+    density ``n_obs * n_states`` (issue #631).
+
+    Returns
+    -------
+    torch.Tensor
+
+    Raises
+    ------
+    ValueError
+        If the covariate does not end in a singleton axis, or is not positive.
+    """
+    if covariate.ndim == 0 or covariate.shape[-1] != 1:
+        msg = (
+            f"an exposure per observation must end in a singleton axis so it "
+            f"broadcasts along the states, got {tuple(covariate.shape)}"
+        )
+        raise ValueError(msg)
+    return validated_exposure(covariate, declared)
+
+
+def validated_exposure(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
+    """``covariate`` as exposures, in ``declared``'s dtype.
+
+    The positivity check alone, without :func:`exposure`'s trailing-axis rule,
+    for the M step --- which flattens over sequences and positions and never
+    broadcasts along the states.
+
+    Returns
+    -------
+    torch.Tensor
+
+    Raises
+    ------
+    ValueError
+        If an exposure is not strictly positive.
+    """
+    offsets = covariate.to(declared.dtype)
+    if bool((offsets <= 0.0).any()):
+        msg = "every exposure must be strictly positive"
+        raise ValueError(msg)
+    return offsets
+
+
 def validated_trials(covariate: torch.Tensor, declared: torch.Tensor) -> torch.Tensor:
     """``covariate`` as trial counts, in ``declared``'s dtype.
 
@@ -988,12 +1037,26 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
 
     @property
     def mean(self) -> torch.Tensor:
-        """Per-state ``mu``, shape ``(n_states,)``."""
+        """Per-state ``mu``, shape ``(n_states,)``.
+
+        **The state's own rate, and what recovery targets.** Under an exposure
+        the *emission's* mean at observation ``i`` in state ``k`` is
+        ``e_i mu_k``; ``mu_k`` is the per-state association that survives it,
+        and is the parameter fitted and recovered. So this property keeps a
+        value under a varying exposure rather than losing one (issue #631):
+        the exposure is conditioned on, never fitted, and an exposure of one
+        is the reference the family declares itself at.
+        """
         return self._mean
 
     @property
     def variance(self) -> torch.Tensor:
-        """``mu + mu**2 / r``, the relation that makes this a count model."""
+        """``mu + mu**2 / r``, the relation that makes this a count model.
+
+        At unit exposure, for the reason :attr:`mean` gives. At exposure
+        ``e_i`` the emission's variance is ``e_i mu + (e_i mu)**2 / r``, which
+        the relation still holds for, one rate over.
+        """
         return self._mean + self._mean**2 / self._dispersion
 
     def sample(
@@ -1002,25 +1065,39 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         rng: np.random.Generator,
         covariate: torch.Tensor | None = None,
     ) -> np.ndarray:
-        """Draw one count per entry of ``states``."""
-        refuse_covariate(self, covariate)
+        """Draw one count per entry of ``states``.
+
+        ``covariate`` is the exposure per draw, shape ``(n_draws, 1)``; the
+        rate is ``e_i mu_k``. Without it every draw is at unit exposure.
+        """
         r = self._dispersion.numpy()[states]
-        mu = self._mean.numpy()[states]
-        return np.asarray(rng.negative_binomial(r, r / (r + mu)))
+        rate = self._mean.numpy()[states]
+        if covariate is not None:
+            rate = rate * exposure(covariate, self._mean).reshape(-1).numpy()
+        return np.asarray(rng.negative_binomial(r, r / (r + rate)))
 
     def log_density(
         self, observations: torch.Tensor, covariate: torch.Tensor | None = None
     ) -> torch.Tensor:
-        """The negative binomial log-probability of every count under every state."""
-        refuse_covariate(self, covariate)
+        """The negative binomial log-probability of every count under every state.
+
+        ``covariate`` is the exposure per observation, shape ``(..., 1)`` so it
+        broadcasts along the state axis; the rate scored at is ``e_i mu_k``.
+        Where the exposure is constant the two models are the same model,
+        absorbing it as ``log mu - log(c)``, which is what makes the conserved
+        family a referee for this one (issue #631).
+        """
         counts = observations.unsqueeze(-1).to(self._mean.dtype)
-        total = self._dispersion + self._mean
+        rate = self._mean
+        if covariate is not None:
+            rate = exposure(covariate, self._mean) * self._mean
+        total = self._dispersion + rate
         return (
             torch.lgamma(counts + self._dispersion)
             - torch.lgamma(self._dispersion)
             - torch.lgamma(counts + 1.0)
             + self._dispersion * torch.log(self._dispersion / total)
-            + counts * torch.log(self._mean / total)
+            + counts * torch.log(rate / total)
         )
 
     def bregman_divergence(self, observations: torch.Tensor) -> torch.Tensor:
@@ -1074,10 +1151,21 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
             bound the data can identify it over, the iterations taken, and the
             weighted score at the answer.
         """
-        refuse_covariate(self, covariate)
         values = observations.reshape(-1).to(posterior.dtype)
         weights = posterior.reshape(-1, self.n_states)
-        mass = weights.sum(dim=0)
+        offsets = (
+            None
+            if covariate is None
+            else validated_exposure(covariate, self._mean).reshape(-1)
+        )
+        # The exposure path forms its denominator as `weights.T @ offsets`:
+        # the same number as `(weights * offsets.unsqueeze(-1)).sum(0)` with no
+        # `(n_obs, n_states)` temporary, BLAS-backed. The numerator keeps the
+        # expression it had, although the same rewrite applies to it: a matmul
+        # sums in a different order, and doing it here costs the bit-for-bit
+        # agreement with the conserved family that is this ticket's Done-when
+        # (#631). Removing that temporary for every caller is #650.
+        mass = _weighted_mass(weights, offsets)
         mean = (weights * values.unsqueeze(-1)).sum(dim=0) / mass
 
         dispersion = torch.empty_like(mean)
@@ -1085,7 +1173,12 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         iterations = 0
         residual = 0.0
         for state in range(self.n_states):
-            solved = _solve_dispersion(values, weights[:, state], float(mean[state]))
+            # Formed once per state, outside the bisection: the solve is at
+            # fixed `mu`, so `e * mu` does not move across its ~50 steps.
+            rate = (
+                float(mean[state]) if offsets is None else offsets * float(mean[state])
+            )
+            solved = _solve_dispersion(values, weights[:, state], rate)
             dispersion[state] = solved.value
             boundary = boundary or solved.at_boundary
             iterations = max(iterations, solved.iterations)
@@ -2412,7 +2505,10 @@ class _SolvedDispersion:
 
 
 def _weighted_dispersion_score(
-    values: torch.Tensor, weights: torch.Tensor, dispersion: float, mean: float
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    dispersion: float,
+    mean: float | torch.Tensor,
 ) -> float:
     """The posterior-weighted score in ``r``, with the mean profiled out.
 
@@ -2420,23 +2516,41 @@ def _weighted_dispersion_score(
     term in ``(mu - y_t) / (r + mu)`` that appears in the full derivative
     vanishes because ``mu`` is the weighted mean of ``y``, which is what
     "profiled out" buys.
+
+    Under an exposure ``mean`` is the **rate** ``e_t mu`` per observation, and
+    the last term stops factoring out of the sum: it is
+    ``sum_t w_t log(r / (r + e_t mu))``. The profiling identity still holds,
+    because the closed form for ``mu`` under an exposure is
+    ``sum_t w_t y_t / sum_t w_t e_t`` (issue #631).
     """
     r = torch.tensor(dispersion, dtype=values.dtype)
-    return float(
-        (weights * (torch.digamma(values + r) - torch.digamma(r))).sum()
-        + weights.sum() * math.log(dispersion / (dispersion + mean))
-    )
+    weighted = (weights * (torch.digamma(values + r) - torch.digamma(r))).sum()
+    if isinstance(mean, torch.Tensor):
+        return float(
+            weighted + (weights * torch.log(dispersion / (dispersion + mean))).sum()
+        )
+    return float(weighted + weights.sum() * math.log(dispersion / (dispersion + mean)))
 
 
 def _solve_dispersion(
     values: torch.Tensor,
     weights: torch.Tensor,
-    mean: float,
+    mean: float | torch.Tensor,
     *,
     tolerance: float = 1e-12,
 ) -> _SolvedDispersion:
-    """Maximize the weighted likelihood in ``r`` by bisection on ``log r``."""
-    upper = identifiable_dispersion_bound(mean, float(weights.sum()))
+    """Maximize the weighted likelihood in ``r`` by bisection on ``log r``.
+
+    ``mean`` is a per-state mean, or the **rate** ``e_t mu`` per observation
+    under an exposure. It is formed once by the caller and passed in rather
+    than rebuilt here: the solve is at fixed ``mu``, so ``e * mu`` does not
+    change across the roughly fifty bisection steps, and computing it inside
+    the score would be that many needless ``n_obs``-length multiplies per
+    state. Invisible at a fixture size and asymptotically wasteful (#631).
+    """
+    upper = identifiable_dispersion_bound(
+        _effective_rate(mean, weights), float(weights.sum())
+    )
     lower = upper * _DISPERSION_BRACKET_RATIO
     if _weighted_dispersion_score(values, weights, upper, mean) > 0.0:
         return _SolvedDispersion(upper, at_boundary=True, iterations=0, residual=0.0)
@@ -2460,6 +2574,51 @@ def _solve_dispersion(
         residual=abs(_weighted_dispersion_score(values, weights, dispersion, mean))
         / float(weights.sum()),
     )
+
+
+def _weighted_mass(weights: torch.Tensor, offsets: torch.Tensor | None) -> torch.Tensor:
+    """``sum_t w_t e_t`` per state: the denominator of the profiled mean.
+
+    Three forms, and the middle one is why this is a function. Without an
+    exposure it is the posterior mass. With a **constant** exposure it is
+    ``e sum_t w_t`` exactly, because a constant factors out of the sum --- and
+    forming it as a matmul instead leaves a one-ULP residue, which is enough to
+    lose the bit-for-bit agreement with the conserved family at ``e = 1`` that
+    issue #631 asks for. With a varying one it is ``weights.T @ offsets``: the
+    same number as ``(weights * offsets.unsqueeze(-1)).sum(0)`` with no
+    ``(n_obs, n_states)`` temporary, and BLAS-backed.
+
+    Returns
+    -------
+    torch.Tensor
+        Shape ``(n_states,)``.
+    """
+    if offsets is None:
+        return weights.sum(dim=0)
+    first = offsets.reshape(-1)[0]
+    if bool((offsets == first).all()):
+        return weights.sum(dim=0) * first
+    return weights.T @ offsets
+
+
+def _effective_rate(mean: float | torch.Tensor, weights: torch.Tensor) -> float:
+    """The one mean :func:`identifiable_dispersion_bound` is read at.
+
+    A per-state mean is itself. A per-observation rate has no single value, so
+    the bound is taken at the *posterior-weighted mean* rate, which is the
+    construction :func:`_effective_trials` already uses one family over. A
+    constant rate reduces exactly, for the reason given there.
+
+    Returns
+    -------
+    float
+    """
+    if not isinstance(mean, torch.Tensor):
+        return mean
+    first = mean.reshape(-1)[0]
+    if bool((mean == first).all()):
+        return float(first)
+    return float((weights * mean).sum() / weights.sum())
 
 
 def identifiable_dispersion_bound(mean: float, weight: float) -> float:
