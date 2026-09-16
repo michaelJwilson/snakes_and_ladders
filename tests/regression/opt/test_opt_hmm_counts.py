@@ -277,8 +277,16 @@ def test_an_m_step_that_did_not_settle_is_refused_rather_than_returned() -> None
     starved = BetaBinomialEmission(TRIALS, [1.0, 3.0], [3.0, 1.0])
 
     def _one_step(
-        self: BetaBinomialEmission, _data: torch.Tensor, _posterior: torch.Tensor
+        self: BetaBinomialEmission,
+        _data: torch.Tensor,
+        _posterior: torch.Tensor,
+        covariate: torch.Tensor | None = None,  # noqa: ARG001 -- see below
     ) -> Reestimate[BetaBinomialEmission]:
+        # `covariate` is unused and cannot be renamed to the unused convention:
+        # the caller passes it by keyword, so this double has to spell it the
+        # way the method it replaces does (#631, #652). A double narrower than
+        # its original fails on the call rather than on the claim, which is
+        # what this one did when `baum_welch_family` began threading one.
         return Reestimate(self, converged=False, iterations=1, residual=0.5)
 
     original = BetaBinomialEmission.reestimate
