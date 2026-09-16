@@ -11,9 +11,8 @@ checks in `CHECKS.md`. A fact restated here is a fact that can drift (issue
 **Statement** is the LaTeX label of the textbook section stating the model.
 It points one way only: the registry names the document, and the document names
 no code (`docs/CLAUDE.md`), which is what keeps a module path out of the
-textbook (issue #249). `infra/problem_join.py` joins the two on it and
-`tests/regression/docs/test_problem_join.py` fails a statement no row is code
-for, and a row keyed to a statement that does not exist (issue #495).
+textbook (issue #249). `tests/regression/docs/test_document_orphans.py` asserts
+that direction on the hand-written sources.
 
 **Key** is the fixture directory under `tests/regression/fixtures/` and the
 marker its tests carry, which are one name and not two. A row with two keys is
