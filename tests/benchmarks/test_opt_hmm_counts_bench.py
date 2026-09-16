@@ -9,6 +9,7 @@ the cost of the emission term alone.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -26,7 +27,8 @@ from snakes_and_ladders.opt.hmm import (
     NegativeBinomialHmmObjective,
     PoissonHmmObjective,
 )
-from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from snakes_and_ladders.sim import fixtures
+from snakes_and_ladders.sim.hmm import simulate_sequences
 
 CountEmission = (
     PoissonEmission | BinomialEmission | NegativeBinomialEmission | BetaBinomialEmission
@@ -38,9 +40,18 @@ CountObjective = (
     | BetaBinomialHmmObjective
 )
 
+#: The declared three-state instance (`hmm/ci.yaml`), read rather than
+#: rebuilt from literals (issue #622). Only its emission is replaced below:
+#: the fixture declares a categorical family and these four are count
+#: families at the same chain. `simulate_sequences` on the swapped params is
+#: bitwise the observations the literals gave.
+PARAMS = fixtures.fixture("hmm", "ci").params
+INITIAL = PARAMS.initial
+TRANSITION = PARAMS.transition
+
+#: Trials per observation for the two binomial families. Not the fixture's ---
+#: a categorical instance declares none.
 TRIALS = np.array([12, 12, 12])
-INITIAL = np.array([0.5, 0.3, 0.2])
-TRANSITION = np.array([[0.70, 0.20, 0.10], [0.15, 0.75, 0.10], [0.20, 0.20, 0.60]])
 
 
 def _truth(name: str) -> CountEmission:
@@ -59,16 +70,7 @@ def _truth(name: str) -> CountEmission:
 def _objective(name: str) -> tuple[CountObjective, torch.Tensor]:
     """The objective and a truth point, at 600 sequences of length 15."""
     truth = _truth(name)
-    params = HmmParams(
-        n_states=3,
-        sequence_length=15,
-        n_sequences=600,
-        initial=INITIAL,
-        transition=TRANSITION,
-        emissions=truth,
-        seed=20260903,
-        tolerance=1e-12,
-    )
+    params = replace(PARAMS, emissions=truth)
     observations = simulate_sequences(params).observations
     objective: CountObjective
     if name == "poisson":
