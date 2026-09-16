@@ -32,6 +32,7 @@
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 /// Draw one category per entry of `rows`, by inverse CDF.
 ///
@@ -50,6 +51,13 @@ use pyo3::prelude::*;
 ///
 /// # Returns
 /// `Ok(())` on success, or `Err` describing the first violated precondition.
+/// Draws below this run on one thread.
+///
+/// Measured, not chosen: issue #627's ranking put `sample_rows/2000000` at
+/// 26.69 ms and `sample_rows/200000` at 2.264 ms on an idle 4-core host, and
+/// `STATUS.md` carries what the pool costs on each side of this line.
+const PARALLEL_ABOVE: usize = 100_000;
+
 pub fn sample_rows_into(
     distributions: &[f64],
     n_categories: usize,
@@ -100,6 +108,10 @@ pub fn sample_rows_into(
         cumulative[base + n_categories - 1] = 1.0;
     }
 
+    // The search is bounds-checked before it is run, so the parallel arm below
+    // carries no early return: a `par_chunks_mut` closure cannot `?` out of
+    // the function, and validating here rather than there keeps one rule for
+    // both arms.
     for (index, &row) in rows.iter().enumerate() {
         if row < 0 || row as usize >= n_rows {
             return Err(format!(
@@ -107,6 +119,44 @@ pub fn sample_rows_into(
                 index, row, n_rows
             ));
         }
+    }
+
+    // One draw, one write, and the write is to this draw's own slot: the
+    // search reads `cumulative` and nothing else, so no two threads share a
+    // mutable byte and no partial sum is reassociated. The result is the
+    // serial path's bit for bit, which `tests/regression/` pins (issue #627).
+    //
+    // `PARALLEL_ABOVE` is measured, not chosen: below it the pool costs more
+    // than the search, and the whole benchmark at 200,000 draws sits under
+    // 2.3 ms. `STATUS.md` carries the numbers on both sides.
+    if rows.len() >= PARALLEL_ABOVE {
+        let chunk = rows.len().div_ceil(rayon::current_num_threads().max(1));
+        out.par_chunks_mut(chunk)
+            .zip(rows.par_chunks(chunk))
+            .zip(draws.par_chunks(chunk))
+            .for_each(|((out_chunk, row_chunk), draw_chunk)| {
+                search_into(&cumulative, n_categories, row_chunk, draw_chunk, out_chunk);
+            });
+    } else {
+        search_into(&cumulative, n_categories, rows, draws, out);
+    }
+    Ok(())
+}
+
+/// One draw per row into `out`, the loop both arms of [`sample_rows_into`] run.
+///
+/// Split out so the serial and parallel paths execute the *same* code rather
+/// than two transcriptions of it: a divergence between them would be a
+/// difference no oracle test could attribute.
+#[inline]
+fn search_into(
+    cumulative: &[f64],
+    n_categories: usize,
+    rows: &[i64],
+    draws: &[f64],
+    out: &mut [i64],
+) {
+    for (index, &row) in rows.iter().enumerate() {
         let base = row as usize * n_categories;
         let draw = draws[index];
         // `np.argmax` over an all-false row returns 0, and this matches it.
@@ -122,7 +172,6 @@ pub fn sample_rows_into(
         }
         out[index] = chosen;
     }
-    Ok(())
 }
 
 /// [`sample_rows_into`] with the output allocated here.
