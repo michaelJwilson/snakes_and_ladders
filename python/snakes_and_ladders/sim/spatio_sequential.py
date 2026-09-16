@@ -69,16 +69,38 @@ class SpatioSequentialParams:
         ``S``, the length of every chain.
     beta : float
         Inverse temperature on the spatial prior of ``eq:joint``.
-    self_transition : float
-        The circulant self-transition rate ``t``, shared by every class.
+    self_transition : float | np.ndarray
+        The per-class kernel, in one of three forms (issue #658):
+
+        ``float``
+            The circulant self-transition rate ``t``, one kernel for the whole
+            chain, built by :func:`circulant_transition`. Every construction
+            before #658 passed this, and it stays the default.
+        ``(K, K)``
+            One matrix for the whole chain, row stochastic and **not**
+            required to be circulant. A kernel assembled from parts --- a base
+            over one latent and a kernel over another, combined into the
+            product space --- is not a circulant at any rate, so the rate above
+            cannot express one even when it does not vary.
+        ``(S - 1, K, K)``
+            One matrix per transition, the same matrices the chain recursions
+            take since #656.
+
+        The name is the rate's, and the two matrix forms outgrow it. They are
+        read as the kernel itself, and how a caller assembled one --- from two
+        kernels over a product space, from a distance between sites --- is the
+        caller's; this carries the result and does not reconstruct it.
     initial : np.ndarray
         ``Pi``, shape ``(M, K)``, one initial distribution per class.
     emissions : tuple[EmissionFamily, ...]
         One family per class, each over ``K`` states.
     covariate : np.ndarray | None
-        What each observation is scored *against*, shape ``(S, n_nodes)`` ---
-        an exposure for a rate family, a trial count for a bounded one
-        (issue #652). It belongs to the observation and not to the class, so
+        What each observation is scored *against* --- an exposure for a rate
+        family, a trial count for a bounded one (issue #652). Its leading two
+        axes are ``(S, n_nodes)`` as the observations' are, followed by
+        whatever the family takes: none for a scalar observation, a channel
+        axis for the two-channel count emission, which takes one covariate per
+        channel (issue #658). It belongs to the observation and not to the class, so
         every class's family reads the same array. ``None``, the default, is
         the model every construction before this field described: the
         families condition on nothing.
@@ -106,7 +128,7 @@ class SpatioSequentialParams:
     n_states: int
     n_positions: int
     beta: float
-    self_transition: float
+    self_transition: float | np.ndarray
     initial: np.ndarray
     emissions: tuple[EmissionFamily, ...]
     covariate: np.ndarray | None = None
@@ -121,7 +143,22 @@ class SpatioSequentialParams:
         if self.n_positions < 1:
             msg = f"a chain needs at least one position, got {self.n_positions}"
             raise ValueError(msg)
-        circulant_transition(self.n_states, self.self_transition)  # validates both
+        given = np.asarray(self.self_transition, dtype=float)
+        steps = max(self.n_positions - 1, 0)
+        square = (self.n_states, self.n_states)
+        if given.ndim == 0:
+            circulant_transition(self.n_states, float(given))  # validates both
+        elif given.shape in (square, (steps, *square)):
+            if (given < 0).any() or not np.allclose(given.sum(axis=-1), 1.0):
+                msg = "every row of every transition must be a distribution"
+                raise ValueError(msg)
+        else:
+            msg = (
+                f"self_transition has shape {given.shape}, expected a scalar "
+                f"rate, {square} one matrix for the chain, or {(steps, *square)} "
+                "one matrix per transition"
+            )
+            raise ValueError(msg)
         initial = np.asarray(self.initial, dtype=float)
         if initial.shape != (self.n_classes, self.n_states):
             msg = (
@@ -148,18 +185,39 @@ class SpatioSequentialParams:
         if self.covariate is not None:
             covariate = np.asarray(self.covariate, dtype=float)
             expected = (self.n_positions, self.graph.n_nodes)
-            if covariate.shape != expected:
+            # The leading two axes are position and node, as the observations'
+            # are. What follows them is the family's own: a scalar-observation
+            # family carries none, and the two-channel count emission carries
+            # a channel axis, one covariate per channel (issue #658). Checking
+            # only the leading two is the same latitude `gated_log_density`
+            # gives the observations, and for the same reason -- what the
+            # trailing axes mean is the family's to say, not this class's.
+            if covariate.shape[:2] != expected:
                 msg = (
-                    f"covariate has shape {covariate.shape}, expected {expected} "
-                    "-- one value per position and node, as the observations are"
+                    f"covariate has shape {covariate.shape}, expected "
+                    f"{expected} in its leading two axes -- one value per "
+                    "position and node, as the observations are, with whatever "
+                    "trailing axes the emission family takes"
                 )
                 raise ValueError(msg)
             object.__setattr__(self, "covariate", covariate)
 
     @property
     def transition(self) -> np.ndarray:
-        """The circulant transition ``A_m`` of ``eq:joint``, the same for every class."""
-        return circulant_transition(self.n_states, self.self_transition)
+        """The circulant transition ``A_m`` of ``eq:joint``, the same for every class.
+
+        Shape ``(K, K)`` where ``self_transition`` is a scalar, and
+        ``(S - 1, K, K)`` where it is one rate per step (issue #658) --- the
+        two shapes ``forward_backward`` takes, so a chain whose kernel is a
+        function of position can be written down here too. A rate per step
+        stays a *circulant*, which is what makes it one number rather than
+        ``K * (K - 1)``: the model that varies is how sticky the chain is at
+        each position, not which states it prefers to move between.
+        """
+        given = np.asarray(self.self_transition, dtype=float)
+        if given.ndim == 0:
+            return circulant_transition(self.n_states, float(given))
+        return given
 
     def scaled_graph(self) -> PottsGraph:
         """The graph with ``beta * J`` as couplings: the prior at temperature one."""
@@ -256,7 +314,14 @@ def simulate_spatio_sequential(
         if nodes.size == 0:
             continue
         emitting = np.repeat(states[m], nodes.size)  # (S * n_m,), position-major
-        drawn_obs = family.sample(emitting, rng).reshape(params.n_positions, nodes.size)
+        # The covariate is laid out the way the states are --- this class's
+        # columns, position-major --- so each draw is made under the value that
+        # belongs to it (issue #658). Without this no planted instance exists
+        # under a varying covariate, and a fit conditioned on one has nothing
+        # to recover.
+        drawn_obs = family.sample(
+            emitting, rng, covariate=_drawing_covariate(params, nodes)
+        ).reshape(params.n_positions, nodes.size)
         for column, node in enumerate(nodes):
             columns[int(node)] = drawn_obs[:, column]
     first = next(iter(columns.values()))
@@ -269,6 +334,46 @@ def simulate_spatio_sequential(
         observations=observations,
         params=params,
     )
+
+
+def _scoring_covariate(params: SpatioSequentialParams) -> torch.Tensor | None:
+    """``params.covariate`` ready to score every vertex against.
+
+    The trailing singleton the single-channel families broadcast over their
+    states with is added only where the covariate has no axes of its own; one
+    that carries the family's own axes is passed through, because the singleton
+    then belongs inside each of them and the family is what puts it there
+    (issue #658). The same rule as
+    :func:`snakes_and_ladders.likelihood.spatio_sequential.covariate_block`,
+    stated here because ``sim`` does not import ``likelihood``.
+    """
+    if params.covariate is None:
+        return None
+    covariate = params.covariate
+    return torch.as_tensor(covariate[..., None] if covariate.ndim == 2 else covariate)
+
+
+def _drawing_covariate(
+    params: SpatioSequentialParams, nodes: np.ndarray
+) -> torch.Tensor | None:
+    """``params.covariate`` for one class's nodes, flattened as the states are.
+
+    The draw runs over ``(S * n_m,)`` position-major entries, so the covariate
+    is selected by the same nodes and flattened the same way. A family whose
+    observation carries its own trailing axes keeps them after the flatten,
+    which is why the reshape names only the leading axis.
+
+    Returns
+    -------
+    torch.Tensor | None
+        ``(S * n_m, 1)`` for a scalar-observation family, ``(S * n_m, ..., 1)``
+        for one with its own axes, or ``None`` where the params carry none.
+    """
+    if params.covariate is None:
+        return None
+    block = params.covariate[:, nodes]
+    flat = block.reshape(-1, *block.shape[2:])
+    return torch.as_tensor(flat[..., None])
 
 
 def gated_log_density(
@@ -293,11 +398,7 @@ def gated_log_density(
     """
     n_positions, n_nodes = observations.shape[:2]
     table = np.empty((n_nodes, n_positions, params.n_classes, params.n_states))
-    covariate = (
-        None
-        if params.covariate is None
-        else torch.as_tensor(params.covariate[..., None])
-    )
+    covariate = _scoring_covariate(params)
     for m, family in enumerate(params.emissions):
         scores = family.log_density(
             torch.as_tensor(observations, dtype=family.observation_dtype),

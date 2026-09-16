@@ -225,7 +225,7 @@ def test_the_chain_is_the_circulant_walk_the_transition_states() -> None:
     # itself, at 999 steps per class.
     declared, fine = _fine()
     model = declared.model
-    transition = circulant_transition(model.n_states, model.self_transition)
+    transition = circulant_transition(model.n_states, float(model.self_transition))
     counts = np.zeros((model.n_states, model.n_states))
     for m in range(model.n_classes):
         np.add.at(counts, (fine.states[m, :-1], fine.states[m, 1:]), 1.0)

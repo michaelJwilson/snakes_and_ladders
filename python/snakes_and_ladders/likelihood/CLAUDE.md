@@ -18,19 +18,15 @@ in this module. It is referenced here, never restated. What follows is local.
   marginalization over the hidden states is the test.
 
 - **Cross-device agreement is a relative tolerance keyed on the lowest
-  precision in the comparison.**
+  precision in the comparison.** A backend is accepted or rejected against it;
+  code may be improved to meet the tolerance, never to cheat it.
 
 - **A boundary cost hides behind the fixture's size, never behind the
-  algorithm's.** A backend measured only where the existing fixtures sit
-  reports its kernel. A cost paid per element crossing into it grows with the
-  problem instead, so it is invisible at a fixture chosen for a different
-  reason and decisive at the scale the roadmap declares. Every accelerated
-  path is therefore measured at both, because the two answer different
-  questions and this repository has had them disagree.
+  algorithm's.** A cost paid per element crossing into a backend grows with
+  the problem, so it is invisible at a fixture chosen for another reason and
+  decisive at the scale the roadmap declares. Every accelerated path is
+  measured at both, because the two have disagreed here.
 
-- **A backend is accepted or rejected against that tolerance, but the code can be improved
-  to match, but not to cheat**
-  
 - **An approximate evaluator states which regime carries its correctness.**
   Where it is exact, equality against enumeration is asserted. Where it is
   approximate, the deviation is *reported*: asserting agreement would assert
@@ -39,13 +35,10 @@ in this module. It is referenced here, never restated. What follows is local.
   structure fixed independently of this implementation — a limit where the
   approximation is exact, or an ordering physics predicts.
 
-- **A density is not a probability, and only one of them is bounded.** The
-  evidence of a model over a countable support is a probability, so its
-  logarithm is at most zero; the evidence of one over the reals is a density
-  and carries no such bound. A check written against the first fails on
-  correct code under the second, so what may be asserted is keyed on the
-  support the model declares, never assumed from the discrete case that
-  happened to come first.
+- **A density is not a probability, and only one of them is bounded.** A log
+  evidence over a countable support is at most zero; over the reals it carries
+  no such bound. What may be asserted is keyed on the support the model
+  declares, never assumed from the discrete case that came first.
 
 - **Refuse rather than return an unconverged number.** A quantity read off
   iterations that never settled is not an estimate of anything, and a caller
@@ -110,3 +103,18 @@ in this module. It is referenced here, never restated. What follows is local.
   raises. A schedule that cannot reach `log Z` reports `nan` rather than the
   nearest available number. Suboptimal orders are first-class: being unable to
   ask for one hides what the exact one buys (issue #592).
+
+- **A compiled backend's table is indexed by a row, not by a value.** The
+  coupled kernel reads `table[row]` and never knew what the index meant. Where
+  the density is a function of the observation alone the row *is* the
+  observation; where it also conditions on something else, the row is a code
+  the caller computes and the kernel is unchanged (issue #658). Widening what
+  a kernel scores is a question about the caller's index; changing the kernel
+  is the answer of last resort.
+
+- **A tabulation is judged by its build, not by its size.** The distinct
+  combinations are the smallest exact table and were the wrong choice: finding
+  them sorts an array per call, which cost more than the densities the table
+  exists to avoid recomputing and put the backend below its own oracle. The
+  outer product is larger, built vectorized, never sorted. Where a table is
+  built per call, the build is the measurement.

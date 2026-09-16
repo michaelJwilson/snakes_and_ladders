@@ -158,12 +158,12 @@ def test_a_count_past_the_table_is_refused_rather_than_clamped() -> None:
     params = instance.params
     totals, successes = rust.emission_tables(params, instance.observations)
     counts = np.ascontiguousarray(
-        instance.observations[..., 0], dtype=np.uint16
+        instance.observations[..., 0], dtype=np.uint32
     ).reshape(-1)
     counts[0] = totals.shape[0]
     arguments = (
         counts,
-        np.ascontiguousarray(instance.observations[..., 1], dtype=np.uint16).reshape(
+        np.ascontiguousarray(instance.observations[..., 1], dtype=np.uint32).reshape(
             -1
         ),
         np.ascontiguousarray(instance.labels, dtype=np.int64),

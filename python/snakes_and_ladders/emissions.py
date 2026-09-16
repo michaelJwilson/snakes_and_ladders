@@ -1067,13 +1067,19 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
     ) -> np.ndarray:
         """Draw one count per entry of ``states``.
 
-        ``covariate`` is the exposure per draw, shape ``(n_draws, 1)``; the
-        rate is ``e_i mu_k``. Without it every draw is at unit exposure.
+        ``covariate`` is the exposure per draw, carrying ``states``' own shape
+        and a trailing singleton; the rate is ``e_i mu_k``. Without it every
+        draw is at unit exposure.
         """
         r = self._dispersion.numpy()[states]
         rate = self._mean.numpy()[states]
         if covariate is not None:
-            rate = rate * exposure(covariate, self._mean).reshape(-1).numpy()
+            # Reshaped to the states, not flattened: `sample` draws one value
+            # per entry of `states`, which a caller may hold in any shape ---
+            # `(n_sequences, length)` for a fit over sequences. Flattening
+            # assumed one dimension and broadcast against nothing at two
+            # (issue #658).
+            rate = rate * exposure(covariate, self._mean).reshape(states.shape).numpy()
         return np.asarray(rng.negative_binomial(r, r / (r + rate)))
 
     def log_density(
@@ -1626,7 +1632,9 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         counts = (
             self._trials.numpy()[states]
             if covariate is None
-            else trial_count(covariate, self._trials).reshape(-1).numpy()
+            # Reshaped to the states, for the reason `NegativeBinomialEmission`
+            # gives at its own draw (issue #658).
+            else trial_count(covariate, self._trials).reshape(states.shape).numpy()
         )
         return np.asarray(rng.binomial(counts.astype(np.int64), rate))
 

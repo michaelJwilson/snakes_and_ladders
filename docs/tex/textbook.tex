@@ -1325,7 +1325,27 @@ parameters $\theta_m$. The joint is
   \label{eq:joint}
 \end{equation}
 Equation~\ref{eq:factor-graph} with pairwise, chain and degree-two gated
-factors, and no fourth code path. Its three terms are the three problem
+factors, and no fourth code path.
+
+Two of these terms admit a quantity the model conditions on rather than fits.
+An emission may be scored against a per-observation \emph{covariate}
+$c_{sn}$ --- what the observation was measured against, an exposure for a rate
+or a number of trials for a bounded count --- so the emission term reads
+$\log P(x_{sn} \mid k_{s,\ell_n}, \theta_{\ell_n}, c_{sn})$. A family whose
+observation has several channels takes one covariate per channel, because the
+channels condition on different kinds of quantity and a single value names
+neither. Setting $c_{sn}$ to each channel's neutral value recovers the
+uncovaried model exactly; the neutral value is a family's to define and is not
+one for every channel. A covariate that varies and is not conditioned on is
+not ignored --- it is absorbed, and the fit recovers the average of what it
+should have separated.
+
+The chain term likewise admits $A_m(k_{s-1,m}, k_{s,m})$ varying with $s$: a
+kernel per transition rather than one for the chain. It carries
+$(S-1)K(K-1)$ free values against $S-1$ transitions per chain, so it is
+conditioned on and not estimated, and what a caller assembles it from --- a
+distance between positions, a product over two latents --- is outside this
+statement. Its three terms are the three problem
 classes above: a Potts prior on the labels,
 \begin{equation}
   \log p(\ell) = \beta \sum_{\langle n,n' \rangle} J_{nn'}\,\delta(\ell_n, \ell_{n'})

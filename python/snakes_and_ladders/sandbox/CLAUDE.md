@@ -49,3 +49,4 @@ pull request that made the move, and `STATUS.md` where they are evidence.
 | `tropical` | declined | topology search where enumeration gives the optimum (#408) |
 | `pruning_burn` | replaced on a hot path | the taped gradient the route that replaced it is pinned against (#449) |
 | `count_emissions` | superseded in capability | a constant covariate, where the covariate-aware families must reproduce these bit for bit (#631) |
+| `circulant_schedule` | superseded in capability | the circulant case, where a rate per step and the matrix stack it builds are one chain (#658) |
