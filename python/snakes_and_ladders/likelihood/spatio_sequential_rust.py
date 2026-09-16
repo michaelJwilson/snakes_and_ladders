@@ -93,13 +93,13 @@ def _channel_rows(
     tabulated before issue #658, and the same numbers.
 
     With one, the density is a function of the count *and* the covariate, so
-    there is no table indexed by the count alone. The distinct ``(count,
-    covariate)`` pairs are tabulated instead and each observation carries the
-    row it falls in. That is the smallest table that is still exact: it never
-    exceeds one row per observation, and it collapses to the count table when
-    the covariate is constant. An exposure that is a per-vertex library size
-    repeated down the positions --- the case this is for --- has as many rows
-    as it has distinct pairs, not as many as it has observations.
+    there is no table indexed by the count alone. Every ``(count, covariate)``
+    combination is tabulated instead, and the row an observation falls in is
+    arithmetic on two codes rather than a lookup: the covariate is factorized
+    once and the row is ``count * n_distinct + code``. The table is therefore
+    the outer product, which is larger than the *distinct* pairs but is built
+    vectorized and never sorted --- and sorting the pairs is what made the
+    first version of this slower than the oracle it replaces.
 
     The rows are the families' own arithmetic either way, which is the property
     that keeps this a table rather than a second implementation of the oracle.
@@ -112,15 +112,25 @@ def _channel_rows(
             side = family.total if channel == TOTAL else family.successes
             table[:, m, :] = side.log_density(counts).numpy()
         return np.ascontiguousarray(table), values
-    pairs = np.stack([values.reshape(-1), covariate.reshape(-1)], axis=1)
-    unique, rows = np.unique(pairs, axis=0, return_inverse=True)
-    table = np.empty((unique.shape[0], params.n_classes, params.n_states))
-    counts = torch.as_tensor(unique[:, 0], dtype=torch.float64)
-    exposure = torch.as_tensor(unique[:, 1], dtype=torch.float64)[:, None]
+    # The covariate alone is factorized, and the row is arithmetic on the two
+    # codes: `count * n_distinct + code`. Factorizing the *pairs* instead --- one
+    # `np.unique` over an `(S * V, 2)` array --- is a lexsort per call, and it
+    # cost 135.6 ms of a 141.4 ms E step at the ci instance, taking the backend
+    # to 0.6x the oracle it exists to beat. This is one sort of a single column
+    # and two integer operations, and the table it addresses is the outer
+    # product rather than the distinct pairs: larger, built vectorized, and
+    # never sorted.
+    distinct, codes = np.unique(covariate.reshape(-1), return_inverse=True)
+    extent = int(values.max()) + 1
+    n_distinct = distinct.size
+    counts = torch.arange(extent, dtype=torch.float64).repeat_interleave(n_distinct)
+    exposure = torch.as_tensor(distinct, dtype=torch.float64).repeat(extent)[:, None]
+    table = np.empty((extent * n_distinct, params.n_classes, params.n_states))
     for m, family in enumerate(families):
         side = family.total if channel == TOTAL else family.successes
         table[:, m, :] = side.log_density(counts, covariate=exposure).numpy()
-    return np.ascontiguousarray(table), rows.reshape(values.shape)
+    rows = values.astype(np.int64) * n_distinct + codes.reshape(values.shape)
+    return np.ascontiguousarray(table), rows
 
 
 def emission_tables(
@@ -140,16 +150,10 @@ def emission_tables(
     -------
     tuple[np.ndarray, np.ndarray]
         The first channel's table and the second's, each ``(row, M, K)``
-        contiguous ``float64``. Use :func:`table_rows` for the indices.
+        contiguous ``float64``. :func:`emission_rows` returns these with the
+        row indices, which is how the two entry points take them.
     """
     return emission_rows(params, observations)[2:]
-
-
-def table_rows(
-    params: SpatioSequentialParams, observations: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
-    """Both channels' table row for every observation, ``uint32``, position-major."""
-    return emission_rows(params, observations)[:2]
 
 
 def emission_rows(
@@ -180,26 +184,6 @@ def emission_rows(
         )
         out.append((np.ascontiguousarray(rows, dtype=np.uint32), table))
     return out[0][0], out[1][0], out[0][1], out[1][1]
-
-
-def _counts(observations: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Both channels as contiguous ``uint32``, or a refusal naming the overflow.
-
-    Kept for a caller that tabulates by count and indexes with the counts
-    themselves; :func:`emission_rows` is what the two entry points use, since
-    under a covariate the index is a table row and not a count (issue #658).
-    """
-    largest = int(observations.max())
-    if largest > np.iinfo(np.uint32).max:
-        msg = (
-            f"a count of {largest} does not fit uint16; the kernel indexes a "
-            f"table by the count, so a range this wide is a different kernel"
-        )
-        raise ValueError(msg)
-    return (
-        np.ascontiguousarray(observations[..., TOTAL], dtype=np.uint32),
-        np.ascontiguousarray(observations[..., SUCCESSES], dtype=np.uint32),
-    )
 
 
 def class_posteriors(

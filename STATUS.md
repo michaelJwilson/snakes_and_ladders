@@ -567,6 +567,28 @@ comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
+**A covariate reaches the two-channel family, every seam above it, and the
+compiled backend** ([#660](https://github.com/michaelJwilson/snakes_and_ladders/pull/660)).
+The pair families take one covariate per channel, `(..., 2)` splitting where
+the observation splits; the neutral covariate is ones for one channel and the
+declared trials for the other, since they condition on different kinds of
+quantity. `external_field` and `marginal_log_likelihood_torch` scored without
+one — the first a defect, since the fit handed it a posterior computed *with*
+the covariate. `baum_welch_family` unpacked the whole observation shape and so
+refused every family carrying axes of its own, which a downstream consumer
+measured on this branch and reported.
+
+**The compiled backend conditions, and the first implementation of it was
+slower than its own oracle.** The kernel indexes a table by a row, not a
+count, so the covariate is caller-side. Tabulating the *distinct*
+`(count, covariate)` pairs meant one `np.unique` over an `(S·V, 2)` array per
+call: **135.6 ms of a 141.4 ms E step**, putting the backend at **0.6x** the
+NumPy oracle it exists to beat. Factorizing the covariate alone and addressing
+the outer product arithmetically — a larger table, built vectorized and never
+sorted — gives **12.4 ms, 6.5x** the oracle, against **37.2x** uncovaried.
+Fewer rows was the wrong thing to optimize. Agreement with the oracle under a
+covariate: 2.7e-15 relative on the evidence, 2.9e-15 on the field, one thread.
+
 **A chain's transition kernel may be a function of position**
 ([#654](https://github.com/michaelJwilson/snakes_and_ladders/pull/654)).
 `forward_backward`, `sample_path` and `forward_log_likelihood_from_density`

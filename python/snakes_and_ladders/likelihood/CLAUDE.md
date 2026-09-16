@@ -110,3 +110,19 @@ in this module. It is referenced here, never restated. What follows is local.
   raises. A schedule that cannot reach `log Z` reports `nan` rather than the
   nearest available number. Suboptimal orders are first-class: being unable to
   ask for one hides what the exact one buys (issue #592).
+
+- **A compiled backend's table is indexed by a row, not by a value.** The
+  coupled kernel reads `table[row]` and never knew what the index meant, only
+  that the table was built from it. Where a density is a function of the
+  observation alone the row *is* the observation, which is what the kernel has
+  always done; where it is a function of the observation and something the
+  model conditions on, the row is a code the caller computes and the kernel is
+  unchanged (issue #658). The rule this states is that widening what a kernel
+  can score is a question about the *caller's* index, and a kernel change is
+  the answer of last resort.
+- **A tabulation is judged by its build, not by its size.** Tabulating the
+  distinct combinations is the smallest exact table and was the wrong choice:
+  finding them sorts an array per call, which cost more than the densities the
+  table exists to avoid recomputing and put the backend below the oracle it
+  replaces. The outer product is larger, built vectorized, and never sorted.
+  Where a table is built per call, the build is the measurement.

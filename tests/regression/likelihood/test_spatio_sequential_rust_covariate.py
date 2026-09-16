@@ -133,14 +133,19 @@ def test_without_a_covariate_the_rows_are_the_counts() -> None:
 
 
 @pytest.mark.structural
-def test_the_covaried_tabulation_is_smaller_than_one_row_per_observation() -> None:
-    """The reason this is a table at all, stated as a number.
+def test_the_covaried_tabulation_stays_a_table() -> None:
+    """The reason this is a table and not a per-observation score array.
 
-    A per-vertex exposure repeated down 1,000 positions has far fewer distinct
-    `(count, covariate)` pairs than observations, and the tabulation finds
-    them: 9,989 and 245 rows against 64,000 observations at the ci instance.
-    Were it one row per observation the table would be the per-observation
-    score table, and the kernel's reason for existing would be gone.
+    The rows are every `(count, covariate)` combination --- the outer product,
+    20,736 and 41 against 64,000 observations at the ci instance --- not one
+    row per observation. Were it one per observation the table would be the
+    score array itself and the kernel's reason for existing would be gone.
+
+    The outer product is larger than the *distinct* pairs, which the first
+    version of this tabulated. It is also 10x faster to build, because those
+    were found by sorting an `(S * V, 2)` array once per call: 135.6 ms of a
+    141.4 ms E step, which put this backend at 0.6x the oracle it exists to
+    beat. Fewer rows was the wrong thing to optimize.
     """
     instance = _instance()
     params = _covaried(instance)
@@ -151,7 +156,6 @@ def test_the_covaried_tabulation_is_smaller_than_one_row_per_observation() -> No
 
     assert total_table.shape[0] < n_observations
     assert success_table.shape[0] < n_observations
-    assert total_table.shape[0] + success_table.shape[0] < n_observations // 4
 
 
 @pytest.mark.mathematical

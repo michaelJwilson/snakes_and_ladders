@@ -314,7 +314,14 @@ def simulate_spatio_sequential(
         if nodes.size == 0:
             continue
         emitting = np.repeat(states[m], nodes.size)  # (S * n_m,), position-major
-        drawn_obs = family.sample(emitting, rng).reshape(params.n_positions, nodes.size)
+        # The covariate is laid out the way the states are --- this class's
+        # columns, position-major --- so each draw is made under the value that
+        # belongs to it (issue #658). Without this no planted instance exists
+        # under a varying covariate, and a fit conditioned on one has nothing
+        # to recover.
+        drawn_obs = family.sample(
+            emitting, rng, covariate=_drawing_covariate(params, nodes)
+        ).reshape(params.n_positions, nodes.size)
         for column, node in enumerate(nodes):
             columns[int(node)] = drawn_obs[:, column]
     first = next(iter(columns.values()))
@@ -327,6 +334,46 @@ def simulate_spatio_sequential(
         observations=observations,
         params=params,
     )
+
+
+def _scoring_covariate(params: SpatioSequentialParams) -> torch.Tensor | None:
+    """``params.covariate`` ready to score every vertex against.
+
+    The trailing singleton the single-channel families broadcast over their
+    states with is added only where the covariate has no axes of its own; one
+    that carries the family's own axes is passed through, because the singleton
+    then belongs inside each of them and the family is what puts it there
+    (issue #658). The same rule as
+    :func:`snakes_and_ladders.likelihood.spatio_sequential.covariate_block`,
+    stated here because ``sim`` does not import ``likelihood``.
+    """
+    if params.covariate is None:
+        return None
+    covariate = params.covariate
+    return torch.as_tensor(covariate[..., None] if covariate.ndim == 2 else covariate)
+
+
+def _drawing_covariate(
+    params: SpatioSequentialParams, nodes: np.ndarray
+) -> torch.Tensor | None:
+    """``params.covariate`` for one class's nodes, flattened as the states are.
+
+    The draw runs over ``(S * n_m,)`` position-major entries, so the covariate
+    is selected by the same nodes and flattened the same way. A family whose
+    observation carries its own trailing axes keeps them after the flatten,
+    which is why the reshape names only the leading axis.
+
+    Returns
+    -------
+    torch.Tensor | None
+        ``(S * n_m, 1)`` for a scalar-observation family, ``(S * n_m, ..., 1)``
+        for one with its own axes, or ``None`` where the params carry none.
+    """
+    if params.covariate is None:
+        return None
+    block = params.covariate[:, nodes]
+    flat = block.reshape(-1, *block.shape[2:])
+    return torch.as_tensor(flat[..., None])
 
 
 def gated_log_density(
@@ -351,11 +398,7 @@ def gated_log_density(
     """
     n_positions, n_nodes = observations.shape[:2]
     table = np.empty((n_nodes, n_positions, params.n_classes, params.n_states))
-    covariate = (
-        None
-        if params.covariate is None
-        else torch.as_tensor(params.covariate[..., None])
-    )
+    covariate = _scoring_covariate(params)
     for m, family in enumerate(params.emissions):
         scores = family.log_density(
             torch.as_tensor(observations, dtype=family.observation_dtype),
