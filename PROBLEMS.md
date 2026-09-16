@@ -41,7 +41,7 @@ none of them defines one.
 | Phylogenetic tree, Jukes–Cantor | `tree_search`, `tree_scale` | `sec:phylo` | `sim.jc`, `sim.simulate`, `likelihood.pruning`, `likelihood.pruning_rust`, `likelihood.hadamard`, `search.neighbor_joining`, `search.rl`, `sandbox.tropical` |
 | Phylogenetic tree, general time-reversible | `tree_jc` | `sec:phylo` | `sim.gtr` |
 | Phylogenetic tree, parsimony | `tree_jc` | `sec:parsimony` | `likelihood.parsimony` |
-| Potts chain in a field | `potts_chain` | `sec:potts` | `learn.potts` |
+| Potts chain in a field | `potts_chain` | `sec:potts` | `learn.potts`, `opt.potts` |
 | Potts lattice and Markov random field | `potts_lattice` | `sec:potts` | `likelihood.belief_propagation`, `search.maxflow`, `search.max_cut`, `sim.graph.lattice_graph`, `sim.graph.erdos_renyi_graph` |
 | Potts lattice in a per-site field | `spatio_only` | `sec:potts` | `sim.potts.spatio_only_field`, `sim.graph.triangular_lattice_graph` |
 | Frustrated Potts: triangular antiferromagnet | `frustrated_lattice` | `sec:frustrated` | `sim.canonical.frustrated_triangular_lattice`, `sim.canonical.minimum_frustrated_edges` |

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -74,6 +75,45 @@ def _grepped(problem: str) -> set[Path]:
 def _selected(problem: str) -> set[Path]:
     """The modules the scan names for one problem."""
     return {path for path in _modules() if problem in fixtures_named_in(path)}
+
+
+#: A ``from snakes_and_ladders... import ...`` statement, single or parenthesized.
+#: A regex where the scan uses `ast`, so the two readings share no code.
+PACKAGE_IMPORT = re.compile(
+    r"from\s+snakes_and_ladders(?:\.([\w.]+))?\s+import\s+(\([^)]*\)|[^\n]*)"
+)
+
+
+def _imports_defining(path: Path, names: tuple[str, ...]) -> bool:
+    """Whether the module imports any of `names`, read by regex not by `ast`."""
+    imported: set[str] = set()
+    for stem, bound in PACKAGE_IMPORT.findall(path.read_text()):
+        for symbol in re.findall(r"\w+", bound):
+            if symbol == "as":
+                continue
+            imported.add(f"{stem}.{symbol}" if stem else symbol)
+    return any(
+        one == name or one.startswith(f"{name}.") for name in names for one in imported
+    )
+
+
+def _catalogue_defines() -> dict[str, tuple[str, ...]]:
+    """``problem -> defining names``, re-read from `PROBLEMS.md` here.
+
+    Deliberately a second reader rather than `tests._problems._defining_code`:
+    a guard that imports the thing it checks agrees with it by construction.
+    """
+    defines: dict[str, list[str]] = {}
+    for line in (REPO_ROOT / "PROBLEMS.md").read_text().splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) != 4 or cells[0] in ("Problem", "---"):
+            continue
+        names = re.findall(r"`([^`]+)`", cells[3])
+        for key in re.findall(r"`([^`]+)`", cells[1]):
+            defines.setdefault(key, []).extend(names)
+    return {key: tuple(names) for key, names in defines.items()}
 
 
 def _reachable_source(path: Path) -> str:
@@ -155,26 +195,67 @@ def test_a_quoted_call_is_data_and_is_not_read_as_one() -> None:
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_no_module_is_selected_without_the_name_in_reachable_source() -> None:
+def test_no_module_is_selected_without_evidence_it_exercises_the_problem() -> None:
     """The upper bound: a selection must point at something written down.
 
     Without this the scan could return every problem for every module and pass
-    every containment above. The check is deliberately weaker than the scan ---
-    it asks only that the name appear in the module or in a `tests` module it
-    imports from --- because that is a reading the scan shares no code with.
+    every containment above. Two kinds of evidence count, because there are two
+    readings: the problem's **name**, in the module or in a `tests` module it
+    imports from, or an **import** of code `PROBLEMS.md` says defines it.
+
+    The second is why this stopped being a name test (issue #622).
+    `search/test_maxflow.py` exercises the Potts lattice and never writes
+    "potts_lattice" anywhere --- it imports `search.maxflow` and builds its
+    lattices from literals --- and that module is one of the two #614 was
+    opened about. Requiring the name would refuse exactly the modules the
+    catalogue reading exists to reach.
+
+    It stays weaker than the scan, and shares no code with it: the names come
+    from the source text, and the imports are re-read here from the catalogue
+    rather than taken from `_defining_code`.
     """
     everything = frozenset(PROBLEMS)
+    defines = _catalogue_defines()
     unevidenced = [
         f"{path.relative_to(REPO_ROOT)}: {problem}"
         for path in _modules()
         if (named := fixtures_named_in(path)) != everything
         for problem in named
         if problem not in _reachable_source(path)
+        and not _imports_defining(path, defines.get(problem, ()))
     ]
     assert not unevidenced, (
-        f"{len(unevidenced)} module/problem pairs were selected without the "
-        f"problem's name appearing in reachable source: {unevidenced[:10]}"
+        f"{len(unevidenced)} module/problem pairs were selected with neither the "
+        f"problem's name in reachable source nor an import of the code "
+        f"PROBLEMS.md says defines it: {unevidenced[:10]}"
     )
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_the_two_modules_the_axis_was_opened_about_are_selected() -> None:
+    """The check #614 states as its motivation, and #619 shipped without.
+
+    `search/test_maxflow.py` and `search/test_alpha_expansion.py` are "that
+    problem's ground-state tests" in #614's own words, and the derived axis
+    gave them no marker at all: neither loads a fixture. They sweep lattices
+    built from literals --- fifteen in one module, each chosen for the property
+    under test, zero coupling against a dominant one against a negative one
+    against a periodic boundary --- so there is no single declared instance to
+    load, and declaring fifteen fixtures to carry fifteen deliberate variations
+    would make the registry a list of test arguments (issue #622).
+
+    They reach the problem the way `PROBLEMS.md` says a module does: by
+    importing `search.maxflow` and `sim.graph.lattice_graph`. A green
+    ``-m potts_lattice`` run over a broken solver is what this refuses.
+    """
+    selected = _selected("potts_lattice")
+    missing = [
+        name
+        for name in ("test_maxflow.py", "test_alpha_expansion.py")
+        if TESTS / "regression" / "search" / name not in selected
+    ]
+    assert not missing, f"-m potts_lattice does not select {missing}"
 
 
 @pytest.mark.critical
