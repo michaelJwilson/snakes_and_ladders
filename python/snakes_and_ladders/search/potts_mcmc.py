@@ -779,7 +779,23 @@ def _sweep_at(
                 # J)` against its `(h + sum J) * beta` -- equal in real
                 # arithmetic, not bitwise, which cost agreement at every
                 # temperature but 1.0 (issue #571). It also drops two
-                # whole-array temporaries per sweep.
+                # whole-array temporaries per sweep, so issue #651 re-opened it
+                # under `CLAUDE.md`'s rule that bitwise may back off to a
+                # declared tolerance.
+                #
+                # **Measured and refused.** The reassociation is not a
+                # last-place difference: `h + sum J` cancels, so the
+                # scaled-parts form's absolute error is set by the magnitudes
+                # of the parts while the result is near zero. Over 50,000
+                # sites the median is 1.00 unit of the last place and the
+                # maximum is 201,145, with 2.9% past `_GUARD` -- and those are
+                # the cancelling sites, whose accumulated field is a median
+                # 7.4e-02 against 2.8e+00 for the rest. A near-zero field is a
+                # near-uniform conditional, so the error concentrates on the
+                # sites whose decision it is likeliest to flip. Neither the
+                # guard nor a relative tolerance reaches it.
+                # `tests/regression/search/test_potts_sweep_reassociation.py`
+                # holds those numbers.
                 node = oxi_snakes_and_ladders.single_site_sweeps(
                     state,
                     contiguous_field,
