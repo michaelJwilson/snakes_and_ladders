@@ -87,9 +87,9 @@ class SpatioSequentialParams:
             take since #656.
 
         The name is the rate's, and the two matrix forms outgrow it. They are
-        read as the kernel itself, and how a caller assembled one --- from a
-        base and a phase, from a distance between sites --- is the caller's;
-        this carries the result and does not reconstruct it.
+        read as the kernel itself, and how a caller assembled one --- from two
+        kernels over a product space, from a distance between sites --- is the
+        caller's; this carries the result and does not reconstruct it.
     initial : np.ndarray
         ``Pi``, shape ``(M, K)``, one initial distribution per class.
     emissions : tuple[EmissionFamily, ...]
