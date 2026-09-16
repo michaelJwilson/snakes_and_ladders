@@ -44,18 +44,20 @@ from snakes_and_ladders.opt.mixture import (
     uniform_seeds,
 )
 from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
+from snakes_and_ladders.sim import fixtures
+from snakes_and_ladders.sim.mixture import simulate_mixture
 
 from tests._objective_checks import Counted
 
-#: The five-component fixture. #262 measured five components 1.5 standard
-#: deviations apart with unequal weights by hand and committed neither, so it
-#: is built here from `sim.mixture` under an explicit seed.
-WEIGHTS = np.array([0.30, 0.10, 0.25, 0.15, 0.20])
-MEAN = np.array([-3.0, -1.5, 0.0, 1.5, 3.0])
-SCALE = np.ones(5)
-N_SAMPLES = 500
-FIXTURE_SEED = 20260908
+#: The five-component fixture, read from the registry rather than rebuilt from
+#: literals (issue #622). #262 measured five components 1.5 standard deviations
+#: apart with unequal weights and committed neither; `mixture/ci.yaml` now
+#: declares that instance, and `simulate_mixture` on it is bitwise the
+#: observations this module used to build.
+PARAMS = fixtures.fixture("mixture", "ci").params
+WEIGHTS = np.asarray(PARAMS.weights)
+MEAN = np.asarray(PARAMS.components.mean)
+SCALE = np.asarray(PARAMS.components.scale)
 
 #: Held equal across methods. One evaluation is one pass over the
 #: observations' per-component log densities: an EM iteration, an objective
@@ -116,14 +118,7 @@ class Fixture:
 
 
 def _fixture() -> Fixture:
-    params = MixtureParams(
-        weights=WEIGHTS,
-        components=GaussianEmission(MEAN, SCALE, 1e-12),
-        n_samples=N_SAMPLES,
-        seed=FIXTURE_SEED,
-        tolerance=1e-12,
-    )
-    observations = simulate_mixture(params).observations
+    observations = simulate_mixture(PARAMS).observations
     return Fixture(
         observations,
         GaussianMixtureObjective(observations, len(WEIGHTS)),
