@@ -84,6 +84,7 @@ def _hmm(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
 # --- the Potts shape -----------------------------------------------------------
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_potts_log_density_is_log_weights_on_every_configuration() -> None:
     graph = from_potts(TREE, FIELD)
@@ -102,6 +103,7 @@ def test_the_potts_log_density_is_log_weights_on_every_configuration() -> None:
     np.testing.assert_allclose(realized, reference, rtol=0.0, atol=1e-13)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_sum_product_on_the_potts_tree_is_the_enumeration() -> None:
     exact = enumerate_potts(TREE, FIELD)
@@ -117,6 +119,7 @@ def test_sum_product_on_the_potts_tree_is_the_enumeration() -> None:
     np.testing.assert_allclose(pairwise, exact.pairwise, rtol=RTOL, atol=ATOL)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_flooding_on_the_loopy_lattice_is_belief_propagation() -> None:
     # Both are the Bethe approximation. Neither is the truth, so the assertion
@@ -168,6 +171,7 @@ def test_damping_outside_the_unit_interval_is_refused(damping: float) -> None:
 # --- the chain shape ------------------------------------------------------------
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize(
     ("n_states", "n_symbols", "length", "seed"),
@@ -193,6 +197,7 @@ def test_sum_product_on_the_chain_is_the_path_enumeration(
     np.testing.assert_allclose(posterior, enumerated.posterior, rtol=RTOL, atol=ATOL)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize(
     ("n_states", "n_symbols", "length", "seed"),
@@ -230,6 +235,7 @@ def _transitions(tau: Node, k: int) -> dict[str, np.ndarray]:
     }
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_sum_product_per_site_sums_to_pruning() -> None:
     params = load_fixture(SMALL_SITES)
@@ -277,6 +283,7 @@ def test_the_leaf_marginals_on_the_tree_are_the_observed_indicators() -> None:
 # --- the coupled shape -----------------------------------------------------------
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_coupled_log_density_is_the_joint_written_out() -> None:
     # eq:joint (textbook, sec:factor-graph): beta * sum_edges J delta(l_i, l_j)
@@ -332,6 +339,7 @@ def test_the_forney_form_has_every_variable_on_exactly_two_factors_or_fewer() ->
     assert forney.is_tree()
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_message_passing_on_the_forney_form_gives_the_same_marginals() -> None:
     graph = from_potts(TREE, FIELD)
@@ -446,6 +454,7 @@ def _coupled_mixed_cardinality() -> FactorGraph:
     )
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize(
     "graph",
@@ -460,6 +469,7 @@ def test_the_tree_schedule_reproduces_the_dictionary_oracle_bitwise(
     _assert_same_marginals(sum_product(graph), reference.sum_product(graph))
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize(
     ("n_states", "n_symbols", "length", "seed"),
@@ -483,6 +493,7 @@ def test_sum_and_max_product_on_the_chain_reproduce_the_dictionary_oracle_bitwis
     _assert_same_marginals(marginals, expected)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_tree_site_reproduces_the_dictionary_oracle_bitwise() -> None:
     # Hard zeros: the leaf indicators put ``-inf`` in the tables.
@@ -498,6 +509,7 @@ def test_the_tree_site_reproduces_the_dictionary_oracle_bitwise() -> None:
     _assert_same_marginals(sum_product(graph), reference.sum_product(graph))
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 @pytest.mark.parametrize(
     "graph",
@@ -521,6 +533,7 @@ def test_flooding_reproduces_the_dictionary_oracle_bitwise(graph: FactorGraph) -
     _assert_same_marginals(marginals, expected)
 
 
+@pytest.mark.critical
 @pytest.mark.oracle
 def test_the_tree_schedule_on_a_deep_chain_is_the_forward_recursion() -> None:
     # 2,000 positions: past the interpreter's recursion limit for the
