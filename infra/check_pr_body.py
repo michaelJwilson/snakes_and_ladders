@@ -47,6 +47,9 @@ def problem(body: str) -> str:
     if count <= BODY_LINE_CAP:
         return ""
     return (
+        # Pipe the body *including* the attribution footer: that is what
+        # GitHub holds and what this job reads back. Checking the draft
+        # without it passes at 40 and fails at 42 (DEV.md).
         f"pull-request body is {count} content lines, over the "
         f"{BODY_LINE_CAP}-line cap (DEV.md). Blank lines and headings are not "
         f"charged; move what does not fit to STATUS.md or an experiment file."

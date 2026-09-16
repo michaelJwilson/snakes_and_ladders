@@ -349,6 +349,14 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox.pruning_burn
    :members:
 
+.. Its two classes carry the live module's names by design -- it is the same
+   code, frozen before the covariate -- so registering them as cross-reference
+   targets makes every bare `:class:` reference to either ambiguous. It is a
+   referee, not API: documented, and not something to link to.
+.. automodule:: snakes_and_ladders.sandbox.count_emissions
+   :members:
+   :no-index:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 
