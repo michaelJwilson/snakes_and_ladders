@@ -3440,6 +3440,56 @@ exist.
 
 **Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
+**Compiled kernels at #678.** The crate is **9 modules and 4,048 lines**, and
+**3 take the thread pool** --- `coupled`, `pruning`, `sampling` --- read from
+each module's own parallel iterators by `infra/appraise_kernels.py` rather than
+from a list. Every module exporting a `#[pyfunction]` is pinned against a
+referee its own tests import; the one exclusion is `lib.double`, the
+extension-loads probe, which arithmetic checks. The tool's first draft called
+the ragged kernel unpinned and the tree said otherwise: `test_ragged_rust.py`
+imports `posteriors` and `posteriors_oracle` from one module, so an oracle
+beside the kernel is a third placement, and a survey reporting a false gap is
+worse than one reporting none.
+
+Four paths measured on the 4-core host, 2026-09-16, at a 1-minute load of 1.2
+to 1.7 (a test run held one core; `DEV.md`'s own readings were taken at 1.19
+to 1.30):
+
+*The count-pair draw does not clear its own bar at the size that matters.* At
+the **declared instance** --- 71x71 at `M = K = 10` over 20,000 positions,
+1.008e8 pairs, 384.6 MiB of counts --- the Rust draw is **30.14 s and 30.32 s**
+against the NumPy oracle's **37.32 s and 37.16 s**, two readings each: a ratio
+of **1.23x**, where root `CLAUDE.md` sets **2x** for keeping a Rust backend and
+says a backend that is never faster is a maintenance cost with no counterpart.
+At the CI instance the same comparison reads **2.5x** (50.0 ms against 20.2
+ms), which is the gate-size illusion the same rule names --- a ratio read at a
+gate size decides nothing in either direction. The conclusion is not that the
+kernel is wrong but that **parallelism is what would justify it**: the draw is
+5,041 independent per-vertex streams by construction, `default_rng([seed, v])`,
+which its own docstring states and no thread uses. That is #693.
+
+*The ragged kernel's two recorded ratios measure two different things, and
+neither is the third.* Against the **padded route** at honest padding it is
+**2.8x** (93.14 to 33.41 ms at 0% padding, 121.63 to 43.37 ms at 47.8%) --- that
+is the Rust claim. At **97.0% padding** it is **97.1x** (386.42 to 3.98 ms),
+which is a statement about padding and not about Rust. Against the
+**per-segment Python oracle** at 600 segments of 8 to 40 it is **65x** (519 to
+8 ms), a statement about Python loop overhead. A survey that lists the three in
+one column invites the wrong port next.
+
+*Dinic is the shape a compiled kernel wins on.* `ising_ground_state` on a
+40x40 lattice is **145.6 ms**, of which `_augment` is **42%** and `_levels`
+**25%** of self time --- two thirds of the call in two pure-Python functions,
+over 25,216 and 14 calls. #642 carries the layout half.
+
+*The factor-graph Gibbs sweep is not a port; its first call is.* Warm it is
+**0.20 ms a sweep** (10 ms for 50), already `njit`-compiled, so there is
+nothing for Rust to take. The **cold call pays 738 ms of `llvmlite`
+compilation** --- 74x the entire warm run of 50 sweeps --- which is a caching
+question and not a language one. Its warm profile's top self-time entry is
+`search.gibbs._Indexed.layout` at **30%**, the same line the structure survey
+surfaces once it stops dropping findings outside clusters (#690).
+
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
 more members. `role:incidence` is 12 members over 78 consuming references --- one
