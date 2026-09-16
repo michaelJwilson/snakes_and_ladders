@@ -908,7 +908,7 @@ def _swendsen_wang_sweep(
     second = np.fromiter(
         (edge[1] for edge in graph.edges), dtype=np.int64, count=len(graph.edges)
     )
-    coupling = beta * np.asarray(graph.coupling, dtype=float)
+    coupling = beta * graph.edge_coupling
     like = state[first] == state[second]
     active = like & (rng.random(len(graph.edges)) < 1.0 - np.exp(-coupling))
 
