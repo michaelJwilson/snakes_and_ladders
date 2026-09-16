@@ -589,6 +589,21 @@ sorted — gives **12.4 ms, 6.5x** the oracle, against **37.2x** uncovaried.
 Fewer rows was the wrong thing to optimize. Agreement with the oracle under a
 covariate: 2.7e-15 relative on the evidence, 2.9e-15 on the field, one thread.
 
+**`FlowNetwork` keeps the contiguous form it built**
+([#659](https://github.com/michaelJwilson/snakes_and_ladders/pull/659)).
+`from_arcs` assembled the compiled consumer's arrays on its way to the list
+store and discarded them, so a network built from arcs and solved in Rust made
+the round trip NumPy → list → NumPy for nothing. `as_arrays` is **289 ns**
+against **2.87 ms** at 20,000 edges; one alpha-expansion sweep of four labels
+is **1.240x** at 16x16 and **1.112x** at 32x32 through the Rust backend, with
+the Python backend — which never calls `as_arrays` — the control at 1.000x.
+The arrays are bit-identical kept or derived, and both writers drop the form.
+The list store stays on #586's measurement (1.95 ms as lists against 3.93 ms
+with offsets). The survey's per-call finding no longer fires against a
+constructor, which runs once per instance and so has no second payment to
+remove; a paired control pins that an accessor over a non-compressed store is
+still reported.
+
 **A chain's transition kernel may be a function of position**
 ([#654](https://github.com/michaelJwilson/snakes_and_ladders/pull/654)).
 `forward_backward`, `sample_path` and `forward_log_likelihood_from_density`
