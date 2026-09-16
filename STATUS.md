@@ -603,6 +603,27 @@ recursion that preceded it at `T = 100,000`, `K = 8`. The varying form costs
 both shapes stay. The new path is pinned against a path enumeration that shares
 no recursion with it, and a planted two-regime kernel is recovered per regime
 from the pairwise posteriors where the pooled estimate matches neither.
+**A count pair can be drawn under a covariate, and fitted under one**
+([#670](https://github.com/michaelJwilson/snakes_and_ladders/issues/670),
+[#671](https://github.com/michaelJwilson/snakes_and_ladders/issues/671),
+[#672](https://github.com/michaelJwilson/snakes_and_ladders/issues/672)).
+Three seams carried one defect: a covariate that already holds the family's
+channel axis had the broadcast singleton appended anyway, so its last axis read
+1, named no channel, and the pair family refused it. `m_step` re-derived
+`covariate_block`'s slice rather than calling it; `_drawing_covariate` did the
+same and the coupled simulator reshaped every draw to `(S, V)`, so a pair could
+not be drawn at all; and both count-pair simulators passed no covariate, so the
+one problem class whose emission *is* a pair had no covaried planted instance.
+The referee is recovery. Over an exposure spanning a factor of 16, a coupled
+fit **told** it recovers planted rates of 24.0 and 72.0 as **23.3 and 71.3**,
+within 3%; the same fit on the same data **not told** it reaches **47.9 and
+151.7**, factors of 1.99 and 2.11 against an `E[U(0.25, 4)]` of 2.125 --- the
+rate averaged over the exposures. In Rust the exposure scales the drawn gamma
+rather than the distribution, `c Gamma(r, mu/r)` being `Gamma(r, c mu/r)`
+exactly, so a covariate costs one multiply per draw and the per-(class, state)
+objects stay. A fixture declaring no covariate draws what it drew before,
+asserted rather than assumed.
+
 **A covariate reaches the families from a fit, not only from a test**
 ([#657](https://github.com/michaelJwilson/snakes_and_ladders/pull/657)).
 #631's exposure and trial count were reachable only by a test that built a
