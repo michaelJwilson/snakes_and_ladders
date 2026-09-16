@@ -3550,6 +3550,56 @@ networks — and **not** for a speed claim: 1.2x at the largest size measured,
 slower below 16x16, and no threshold was added because `alpha_expansion` is not
 run at 8x8 in anger.
 
+## Three kernels take a thread pool, three proposals do not ([#627](https://github.com/michaelJwilson/snakes_and_ladders/issues/627))
+
+Every number is a criterion median of 100 samples on an idle 4-core host ---
+1-minute load 0.07, `OMP_NUM_THREADS=1`, nothing else running --- against the
+serial medians the same command took before the port.
+
+| kernel | serial | `rayon` | ratio | kept |
+| --- | --- | --- | --- | --- |
+| `pruning_log_likelihood/8taxa_200000sites` | 117.64 ms | **30.818 ms** | **3.82x** | yes |
+| `external_field 200x5041 M=K=10` | 93.432 ms | **39.310 ms** | **2.38x** | yes |
+| `sample_rows/2000000` | 26.694 ms | **13.091 ms** | **2.04x** | yes |
+| `pruning_log_likelihood/4taxa_200000sites` | 58.119 ms | 15.259 ms | 3.81x | yes |
+| `sample_rows/200000` | 2.2644 ms | 1.2126 ms | 1.87x | yes |
+| `class_posteriors 200x5041 M=K=10` | 23.064 ms | 26.703 ms | **0.86x** | **no** |
+| `external_field`, parallel over positions | 93.432 ms | 43.642 ms | 2.14x | **no** |
+| `pruning_log_likelihood/8taxa`, reassociated | 117.64 ms | 30.903 ms | 3.81x | **no** |
+
+**Three kept, and all three are bit-identical to the serial path.** Each writes
+each result exactly once, and where there is a reduction it stays sequential,
+so no oracle tolerance is spent and a run on a 4-core host equals a run on a
+64-core one. `tests/` pins that for pruning at four window widths.
+
+**`class_posteriors` is declined by measurement**, the way #591 declined three
+proposals. `m` is a clean axis --- each class writes its own slice and nothing
+is summed across them --- and it still runs at **0.86x**: ten items against
+four cores, and `forward_backward` allocates per class, so the pool costs more
+than it saves.
+
+**The other two are declined although they were permitted.** The maintainer
+relaxed the requirement from bit-identical to `likelihood/CLAUDE.md`'s relative
+`1e-11` where a looser form ran faster, and a reassociated pruning sum measured
+a relative deviation of **1.85e-13**, two orders inside it. Neither looser form
+was faster. The reassociated reduction saves one `f64` per site and runs
+**30.903 ms against 30.818 ms**; parallelising `external_field` over its 5,041
+positions instead of its 200 vertices runs **43.642 ms against 39.310 ms**. So
+the tolerance stays unspent, not on principle but because buying nothing with
+it was the measured outcome.
+
+**Two expectations the measurement overturned.** Inverting `external_field`'s
+loops to keep the sum sequential was expected to cost locality, since
+`totals[s * n_nodes + v]` walks contiguously in `s` and strides in `v`; it is
+11% *faster*, because each vertex then owns a contiguous output slice and the
+table reads are shared-read. And the per-site buffer pruning needs to keep its
+sum ordered was expected to cost time; at 8 taxa the bit-identical form is
+faster than the one without it.
+
+The maximum-flow network and `double` are unchanged, as they must be: neither
+is touched, and `max_flow_expansion_network/32x32` reads 396.93 us against
+385.89 us, inside the spread.
+
 ## A graph owns its array form ([#623](https://github.com/michaelJwilson/snakes_and_ladders/issues/623))
 
 `PottsGraph` stores its edges as a tuple of pairs, which is what a fixture
