@@ -67,7 +67,11 @@ import baselines as baseline_script  # noqa: E402
 import problems_tables  # noqa: E402
 
 CATALOGUE = REPO_ROOT / "PROBLEMS.md"
-_FIXTURE_PATH = re.compile(r"`(tests/regression/fixtures/[a-z_0-9]+/[a-z]+\.yaml)`")
+#: A fixture key in the catalogue's Key column: the fixture directory name,
+#: which is also the marker its tests carry. The column held full fixture
+#: paths until #640 made the catalogue minimal; a row names the key and the
+#: registry resolves it to a file, so the path is stated in one place.
+_FIXTURE_KEY = re.compile(r"`([a-z][a-z_0-9]*)`")
 
 #: The applicability table column each stated oracle fills. ``none`` fills
 #: none, which is the point of stating it: the size is past every oracle.
@@ -79,13 +83,13 @@ ORACLE_COLUMNS = {
 
 
 def _catalogue_fixtures() -> dict[str, list[str]]:
-    """``row title -> fixture paths`` for every row of the catalogue."""
+    """``row title -> fixture keys`` for every row of the catalogue."""
     found: dict[str, list[str]] = {}
     for line in CATALOGUE.read_text().splitlines():
         if not line.startswith("| ") or line.startswith("| Problem") or "---" in line:
             continue
-        title = line.strip().strip("|").split("|")[0].strip()
-        found[title] = _FIXTURE_PATH.findall(line)
+        cells = line.strip().strip("|").split("|")
+        found[cells[0].strip()] = _FIXTURE_KEY.findall(cells[1])
     return found
 
 
@@ -96,25 +100,20 @@ def test_every_catalogue_row_names_a_ci_fixture_that_loads() -> None:
     rows = _catalogue_fixtures()
     assert len(rows) > 8, "the catalogue lost its table"
 
-    for title, paths in rows.items():
-        assert paths, f"{title} names no fixture"
-        assert any(path.endswith("/ci.yaml") for path in paths), (
-            f"{title} names no ci fixture: {paths}"
-        )
-        for path in paths:
-            problem, tier = Path(path).parent.name, Path(path).stem
-            assert fixture(problem, tier).path == REPO_ROOT / path
+    for title, keys in rows.items():
+        assert keys, f"{title} names no fixture"
+        for key in keys:
+            assert "ci" in tiers(key), f"{title} names no ci fixture: {key}"
+            assert fixture(key, "ci").path == (FIXTURES_DIR / key / "ci.yaml"), (
+                f"{title}'s {key} does not resolve to its own directory"
+            )
 
 
 @pytest.mark.structural
 def test_every_fixture_is_named_by_the_catalogue() -> None:
     # The other direction: an instance the catalogue does not claim is one
     # no row is answerable for.
-    named = {
-        Path(path).parent.name
-        for paths in _catalogue_fixtures().values()
-        for path in paths
-    }
+    named = {key for keys in _catalogue_fixtures().values() for key in keys}
 
     assert set(problems()) == named
 

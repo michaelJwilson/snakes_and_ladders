@@ -97,16 +97,38 @@ def test_the_one_structure_the_three_now_hold_is_in_the_cluster(
 
 
 @pytest.mark.structural
-def test_the_per_call_derivation_finding_is_gone(
+def test_the_per_call_derivation_finding_is_gone_for_the_graph_that_fixed_it(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
     # The survey reported `PottsGraph.compressed_adjacency` deriving the
     # layout per call; it is derived once now, and the finding has to go with
     # it -- a survey whose findings outlive their fixes is a survey nobody
     # reads. Stated as the absence, because that is what the fix changed.
+    #
+    # The absence is asserted of `PottsGraph` and not of the sentence. The
+    # sentence is the survey's standing vocabulary for the finding, so any
+    # class that later derives a layout per call raises it again --- and one
+    # does: `search.maxflow.FlowNetwork`, open as #642. A substring match
+    # over every cluster reads that new finding as this fix regressing, which
+    # is the opposite of what a survey is for.
     findings = " ".join(f for cluster in grouped for f in cluster.findings)
 
-    assert "derives a compressed layout per call" not in findings
+    assert "PottsGraph" not in findings
+    assert "sim.graph.PottsGraph: compressed_adjacency" not in findings
+
+
+@pytest.mark.structural
+def test_the_open_per_call_derivation_finding_names_its_ticket(
+    grouped: list[appraise_structures.Cluster],
+) -> None:
+    # The survey's live finding, and the reason the test above is narrow: the
+    # same sentence is raised about `FlowNetwork`, where the layout is still
+    # derived per call. It stands until #642 lands.
+    findings = " ".join(f for cluster in grouped for f in cluster.findings)
+
+    assert "search.maxflow.FlowNetwork: from_arcs derives a compressed layout" in (
+        findings
+    )
 
 
 @pytest.mark.structural

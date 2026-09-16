@@ -148,14 +148,25 @@ def test_eigendecomposition_gives_a_transition_matrix() -> None:
 def test_the_transposed_operand_is_the_contiguous_one() -> None:
     """Item 5: ``transitions[i].T`` is a view, and BLAS reads it as one.
 
-    Bitwise equality is the claim. A copy that changed the product would mean
-    the reduction order moved, which is what the memory-layout rule is
-    measured against rather than asserted.
+    The claim is that the copy buys nothing, so the decline on speed is also a
+    decline on nothing else: the product is the same number.
+
+    Bitwise is the target and it is what this host gives --- 200 seeded draws
+    at every thread count from 1 to 8, not one differing bit. It is not what a
+    GitHub runner gave, where one draw disagreed and put `main` red. Nothing
+    about the computation changed there; a BLAS that dispatches a different
+    kernel for a stride-transposed operand sums in a different order, which is
+    a reduction-order difference and the case `CLAUDE.md` lets back off to the
+    declared tolerance. So the tolerance is asserted, the bitwise result is
+    reported here rather than asserted, and the draw is seeded --- an
+    unseeded draw under a bitwise assertion is a test that fails on a
+    different day for no change, which is how this one failed.
     """
     tau, k, _, _, lengths = _dataset()
     transitions = transition_probabilities(lengths, k, None)
-    partial = torch.rand((_SITES, k), dtype=torch.float64)
+    generator = torch.Generator().manual_seed(544)
+    partial = torch.rand((_SITES, k), dtype=torch.float64, generator=generator)
 
     view = partial @ transitions[0].T
     copied = partial @ transitions[0].T.contiguous()
-    assert torch.equal(view, copied)
+    assert_allclose(view.numpy(), copied.numpy(), rtol=CROSS_DEVICE_RTOL_FLOAT64)
