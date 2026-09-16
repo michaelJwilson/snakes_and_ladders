@@ -84,11 +84,13 @@ Submodules include `infra/`, `sim/`, `likelihood/`, `opt/`, `search/`, learn/`, 
 *   **Check known Math properties** limits, invariants, etc.
 *   **Cross-Device Agreement Is a Tolerance:** given `float32` and `float64`, tolerance is the higher precision, etc.
 *   **No Coverage Theatre:** Tests asserting only output shapes or successful execution without exceptions are forbidden. Leave gaps documented where necessary and track with tickets.x
-*   **Every Test Says What It Is Checked Against:** a test carries marker tags for meaning and selection, e.g. naming its referee.  `pyproject.toml` registers the names.
+*   **Every Test Says What It Is Checked Against:** a test carries marker tags for meaning and selection, e.g. naming its referee. `pyproject.toml` registers the ones an author writes; a marker a hook derives is registered where it is derived, so nothing is maintained by hand twice.
 *   **Notebooks:** `docs/nb/` carries one notebook per problem (of various sizes), demonstrating functionality is supports, and evidence by oracles.  A **Further Work** specifies gaps/relevant roadmap.
 *   **Scientific Outputs:** The suite must emit plots, tables and the  LaTeX documents.
 *   **Time is money:** test and build frameworks should be justified wrt time and computational budget, e.g. cached; a high priority is to quickly standup a minimal implementation against the ROADMAP.md with  test-driven development.  
 *   **The per-PR tier is the fast gate; the release gate runs everything.** A test over the per-PR duration cap, or whose claim is not needed to gate a merge, carries the `release` marker and runs for a release.
+*   **Select narrowly to iterate; gate on the tier.** Selection composes over what a test *is* --- the problem it exercises and the kind that referees it --- and the tier it runs in, so reach for the narrowest selection that can still refute the change. The narrow run is for iterating and is never reported as the gate: on #601 and #595 this session the full tier caught what the `critical` gate could not, twelve failures and two stale references. `DEV.md` holds the expressions.
+*   **A plan says how the work will be developed, not only how it will be checked.** A plan that names an oracle and a tolerance but no selection has said nothing about how the work will be iterated on, or about which tier decides it. `ROADMAP.md` §0.2 states what a plan must name; it is not restated here.
 
 ## Definition of Done
 1.  **Regression Test:** Asserts scientific validity against known simulations, simpler/alternative algorithms, and pins expected output.
