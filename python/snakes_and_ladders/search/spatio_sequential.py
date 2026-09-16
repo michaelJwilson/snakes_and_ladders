@@ -107,7 +107,8 @@ def m_step(
     """Re-estimate every class's emissions, ``Pi_m`` and the shared ``t`` from the E step.
 
     A class with no members keeps its emissions: there is nothing to
-    re-estimate them from, and its chain posterior is its prior.
+    re-estimate them from, and its chain posterior is its prior. A per-step
+    ``self_transition`` is kept too, for the reason stated at the assignment.
 
     ``params.covariate`` is selected by the same members and moved by the same
     axis as the observations (issue #652). That pairing is the one place this
@@ -141,7 +142,14 @@ def m_step(
         )
     initial = np.maximum(posteriors.posterior[:, 0, :], 1e-12)
     initial = initial / initial.sum(axis=1, keepdims=True)
-    if params.n_positions > 1:
+    self_transition: float | np.ndarray = params.self_transition
+    # A per-step rate is conditioned on, not fitted (issue #658), the same
+    # standing `baum_welch_family` gives a per-step kernel and for the same
+    # reason: it carries one free value per transition against the transitions
+    # of `M` chains, and pooling them into the scalar below would answer a
+    # question nobody asked -- what single stickiness best explains a chain
+    # whose stickiness the caller said varies.
+    if params.n_positions > 1 and np.asarray(params.self_transition).ndim == 0:
         stays = sum(
             float(np.trace(posteriors.pairwise[m, s]))
             for m in range(params.n_classes)
@@ -149,8 +157,6 @@ def m_step(
         )
         total = params.n_classes * (params.n_positions - 1)
         self_transition = min(max(stays / total, 1e-6), 1 - 1e-6)
-    else:
-        self_transition = params.self_transition
     return replace(
         params,
         initial=initial,

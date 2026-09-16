@@ -69,8 +69,14 @@ class SpatioSequentialParams:
         ``S``, the length of every chain.
     beta : float
         Inverse temperature on the spatial prior of ``eq:joint``.
-    self_transition : float
-        The circulant self-transition rate ``t``, shared by every class.
+    self_transition : float | np.ndarray
+        The circulant self-transition rate ``t``, shared by every class. A
+        scalar is one kernel for the whole chain; a ``(S - 1,)`` array is one
+        rate per transition, which is the varying kernel #656 gave
+        ``forward_backward`` and #658 brings to the spatial model. It stays a
+        rate rather than a matrix because a circulant is what this model's
+        kernel is: what varies with position is the stickiness, not the
+        preference between states.
     initial : np.ndarray
         ``Pi``, shape ``(M, K)``, one initial distribution per class.
     emissions : tuple[EmissionFamily, ...]
@@ -109,7 +115,7 @@ class SpatioSequentialParams:
     n_states: int
     n_positions: int
     beta: float
-    self_transition: float
+    self_transition: float | np.ndarray
     initial: np.ndarray
     emissions: tuple[EmissionFamily, ...]
     covariate: np.ndarray | None = None
@@ -124,7 +130,18 @@ class SpatioSequentialParams:
         if self.n_positions < 1:
             msg = f"a chain needs at least one position, got {self.n_positions}"
             raise ValueError(msg)
-        circulant_transition(self.n_states, self.self_transition)  # validates both
+        rate = np.asarray(self.self_transition, dtype=float)
+        if rate.ndim == 0:
+            circulant_transition(self.n_states, float(rate))  # validates both
+        elif rate.shape != (max(self.n_positions - 1, 0),):
+            msg = (
+                f"self_transition has shape {rate.shape}, expected a scalar or "
+                f"({max(self.n_positions - 1, 0)},) -- one rate per transition"
+            )
+            raise ValueError(msg)
+        else:
+            for value in rate:
+                circulant_transition(self.n_states, float(value))
         initial = np.asarray(self.initial, dtype=float)
         if initial.shape != (self.n_classes, self.n_states):
             msg = (
@@ -170,8 +187,20 @@ class SpatioSequentialParams:
 
     @property
     def transition(self) -> np.ndarray:
-        """The circulant transition ``A_m`` of ``eq:joint``, the same for every class."""
-        return circulant_transition(self.n_states, self.self_transition)
+        """The circulant transition ``A_m`` of ``eq:joint``, the same for every class.
+
+        Shape ``(K, K)`` where ``self_transition`` is a scalar, and
+        ``(S - 1, K, K)`` where it is one rate per step (issue #658) --- the
+        two shapes ``forward_backward`` takes, so a chain whose kernel is a
+        function of position can be written down here too. A rate per step
+        stays a *circulant*, which is what makes it one number rather than
+        ``K * (K - 1)``: the model that varies is how sticky the chain is at
+        each position, not which states it prefers to move between.
+        """
+        rate = np.asarray(self.self_transition, dtype=float)
+        if rate.ndim == 0:
+            return circulant_transition(self.n_states, float(rate))
+        return np.stack([circulant_transition(self.n_states, float(t)) for t in rate])
 
     def scaled_graph(self) -> PottsGraph:
         """The graph with ``beta * J`` as couplings: the prior at temperature one."""

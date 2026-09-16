@@ -1125,8 +1125,6 @@ def baum_welch_family(
     observations : np.ndarray
         Observations, shape ``(n_sequences, length)``. Symbol indices or real
         values, as the family says.
-    log_initial, log_transition : torch.Tensor
-        Starting parameters, as log-probabilities.
     emissions : EmissionFamily
         Starting emission family.
     max_iterations : int
@@ -1135,6 +1133,19 @@ def baum_welch_family(
         Stop when the log-likelihood improves by less than this *relative*
         to its magnitude -- absolute would not transfer across data sizes
         (``DEV.md``, issue #111).
+    log_initial, log_transition : torch.Tensor
+        Starting parameters, as log-probabilities. ``log_transition`` is either
+        ``(m, m)``, one kernel for the whole chain, or ``(length - 1, m, m)``,
+        one per step (issue #658).
+
+        **A per-step kernel is conditioned on, not fitted.** It carries
+        ``(length - 1) * m * (m - 1)`` free values against ``length - 1``
+        transitions per sequence, so at the sequence counts this repository
+        runs it is not identifiable and an M step that re-estimated it would
+        return the posterior it was handed. Given one, this function holds it
+        fixed and fits the initial distribution and the emissions --- the same
+        standing a covariate has, and for the same reason. Given a single
+        matrix it fits that matrix, exactly as before.
     covariate : np.ndarray | None
         What each observation is scored against, shape ``(n_sequences,
         length)`` -- an exposure for a rate family, a trial count for a
@@ -1161,6 +1172,17 @@ def baum_welch_family(
     data = torch.as_tensor(observations, dtype=emissions.observation_dtype)
     n_sequences, length = data.shape
     m = emissions.n_states
+    varying = log_transition.shape != (m, m)
+    if varying and log_transition.shape != (max(length - 1, 0), m, m):
+        msg = (
+            f"log_transition {tuple(log_transition.shape)} is neither ({m}, {m}) "
+            f"nor ({max(length - 1, 0)}, {m}, {m}) for a chain of {length} "
+            f"positions over {m} states"
+        )
+        raise ValueError(msg)
+    kernels = (
+        log_transition if varying else log_transition.expand(max(length - 1, 0), m, m)
+    )
     exposure = (
         None
         if covariate is None
@@ -1176,17 +1198,18 @@ def baum_welch_family(
         alpha = torch.empty((n_sequences, length, m), dtype=log_initial.dtype)
         alpha[:, 0] = log_initial.unsqueeze(0) + emit[:, 0]
         for t in range(1, length):
+            kernel = kernels[t - 1] if varying else log_transition
             alpha[:, t] = (
                 torch.logsumexp(
-                    alpha[:, t - 1].unsqueeze(2) + log_transition.unsqueeze(0), dim=1
+                    alpha[:, t - 1].unsqueeze(2) + kernel.unsqueeze(0), dim=1
                 )
                 + emit[:, t]
             )
         beta = torch.zeros((n_sequences, length, m), dtype=log_initial.dtype)
         for t in range(length - 2, -1, -1):
+            kernel = kernels[t] if varying else log_transition
             beta[:, t] = torch.logsumexp(
-                log_transition.unsqueeze(0)
-                + (emit[:, t + 1] + beta[:, t + 1]).unsqueeze(1),
+                kernel.unsqueeze(0) + (emit[:, t + 1] + beta[:, t + 1]).unsqueeze(1),
                 dim=2,
             )
 
@@ -1196,7 +1219,7 @@ def baum_welch_family(
         gamma = alpha + beta - evidence[:, None, None]
         xi = (
             alpha[:, :-1].unsqueeze(3)
-            + log_transition.unsqueeze(0).unsqueeze(0)
+            + kernels.unsqueeze(0)
             + (emit[:, 1:] + beta[:, 1:]).unsqueeze(2)
             - evidence[:, None, None, None]
         )
@@ -1205,10 +1228,12 @@ def baum_welch_family(
         log_initial = torch.logsumexp(gamma[:, 0], dim=0) - torch.log(
             torch.tensor(float(n_sequences), dtype=gamma.dtype)
         )
-        transition_counts = torch.logsumexp(xi.reshape(-1, m, m), dim=0)
-        log_transition = transition_counts - torch.logsumexp(
-            transition_counts, dim=1, keepdim=True
-        )
+        if not varying:
+            transition_counts = torch.logsumexp(xi.reshape(-1, m, m), dim=0)
+            log_transition = transition_counts - torch.logsumexp(
+                transition_counts, dim=1, keepdim=True
+            )
+            kernels = log_transition.expand(max(length - 1, 0), m, m)
         step = emissions.reestimate(data, torch.exp(gamma), covariate=exposure)
         if not step.converged:
             msg = (
