@@ -107,6 +107,8 @@ def simulate_count_pairs(
     trials: np.ndarray,
     alpha: np.ndarray,
     beta: np.ndarray,
+    exposure: np.ndarray | None,
+    trial_counts: np.ndarray | None,
     n_positions: int,
     n_nodes: int,
     n_classes: int,

@@ -25,7 +25,10 @@ from pathlib import Path
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.emissions import CovariateNotSupportedError
 from snakes_and_ladders.sim.count_pairs import (
+    SUCCESSES,
+    TOTAL,
     CountPairInstance,
     IndependentCountPair,
     SpatioSequentialCountsParams,
@@ -69,6 +72,41 @@ def _tables(declared: SpatioSequentialCountsParams) -> dict[str, np.ndarray]:
     }
 
 
+def _channels(
+    covariate: np.ndarray | None,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """The model's covariate as the kernel's two flat ``S * V`` arrays.
+
+    The kernel takes one array per channel rather than the ``(S, V, 2)`` the
+    model holds, because each is read at a different point of the draw --- the
+    exposure scales the gamma, the trial count sizes the binomial --- and a
+    strided read of one channel out of an interleaved pair would touch both
+    (issue #671). Splitting here is one copy per call against ``S * V`` reads.
+
+    Raises
+    ------
+    CovariateNotSupportedError
+        If the covariate names no channel. The same refusal, of the same type,
+        that :func:`~snakes_and_ladders.sim.count_pairs.split_covariate` gives
+        the NumPy draw for the same shape: one simulator must not accept what
+        the other refuses.
+    """
+    if covariate is None:
+        return None, None
+    if covariate.ndim != 3 or covariate.shape[-1] != 2:
+        msg = (
+            f"the count-pair simulator takes one covariate per channel, shape "
+            f"(S, V, 2) as its observations are: channel {TOTAL} the total's "
+            f"exposure and channel {SUCCESSES} the successes' trial count. Got "
+            f"{tuple(covariate.shape)}, which names no channel (#671)."
+        )
+        raise CovariateNotSupportedError(msg)
+    return (
+        np.ascontiguousarray(covariate[..., TOTAL], dtype=np.float64).reshape(-1),
+        np.ascontiguousarray(covariate[..., SUCCESSES], dtype=np.float64).reshape(-1),
+    )
+
+
 def simulate_count_pairs(
     declared: SpatioSequentialCountsParams,
 ) -> CountPairInstance:
@@ -89,6 +127,12 @@ def simulate_count_pairs(
     -------
     CountPairInstance
         ``factor = 1``, its observations ``(S, n_nodes, 2)`` ``uint16``.
+
+    Raises
+    ------
+    CovariateNotSupportedError
+        If the model's covariate does not carry the channel axis the pair
+        family splits on.
     """
     params = declared.model
     n_nodes = params.graph.n_nodes
@@ -98,6 +142,7 @@ def simulate_count_pairs(
     totals = np.empty((params.n_positions, n_nodes), dtype=np.uint16)
     successes = np.empty_like(totals)
     tables = _tables(declared)
+    exposure, trial_counts = _channels(params.covariate)
     oxi_snakes_and_ladders.simulate_count_pairs(
         declared.seed,
         np.ascontiguousarray(states, dtype=np.int64).reshape(-1),
@@ -107,6 +152,8 @@ def simulate_count_pairs(
         tables["trials"],
         tables["alpha"],
         tables["beta"],
+        exposure,
+        trial_counts,
         params.n_positions,
         n_nodes,
         params.n_classes,
