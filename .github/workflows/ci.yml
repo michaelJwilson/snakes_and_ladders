@@ -483,19 +483,65 @@ jobs:
   documents:
     name: Documents (paper and textbook)
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The scope step below diffs against the base branch, which needs
+          # more than the single merge commit a default checkout fetches.
+          fetch-depth: 0
+      # This job used to be `if: github.event_name == 'push'`, so a break in a
+      # document input was green on the pull request and red the moment it
+      # merged -- which is exactly how issue #625 landed. It now runs on a
+      # pull request too, but only builds when the pull request touches an
+      # input to the documents: everything else pays one checkout and this
+      # step, a few seconds, rather than the ~8 minutes a build costs.
+      #
+      # The scope is computed with `git diff` rather than a paths-filter
+      # action, for the reason the TeX Live install below gives: no new
+      # GitHub Action joins the supply chain.
+      - name: Which pull requests build the documents
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" != 'pull_request' ]; then
+            echo "build=true" >>"$GITHUB_OUTPUT"
+            echo "every push to main builds both documents"
+            exit 0
+          fi
+          git fetch --no-tags origin "${{ github.base_ref }}" || true
+          # What the two documents are built from: the sources, the figures
+          # and captions the QA suite renders into them, the catalogue and
+          # notes the generated tables are read from, and the scripts that do
+          # the generating and the building. A change outside this set cannot
+          # alter a PDF, so it does not pay for one.
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- \
+            docs/tex/ \
+            PROBLEMS.md \
+            infra/problems_tables.py \
+            infra/build_documents.sh \
+            python/snakes_and_ladders/qa/ \
+            .github/workflows/ci.yml)"
+          if [ -n "$changed" ]; then
+            echo "build=true" >>"$GITHUB_OUTPUT"
+            echo "building; this pull request changes:"
+            printf '%s\n' "$changed"
+          else
+            echo "build=false" >>"$GITHUB_OUTPUT"
+            echo "no document input changed; the build is skipped"
+          fi
       - uses: actions/setup-python@v5
+        if: steps.scope.outputs.build == 'true'
         with:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.scope.outputs.build == 'true'
       - name: Cache the uv environment
+        if: steps.scope.outputs.build == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
       - name: Cache Cargo registry and the oxi_snakes_and_ladders build
+        if: steps.scope.outputs.build == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -506,7 +552,9 @@ jobs:
           restore-keys: |
             cargo-${{ runner.os }}-
       - run: pip install "uv==${UV_VERSION}"
+        if: steps.scope.outputs.build == 'true'
       - run: uv sync --locked --extra test
+        if: steps.scope.outputs.build == 'true'
       # TeX Live from the Ubuntu archive rather than a third-party action:
       # these packages are what the document needs, and no new GitHub Action
       # joins the supply chain.
@@ -515,6 +563,7 @@ jobs:
       # `uv` and Cargo are both cached above; this was the one install left
       # paying full price on every run (issue #154).
       - name: Cache the TeX Live packages
+        if: steps.scope.outputs.build == 'true'
         uses: actions/cache@v4
         with:
           path: /var/cache/apt/archives
@@ -522,6 +571,7 @@ jobs:
           restore-keys: |
             texlive-${{ runner.os }}-
       - name: Install TeX Live
+        if: steps.scope.outputs.build == 'true'
         run: |
           # Keep the downloaded .debs so the cache above has something to save.
           sudo rm -f /etc/apt/apt.conf.d/docker-clean
@@ -539,13 +589,28 @@ jobs:
       # docs/paper.pdf and docs/textbook.pdf -- the same entry point a local
       # build uses (see infra/CLAUDE.md), so CI and a contributor's machine
       # take one path.
+      #
+      # On a pull request the renders are dropped and the committed figures
+      # are used as they are. Issue #488 moved this job off the pull request
+      # because of the renders -- 431.8 s against the LaTeX's 15.8 s -- and
+      # that decision stands: what comes back to the pull request is the
+      # 15.8 s half, which is the half that catches a document that no longer
+      # typesets (issue #625). The renders still run on the push to main,
+      # where a figure whose numbers moved is caught.
       - name: Build the documents (QA figures + PDFs)
-        run: infra/build_documents.sh
+        if: steps.scope.outputs.build == 'true'
+        run: |
+          if [ "${{ github.event_name }}" = 'pull_request' ]; then
+            infra/build_documents.sh --no-figures
+          else
+            infra/build_documents.sh
+          fi
       # latexmk exits 0 on unresolved references and citations, so the log is
       # checked explicitly -- the LaTeX counterpart of the docs job's -W.
       # Both logs, since a reference broken by the split would otherwise be
       # caught in whichever document happened to be checked (issue #249).
       - name: Fail on undefined or duplicated references and citations
+        if: steps.scope.outputs.build == 'true'
         run: |
           # "multiply defined" matters as much as "undefined": two equations
           # sharing a label make every \eqref to it point at whichever came

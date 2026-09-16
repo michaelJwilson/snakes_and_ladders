@@ -142,10 +142,14 @@ def test_the_gate_renders_each_figure_once() -> None:
 def test_the_build_script_renders_the_figures_unless_it_is_told_not_to() -> None:
     """`--no-figures` is one caller's flag, not the script's default.
 
-    The `documents` job on the push to `main` runs the script with no
-    arguments and must still render; only the release gate, which has just
-    compared every figure, may skip. An unknown argument is refused rather
-    than ignored, so a typo cannot silently turn the render off.
+    Three callers may skip the render and one may not. The release gate skips
+    because it has just compared every figure (issue #530), and a pull request
+    skips because issue #488 moved the renders --- 431.8 s against the LaTeX's
+    15.8 s --- off the path a merge waits for, and issue #625 brought only the
+    LaTeX back. **The push to `main` must still render**, because that is what
+    catches a figure whose numbers moved; a workflow that skipped it there
+    would typeset figures nothing regenerates. An unknown argument is refused
+    rather than ignored, so a typo cannot silently turn the render off.
     """
     script = BUILD_DOCUMENTS.read_text()
     assert "--no-figures) figures=0" in script
@@ -162,10 +166,31 @@ def test_the_build_script_renders_the_figures_unless_it_is_told_not_to() -> None
     assert refused.returncode == 2, refused.stderr.decode()
 
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
-    assert "infra/build_documents.sh --no-figures" not in workflow, (
-        "the documents job skips the render, so nothing regenerates the "
-        "figures it typesets (issue #530)"
+    skipping = [
+        line.strip()
+        for line in workflow.splitlines()
+        if "build_documents.sh" in line and "--no-figures" in line
+    ]
+    rendering = [
+        line.strip()
+        for line in workflow.splitlines()
+        if "build_documents.sh" in line and "--no-figures" not in line
+    ]
+    assert rendering, (
+        "no invocation of infra/build_documents.sh renders, so nothing "
+        "regenerates the figures the documents typeset (issue #530)"
     )
+    # The call that skips is reachable only from the pull-request arm, and the
+    # call that renders only from the other. Asserting the shape of the `if`
+    # rather than the presence of a string is what lets one job carry both.
+    assert len(skipping) <= 1, skipping
+    if skipping:
+        arm = workflow.split("infra/build_documents.sh --no-figures")[0]
+        assert arm.rstrip().endswith("= 'pull_request' ]; then"), (
+            "infra/build_documents.sh --no-figures is reachable outside the "
+            "pull-request arm, so a merge would typeset stale figures "
+            "(issues #530, #625)"
+        )
 
 
 @pytest.mark.structural
