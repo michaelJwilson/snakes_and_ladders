@@ -1,0 +1,15 @@
+model: polar
+oracle: closed-form
+
+# N = 2048, k = 1024, the length the roadmap's coding claims are made at. The
+# capacity sum `sum_i I(W_i) = N (1 - eps)` is asserted here as it is at every
+# tier, because it is exact at every length; the decoding claims are frame
+# error rates over seeded draws.
+seed: 595
+n_stages: 11
+n_info: 1024
+construction: bec
+
+flip_probability: 0.04
+erasure_probability: 0.5
+noise_scale: 0.7

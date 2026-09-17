@@ -198,6 +198,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.polar
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.polar_reference
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.convolutional
    :members:
 

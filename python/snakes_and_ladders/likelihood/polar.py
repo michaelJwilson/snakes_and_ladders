@@ -227,9 +227,16 @@ def transmitted(code: PolarCode, message: np.ndarray) -> np.ndarray:
 
 
 def is_codeword(code: PolarCode, bits: np.ndarray) -> bool:
-    """Whether ``bits`` lies in the code: its frozen source positions are zero."""
+    """Whether ``bits`` lies in the code: its frozen source positions are zero.
+
+    The transform is its **own inverse** over GF(2) --- ``F F = I`` on the
+    kernel and the Kronecker power of an involution is one --- so the source
+    vector is recovered by applying the same matrix rather than by inverting
+    a float copy of it and rounding, which is what this did until the
+    involution was asserted (``test_polar.py``).
+    """
     word = np.asarray(bits, dtype=np.int64).reshape(-1)
-    source = (word @ np.linalg.inv(polar_transform(code.n_stages)).round()) % 2
+    source = (word @ polar_transform(code.n_stages)) % 2
     return bool(np.all(source[code.frozen] == 0))
 
 

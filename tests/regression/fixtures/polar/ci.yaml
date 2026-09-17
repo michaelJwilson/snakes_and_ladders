@@ -1,0 +1,26 @@
+model: polar
+oracle: enumeration
+
+# The BEC-constructed polar code at the block length exact decoding reaches.
+# Every field is required -- see python/snakes_and_ladders/sim/polar.py and
+# sim/CLAUDE.md.
+#
+# n = 4 gives N = 16 and k = 8, so 2**8 = 256 codewords and
+# `likelihood.ldpc.exact_decoding` on `sim.polar.parity_check` is the exact
+# maximum-likelihood oracle: successive cancellation is measured against what
+# the best possible decoder would have said, which is the gap the ticket is
+# about. N = 8 was the first candidate and is too small to show one -- at
+# k = 4 the code is the extended Hamming (8,4), where SC already agrees with
+# enumeration on most draws (issue #593).
+seed: 593
+n_stages: 4
+n_info: 8
+construction: bec
+
+# The three channels this instance is decoded on. The frozen set is chosen at
+# the erasure probability below and then used on all three, which is what a
+# real deployment does: a code is built once and met by whatever channel
+# arrives.
+flip_probability: 0.1
+erasure_probability: 0.5
+noise_scale: 1.0
