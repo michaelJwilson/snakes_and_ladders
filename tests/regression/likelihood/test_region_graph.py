@@ -62,7 +62,6 @@ def _beliefs(
 
 
 @pytest.mark.oracle
-@pytest.mark.potts_chain
 def test_the_free_energy_is_the_exact_log_partition_on_a_tree() -> None:
     # The strongest statement available: on a chain the Bethe region graph's
     # free energy is not an approximation of anything, so equality against the
@@ -78,7 +77,6 @@ def test_the_free_energy_is_the_exact_log_partition_on_a_tree() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.potts_lattice
 @pytest.mark.parametrize("shape", [(3, 3), (4, 4)])
 def test_the_free_energy_reproduces_the_bethe_value_on_a_loop(
     shape: tuple[int, int],
@@ -98,7 +96,6 @@ def test_the_free_energy_reproduces_the_bethe_value_on_a_loop(
 
 
 @pytest.mark.mathematical
-@pytest.mark.potts_lattice
 def test_the_counting_numbers_are_one_minus_the_degree() -> None:
     # The closed form the pairwise case carries, and the reason the Bethe
     # region graph is built by the general construction rather than written
@@ -123,7 +120,6 @@ def test_the_counting_numbers_are_one_minus_the_degree() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.potts_lattice
 @pytest.mark.parametrize(("shape", "expected"), [((3, 3), 9), ((4, 4), 25)])
 def test_the_plaquette_closure_counts_everything_once(
     shape: tuple[int, int], expected: int
@@ -143,7 +139,6 @@ def test_the_plaquette_closure_counts_everything_once(
 
 
 @pytest.mark.edge_case
-@pytest.mark.potts_lattice
 def test_a_cluster_that_leaves_a_factor_outside_is_refused() -> None:
     # A factor whose scope fits in no cluster has its energy dropped, not
     # approximated, and the free energy would still return a number. Refused
@@ -157,7 +152,6 @@ def test_a_cluster_that_leaves_a_factor_outside_is_refused() -> None:
 
 
 @pytest.mark.edge_case
-@pytest.mark.potts_lattice
 def test_a_belief_that_is_not_a_distribution_is_refused() -> None:
     # A caller who has not normalized has not converged, so renormalizing here
     # would hide an unconverged run inside a plausible number.
@@ -172,7 +166,6 @@ def test_a_belief_that_is_not_a_distribution_is_refused() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.potts_lattice
 def test_a_region_graph_that_counts_a_variable_twice_is_refused() -> None:
     # The validity condition, triggered rather than described: two overlapping
     # clusters whose intersection is not among the regions count the shared
@@ -196,7 +189,6 @@ def test_a_region_graph_that_counts_a_variable_twice_is_refused() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.potts_chain
 def test_the_updates_find_the_exact_beliefs_on_a_tree() -> None:
     # On a chain the region graph is a tree and the fixed point is the exact
     # one, so the beliefs are marginals and equality against message passing
@@ -216,7 +208,6 @@ def test_the_updates_find_the_exact_beliefs_on_a_tree() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.potts_lattice
 def test_the_updates_find_the_bethe_fixed_point_on_a_loop() -> None:
     # The referee for the algorithm, as the reduction is for the energy: on the
     # Bethe region graph these updates and `message_passing`'s flooding
@@ -236,7 +227,6 @@ def test_the_updates_find_the_bethe_fixed_point_on_a_loop() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.potts_lattice
 def test_the_plaquette_regions_are_nearer_the_truth_than_the_pairwise_ones() -> None:
     # The claim the ticket exists to test, against exhaustive enumeration of
     # all 3**9 configurations. Asserted as an ordering rather than pinned to a
@@ -260,8 +250,34 @@ def test_the_plaquette_regions_are_nearer_the_truth_than_the_pairwise_ones() -> 
     assert kikuchi.iterations > bethe.iterations
 
 
+@pytest.mark.mathematical
+def test_at_size_the_plaquette_graph_settles_where_the_pairwise_one_always_does() -> (
+    None
+):
+    # The binding constraint at size is convergence, not accuracy, and it is
+    # asserted in the direction the measurement found. On the 6x4 strip the
+    # pairwise region graph settles at every coupling measured; the plaquette
+    # one settles at J = 0.25 and does not at J = 0.5 -- damping 0.7 through
+    # 0.98 and 20,000 sweeps all refuse, with the residual falling from 0.377
+    # to 0.020 as the damping rises, so more damping buys a slower approach
+    # and not a fixed point (`STATUS.md`).
+    #
+    # The cap here is 200 sweeps rather than 20,000: what is asserted is that
+    # the two graphs part on this instance, and the fuller sweep is a
+    # measurement recorded rather than a test run per pull request.
+    shape, cap = (6, 4), 200
+    for coupling in (0.25, 0.5):
+        pairwise = generalized_belief_propagation(
+            bethe_region_graph(_graph(shape, coupling)), max_iterations=cap
+        )
+        assert pairwise.residual <= 1e-12
+
+    plaquette = region_graph(_graph(shape, 0.5), lattice_plaquettes(shape))
+    with pytest.raises(ConvergenceError):
+        generalized_belief_propagation(plaquette, damping=0.7, max_iterations=cap)
+
+
 @pytest.mark.edge_case
-@pytest.mark.potts_lattice
 def test_damping_that_freezes_every_message_is_refused() -> None:
     # At damping 1 no message moves, so the residual is zero on the first sweep
     # and every graph "converges" -- a silent wrong answer rather than a loud
@@ -273,7 +289,6 @@ def test_damping_that_freezes_every_message_is_refused() -> None:
 
 
 @pytest.mark.edge_case
-@pytest.mark.potts_lattice
 def test_a_run_that_does_not_settle_raises_rather_than_reporting() -> None:
     # A free energy read off messages that never settled estimates nothing, and
     # the caller cannot tell it from one that did.

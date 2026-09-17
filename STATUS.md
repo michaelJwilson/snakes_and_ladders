@@ -3460,6 +3460,25 @@ rather than at none. **The advantage decays with coupling**, 23,378x at
 concentrate on the same configuration and what Bethe neglects stops mattering,
 which is also why Kikuchi is not the tool for a ground state.
 
+**At size, convergence is the binding constraint and not accuracy.** On the
+6x4 open strip, refereed by `strip_log_partition` where enumeration cannot
+reach (2026-09-17, this host):
+
+| `J` | pairwise: sweeps, ms, error | plaquette: sweeps, ms, error | factor |
+| --- | --- | --- | --- |
+| 0.25 | 50, 182.7 ms, 2.147e-03 | 1,176, 5,196.6 ms, **1.510e-07** | 14,219x |
+| 0.5 | 85, 296.8 ms, 3.778e-02 | **does not settle** | --- |
+| 0.875 | 169, 610.5 ms, 2.285e-01 | **does not settle** | --- |
+
+The refusals are not a cap chosen too low: at `J = 0.875` damping 0.7, 0.8,
+0.9, 0.95 and 0.98 all reach 20,000 sweeps with the residual at 0.377, 0.140,
+0.070 and 0.020 against a tolerance of 1e-12 --- rising damping buys a slower
+approach, not a fixed point. So the plaquette regions pay 28x the wall clock
+for four orders of magnitude at weak coupling, and at the couplings where
+Bethe is worst they return nothing at all rather than a number. That is the
+result the ticket asked for, and it is why nothing here is reported as a
+replacement for `belief_propagation`.
+
 The construction is refereed by the case it generalizes rather than by its own
 claim: at the Bethe region graph `-F_K` is `log Z` to **8.9e-16** on a chain
 and the value `likelihood.message_passing` reports to **1.8e-10** on a 3x3 and
