@@ -36,7 +36,6 @@ from snakes_and_ladders.sim.elementary_codes import (
 
 
 @pytest.mark.oracle
-@pytest.mark.ldpc
 def test_the_single_parity_check_posterior_is_the_tanh_rule() -> None:
     # The reason this code is in the tree: its exact bitwise posterior is the
     # check-node update every LDPC and turbo decode here performs, so brute
@@ -58,7 +57,6 @@ def test_the_single_parity_check_posterior_is_the_tanh_rule() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 @pytest.mark.parametrize(("m", "n_bits", "dimension"), [(3, 7, 4), (4, 15, 11)])
 def test_a_hamming_code_is_perfect(m: int, n_bits: int, dimension: int) -> None:
     # `2^k (1 + n) == 2^n`, an equality over integers. A dropped row or a
@@ -71,7 +69,6 @@ def test_a_hamming_code_is_perfect(m: int, n_bits: int, dimension: int) -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_the_golay_code_is_perfect_and_its_extension_is_not() -> None:
     # `2^12 (1 + 23 + 253 + 1771) == 2^23` exactly. The extended code is *not*
     # perfect and that is not a defect: adding a parity bit buys distance 8,
@@ -87,7 +84,6 @@ def test_the_golay_code_is_perfect_and_its_extension_is_not() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 @pytest.mark.parametrize(
     ("build", "expected"),
     [
@@ -109,7 +105,6 @@ def test_the_minimum_distance_is_the_one_the_literature_states(
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_the_syndrome_of_a_hamming_error_is_the_index_of_the_flipped_bit() -> None:
     # Why the columns are written in increasing order: syndrome decoding is a
     # lookup with no table. Checked at *every* position, since an off-by-one in
@@ -128,7 +123,6 @@ def test_the_syndrome_of_a_hamming_error_is_the_index_of_the_flipped_bit() -> No
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_the_repetition_error_rate_is_its_closed_form() -> None:
     # An analytic curve, which no fixture in this tree had. The erasure case is
     # exact by construction; the binary symmetric case is the binomial tail
@@ -153,7 +147,6 @@ def test_the_repetition_error_rate_is_its_closed_form() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_a_repetition_code_carries_exactly_two_words() -> None:
     for length in (2, 4, 7):
         words = enumerate_codewords(repetition_code(length))
@@ -163,7 +156,6 @@ def test_a_repetition_code_carries_exactly_two_words() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_the_crc_remainder_is_what_division_leaves() -> None:
     # Polynomial long division over GF(2), checked against the property that
     # defines it: the shifted message plus its remainder is divisible, so
@@ -181,7 +173,6 @@ def test_the_crc_remainder_is_what_division_leaves() -> None:
 
 
 @pytest.mark.edge_case
-@pytest.mark.ldpc
 def test_the_constructions_refuse_a_shape_they_cannot_build() -> None:
     with pytest.raises(ValueError, match="at least two bits"):
         repetition_code(1)

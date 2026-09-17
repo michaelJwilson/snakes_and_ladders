@@ -36,7 +36,6 @@ from snakes_and_ladders.sim.reed_solomon import (
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_the_field_is_a_field() -> None:
     # Exhaustive over GF(16): 4,096 triples for each law. The axioms are what
     # every later step silently assumes, so they are checked rather than
@@ -55,7 +54,6 @@ def test_the_field_is_a_field() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 @pytest.mark.parametrize("m", sorted(PRIMITIVE))
 def test_the_generator_reaches_every_nonzero_element(m: int) -> None:
     # What "primitive" means, and the property the logarithm table depends on:
@@ -72,7 +70,6 @@ def test_the_generator_reaches_every_nonzero_element(m: int) -> None:
 
 
 @pytest.mark.edge_case
-@pytest.mark.ldpc
 def test_zero_has_no_logarithm_and_says_so() -> None:
     # The usual trick is `log(0) = -1` propagating quietly through a decode.
     with pytest.raises(ZeroDivisionError, match="no multiplicative inverse"):
@@ -80,7 +77,6 @@ def test_zero_has_no_logarithm_and_says_so() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.ldpc
 def test_reed_solomon_meets_the_singleton_bound_with_equality() -> None:
     # Maximum distance separable, read off every codeword: `d = n - k + 1`
     # exactly, not `>=`. The 512 words of RS(7,3) are enumerable, which is the
@@ -100,7 +96,6 @@ def test_reed_solomon_meets_the_singleton_bound_with_equality() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_encoding_is_systematic_and_lands_in_the_code() -> None:
     code = reed_solomon(3, 3)
     rng = np.random.default_rng(594)
@@ -114,7 +109,6 @@ def test_encoding_is_systematic_and_lands_in_the_code() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.ldpc
 @pytest.mark.parametrize(
     ("m", "k", "errors"), [(3, 3, 0), (3, 3, 1), (3, 3, 2), (4, 9, 3)]
 )
@@ -136,7 +130,6 @@ def test_the_decoder_is_exact_within_its_guarantee(m: int, k: int, errors: int) 
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_past_the_guarantee_it_refuses_or_is_confidently_wrong() -> None:
     # Reported, not asserted to refuse: a bounded-distance decoder returns the
     # nearest codeword, and past `t` the nearest one can be the wrong one. The
@@ -166,7 +159,6 @@ def test_past_the_guarantee_it_refuses_or_is_confidently_wrong() -> None:
 
 
 @pytest.mark.edge_case
-@pytest.mark.ldpc
 def test_a_wasteful_or_impossible_shape_is_refused() -> None:
     # An odd parity count is legal and wastes a symbol: `t` rounds down while
     # `d` does not, so a reader comparing them finds them disagree. Refused
@@ -180,7 +172,6 @@ def test_a_wasteful_or_impossible_shape_is_refused() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.ldpc
 def test_the_bit_packing_round_trips_and_localises_a_flip() -> None:
     # What carries a symbol code onto a binary channel. Two claims: the
     # mapping is a bijection over every symbol of GF(8), and one flipped bit
@@ -201,7 +192,6 @@ def test_the_bit_packing_round_trips_and_localises_a_flip() -> None:
 
 
 @pytest.mark.structural
-@pytest.mark.ldpc
 def test_the_packing_refuses_what_it_would_have_to_truncate() -> None:
     with pytest.raises(ValueError, match="symbols must lie in"):
         bits_from_symbols(np.array([8]), 3)
