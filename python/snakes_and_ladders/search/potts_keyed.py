@@ -42,32 +42,43 @@ from snakes_and_ladders.search.potts_mcmc import (
 from snakes_and_ladders.sim.graph import PottsGraph
 
 
-def monochrome_partition(labels: np.ndarray, graph: PottsGraph) -> np.ndarray:
+def monochrome_partition(
+    labels: np.ndarray, offsets: np.ndarray, neighbours: np.ndarray
+) -> np.ndarray:
     """Component index per site over the bonds between like-coloured sites.
 
     The ``T = 0`` cluster partition of both moves: every like-coloured bond is
     active with probability ``1 - exp(-J / T) -> 1``, so a cluster is a
     connected component of the like-coloured subgraph. Uses
     ``potts_mcmc``'s own union-find, so the partition is not a second reading
-    of what a component is.
+    of what a component is. Walked over the compressed rows the move built
+    once rather than the graph's edge tuples, which `CLAUDE.md`'s layout rule
+    asks and `infra/appraise_structures.py` reported (2026-09-17 review).
 
     Parameters
     ----------
     labels : np.ndarray
         The labelling, ``(n_nodes,)``.
-    graph : PottsGraph
-        The lattice.
+    offsets, neighbours : np.ndarray
+        The compressed adjacency, as
+        :meth:`~snakes_and_ladders.sim.graph.PottsGraph.compressed_adjacency`
+        lays it out. Each bond appears twice and is joined once, from its
+        lower end.
 
     Returns
     -------
     np.ndarray
         ``(n_nodes,)`` of component roots, as :func:`_find` reports them.
     """
-    parent = np.arange(graph.n_nodes)
-    for first, second in graph.edges:
-        if labels[first] == labels[second]:
-            _union(parent, int(first), int(second))
-    return np.array([_find(parent, node) for node in range(graph.n_nodes)])
+    n_nodes = int(offsets.shape[0]) - 1
+    parent = np.arange(n_nodes)
+    bounds, incident = offsets.tolist(), neighbours.tolist()
+    for node in range(n_nodes):
+        for position in range(bounds[node], bounds[node + 1]):
+            neighbour = incident[position]
+            if neighbour > node and labels[neighbour] == labels[node]:
+                _union(parent, node, neighbour)
+    return np.array([_find(parent, node) for node in range(n_nodes)])
 
 
 def _recolour_at_zero(
@@ -121,14 +132,15 @@ class WolffMove:
                 "measured (issue #706)"
             )
             raise ValueError(msg)
-        self._graph = graph
+        self._n_nodes = graph.n_nodes
         self._field = field
+        # Built once and held: the T = 0 partition and the T > 0 sweep both
+        # read these rows, and `infra/appraise_structures.py` reads the store
+        # from these assignments (recompute or store, decided as store).
         offsets, neighbours, couplings = graph.compressed_adjacency()
-        self._offsets, self._neighbours, self._couplings = (
-            offsets,
-            neighbours,
-            couplings,
-        )
+        self._offsets = offsets
+        self._neighbours = neighbours
+        self._couplings = couplings
         # `potts_mcmc._anneal`'s charge, to the integer division: a cluster
         # member's neighbours are read and the member is written, and the mean
         # degree is what a heat-bath sweep is charged per site.
@@ -137,7 +149,7 @@ class WolffMove:
     @property
     def n_nodes(self) -> int:
         """Sites the move expects."""
-        return self._graph.n_nodes
+        return self._n_nodes
 
     @property
     def n_states(self) -> int:
@@ -161,7 +173,7 @@ class WolffMove:
         """Grow the cluster at ``site``, recolour it to ``label``, and charge it."""
         labels = np.ascontiguousarray(state, dtype=np.int64).copy()
         if temperature == 0.0:
-            partition = monochrome_partition(labels, self._graph)
+            partition = monochrome_partition(labels, self._offsets, self._neighbours)
             members = np.flatnonzero(partition == partition[site])
             _recolour_at_zero(labels, members, self._field, label)
             size = int(members.size)
@@ -210,6 +222,9 @@ class SwendsenWangMove:
             raise ValueError(msg)
         self._graph = graph
         self._field = field
+        offsets, neighbours, _ = graph.compressed_adjacency()
+        self._offsets = offsets
+        self._neighbours = neighbours
         #: `search.ground_state.Rung.visits_per_sweep`: the bond pass reads
         #: both labels of every edge and writes every site.
         self._visits = graph.n_nodes + 2 * len(graph.edges)
@@ -242,7 +257,7 @@ class SwendsenWangMove:
         del site, label
         labels = np.ascontiguousarray(state, dtype=np.int64).copy()
         if temperature == 0.0:
-            partition = monochrome_partition(labels, self._graph)
+            partition = monochrome_partition(labels, self._offsets, self._neighbours)
             for root in np.unique(partition):
                 members = np.flatnonzero(partition == root)
                 proposed = int(rng.integers(self.n_states))
