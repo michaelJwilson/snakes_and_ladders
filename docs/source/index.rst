@@ -267,6 +267,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.canonical
    :members:
 
+.. automodule:: snakes_and_ladders.learn.tabular
+   :members:
+
 .. automodule:: snakes_and_ladders.learn.critic
    :members:
 

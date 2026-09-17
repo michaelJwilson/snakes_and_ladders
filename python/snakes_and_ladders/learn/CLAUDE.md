@@ -4,9 +4,8 @@ Reinforcement learning applied to discrete search problems. The interface is
 model-agnostic by construction, on exactly the terms `opt/CLAUDE.md` sets.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this module too.  It is referenced here, never restated. What follows is local,
-and is principle: the numbers behind each rule live with the code that
-produces them or in `STATUS.md`.
+section binds this module too, referenced here and never restated. What follows
+is local, and is principle: the numbers live with the code or in `STATUS.md`.
 
 ## What lives here
 
@@ -55,13 +54,11 @@ same models `sal.opt` fits.
   searcher and a policy score the whole neighbourhood per decision, so
   decisions are the unit at which they are comparable — the same reasoning
   that makes `sal.search.infer` count candidate fits.
-
 - **An episode that may leave a local optimum is scored on its best state,
   not its last.** `rollout(..., stop_at_local_optimum=False)` runs to its
   budget, so its final state is wherever the walk happened to stop, and a
   real search keeps the best thing it saw. Scoring the last state instead
   would make a better searcher look worse the longer it ran.
-
 - **A comparison against a wandering searcher is against *restarts*.** Once
   an episode is no longer bounded by reaching a local optimum, a single
   greedy run is not a budget-matched baseline: greedy stops after a few
@@ -110,6 +107,11 @@ against the exact gradient enumeration supplies, never assumed small.
   `learn/canonical.py` carries optima known from outside, and its oracle is a
   second computation rather than a second opinion: a sweep over an enumerated
   state set against `learn.exact`'s recursion over trajectories.
+
+- **A learner states which values it converges to.** Q-learning's fixed point
+  is `q*` and SARSA's is `q_pi` for the epsilon-greedy policy it behaves
+  under, so a suite asserting both match value iteration asserts something
+  false: one is held at `V*` and the other held away from it (issue #597).
 
 - **A fixture needing randomness inside a transition is not of this
   protocol.** `step` is deterministic by contract and `learn.exact`'s
