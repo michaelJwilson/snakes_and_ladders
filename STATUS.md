@@ -3519,6 +3519,56 @@ question and not a language one. Its warm profile's top self-time entry is
 `search.gibbs._Indexed.layout` at **30%**, the same line the structure survey
 surfaces once it stops dropping findings outside clusters (#690).
 
+**Generalized belief propagation at #689.** The plaquette regions see the
+4-cycles the Bethe approximation cannot, and the measurement is what the ticket
+was for. On the 3x3 lattice at three states, against exhaustive enumeration of
+all 19,683 configurations (2026-09-16, 4-core host):
+
+| `J` | exact `log Z` | Bethe error | Kikuchi error | factor | sweeps B/K | ms B/K |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.3 | 1.538947 | 8.53e-04 | **3.65e-08** | 23,378x | 49 / 372 | 58.7 / 277.3 |
+| 0.6 | 3.483551 | 1.11e-02 | **6.66e-06** | 1,672x | 69 / 380 | 76.0 / 280.0 |
+| 0.9 | 5.924288 | 2.99e-02 | **7.75e-05** | 386x | 87 / 394 | 95.5 / 291.4 |
+| 1.2 | 8.845411 | 3.13e-02 | **2.41e-04** | 130x | 86 / 402 | 96.5 / 305.5 |
+
+**Both halves of the case.** The ratio is three to four orders of magnitude and
+the cost is **3.7x the wall clock** --- 5.5x the sweeps over tables of 81
+entries rather than 9 --- so the plaquette buys its accuracy at a stated price
+rather than at none. **The advantage decays with coupling**, 23,378x at
+`J = 0.3` to 130x at `J = 1.2`: deep in the ordered phase both approximations
+concentrate on the same configuration and what Bethe neglects stops mattering,
+which is also why Kikuchi is not the tool for a ground state.
+
+**At size, convergence is the binding constraint and not accuracy.** On the
+6x4 open strip, refereed by `strip_log_partition` where enumeration cannot
+reach (2026-09-17, this host):
+
+| `J` | pairwise: sweeps, ms, error | plaquette: sweeps, ms, error | factor |
+| --- | --- | --- | --- |
+| 0.25 | 50, 182.7 ms, 2.147e-03 | 1,176, 5,196.6 ms, **1.510e-07** | 14,219x |
+| 0.5 | 85, 296.8 ms, 3.778e-02 | **does not settle** | --- |
+| 0.875 | 169, 610.5 ms, 2.285e-01 | **does not settle** | --- |
+
+The refusals are not a cap chosen too low: at `J = 0.875` damping 0.7, 0.8,
+0.9, 0.95 and 0.98 all reach 20,000 sweeps with the residual at 0.377, 0.140,
+0.070 and 0.020 against a tolerance of 1e-12 --- rising damping buys a slower
+approach, not a fixed point. So the plaquette regions pay 28x the wall clock
+for four orders of magnitude at weak coupling, and at the couplings where
+Bethe is worst they return nothing at all rather than a number. That is the
+result the ticket asked for, and it is why nothing here is reported as a
+replacement for `belief_propagation`.
+
+The construction is refereed by the case it generalizes rather than by its own
+claim: at the Bethe region graph `-F_K` is `log Z` to **8.9e-16** on a chain
+and the value `likelihood.message_passing` reports to **1.8e-10** on a 3x3 and
+a 4x4, and the parent-to-child updates find that module's fixed point to
+**1.65e-10**. The singleton counting numbers come out `1 - d` --- -1, -2, -3 on
+a 3x3 --- with the closed form written nowhere.
+
+**Kikuchi is not a bound**, and nothing here is read as one: mean field bounds
+`log Z`, Bethe and Kikuchi are stationary points of a non-convex functional and
+may fall either side. Every claim above is accuracy against an exact referee.
+
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
 more members. `role:incidence` is 12 members over 78 consuming references --- one
