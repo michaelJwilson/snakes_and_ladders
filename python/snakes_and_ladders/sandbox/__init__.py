@@ -20,4 +20,8 @@ the same rule: `burn`'s taped gradient over the Felsenstein recursion (issue
 #449), which cost 46.80 ms against the route that replaced it at 16.36. Its
 Rust half is behind the ``sandbox`` Cargo feature and absent from the default
 build, so the module imports either way and refuses to run without it.
+``region_graph`` is here as ``tropical`` is, declined: generalized belief propagation
+over Kikuchi regions (issue #689), ``log Z`` three to four orders nearer than
+Bethe on the 3x3 lattice for 3.7x the wall clock, and no fixed point on the
+6x4 strip above ``J = 0.25``.
 """

@@ -210,7 +210,6 @@ ALGORITHMS: dict[str, str] = {
     "opt.testfunctions.Rastrigin": "exact evaluation",
     "opt.testfunctions.Himmelblau": "exact evaluation",
     "likelihood.belief_propagation.belief_propagation": "message passing",
-    "likelihood.region_graph.generalized_belief_propagation": "message passing",
     "likelihood.message_passing.sum_product": "message passing",
     "sim.factor_graph.FactorGraph": "message passing",
     "sim.spatio_sequential.coupled_factor_graph": "message passing",
