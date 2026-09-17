@@ -252,6 +252,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.potts
    :members:
 
+.. automodule:: snakes_and_ladders.learn.potts_nd
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.keyed
+   :members:
+
 .. automodule:: snakes_and_ladders.learn.hmm
    :members:
 
