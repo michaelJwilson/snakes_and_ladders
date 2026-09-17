@@ -50,7 +50,6 @@ none of them defines one.
 | Low-density parity-check code, bicycle | `bicycle` | `sec:ldpc` | `sim.ldpc.bicycle_code` |
 | Calderbank–Shor–Steane code over a bicycle matrix | `bicycle_css` | `sec:ldpc` | `sim.css`, `likelihood.css` |
 | Turbo code, two (7,5) recursive systematic encoders | `turbo` | `sec:turbo` | `sim.convolutional`, `likelihood.convolutional`, `likelihood.turbo` |
-| Polar code, BEC-constructed at rate 1/2 | `polar` | `sec:polar` | `sim.polar`, `likelihood.polar`, `likelihood.polar_reference` |
 | Hidden Markov model, six emission families | `hmm`, `ragged_hmm` | `sec:hmm` | `sim.hmm`, `opt.hmm`, `likelihood.hmm_paths`, `learn.hmm` |
 | Coupled spatio-sequential model | `spatio_sequential`, `spatio_sequential_ragged` | `sec:coupled` | `sim.spatio_sequential` |
 | Count-pair coupled spatio-sequential model | `spatio_sequential_counts` | `sec:coupled` | `sim.count_pairs`, `sim.count_pairs_rust`, `likelihood.spatio_sequential_rust` |

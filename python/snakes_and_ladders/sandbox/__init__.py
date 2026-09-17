@@ -24,4 +24,8 @@ build, so the module imports either way and refuses to run without it.
 over Kikuchi regions (issue #689), ``log Z`` three to four orders nearer than
 Bethe on the 3x3 lattice for 3.7x the wall clock, and no fixed point on the
 6x4 strip above ``J = 0.25``.
+``polar``, ``polar_decoding`` and ``polar_reference`` are here as ``tropical``
+is, declined: the polar construction with successive-cancellation and list
+decoding (issue #593), refereed by enumeration at the declared length and
+taken no further.
 """
