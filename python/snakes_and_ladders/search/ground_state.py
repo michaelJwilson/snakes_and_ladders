@@ -35,6 +35,14 @@ label by a move: a heat-bath sweep costs ``n_nodes + 2 * n_edges``, a
 Swendsen-Wang bond-and-recolour pass the same, and a Wolff step its cluster's
 size times the mean degree plus one.
 
+**A second family, for sizing rather than for ranking.** #596 asks where a
+baseline *first fails*, which needs one instance family indexed by size rather
+than three rungs chosen for what can referee them. :func:`lattice_rung` builds
+the square lattice at the exact critical coupling at any side, in zero field or
+in the size tilt, and :func:`uniform_ground_energy` is the closed form its zero
+-field optimum has. The methods and the budget unit are shared, so a sizing
+sweep and the three-rung comparison are billed the same way.
+
 See Boykov, Veksler & Zabih (2001) for the expansion bound and Baxter ch. 12
 for the ordering coupling the rungs sit either side of.
 """
@@ -67,8 +75,12 @@ from snakes_and_ladders.search.potts_mcmc import (
     parallel_tempering,
 )
 from snakes_and_ladders.sim.factor_graph import from_potts
-from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import SpatioOnlyParams, spatio_only_field
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import (
+    SpatioOnlyParams,
+    critical_coupling,
+    spatio_only_field,
+)
 
 #: The annealing schedule every annealed entry runs, so a difference between
 #: them is the move set. It starts above the ordering coupling's temperature
@@ -125,6 +137,119 @@ class Rung:
     def visits_per_sweep(self) -> int:
         """Site visits one heat-bath sweep costs: a write per site, a read per edge end."""
         return self.n_nodes + 2 * len(self.graph.edges)
+
+
+#: The class ladder the sizing family tilts by, when it carries a field at all.
+#: Three equally spaced values, so the null class sits in the middle and the
+#: tilt is symmetric: an asymmetric ladder would make the majority label a
+#: property of the ladder rather than of the coupling.
+SWEEP_ALPHA = (-1.0, 0.0, 1.0)
+#: Spread of the lognormal per-site covariate. 0.6 puts the field's scale
+#: within a factor of the coupling at `q = 3`, which is what makes the instance
+#: a contest between the two terms rather than a field-only or coupling-only
+#: problem.
+SWEEP_SPREAD = 0.6
+
+
+def uniform_ground_energy(rung: Rung) -> float:
+    """``-J * n_edges``: the exact optimum of a zero-field ferromagnet.
+
+    In zero field every site's unary term is zero, so the energy is the
+    coupling term alone and is minimized by any labelling that agrees across
+    every edge --- the ``q`` uniform ones. There is nothing to search for and
+    that is the point of measuring here: a baseline that cannot reach *this*
+    has failed on an instance whose answer is a closed form, and one that
+    reaches it has not thereby solved anything.
+
+    Raises
+    ------
+    ValueError
+        If the field is not identically zero, where the closed form does not
+        hold and returning it anyway would put a wrong target under a curve.
+    """
+    if bool(np.any(rung.field != 0.0)):
+        msg = (
+            "the closed form holds in zero field only; this rung's field has "
+            f"a largest magnitude of {np.abs(rung.field).max():.6g}"
+        )
+        raise ValueError(msg)
+    return -float(rung.graph.edge_coupling.sum())
+
+
+def lattice_rung(
+    side: int,
+    n_states: int,
+    *,
+    seed: int | None = None,
+    boundary: BoundaryCondition = BoundaryCondition.OPEN,
+) -> Rung:
+    """One member of the sizing family: a square lattice at its critical coupling.
+
+    The coupling is :func:`~snakes_and_ladders.sim.potts.critical_coupling`'s
+    closed form at ``n_states`` rather than a stored float, for the reason
+    `tests/regression/fixtures/potts_lattice/stress.yaml` gives: an instance
+    declared *at* the transition cannot drift off it, and a family at a
+    different label count is at its own transition rather than at this one.
+
+    Parameters
+    ----------
+    side : int
+        Extent of both dimensions, so the instance has ``side ** 2`` sites.
+    n_states : int
+        ``q``.
+    seed : int | None
+        ``None`` leaves the field identically zero, where
+        :func:`uniform_ground_energy` is the exact optimum. An integer draws
+        the per-site covariate lognormally and tilts the field by
+        :data:`SWEEP_ALPHA`, which removes the closed form and is the instance
+        a gate would be argued on.
+    boundary : BoundaryCondition
+        Open by default, matching the lattice fixture.
+
+    Returns
+    -------
+    Rung
+        With ``optimum`` set only in zero field, since that is the only case
+        here where an optimum is known without running anything.
+    """
+    coupling = critical_coupling(n_states)
+    graph = lattice_graph((side, side), boundary, coupling)
+    n_nodes = side * side
+    if seed is None:
+        field = np.zeros((n_nodes, n_states))
+        alpha = np.zeros(n_states)
+        sizes = np.ones(n_nodes)
+    else:
+        ladder = np.asarray(SWEEP_ALPHA, dtype=float)
+        alpha = ladder if n_states == ladder.size else np.array([ladder[0], ladder[-1]])
+        if alpha.size != n_states:
+            msg = (
+                f"the sizing family tilts by {ladder.size} classes or 2, got "
+                f"{n_states}: any other truncation keeps a lopsided ladder"
+            )
+            raise ValueError(msg)
+        sizes = np.random.default_rng(seed).lognormal(0.0, SWEEP_SPREAD, size=n_nodes)
+        field = spatio_only_field(alpha, sizes)
+    rung = Rung(
+        name=f"sweep-{side}x{side}-q{n_states}",
+        graph=graph,
+        field=field,
+        alpha=alpha,
+        sizes=sizes,
+        n_states=n_states,
+        optimum=None,
+    )
+    if seed is not None:
+        return rung
+    return Rung(
+        name=rung.name,
+        graph=graph,
+        field=field,
+        alpha=alpha,
+        sizes=sizes,
+        n_states=n_states,
+        optimum=uniform_ground_energy(rung),
+    )
 
 
 def rung_field(
