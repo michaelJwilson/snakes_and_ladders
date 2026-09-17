@@ -181,9 +181,7 @@ def _starts(built: TreeEnvironment, seed: int) -> list[Topology]:
     return [built.reset(generator) for _ in range(STARTS)]
 
 
-def _rate(
-    built: TreeEnvironment, endpoints: Sequence[Topology], best: float
-) -> float:
+def _rate(built: TreeEnvironment, endpoints: Sequence[Topology], best: float) -> float:
     """The fraction of ``endpoints`` scoring the enumerated maximum."""
     return float(
         np.mean([abs(built.score(state) - best) < 1e-9 for state in endpoints])

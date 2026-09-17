@@ -62,9 +62,7 @@ def maximum(environment: TreeEnvironment) -> float:
     return max(environment.score(t) for t in enumerate_topologies(leaves))
 
 
-def _rate(
-    environment: TreeEnvironment, finals: list[Topology], best: float
-) -> float:
+def _rate(environment: TreeEnvironment, finals: list[Topology], best: float) -> float:
     return float(np.mean([abs(environment.score(t) - best) < 1e-9 for t in finals]))
 
 

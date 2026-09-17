@@ -92,9 +92,7 @@ def environment(params: SimulationParams) -> TreeEnvironment:
 
 
 @pytest.fixture(scope="module")
-def starts(
-    environment: TreeEnvironment, params: SimulationParams
-) -> list[Topology]:
+def starts(environment: TreeEnvironment, params: SimulationParams) -> list[Topology]:
     rng = np.random.default_rng(params.seed + 1000)
     return [environment.reset(rng) for _ in range(STARTS)]
 

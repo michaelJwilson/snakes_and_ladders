@@ -139,17 +139,13 @@ def enumerated_maximum(built: TreeEnvironment, taxa: list[str]) -> float:
     return max(built.score(topology) for topology in enumerate_topologies(taxa))
 
 
-def _reached(
-    built: TreeEnvironment, endpoints: list[Topology], best: float
-) -> float:
+def _reached(built: TreeEnvironment, endpoints: list[Topology], best: float) -> float:
     return float(
         np.mean([abs(built.score(state) - best) < 1e-9 for state in endpoints])
     )
 
 
-def greedy_rate(
-    built: TreeEnvironment, starts: list[Topology], best: float
-) -> float:
+def greedy_rate(built: TreeEnvironment, starts: list[Topology], best: float) -> float:
     return _reached(
         built,
         [greedy_rollout(built, start, HORIZON).states[-1] for start in starts],

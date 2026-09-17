@@ -194,9 +194,7 @@ def test_the_fitted_score_is_never_below_the_known_one() -> None:
     # surface rather than a noisy estimate of the same one.
     _, params, alignment = _environment()
     known, fitted = (
-        TreeEnvironment(
-            alignment, params.k, params.pi, _BRANCH_LENGTH, reward=reward
-        )
+        TreeEnvironment(alignment, params.k, params.pi, _BRANCH_LENGTH, reward=reward)
         for reward in (RewardModel.KNOWN, RewardModel.FITTED)
     )
     for topology in enumerate_topologies(sorted(alignment)):
