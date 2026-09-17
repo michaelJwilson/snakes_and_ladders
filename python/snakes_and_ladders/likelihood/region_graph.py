@@ -497,8 +497,10 @@ def generalized_belief_propagation(
     ValueError
         If ``damping`` is outside ``[0, 1)``, where at 1 no message moves and
         every graph would "converge" on the first sweep.
-    ConvergenceError
+    ~snakes_and_ladders.likelihood.belief_propagation.ConvergenceError
         If the residual is still above ``tolerance`` at ``max_iterations``.
+        Qualified because two modules here declare that name and Sphinx
+        resolves a bare one to both, which `-W` makes an error.
     """
     if not 0.0 <= damping < 1.0:
         msg = (
