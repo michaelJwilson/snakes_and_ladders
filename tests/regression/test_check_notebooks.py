@@ -146,7 +146,8 @@ def test_text_outputs_reads_streams_and_results_but_not_images() -> None:
 @pytest.mark.edge_case
 def test_a_stream_split_into_a_different_number_of_chunks_is_the_same_output() -> None:
     # ipykernel flushes stdout on its own schedule: one `print` loop arrives
-    # as one stream output on one run and as four on another. `ldpc.ipynb`
+    # as one stream output on one run and as four on another. `ldpc.ipynb`,
+    # `classical_codes.ipynb` since issue #594,
     # failed CI on exactly this with an empty diff, since the text agreed.
     committed = [_cell(_stream("a\n"), _stream("b\n"), _stream("c\n"))]
     executed = [_cell(_stream("a\nb\nc\n"))]
