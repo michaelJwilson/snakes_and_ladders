@@ -3889,3 +3889,74 @@ likelihood the instance does not have, so the three pairings that need it say
 exactly that in `docs/tex/method_notes.yaml`, and the work is issue #669. `ragged_hmm`'s two say something
 different: a path sampler over segments is the unsegmented sampler run S times,
 and a bound over 89 positions costs more than the exact evaluation.
+
+## Concurrency shape before a thread pool ([#612](https://github.com/michaelJwilson/snakes_and_ladders/issues/612))
+
+Neither `rayon` nor `tokio` is a dependency. #610 has just put nine of the ten
+`#[pyfunction]`s under `Python::detach`, taking threaded throughput from 1.05x
+to **3.70x** at four threads, so a thread pool inside a kernel can overlap with
+Python for the first time. What it should be is decided here by shape, not by
+subsystem.
+
+Counts are at the declared scale (`ROADMAP.md`: `n` to 1000, `L` to 11,000) on
+a 4-core host.
+
+| axis | independent items | against 4 cores | does an item ever wait? |
+| --- | --- | --- | --- |
+| `pruning_log_likelihood_impl`, sites | up to **11,000** | ~2,750x | no: one contiguous row, no early exit |
+| `count_pairs`, vertex blocks | `n / VERTEX_BLOCK` = 1000/64 ~ **16** | 4x | no |
+| tempering replicas | the ladder length, single digits | ~1x | no |
+| heat-bath sweep | **1** | --- | a Markov chain: the next site reads the last |
+| Dinic maximum flow | **1** | --- | each augmenting path reads the residual the last left |
+
+**`tokio` is declined, and not for the reason first written down.** It is not
+only an I/O runtime --- it carries M:N lightweight tasks over a work-stealing
+scheduler, `spawn_blocking` and `block_in_place`. The argument is the table: a
+lightweight task is cheap because it is a `Future` polled cooperatively, which
+pays where concurrency greatly exceeds cores *and tasks spend their life
+suspended*. Every item above is CPU-saturating with no await point, so it holds
+its worker to completion and achieved parallelism is the worker count --- what
+a plain pool gives with less machinery, and what `tokio`'s own guidance sends
+to `rayon`. That no kernel in `src/` references `std::fs`, `std::net` or
+`std::io` is corroboration, not the argument.
+
+**The deciding property is an ordered reduction.** A parallel sum over sites
+reassociates `log L` and moves its last bits, which the oracle tests pin.
+`rayon` has `fold` and `reduce` over an *indexed* parallel iterator, so
+per-site partials combine in index order and the arithmetic is unchanged.
+`tokio` offers no such primitive; it would be hand-rolled, and hand-rolling is
+where a reassociated sum gets in.
+
+So one crate is worth asking for, and the last two rows are not candidates for
+either: parallelising them means changing what they compute.
+
+**The ranking is now measured**
+([#627](https://github.com/michaelJwilson/snakes_and_ladders/issues/627)).
+`cargo bench --locked` under `OMP_NUM_THREADS=1` on an idle host --- 1-minute
+load 0.07, no agent and no suite running, the condition #598's withdrawn
+profile lacked. Criterion medians of 100 samples:
+
+| kernel | median | independent items, from the table above |
+| --- | --- | --- |
+| `pruning_log_likelihood/8taxa_200000sites` | **117.64 ms** | one per site |
+| `external_field 200x5041 M=K=10` | 93.43 ms | one per site |
+| `pruning_log_likelihood/4taxa_200000sites` | 58.12 ms | one per site |
+| `sample_rows/2000000` | 26.69 ms | one per row |
+| `class_posteriors 200x5041 M=K=10` | 23.06 ms | one per site |
+| `sample_rows/200000` | 2.264 ms | one per row |
+| `max_flow_expansion_network/32x32` | 385.9 us | **1**, Dinic is sequential |
+| `max_flow_expansion_network/16x16` | 92.0 us | 1 |
+| `max_flow_expansion_network/8x8` | 22.2 us | 1 |
+| `double` | 704.8 ps | --- |
+
+Pruning is the top of the ranking *and* the widest axis, so it is the one
+kernel where a pool can pay, and it is what `rayon` should take first. The
+maximum-flow network is three orders of magnitude below it and carries one
+item, so it is a candidate on neither count --- which corroborates #598
+independently: that half was kept for its layout, not for a speed claim.
+`external_field` places second and is not in the table above; its shape is
+counted before anything is written, not assumed.
+
+**Still not measured:** whether a site-parallel pruning clears root
+`CLAUDE.md`'s 2x bar against the NumPy reference at realistic `(sites, taxa)`.
+No number is claimed here that was not taken.
