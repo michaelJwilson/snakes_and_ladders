@@ -102,6 +102,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.newick
    :members:
 
+.. automodule:: snakes_and_ladders.sim.elementary_codes
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.ldpc
    :members:
 
