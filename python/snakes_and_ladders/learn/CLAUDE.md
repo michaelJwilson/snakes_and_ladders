@@ -79,14 +79,6 @@ same models `sal.opt` fits.
 - **A learned surrogate predicts the gap above an analytic bound**, scored on
   unseen groups, so a poor fit falls back to the bound (issue #308).
 
-- **A critic is pinned to enumeration, never to its loss.** Where the return
-  is exact so is the state value, and a critic's number is its fit to that;
-  a baseline may read the state and never the action sampled at that step.
-
-- **A planner is counted in evaluations, and its answer is compared with
-  greedy's at the same count.** A search that reaches the optimum by
-  evaluating more successors than hill climbing has not won.
-
 ## Framework
 
 **PyTorch**, per root `CLAUDE.md`, and `float64` throughout: the exact
@@ -111,3 +103,16 @@ at the marginals whenever no term reuses a site — multilinearity, not graph
 shape, is the boundary — so the maximum sits at a vertex and a relaxation adds
 no optimum the discrete problem lacks. A gradient estimator's bias is measured
 against the exact gradient enumeration supplies, never assumed small.
+
+- **A learner is pinned on a canonical fixture before a research problem.**
+  Every other environment here *is* a research problem, so a tie leaves two
+  readings open --- the problem is hard, or the learner is broken.
+  `learn/canonical.py` carries optima known from outside, and its oracle is a
+  second computation rather than a second opinion: a sweep over an enumerated
+  state set against `learn.exact`'s recursion over trajectories.
+
+- **A fixture needing randomness inside a transition is not of this
+  protocol.** `step` is deterministic by contract and `learn.exact`'s
+  enumeration depends on it, so a stochastic reward or a slippery transition
+  goes to `TICKETS.md` rather than into a deterministic stand-in that looks
+  like the problem and tests nothing about it (issue #597).

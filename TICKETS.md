@@ -133,6 +133,9 @@ parenthesis the only way a ticket is cited.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
+- Tabular Q-learning and SARSA on the canonical fixtures (#597's second pull request): the cliff walk's on-policy against off-policy distinction is untestable without both, and it is the only pass condition in the suite that is a *difference* rather than an agreement
+- The two canonical fixtures a deterministic `Environment.step` cannot express (#597): the k-armed bandit, whose tension is a stochastic reward, and the slippery Frozen Lake. Either the protocol widens for every implementer and `learn.exact`'s enumeration is replaced by an expectation over successors, or the two stay out --- a decision, not a default
+
 - The surrogate-bound columns of #308 in the tree feature set — the plug-in
   lower and parsimony upper bounds — measured at the budget of
   `docs/experiments/005-tree-policy-features.md`, and the full feature set
