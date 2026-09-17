@@ -3476,6 +3476,29 @@ than the last: every iterate is a valid bound, so this costs one comparison
 and removes any need to rely on monotonicity (none of 480 updates raised the
 dual once the block update was right).
 
+**Label marginals, and which estimator the reported metric asks for (#696).**
+`search.decoding` carries the maximum-posterior-marginal labelling and the
+loss it minimizes. The distinction is not a preference: `label_accuracy`
+scores **per-site** agreement, and the estimator minimizing per-site error is
+the marginal one, while a maximum-a-posteriori labelling minimizes the chance
+of getting the **whole field** wrong. Measured 2026-09-17 on the 3x3
+triangular antiferromagnet at `J = -0.9`, against exhaustive enumeration of
+all 19,683 labellings:
+
+| labelling | energy | posterior | rank | expected wrong sites |
+| --- | ---: | ---: | ---: | ---: |
+| maximum a posteriori | 10.37330 | 1.668e-03 | **1** of 19,683 | 6.0051 |
+| maximum posterior marginal | 21.58657 | 2.251e-08 | **19,555** of 19,683 | **5.4906** |
+
+The two differ at **six of nine sites**, and each wins on its own loss and
+loses on the other's. The marginal labelling sits in the worst one per cent of
+configurations by posterior --- minimizing per-site error does not require the
+answer to be jointly plausible, and on an antiferromagnet it puts every site
+at its own field-preferred label, which no draw would produce. That is the
+cost of the loss, and it is why a decoder reported without naming its loss
+hides the question it answered. On a ferromagnet at the same field the two
+agree exactly, which is recorded so the difference is not read as general.
+
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
 more members. `role:incidence` is 12 members over 78 consuming references --- one

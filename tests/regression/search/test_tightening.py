@@ -119,9 +119,7 @@ def test_triangles_tighten_what_the_pairwise_relaxation_cannot_see(
     ground = _ground_state(graph)
 
     pairwise = dual_bound(graph, FIELD, iterations=300)
-    tightened = dual_bound(
-        graph, FIELD, iterations=300, plaquettes=_triangles(graph)
-    )
+    tightened = dual_bound(graph, FIELD, iterations=300, plaquettes=_triangles(graph))
 
     assert pairwise.bound <= ground + 1e-9
     assert tightened.bound <= ground + 1e-9
