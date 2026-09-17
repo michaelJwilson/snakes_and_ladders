@@ -409,6 +409,8 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.region_graph
+   :members:
+
 .. automodule:: snakes_and_ladders.sandbox.polar
    :members:
 
