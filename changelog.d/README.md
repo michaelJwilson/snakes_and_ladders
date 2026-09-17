@@ -12,7 +12,10 @@ Every user-visible change adds one file to this directory, named:
 <issue-number>.<type>.md
 ```
 
-`<issue-number>` is the GitHub issue or PR number the change belongs to.
+`<issue-number>` is the GitHub issue or PR number the change belongs to. One
+issue carrying two entries adds a counter --- `696.added.md` and
+`696.added.1.md` --- which is the only spelling `towncrier check` accepts; any
+other suffix fails the `lint` job as an invalid fragment name.
 `<type>` is one of, mapped onto this project's Keep a Changelog sections:
 
 | Type       | Section    |
