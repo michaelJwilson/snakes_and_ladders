@@ -43,7 +43,7 @@ from snakes_and_ladders.search.rl import (
     FEATURE_NAMES,
     FeatureSet,
     RewardModel,
-    TopologyEnvironment,
+    TreeEnvironment,
 )
 from snakes_and_ladders.search.statistics import sign_test_p_value
 from snakes_and_ladders.search.topology import (
@@ -104,7 +104,7 @@ def load_params() -> SimulationParams:
 
 def environment(
     params: SimulationParams, feature_set: FeatureSet
-) -> tuple[TopologyEnvironment, list[str]]:
+) -> tuple[TreeEnvironment, list[str]]:
     """The reward surface an agent sees, and the taxa it is over."""
     dataset = simulate_alignment(
         tau=params.tau,
@@ -114,7 +114,7 @@ def environment(
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)
-    built = TopologyEnvironment(
+    built = TreeEnvironment(
         alignment,
         params.k,
         np.asarray(params.pi),
@@ -129,27 +129,23 @@ def environment(
 
 
 def starting_topologies(
-    built: TopologyEnvironment, params: SimulationParams
+    built: TreeEnvironment, params: SimulationParams
 ) -> list[Topology]:
     rng = np.random.default_rng(params.seed + START_SEED_OFFSET)
     return [built.reset(rng) for _ in range(STARTS)]
 
 
-def enumerated_maximum(built: TopologyEnvironment, taxa: list[str]) -> float:
+def enumerated_maximum(built: TreeEnvironment, taxa: list[str]) -> float:
     return max(built.score(topology) for topology in enumerate_topologies(taxa))
 
 
-def _reached(
-    built: TopologyEnvironment, endpoints: list[Topology], best: float
-) -> float:
+def _reached(built: TreeEnvironment, endpoints: list[Topology], best: float) -> float:
     return float(
         np.mean([abs(built.score(state) - best) < 1e-9 for state in endpoints])
     )
 
 
-def greedy_rate(
-    built: TopologyEnvironment, starts: list[Topology], best: float
-) -> float:
+def greedy_rate(built: TreeEnvironment, starts: list[Topology], best: float) -> float:
     return _reached(
         built,
         [greedy_rollout(built, start, HORIZON).states[-1] for start in starts],
@@ -158,7 +154,7 @@ def greedy_rate(
 
 
 def policy_rate(
-    built: TopologyEnvironment,
+    built: TreeEnvironment,
     policy: LinearPolicy,
     starts: list[Topology],
     best: float,
@@ -264,13 +260,13 @@ def params() -> SimulationParams:
 
 
 @pytest.fixture(scope="module")
-def full(params: SimulationParams) -> tuple[TopologyEnvironment, list[str]]:
+def full(params: SimulationParams) -> tuple[TreeEnvironment, list[str]]:
     return environment(params, FeatureSet.FULL)
 
 
 @pytest.fixture(scope="module")
 def starts(
-    full: tuple[TopologyEnvironment, list[str]], params: SimulationParams
+    full: tuple[TreeEnvironment, list[str]], params: SimulationParams
 ) -> list[Topology]:
     return starting_topologies(full[0], params)
 
@@ -278,7 +274,7 @@ def starts(
 # --- the columns are identifiable ---------------------------------------
 
 
-def _constant_columns(built: TopologyEnvironment, states: list[Topology]) -> set[int]:
+def _constant_columns(built: TreeEnvironment, states: list[Topology]) -> set[int]:
     """Columns that take one value across every action, in every one of ``states``."""
     constant: set[int] | None = None
     for state in states:
@@ -295,7 +291,7 @@ def _constant_columns(built: TopologyEnvironment, states: list[Topology]) -> set
 
 @pytest.mark.structural
 def test_every_full_set_column_varies_within_some_neighbourhood(
-    full: tuple[TopologyEnvironment, list[str]], starts: list[Topology]
+    full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
     # The invariance rule of `learn/CLAUDE.md`, column by column: a feature the
     # softmax cancels in every state has no identifiable weight. Over the 50
@@ -313,7 +309,7 @@ def test_every_full_set_column_varies_within_some_neighbourhood(
 
 @pytest.mark.edge_case
 def test_a_planted_constant_column_is_refused(
-    full: tuple[TopologyEnvironment, list[str]], starts: list[Topology]
+    full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
     # The normalized Robinson-Foulds distance from the state is 1 / (n - 3)
     # for every NNI neighbour, so as a column it is exactly the thing the
@@ -338,7 +334,7 @@ def test_a_planted_constant_column_is_refused(
 
 @pytest.mark.mathematical
 def test_shifting_a_column_by_a_constant_leaves_the_policy_unchanged(
-    full: tuple[TopologyEnvironment, list[str]], starts: list[Topology]
+    full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
     # The invariance itself, for every new column: adding a constant to one
     # column of the neighbourhood's features shifts every score alike.
@@ -360,7 +356,7 @@ def test_shifting_a_column_by_a_constant_leaves_the_policy_unchanged(
 
 @pytest.mark.oracle
 def test_the_greedy_weights_reproduce_the_greedy_searcher(
-    full: tuple[TopologyEnvironment, list[str]], starts: list[Topology]
+    full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
     # `learn/CLAUDE.md`: the greedy searcher must be inside the policy class.
     # Weight on the improvement column only, and the policy's argmax is the
@@ -390,7 +386,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher(
 @pytest.mark.simulated_truth
 @pytest.mark.release
 def test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget(
-    full: tuple[TopologyEnvironment, list[str]], starts: list[Topology]
+    full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
     # One seed at half the budget. Against the uniform control, both trained
     # policies must land within 0.1 of the rates realized here and keep their

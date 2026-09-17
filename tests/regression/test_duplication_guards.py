@@ -47,6 +47,15 @@ SQUARE_TRANSITION = re.compile(r"log\(\s*1(\.0)?\s*\+\s*(np\.|numpy\.|math\.)?sq
 #: walks a tree whose couplings carry gradients, and the compressed rows are
 #: `float64` arrays that would cut the autodiff graph.
 NEIGHBOUR_LISTS = re.compile(r"list\[list\[tuple\[int, ?float\]\]\]")
+#: Names an environment carried before it was named for its problem. Issue
+#: #644 retired the first two and #705 the third, each on the same rule: the
+#: problem is `potts`, `hmm` or `tree`, and a class named for its mechanism
+#: sends a reader looking for a mechanism. A retired name is guarded rather
+#: than remembered --- `Topology` was the *third* spelling of one seam, so the
+#: spellings return unless something refuses them.
+RETIRED_ENVIRONMENTS = re.compile(
+    r"\b(PottsLandscape|StatePathLandscape|TopologyEnvironment)\b"
+)
 
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
@@ -142,6 +151,25 @@ def test_the_square_lattice_transition_is_computed_in_one_place() -> None:
 
 @pytest.mark.critical
 @pytest.mark.structural
+def test_no_retired_environment_name_returns() -> None:
+    # Three names for the same seam in two years: `PottsLandscape` and
+    # `StatePathLandscape` went in #644, `TopologyEnvironment` in #705. The
+    # search is the whole repository and not the package alone, because the
+    # old names survived longest in the suite and in a notebook cell -- which
+    # is where the fourth spelling would come back from.
+    assert (
+        _found(
+            RETIRED_ENVIRONMENTS,
+            "test_duplication_guards.py",
+            SEARCHED,
+            ("*.py", "*.ipynb"),
+        )
+        == []
+    )
+
+
+@pytest.mark.critical
+@pytest.mark.structural
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -154,6 +182,8 @@ def test_each_guard_fails_on_violating_source() -> None:
         # Split so this module is not its own offender: the guard reads the
         # suite, and a literal here would match.
         SQUARE_TRANSITION: "TRANSITION = math.log(1.0 + " + "math.sqrt(3.0))\n",
+        # Split for the same reason as the line above.
+        RETIRED_ENVIRONMENTS: "landscape = Potts" + "Landscape(graph, field)\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -163,6 +193,7 @@ def test_each_guard_fails_on_violating_source() -> None:
             "offsets, neighbours, couplings = graph.compressed_adjacency()\n"
         ),
         SQUARE_TRANSITION: 'print(f"at J_c = ln(1 + sqrt(3)) = {coupling:.4f}")\n',
+        RETIRED_ENVIRONMENTS: "environment = TreeEnvironment(alignment, k=4)\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []

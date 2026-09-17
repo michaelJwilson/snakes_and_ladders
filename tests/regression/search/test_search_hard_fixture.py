@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 from snakes_and_ladders.learn.rollout import greedy_rollout
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -70,9 +70,9 @@ def alignment(params: SimulationParams) -> dict[str, np.ndarray]:
 
 def _environment(
     params: SimulationParams, alignment: dict[str, np.ndarray], moves: MoveSet
-) -> TopologyEnvironment:
+) -> TreeEnvironment:
     """The reward surface an agent sees, at the tree's own mean branch length."""
-    return TopologyEnvironment(
+    return TreeEnvironment(
         alignment,
         params.k,
         np.asarray(params.pi),
@@ -85,7 +85,7 @@ def _environment(
 
 
 def _enumerated_maximum(
-    environment: TopologyEnvironment, alignment: dict[str, np.ndarray]
+    environment: TreeEnvironment, alignment: dict[str, np.ndarray]
 ) -> float:
     return max(
         environment.score(topology)
@@ -93,7 +93,7 @@ def _enumerated_maximum(
     )
 
 
-def _endpoints(environment: TopologyEnvironment, seed: int) -> list[Topology]:
+def _endpoints(environment: TreeEnvironment, seed: int) -> list[Topology]:
     """Where greedy stops, from each of `STARTS` seeded starting topologies."""
     rng = np.random.default_rng(seed + START_SEED_OFFSET)
     return [

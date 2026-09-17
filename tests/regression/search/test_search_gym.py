@@ -25,7 +25,7 @@ from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -48,7 +48,7 @@ def _potts(chain_length: int = 4) -> tuple[PottsEnvironment, int]:
     return environment, chain_length * (environment.n_states - 1)
 
 
-def _tree() -> tuple[TopologyEnvironment, int]:
+def _tree() -> tuple[TreeEnvironment, int]:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
         tau=params.tau,
@@ -57,7 +57,7 @@ def _tree() -> tuple[TopologyEnvironment, int]:
         rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
-    environment = TopologyEnvironment(
+    environment = TreeEnvironment(
         dict(dataset.alignment),
         params.k,
         params.pi,

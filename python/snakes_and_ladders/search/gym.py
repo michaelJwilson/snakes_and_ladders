@@ -57,7 +57,7 @@ class GymnasiumEnvironment[S, A](gymnasium.Env[Observation, int]):
     ----------
     environment : Environment[S, A]
         The search problem. It is not copied; a memoizing environment such as
-        :class:`~snakes_and_ladders.search.rl.TopologyEnvironment` keeps its cache
+        :class:`~snakes_and_ladders.search.rl.TreeEnvironment` keeps its cache
         across episodes, as it does under :func:`~snakes_and_ladders.learn.rollout.rollout`.
     n_max : int
         The widest neighbourhood any state may have. The observation is
