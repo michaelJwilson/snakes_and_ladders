@@ -1,6 +1,6 @@
 """What the plaquette regions cost, beside what `belief_propagation` costs.
 
-Correctness is pinned in `tests/regression/likelihood/test_region_graph.py`,
+Correctness is pinned in `tests/regression/sandbox/test_region_graph.py`,
 per the repository's division of labour between the two directories.
 
 The point of measuring both here is that the accuracy claim of issue #689 has
@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.likelihood.region_graph import (
+from snakes_and_ladders.sandbox.region_graph import (
     RegionGraph,
     bethe_region_graph,
     generalized_belief_propagation,

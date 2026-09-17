@@ -8,6 +8,17 @@ channel is either useless or perfect. The message rides the good ones and the
 rest are **frozen** to zero, so a decoder that works through the bits in order
 knows the frozen ones already (``sec:polar`` in the textbook).
 
+**It is here as a declined route (issue #593).** The construction and its two
+decoders answer the question the ticket posed --- the gap successive
+cancellation leaves against maximum likelihood at ``N = 16``, and the list that
+closes part of it --- and no search, learner or figure calls them; the fourth
+step, CRC-aided list decoding, is not taken. The three modules are conserved
+rather than deleted with the tests that referee them (``sandbox/CLAUDE.md``):
+:mod:`snakes_and_ladders.sandbox.polar_decoding` carries the decoders and
+:mod:`snakes_and_ladders.sandbox.polar_reference` the naive recursion they are
+pinned to bitwise. Only ``tests/`` imports them, and the declared instance is
+the file beside those tests rather than a row of the fixture registry.
+
 **The reliability, and where it is exact.** On the erasure channel the
 Bhattacharyya parameter obeys a closed recursion, ``eq:polar-bec``: ``Z(W^-) =
 2Z - Z^2`` and ``Z(W^+) = Z^2``. That is an oracle, not an approximation, and

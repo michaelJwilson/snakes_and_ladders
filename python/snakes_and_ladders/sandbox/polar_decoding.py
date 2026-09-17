@@ -35,8 +35,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.sandbox.polar import PolarCode, polar_transform
 from snakes_and_ladders.sim.ldpc import LLR_CAP
-from snakes_and_ladders.sim.polar import PolarCode, polar_transform
 
 
 @dataclass(frozen=True)

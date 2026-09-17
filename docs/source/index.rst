@@ -120,9 +120,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.css
    :members:
 
-.. automodule:: snakes_and_ladders.sim.polar
-   :members:
-
 .. automodule:: snakes_and_ladders.sim.convolutional
    :members:
 
@@ -165,9 +162,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.potts
    :members:
 
-.. automodule:: snakes_and_ladders.likelihood.region_graph
-   :members:
-
 .. automodule:: snakes_and_ladders.likelihood.belief_propagation
    :members:
 
@@ -208,12 +202,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.css
-   :members:
-
-.. automodule:: snakes_and_ladders.likelihood.polar
-   :members:
-
-.. automodule:: snakes_and_ladders.likelihood.polar_reference
    :members:
 
 .. automodule:: snakes_and_ladders.likelihood.convolutional
@@ -418,6 +406,18 @@ whether or not it has members yet.
    :no-index:
 
 .. automodule:: snakes_and_ladders.sandbox.circulant_schedule
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.region_graph
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar_decoding
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar_reference
    :members:
 
 .. automodule:: snakes_and_ladders.qa

@@ -70,7 +70,6 @@ PROBLEMS = (
     "testfunctions",
     "ldpc",
     "turbo",
-    "polar",
 )
 
 _SECTION = re.compile(r"^\\section\{", re.MULTILINE)
