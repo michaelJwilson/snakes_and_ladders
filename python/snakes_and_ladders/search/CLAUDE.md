@@ -60,6 +60,12 @@ in this module. It is referenced here, never restated. What follows is local.
   *per-site* field that step sums the difference over the cluster's own
   members rather than scaling one shared difference by `|C|` (#551).
 
+- **A move offered to a learner is the move this package runs, wrapped.**
+  `potts_keyed` parameterizes what the action names and writes out the `T = 0`
+  limit `beta = 1 / 0` cannot express; it implements no kernel of its own, so
+  there is no second physics to keep in step (#706). Above zero the wrapper is
+  pinned bitwise against the sweep it delegates to.
+
 - **A structural statistic measured at finite temperature does not referee a
   ground state.** `spatio_only` records a size tilt and a per-class occupancy
   from thermal draws; a ferromagnet's ground state matches neither, and the

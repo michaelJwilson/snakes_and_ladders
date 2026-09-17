@@ -26,9 +26,9 @@ episode reproducible only within one interpreter. ``blake2b`` over the
 labelling's own bytes and a canonical action encoding is stable across
 processes, platforms and orderings, which is the property being claimed.
 
-The protocol the cluster moves reach this through arrives with them: a seam
-with no implementer is a seam nobody needs yet, which
-`tests/regression/test_seams.py` refuses and root `CLAUDE.md` agrees with.
+:class:`KeyedMove` is how a move that needs more than a uniform --- a cluster
+growth, a bond pass --- reaches an environment in this package without
+`learn/` importing the module that implements it.
 
 What this does **not** buy: an expectation. A keyed move is one successor, so
 the environment is a deterministic MDP over a stochastic move's *realization*
@@ -41,6 +41,7 @@ tree, which is why it is not taken here.
 from __future__ import annotations
 
 import hashlib
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 
@@ -93,3 +94,81 @@ def keyed_generator(
     stream is a function of the key, so holding it would only hide that.
     """
     return np.random.default_rng(state_key(key, state, action_code))
+
+
+@runtime_checkable
+class KeyedMove(Protocol):
+    """A Monte Carlo move a deterministic ``step`` can call.
+
+    The implementations live in ``snakes_and_ladders.search``, which may import
+    both halves; this package holds the protocol alone, which is what keeps
+    `learn/CLAUDE.md`'s import rule green while a cluster move still reaches
+    :class:`~snakes_and_ladders.learn.potts_nd.PottsNDEnvironment`.
+
+    Under the seam rule: two consuming modules rather than three. It is kept
+    because the alternative is not a third consumer but an import
+    `tests/regression/learn/test_learn_environment.py` refuses --- the seam
+    exists to carry a dependency in the direction the package allows, so its
+    consumer count is bounded by the two sides it joins.
+
+    A move holds the problem it moves on --- the graph and the field --- so
+    ``propose`` is a function of the labelling, the action's parameters and the
+    generator alone, and the layout it reads is built once rather than per
+    call. The environment checks ``n_nodes`` and ``n_states`` against its own
+    at construction: two callers scoring one problem is the property #706
+    exists to establish, and a move built on a different lattice would break it
+    silently.
+    """
+
+    @property
+    def n_nodes(self) -> int:
+        """Sites the move expects, checked against the environment's."""
+
+    @property
+    def n_states(self) -> int:
+        """Labels the move expects, checked against the environment's."""
+
+    @property
+    def parametric(self) -> bool:
+        """Whether an action of this move names a site and a target label.
+
+        A Wolff step names its cluster root and the colour to recolour to; a
+        Swendsen-Wang pass names neither, since it partitions the whole lattice
+        and recolours every cluster. The environment reads this to decide how
+        many candidates the move contributes.
+        """
+
+    def propose(
+        self,
+        state: np.ndarray,
+        *,
+        temperature: float,
+        site: int,
+        label: int,
+        rng: np.random.Generator,
+    ) -> tuple[np.ndarray, int]:
+        """The successor labelling, and what the move cost in site visits.
+
+        Parameters
+        ----------
+        state : np.ndarray
+            The labelling, as ``int64``. Not mutated.
+        temperature : float
+            ``0.0`` is admitted and is not a small number: it is where the move
+            becomes deterministic in its bonds, which is the limit an oracle
+            can check exactly.
+        site, label : int
+            The action's parameters, or ``-1`` each where
+            :attr:`parametric` is ``False``.
+        rng : np.random.Generator
+            Keyed on ``(state, action)`` by :func:`keyed_generator`, which is
+            what makes the successor a function of the pair rather than of the
+            order the move was reached in.
+
+        Returns
+        -------
+        tuple[np.ndarray, int]
+            The successor, and its charge in the site visits
+            ``search.ground_state`` charges the same move --- realized rather
+            than nominal, since a cluster move's cost is its cluster's size.
+        """
