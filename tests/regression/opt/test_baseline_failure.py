@@ -28,7 +28,7 @@ from snakes_and_ladders.opt.failure import (
     probe_failure,
 )
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -248,7 +248,7 @@ def test_the_harness_refuses_what_it_cannot_measure() -> None:
 # --- the use: #194's measurement, reproduced through the harness -------------
 
 
-def _tree_instance() -> tuple[TopologyEnvironment, float]:
+def _tree_instance() -> tuple[TreeEnvironment, float]:
     """The 7-taxon environment and its enumerated maximum."""
     params: SimulationParams = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
@@ -258,7 +258,7 @@ def _tree_instance() -> tuple[TopologyEnvironment, float]:
         rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
-    environment = TopologyEnvironment(
+    environment = TreeEnvironment(
         dict(dataset.alignment),
         params.k,
         np.asarray(params.pi),
@@ -276,7 +276,7 @@ def _tree_instance() -> tuple[TopologyEnvironment, float]:
 
 
 def _descent(
-    instance: TopologyEnvironment, budget: Budget, rng: np.random.Generator
+    instance: TreeEnvironment, budget: Budget, rng: np.random.Generator
 ) -> Outcome:
     """One greedy descent from a random start, scored as a negative likelihood.
 

@@ -254,7 +254,7 @@ sites the plan lists after these — the candidate fits of `search.infer`,
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
-**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on.
+**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. Since the 2026-09-17 review, on the stack: `sim.polar`, `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` (#605, #700).
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed tree fixture, retaining
@@ -576,7 +576,7 @@ comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
-**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against.
+**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. Since the 2026-09-17 review, on the stack: `likelihood.polar` and `likelihood.polar_reference` (#605), `likelihood.region_graph` (#695), `likelihood.ragged_rust` (#666), `search.decoding` (#700).
 
 **A covariate reaches the two-channel family, every seam above it, and the
 compiled backend** ([#660](https://github.com/michaelJwilson/snakes_and_ladders/pull/660)).
@@ -2162,7 +2162,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`.
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`. Since the 2026-09-17 review, on the stack: `search.tightening` (#699).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -2796,7 +2796,7 @@ is checkable against.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface.
+**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface. Since the 2026-09-17 review, on the stack: `learn.canonical` (#702), `learn.tabular` (#703), `opt.failure` (#701), `learn.keyed` and `learn.potts_nd` (#707), `search.potts_keyed` (#708), `learn.arena` (#709).
 
 **A Potts environment whose field is per site, and whose action carries a temperature** ([#706](https://github.com/michaelJwilson/snakes_and_ladders/issues/706), the single-site arm). Every learned policy before this scored a field of shape `(n_states,)` — one global tilt per label — while `search.ground_state` and `search.maxflow` score `(n_nodes, n_states)`, so no policy had been measured on the instance the classical ground-state methods are ranked on. `PottsNDEnvironment.score` is now the negation of `sim.potts.energies` **bitwise** over 600 seeded labellings at three instances, which is what says the two callers score one problem.
 
