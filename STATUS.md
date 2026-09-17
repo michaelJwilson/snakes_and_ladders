@@ -3440,6 +3440,42 @@ exist.
 
 **Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
+**A dual bound on a ground state at #696.** `search.tightening` decomposes the
+energy into subproblems whose shares sum to it, so
+`max_x E(x) <= sum_s max_{x_s} E_s(x_s)` holds **at every iteration by
+construction** and not at convergence --- which is what lets validity be
+asserted after one sweep rather than after two hundred. Measured 2026-09-17
+against exhaustive enumeration of all 19,683 labellings:
+
+| instance | ground state | bound | gap | verdict |
+| --- | --- | --- | --- | --- |
+| square 3x3, `J = +0.6` | -0.961675 | **-0.961675** | 0 | certified optimal, 1 sweep |
+| square 3x3, `J = -0.8` | 7.665024 | **7.665024** | 0 | certified optimal, 4 sweeps |
+| triangular 3x3, `J = -0.8`, pairwise | 10.112322 | 7.843362 | 2.27 | |
+| triangular 3x3, `J = -0.8`, **+ triangles** | 10.112322 | **9.668997** | 0.44 | **80%** of the gap closed |
+| triangular 3x3, `J = -1.5`, pairwise | 10.920268 | 7.843362 | 3.08 | |
+| triangular 3x3, `J = -1.5`, **+ triangles** | 10.920268 | **10.221722** | 0.70 | **77%** closed |
+
+The square rows include `J = -0.8`, which is **non-submodular**: minimum cut
+cannot take it and this certifies the labelling anyway, with no oracle
+consulted --- the enumeration checks the claim rather than supplying it.
+
+**The pairwise bound is the same number at both couplings**, 7.843362, and
+that is the clearest statement of what the relaxation misses: with three
+states every triangle is 3-colourable, so the relaxation satisfies every edge
+at no cost whatever the coupling, and only a constraint *over* the triangle
+can charge for the frustration. It is asserted as a prediction, not recorded
+as an observation.
+
+Two implementation notes worth keeping. The block update is the exact
+minimizer of its own block, checked against a numerical minimum over the
+block's messages; an early version left the site's own share inside the
+maximization, which adds half of it to every update and reads as a coordinate
+descent that does not descend. And the tightest iterate is retained rather
+than the last: every iterate is a valid bound, so this costs one comparison
+and removes any need to rely on monotonicity (none of 480 updates raised the
+dual once the block update was right).
+
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
 more members. `role:incidence` is 12 members over 78 consuming references --- one
