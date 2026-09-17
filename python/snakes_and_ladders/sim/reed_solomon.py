@@ -32,6 +32,10 @@ errors or fewer occurred, and a caller who needs that evidence needs a code
 with more distance, not a better decoder. The refusals are real refusals ---
 the locator's degree and its root count disagree, or the corrected word still
 fails its syndromes --- and they are raised rather than returned.
+
+See ``sec:ldpc:algebraic`` of ``docs/tex/textbook.tex``, ``eq:singleton`` for
+the bound this code meets and ``eq:bounded-distance`` for the block error rate
+that follows from meeting it (Blahut 2003).
 """
 
 from __future__ import annotations

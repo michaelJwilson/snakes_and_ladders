@@ -108,6 +108,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.galois
    :members:
 
+.. automodule:: snakes_and_ladders.sim.capacity
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.reed_solomon
    :members:
 

@@ -20,7 +20,12 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.sim.galois import PRIMITIVE, field
+from snakes_and_ladders.sim.galois import (
+    PRIMITIVE,
+    bits_from_symbols,
+    field,
+    symbols_from_bits,
+)
 from snakes_and_ladders.sim.reed_solomon import (
     DecodingFailure,
     decode,
@@ -172,3 +177,33 @@ def test_a_wasteful_or_impossible_shape_is_refused() -> None:
         reed_solomon(3, 7)
     with pytest.raises(KeyError, match="no primitive polynomial"):
         field(9)
+
+
+@pytest.mark.mathematical
+@pytest.mark.ldpc
+def test_the_bit_packing_round_trips_and_localises_a_flip() -> None:
+    # What carries a symbol code onto a binary channel. Two claims: the
+    # mapping is a bijection over every symbol of GF(8), and one flipped bit
+    # corrupts exactly one symbol -- which is why the symbol error rate is
+    # `1 - (1 - p)^m` and not `p`.
+    m = 3
+    symbols = np.arange(8)
+    bits = bits_from_symbols(symbols, m)
+    assert bits.size == symbols.size * m
+    assert np.array_equal(symbols_from_bits(bits, m), symbols)
+
+    for position in range(bits.size):
+        flipped = bits.copy()
+        flipped[position] ^= 1
+        differing = symbols_from_bits(flipped, m) != symbols
+        assert int(differing.sum()) == 1
+        assert int(np.flatnonzero(differing)[0]) == position // m
+
+
+@pytest.mark.structural
+@pytest.mark.ldpc
+def test_the_packing_refuses_what_it_would_have_to_truncate() -> None:
+    with pytest.raises(ValueError, match="symbols must lie in"):
+        bits_from_symbols(np.array([8]), 3)
+    with pytest.raises(ValueError, match="do not divide into symbols"):
+        symbols_from_bits(np.zeros(7, dtype=np.int64), 3)

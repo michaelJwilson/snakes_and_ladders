@@ -209,3 +209,44 @@ def polynomial_remainder(
                 scale, int(divisor[offset])
             )
     return remainder[:degree]
+
+
+def bits_from_symbols(symbols: np.ndarray, m: int) -> np.ndarray:
+    """Each symbol as ``m`` bits, most significant first, concatenated.
+
+    The route from a symbol code to a *binary* channel: a symbol of
+    ``GF(2^m)`` is sent as ``m`` bits, so a bit-flipping channel corrupts a
+    symbol when it flips any of them, and a symbol error rate is
+    ``1 - (1 - p)^m`` rather than ``p``. Most significant first so the
+    mapping is the integer's own binary expansion and a reader can check a
+    row by eye.
+
+    Raises
+    ------
+    ValueError
+        If a symbol is outside ``[0, 2^m)``, which would silently lose its
+        high bits.
+    """
+    values = np.asarray(symbols, dtype=np.int64)
+    if values.size and (values.min() < 0 or values.max() >= 1 << m):
+        msg = f"symbols must lie in [0, {1 << m}), got [{values.min()}, {values.max()}]"
+        raise ValueError(msg)
+    shifts = np.arange(m - 1, -1, -1, dtype=np.int64)
+    return np.asarray(((values[:, np.newaxis] >> shifts) & 1).ravel())
+
+
+def symbols_from_bits(bits: np.ndarray, m: int) -> np.ndarray:
+    """The inverse of :func:`bits_from_symbols`.
+
+    Raises
+    ------
+    ValueError
+        If the length is not a multiple of ``m``, where the last symbol
+        would be read from a partial group.
+    """
+    values = np.asarray(bits, dtype=np.int64) % 2
+    if values.size % m:
+        msg = f"{values.size} bits do not divide into symbols of {m}"
+        raise ValueError(msg)
+    weights = 1 << np.arange(m - 1, -1, -1, dtype=np.int64)
+    return np.asarray((values.reshape(-1, m) * weights).sum(axis=1))

@@ -28,12 +28,16 @@ rather than a tolerance, so a wrong column order or a dropped row cannot pass.
 decoding needs it and it is polynomial division over GF(2), which belongs with
 the elementary codes.
 
-What is **not** here: Reed--Solomon and the ``GF(2^m)`` arithmetic it needs,
-which is the same ticket's second part, and BCH, which that machinery makes
-cheap afterwards and which nothing yet asks for. Nor is a codeword
+Reed--Solomon and the ``GF(2^m)`` arithmetic it needs are the same ticket's
+second part and live in :mod:`snakes_and_ladders.sim.reed_solomon` and
+:mod:`snakes_and_ladders.sim.galois`. What is **not** here is BCH, which that
+machinery makes cheap afterwards and which nothing yet asks for. Nor is a codeword
 enumerator: :func:`snakes_and_ladders.likelihood.ldpc.enumerate_codewords`
 spans the generator matrix and checks each word against ``H c = 0``, which is
 what these constructions are refereed with rather than a second copy of it.
+
+See ``sec:ldpc:algebraic`` of ``docs/tex/textbook.tex`` (Blahut 2003;
+MacKay 2003), and ``eq:sphere-packing`` for the perfection equality.
 """
 
 from __future__ import annotations
