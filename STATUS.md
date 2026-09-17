@@ -2766,6 +2766,12 @@ is checkable against.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
+**One table per problem, from one call, and the chain's five rows come back through it** ([#705](https://github.com/michaelJwilson/snakes_and_ladders/issues/705), steps 1-3). The rows existed and each was written for its own experiment: the Potts chain had all five, the tree three and the HMM path none, so a new problem cost a new harness and the rows were not read side by side. `learn.arena` is that harness, and it is a *list* of the five calls rather than a reimplementation — each learner reached through the registry returns **bitwise** what calling its function directly returns on the same four streams, asserted per learner. Through it the chain reads **65 / 72 / 72 / 78 / 79 of 81 starts** — 80.2 / 88.9 / 88.9 / 96.3 / 97.5%, #313's numbers to the start, under both scorings.
+
+**Two things the harness found in the numbers it reproduces.** The MLP row's 97.5% depends on a hyper-parameter the published row carried silently: at `ppo`'s default step of 0.05 it reads 78 of 81 rather than 79, which is the entire margin between the MLP and linear rows, so `MLP_LEARNING_RATE = 0.01` is declared in the registry rather than defaulted. And greedy's cost is **17.4** scored actions an episode on the chain, not the 48 the planner comparison quotes: 48 is `max_steps x |actions|`, the budget, which hill climbing does not spend because it stops at a local maximum after 2.2 steps. The planner's 8.3 is in its own unit — simulated evaluations inside a tree search, which a trajectory count does not see — so #135's "8.3 against greedy's 48" compares two units and is not reproduced here. One unit for it is step 5's.
+
+**`TopologyEnvironment` is `TreeEnvironment`,** on #644's rule that an environment is named for its problem; the problem is `tree` and its fixtures are `tree_jc`, `tree_scale` and `tree_search`. No behaviour moved. All three retired names — `PottsLandscape`, `StatePathLandscape`, `TopologyEnvironment` — are now refused by a guard over the whole repository rather than the package alone, since the old names survived longest in the suite and in a notebook cell, and `Topology` was the third spelling of one seam.
+
 **The estimator is pinned to a closed form, not to a training curve**
 ([#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135)). With a finite
 action set and horizon the expected return is exact by trajectory enumeration,

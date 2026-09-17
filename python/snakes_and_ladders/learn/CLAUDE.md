@@ -56,6 +56,12 @@ same models `sal.opt` fits.
   decisions are the unit at which they are comparable — the same reasoning
   that makes `sal.search.infer` count candidate fits.
 
+- **A match is a result, and a row states what it cost.** Nothing beats an
+  exact baseline, so a learner that reaches one has shown its policy class
+  contains the classical method — and one that reaches it more cheaply has
+  shown more. Neither is readable from a fraction alone, so a row carries the
+  evaluations beside it and names which of beat, match and lose it is (#705).
+
 - **An episode that may leave a local optimum is scored on its best state,
   not its last.** `rollout(..., stop_at_local_optimum=False)` runs to its
   budget, so its final state is wherever the walk happened to stop, and a

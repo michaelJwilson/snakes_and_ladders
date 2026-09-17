@@ -82,7 +82,7 @@ class RewardModel(StrEnum):
 
 
 class FeatureSet(StrEnum):
-    """Which columns :meth:`TopologyEnvironment.features` returns per move.
+    """Which columns :meth:`TreeEnvironment.features` returns per move.
 
     ``IMPROVEMENT`` is the one column the environment had before issue
     #328, unstandardized, so every number pinned against it stands.
@@ -210,7 +210,7 @@ def standardize(rows: torch.Tensor) -> torch.Tensor:
     )
 
 
-class TopologyEnvironment(Environment[Topology, Topology]):
+class TreeEnvironment(Environment[Topology, Topology]):
     """Tree search as a Markov decision process.
 
     Parameters

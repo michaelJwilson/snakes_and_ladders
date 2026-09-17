@@ -34,7 +34,7 @@ from snakes_and_ladders.qa.rl_tree_policy import (
     STARTS,
 )
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -71,7 +71,7 @@ def taxa(params: SimulationParams) -> list[str]:
 
 
 @pytest.fixture(scope="module")
-def environment(params: SimulationParams) -> TopologyEnvironment:
+def environment(params: SimulationParams) -> TreeEnvironment:
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -79,7 +79,7 @@ def environment(params: SimulationParams) -> TopologyEnvironment:
         rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
-    return TopologyEnvironment(
+    return TreeEnvironment(
         dict(dataset.alignment),
         params.k,
         np.asarray(params.pi),
@@ -93,20 +93,20 @@ def environment(params: SimulationParams) -> TopologyEnvironment:
 
 @pytest.fixture(scope="module")
 def starts(
-    environment: TopologyEnvironment, params: SimulationParams
+    environment: TreeEnvironment, params: SimulationParams
 ) -> list[Topology]:
     rng = np.random.default_rng(params.seed + 1000)
     return [environment.reset(rng) for _ in range(STARTS)]
 
 
 @pytest.fixture(scope="module")
-def maximum(environment: TopologyEnvironment, taxa: list[str]) -> float:
+def maximum(environment: TreeEnvironment, taxa: list[str]) -> float:
     """The enumerated maximum over all 945 unrooted topologies."""
     return max(environment.score(topology) for topology in enumerate_topologies(taxa))
 
 
 def _rate(
-    environment: TopologyEnvironment, endpoints: list[Topology], best: float
+    environment: TreeEnvironment, endpoints: list[Topology], best: float
 ) -> float:
     return float(
         np.mean([abs(environment.score(state) - best) < 1e-9 for state in endpoints])
@@ -115,7 +115,7 @@ def _rate(
 
 @pytest.mark.structural
 def test_every_episode_ends_where_no_move_improves(
-    environment: TopologyEnvironment, starts: list[Topology]
+    environment: TreeEnvironment, starts: list[Topology]
 ) -> None:
     # The claim the null result rests on. If an episode could end with an
     # improving move still on the table, the comparison would measure HORIZON
@@ -146,7 +146,7 @@ def test_every_episode_ends_where_no_move_improves(
 @pytest.mark.structural
 @pytest.mark.release
 def test_an_untrained_policy_is_far_worse_than_greedy(
-    environment: TopologyEnvironment, starts: list[Topology], maximum: float
+    environment: TreeEnvironment, starts: list[Topology], maximum: float
 ) -> None:
     # The control. Without it "the policy ties greedy" is consistent with the
     # environment being so easy that anything ties greedy.
@@ -169,7 +169,7 @@ def test_an_untrained_policy_is_far_worse_than_greedy(
 
 @pytest.mark.structural
 def test_a_trained_policy_is_no_worse_than_hill_climbing(
-    environment: TopologyEnvironment, starts: list[Topology], maximum: float
+    environment: TreeEnvironment, starts: list[Topology], maximum: float
 ) -> None:
     # Deliberately weaker than the measurement, following
     # `test_the_learned_policy_is_at_least_as_good_as_hill_climbing`: over 16

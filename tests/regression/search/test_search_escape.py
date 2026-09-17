@@ -22,7 +22,7 @@ import torch
 from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, LinearPolicy
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -57,7 +57,7 @@ def params() -> SimulationParams:
 
 
 @pytest.fixture(scope="module")
-def environment(params: SimulationParams) -> TopologyEnvironment:
+def environment(params: SimulationParams) -> TreeEnvironment:
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -65,7 +65,7 @@ def environment(params: SimulationParams) -> TopologyEnvironment:
         rng=np.random.default_rng(params.seed),
         n_sites=params.n_sites,
     )
-    return TopologyEnvironment(
+    return TreeEnvironment(
         dict(dataset.alignment),
         params.k,
         np.asarray(params.pi),
@@ -91,13 +91,13 @@ def taxa(params: SimulationParams) -> list[str]:
 
 
 @pytest.fixture(scope="module")
-def maximum(environment: TopologyEnvironment, taxa: list[str]) -> float:
+def maximum(environment: TreeEnvironment, taxa: list[str]) -> float:
     return max(environment.score(topology) for topology in enumerate_topologies(taxa))
 
 
 @pytest.fixture(scope="module")
 def traps(
-    environment: TopologyEnvironment, taxa: list[str], maximum: float
+    environment: TreeEnvironment, taxa: list[str], maximum: float
 ) -> list[Topology]:
     """The local optima that are not the global one."""
     return [
@@ -108,7 +108,7 @@ def traps(
     ]
 
 
-def _hill_climbing_policy(environment: TopologyEnvironment) -> LinearPolicy:
+def _hill_climbing_policy(environment: TreeEnvironment) -> LinearPolicy:
     """A policy whose greedy action is the best-rewarded one.
 
     The environment's single feature is the improvement a move buys, so any
@@ -121,14 +121,14 @@ def _hill_climbing_policy(environment: TopologyEnvironment) -> LinearPolicy:
     return policy
 
 
-def _best_seen(environment: TopologyEnvironment, states: tuple[Topology, ...]) -> float:
+def _best_seen(environment: TreeEnvironment, states: tuple[Topology, ...]) -> float:
     """A wandering searcher keeps its best state, not its last."""
     return max(environment.score(state) for state in states)
 
 
 @pytest.mark.structural
 def test_wrapping_an_untrained_policy_is_not_hill_climbing(
-    environment: TopologyEnvironment, traps: list[Topology]
+    environment: TreeEnvironment, traps: list[Topology]
 ) -> None:
     # A trap for the next caller, pinned rather than left to be rediscovered.
     # `EpsilonGreedyPolicy` takes the *wrapped policy's* greedy action, and an
@@ -150,7 +150,7 @@ def test_wrapping_an_untrained_policy_is_not_hill_climbing(
 
 @pytest.mark.oracle
 def test_epsilon_zero_reproduces_hill_climbing_exactly(
-    environment: TopologyEnvironment, traps: list[Topology]
+    environment: TreeEnvironment, traps: list[Topology]
 ) -> None:
     # The control. Without it, a rising escape rate is not attributable to
     # epsilon, because the thing epsilon is added to might not be the
@@ -167,7 +167,7 @@ def test_epsilon_zero_reproduces_hill_climbing_exactly(
 
 @pytest.mark.structural
 def test_an_episode_can_leave_a_local_optimum(
-    environment: TopologyEnvironment, traps: list[Topology], maximum: float
+    environment: TreeEnvironment, traps: list[Topology], maximum: float
 ) -> None:
     # The claim the ticket exists for, against a floor that cannot drift:
     # with `stop_at_local_optimum` left at its default every one of these
@@ -205,7 +205,7 @@ def test_an_episode_can_leave_a_local_optimum(
 
 @pytest.mark.structural
 def test_stopping_at_a_local_optimum_never_escapes(
-    environment: TopologyEnvironment, traps: list[Topology], maximum: float
+    environment: TreeEnvironment, traps: list[Topology], maximum: float
 ) -> None:
     # The floor the previous test is measured against, asserted rather than
     # asserted-about: under the default rule an episode started at a local
@@ -220,7 +220,7 @@ def test_stopping_at_a_local_optimum_never_escapes(
 
 @pytest.mark.structural
 def test_random_restart_hill_climbing_solves_this_fixture(
-    environment: TopologyEnvironment, params: SimulationParams, maximum: float
+    environment: TreeEnvironment, params: SimulationParams, maximum: float
 ) -> None:
     # The result that matters more than the mechanism. #193 compared a policy
     # against a *single* greedy run, which reaches the maximum from 48% of

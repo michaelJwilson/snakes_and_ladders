@@ -14,7 +14,7 @@ the same per-episode budget from the same starting topologies.
 The two panels together say why the answer is what it is. Every episode --
 greedy and learned alike -- ends at one of the marked states, because
 `snakes_and_ladders.learn.rollout` stops when `is_terminal` holds and
-`TopologyEnvironment.is_terminal` holds exactly at a state with no improving
+`TreeEnvironment.is_terminal` holds exactly at a state with no improving
 move. So the task an agent faces here is not "escape a local optimum" but
 "choose which one to walk into", and a policy scoring moves by the single
 feature this environment exposes -- the improvement a move buys -- is hill
@@ -42,7 +42,7 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -80,12 +80,12 @@ BATCH = 16
 
 def _environment(
     params: SimulationParams, moves: MoveSet
-) -> tuple[TopologyEnvironment, list[str]]:
+) -> tuple[TreeEnvironment, list[str]]:
     """The reward surface an agent sees, and the taxa it is over.
 
     Returns
     -------
-    tuple[TopologyEnvironment, list[str]]
+    tuple[TreeEnvironment, list[str]]
         The environment, scored at the generating tree's mean branch length,
         and the sorted taxon names -- returned rather than recovered from the
         environment, which keeps its alignment private.
@@ -98,7 +98,7 @@ def _environment(
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)
-    environment = TopologyEnvironment(
+    environment = TreeEnvironment(
         alignment,
         params.k,
         np.asarray(params.pi),

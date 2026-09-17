@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import random_topology
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -60,7 +60,7 @@ def _score_once(
     def run() -> float:
         # A fresh environment per call: the cache is the point of the class,
         # and timing a cache hit would measure a dictionary lookup.
-        return TopologyEnvironment(
+        return TreeEnvironment(
             alignment, k, pi, branch_length, reward=reward
         ).score(topology)
 
@@ -98,7 +98,7 @@ def test_fitted_reward_on_the_hard_fixture_benchmark(
 def test_neighbourhood_benchmark(benchmark: BenchmarkFixture) -> None:
     """Generating and deduplicating the neighbourhood, without scoring it."""
     alignment, k, pi = _alignment()
-    environment = TopologyEnvironment(alignment, k, pi, _BRANCH_LENGTH)
+    environment = TreeEnvironment(alignment, k, pi, _BRANCH_LENGTH)
     topology = random_topology(sorted(alignment), np.random.default_rng(1))
 
     actions = benchmark(environment.actions, topology)

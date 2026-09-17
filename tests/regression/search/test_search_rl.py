@@ -28,7 +28,7 @@ from snakes_and_ladders.search.rl import (
     FEATURE_NAMES,
     FeatureSet,
     RewardModel,
-    TopologyEnvironment,
+    TreeEnvironment,
     exchanged_subtrees,
     standardize,
     with_uniform_branch_lengths,
@@ -73,10 +73,10 @@ def _environment(
     reward: RewardModel = RewardModel.KNOWN,
     moves: MoveSet = MoveSet.NNI,
     features: FeatureSet = FeatureSet.IMPROVEMENT,
-) -> tuple[TopologyEnvironment, SimulationParams, dict[str, np.ndarray]]:
+) -> tuple[TreeEnvironment, SimulationParams, dict[str, np.ndarray]]:
     params = _params()
     alignment = _alignment(params)
-    environment = TopologyEnvironment(
+    environment = TreeEnvironment(
         alignment,
         params.k,
         params.pi,
@@ -194,7 +194,7 @@ def test_the_fitted_score_is_never_below_the_known_one() -> None:
     # surface rather than a noisy estimate of the same one.
     _, params, alignment = _environment()
     known, fitted = (
-        TopologyEnvironment(
+        TreeEnvironment(
             alignment, params.k, params.pi, _BRANCH_LENGTH, reward=reward
         )
         for reward in (RewardModel.KNOWN, RewardModel.FITTED)
@@ -361,7 +361,7 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
     params = _params()
     alignment = _alignment(params)
     with pytest.raises(ValueError, match="under gtr needs a rate_matrix"):
-        TopologyEnvironment(
+        TreeEnvironment(
             alignment,
             params.k,
             params.pi,
@@ -370,7 +370,7 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
             reward=RewardModel.KNOWN,
         )
     with pytest.raises(ValueError, match="must have shape"):
-        TopologyEnvironment(
+        TreeEnvironment(
             alignment,
             params.k,
             params.pi,
@@ -380,7 +380,7 @@ def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
             rate_matrix=np.eye(3),
         )
     with pytest.raises(ValueError, match="fixes its rate matrix"):
-        TopologyEnvironment(
+        TreeEnvironment(
             alignment,
             params.k,
             params.pi,
@@ -400,7 +400,7 @@ def test_the_known_gtr_score_is_the_pruning_recursion_at_the_fixed_length() -> N
     # at the same lengths, for every topology on the leaf set.
     params = _params()
     alignment, rate_matrix = _gtr_alignment(params)
-    environment = TopologyEnvironment(
+    environment = TreeEnvironment(
         alignment,
         params.k,
         _GTR_PI,
@@ -433,7 +433,7 @@ def test_the_general_q_path_reduces_to_jukes_cantor_at_its_rate_matrix() -> None
     # reproduce the closed-form path, topology by topology, sharing no
     # transition-probability code.
     environment, params, alignment = _environment(RewardModel.KNOWN)
-    general = TopologyEnvironment(
+    general = TreeEnvironment(
         alignment,
         params.k,
         params.pi,
@@ -456,7 +456,7 @@ def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
     # and pi alike -- so it cannot do worse, at the generating Q as at any.
     params = _params()
     alignment, rate_matrix = _gtr_alignment(params)
-    known = TopologyEnvironment(
+    known = TreeEnvironment(
         alignment,
         params.k,
         _GTR_PI,
@@ -465,7 +465,7 @@ def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
         reward=RewardModel.KNOWN,
         rate_matrix=rate_matrix,
     )
-    fitted = TopologyEnvironment(
+    fitted = TreeEnvironment(
         alignment,
         params.k,
         _GTR_PI,
@@ -594,7 +594,7 @@ def test_too_few_taxa_is_rejected() -> None:
     alignment = _alignment(params)
     trimmed = {name: alignment[name] for name in sorted(alignment)[:3]}
     with pytest.raises(ValueError, match="need at least 4 taxa"):
-        TopologyEnvironment(trimmed, params.k, params.pi, _BRANCH_LENGTH)
+        TreeEnvironment(trimmed, params.k, params.pi, _BRANCH_LENGTH)
 
 
 @pytest.mark.oracle

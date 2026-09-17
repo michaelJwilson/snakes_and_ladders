@@ -257,7 +257,7 @@ ALGORITHMS: dict[str, str] = {
     "learn.relaxed.RelaxedHmmPath": "relaxation",
     "sandbox.tropical.optimize": "relaxation",
     "sandbox.tropical.quartet_table": "relaxation",
-    "search.rl.TopologyEnvironment": "policy learning",
+    "search.rl.TreeEnvironment": "policy learning",
     "learn.potts.PottsEnvironment": "policy learning",
     "learn.hmm.HmmEnvironment": "policy learning",
     "learn.surrogate.fit_surrogate": "policy learning",
