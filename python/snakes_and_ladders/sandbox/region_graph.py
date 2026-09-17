@@ -8,6 +8,18 @@ free energy is the same expression over *larger* regions --- on a square
 lattice, the plaquettes, which are exactly the 4-cycles Bethe cannot see
 (`sim/graph.py`, issue #172).
 
+**It is here because at size the messages do not settle.** On the 3x3 lattice
+the plaquette regions put ``log Z`` 130x to 23,378x nearer than Bethe for 3.7x
+the wall clock; on the 6x4 strip they settle at ``J = 0.25`` and at ``J = 0.5``
+or ``0.875`` at no damping from 0.7 to 0.98 over 20,000 sweeps. A route that
+returns nothing at the couplings where Bethe is worst is declined, not
+adopted, and it is conserved rather than deleted with the tests that measured
+it (``sandbox/CLAUDE.md``). Its referee is the case it generalizes: at the
+Bethe region graph the free energy is
+:mod:`snakes_and_ladders.likelihood.message_passing`'s Bethe value and the
+updates find that module's fixed point. Only ``tests/`` and
+:mod:`snakes_and_ladders.qa` import it.
+
 **The structure, the energy, and the algorithm, in that order.** What a region
 graph is, which ones are valid, what a set of beliefs over them costs, and
 then the parent-to-child updates that look for a stationary point. The order

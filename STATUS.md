@@ -3579,7 +3579,8 @@ approach, not a fixed point. So the plaquette regions pay 28x the wall clock
 for four orders of magnitude at weak coupling, and at the couplings where
 Bethe is worst they return nothing at all rather than a number. That is the
 result the ticket asked for, and it is why nothing here is reported as a
-replacement for `belief_propagation`.
+replacement for `belief_propagation`: the module is conserved as a declined
+route in `sandbox/region_graph.py`, imported by `tests/` alone.
 
 The construction is refereed by the case it generalizes rather than by its own
 claim: at the Bethe region graph `-F_K` is `log Z` to **8.9e-16** on a chain

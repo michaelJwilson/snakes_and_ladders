@@ -24,7 +24,7 @@ import pytest
 from snakes_and_ladders.likelihood.belief_propagation import ConvergenceError
 from snakes_and_ladders.likelihood.message_passing import Marginals, sum_product
 from snakes_and_ladders.likelihood.potts import enumerate_potts
-from snakes_and_ladders.likelihood.region_graph import (
+from snakes_and_ladders.sandbox.region_graph import (
     RegionGraph,
     bethe_region_graph,
     generalized_belief_propagation,
@@ -171,7 +171,7 @@ def test_a_region_graph_that_counts_a_variable_twice_is_refused() -> None:
     # clusters whose intersection is not among the regions count the shared
     # variables twice. The closure is what prevents it, so the test builds the
     # unclosed collection by hand.
-    from snakes_and_ladders.likelihood.region_graph import Region
+    from snakes_and_ladders.sandbox.region_graph import Region
 
     graph = _graph((2, 2), 0.6)
     both = tuple(sorted(v.name for v in graph.variables))
