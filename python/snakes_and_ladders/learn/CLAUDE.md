@@ -76,6 +76,13 @@ same models `sal.opt` fits.
 - **A learned surrogate predicts the gap above an analytic bound**, scored on
   unseen groups, so a poor fit falls back to the bound (issue #308).
 
+- **Randomness inside a move is keyed on the state and the action, never
+  streamed.** `step` is deterministic by contract and `exact.py`'s enumeration
+  depends on it, so a Monte Carlo move draws from a digest of where it is and
+  what it is doing --- `sim/count_pairs.py`'s contract, applied to a move
+  (issue #706). A stream threaded through the caller would make the successor
+  depend on visit order and the enumeration invalid.
+
 ## Framework
 
 **PyTorch**, per root `CLAUDE.md`, and `float64` throughout: the exact

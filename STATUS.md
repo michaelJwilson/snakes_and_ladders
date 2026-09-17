@@ -2798,6 +2798,12 @@ is checkable against.
 
 **Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface.
 
+**A Potts environment whose field is per site, and whose action carries a temperature** ([#706](https://github.com/michaelJwilson/snakes_and_ladders/issues/706), the single-site arm). Every learned policy before this scored a field of shape `(n_states,)` — one global tilt per label — while `search.ground_state` and `search.maxflow` score `(n_nodes, n_states)`, so no policy had been measured on the instance the classical ground-state methods are ranked on. `PottsNDEnvironment.score` is now the negation of `sim.potts.energies` **bitwise** over 600 seeded labellings at three instances, which is what says the two callers score one problem.
+
+**The classical baseline is a point in the action space, and which point it is was measured rather than assumed.** A sweep action at temperature zero is one iterated-conditional-modes sweep — each site taking its conditional mode in index order — and repeating it reproduces `iterated_conditional_modes`'s labelling **label for label** at 16 and 36 sites from the start that method draws for itself. The best single flip at zero temperature is a *different* baseline, steepest ascent: on the 6x6 fixture it reaches 61.87 from the field-only start where ICM's own random start reaches 57.33, which is two methods and two starts rather than one beating the other. Mistaking the second for the first is the defect the test caught.
+
+**A Monte Carlo move keeps a deterministic `step`.** The realization is keyed on a `blake2b` digest of the labelling and the action rather than drawn from a stream (`learn/keyed.py`), so replaying an action replays its successor, a different state draws differently, and `learn.exact`'s enumeration stays valid — the obstacle #597 left open for the bandit and slippery Frozen Lake, settled here without widening the protocol. Prices are `search.ground_state`'s own: a sweep costs `n_nodes + 2 n_edges` and a flip its degree plus one, so a matched-budget comparison is against that module's unit.
+
 **The estimator is pinned to a closed form, not to a training curve**
 ([#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135)). With a finite
 action set and horizon the expected return is exact by trajectory enumeration,
