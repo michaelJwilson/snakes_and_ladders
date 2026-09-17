@@ -67,6 +67,11 @@ same models `sal.opt` fits.
   it reaches the enumerated maximum from every start where the best epsilon
   measured does not (issue #194; the numbers are in `STATUS.md`). A result
   stated against single-run greedy alone overstates itself.
+- **A feature column an arm cannot vary is dropped, not carried.** The gauge
+  rule is per arm: a move set whose actions differ in one coordinate has one
+  informative column, and a second would be a weight nothing identifies. The
+  width is decided from the declared move set and ladder, never per state, so a
+  policy's input shape is fixed (issue #706).
 - **A critic is pinned to enumeration, never to its loss.** Where the return
   is exact so is the state value, and a critic's number is its fit to that;
   a baseline may read the state and never the action sampled at that step.

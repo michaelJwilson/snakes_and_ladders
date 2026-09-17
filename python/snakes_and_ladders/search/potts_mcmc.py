@@ -950,6 +950,8 @@ def _wolff_sweep(
     counter: ClusterCounter | None = None,
     graph: PottsGraph | None = None,
     beta: float = 1.0,
+    root: int | None = None,
+    proposed: int | None = None,
 ) -> int:
     """Grow one cluster from a random seed, recolour it, and stop.
 
@@ -967,6 +969,13 @@ def _wolff_sweep(
     :func:`sample_potts` returns the mean cluster size so a comparison can be
     normalized.
 
+    ``root`` and ``proposed``, when given, are the cluster's seed site and the
+    colour to recolour it to rather than draws made here. That is issue #706's
+    Wolff *action* --- a root, a label and a temperature --- so the choice
+    belongs to the policy taking it, leaving the bond construction as the only
+    randomness. Omitted, both are drawn as before and every existing caller's
+    stream is bitwise unchanged.
+
     Returns
     -------
     int
@@ -974,7 +983,7 @@ def _wolff_sweep(
     """
     bounds = offsets.tolist()
     incident, weights = neighbours.tolist(), couplings.tolist()
-    seed_node = int(rng.integers(state.shape[0]))
+    seed_node = int(rng.integers(state.shape[0])) if root is None else int(root)
     colour = int(state[seed_node])
     cluster = [seed_node]
     in_cluster = np.zeros(state.shape[0], dtype=bool)
@@ -991,14 +1000,18 @@ def _wolff_sweep(
                 cluster.append(neighbour)
                 frontier.append(neighbour)
     members = np.array(cluster, dtype=np.int64)
-    outcome = _recolour(state, members, beta * rows, rng)
+    outcome = _recolour(state, members, beta * rows, rng, proposed)
     if counter is not None:
         counter.record(members, outcome, graph)
     return len(cluster)
 
 
 def _recolour(
-    state: np.ndarray, members: np.ndarray, rows: np.ndarray, rng: np.random.Generator
+    state: np.ndarray,
+    members: np.ndarray,
+    rows: np.ndarray,
+    rng: np.random.Generator,
+    proposed: int | None = None,
 ) -> Recolour:
     """Propose one colour for a whole cluster, accepting on the field alone.
 
@@ -1016,6 +1029,12 @@ def _recolour(
     difference over the cluster's own members, which the shared case is the
     special case of.
 
+    ``proposed``, when given, is the colour to try rather than one drawn here:
+    issue #706's Wolff action names the colour it recolours to, so the draw
+    belongs to the action rather than to this function. Omitted, the draw is
+    unchanged, which is what keeps every existing caller's stream bitwise as it
+    was.
+
     Returns
     -------
     Recolour
@@ -1024,7 +1043,8 @@ def _recolour(
         run that never proposed is not a run that was rejected.
     """
     current = int(state[members[0]])
-    proposed = int(rng.integers(rows.shape[1]))
+    if proposed is None:
+        proposed = int(rng.integers(rows.shape[1]))
     if proposed == current:
         return Recolour(proposed=False, accepted=False)
     difference = float(rows[members, proposed].sum() - rows[members, current].sum())
