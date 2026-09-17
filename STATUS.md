@@ -3569,6 +3569,65 @@ a 3x3 --- with the closed form written nowhere.
 `log Z`, Bethe and Kikuchi are stationary points of a non-convex functional and
 may fall either side. Every claim above is accuracy against an exact referee.
 
+**A dual bound on a ground state at #696.** `search.tightening` decomposes the
+energy into subproblems whose shares sum to it, so
+`max_x E(x) <= sum_s max_{x_s} E_s(x_s)` holds **at every iteration by
+construction** and not at convergence --- which is what lets validity be
+asserted after one sweep rather than after two hundred. Measured 2026-09-17
+against exhaustive enumeration of all 19,683 labellings:
+
+| instance | ground state | bound | gap | verdict |
+| --- | --- | --- | --- | --- |
+| square 3x3, `J = +0.6` | -0.961675 | **-0.961675** | 0 | certified optimal, 1 sweep |
+| square 3x3, `J = -0.8` | 7.665024 | **7.665024** | 0 | certified optimal, 4 sweeps |
+| triangular 3x3, `J = -0.8`, pairwise | 10.112322 | 7.843362 | 2.27 | |
+| triangular 3x3, `J = -0.8`, **+ triangles** | 10.112322 | **9.668997** | 0.44 | **80%** of the gap closed |
+| triangular 3x3, `J = -1.5`, pairwise | 10.920268 | 7.843362 | 3.08 | |
+| triangular 3x3, `J = -1.5`, **+ triangles** | 10.920268 | **10.221722** | 0.70 | **77%** closed |
+
+The square rows include `J = -0.8`, which is **non-submodular**: minimum cut
+cannot take it and this certifies the labelling anyway, with no oracle
+consulted --- the enumeration checks the claim rather than supplying it.
+
+**The pairwise bound is the same number at both couplings**, 7.843362, and
+that is the clearest statement of what the relaxation misses: with three
+states every triangle is 3-colourable, so the relaxation satisfies every edge
+at no cost whatever the coupling, and only a constraint *over* the triangle
+can charge for the frustration. It is asserted as a prediction, not recorded
+as an observation.
+
+Two implementation notes worth keeping. The block update is the exact
+minimizer of its own block, checked against a numerical minimum over the
+block's messages; an early version left the site's own share inside the
+maximization, which adds half of it to every update and reads as a coordinate
+descent that does not descend. And the tightest iterate is retained rather
+than the last: every iterate is a valid bound, so this costs one comparison
+and removes any need to rely on monotonicity (none of 480 updates raised the
+dual once the block update was right).
+
+**Label marginals, and which estimator the reported metric asks for (#696).**
+`search.decoding` carries the maximum-posterior-marginal labelling and the
+loss it minimizes. The distinction is not a preference: `label_accuracy`
+scores **per-site** agreement, and the estimator minimizing per-site error is
+the marginal one, while a maximum-a-posteriori labelling minimizes the chance
+of getting the **whole field** wrong. Measured 2026-09-17 on the 3x3
+triangular antiferromagnet at `J = -0.9`, against exhaustive enumeration of
+all 19,683 labellings:
+
+| labelling | energy | posterior | rank | expected wrong sites |
+| --- | ---: | ---: | ---: | ---: |
+| maximum a posteriori | 10.37330 | 1.668e-03 | **1** of 19,683 | 6.0051 |
+| maximum posterior marginal | 21.58657 | 2.251e-08 | **19,555** of 19,683 | **5.4906** |
+
+The two differ at **six of nine sites**, and each wins on its own loss and
+loses on the other's. The marginal labelling sits in the worst one per cent of
+configurations by posterior --- minimizing per-site error does not require the
+answer to be jointly plausible, and on an antiferromagnet it puts every site
+at its own field-preferred label, which no draw would produce. That is the
+cost of the loss, and it is why a decoder reported without naming its loss
+hides the question it answered. On a ferromagnet at the same field the two
+agree exactly, which is recorded so the difference is not read as general.
+
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
 more members. `role:incidence` is 12 members over 78 consuming references --- one
