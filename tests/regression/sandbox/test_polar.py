@@ -17,30 +17,42 @@ outside this repository:
 from __future__ import annotations
 
 from itertools import pairwise
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from snakes_and_ladders.likelihood.ldpc import enumerate_codewords
-from snakes_and_ladders.likelihood.polar import decode_sc
-from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.polar import (
+from snakes_and_ladders.sandbox.polar import (
     KERNEL,
     MAX_DENSE_LENGTH,
     PolarCode,
+    PolarParams,
     bec_polar_code,
     bec_reliability,
     capacity,
     gaussian_polar_code,
     gaussian_reliability,
+    load_polar_params,
     parity_check,
     polar_information_set,
     polar_transform,
     reed_muller_code,
     reed_muller_information_set,
 )
+from snakes_and_ladders.sandbox.polar_decoding import decode_sc
 
 #: The information set the ticket states at `N = 16`, rate 1/2, on BEC(0.5).
 CI_INFORMATION = (3, 5, 7, 9, 11, 13, 14, 15)
+
+#: The declared instance, outside the fixture registry: a conserved route's
+#: file lives beside its tests, and `PROBLEMS.md` names no row for it.
+FIXTURES = Path(__file__).parent / "fixtures" / "polar"
+
+
+def _declared(tier: str = "ci") -> PolarParams:
+    """The instance the sandbox declares at one tier."""
+    return load_polar_params(FIXTURES / f"{tier}.yaml")
 
 
 @pytest.mark.mathematical
@@ -121,9 +133,9 @@ def test_the_declared_instance_is_the_code_the_ticket_states() -> None:
     # The fixture is the instance every caller shares, so what it builds is
     # asserted rather than assumed: `N = 16`, rate 1/2, and the information
     # set the exact recursion picks.
-    declared = fixture("polar", "ci")
-    assert declared.oracle == "enumeration"
-    code = declared.params.code()
+    with (FIXTURES / "ci.yaml").open() as handle:
+        assert yaml.safe_load(handle)["oracle"] == "enumeration"
+    code = _declared().code()
 
     assert (code.n_bits, code.n_info) == (16, 8)
     assert code.rate == 0.5
@@ -217,12 +229,12 @@ def test_a_fixture_asking_for_an_impossible_reed_muller_rate_is_refused() -> Non
     # The weight rule fixes `k`, so a fixture cannot ask for another one: the
     # error names the sizes RM does produce rather than silently returning the
     # nearest.
-    declared = fixture("polar", "ci")
-    impossible = type(declared.params)(
+    declared = _declared()
+    impossible = type(declared)(
         **{
             **{
-                field: getattr(declared.params, field)
-                for field in declared.params.__dataclass_fields__
+                field: getattr(declared, field)
+                for field in declared.__dataclass_fields__
             },
             "construction": "reed-muller",
             "n_info": 7,

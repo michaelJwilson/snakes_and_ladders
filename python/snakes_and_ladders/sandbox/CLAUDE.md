@@ -51,3 +51,4 @@ pull request that made the move, and `STATUS.md` where they are evidence.
 | `count_emissions` | superseded in capability | a constant covariate, where the covariate-aware families must reproduce these bit for bit (#631) |
 | `circulant_schedule` | superseded in capability | the circulant case, where a rate per step and the matrix stack it builds are one chain (#658) |
 | `rectangular_hmm` | superseded in capability | the equal-length case, where the ragged fit's mask is everywhere true and must fall through to this arithmetic bit for bit (#666) |
+| `polar`, `polar_decoding`, `polar_reference` | declined | the declared code, where `SCL(1) == SC` bitwise, `SCL(2^k)` is the enumerated maximum likelihood, and the naive recursion pins the list layout bitwise (#593) |

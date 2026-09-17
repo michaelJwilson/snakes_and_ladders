@@ -20,18 +20,25 @@ question:
 from __future__ import annotations
 
 from itertools import pairwise
+from pathlib import Path
 
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.ldpc import exact_decoding
-from snakes_and_ladders.likelihood.polar import (
+from snakes_and_ladders.sandbox.polar import (
+    PolarCode,
+    PolarParams,
+    load_polar_params,
+    parity_check,
+    polar_transform,
+)
+from snakes_and_ladders.sandbox.polar_decoding import (
     decode_sc,
     decode_scl,
     is_codeword,
     transmitted,
 )
-from snakes_and_ladders.likelihood.polar_reference import decode_sc_reference
-from snakes_and_ladders.sim.fixtures import fixture
+from snakes_and_ladders.sandbox.polar_reference import decode_sc_reference
 from snakes_and_ladders.sim.ldpc import (
     BinaryErasureChannel,
     BinaryInputGaussianChannel,
@@ -40,22 +47,29 @@ from snakes_and_ladders.sim.ldpc import (
     ParityCheck,
     all_zero_transmission,
 )
-from snakes_and_ladders.sim.polar import PolarCode, parity_check, polar_transform
 
 #: The declared instance every test here shares: `N = 16`, `k = 8`, so
 #: enumeration over 256 codewords is the maximum-likelihood oracle.
 DRAWS = 200
 
+#: The declared instance, read off the sandbox's own file as `test_polar.py` does.
+FIXTURES = Path(__file__).parent / "fixtures" / "polar"
+
+
+def _declared() -> PolarParams:
+    """The `ci` instance the sandbox declares."""
+    return load_polar_params(FIXTURES / "ci.yaml")
+
 
 def _instance() -> tuple[PolarCode, ParityCheck]:
     """The `ci` code and its parity check, which is what the oracle reads."""
-    code = fixture("polar", "ci").params.code()
+    code = _declared().code()
     return code, parity_check(code)
 
 
 def _channels() -> tuple[Channel, ...]:
     """The three channels the fixture declares, at its declared parameters."""
-    declared = fixture("polar", "ci").params
+    declared = _declared()
     return (
         BinaryInputGaussianChannel(declared.noise_scale),
         BinarySymmetricChannel(declared.flip_probability),
