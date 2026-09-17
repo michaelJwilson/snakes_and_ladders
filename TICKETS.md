@@ -133,6 +133,8 @@ parenthesis the only way a ticket is cited.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
+- The gate's per-problem pull requests (#596): the Potts lattice at critical coupling, the planted glass, the coupled model, the two tree surfaces, Max-Cut and the codes, each sized with `opt.failure` until its classical baseline fails and then argued at a matched budget. Step 0, the sizing harness, has landed; a problem whose baseline does not fail inside the budget is reported with its curve and excluded from the gate
+
 - The surrogate-bound columns of #308 in the tree feature set — the plug-in
   lower and parsimony upper bounds — measured at the budget of
   `docs/experiments/005-tree-policy-features.md`, and the full feature set
