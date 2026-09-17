@@ -511,7 +511,9 @@ def test_the_vectorized_gain_is_the_scalar_one_bitwise() -> None:
         targets = (labels[sites] + np.tile((1, 2), side * side)) % 3
         together = environment._flip_gains(labels, sites, targets)
         apart = [
-            environment._flip_gain(labels, PottsAction(MoveKind.FLIP, site, label, 0))
+            environment._flip_gain(
+                labels, PottsAction(MoveKind.FLIP, int(site), int(label), 0)
+            )
             for site, label in zip(sites, targets, strict=True)
         ]
         assert together.tolist() == apart
