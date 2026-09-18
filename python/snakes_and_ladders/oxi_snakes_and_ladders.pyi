@@ -51,12 +51,24 @@ def max_flow(
     source: int,
     sink: int,
     reverse: np.ndarray | None = ...,
+    algorithm: str = ...,
+    threads: int | None = ...,
 ) -> tuple[float, np.ndarray]: ...
 def ising_ground_state(
     n_nodes: int,
     field: np.ndarray,
     edges: np.ndarray,
     coupling: np.ndarray,
+    algorithm: str = ...,
+    threads: int | None = ...,
+) -> np.ndarray: ...
+def ising_ground_states(
+    n_nodes: int,
+    fields: np.ndarray,
+    edges: np.ndarray,
+    coupling: np.ndarray,
+    algorithm: str = ...,
+    threads: int | None = ...,
 ) -> np.ndarray: ...
 def single_site_sweeps(
     state: np.ndarray,

@@ -1,4 +1,4 @@
-"""Rust Dinic max-flow (`snakes_and_ladders.oxi_snakes_and_ladders`), pinned against `snakes_and_ladders.search.maxflow`.
+"""Rust max-flow kernels (`snakes_and_ladders.oxi_snakes_and_ladders`), pinned against `snakes_and_ladders.search.maxflow`.
 
 The NumPy/Python implementation stays as the oracle, per root ``CLAUDE.md``
 ("Every accelerated kernel keeps its pure Python/NumPy implementation as an
@@ -41,6 +41,8 @@ which is why the tests compare energies.
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
@@ -48,8 +50,38 @@ from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut, energy, site_
 from snakes_and_ladders.sim.graph import PottsGraph
 
 
+class MaxFlowAlgorithm(StrEnum):
+    """The kernel behind the seam (issue #715).
+
+    Every kernel returns the same cut: the nodes reachable from the source in
+    the residual graph on termination, which is the minimal minimum cut and
+    the same for every maximum flow. So a configuration read off the cut does
+    not depend on which kernel produced the flow, and the kernels are pinned
+    against each other element for element.
+    """
+
+    DINIC = "dinic"
+    """Level graphs and blocking flows; the reference the others are pinned to."""
+
+    PUSH_RELABEL = "push-relabel"
+    """Goldberg--Tarjan, highest label first, with global relabel and gap."""
+
+    BOYKOV_KOLMOGOROV = "boykov-kolmogorov"
+    """Two search trees from the terminals, with orphan adoption."""
+
+    PARALLEL_PUSH_RELABEL = "parallel-push-relabel"
+    """Synchronous push-relabel on rayon; schedule-independent output."""
+
+
+#: The kernel a caller gets by naming none.
+DEFAULT_ALGORITHM = MaxFlowAlgorithm.DINIC
+
+
 def ising_ground_state(
-    graph: PottsGraph, field_values: np.ndarray
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
+    threads: int | None = None,
 ) -> tuple[np.ndarray, float]:
     """The exact two-state ferromagnetic ground state, computed in Rust.
 
@@ -59,6 +91,11 @@ def ising_ground_state(
         Every coupling must be non-negative.
     field_values : np.ndarray
         ``(2,)`` or ``(n_nodes, 2)``, as :func:`snakes_and_ladders.search.maxflow.site_field`.
+    algorithm : MaxFlowAlgorithm
+        The kernel; :data:`DEFAULT_ALGORITHM` unless named.
+    threads : int | None
+        The rayon pool the parallel kernel runs on; ``None`` is the global
+        pool. The sequential kernels ignore it.
 
     Returns
     -------
@@ -78,12 +115,66 @@ def ising_ground_state(
         np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
         graph.edge_index.reshape(-1),
         graph.edge_coupling,
+        str(algorithm),
+        threads,
     )
     configuration = np.asarray(states, dtype=np.int64)
     return configuration, float(energy(graph, values, configuration))
 
 
-def min_cut(network: FlowNetwork, source: int, sink: int) -> MinCut:
+def ising_ground_states(
+    graph: PottsGraph,
+    fields: np.ndarray,
+    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
+    threads: int | None = None,
+) -> np.ndarray:
+    """The ground states of a batch of per-node fields on one graph.
+
+    The cuts are independent, so the batch is the axis rayon takes: one
+    network per field, solved on the pool, the GIL released for the whole
+    call (root ``CLAUDE.md``, parallel over independent tasks). This is the
+    entry point a sweep over instances or seeded starts calls, and the one
+    place a linear-in-cores speedup is on the table --- a single cut's
+    kernel is sequential unless it is the parallel one.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        Every coupling must be non-negative.
+    fields : np.ndarray
+        ``(batch, n_nodes, 2)``: one per-node field per instance.
+    algorithm : MaxFlowAlgorithm
+        The kernel each cut runs; the sequential ones are what a batch wants.
+    threads : int | None
+        The pool's size; ``None`` is the global pool.
+
+    Returns
+    -------
+    np.ndarray
+        ``(batch, n_nodes)`` ``int64`` configurations.
+    """
+    batch = np.ascontiguousarray(fields, dtype=np.float64)
+    if batch.ndim != 3 or batch.shape[1:] != (graph.n_nodes, 2):
+        msg = f"fields must be (batch, {graph.n_nodes}, 2), got {batch.shape}"
+        raise ValueError(msg)
+    states = oxi_snakes_and_ladders.ising_ground_states(
+        graph.n_nodes,
+        batch.reshape(-1),
+        graph.edge_index.reshape(-1),
+        graph.edge_coupling,
+        str(algorithm),
+        threads,
+    )
+    return np.asarray(states, dtype=np.int64).reshape(batch.shape[0], graph.n_nodes)
+
+
+def min_cut(
+    network: FlowNetwork,
+    source: int,
+    sink: int,
+    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
+    threads: int | None = None,
+) -> MinCut:
     """Maximum flow and the minimum cut it certifies, computed in Rust.
 
     The same signature and the same return as
@@ -107,6 +198,6 @@ def min_cut(network: FlowNetwork, source: int, sink: int) -> MinCut:
     """
     arcs, capacity, reverse = network.as_arrays()
     value, side = oxi_snakes_and_ladders.max_flow(
-        network.n_nodes, arcs, capacity, source, sink, reverse
+        network.n_nodes, arcs, capacity, source, sink, reverse, str(algorithm), threads
     )
     return MinCut(value=float(value), source_side=np.asarray(side, dtype=bool))

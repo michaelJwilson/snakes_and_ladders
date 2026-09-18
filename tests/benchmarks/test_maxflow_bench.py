@@ -87,3 +87,77 @@ def test_rust_kernel_ising_ground_state_benchmark(
     )
 
     assert states.shape == (graph.n_nodes,)
+
+
+# --- the kernels behind one seam (issue #715) --------------------------------
+
+#: The sizes the kernels are decided at. 128 and 256 are the stress sizes a
+#: speedup is claimed at (root `CLAUDE.md`), over the per-pull-request cap, so
+#: they run at the release gate; 16 to 64 keep the ratio measured per pull
+#: request.
+KERNEL_EXTENTS = [
+    16,
+    32,
+    64,
+    pytest.param(128, marks=pytest.mark.release),
+    pytest.param(256, marks=pytest.mark.release),
+]
+
+
+@pytest.mark.parametrize("algorithm", list(maxflow_rust.MaxFlowAlgorithm), ids=str)
+@pytest.mark.parametrize("extent", KERNEL_EXTENTS)
+def test_kernel_ising_ground_state_benchmark(
+    benchmark: BenchmarkFixture, extent: int, algorithm: maxflow_rust.MaxFlowAlgorithm
+) -> None:
+    # Every kernel on the same instance, so one table decides which stays
+    # in the package: the lowest wall clock at 128 and 256 wins.
+    graph, field_values = _problem(extent)
+
+    _, energy = benchmark(
+        maxflow_rust.ising_ground_state, graph, field_values, algorithm
+    )
+
+    assert np.isfinite(energy)
+
+
+@pytest.mark.parametrize("threads", [1, 2, 4])
+@pytest.mark.parametrize("extent", [64, pytest.param(256, marks=pytest.mark.release)])
+def test_parallel_kernel_threads_benchmark(
+    benchmark: BenchmarkFixture, extent: int, threads: int
+) -> None:
+    # The one kernel rayon reaches inside a cut, at one, two and four
+    # threads on one pool: what a round's barrier costs against what the
+    # parallel pushes buy.
+    graph, field_values = _problem(extent)
+
+    _, energy = benchmark(
+        maxflow_rust.ising_ground_state,
+        graph,
+        field_values,
+        maxflow_rust.MaxFlowAlgorithm.PARALLEL_PUSH_RELABEL,
+        threads,
+    )
+
+    assert np.isfinite(energy)
+
+
+@pytest.mark.parametrize("threads", [1, 4])
+@pytest.mark.parametrize("extent", [64, pytest.param(256, marks=pytest.mark.release)])
+def test_batch_ground_states_benchmark(
+    benchmark: BenchmarkFixture, extent: int, threads: int
+) -> None:
+    # The batch entry point: eight independent cuts on the pool, the axis
+    # rayon takes by default. Four threads over one is the throughput a
+    # sweep of instances or starts pays for.
+    graph, _ = _problem(extent)
+    fields = np.random.default_rng(extent).normal(size=(8, graph.n_nodes, 2))
+
+    states = benchmark(
+        maxflow_rust.ising_ground_states,
+        graph,
+        fields,
+        maxflow_rust.DEFAULT_ALGORITHM,
+        threads,
+    )
+
+    assert states.shape == (8, graph.n_nodes)

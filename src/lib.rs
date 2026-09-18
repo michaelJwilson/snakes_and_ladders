@@ -18,6 +18,7 @@ use pyo3::prelude::*;
 pub mod count_pairs;
 pub mod coupled;
 pub mod maxflow;
+pub mod maxflow_kernels;
 pub mod potts;
 pub mod pruning;
 #[cfg(feature = "sandbox")]
@@ -27,7 +28,7 @@ pub mod sampling;
 
 pub use count_pairs::simulate_count_pairs;
 pub use coupled::{class_posteriors, external_field};
-pub use maxflow::{ising_ground_state, max_flow};
+pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
 pub use potts::single_site_sweeps;
 pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
@@ -59,6 +60,7 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ragged::ragged_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(max_flow, m)?)?;
     m.add_function(wrap_pyfunction!(ising_ground_state, m)?)?;
+    m.add_function(wrap_pyfunction!(ising_ground_states, m)?)?;
     m.add_function(wrap_pyfunction!(single_site_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;

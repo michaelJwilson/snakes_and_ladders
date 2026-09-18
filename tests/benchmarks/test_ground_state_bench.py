@@ -25,6 +25,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
 from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.search.maxflow_rust import MaxFlowAlgorithm
 from snakes_and_ladders.search.potts_mcmc import PottsMove, anneal_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
 from snakes_and_ladders.sim.potts import spatio_only_field
@@ -95,3 +96,31 @@ def test_annealed_move_set_benchmark(
     )
 
     assert result.n_sweeps == STEPS
+
+
+# --- every max-flow kernel as the inner solver (issue #715) -------------------
+
+
+@pytest.mark.parametrize("algorithm", list(MaxFlowAlgorithm), ids=str)
+@pytest.mark.parametrize("n_states", [3, 10])
+@pytest.mark.parametrize(
+    "extent", [8, 16, 32, pytest.param(64, marks=pytest.mark.release)]
+)
+def test_alpha_expansion_by_kernel_benchmark(
+    benchmark: BenchmarkFixture, extent: int, n_states: int, algorithm: MaxFlowAlgorithm
+) -> None:
+    # The effect-size row of issue #715: what a Potts caller pays is `q`
+    # cuts per sweep, so the kernel is decided here as well as on the cut,
+    # and the expansion decides if the two tables disagree.
+    graph, field = _problem(extent, n_states)
+
+    result = benchmark(
+        alpha_expansion,
+        graph,
+        field,
+        n_states,
+        backend=Backend.RUST,
+        algorithm=algorithm,
+    )
+
+    assert result.cycles >= 1

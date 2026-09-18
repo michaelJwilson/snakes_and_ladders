@@ -25,6 +25,7 @@
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 /// A flow network as paired residual arcs.
 ///
@@ -33,10 +34,10 @@ use pyo3::prelude::*;
 /// subtracts from one and adds to the other, which keeps the residual graph
 /// implicit rather than a second structure to hold in step.
 pub struct FlowNetwork {
-    n_nodes: usize,
-    target: Vec<usize>,
-    capacity: Vec<f64>,
-    outgoing: Vec<Vec<usize>>,
+    pub(crate) n_nodes: usize,
+    pub(crate) target: Vec<usize>,
+    pub(crate) capacity: Vec<f64>,
+    pub(crate) outgoing: Vec<Vec<usize>>,
 }
 
 impl FlowNetwork {
@@ -79,7 +80,7 @@ impl FlowNetwork {
     }
 
     /// Breadth-first distances in the residual graph; `usize::MAX` if unreached.
-    fn levels(&self, source: usize) -> Vec<usize> {
+    pub(crate) fn levels(&self, source: usize) -> Vec<usize> {
         let mut level = vec![usize::MAX; self.n_nodes];
         level[source] = 0;
         let mut queue = std::collections::VecDeque::new();
@@ -198,6 +199,76 @@ pub fn max_flow_impl(
     Ok((total, side))
 }
 
+/// The kernels behind one seam (issue #715).
+///
+/// Every kernel returns the same pair as [`max_flow_impl`]: the flow value,
+/// and the nodes reachable from the source in the residual graph on
+/// termination. That set is the *minimal* minimum cut and is the same for
+/// every maximum flow, so a configuration read off it is the same whichever
+/// kernel produced the flow --- which is what lets the kernels be pinned
+/// against each other element for element rather than only on the value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Algorithm {
+    /// Level graphs and blocking flows; the reference the others are pinned to.
+    Dinic,
+    /// Goldberg--Tarjan with highest-label selection over buckets, a global
+    /// relabel by reverse breadth-first search, and the gap heuristic.
+    PushRelabel,
+    /// Boykov--Kolmogorov: two search trees grown from the terminals, with
+    /// orphan adoption after each augmentation.
+    BoykovKolmogorov,
+    /// Synchronous parallel push-relabel on rayon, rounds of pushes computed
+    /// in parallel and applied in vertex order so the result is independent
+    /// of the schedule.
+    ParallelPushRelabel,
+}
+
+impl Algorithm {
+    /// The kernel a name selects, as the Python seam spells it.
+    pub fn parse(name: &str) -> Result<Self, String> {
+        match name {
+            "dinic" => Ok(Self::Dinic),
+            "push-relabel" => Ok(Self::PushRelabel),
+            "boykov-kolmogorov" => Ok(Self::BoykovKolmogorov),
+            "parallel-push-relabel" => Ok(Self::ParallelPushRelabel),
+            other => Err(format!(
+                "unknown max-flow algorithm {other:?}; one of dinic, push-relabel, \
+                 boykov-kolmogorov, parallel-push-relabel"
+            )),
+        }
+    }
+}
+
+/// Maximum flow by the named kernel, and the minimal minimum cut it certifies.
+pub fn max_flow_with(
+    network: &mut FlowNetwork,
+    source: usize,
+    sink: usize,
+    algorithm: Algorithm,
+) -> Result<(f64, Vec<bool>), String> {
+    if source == sink {
+        return Err(format!("source and sink must differ, both are {source}"));
+    }
+    if source >= network.n_nodes || sink >= network.n_nodes {
+        return Err(format!(
+            "terminals ({source}, {sink}) must lie in [0, {})",
+            network.n_nodes
+        ));
+    }
+    let value = match algorithm {
+        Algorithm::Dinic => return max_flow_impl(network, source, sink),
+        Algorithm::PushRelabel => crate::maxflow_kernels::push_relabel(network, source, sink),
+        Algorithm::BoykovKolmogorov => {
+            crate::maxflow_kernels::boykov_kolmogorov(network, source, sink)
+        }
+        Algorithm::ParallelPushRelabel => {
+            crate::maxflow_kernels::parallel_push_relabel(network, source, sink)
+        }
+    };
+    let level = network.levels(source);
+    Ok((value, level.iter().map(|&d| d != usize::MAX).collect()))
+}
+
 /// Build the network for a two-state ferromagnetic Ising ground state.
 ///
 /// `field` is `n_nodes * 2` in row-major order, `edges` is `2 * n_edges` as
@@ -255,9 +326,10 @@ pub fn ising_ground_state_impl(
     field: &[f64],
     edges: &[usize],
     coupling: &[f64],
+    algorithm: Algorithm,
 ) -> Result<Vec<i64>, String> {
     let mut network = ising_network(n_nodes, field, edges, coupling)?;
-    let (_, side) = max_flow_impl(&mut network, n_nodes, n_nodes + 1)?;
+    let (_, side) = max_flow_with(&mut network, n_nodes, n_nodes + 1, algorithm)?;
     Ok(side[..n_nodes]
         .iter()
         .map(|&reachable| i64::from(!reachable))
@@ -299,8 +371,13 @@ fn node_indices(indices: &[i64]) -> PyResult<Vec<usize>> {
 /// (issue #336). `rust-numpy` hands over the buffer itself, the contract
 /// `sampling::sample_rows` and `pruning::pruning_log_likelihood` already
 /// state.
+///
+/// `algorithm` names the kernel (see [`Algorithm::parse`]) and `threads` the
+/// rayon pool the parallel one runs on, `None` for the global pool; the
+/// sequential kernels ignore it.
 #[pyfunction]
-#[pyo3(signature = (n_nodes, arcs, capacity, source, sink, reverse=None))]
+#[pyo3(signature = (n_nodes, arcs, capacity, source, sink, reverse=None, algorithm="dinic", threads=None))]
+#[allow(clippy::too_many_arguments)]
 pub fn max_flow<'py>(
     py: Python<'py>,
     n_nodes: usize,
@@ -309,7 +386,10 @@ pub fn max_flow<'py>(
     source: usize,
     sink: usize,
     reverse: Option<PyReadonlyArray1<'_, f64>>,
+    algorithm: &str,
+    threads: Option<usize>,
 ) -> PyResult<(f64, Bound<'py, PyArray1<bool>>)> {
+    let algorithm = Algorithm::parse(algorithm).map_err(PyValueError::new_err)?;
     // `as_slice` succeeds only for a C-contiguous array, the same contract
     // `sampling::sample_rows` states; the wrapper normalizes with
     // `ascontiguousarray`, free when the array already is one.
@@ -347,7 +427,11 @@ pub fn max_flow<'py>(
             .map_err(PyValueError::new_err)?;
     }
     let (value, side) = py
-        .detach(|| max_flow_impl(&mut network, source, sink))
+        .detach(|| {
+            on_pool(threads, || {
+                max_flow_with(&mut network, source, sink, algorithm)
+            })
+        })
         .map_err(PyValueError::new_err)?;
     Ok((value, PyArray1::from_vec(py, side)))
 }
@@ -360,21 +444,86 @@ pub fn max_flow<'py>(
 /// result comes back as an `int64` array rather than a list, so nothing at
 /// the boundary is built one Python object at a time.
 #[pyfunction]
-#[pyo3(signature = (n_nodes, field, edges, coupling))]
+#[pyo3(signature = (n_nodes, field, edges, coupling, algorithm="dinic", threads=None))]
 pub fn ising_ground_state<'py>(
     py: Python<'py>,
     n_nodes: usize,
     field: PyReadonlyArray1<'py, f64>,
     edges: PyReadonlyArray1<'py, i64>,
     coupling: PyReadonlyArray1<'py, f64>,
+    algorithm: &str,
+    threads: Option<usize>,
 ) -> PyResult<Bound<'py, PyArray1<i64>>> {
+    let algorithm = Algorithm::parse(algorithm).map_err(PyValueError::new_err)?;
     let edges = node_indices(edges.as_slice()?)?;
     let field = field.as_slice()?;
     let coupling = coupling.as_slice()?;
     let states = py
-        .detach(|| ising_ground_state_impl(n_nodes, field, &edges, coupling))
+        .detach(|| {
+            on_pool(threads, || {
+                ising_ground_state_impl(n_nodes, field, &edges, coupling, algorithm)
+            })
+        })
         .map_err(PyValueError::new_err)?;
     Ok(PyArray1::from_vec(py, states))
+}
+
+/// The ground states of a batch of fields on one graph, one cut per field.
+///
+/// `fields` is `batch * 2 * n_nodes`, row-major, and the result
+/// `batch * n_nodes`. The cuts are independent, so the batch is the axis
+/// rayon takes (root `CLAUDE.md`, parallel over independent tasks): a
+/// `par_iter` over the fields, each building and solving its own network,
+/// with the GIL released for the whole call. Each cut is the sequential
+/// kernel named; the parallel kernel inside a parallel batch would
+/// oversubscribe the pool for nothing.
+#[pyfunction]
+#[pyo3(signature = (n_nodes, fields, edges, coupling, algorithm="dinic", threads=None))]
+pub fn ising_ground_states<'py>(
+    py: Python<'py>,
+    n_nodes: usize,
+    fields: PyReadonlyArray1<'py, f64>,
+    edges: PyReadonlyArray1<'py, i64>,
+    coupling: PyReadonlyArray1<'py, f64>,
+    algorithm: &str,
+    threads: Option<usize>,
+) -> PyResult<Bound<'py, PyArray1<i64>>> {
+    let algorithm = Algorithm::parse(algorithm).map_err(PyValueError::new_err)?;
+    let edges = node_indices(edges.as_slice()?)?;
+    let fields = fields.as_slice()?;
+    let coupling = coupling.as_slice()?;
+    let width = 2 * n_nodes;
+    if width == 0 || fields.len() % width != 0 {
+        return Err(PyValueError::new_err(format!(
+            "fields has {} entries, not a multiple of 2 * {n_nodes}",
+            fields.len()
+        )));
+    }
+    let states = py
+        .detach(|| {
+            on_pool(threads, || {
+                fields
+                    .par_chunks(width)
+                    .map(|field| {
+                        ising_ground_state_impl(n_nodes, field, &edges, coupling, algorithm)
+                    })
+                    .collect::<Result<Vec<Vec<i64>>, String>>()
+            })
+        })
+        .map_err(PyValueError::new_err)?;
+    Ok(PyArray1::from_vec(py, states.concat()))
+}
+
+/// Run `body` on a pool of `threads`, or on the global pool for `None`.
+fn on_pool<T: Send>(threads: Option<usize>, body: impl FnOnce() -> T + Send) -> T {
+    match threads {
+        None => body(),
+        Some(count) => rayon::ThreadPoolBuilder::new()
+            .num_threads(count.max(1))
+            .build()
+            .expect("a rayon pool")
+            .install(body),
+    }
 }
 
 #[cfg(test)]
@@ -439,12 +588,14 @@ mod tests {
     fn a_negative_coupling_is_refused() {
         let field = vec![0.0, 0.0, 0.0, 0.0];
         let edges = vec![0, 1];
-        assert!(ising_ground_state_impl(2, &field, &edges, &[-0.5]).is_err());
+        assert!(ising_ground_state_impl(2, &field, &edges, &[-0.5], Algorithm::Dinic).is_err());
     }
 
     #[test]
     fn a_field_of_the_wrong_length_is_refused() {
-        assert!(ising_ground_state_impl(2, &[0.0, 0.0], &[0, 1], &[0.5]).is_err());
+        assert!(
+            ising_ground_state_impl(2, &[0.0, 0.0], &[0, 1], &[0.5], Algorithm::Dinic).is_err()
+        );
     }
 
     #[test]
@@ -452,7 +603,9 @@ mod tests {
         // With no coupling every site independently takes its better state,
         // so the answer is known without solving anything.
         let field = vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0];
-        let ground = ising_ground_state_impl(3, &field, &[0, 1, 1, 2], &[0.0, 0.0]).unwrap();
+        let ground =
+            ising_ground_state_impl(3, &field, &[0, 1, 1, 2], &[0.0, 0.0], Algorithm::Dinic)
+                .unwrap();
         assert_eq!(ground, vec![0, 1, 0]);
     }
 
@@ -461,7 +614,7 @@ mod tests {
         // Two sites pulled to opposite states by a weak field, bound by a
         // coupling stronger than the disagreement is worth: they must align.
         let field = vec![0.1, 0.0, 0.0, 0.1];
-        let ground = ising_ground_state_impl(2, &field, &[0, 1], &[5.0]).unwrap();
+        let ground = ising_ground_state_impl(2, &field, &[0, 1], &[5.0], Algorithm::Dinic).unwrap();
         assert_eq!(ground[0], ground[1]);
     }
 }
