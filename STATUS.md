@@ -254,7 +254,7 @@ sites the plan lists after these — the candidate fits of `search.infer`,
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
-**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700).
+**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700). `sim.spectrum`: the spectrum of a coupling graph, the seam every spectral method reads (#718).
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed tree fixture, retaining
@@ -2162,7 +2162,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`. `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`. `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `search.spectral`: a spectral lower bound on the two-state ground-state energy, and the start it gives (#718).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -2758,6 +2758,17 @@ heads is 9.76 GB, and the kernel killed the process at 9.96 GB resident, twice.
 What survives both is the offset --- every prediction, the diverged fit
 included, stays inside the bracket, which is what predicting a gap above a
 bound buys. Both failures are ticketed rather than worked around.
+
+**A spectral lower bound on the two-state ground state, and the start it gives** ([#718](https://github.com/michaelJwilson/snakes_and_ladders/issues/718), methods 1 and 2). `sim.spectrum` is the seam: the coupling matrix, the Laplacian, and one or two eigenpairs at either end, dense `eigh` below 2,048 nodes and `eigsh` above, the sparse route pinned to the dense one at 1e-10 on every graph the suite reaches. `search.spectral` reads it for `E >= c - (n+1) lambda_max(A~) / 4`, the field lifted onto a ghost spin (Mohar and Poljak 1993), and asserts the inequality on every run: against enumeration at up to 12 sites over five couplings, the exact cut at 24x24, the closed-form frustrated optimum at 3, 6 and 9, and the planted energy. The uncorrected bound is worthless where a field is present --- the ghost spin absorbs the field's norm --- and the diagonal correction (Delorme and Poljak 1993) is what the module runs by default: 16 steps of a bracketed subgradient search, 48 eigensolves. Measured 2026-09-18 on the open lattice at `J = 0.6` with a unit normal field, exact by minimum cut:
+
+| lattice | exact | uncorrected | corrected, gap | cost | dual bound, 50 iterations | start above exact | best of 200 random |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 16x16 | -317.49 | -1,565.91 (393%) | -356.15, **12.2%** | 0.47 s | -317.49 (0.0%), 0.79 s | 4.7% | 48.6% |
+| 32x32 | -1,359.09 | -12,068.75 (788%) | -1,482.68, **9.1%** | 2.6 s | -1,359.18 (0.007%), 5.4 s | 3.7% | 52.2% |
+| 64x64 | -5,480.51 | -95,672.62 (1,646%) | -6,123.32, **11.7%** | 16.0 s | -5,482.11 (0.03%), 21.8 s | 3.3% | 53.1% |
+| 128x128 | -22,101.58 | -749,836.88 (3,293%) | -24,960.21, **12.9%** | 85 s | | 3.5% | 54.7% |
+
+Where the cut applies the dual bound is the tighter certificate by two orders, and the table says so. The spectral bound's place is where the dual has nothing: on the frustrated triangular lattice it is **0.75 of the closed-form optimum at every size** (6.75 / 9, 27 / 36, 60.75 / 81; `lambda_max(-A) = 3`, no correction moves it, and the pairwise dual is 0 at all three), and on the `planted_glass/ci` fixture it is **-14.51 against the enumerated -14**, where the dual reads -18 and the planted state -7. The start is the corrected top eigenvector's signs: 3.3 to 4.7% above the exact cut against 49 to 55% for the best of 200 random labellings, and -13 on the glass against -12 for the best of 2,000. The step rule was chosen on the measurement: a single backtracking step lands anywhere from 6.9% to 29% at 32x32 with its initial length, and the bracket at 9.1% on the same 49 solves; a bundle method, which is what Delorme and Poljak ran, is the follow-up, and the ticket's Max-Cut certificate (method 3) reads the same correction from above.
 
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 

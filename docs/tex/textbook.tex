@@ -5806,6 +5806,36 @@ for factors of any degree, with Equation~\ref{eq:bethe-factor} in place of
 Equation~\ref{eq:bethe} and $d_i - 1$ counting the factors on $i$ beyond
 the first (Appendix~\ref{app:sum-product}).
 
+\subsection{A spectral lower bound on the two-state ground state}
+\label{app:spectral}
+With spins $\sigma_i = 2 s_i - 1$ the two-state energy of
+Equation~\ref{eq:potts} is a quadratic form on the hypercube,
+$E = c - \tfrac{1}{4}\sigma^\top A \sigma - b^\top \sigma$, where $A$ is the
+symmetric coupling matrix, $b_i = (h_i(1) - h_i(0))/2$ and $c$ collects the
+constants. A ghost spin $\sigma_0$ carries the linear term,
+$\tilde{A} = \bigl(\begin{smallmatrix} 0 & 2 b^\top \\ 2 b & A \end{smallmatrix}\bigr)$,
+and since $\|\tilde{\sigma}\|^2 = n + 1$ on the cube,
+\begin{equation}
+  \min_{s} E(s) \;\ge\; c - \tfrac{1}{4}\,(n+1)\,\lambda_{\max}(\tilde{A}),
+  \label{eq:spectral-bound}
+\end{equation}
+with $n$ in place of $n + 1$ and $A$ in place of $\tilde{A}$ when the field
+vanishes \citep{mohar1993}. On the cube $\tilde{\sigma}^\top \mathrm{diag}(u)\, \tilde{\sigma} = \sum_i u_i$,
+so Equation~\ref{eq:spectral-bound} holds with $\tilde{A} + \mathrm{diag}(u)$ for
+every $u$ with $\sum_i u_i = 0$, and the best such $u$ is the dual of the
+semidefinite relaxation \citep{delorme1993}; $\lambda_{\max}$ is convex in $u$
+with subgradient the top eigenvector squared, so projected subgradient descent
+lowers it and every iterate is a valid bound. The correction is not optional
+where a field is present: the ghost spin absorbs the field's norm, and the
+uncorrected bound sits 393\% below the exact cut on the $16 \times 16$ lattice
+with a unit normal field. The bound holds for couplings of either sign, which
+is what distinguishes it from the cut of Section~\ref{sec:potts}: on the
+triangular antiferromagnet it is $\tfrac{3}{4}$ of the closed-form optimum at
+every size, since $\lambda_{\max}(-A) = 3$ there. The top eigenvector of
+$\tilde{A}$ minimizes the relaxation on the sphere, and its signs, gauged by
+the ghost component, are the labelling nearest it on the cube: a start, never a
+result, and measured as one.
+
 \subsection{The region-based free energy is stationary at a parent-to-child
 fixed point}
 \label{app:gbp}

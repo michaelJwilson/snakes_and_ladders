@@ -72,6 +72,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.graph
    :members:
 
+.. automodule:: snakes_and_ladders.sim.spectrum
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.factor_graph
    :members:
 
@@ -358,6 +361,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.tightening
+   :members:
+
+.. automodule:: snakes_and_ladders.search.spectral
    :members:
 
 .. automodule:: snakes_and_ladders.search.alpha_expansion
