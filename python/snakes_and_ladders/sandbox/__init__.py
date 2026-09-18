@@ -32,3 +32,7 @@ Rust half behind the ``sandbox`` feature: the three max-flow kernels issue
 #715 measured against Boykov--Kolmogorov and did not keep, each still a
 referee of the kept one arc for arc.
 """
+
+from snakes_and_ladders import _submodules
+
+__getattr__ = _submodules(__name__)

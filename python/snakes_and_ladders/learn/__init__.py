@@ -8,3 +8,7 @@ pairs :class:`~snakes_and_ladders.opt.objective.Objective` with a Potts chain an
 Root ``CLAUDE.md`` re-exports nothing from a package's top level, so import
 submodule contents explicitly.
 """
+
+from snakes_and_ladders import _submodules
+
+__getattr__ = _submodules(__name__)
