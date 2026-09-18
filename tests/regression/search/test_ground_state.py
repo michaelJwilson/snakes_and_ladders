@@ -25,6 +25,7 @@ import itertools
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search import ground_state
@@ -33,7 +34,6 @@ from snakes_and_ladders.search.alpha_expansion import (
     alpha_expansion,
     swap,
 )
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.search.maxflow_rust import (
     ising_ground_state as rust_ground_state,

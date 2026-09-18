@@ -26,6 +26,7 @@ import math
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.opt.schedule import (
@@ -34,7 +35,6 @@ from snakes_and_ladders.opt.schedule import (
 )
 from snakes_and_ladders.search import potts_mcmc
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import _GUARD as GUARD
 from snakes_and_ladders.search.potts_mcmc import (
     PottsChain,
