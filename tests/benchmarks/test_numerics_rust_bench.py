@@ -16,8 +16,21 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.numerics import sample_rows as oracle
-from snakes_and_ladders.numerics_rust import sample_rows as accelerated
+from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.numerics import sample_rows
+
+
+def oracle(
+    rng: np.random.Generator, distributions: np.ndarray, rows: np.ndarray
+) -> np.ndarray:
+    return sample_rows(rng, distributions, rows, backend=Backend.PYTHON)
+
+
+def accelerated(
+    rng: np.random.Generator, distributions: np.ndarray, rows: np.ndarray
+) -> np.ndarray:
+    return sample_rows(rng, distributions, rows, backend=Backend.RUST)
+
 
 N_CATEGORIES = 4
 SEED = 20260904

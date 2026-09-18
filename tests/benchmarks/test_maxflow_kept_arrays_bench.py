@@ -15,8 +15,8 @@ import math
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.alpha_expansion import expand
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 

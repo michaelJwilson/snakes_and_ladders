@@ -3517,6 +3517,8 @@ Pull request 2 folded the energies and the site fields: `search.maxflow.energy`,
 
 Pull request 3 (issue #387) put one enumeration behind the oracles: `enumeration.configurations` is the product space under the cap, `posterior`, `site_marginals` and `argmax` its reductions, and the five enumerators and three `optimum` helpers call it with every signature and value unchanged --- the row of enumerate-shaped names stays at 19 because #387 keeps every name; what went were five copies of the product space, two of them uncapped, and three of the argmax loop; the seam's four functions read API-map entries 1,580.
 
+Pull request 5 folded the first compiled twin: `numerics_rust.sample_rows` is `numerics.sample_rows(backend=)`, the extension by default since the two agree bitwise on the same generator state, and `Backend` moved from `search.backend` to `snakes_and_ladders.backend` so a module below `search` can name it; the rows read twins 7, flat modules 149, API-map entries 1,575. The remaining six twins follow one per pull request, `maxflow_rust` after #716 lands on it.
+
 **A dual bound on a ground state at #696.** `search.tightening` decomposes the
 energy into subproblems whose shares sum to it, so
 `max_x E(x) <= sum_s max_{x_s} E_s(x_s)` holds **at every iteration by

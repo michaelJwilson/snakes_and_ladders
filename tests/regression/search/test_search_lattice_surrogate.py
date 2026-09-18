@@ -31,6 +31,7 @@ from collections.abc import Sequence
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.learn.surrogate import (
     AttentionSurrogate,
     Examples,
@@ -52,7 +53,6 @@ from snakes_and_ladders.likelihood.surrogate import (
     saturated_log_partition,
     spanning_tree_log_partition,
 )
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.surrogate import (
     enumerated_log_partition_target,
     ground_state_offset,

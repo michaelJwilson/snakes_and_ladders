@@ -62,7 +62,7 @@ from typing import Generic, Protocol, TypeVar, runtime_checkable
 import numpy as np
 import torch
 
-from snakes_and_ladders.numerics_rust import sample_rows
+from snakes_and_ladders.numerics import sample_rows
 
 #: What a family accepts for a parameter vector. A plain list is admitted
 #: because a fixture states its truth in one; the constructor converts, and

@@ -1,7 +1,7 @@
 """The Rust single-site heat-bath chain, named for callers that want it by name.
 
 One line of dispatch onto :func:`snakes_and_ladders.search.potts_mcmc.sample_potts`
-with :data:`~snakes_and_ladders.search.backend.Backend.RUST`, which is now that
+with :data:`~snakes_and_ladders.backend.Backend.RUST`, which is now that
 function's default. It stays because it is the name issue #246 published and
 `tests/benchmarks/` and `STATUS.md` still cite, and because it fixes the one
 move set the kernel implements; what it no longer carries is a second loop
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import PottsChain, PottsMove
 from snakes_and_ladders.search.potts_mcmc import sample_potts as _sample_potts
 from snakes_and_ladders.sim.graph import PottsGraph

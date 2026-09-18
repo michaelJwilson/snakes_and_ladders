@@ -17,6 +17,7 @@ from itertools import product
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.hmm_paths import (
     PathEnumeration,
     emission_log_density,
@@ -31,7 +32,6 @@ from snakes_and_ladders.opt.schedule import (
     ExponentialTempSchedule,
 )
 from snakes_and_ladders.search import gibbs
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.gibbs import (
     _Indexed,
     anneal_factor_graph,

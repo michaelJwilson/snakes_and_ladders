@@ -16,12 +16,12 @@ import sys
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.alpha_expansion import (
     _expansion_network,
     alpha_expansion,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import site_field
 
