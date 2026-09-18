@@ -36,8 +36,14 @@ from snakes_and_ladders.sim.graph import (
 )
 
 
-def site_field(field: np.ndarray, n_nodes: int) -> np.ndarray:
+def site_field(
+    field: np.ndarray, n_nodes: int, *, n_states: int | None = None
+) -> np.ndarray:
     """``field`` as one row per site, whichever of the two shapes it arrives in.
+
+    The one broadcast (issue #717): `search.maxflow` and
+    `search.alpha_expansion` each carried their own before, with three
+    signatures between them, and a fix to one did not land in the others.
 
     Parameters
     ----------
@@ -46,6 +52,12 @@ def site_field(field: np.ndarray, n_nodes: int) -> np.ndarray:
         --- or ``(n_nodes, n_states)``.
     n_nodes : int
         Sites the graph carries.
+    n_states : int | None
+        Columns the caller expects, checked where the caller knows it: a
+        field with the wrong number of columns would otherwise surface as an
+        ``IndexError`` inside a kernel rather than at the call that got it
+        wrong. A cut passes ``2``; alpha expansion the state count it was
+        given.
 
     Returns
     -------
@@ -57,7 +69,8 @@ def site_field(field: np.ndarray, n_nodes: int) -> np.ndarray:
     Raises
     ------
     ValueError
-        If ``field`` is neither shape. Refused rather than broadcast: a
+        If ``field`` is neither shape, or carries other than ``n_states``
+        columns where that is given. Refused rather than broadcast: a
         ``(n_states,)`` field on a graph whose node count equals the state
         count would otherwise be read as per-site, silently scoring a
         different model.
@@ -68,13 +81,22 @@ def site_field(field: np.ndarray, n_nodes: int) -> np.ndarray:
     (3, 2)
     """
     if field.ndim == 1:
-        return np.broadcast_to(field, (n_nodes, field.shape[0])).copy()
-    if field.shape[:1] == (n_nodes,) and field.ndim == 2:
-        return np.ascontiguousarray(field)
-    msg = (
-        f"field has shape {field.shape}; expected (n_states,) or ({n_nodes}, n_states)"
-    )
-    raise ValueError(msg)
+        rows = np.broadcast_to(field, (n_nodes, field.shape[0])).copy()
+    elif field.shape[:1] == (n_nodes,) and field.ndim == 2:
+        rows = np.ascontiguousarray(field)
+    else:
+        msg = (
+            f"field has shape {field.shape}; expected (n_states,) or "
+            f"({n_nodes}, n_states)"
+        )
+        raise ValueError(msg)
+    if n_states is not None and rows.shape[1] != n_states:
+        msg = (
+            f"a field for {n_states} states must have {n_states} columns, "
+            f"got {rows.shape[1]}"
+        )
+        raise ValueError(msg)
+    return rows
 
 
 def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.ndarray:
@@ -136,6 +158,19 @@ def energies(graph: PottsGraph, field: np.ndarray, states: np.ndarray) -> np.nda
         agree = states[..., ends[:, 0]] == states[..., ends[:, 1]]
         total = total + agree.astype(float) @ graph.edge_coupling
     return -np.asarray(total)
+
+
+def energy(graph: PottsGraph, field: np.ndarray, labelling: np.ndarray) -> float:
+    """``E(s)`` of one labelling, for any state count: :func:`energies` at ``n = 1``.
+
+    The scalar entry point `search.maxflow` and `search.alpha_expansion`
+    each defined before issue #717; one labelling is ``labelling[None]``
+    through the block form, element zero read back, and the field is widened
+    to ``float64`` rows on the way in so an integer field scores as the
+    model it names.
+    """
+    values = site_field(np.asarray(field, dtype=float), graph.n_nodes)
+    return float(energies(graph, values, np.asarray(labelling)[None])[0])
 
 
 def heat_bath_log_weights(

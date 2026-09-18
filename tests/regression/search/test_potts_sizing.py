@@ -36,7 +36,8 @@ from snakes_and_ladders.search.ground_state import (
     lattice_rung,
     uniform_ground_energy,
 )
-from snakes_and_ladders.search.maxflow import energy, ising_ground_state
+from snakes_and_ladders.search.maxflow import ising_ground_state
+from snakes_and_ladders.sim.potts import energy
 
 #: Sweeps of budget every probe gets, converted to site visits per rung. The
 #: unit is the module's own (`search/ground_state.py`): a Wolff step flips one

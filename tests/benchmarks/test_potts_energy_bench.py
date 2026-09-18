@@ -2,7 +2,8 @@
 
 Correctness is pinned in `tests/regression/sim/test_potts_energy.py`; this
 measures. Four implementations scored a labelling before issue #277 and the
-fastest of them --- `search.maxflow.energy`'s gather and dot product over the
+fastest of them --- the gather and dot product over the edges that was
+`search.maxflow.energy`'s and is `sim.potts.energies` (issue #717) --- over the
 edges --- is the one that survived, so both entries below run the same
 arithmetic and the second adds one call and a field widening to it. The
 sampler's entry is the one that moved: it evaluated
@@ -21,7 +22,6 @@ import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.search.maxflow import energy as cut_energy
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import energies
 
@@ -51,7 +51,7 @@ def test_the_block_energy(benchmark: BenchmarkFixture) -> None:
 def test_the_two_state_entry_point(benchmark: BenchmarkFixture) -> None:
     graph, states = _problem()
 
-    realized = benchmark(cut_energy, graph, FIELD, states)
+    realized = benchmark(energies, graph, FIELD, states)
 
     assert realized.shape == (CONFIGURATIONS,)
     assert math.isfinite(float(realized.sum()))

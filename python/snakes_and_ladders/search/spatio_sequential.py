@@ -57,9 +57,9 @@ from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
 from snakes_and_ladders.opt.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_expansion,
-    energy,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import energy
 from snakes_and_ladders.sim.spatio_sequential import SpatioSequentialParams
 
 
