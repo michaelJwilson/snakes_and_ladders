@@ -107,7 +107,11 @@ the release gate, `search` at its own **86.18%**. The contexts cost the tier
 `patch`, `backend`, `bug`, `warning` and `snapshot` are registered as the
 finding axis, none of which counts; root `CLAUDE.md` states the rule and the
 audit the ticket plans raises the judged figure directory by directory,
-`search` first.
+`search` first. The complement --- every kind and finding but the two that
+judge --- is the third guard (issue #732, PR
+[#733](https://github.com/michaelJwilson/snakes_and_ladders/pull/733)): **89.25%** with `qa` exempt,
+`search` **88.66%**, floored at 89.2 and 88.6, and `--functions` lists the
+330 public callables no judging test enters, 157 of them entered by no test.
 
 Two releases have been cut under the procedure, each from a Release ticket
 gated on `infra/release.sh`: `0.1.0`

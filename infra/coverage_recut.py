@@ -35,6 +35,7 @@ the release gate.
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import io
 import sqlite3
@@ -53,7 +54,7 @@ PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 # `infra/` is on `mypy_path` and is how the guards reach their shared names.
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
-from gates import JUDGED_COVERAGE, JudgedCoverage  # noqa: E402
+from gates import COVERAGE_GUARDS, JudgedCoverage  # noqa: E402
 
 #: The package a module belongs to where it sits directly under the package.
 ROOT_PACKAGE = "(root)"
@@ -115,6 +116,20 @@ def statements_of(path: Path) -> frozenset[int]:
     parser = PythonParser(text=path.read_text(), filename=str(path))
     parser.parse_source()
     return frozenset(parser.statements)
+
+
+def module_of(path: Path) -> str | None:
+    """A measured file's path inside the package, whichever checkout measured it.
+
+    The data names the file where the run happened; the source is read from
+    this tree, so a run from another worktree of the same commit recuts here.
+    ``None`` for a file outside the package.
+    """
+    parts = path.parts
+    if PACKAGE.name not in parts:
+        return None
+    index = len(parts) - 1 - parts[::-1].index(PACKAGE.name)
+    return "/".join(parts[index + 1 :])
 
 
 def _test_id(context: str) -> str:
@@ -179,14 +194,13 @@ def read_reach(
             judged[file_id].update(lines)
     reach = []
     for file_id, path in sorted(files.items(), key=lambda item: item[1]):
-        source = Path(path)
-        if not source.is_file():
+        module = module_of(Path(path))
+        source = PACKAGE / module if module else Path(path)
+        if module is None or not source.is_file():
             continue
         reach.append(
             Reach(
-                module=str(source.relative_to(PACKAGE))
-                if source.is_relative_to(PACKAGE)
-                else source.name,
+                module=module,
                 statements=statements_of(source),
                 imported=frozenset(imported[file_id]),
                 tested=frozenset(tested[file_id]),
@@ -282,28 +296,138 @@ def by_package(reach: Iterable[Reach]) -> dict[str, list[Reach]]:
     return dict(sorted(groups.items()))
 
 
-def tables(reach: list[Reach], guard: JudgedCoverage) -> str:
-    """The two tables, as text."""
-    whole = figure(reach)
-    guarded = figure(one for one in reach if one.package not in guard.exempt_packages)
-    lines = [
-        f"{'set':44s} {'statements':>10s} {'import':>8s} {'gate':>8s} {'judged':>8s}",
-        f"{'every package':44s} {whole.statements:10d} {whole.import_percent:7.2f}% "
-        f"{whole.gate_percent:7.2f}% {whole.counted_percent:7.2f}%",
-        f"{'guarded (exempt: ' + ', '.join(guard.exempt_packages) + ')':44s} "
-        f"{guarded.statements:10d} {guarded.import_percent:7.2f}% "
-        f"{guarded.gate_percent:7.2f}% {guarded.counted_percent:7.2f}%",
-        "",
-        f"{'package':12s} {'statements':>10s} {'gate':>8s} {'judged':>8s} "
-        f"{'deficit':>8s} {'never':>6s}",
-    ]
-    for package, files in by_package(reach).items():
-        one = figure(files)
-        lines.append(
-            f"{package:12s} {one.statements:10d} {one.gate_percent:7.2f}% "
-            f"{one.counted_percent:7.2f}% {sum(f.deficit for f in files):8d} "
-            f"{sum(f.never for f in files):6d}"
+def package_of(module: str) -> str:
+    """The first directory of a module's path, or the root."""
+    return module.split("/")[0] if "/" in module else ROOT_PACKAGE
+
+
+def tables(reaches: Mapping[str, list[Reach]], guards: Iterable[JudgedCoverage]) -> str:
+    """The two tables, as text: one column per guard beside the gate."""
+    names = [guard.name for guard in guards]
+    first = reaches[names[0]]
+    exempt = next(iter(guards)).exempt_packages
+    head = " ".join(f"{name:>9s}" for name in names)
+    lines = [f"{'set':44s} {'statements':>10s} {'import':>8s} {'gate':>8s} {head}"]
+    for label, packages in (
+        ("every package", None),
+        ("guarded (exempt: " + ", ".join(exempt) + ")", exempt),
+    ):
+        keep = [
+            one.package
+            for one in first
+            if packages is None or one.package not in packages
+        ]
+        whole = figure(one for one in first if one.package in keep)
+        counted = " ".join(
+            f"{figure(one for one in reaches[name] if one.package in keep).counted_percent:8.2f}%"
+            for name in names
         )
+        lines.append(
+            f"{label:44s} {whole.statements:10d} {whole.import_percent:7.2f}% "
+            f"{whole.gate_percent:7.2f}% {counted}"
+        )
+    lines += [
+        "",
+        f"{'package':12s} {'statements':>10s} {'gate':>8s} {head} {'deficit':>8s} {'never':>6s}",
+    ]
+    for package, files in by_package(first).items():
+        one = figure(files)
+        counted = " ".join(
+            f"{figure(f for f in reaches[name] if f.package == package).counted_percent:8.2f}%"
+            for name in names
+        )
+        lines.append(
+            f"{package:12s} {one.statements:10d} {one.gate_percent:7.2f}% {counted} "
+            f"{sum(f.deficit for f in files):8d} {sum(f.never for f in files):6d}"
+        )
+    return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class PublicCallable:
+    """One public top-level function or class, and which guards' tests enter it."""
+
+    module: str
+    name: str
+    #: The guards whose tests reach a statement of the body.
+    entered_by: frozenset[str]
+    #: Whether any test at all reaches one.
+    tested: bool
+
+    @property
+    def package(self) -> str:
+        return package_of(self.module)
+
+
+def callables(reaches: Mapping[str, list[Reach]]) -> list[PublicCallable]:
+    """Every public top-level ``def`` and ``class`` of every measured module.
+
+    A body is entered by a guard's set when one of its statements is in that
+    set's reach; the ``def`` line itself runs at import and is left out, so a
+    function nothing calls is entered by nothing. Read with `ast` from the
+    source `coverage` measured, so a body's lines are the parser's.
+    """
+    found: list[PublicCallable] = []
+    per_module: dict[str, dict[str, Reach]] = {}
+    for name, reach in reaches.items():
+        for one in reach:
+            per_module.setdefault(one.module, {})[name] = one
+    for module, per_set in sorted(per_module.items()):
+        source = PACKAGE / module
+        if not source.is_file() or module.endswith("__init__.py"):
+            continue
+        first = next(iter(per_set.values()))
+        for node in ast.parse(source.read_text()).body:
+            if not isinstance(
+                node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+            ):
+                continue
+            if node.name.startswith("_"):
+                continue
+            body = set(range(node.lineno + 1, (node.end_lineno or node.lineno) + 1))
+            body &= first.statements
+            found.append(
+                PublicCallable(
+                    module=module,
+                    name=node.name,
+                    entered_by=frozenset(
+                        name for name, one in per_set.items() if body & one.judged
+                    ),
+                    tested=bool(body & first.tested),
+                )
+            )
+    return found
+
+
+def functions_table(reaches: Mapping[str, list[Reach]], judged: str) -> str:
+    """Per package, the public callables by what enters them; then the list.
+
+    ``judged`` names the guard whose tests are the referee; a callable no test
+    of that guard enters is listed by module, marked ``(never)`` where no test
+    of any kind enters it either.
+    """
+    found = callables(reaches)
+    lines = [
+        f"{'package':12s} {'callables':>9s} {judged:>9s} {'others only':>12s} {'never':>6s}"
+    ]
+    for package in sorted({one.package for one in found}):
+        ours = [one for one in found if one.package == package]
+        entered = sum(1 for one in ours if judged in one.entered_by)
+        others = sum(1 for one in ours if judged not in one.entered_by and one.tested)
+        never = sum(1 for one in ours if not one.tested)
+        lines.append(
+            f"{package:12s} {len(ours):9d} {entered:9d} {others:12d} {never:6d}"
+        )
+    lines += ["", f"public callables no {judged} test enters, by module:"]
+    by_module: dict[str, list[str]] = {}
+    for one in found:
+        if judged not in one.entered_by:
+            by_module.setdefault(one.module, []).append(
+                one.name + ("" if one.tested else " (never)")
+            )
+    lines += [
+        f"  {module}: {', '.join(names)}" for module, names in sorted(by_module.items())
+    ]
     return "\n".join(lines)
 
 
@@ -342,26 +466,40 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--fail-under",
         action="store_true",
-        help="exit 1 where the judged figure is below a floor in infra/gates.py",
+        help="exit 1 where a guard's figure is below a floor in infra/gates.py",
+    )
+    parser.add_argument(
+        "--functions",
+        action="store_true",
+        help="list the public callables the judging tests never enter",
     )
     args = parser.parse_args(argv)
-    guard = JUDGED_COVERAGE
-    reach = read_reach(args.data, collect_markers(args.tests), guard.counting)
-    print(tables(reach, guard))
+    markers = collect_markers(args.tests)
+    reaches = {
+        guard.name: read_reach(args.data, markers, guard.counting)
+        for guard in COVERAGE_GUARDS
+    }
+    print(tables(reaches, COVERAGE_GUARDS))
+    if args.functions:
+        print()
+        print(functions_table(reaches, COVERAGE_GUARDS[0].name))
     if not args.fail_under:
         return 0
-    short = shortfalls(reach, guard)
-    for sentence in short:
-        print(f"FAIL: {sentence}")
-    if not short:
-        print(
-            f"judged coverage holds the {guard.floor}% floor"
-            + "".join(
-                f", {package} its {floor}%"
-                for package, floor in guard.package_floors.items()
+    failed = False
+    for guard in COVERAGE_GUARDS:
+        short = shortfalls(reaches[guard.name], guard)
+        for sentence in short:
+            print(f"FAIL: {guard.name} {sentence}")
+        failed |= bool(short)
+        if not short:
+            print(
+                f"{guard.name} coverage holds the {guard.floor}% floor"
+                + "".join(
+                    f", {package} its {floor}%"
+                    for package, floor in guard.package_floors.items()
+                )
             )
-        )
-    return 1 if short else 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

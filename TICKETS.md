@@ -217,6 +217,9 @@ parenthesis the only way a ticket is cited.
 
 ## Cross-Cutting Infrastructure
 
+- The oracle ladder per problem: every algorithm pinned to the simpler one
+  below it, declared once in `infra/ladder.py` and generated into the
+  textbook's applicability tables, and the 22 rungs no test pins (#734)
 - CPU parallelism past the first three sites: the candidate fits of
   `search.infer`, `learn.rollout` batches, tempering replicas (or a `rayon`
   loop, a dependency decision), `qa.build` and `check_notebooks` through the
