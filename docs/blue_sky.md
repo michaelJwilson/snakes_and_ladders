@@ -33,7 +33,7 @@ three that have none at the size that matters say so.
 | `TICKETS.md` 1.4 | The Max-Cut SDP certificate behind an approved dependency | Open (#334) | `search/max_cut.py` states its bound is not rigorous |
 | `TICKETS.md` 1.3 | NUTS | Open, conditional on #268 | #352's fixed trajectory length adapted instead |
 | `TICKETS.md` 1.2 | CUDA and Metal dispatch, a Triton or JAX kernel | Open (#227 for coloured ICM) | GPU dispatch specified and not built (`STATUS.md` What Is Not Claimed) |
-| #340 | An LDPC problem class at `10,000 × 20,000` | Open, parts 2 and 3 | The 19,998-bit erasure bracket runs at the release gate; `ldpc.ipynb` stops at 996 bits and decoding as optimization is unbuilt |
+| #340 | An LDPC problem class at `10,000 × 20,000` | Open, parts 2 and 3 | The 19,998-bit erasure bracket runs at the release gate; `classical_codes.ipynb` stops at 996 bits and decoding as optimization is unbuilt |
 
 ## 2. Candidates
 

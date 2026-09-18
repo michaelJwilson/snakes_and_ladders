@@ -37,8 +37,10 @@ before it is published.
   a size chosen so the gate stays affordable is not a size a user works at.
 
   The gate is narrow by design and that is the reason for the rule: `-m
-  critical` collects **368** tests where the CI tier collects **2,860** and the
-  whole suite 2,969 (measured on `main` at #676, 2026-09-16). This session the
+  critical` collects **384** tests where the CI tier collects **3,185** and the
+  whole suite 3,298 (measured on `dev`, `main` plus the 19 open pull requests,
+  2026-09-17, and 380 / 3,185 / 3,301 once #605 and #695 moved to `sandbox/` the
+  same day; 368 / 2,860 / 2,969 on `main` at #676, 2026-09-16). This session the
   full tier caught what `critical` could not on two pull requests --- twelve
   failures on #601, two stale references on #595 --- and #598's headline
   benchmark was gate-sized, withdrawn as unmeasured at a stress size rather
