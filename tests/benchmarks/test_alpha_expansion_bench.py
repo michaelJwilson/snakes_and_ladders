@@ -19,11 +19,11 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.alpha_expansion import (
     _expansion_network,
-    _site_field,
     alpha_expansion,
     iterated_conditional_modes,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import site_field
 
 sys.setrecursionlimit(50_000)
 
@@ -89,7 +89,7 @@ def test_the_expansion_network_build_benchmark(
     building and solving is a number rather than a profile reading.
     """
     graph, values = _problem(extent, n_states)
-    field = _site_field(graph, values)
+    field = site_field(values, graph.n_nodes)
     rng = np.random.default_rng(598)
     labelling = rng.integers(0, n_states, size=graph.n_nodes)
 

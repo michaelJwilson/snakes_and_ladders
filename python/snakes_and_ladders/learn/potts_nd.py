@@ -9,7 +9,7 @@ global tilt per label --- while ``search.ground_state`` and ``search.maxflow``
 score a ``(n_nodes, n_states)`` field. So no learned policy has ever been
 measured on the instance the classical ground-state methods are ranked on. A
 uniform field also makes the ferromagnetic ground state trivial, for the reason
-``maxflow.site_field`` states: every coupling favours agreement and every site
+``search.maxflow.ising_ground_state`` states: every coupling favours agreement and every site
 prefers the same label, so the answer is ``argmax(h)`` everywhere.
 
 **The action carries a temperature.** A sweep action at ``T = 0`` is one
