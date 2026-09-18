@@ -212,6 +212,24 @@ _CSR_PARTNER = frozenset(
         "factor_start",
     }
 )
+#: The **implicit-offsets** spelling: segment lengths beside one flat payload,
+#: with the offsets derived rather than stored. `ragged.Ragged` is the case
+#: that named it --- the survey ran for months reporting 218 classes and no
+#: `Ragged`, because the classifier knew `offsets` and `indptr` and not the
+#: third way of writing the same relation (issue #677).
+#:
+#: The corroboration rule of `_CSR_EXACT` applies here too, and it is what
+#: keeps this from over-matching. A payload partner is **required**:
+#: `sim.hmm.HmmParams` carries `lengths` and no flat array, because there it
+#: declares the shape of a batch rather than addressing one, and a params is
+#: not a layout. And `sizes` is deliberately **not** a length field:
+#: `search.potts_mcmc.ClusterCounter.sizes` is a histogram of cluster sizes,
+#: `search.ground_state.Rung.sizes` and `sim.potts.SpatioOnlyParams.sizes` are
+#: problem sizes, and admitting the name would misfile all three --- the same
+#: failure as matching `restarts` for `starts`.
+_SEGMENTED_EXACT = frozenset({"lengths"})
+_SEGMENTED_SUFFIX = "_lengths"
+_SEGMENTED_PARTNER = frozenset({"values", "observations", "data", "flat"})
 _COO_EXACT = frozenset({"edges", "edge_variable", "edge_check"})
 _COO_PARTNER = frozenset({"coupling", "couplings", "weight", "weights", "capacity"})
 _GRAPH_EXACT = frozenset({"children", "nodes", "variables", "factors", "outgoing"})
@@ -222,6 +240,11 @@ def _layout(fields: tuple[str, ...]) -> str:
     names = set(fields)
     csr = {f for f in names if f in _CSR_EXACT or f.endswith(_CSR_SUFFIX)}
     if csr and (names & _CSR_PARTNER or len(csr) >= 2):
+        return "csr"
+    segmented = {
+        f for f in names if f in _SEGMENTED_EXACT or f.endswith(_SEGMENTED_SUFFIX)
+    }
+    if segmented and names & _SEGMENTED_PARTNER:
         return "csr"
     coo = names & _COO_EXACT
     if coo and (names & _COO_PARTNER or len(coo) >= 2):
@@ -237,8 +260,19 @@ def _layout(fields: tuple[str, ...]) -> str:
 #: opinion but a benchmark, named so the next reader can re-run it rather
 #: than re-litigate it. The reason replaces the finding, so the survey still
 #: reports the layout --- it stops calling it a cost.
+#: Keyed ``<qualified>:<kind>`` rather than by the class, because one class
+#: can raise two findings and a measurement answers one of them:
+#: `FlowNetwork` keeps its list of lists on a benchmark *and* still derives
+#: its layout per call, which is open as #642 (issue #677).
 MEASURED: dict[str, str] = {
-    "search.maxflow.FlowNetwork": (
+    "ragged.Ragged:offsets": (
+        "offsets rebuilt per call kept: the Python scan is 39.3 us on the "
+        "600-segment `hmm/ci` batch against 335.11 ms for one Baum-Welch "
+        "iteration over it, 0.012%, and the NumPy cumsum that would replace "
+        "it saves 6 us of that (2026-09-16, #677). A ratio with no effect "
+        "size, which root CLAUDE.md leaves alone"
+    ),
+    "search.maxflow.FlowNetwork:list-of-lists": (
         "list of lists kept: Dinic is a pure-Python inner loop, where a row "
         "is 1.95 ms as lists, 3.93 ms flat with offsets and 25.63 ms as a "
         "NumPy slice over 16,384 rows of degree six; the compiled consumer "
@@ -266,12 +300,57 @@ def _notes(
         and any(mark in ast.unparse(item) for mark in ("cumsum", "offsets", "indptr"))
         for item in node.body
     )
+    # What decides the finding is whether the *offsets* are stored, not whether
+    # the store is compressed at all. An implicit-offsets structure is
+    # compressed --- `_layout` now says `csr` for it --- and still rebuilds the
+    # offsets on every call, which is the "recompute or store" question
+    # unanswered rather than answered. Keying on the layout alone hid that for
+    # every `Ragged`-shaped class (issue #677).
+    stores_offsets = any(
+        name in _CSR_EXACT or name.endswith(_CSR_SUFFIX) for name in fields
+    )
     for item in node.body:
-        if not isinstance(item, ast.FunctionDef) or derived_once:
+        if not isinstance(item, ast.FunctionDef) or derived_once or stores_offsets:
+            continue
+        # A constructor is not a per-call derivation (issue #642). "Derives X
+        # per call" names a cost that repeats on one object: an accessor asked
+        # twice pays twice, and storing the result removes the second payment.
+        # A `classmethod` that builds an instance runs once per instance it
+        # builds, so there is no second payment to remove and no rewrite that
+        # would clear the finding short of deleting the constructor. Reported
+        # of one, the finding is unanswerable, and `FlowNetwork.from_arcs`
+        # carried it on `main` while the survey's *own* next line recorded the
+        # measurement that keeps the store it was objecting to --- the two read
+        # together as the survey contradicting itself about one class.
+        #
+        # This narrows what is reported, so `tests/regression/test_structure_survey.py`
+        # holds it to a positive control: a class with a real per-call accessor
+        # over a non-compressed store is still reported, and the day this stops
+        # firing for one, that test fails rather than this going quiet.
+        if any(
+            isinstance(d, ast.Name) and d.id == "classmethod"
+            for d in item.decorator_list
+        ):
             continue
         body = ast.unparse(item)
-        derives_csr = any(mark in body for mark in ("cumsum", "offsets", "indptr"))
-        if derives_csr and _layout(fields) != "csr":
+        # A method *reading* `self.offsets` consumes a derivation; the method
+        # that computes the scan is the one to report. `Ragged.segments` reads
+        # `self.offsets` once and was reported as a second derivation of it,
+        # which is the survey measuring a name again (issue #677).
+        derives_csr = any(mark in body for mark in ("cumsum", "indptr")) or (
+            "offsets" in body and "self.offsets" not in body
+        )
+        if not derives_csr:
+            continue
+        if _layout(fields) == "csr":
+            out.append(
+                MEASURED.get(
+                    f"{qualified}:offsets",
+                    f"{item.name} derives the offsets per call from a store "
+                    "that keeps them implicitly (CLAUDE.md, recompute or store)",
+                )
+            )
+        else:
             out.append(
                 f"{item.name} derives a compressed layout per call from a store "
                 "that is not compressed (CLAUDE.md, Memory layout; recompute or store)"
@@ -279,7 +358,7 @@ def _notes(
     if "list[list[" in source:
         out.append(
             MEASURED.get(
-                qualified,
+                f"{qualified}:list-of-lists",
                 "carries a list of lists where the rule asks for offsets into one "
                 "array (CLAUDE.md, Memory layout)",
             )
@@ -333,6 +412,25 @@ def _keys(structure: Structure) -> list[str]:
     return keys
 
 
+def unclustered_findings(found: list[Structure], grouped: list[Cluster]) -> list[str]:
+    """Cost findings on classes that belong to no cluster.
+
+    A finding was printed only inside a cluster, so one on a class sharing its
+    shape with nobody was derived and then dropped --- and that is a second
+    blindness, not a display detail: `ragged.Ragged` raised the per-call
+    derivation finding for months while its only cluster key was a field
+    signature of one member, so nothing printed it (issue #677). The cost of a
+    structure does not depend on how many others look like it.
+    """
+    clustered = {member for cluster in grouped for member in cluster.members}
+    return [
+        f"{structure.qualified}: {note}"
+        for structure in found
+        if structure.qualified not in clustered
+        for note in structure.notes
+    ]
+
+
 def render(found: list[Structure], grouped: list[Cluster]) -> str:
     lines = [
         f"{len(found)} state-carrying classes; "
@@ -348,6 +446,11 @@ def render(found: list[Structure], grouped: list[Cluster]) -> str:
             lines.append(f"  {cluster.layouts[member]:16s} {member}")
         for finding in sorted(set(cluster.findings)):
             lines.append(f"  ! {finding}")
+        lines.append("")
+    loose = unclustered_findings(found, grouped)
+    if loose:
+        lines.append(f"## findings outside every cluster  ({len(loose)})")
+        lines.extend(f"  ! {finding}" for finding in sorted(set(loose)))
         lines.append("")
     return "\n".join(lines)
 
