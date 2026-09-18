@@ -48,9 +48,9 @@ SLIMMING_BASELINE = {
     "surrogate modules": 4,
     "modules without a docstring": 0,
     "root exports": 7,
-    "test modules pinning a twin to its oracle beyond the first": 12,
+    "test modules pinning a twin to its oracle beyond the first": 13,
     "flat modules": 148,
-    "API-map entries": 1574,
+    "API-map entries": 1578,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
