@@ -15,6 +15,8 @@ That is the mistake this file caught while it was being written.
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.ldpc import (
@@ -120,6 +122,117 @@ def test_the_syndrome_of_a_hamming_error_is_the_index_of_the_flipped_bit() -> No
 
         assert index == position + 1
         np.testing.assert_array_equal(hamming_correct(code, 3, received), zero)
+
+
+#: The crossover the maximum-likelihood decode is read at. Any value below a
+#: half orders the codewords by Hamming distance, so the referee is the
+#: distance and the number only fixes where `exact_decoding` is evaluated.
+BSC_FLIP = 0.05
+
+#: Received words drawn at the `(15, 11)` Hamming code, where the 2**15 space
+#: is 2.7 s to walk and 500 seeded draws are 0.05 s.
+HAMMING_DRAWS = 500
+
+#: Weight-four error patterns drawn at Golay, past its correction radius.
+GOLAY_DRAWS = 100
+
+
+def _nearest(words: np.ndarray, received: np.ndarray) -> tuple[np.ndarray, int, int]:
+    """The nearest codeword to ``received``, its distance, and how many tie.
+
+    Maximum likelihood on a binary symmetric channel below a half: a word's
+    log-likelihood falls with its Hamming distance to the received word, so
+    the ranking is the distance's and the tie count is what decides whether
+    the decode is unique.
+    """
+    distance = (words != received[np.newaxis, :]).sum(axis=1)
+    smallest = int(distance.min())
+    return words[int(distance.argmin())], smallest, int((distance == smallest).sum())
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_syndrome_correction_is_the_nearest_codeword_enumeration_returns() -> None:
+    # The rung below (issue #734): brute-force maximum likelihood, the
+    # enumeration `likelihood.ldpc` runs over `enumerate_codewords`. The two
+    # perfect codes are pinned to it, and they are pinned differently because
+    # only one of them has a decoder here.
+    #
+    # `hamming_correct` reads the syndrome as a bit index, and what is pinned
+    # is that the bit it flips is the one maximum likelihood flips. Exhaustive
+    # at `(7, 4)`: over all 2**7 = 128 received words the nearest codeword is
+    # unique and at distance at most 1 -- perfection, as a decoding statement
+    # rather than as the counting one above -- and the syndrome correction is
+    # that word on all 128, as is `exact_decoding`'s `ml_codeword` at
+    # `BSC_FLIP`. Over 500 seeded words of the `(15, 11)` code the three agree
+    # again on all 500; the 2**15 space is 2.7 s and the draws are 0.05 s, and
+    # an exhaustive walk found no disagreement either.
+    #
+    # Golay has no syndrome decoder in this tree, so what enumeration referees
+    # is the construction: over all 2,048 error patterns of weight at most 3,
+    # applied to the zero word and to the first nonzero codeword the
+    # enumeration lists, the maximum-likelihood decode is the word that was
+    # sent, with no tie in any of the 4,096.
+    #
+    # Where it stops is one error further out and is asserted beside it. The
+    # code is perfect, so its covering radius is 3 and *no* received word is
+    # further than that from a codeword: all 100 seeded weight-four patterns
+    # sit at distance 3 from a codeword that is not the one sent, so maximum
+    # likelihood returns a wrong word and returns it without ambiguity. That is
+    # the code's radius, not a defect of a decoder.
+    rng = np.random.default_rng(734)
+    magnitude = np.log((1.0 - BSC_FLIP) / BSC_FLIP)
+
+    code = hamming_code(3)
+    words = enumerate_codewords(code).astype(np.int64)
+    ties = 0
+    for value in range(2**code.n_bits):
+        received = np.array(
+            [(value >> place) & 1 for place in range(code.n_bits)], dtype=np.int64
+        )
+        nearest, distance, tied = _nearest(words, received)
+        ties += tied - 1
+        assert distance <= 1
+        np.testing.assert_array_equal(hamming_correct(code, 3, received), nearest)
+        np.testing.assert_array_equal(
+            exact_decoding(code, (1.0 - 2.0 * received) * magnitude).ml_codeword,
+            nearest,
+        )
+    assert ties == 0
+
+    code = hamming_code(4)
+    words = enumerate_codewords(code).astype(np.int64)
+    for _ in range(HAMMING_DRAWS):
+        received = rng.integers(0, 2, size=code.n_bits)
+        nearest, distance, tied = _nearest(words, received)
+        assert distance <= 1
+        assert tied == 1
+        np.testing.assert_array_equal(hamming_correct(code, 4, received), nearest)
+
+    code = golay_code()
+    words = enumerate_codewords(code).astype(np.int64)
+    patterns = np.zeros((1, code.n_bits), dtype=np.int64)
+    for weight in (1, 2, 3):
+        support = np.array(list(itertools.combinations(range(code.n_bits), weight)))
+        block = np.zeros((support.shape[0], code.n_bits), dtype=np.int64)
+        np.put_along_axis(block, support, 1, axis=1)
+        patterns = np.vstack([patterns, block])
+    assert patterns.shape == (1 + 23 + 253 + 1771, code.n_bits)
+
+    for sent in (words[0], words[1]):
+        for pattern in patterns:
+            nearest, distance, tied = _nearest(words, sent ^ pattern)
+            assert tied == 1
+            np.testing.assert_array_equal(nearest, sent)
+
+    wrong = 0
+    for _ in range(GOLAY_DRAWS):
+        pattern = np.zeros(code.n_bits, dtype=np.int64)
+        pattern[rng.choice(code.n_bits, size=4, replace=False)] = 1
+        nearest, distance, tied = _nearest(words, pattern)
+        assert (distance, tied) == (3, 1)
+        wrong += int(bool(nearest.any()))
+    assert wrong == GOLAY_DRAWS
 
 
 @pytest.mark.analytic

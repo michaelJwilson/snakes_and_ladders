@@ -28,6 +28,7 @@ from snakes_and_ladders.sim.galois import (
 )
 from snakes_and_ladders.sim.reed_solomon import (
     DecodingFailure,
+    ReedSolomon,
     decode,
     encode,
     reed_solomon,
@@ -127,6 +128,98 @@ def test_the_decoder_is_exact_within_its_guarantee(m: int, k: int, errors: int) 
             received[position] ^= int(rng.integers(1, code.field.order))
 
         np.testing.assert_array_equal(decode(code, received), word)
+
+
+#: Error patterns past the guarantee, at three symbols on a code that
+#: corrects two.
+PAST_GUARANTEE_DRAWS = 300
+
+
+def _codebook(code: ReedSolomon) -> np.ndarray:
+    """Every codeword of ``code``, as the systematic encoder writes it."""
+    return np.array(
+        [
+            encode(code, np.asarray(message))
+            for message in itertools.product(
+                range(code.field.order), repeat=code.n_message
+            )
+        ]
+    )
+
+
+def _nearest(words: np.ndarray, received: np.ndarray) -> tuple[np.ndarray, int, int]:
+    """The nearest codeword in symbol distance, that distance, and how many tie."""
+    distance = (words != received[np.newaxis, :]).sum(axis=1)
+    smallest = int(distance.min())
+    return words[int(distance.argmin())], smallest, int((distance == smallest).sum())
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_the_algebraic_decode_is_the_nearest_codeword_enumeration_returns() -> None:
+    # The rung below (issue #734): brute-force maximum likelihood, here the
+    # 512 codewords of RS(7,3) enumerated and ranked by symbol distance --- on
+    # a symmetric channel a word's likelihood falls with that distance, so the
+    # nearest codeword is the maximum-likelihood one and the tie count says
+    # whether it is the only one.
+    #
+    # The existing pin says the decoder recovers what was *sent* within `t`.
+    # That is a weaker statement than this one: a decoder could recover the
+    # sent word and still not be returning the likeliest codeword off it. Over
+    # all 1,079 error patterns of weight at most 2 on two sent codewords,
+    # 2,158 decodes, the algebraic answer is the nearest codeword, the nearest
+    # codeword is unique, and both are the word that was sent.
+    #
+    # Where it stops is one symbol further out, and the correspondence there is
+    # exact rather than approximate. Over 300 seeded weight-three patterns:
+    # 35 decode and 265 refuse, and the split is maximum likelihood's own. The
+    # 35 are the draws whose nearest codeword sits at distance 2 and is unique
+    # --- the received word fell inside another codeword's sphere, the decoder
+    # returns that codeword, and it is the likeliest one; none of the 35 is the
+    # word that was sent. The 265 are the draws whose nearest sits at distance
+    # 3, where 2 to 7 codewords tie for it, so maximum likelihood has no unique
+    # answer and the decoder refuses rather than choosing one.
+    code = reed_solomon(3, 3)
+    words = _codebook(code)
+    assert words.shape == (512, 7)
+    rng = np.random.default_rng(734)
+
+    for sent in (words[0], words[137]):
+        for weight in (0, 1, 2):
+            assert weight <= code.correctable
+            for positions in itertools.combinations(range(code.n_symbols), weight):
+                for magnitudes in itertools.product(
+                    range(1, code.field.order), repeat=weight
+                ):
+                    received = sent.copy()
+                    for position, magnitude in zip(positions, magnitudes, strict=True):
+                        received[position] ^= magnitude
+                    nearest, distance, tied = _nearest(words, received)
+
+                    assert (distance, tied) == (weight, 1)
+                    np.testing.assert_array_equal(nearest, sent)
+                    np.testing.assert_array_equal(decode(code, received), nearest)
+
+    sent = words[137]
+    decoded = refused = 0
+    for _ in range(PAST_GUARANTEE_DRAWS):
+        received = sent.copy()
+        for position in rng.choice(code.n_symbols, size=3, replace=False):
+            received[position] ^= int(rng.integers(1, code.field.order))
+        nearest, distance, tied = _nearest(words, received)
+        try:
+            answer = decode(code, received)
+        except (DecodingFailure, RuntimeError):
+            refused += 1
+            assert distance == 3
+            assert 2 <= tied <= 7
+            continue
+        decoded += 1
+        assert (distance, tied) == (2, 1)
+        np.testing.assert_array_equal(answer, nearest)
+        assert not np.array_equal(answer, sent)
+
+    assert (decoded, refused) == (35, 265)
 
 
 @pytest.mark.analytic

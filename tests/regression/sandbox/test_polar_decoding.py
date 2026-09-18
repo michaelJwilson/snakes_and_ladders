@@ -24,7 +24,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.ldpc import exact_decoding
+from snakes_and_ladders.likelihood.ldpc import (
+    DecodingAlgorithm,
+    decode,
+    exact_decoding,
+)
 from snakes_and_ladders.sandbox.polar import (
     PolarCode,
     PolarParams,
@@ -148,6 +152,80 @@ def test_the_gap_to_maximum_likelihood_is_what_the_list_closes() -> None:
     assert failures["ml"] <= failures["scl4"] < failures["sc"]
     assert failures["sc"] - failures["ml"] >= 20
     assert failures["scl4"] - failures["ml"] <= 5
+
+
+#: The `N = 4` code whose information set is the transform's last three rows.
+#: Its dual is the single all-ones row, so its Tanner graph carries one check
+#: and no cycle, which is where sum-product is exact.
+CYCLE_FREE = PolarCode(2, np.array([1, 2, 3]))
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_successive_cancellation_against_min_sum_on_the_same_parity_check() -> None:
+    # The rung below (issue #734): `likelihood.ldpc.decode`, sum-product and
+    # min-sum, run on the parity check `polar.parity_check` builds from the
+    # same code. A polar code is linear, so both decoders read one instance
+    # and one set of channel ratios, and the comparison is paired over seeds.
+    #
+    # Cycle-free first, where the rung below is exact and therefore a referee:
+    # `CYCLE_FREE`'s dual is a single check, so min-sum is blockwise maximum
+    # likelihood and sum-product's decision is the bitwise one. Over 200 draws
+    # both hold against enumeration on all 200. Successive cancellation, on the
+    # same draws, returns a different word on 4 of the 200 --- it commits to
+    # each source bit in order and cannot revisit --- and those 4 split 2 where
+    # both are wrong, 1 where SC is right and the likeliest word is not, 1 the
+    # other way, so the block error counts tie at 55 and the disagreement is
+    # what the count hides.
+    #
+    # Then the declared `N = 16` instance, where the dual is dense --- 28 pairs
+    # of its 8 checks overlap in two or more positions, so the graph is thick
+    # with four-cycles --- and neither decoder is exact. The ticket's bullet
+    # expects SC bounded by sum-product's error rate; the measurement runs the
+    # other way and is pinned in the direction it runs. Over the same 200
+    # draws at sigma = 1.0: enumeration 62 block errors, min-sum 81,
+    # sum-product 89, successive cancellation 98. BP on the loopy dual is
+    # nearer maximum likelihood than SC is, by 17 blocks of the 36 SC gives up.
+    channel = BinaryInputGaussianChannel(1.0)
+    check = parity_check(CYCLE_FREE)
+    exact_min_sum = exact_sum_product = differing = 0
+    counts = {"sc": 0, "ml": 0}
+    for seed in range(DRAWS):
+        ratios = all_zero_transmission(check, channel, np.random.default_rng(seed))
+        exact = exact_decoding(check, ratios)
+        min_sum = decode(check, ratios, algorithm=DecodingAlgorithm.MIN_SUM)
+        sum_product = decode(check, ratios)
+        word = decode_sc(CYCLE_FREE, ratios).codeword
+
+        exact_min_sum += int(np.array_equal(min_sum.bits, exact.ml_codeword))
+        exact_sum_product += int(
+            np.array_equal(
+                sum_product.bits, (exact.posterior_llr < 0.0).astype(np.uint8)
+            )
+        )
+        differing += int(not np.array_equal(word, exact.ml_codeword))
+        counts["sc"] += int(word.any())
+        counts["ml"] += int(exact.ml_codeword.any())
+
+    assert (exact_min_sum, exact_sum_product) == (DRAWS, DRAWS)
+    assert differing == 4
+    assert counts == {"sc": 55, "ml": 55}
+
+    code, check = _instance()
+    overlap = check.dense().astype(np.int64) @ check.dense().astype(np.int64).T
+    np.fill_diagonal(overlap, 0)
+    blocks = {"ml": 0, "min_sum": 0, "sum_product": 0, "sc": 0}
+    for seed in range(DRAWS):
+        ratios = all_zero_transmission(check, channel, np.random.default_rng(seed))
+        blocks["ml"] += int(exact_decoding(check, ratios).ml_codeword.any())
+        blocks["min_sum"] += int(
+            decode(check, ratios, algorithm=DecodingAlgorithm.MIN_SUM).bits.any()
+        )
+        blocks["sum_product"] += int(decode(check, ratios).bits.any())
+        blocks["sc"] += int(decode_sc(code, ratios).codeword.any())
+
+    assert int((overlap >= 2).sum()) // 2 == 28
+    assert blocks == {"ml": 62, "min_sum": 81, "sum_product": 89, "sc": 98}
 
 
 @pytest.mark.end2end
