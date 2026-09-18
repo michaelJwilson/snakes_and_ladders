@@ -18,7 +18,7 @@ issue #336 replaced them with `rust-numpy` buffers, the fix issue #202
 applied to the categorical sampler. Measured, that copy was 0.03-0.2 ms of a
 0.7-17 ms call at extents 16-64, and removing it moved the caller-visible
 number by under 3%. The term that remained was
-:func:`snakes_and_ladders.search.maxflow.energy`, which scored the returned
+:func:`snakes_and_ladders.sim.potts.energy`, which scored the returned
 configuration edge by edge in Python: 0.6, 2.6 and 9.9 ms at extents 16, 32
 and 64, against 0.14, 0.84 and 6.9 ms for the kernel. Issue #341 vectorized
 it to 0.08, 0.28 and 1.0 ms, below the kernel at every extent. `STATUS.md`
@@ -44,8 +44,9 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut, energy, site_field
+from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import energy, site_field
 
 
 def ising_ground_state(
@@ -58,7 +59,7 @@ def ising_ground_state(
     graph : PottsGraph
         Every coupling must be non-negative.
     field_values : np.ndarray
-        ``(2,)`` or ``(n_nodes, 2)``, as :func:`snakes_and_ladders.search.maxflow.site_field`.
+        ``(2,)`` or ``(n_nodes, 2)``, as :func:`snakes_and_ladders.search.maxflow.ising_ground_state`.
 
     Returns
     -------
@@ -69,7 +70,9 @@ def ising_ground_state(
         function independent, so a construction that were wrong could not
         also report itself as right.
     """
-    values = site_field(graph, field_values)
+    values = site_field(
+        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
+    )
     # `as_slice` on the Rust side succeeds only for a C-contiguous array, so
     # every argument is normalized here; `ascontiguousarray` is free when the
     # array already is one, and `site_field` already returns `float64`.
@@ -80,7 +83,7 @@ def ising_ground_state(
         graph.edge_coupling,
     )
     configuration = np.asarray(states, dtype=np.int64)
-    return configuration, float(energy(graph, values, configuration))
+    return configuration, energy(graph, values, configuration)
 
 
 def min_cut(network: FlowNetwork, source: int, sink: int) -> MinCut:
