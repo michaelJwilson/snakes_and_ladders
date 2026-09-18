@@ -14,6 +14,11 @@ a theorem, so a test asserts it as a prediction rather than discovering it as
 a defect. The *Farris zone* is the control that makes the first interpretable
 --- move the same two long branches to be adjacent and parsimony becomes
 correct and fast. An implementation that is simply broken fails both.
+
+Then the rung against likelihood (issue #734): at a common short branch length
+the pruning log-likelihood is `F log t` plus a constant, so its slope in
+`log t` is the Fitch score and its ranking of topologies is parsimony's. The
+length at which that stops holding is pinned beside it.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ from snakes_and_ladders.likelihood.parsimony import (
     sankoff_score,
     unit_step_matrix,
 )
+from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -349,3 +355,109 @@ def test_a_zero_length_internal_branch_leaves_the_three_topologies_tied() -> Non
     # under a uniform winner, and is essentially impossible under a systematic
     # preference for any one of them.
     assert winners == {0, 1, 2}
+
+
+def _at_one_length(topology: Node, length: float) -> Node:
+    """The topology with every branch set to ``length``, the root carrying none."""
+
+    def rebuild(node: Node, is_root: bool) -> Node:
+        return Node(
+            name=node.name,
+            branch_length=None if is_root else length,
+            children=tuple(rebuild(child, False) for child in node.children),
+        )
+
+    return rebuild(topology, True)
+
+
+def _likelihoods(
+    topologies: list[Node],
+    length: float,
+    k: int,
+    pi: np.ndarray,
+    alignment: dict[str, np.ndarray],
+) -> np.ndarray:
+    """Each topology's log-likelihood with every branch at ``length``."""
+    return np.array(
+        [
+            log_likelihood(_at_one_length(topology, length), k, pi, alignment)
+            for topology in topologies
+        ]
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_short_branch_likelihood_ranks_the_topologies_as_the_fitch_score_does() -> (
+    None
+):
+    # The rung below (issue #734): Felsenstein pruning, on the five-taxon
+    # fixture's 15 topologies at 300 sites, five alignments.
+    #
+    # **Which relation is pinned.** Tuffley and Steel's theorem -- maximum
+    # likelihood under no common mechanism is maximum parsimony -- is not a
+    # statement about these two callables: `pruning.log_likelihood` reads one
+    # branch length per branch, shared by every site, and no-common-mechanism
+    # gives each site its own. What holds for the callables as implemented is
+    # the short-branch limit. Under Jukes--Cantor a site's likelihood at a
+    # common branch length `t` is `C t^F (1 + O(t))` for that site's Fitch
+    # score `F`, so summed over sites `log L = F log t + log C + O(t)`, and
+    # two statements follow, in that order.
+    #
+    # 1. The slope of the log-likelihood in `log t` *is* the Fitch score.
+    #    Read as a difference quotient between t = 1e-5 and 1e-6, over all 75
+    #    topology-alignment pairs, the largest departure from the integer
+    #    score is 7.43e-3 against the 1e-2 declared -- and it is O(t), 7.3e-2
+    #    at 1e-4/1e-5 and 7.3e-4 at 1e-6/1e-7, which is the limit and not a
+    #    coincidence at one length.
+    # 2. The ranking agrees once `t` is small enough that `F log t` dominates
+    #    the reconstruction counts `log C`. At t = 1e-8 every pair whose Fitch
+    #    scores differ is ordered the same way by both, the smallest realized
+    #    margin 3.812 nats against the 0.0 declared.
+    #
+    # **Where it stops, which is half the statement.** The agreement is a
+    # limit and not a general fact: at t = 1e-2 twelve of the pairs invert
+    # over the five alignments -- five on the first alignment, at Fitch
+    # differences of one and log-likelihood gaps to -9.8 nats -- and that is
+    # asserted here rather than described. The argmax survives it: the
+    # maximum-likelihood topology is the maximum-parsimony one at every
+    # length tried.
+    params = load_fixture(FIVE_TAXA)
+    pi = np.asarray(params.pi)
+    inverted = 0
+    slope_error = 0.0
+    margin = np.inf
+
+    for seed in range(5):
+        alignment = dict(
+            simulate_alignment(
+                params.tau, params.k, params.pi, np.random.default_rng(1000 + seed), 300
+            ).alignment
+        )
+        topologies = list(enumerate_topologies(sorted(alignment)))
+        fitch = np.array(
+            [fitch_score(topology, alignment, params.k) for topology in topologies]
+        )
+
+        fine = _likelihoods(topologies, 1e-5, params.k, pi, alignment)
+        coarse = _likelihoods(topologies, 1e-6, params.k, pi, alignment)
+        slope = (fine - coarse) / (np.log(1e-5) - np.log(1e-6))
+        slope_error = max(slope_error, float(np.abs(slope - fitch).max()))
+
+        for length in (1e-2, 1e-8):
+            values = _likelihoods(topologies, length, params.k, pi, alignment)
+            gaps = [
+                values[better] - values[worse]
+                for better in range(len(topologies))
+                for worse in range(len(topologies))
+                if fitch[better] < fitch[worse]
+            ]
+            if length == 1e-8:
+                margin = min(margin, *gaps)
+            else:
+                inverted += sum(1 for gap in gaps if gap <= 0.0)
+            assert int(np.argmax(values)) == int(np.argmin(fitch))
+
+    assert slope_error < 1e-2
+    assert margin > 0.0
+    assert inverted == 12

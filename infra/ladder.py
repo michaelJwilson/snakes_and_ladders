@@ -276,6 +276,14 @@ LADDER: tuple[Rung, ...] = (
     # --- trees / phylogenetics ---------------------------------------------
     Rung(
         "tree",
+        "projection",
+        "search.projection.project",
+        None,
+        T + "search/test_projection_seeding.py"
+        "::test_the_projected_draw_is_the_closed_form_mixture_of_the_flattened_families",
+    ),
+    Rung(
+        "tree",
         "topology enumeration",
         "search.topology.enumerate_topologies",
         None,
@@ -305,6 +313,14 @@ LADDER: tuple[Rung, ...] = (
         "parsimony, Fitch",
         T + "likelihood/test_likelihood_parsimony.py"
         "::test_sankoff_with_the_unit_matrix_is_fitch_on_every_five_taxon_topology",
+    ),
+    Rung(
+        "tree",
+        "parsimony against likelihood",
+        "likelihood.parsimony.fitch_score",
+        "pruning, NumPy",
+        T + "likelihood/test_likelihood_parsimony.py"
+        "::test_the_short_branch_likelihood_ranks_the_topologies_as_the_fitch_score_does",
     ),
     Rung(
         "tree",
@@ -353,6 +369,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "tree",
+        "distance start (NJ)",
+        "search.neighbor_joining.neighbor_joining",
+        "topology enumeration",
+        T + "search/test_neighbor_joining.py"
+        "::test_the_joined_tree_is_the_least_squares_optimum_over_the_enumerated_topologies",
+    ),
+    Rung(
+        "tree",
         "tropical / Grassmannian",
         "sandbox.tropical.resolutions",
         None,
@@ -390,6 +414,14 @@ LADDER: tuple[Rung, ...] = (
         "tree search (NNI/SPR)",
         T + "search/test_search_surrogate.py"
         "::test_surrogate_ranked_search_reaches_what_the_full_search_reaches",
+    ),
+    Rung(
+        "tree",
+        "surrogate-ranked search",
+        "search.surrogate.LearnedTreeSurrogate",
+        "analytic surrogates",
+        T + "search/test_search_surrogate.py"
+        "::test_the_learned_surrogate_ranks_the_topologies_the_plug_in_bound_ranks",
     ),
     Rung(
         "tree",
@@ -658,32 +690,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "opt/test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian",
     ),
-    # --- the 17 rungs no test pins, one per bullet of issue #734 -----------
-    Rung("tree", "projection", "search.projection.project", None, None, LADDER_TICKET),
-    Rung(
-        "tree",
-        "distance start (NJ)",
-        "search.neighbor_joining.neighbor_joining",
-        "topology enumeration",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "tree",
-        "parsimony against likelihood",
-        "likelihood.parsimony.fitch_score",
-        "pruning, NumPy",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "tree",
-        "surrogate-ranked search",
-        "search.surrogate.LearnedTreeSurrogate",
-        "analytic surrogates",
-        None,
-        LADDER_TICKET,
-    ),
+    # --- the 13 rungs no test pins, one per bullet of issue #734 -----------
     Rung(
         "hmm",
         "path sampling",

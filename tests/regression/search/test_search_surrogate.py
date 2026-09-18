@@ -189,6 +189,61 @@ def test_analytic_bounds_rank_the_fitted_best_first_on_fresh_alignments() -> Non
             assert int(np.argmax(values)) == int(np.argmax(exact))
 
 
+def _spearman(first: np.ndarray, second: np.ndarray) -> float:
+    """Rank correlation, Pearson on the ranks; no ties arise on these values."""
+    ranks = [np.argsort(np.argsort(values)).astype(float) for values in (first, second)]
+    return float(np.corrcoef(ranks[0], ranks[1])[0, 1])
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_learned_surrogate_ranks_the_topologies_the_plug_in_bound_ranks() -> None:
+    # The rung below (issue #734): the analytic surrogate the learned one
+    # replaces. `tree_examples` offsets every target by the plug-in bound, so
+    # the model predicts the *gap* above it and the two rankings are related
+    # by construction -- what is not given is how much of the ranking the
+    # learned gap moves, and that is what is pinned.
+    #
+    # One alignment held out of three, its 15 topologies ranked by
+    # `LearnedTreeSurrogate` and by `PlugInLikelihood`, against the 45
+    # maximum-likelihood fits read from the `tree_search/ci` baseline record
+    # rather than refitted (issue #401), as its sibling above reads them.
+    # Realized on the held-out alignment: rank correlation 0.896 between the
+    # two rankings, against the 0.8 declared, and both put the fitted best
+    # first. The correlation is also strictly below 1 -- 10 of the 105 pairs
+    # are ordered differently -- so the learned model is not the bound with a
+    # shift, and it is the closer of the two to the fitted truth, 0.893
+    # against the bound's 0.804.
+    alignments, k, pi = _alignments(3)
+    topologies = [list(enumerate_topologies(sorted(a))) for a in alignments]
+    examples = tree_examples(
+        alignments, topologies, k, pi, _recorded_target("tree_search", Scale.CI)
+    )
+    split = split_by_group(examples.groups, (1 / 3, 1 / 3, 1 / 3))
+    train, validation = examples.subset(split.train), examples.subset(split.validation)
+    test = examples.subset(split.test)
+    fitted = fit_surrogate(
+        LinearSurrogate(examples.features.shape[1]),
+        train,
+        validation,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    held_out = int(np.unique(examples.groups[split.test])[0])
+    alignment, candidates = alignments[held_out], topologies[held_out]
+    learned = LearnedTreeSurrogate(fitted, k, pi)
+    bound = PlugInLikelihood(k, pi)
+    ranked = np.array([float(learned(topology, alignment)) for topology in candidates])
+    analytic = np.array([float(bound(topology, alignment)) for topology in candidates])
+    maximized = test.targets.numpy()
+
+    assert _spearman(ranked, analytic) > 0.8
+    assert _spearman(ranked, analytic) < 1.0
+    assert int(np.argmax(ranked)) == int(np.argmax(analytic))
+    assert int(np.argmax(ranked)) == int(np.argmax(maximized))
+    assert _spearman(ranked, maximized) > _spearman(analytic, maximized)
+
+
 @pytest.mark.oracle
 def test_surrogate_ranked_search_reaches_what_the_full_search_reaches() -> None:
     # Lazy ranking by the plug-in bound, fitting one candidate per

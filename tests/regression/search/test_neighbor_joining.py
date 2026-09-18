@@ -6,20 +6,35 @@ taxa and random trees at 20 and 50 --- which is the closed-form statement
 a moment estimator is held to. On simulated alignments the guarantee is
 Atteson's: the topology is recovered whenever every distance error is under
 half the shortest branch, and the recovery rate rises with the site count.
+
+Against enumeration (issue #734) the same additive matrices say more: at five
+to seven taxa every topology is scored by the least-squares fit of its path
+lengths, and the tree the algorithm joins is the argmin, unique by 27 orders
+of magnitude.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.distance import distance_matrix, tree_distances
+from snakes_and_ladders.likelihood.surrogate import (
+    least_squares_lengths,
+    least_squares_residual,
+)
 from snakes_and_ladders.search.neighbor_joining import (
     atteson_radius,
     four_point_violation,
     neighbor_joining,
     split_lengths,
 )
-from snakes_and_ladders.search.topology import leaf_bipartitions, random_topology
+from snakes_and_ladders.search.topology import (
+    enumerate_topologies,
+    leaf_bipartitions,
+    random_topology,
+)
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
@@ -82,6 +97,61 @@ def test_a_random_tree_is_recovered_exactly_from_its_path_lengths(n_taxa: int) -
         names, distances = tree_distances(truth)
 
         _assert_recovered(truth, neighbor_joining(names, distances))
+
+
+def _pairwise(
+    names: Sequence[str], distances: np.ndarray
+) -> dict[frozenset[str], float]:
+    """The matrix as the mapping the least-squares fit reads, one entry per pair."""
+    return {
+        frozenset((first, second)): float(distances[row, column])
+        for row, first in enumerate(names)
+        for column, second in enumerate(names)
+        if row < column
+    }
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+@pytest.mark.parametrize("n_taxa", [5, 6, 7])
+def test_the_joined_tree_is_the_least_squares_optimum_over_the_enumerated_topologies(
+    n_taxa: int,
+) -> None:
+    # The rung below (issue #734): enumeration, which at these sizes scores
+    # every topology there is -- 15, 105 and 945. The criterion has to be
+    # named, since a topology on its own has no score: it is the least-squares
+    # fit of the topology's path lengths to the matrix
+    # (`likelihood.surrogate.least_squares_lengths`, the fit the plug-in bound
+    # already runs), and on an additive matrix exactly one topology attains
+    # zero. That is the statement pinned -- the joined tree is the enumerated
+    # argmin, and the argmin is the generating tree -- rather than a maximum
+    # under a likelihood, which the matrix does not carry.
+    #
+    # Realized over the six trees, two seeds at each size: the argmin's
+    # residual is at most 3.3e-31 against the 1e-20 declared, and the runner-up
+    # at least 1.9e-3 against the 1e-4 declared, so the argmin is unique by
+    # 27 orders of magnitude and not by a rounding.
+    for seed in range(2):
+        truth = random_tree(n_taxa, np.random.default_rng([734, n_taxa, seed]))
+        names, distances = tree_distances(truth)
+        pairwise = _pairwise(names, distances)
+
+        joined = neighbor_joining(names, distances)
+        scored = sorted(
+            (
+                least_squares_residual(
+                    topology, pairwise, least_squares_lengths(topology, pairwise)
+                ),
+                index,
+                topology,
+            )
+            for index, topology in enumerate(enumerate_topologies(sorted(names)))
+        )
+
+        assert scored[0][0] < 1e-20
+        assert scored[1][0] > 1e-4
+        assert leaf_bipartitions(scored[0][2]) == leaf_bipartitions(joined)
+        assert leaf_bipartitions(joined) == leaf_bipartitions(truth)
 
 
 @pytest.mark.analytic
