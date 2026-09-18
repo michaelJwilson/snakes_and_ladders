@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,8 @@ import pytest
 from tests._problems import (
     NAMES_FIRST,
     NAMES_SECOND,
+    _defining_code,
+    _imported_code,
     fixtures_named_in,
     problem_names,
     restore,
@@ -74,6 +77,45 @@ def _grepped(problem: str) -> set[Path]:
 def _selected(problem: str) -> set[Path]:
     """The modules the scan names for one problem."""
     return {path for path in _modules() if problem in fixtures_named_in(path)}
+
+
+#: A ``from snakes_and_ladders... import ...`` statement, single or parenthesized.
+#: A regex where the scan uses `ast`, so the two readings share no code.
+PACKAGE_IMPORT = re.compile(
+    r"from\s+snakes_and_ladders(?:\.([\w.]+))?\s+import\s+(\([^)]*\)|[^\n]*)"
+)
+
+
+def _imports_defining(path: Path, names: tuple[str, ...]) -> bool:
+    """Whether the module imports any of `names`, read by regex not by `ast`."""
+    imported: set[str] = set()
+    for stem, bound in PACKAGE_IMPORT.findall(path.read_text()):
+        for symbol in re.findall(r"\w+", bound):
+            if symbol == "as":
+                continue
+            imported.add(f"{stem}.{symbol}" if stem else symbol)
+    return any(
+        one == name or one.startswith(f"{name}.") for name in names for one in imported
+    )
+
+
+def _catalogue_defines() -> dict[str, tuple[str, ...]]:
+    """``problem -> defining names``, re-read from `PROBLEMS.md` here.
+
+    Deliberately a second reader rather than `tests._problems._defining_code`:
+    a guard that imports the thing it checks agrees with it by construction.
+    """
+    defines: dict[str, list[str]] = {}
+    for line in (REPO_ROOT / "PROBLEMS.md").read_text().splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) != 4 or cells[0] in ("Problem", "---"):
+            continue
+        names = re.findall(r"`([^`]+)`", cells[3])
+        for key in re.findall(r"`([^`]+)`", cells[1]):
+            defines.setdefault(key, []).extend(names)
+    return {key: tuple(names) for key, names in defines.items()}
 
 
 def _reachable_source(path: Path) -> str:
@@ -155,26 +197,67 @@ def test_a_quoted_call_is_data_and_is_not_read_as_one() -> None:
 
 @pytest.mark.critical
 @pytest.mark.structural
-def test_no_module_is_selected_without_the_name_in_reachable_source() -> None:
+def test_no_module_is_selected_without_evidence_it_exercises_the_problem() -> None:
     """The upper bound: a selection must point at something written down.
 
     Without this the scan could return every problem for every module and pass
-    every containment above. The check is deliberately weaker than the scan ---
-    it asks only that the name appear in the module or in a `tests` module it
-    imports from --- because that is a reading the scan shares no code with.
+    every containment above. Two kinds of evidence count, because there are two
+    readings: the problem's **name**, in the module or in a `tests` module it
+    imports from, or an **import** of code `PROBLEMS.md` says defines it.
+
+    The second is why this stopped being a name test (issue #622).
+    `search/test_maxflow.py` exercises the Potts lattice and never writes
+    "potts_lattice" anywhere --- it imports `search.maxflow` and builds its
+    lattices from literals --- and that module is one of the two #614 was
+    opened about. Requiring the name would refuse exactly the modules the
+    catalogue reading exists to reach.
+
+    It stays weaker than the scan, and shares no code with it: the names come
+    from the source text, and the imports are re-read here from the catalogue
+    rather than taken from `_defining_code`.
     """
     everything = frozenset(PROBLEMS)
+    defines = _catalogue_defines()
     unevidenced = [
         f"{path.relative_to(REPO_ROOT)}: {problem}"
         for path in _modules()
         if (named := fixtures_named_in(path)) != everything
         for problem in named
         if problem not in _reachable_source(path)
+        and not _imports_defining(path, defines.get(problem, ()))
     ]
     assert not unevidenced, (
-        f"{len(unevidenced)} module/problem pairs were selected without the "
-        f"problem's name appearing in reachable source: {unevidenced[:10]}"
+        f"{len(unevidenced)} module/problem pairs were selected with neither the "
+        f"problem's name in reachable source nor an import of the code "
+        f"PROBLEMS.md says defines it: {unevidenced[:10]}"
     )
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_the_two_modules_the_axis_was_opened_about_are_selected() -> None:
+    """The check #614 states as its motivation, and #619 shipped without.
+
+    `search/test_maxflow.py` and `search/test_alpha_expansion.py` are "that
+    problem's ground-state tests" in #614's own words, and the derived axis
+    gave them no marker at all: neither loads a fixture. They sweep lattices
+    built from literals --- fifteen in one module, each chosen for the property
+    under test, zero coupling against a dominant one against a negative one
+    against a periodic boundary --- so there is no single declared instance to
+    load, and declaring fifteen fixtures to carry fifteen deliberate variations
+    would make the registry a list of test arguments (issue #622).
+
+    They reach the problem the way `PROBLEMS.md` says a module does: by
+    importing `search.maxflow` and `sim.graph.lattice_graph`. A green
+    ``-m potts_lattice`` run over a broken solver is what this refuses.
+    """
+    selected = _selected("potts_lattice")
+    missing = [
+        name
+        for name in ("test_maxflow.py", "test_alpha_expansion.py")
+        if TESTS / "regression" / "search" / name not in selected
+    ]
+    assert not missing, f"-m potts_lattice does not select {missing}"
 
 
 @pytest.mark.critical
@@ -302,7 +385,7 @@ def test_a_damaged_cache_is_ignored_rather_than_raised_on() -> None:
 
 @pytest.fixture(scope="module")
 def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Four modules naming a problem four ways, outside the real tree.
+    """Five modules naming a problem four ways, and one naming none.
 
     Nothing here is executed: the runs below are ``--collect-only``, and the
     scan is static, so a call to an undefined name is exactly as readable as a
@@ -314,13 +397,13 @@ def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
     (directory / "conftest.py").write_text(
         f"import sys\n\nsys.path.insert(0, {str(REPO_ROOT)!r})\n"
         f"sys.path.insert(0, {str(REPO_ROOT / 'infra')!r})\n\n"
-        "from test_kinds import KINDS, SCHEDULING  # noqa: E402\n"
+        "from test_kinds import KINDS, SCHEDULING, SUBJECTS  # noqa: E402\n"
         "from tests.conftest import (  # noqa: E402,F401\n"
         "    pytest_collection_modifyitems,\n"
         ")\n"
         "from tests.conftest import pytest_configure as _configure  # noqa: E402\n\n\n"
         "def pytest_configure(config):\n"
-        "    for name in KINDS + SCHEDULING:\n"
+        "    for name in KINDS + SCHEDULING + SUBJECTS:\n"
         '        config.addinivalue_line("markers", name)\n'
         "    _configure(config)\n"
     )
@@ -331,6 +414,11 @@ def mini_suite(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     (directory / "test_computed.py").write_text(
         f"def test_computed(name: str) -> None:\n    {CALL}(name, 'ci')\n"
+    )
+    # Names no problem and imports no defining code: the `infra` case.
+    (directory / "test_shared.py").write_text(
+        "from snakes_and_ladders.numerics import sample_rows\n\n\n"
+        "def test_shared() -> None:\n    sample_rows\n"
     )
     (directory / "test_typo.py").write_text(
         "import pytest\n\n\n@pytest.mark.potts_latice\ndef test_typo() -> None:\n"
@@ -418,3 +506,52 @@ def test_a_misspelled_problem_marker_fails_collection(mini_suite: Path) -> None:
     """
     status, _ = _collected(mini_suite, "potts_lattice", "test_typo.py")
     assert status != 0, "an unregistered problem marker was accepted"
+
+
+@pytest.mark.structural
+def test_a_module_naming_no_problem_is_selected_by_infra(mini_suite: Path) -> None:
+    """ "Unmarked" is not a state a module can be in (issue #622).
+
+    It used to be, and it meant two things at once: the module exercises
+    shared machinery and has nothing to name, or the scan failed to see what
+    it exercises. Nothing told them apart. Run for real over the mini suite,
+    as the problem markers are: `-m infra` selects the module that names no
+    problem and nothing else, so the marker partitions rather than labels.
+    """
+    files = ("test_literal.py", "test_shared.py")
+    _, infra = _collected(mini_suite, "infra", *files)
+    _, potts = _collected(mini_suite, "potts_lattice", *files)
+
+    assert infra == {"test_shared.py::test_shared"}
+    assert potts == {
+        "test_literal.py::test_gating",
+        "test_literal.py::test_plain",
+    }
+
+
+@pytest.mark.structural
+def test_an_infra_module_imports_no_code_that_defines_a_problem() -> None:
+    """The `infra` marker is a claim about the module, and this is the claim.
+
+    A module carries `infra` because its imports reach nothing `PROBLEMS.md`
+    attributes to a problem. Asserted the other way round here: if an
+    unmarked module *does* import defining code, the scan and the catalogue
+    disagree and one of them is wrong --- either the module exercises a
+    problem the axis is missing, or the catalogue attributes a module it
+    should not. Both are defects, and both are silent without this.
+    """
+    defining = {name for name, _ in _defining_code()}
+    offenders = []
+    for path in _modules():
+        if fixtures_named_in(path):
+            continue
+        imported = _imported_code(ast.parse(path.read_text()))
+        reached = sorted(
+            name
+            for name in defining
+            if any(one == name or one.startswith(f"{name}.") for one in imported)
+        )
+        if reached:
+            offenders.append(f"{path.relative_to(REPO_ROOT)} imports {reached}")
+
+    assert not offenders, "\n".join(offenders)

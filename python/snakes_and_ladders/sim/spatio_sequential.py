@@ -24,6 +24,7 @@ import torch
 
 from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
 from snakes_and_ladders.fixtures import load_declared
+from snakes_and_ladders.ragged import MINIMUM_LENGTH
 from snakes_and_ladders.sim.factor_graph import FactorGraph, from_coupled
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import simulate_potts
@@ -132,6 +133,7 @@ class SpatioSequentialParams:
     initial: np.ndarray
     emissions: tuple[EmissionFamily, ...]
     covariate: np.ndarray | None = None
+    segments: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
         if any(coupling < 0.0 for coupling in self.graph.coupling):
@@ -143,6 +145,29 @@ class SpatioSequentialParams:
         if self.n_positions < 1:
             msg = f"a chain needs at least one position, got {self.n_positions}"
             raise ValueError(msg)
+        if self.segments is not None:
+            # `n_positions` stays the total, so the kernel stack and the
+            # observation shape are what they always were; what the segments
+            # add is where the chain restarts (issue #666).
+            short = [
+                (index, length)
+                for index, length in enumerate(self.segments)
+                if length < MINIMUM_LENGTH
+            ]
+            if short:
+                index, length = short[0]
+                msg = (
+                    f"segment {index} has length {length}; a segment carries at "
+                    f"least {MINIMUM_LENGTH} positions, since one position is an "
+                    "initial distribution and no transition (issue #666)"
+                )
+                raise ValueError(msg)
+            if sum(self.segments) != self.n_positions:
+                msg = (
+                    f"segments sum to {sum(self.segments)} and the chain has "
+                    f"{self.n_positions} positions; they must tile it exactly"
+                )
+                raise ValueError(msg)
         given = np.asarray(self.self_transition, dtype=float)
         steps = max(self.n_positions - 1, 0)
         square = (self.n_states, self.n_states)
@@ -203,6 +228,16 @@ class SpatioSequentialParams:
             object.__setattr__(self, "covariate", covariate)
 
     @property
+    def segment_lengths(self) -> tuple[int, ...]:
+        """The chain's segments, which is one whole chain where none is declared.
+
+        Undeclared, the model is what it has always been: a single chain of
+        `n_positions`. Declared, the chain restarts at each boundary, and the
+        number of boundaries is part of the problem rather than of its size.
+        """
+        return self.segments if self.segments is not None else (self.n_positions,)
+
+    @property
     def transition(self) -> np.ndarray:
         """The circulant transition ``A_m`` of ``eq:joint``, the same for every class.
 
@@ -240,7 +275,10 @@ class SimulatedSpatioSequential:
         ``k_{s,m}``, shape ``(M, S)``, entries in ``[0, K)``; every class's
         chain is drawn, whether or not a node belongs to it.
     observations : np.ndarray
-        ``x_{sn}``, shape ``(S, n_nodes)``, in the emission families' dtype.
+        ``x_{sn}``, shape ``(S, n_nodes)`` for a scalar-observation family and
+        ``(S, n_nodes, ...)`` for one carrying axes of its own --- the
+        two-channel count pair of :mod:`snakes_and_ladders.sim.count_pairs` is
+        ``(S, n_nodes, 2)`` (issue #672). In the emission families' dtype.
     params : SpatioSequentialParams
         The generating truth.
     """
@@ -302,11 +340,19 @@ def simulate_spatio_sequential(
     transition = params.transition
     states = np.empty((params.n_classes, params.n_positions), dtype=np.int64)
     for m in range(params.n_classes):
-        states[m, 0] = rng.choice(params.n_states, p=params.initial[m])
-        for s in range(1, params.n_positions):
-            states[m, s] = rng.choice(
-                params.n_states, p=transition[int(states[m, s - 1])]
-            )
+        at = 0
+        # The chain restarts at each segment: the first position of every one
+        # is drawn from the initial distribution, not from the transition out
+        # of the position before it, which belongs to another chain entirely
+        # (issue #666). With no segments declared this is one pass and the
+        # draws are the ones this simulator has always made.
+        for length in params.segment_lengths:
+            states[m, at] = rng.choice(params.n_states, p=params.initial[m])
+            for s in range(at + 1, at + length):
+                states[m, s] = rng.choice(
+                    params.n_states, p=transition[int(states[m, s - 1])]
+                )
+            at += length
 
     columns: dict[int, np.ndarray] = {}
     for m, family in enumerate(params.emissions):
@@ -319,13 +365,24 @@ def simulate_spatio_sequential(
         # belongs to it (issue #658). Without this no planted instance exists
         # under a varying covariate, and a fit conditioned on one has nothing
         # to recover.
-        drawn_obs = family.sample(
-            emitting, rng, covariate=_drawing_covariate(params, nodes)
-        ).reshape(params.n_positions, nodes.size)
+        flat = family.sample(emitting, rng, covariate=_drawing_covariate(params, nodes))
+        # Only the leading axis is the flattened draw; what follows belongs to
+        # the family and is carried through rather than assumed absent, which
+        # is what lets a pair family be drawn here at all (issue #672).
+        drawn_obs = flat.reshape(params.n_positions, nodes.size, *flat.shape[1:])
         for column, node in enumerate(nodes):
             columns[int(node)] = drawn_obs[:, column]
     first = next(iter(columns.values()))
-    observations = np.empty((params.n_positions, n_nodes), dtype=first.dtype)
+    channels = tuple(first.shape[1:])
+    for vertex, column_values in columns.items():
+        if tuple(column_values.shape[1:]) != channels:
+            msg = (
+                f"vertex {vertex} draws an observation of shape "
+                f"{column_values.shape[1:]} where another draws {channels}; one "
+                f"instance holds one observation shape across its classes"
+            )
+            raise ValueError(msg)
+    observations = np.empty((params.n_positions, n_nodes, *channels), dtype=first.dtype)
     for index, column_values in columns.items():
         observations[:, index] = column_values
     return SimulatedSpatioSequential(
@@ -339,13 +396,12 @@ def simulate_spatio_sequential(
 def _scoring_covariate(params: SpatioSequentialParams) -> torch.Tensor | None:
     """``params.covariate`` ready to score every vertex against.
 
-    The trailing singleton the single-channel families broadcast over their
-    states with is added only where the covariate has no axes of its own; one
-    that carries the family's own axes is passed through, because the singleton
-    then belongs inside each of them and the family is what puts it there
-    (issue #658). The same rule as
-    :func:`snakes_and_ladders.likelihood.spatio_sequential.covariate_block`,
-    stated here because ``sim`` does not import ``likelihood``.
+    The singleton is added only where the covariate has no axes of its own,
+    the contract :mod:`snakes_and_ladders.emissions` states and enforces
+    (issues #658, #677). Both this and
+    :func:`snakes_and_ladders.likelihood.spatio_sequential.covariate_block`
+    obey it, and neither restates it: ``sim`` cannot import ``likelihood``, so
+    the rule lives where the families that consume the covariate are.
     """
     if params.covariate is None:
         return None
@@ -363,17 +419,24 @@ def _drawing_covariate(
     observation carries its own trailing axes keeps them after the flatten,
     which is why the reshape names only the leading axis.
 
+    The singleton is added **only** where the covariate has no axes of its own
+    (:mod:`snakes_and_ladders.emissions`). Appending it to a per-channel
+    covariate makes ``(S * n_m, 2)`` into ``(S * n_m, 2, 1)``, whose last axis
+    names no channel, and
+    :func:`snakes_and_ladders.sim.count_pairs.split_covariate` refuses it ---
+    which is how a pair family could not be drawn here at all (issue #672).
+
     Returns
     -------
     torch.Tensor | None
-        ``(S * n_m, 1)`` for a scalar-observation family, ``(S * n_m, ..., 1)``
+        ``(S * n_m, 1)`` for a scalar-observation family, ``(S * n_m, ...)``
         for one with its own axes, or ``None`` where the params carry none.
     """
     if params.covariate is None:
         return None
     block = params.covariate[:, nodes]
     flat = block.reshape(-1, *block.shape[2:])
-    return torch.as_tensor(flat[..., None])
+    return torch.as_tensor(flat[..., None] if block.ndim == 2 else flat)
 
 
 def gated_log_density(
@@ -511,4 +574,9 @@ def load_spatio_sequential_params(path: Path) -> SpatioSequentialParams:
         self_transition=float(raw["self_transition"]),
         initial=np.asarray(raw["initial"], dtype=np.float64),
         emissions=emissions,
+        # Optional: a fixture that declares no segmentation is one chain, which
+        # is every instance that existed before #666.
+        segments=(
+            tuple(int(one) for one in raw["segments"]) if "segments" in raw else None
+        ),
     )

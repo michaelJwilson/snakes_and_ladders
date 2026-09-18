@@ -107,10 +107,21 @@ def simulate_count_pairs(
     trials: np.ndarray,
     alpha: np.ndarray,
     beta: np.ndarray,
+    exposure: np.ndarray | None,
+    trial_counts: np.ndarray | None,
     n_positions: int,
     n_nodes: int,
     n_classes: int,
     n_states: int,
     totals: np.ndarray,
     successes: np.ndarray,
+) -> None: ...
+def ragged_posteriors(
+    log_density: np.ndarray,
+    lengths: np.ndarray,
+    log_initial: np.ndarray,
+    log_transition: np.ndarray,
+    gamma: np.ndarray,
+    counts: np.ndarray,
+    evidence: np.ndarray,
 ) -> None: ...

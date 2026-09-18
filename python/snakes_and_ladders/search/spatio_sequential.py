@@ -49,6 +49,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     CoupledBackend,
     class_log_density,
     class_posteriors,
+    covariate_block,
     external_field,
     labelled_log_likelihood,
 )
@@ -114,8 +115,9 @@ def m_step(
     axis as the observations (issue #652). That pairing is the one place this
     module can go quietly wrong: a covariate sliced differently from the block
     it accompanies is a fit that conditions on the wrong exposures and
-    converges anyway, which is why it is written as one expression beside the
-    block rather than assembled apart from it.
+    converges anyway, which is why the slice is
+    :func:`~snakes_and_ladders.likelihood.spatio_sequential.covariate_block`'s
+    and not this module's own (issue #670).
     """
     labels = np.asarray(labels, dtype=np.int64)
     emissions: list[EmissionFamily] = []
@@ -127,13 +129,15 @@ def m_step(
         block = torch.as_tensor(
             np.moveaxis(observations[:, members], 1, 0), dtype=family.observation_dtype
         )  # (n_m, S), plus any channel axes the family's observation carries
+        block_covariate = covariate_block(params, members)
+        # `covariate_block` returns the block position-major, as the
+        # observations are held; the family wants it member-major, as the block
+        # above is. Moving the axis is all this does -- appending the singleton
+        # here was the defect of issue #670, since a covariate carrying the
+        # family's own channel axis already has one inside each channel.
         exposure = (
-            None
-            if params.covariate is None
-            else torch.as_tensor(
-                np.moveaxis(params.covariate[:, members], 1, 0)[..., None]
-            )
-        )  # (n_m, S, 1), the same members moved the same way
+            None if block_covariate is None else block_covariate.movedim(1, 0)
+        )  # (n_m, S, 1), or (n_m, S, ...) for a family with axes of its own
         weights = torch.as_tensor(posteriors.posterior[m])[None].expand(
             members.size, -1, -1
         )  # (n_m, S, K)

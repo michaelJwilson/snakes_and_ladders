@@ -15,6 +15,7 @@ could cite an experiment a later pull request renumbered or retracted.
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -59,7 +60,13 @@ def test_every_catalogue_row_reaches_an_algorithm_and_names_its_oracle_gap(
     # independent referees, so it is listed above and ticketed -- not asserted
     # away by a cell, which is how the one below went unnoticed.
     text = generated
-    # Twice for the algorithm and oracle tables, once per method family.
+    # Twice for the algorithm and oracle tables, once per method family, and
+    # once per declared instance of every key the row names (issue #622).
+    instances = Counter(
+        title
+        for problem, _, _ in problems_tables.fixture_rows()
+        for title in problem.split("; ")
+    )
     appearances = 2 + len(problems_tables.METHOD_FAMILIES)
     without = []
     for problem, symbols in problems_tables.rows():
@@ -67,7 +74,8 @@ def test_every_catalogue_row_reaches_an_algorithm_and_names_its_oracle_gap(
         assert any(s in problems_tables.ALGORITHMS for s in symbols), problem
         if not any(s in problems_tables.ORACLES for s in symbols):
             without.append(problem)
-        assert text.count(problems_tables._tex_text(problem)) == appearances, problem
+        expected = appearances + instances[problem]
+        assert text.count(problems_tables._tex_text(problem)) == expected, problem
 
     assert tuple(without) == WITHOUT_AN_ORACLE
 
@@ -218,3 +226,71 @@ def test_a_row_reads_its_key_and_its_defining_code(tmp_path: Path) -> None:
     assert problems_tables.catalogue_rows(catalogue) == [
         ("Made up", ["potts_chain", "potts_lattice"], ["sim.nothing"])
     ]
+
+
+@pytest.mark.structural
+def test_every_declared_instance_has_a_row() -> None:
+    # The table cannot be narrower than the registry (issue #622, step 6). A
+    # fixture added with no row would be an instance the document does not
+    # know exists, which is the state `PROBLEMS.md` was written to end.
+    declared = {
+        (directory.name, path.stem)
+        for directory in sorted(problems_tables.FIXTURES.iterdir())
+        if directory.is_dir()
+        for path in directory.glob("*.yaml")
+    }
+    rows = problems_tables.fixture_rows()
+    titled = {
+        key: "; ".join(
+            title for title, keys, _ in problems_tables.catalogue_rows() if key in keys
+        )
+        for key, _ in declared
+    }
+
+    assert {(titled[key], tier) for key, tier in declared} == {
+        (title, tier) for title, tier, _ in rows
+    }
+    assert len(rows) == len(declared), "two fixtures collapsed into one row"
+
+
+@pytest.mark.structural
+def test_a_declared_shape_never_collapses_to_one_number() -> None:
+    # The column is a shape and not a size, which is the one thing it must not
+    # become: the tiers of one problem differ in extent *and* state count, in
+    # taxa *and* sites. A row naming a single field would read as a size.
+    for title, tier, shape in problems_tables.fixture_rows():
+        assert shape.count(";") >= 1, f"{title} / {tier} names one field: {shape}"
+
+
+@pytest.mark.structural
+def test_the_declared_shapes_name_no_code() -> None:
+    # `docs/CLAUDE.md`: the document names no code. The field names are the
+    # fixture file's own words, so a module that moves does not stale the
+    # text; this asserts nothing else got in.
+    for title, tier, shape in problems_tables.fixture_rows():
+        for forbidden in ("snakes_and_ladders", ".py", ".yaml", "tests/"):
+            assert forbidden not in shape, f"{title} / {tier} names code: {shape}"
+
+
+@pytest.mark.edge_case
+def test_a_nested_declaration_is_left_to_the_file() -> None:
+    # A transition matrix and a tree are the instance's parameters rather than
+    # its extent; printing either would fill the page with numbers no reader
+    # checks. Asserted on a declaration carrying both, so the rule is exercised
+    # rather than described.
+    shape = problems_tables.shape_cell(
+        {
+            "model": "hidden-markov",
+            "seed": 1,
+            "n_states": 3,
+            "transition": [[0.5, 0.5], [0.5, 0.5]],
+            "tau": {"name": "root"},
+            "lengths": [15, 15, 15, 15, 15],
+        }
+    )
+
+    assert "transition" not in shape
+    assert "tau" not in shape
+    assert "seed" not in shape
+    assert "n\\_states 3" in shape
+    assert "5 entries of 15" in shape

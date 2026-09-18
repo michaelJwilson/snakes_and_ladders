@@ -1,4 +1,5 @@
-"""Which problem each test module exercises, read from the fixture it loads.
+"""Which problem each test module exercises, read from the fixture it loads
+and from the code it imports.
 
 Issue #614. The suite cuts by *kind* (what refereed a test), by *tier* (when it
 runs) and, through `infra/select_tests.py`, by *module*. None of those cuts by
@@ -13,6 +14,20 @@ test already names its problem by loading its instance: `fixture("potts_lattice"
 tier)`, `at_fixture("instance", "tree_scale")`, or the path
 ``potts_lattice/ci.yaml``. Reading that call is reading a fact the test has to
 keep true to run at all.
+
+**A call is not the only way a module names its problem** (issue #622). Reading
+calls alone left 138 of 258 modules unmarked, 78 of them application code, and
+among them both modules #614 gives as its motivation: `search/test_maxflow.py`
+and `search/test_alpha_expansion.py` build their lattices from literals and
+never load a fixture, so `-m potts_lattice` missed that problem's ground-state
+tests. A module that *sweeps* an instance has none to declare --- fifteen
+lattices in one module, each chosen for the property under test --- so the
+second reading is over the module's **imports**, against `PROBLEMS.md`'s
+**Defines** column, which the catalogue already states as the rule: *a test
+module importing any of it exercises the problem*. That file is held true by
+`tests/regression/test_problems_catalogue.py`, which resolves every symbol it
+names, so this reading is as current as the code and not a second map to
+maintain. The two readings are unioned; neither can take a marker away.
 
 `tests/conftest.py` turns what this returns into markers at collection. The kind
 markers are unaffected and are still read from the source by
@@ -65,6 +80,19 @@ NAMES_SECOND = ("at_fixture", "at_bin")
 #: problem in the directory above the file.
 FIXTURE_PATH = re.compile(r"([a-z_0-9]+)/[a-z]+\.yaml$")
 
+#: The catalogue whose **Defines** column says which code *is* each problem.
+#: `PROBLEMS.md` states the rule this file implements --- "a test module
+#: importing any of it exercises the problem" --- and
+#: `tests/regression/test_problems_catalogue.py` resolves every symbol it names,
+#: so a row cannot outlive its code. Reading it is reading a fact CI already
+#: holds true, which is what a hand-written module-to-problem map is not.
+CATALOGUE = REPO_ROOT / "PROBLEMS.md"
+
+#: A ``| cell | cell |`` row of that table, and the ``` `name` ``` spans inside
+#: a cell. The table is the only part of the file with four columns.
+CATALOGUE_ROW = re.compile(r"^\|(.+)\|\s*$")
+CATALOGUE_CODE = re.compile(r"`([^`]+)`")
+
 #: Where `tests/conftest.py` keeps this between sessions, under `.pytest_cache`.
 CACHE_KEY = "problems/fixtures-named"
 
@@ -83,8 +111,14 @@ def _registry_stamp() -> str:
     left a stale name to reach `add_marker`, which `--strict-markers` raises
     inside `pytest_collection_modifyitems` --- a collection error for the whole
     session, surviving until `.pytest_cache` is deleted.
+
+    `PROBLEMS.md` is in the key for the same reason and one more: editing a
+    **Defines** cell changes which modules carry which marker without touching
+    a single test file, so a cache keyed on the tests alone would answer from
+    the catalogue that was current when it was written.
     """
-    return ",".join(problem_names())
+    stat = CATALOGUE.stat()
+    return f"{','.join(problem_names())};{stat.st_mtime};{stat.st_size}"
 
 
 @cache
@@ -220,11 +254,91 @@ def _called_names(tree: ast.Module, bound: dict[str, str]) -> set[str] | None:
     return found
 
 
+@cache
+def _defining_code() -> tuple[tuple[str, frozenset[str]], ...]:
+    """`PROBLEMS.md`'s **Defines** column, as ``(dotted name, keys)`` pairs.
+
+    Returns
+    -------
+    tuple[tuple[str, frozenset[str]], ...]
+        Each defining module or symbol, rooted at `snakes_and_ladders` and
+        written without it, against the problem keys of every row naming it.
+        A name appearing in two rows carries both, which is why the value is a
+        set: `sec:phylo` is stated once and declared at two instances.
+
+    Notes
+    -----
+    Read from the table rather than from a copy of it. The alternative
+    considered was a module-level ``PROBLEM = "<name>"`` constant in each test,
+    which is the map this ticket exists to remove, one level up: rewrite a
+    module to exercise a different model, forget the constant, and the axis is
+    confidently wrong --- worse than visibly empty (issue #622).
+    """
+    rows: dict[str, set[str]] = {}
+    for line in CATALOGUE.read_text().splitlines():
+        match = CATALOGUE_ROW.match(line)
+        if match is None:
+            continue
+        cells = [cell.strip() for cell in match.group(1).split("|")]
+        if len(cells) != 4 or cells[0] in ("Problem", "---"):
+            continue
+        keys = frozenset(CATALOGUE_CODE.findall(cells[1]))
+        for name in CATALOGUE_CODE.findall(cells[3]):
+            rows.setdefault(name, set()).update(keys)
+    return tuple((name, frozenset(keys)) for name, keys in sorted(rows.items()))
+
+
+def _imported_code(tree: ast.Module) -> set[str]:
+    """Every `snakes_and_ladders` name the module imports, without that prefix.
+
+    Both spellings of one import are recorded at their full depth ---
+    ``from snakes_and_ladders.sim import jc`` and
+    ``from snakes_and_ladders.sim.jc import simulate`` both yield a name under
+    ``sim.jc`` --- so the match below is a prefix test and not an equality.
+    """
+    package = "snakes_and_ladders"
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == package or alias.name.startswith(f"{package}."):
+                    imported.add(alias.name[len(package) + 1 :])
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module != package and not module.startswith(f"{package}."):
+                continue
+            stem = module[len(package) + 1 :]
+            for alias in node.names:
+                imported.add(f"{stem}.{alias.name}" if stem else alias.name)
+    return {name for name in imported if name}
+
+
+def _catalogued_names(tree: ast.Module) -> set[str]:
+    """The problems a module exercises, from what it imports.
+
+    This covers what no fixture call can. A module that sweeps an instance ---
+    `search/test_alpha_expansion.py` builds fifteen lattices, each chosen for
+    the property under test: zero coupling, a dominant one, a negative one, a
+    periodic boundary --- has no single declared instance to load, and
+    declaring fifteen fixtures to carry fifteen deliberate variations would
+    make the registry a list of test arguments (issue #622).
+    """
+    imported = _imported_code(tree)
+    found: set[str] = set()
+    for name, keys in _defining_code():
+        prefix = f"{name}."
+        if any(one == name or one.startswith(prefix) for one in imported):
+            found |= keys
+    return found
+
+
 def _scan(path: Path) -> frozenset[str]:
     """The problems one module names, every problem if one name is computed."""
     tree = ast.parse(path.read_text())
     bound = _bound_strings(path, tree)
     declared = set(problem_names())
+
+    catalogued = _catalogued_names(tree)
 
     called = _called_names(tree, bound)
     if called is None:
@@ -240,7 +354,7 @@ def _scan(path: Path) -> frozenset[str]:
         for text in literals | set(bound.values())
         if (match := FIXTURE_PATH.search(text)) is not None
     }
-    return frozenset((called | paths) & declared)
+    return frozenset((called | paths | catalogued) & declared)
 
 
 def fixtures_named_in(path: Path) -> frozenset[str]:

@@ -135,8 +135,15 @@ def pytest_collection_modifyitems(
         path = getattr(item, "path", None)
         if path is None:
             continue
-        for problem in fixtures_named_in(path):
+        found = fixtures_named_in(path)
+        for problem in found:
             item.add_marker(problem)
+        # A module names a problem or it names `infra`; there is no third
+        # state (issue #622). Added here rather than written by an author for
+        # the same reason the problem markers are: a hand-written one goes
+        # stale the first time a module changes what it exercises.
+        if not found:
+            item.add_marker("infra")
 
     conflicts = outside_the_tier(
         (item.nodeid, frozenset(marker.name for marker in item.iter_markers()))

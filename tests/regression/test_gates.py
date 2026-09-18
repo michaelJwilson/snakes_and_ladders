@@ -341,6 +341,7 @@ def test_the_writer_restores_a_block_that_drifted(
     assert _registered_markers(tmp_path / "pyproject.toml") == {
         **gates.KIND_MARKERS,
         **gates.SCHEDULING_MARKERS,
+        **gates.SUBJECT_MARKERS,
     }
     budgets = _tier_budgets(tmp_path / "DEV.md")
     assert _seconds(budgets["key"]) == gates.KEY_DURATION_CAP.seconds

@@ -109,8 +109,7 @@ def _params(
     """A count HMM fixture over ``emissions``."""
     return HmmParams(
         n_states=2,
-        sequence_length=length,
-        n_sequences=n_sequences,
+        lengths=(length,) * n_sequences,
         initial=INITIAL,
         transition=TRANSITION,
         emissions=emissions,

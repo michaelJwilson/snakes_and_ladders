@@ -619,6 +619,159 @@ def _tex_text(text: str) -> str:
     )
 
 
+#: Fixture keys that are not the instance's shape. A seed and a tolerance say
+#: how a claim is checked rather than how large the instance is; `model` and
+#: `oracle` name the loader and the referee, which the other tables carry; a
+#: digest is a record of a draw. Everything else a file declares is shape, so
+#: a field added to a fixture appears in the table the day it is written and
+#: nobody maintains a list of what to print (issue #622, step 6).
+NOT_SHAPE = frozenset({"model", "oracle", "seed", "tolerance", "counts_digest"})
+
+#: Entries of a flat numeric list printed in full before it is summarized by
+#: its length. Four covers a lattice's extent, a base composition and a
+#: channel sweep; past it a list is parameters and not an extent.
+SHAPE_LIST_CAP = 4
+
+
+def shape_cell(raw: dict[str, object]) -> str:
+    """One fixture's declared shape, in the words its own file uses.
+
+    Not "size": the tiers of one problem differ in extent *and* state count,
+    in taxa *and* sites, in length *and* rate, so a column that collapsed to a
+    scalar would say the one thing it must not (issue #622).
+
+    Every declared field outside :data:`NOT_SHAPE` is printed, nested
+    structures excepted --- a transition matrix and a tree are the instance's
+    parameters rather than its extent, and printing either would fill the page
+    with numbers no reader checks. A flat numeric list is printed whole up to
+    :data:`SHAPE_LIST_CAP` entries and by its length past it, so a batch of six
+    hundred chains reads as a count rather than as six hundred fifteens.
+
+    The field names are the fixture file's own and not code: this names no
+    module, and a file that moves does not stale the text (``docs/CLAUDE.md``).
+    They are set as text and not in typewriter, because typewriter is how this
+    repository sets code and a generated table may not look like code even
+    where it is not.
+
+    Returns
+    -------
+    str
+        LaTeX text, the declared field names beside their declared values.
+    """
+    parts: list[str] = []
+    for key, value in raw.items():
+        if key in NOT_SHAPE:
+            continue
+        name = _tex_text(key)
+        if isinstance(value, bool):
+            parts.append(f"{name} {str(value).lower()}")
+        elif isinstance(value, int | float):
+            parts.append(f"{name} {_number(value)}")
+        elif isinstance(value, str):
+            parts.append(f"{name} {_tex_text(value)}")
+        elif isinstance(value, list) and all(
+            isinstance(one, int | float) and not isinstance(one, bool) for one in value
+        ):
+            if len(value) <= SHAPE_LIST_CAP:
+                parts.append(f"{name} {', '.join(_number(one) for one in value)}")
+            else:
+                held = set(value)
+                inner = (
+                    f"{len(value)} entries of {_number(value[0])}"
+                    if len(held) == 1
+                    else f"{len(value)} values"
+                )
+                parts.append(f"{name} {inner}")
+    return "; ".join(parts)
+
+
+def _number(value: float) -> str:
+    """A declared number as the file writes it: no trailing zero on an integer."""
+    if isinstance(value, int) or float(value).is_integer():
+        return str(int(value))
+    return f"{value:g}"
+
+
+def fixture_rows() -> list[tuple[str, str, str]]:
+    """``(problem, tier, shape)`` for every declared instance, catalogue order.
+
+    Raises
+    ------
+    UnnamedSymbolError
+        If a fixture directory belongs to no catalogue row. The table cannot
+        be narrower than the registry, and a problem declared with no row is
+        the catalogue going quiet rather than the table.
+    """
+    titled: dict[str, list[str]] = {}
+    for title, keys, _ in catalogue_rows():
+        for key in keys:
+            titled.setdefault(key, []).append(title)
+    found: list[tuple[str, str, str]] = []
+    unclaimed: list[str] = []
+    for directory in sorted(FIXTURES.iterdir()):
+        if not directory.is_dir():
+            continue
+        if directory.name not in titled:
+            unclaimed.append(directory.name)
+            continue
+        # One row per declared instance, and the problem cell names every
+        # catalogue row that declares it: one directory serves two rows where
+        # two problems are stated at one instance --- parsimony and the
+        # general time-reversible model share an alignment --- and a table
+        # that picked one of them would drop the other (issue #622).
+        problem = "; ".join(titled[directory.name])
+        for path in sorted(directory.glob("*.yaml")):
+            raw = yaml.safe_load(path.read_text())
+            found.append((problem, path.stem, shape_cell(raw)))
+    if unclaimed:
+        msg = (
+            f"fixture directories {unclaimed} belong to no catalogue row; the "
+            "table cannot be narrower than the registry"
+        )
+        raise UnnamedSymbolError(msg)
+    return found
+
+
+def _fixtures_table(body: list[tuple[str, str, str]]) -> list[str]:
+    """The declared-instances table: one row per fixture, shape in its own words.
+
+    A ``longtable`` and not a float: one row per declared instance is forty
+    rows and a float cannot break across a page, so a table environment would
+    be set adrift or dropped entirely.
+    """
+    caption = (
+        "Every instance the registry declares, and the shape each file states "
+        "in its own words. The tiers of one problem differ in more than one "
+        "quantity at once --- extent and state count, taxa and sites, length "
+        "and rate --- so the column is a shape and never a size. A field a "
+        "fixture declares appears here the day it is written; a transition "
+        "matrix, a tree and a size distribution are the instance's parameters "
+        "rather than its extent and are left to the file."
+    )
+    lines = [
+        r"{\footnotesize",
+        r"\begin{longtable}{p{0.20\textwidth}lp{0.58\textwidth}}",
+        f"  \\caption{{{caption}}}\\label{{tab:declared-instances}}\\\\",
+        r"  \toprule",
+        r"  Problem & Tier & Declared shape \\",
+        r"  \midrule",
+        r"  \endfirsthead",
+        r"  \toprule",
+        r"  Problem & Tier & Declared shape \\",
+        r"  \midrule",
+        r"  \endhead",
+        r"  \bottomrule",
+        r"  \endlastfoot",
+    ]
+    # The problem is repeated on every row rather than printed once per run:
+    # the table runs past a page break, and a reader landing on the second
+    # page of one problem's instances would otherwise see a blank column.
+    for problem, tier, shape in body:
+        lines.append(f"  {_tex_text(problem)} & {_tex_text(tier)} & {shape} \\\\")
+    lines += [r"\end{longtable}}"]
+    return lines
+
+
 def _table(
     columns: tuple[str, ...],
     body: list[tuple[str, list[str]]],
@@ -1024,6 +1177,8 @@ def render(catalogue: Path = CATALOGUE) -> str:
         ),
         "",
         *_method_table(method_cells(catalogue)),
+        "",
+        *_fixtures_table(fixture_rows()),
     ]
     return "\n".join(lines) + "\n"
 

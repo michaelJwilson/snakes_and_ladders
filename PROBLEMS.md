@@ -41,7 +41,7 @@ none of them defines one.
 | Phylogenetic tree, Jukes–Cantor | `tree_search`, `tree_scale` | `sec:phylo` | `sim.jc`, `sim.simulate`, `likelihood.pruning`, `likelihood.pruning_rust`, `likelihood.hadamard`, `search.neighbor_joining`, `search.rl`, `sandbox.tropical` |
 | Phylogenetic tree, general time-reversible | `tree_jc` | `sec:phylo` | `sim.gtr` |
 | Phylogenetic tree, parsimony | `tree_jc` | `sec:parsimony` | `likelihood.parsimony` |
-| Potts chain in a field | `potts_chain` | `sec:potts` | `learn.potts` |
+| Potts chain in a field | `potts_chain` | `sec:potts` | `learn.potts`, `opt.potts` |
 | Potts lattice and Markov random field | `potts_lattice` | `sec:potts` | `likelihood.belief_propagation`, `search.maxflow`, `search.max_cut`, `sim.graph.lattice_graph`, `sim.graph.erdos_renyi_graph` |
 | Potts lattice in a per-site field | `spatio_only` | `sec:potts` | `sim.potts.spatio_only_field`, `sim.graph.triangular_lattice_graph` |
 | Frustrated Potts: triangular antiferromagnet | `frustrated_lattice` | `sec:frustrated` | `sim.canonical.frustrated_triangular_lattice`, `sim.canonical.minimum_frustrated_edges` |
@@ -50,8 +50,8 @@ none of them defines one.
 | Low-density parity-check code, bicycle | `bicycle` | `sec:ldpc` | `sim.ldpc.bicycle_code` |
 | Calderbank–Shor–Steane code over a bicycle matrix | `bicycle_css` | `sec:ldpc` | `sim.css`, `likelihood.css` |
 | Turbo code, two (7,5) recursive systematic encoders | `turbo` | `sec:turbo` | `sim.convolutional`, `likelihood.convolutional`, `likelihood.turbo` |
-| Hidden Markov model, six emission families | `hmm` | `sec:hmm` | `sim.hmm`, `opt.hmm`, `likelihood.hmm_paths`, `learn.hmm` |
-| Coupled spatio-sequential model | `spatio_sequential` | `sec:coupled` | `sim.spatio_sequential` |
+| Hidden Markov model, six emission families | `hmm`, `ragged_hmm` | `sec:hmm` | `sim.hmm`, `opt.hmm`, `likelihood.hmm_paths`, `learn.hmm` |
+| Coupled spatio-sequential model | `spatio_sequential`, `spatio_sequential_ragged` | `sec:coupled` | `sim.spatio_sequential` |
 | Count-pair coupled spatio-sequential model | `spatio_sequential_counts` | `sec:coupled` | `sim.count_pairs`, `sim.count_pairs_rust`, `likelihood.spatio_sequential_rust` |
 | Gaussian mixture | `mixture` | `sec:mixture` | `sim.mixture`, `likelihood.mixture_assignments` |
 | Mixture of two-channel count emissions | `emission_mixture` | `sec:emissionmixture` | `sim.emission_mixture`, `opt.emission_mixture` |

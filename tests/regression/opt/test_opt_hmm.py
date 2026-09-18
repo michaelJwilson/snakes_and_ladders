@@ -326,10 +326,12 @@ def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -
     # the parameters it returns; and the fitted initial distribution equals
     # the enumerated posterior at the first site, averaged over sequences, to
     # 2.2e-12 -- the M step's own fixed point, read off the enumeration.
+    # `lengths` is the only shape a batch declares (#666): `n_sequences` and
+    # `sequence_length` are derived and cannot be replaced. A count with a
+    # shared length is the equal-length case, written out.
     params = replace(
         fixture("hmm", "ci").params,
-        sequence_length=_EM_LENGTH,
-        n_sequences=_EM_SEQUENCES,
+        lengths=(_EM_LENGTH,) * _EM_SEQUENCES,
     )
     observations = simulate_sequences(params).observations
     start = (

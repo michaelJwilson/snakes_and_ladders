@@ -21,12 +21,12 @@ import numpy as np
 from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
 from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.numerics_rust import sample_rows
+from snakes_and_ladders.ragged import Ragged
 
 _REQUIRED_FIELDS = frozenset(
     {
         "seed",
-        "n_sequences",
-        "sequence_length",
+        "lengths",
         "n_states",
         "n_symbols",
         "initial",
@@ -69,13 +69,53 @@ class HmmParams:
     """
 
     n_states: int
-    sequence_length: int
-    n_sequences: int
+    #: One length per chain, and the only declaration of the batch's shape.
+    #: `n_sequences` chains of a shared `sequence_length` is the case where
+    #: these are equal, and is read off them rather than stored beside them
+    #: (issue #666): a second field for a derived fact is a field that can
+    #: disagree, and on a ragged batch there is no shared length for it to
+    #: hold.
+    lengths: tuple[int, ...]
     initial: np.ndarray
     transition: np.ndarray
     emissions: EmissionFamily
     seed: int
     tolerance: float
+
+    @property
+    def segment_lengths(self) -> tuple[int, ...]:
+        """One length per chain."""
+        return self.lengths
+
+    @property
+    def n_sequences(self) -> int:
+        """How many chains the batch holds."""
+        return len(self.lengths)
+
+    @property
+    def rectangular(self) -> bool:
+        """Whether every chain is the same length."""
+        return len(set(self.lengths)) == 1
+
+    @property
+    def sequence_length(self) -> int:
+        """The length every chain shares.
+
+        Raises
+        ------
+        ValueError
+            Where the chains differ. A caller asking for *the* length of a
+            ragged batch is asking a question with no answer, and returning
+            the longest --- which an earlier draft of this did --- is the kind
+            of quiet wrong number the segmentation exists to make impossible.
+        """
+        if not self.rectangular:
+            msg = (
+                f"the chains have lengths {self.lengths} and do not share one; "
+                "read `segment_lengths`, or `n_sequences` for how many there are"
+            )
+            raise ValueError(msg)
+        return self.lengths[0]
 
     @property
     def emission(self) -> np.ndarray:
@@ -140,15 +180,28 @@ def load_hmm_params(path: Path) -> HmmParams:
 
     n_states = int(raw["n_states"])
     n_symbols = int(raw["n_symbols"])
-    sequence_length = int(raw["sequence_length"])
-    if n_states < 2:
-        msg = f"{path}: n_states must be >= 2, got {n_states}"
+    # Both guards predate the `lengths` spelling and were lost with the field
+    # that was beside them (#667). They are not shape checks: a one-state chain
+    # has no transition to identify and a one-symbol alphabet carries no
+    # information, and both declare arrays that are internally consistent, so
+    # `_stochastic` below passes them and the fixture is accepted.
+    for name, size in (("n_states", n_states), ("n_symbols", n_symbols)):
+        if size < 2:
+            msg = f"{path}: {name} must be >= 2, got {size}"
+            raise ValueError(msg)
+    # One spelling. `n_sequences` chains of a shared `sequence_length` is the
+    # equal-length case of `lengths`, so a fixture writes the lengths and the
+    # loader reads them; there is nothing to keep consistent (issue #666).
+    lengths = tuple(int(one) for one in raw["lengths"])
+    if not lengths:
+        msg = f"{path}: a batch needs at least one chain, got none"
         raise ValueError(msg)
-    if n_symbols < 2:
-        msg = f"{path}: n_symbols must be >= 2, got {n_symbols}"
-        raise ValueError(msg)
+    sequence_length = min(lengths)
     if sequence_length < 2:
-        msg = f"{path}: sequence_length must be >= 2, got {sequence_length}"
+        msg = (
+            f"{path}: every chain carries at least 2 positions, got {lengths}; "
+            "one position is an initial distribution and no transition"
+        )
         raise ValueError(msg)
 
     initial = _stochastic(raw["initial"], (n_states,), path, "initial")
@@ -159,8 +212,7 @@ def load_hmm_params(path: Path) -> HmmParams:
 
     return HmmParams(
         n_states=n_states,
-        sequence_length=sequence_length,
-        n_sequences=int(raw["n_sequences"]),
+        lengths=lengths,
         initial=initial,
         transition=transition,
         emissions=CategoricalEmission(emission),
@@ -205,6 +257,11 @@ class SimulatedHmmDataset:
         The emission truth that generated ``observations``.
     seed : int
         Seed used.
+    lengths : tuple[int, ...] | None
+        The segment lengths where they differ, and `None` where they do not.
+        Where it is given, `states` and `observations` are **flat** --- the
+        segments end to end --- because there is no rectangle to put them in;
+        `batch` is the carrier that reads them (issue #666).
     """
 
     states: np.ndarray
@@ -213,6 +270,20 @@ class SimulatedHmmDataset:
     transition: np.ndarray
     emissions: EmissionFamily
     seed: int
+    lengths: tuple[int, ...]
+
+    @property
+    def rectangular(self) -> bool:
+        """Whether every chain is the same length, and so whether the arrays are 2-D."""
+        return len(set(self.lengths)) == 1
+
+    @property
+    def batch(self) -> Ragged:
+        """The observations as segments, whatever shape they are stored in."""
+        flat = self.observations
+        if self.rectangular:
+            flat = flat.reshape((-1, *flat.shape[2:]))
+        return Ragged(flat, self.lengths)
 
     @property
     def emission(self) -> np.ndarray:
@@ -241,20 +312,45 @@ def simulate_sequences(params: HmmParams) -> SimulatedHmmDataset:
         truth.
     """
     rng = np.random.default_rng(params.seed)
-    states = np.empty((params.n_sequences, params.sequence_length), dtype=np.int64)
-    columns: list[np.ndarray] = []
-    states[:, 0] = rng.choice(
-        params.n_states, size=params.n_sequences, p=params.initial
-    )
-    columns.append(params.emissions.sample(states[:, 0], rng))
-    for t in range(1, params.sequence_length):
-        states[:, t] = sample_rows(rng, params.transition, states[:, t - 1])
-        columns.append(params.emissions.sample(states[:, t], rng))
+    # Segments of one length are drawn together, which is what keeps the draw
+    # vectorized. Where every chain is the same length --- every fixture that
+    # predates #666 --- there is one group, the calls below are the calls this
+    # simulator has always made, and the stream is therefore the same one: a
+    # seeded fixture's data does not move because the simulator learned to
+    # segment. A ragged batch is several groups, in declared length order.
+    lengths = params.segment_lengths
+    order: dict[int, list[int]] = {}
+    for index, length in enumerate(lengths):
+        order.setdefault(length, []).append(index)
+
+    drawn_states: list[np.ndarray] = [np.empty(0, dtype=np.int64)] * len(lengths)
+    drawn_values: list[np.ndarray] = [np.empty(0)] * len(lengths)
+    for length, members in order.items():
+        block = np.empty((len(members), length), dtype=np.int64)
+        columns: list[np.ndarray] = []
+        # Every chain in the group restarts here, at the initial distribution.
+        block[:, 0] = rng.choice(params.n_states, size=len(members), p=params.initial)
+        columns.append(params.emissions.sample(block[:, 0], rng))
+        for t in range(1, length):
+            block[:, t] = sample_rows(rng, params.transition, block[:, t - 1])
+            columns.append(params.emissions.sample(block[:, t], rng))
+        values = np.stack(columns, axis=1)
+        for row, index in enumerate(members):
+            drawn_states[index] = block[row]
+            drawn_values[index] = values[row]
+
+    if params.rectangular:
+        states = np.stack(drawn_states, axis=0)
+        observations = np.stack(drawn_values, axis=0)
+    else:
+        states = np.concatenate(drawn_states)
+        observations = np.concatenate(drawn_values)
     return SimulatedHmmDataset(
         states=states,
-        observations=np.stack(columns, axis=1),
+        observations=observations,
         initial=params.initial,
         transition=params.transition,
         emissions=params.emissions,
         seed=params.seed,
+        lengths=params.lengths,
     )

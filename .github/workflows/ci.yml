@@ -117,11 +117,11 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}" || true
-          # `--diff-filter=M`: the rule is about rebuild churn, and a pull
-          # request that *introduces* a document is not a rebuild of one. An
-          # added PDF passes here and is reviewed as the new file it is
-          # (issue #664).
-          changed="$(git diff --name-only --diff-filter=M "origin/${{ github.base_ref }}"...HEAD -- docs/paper.pdf docs/textbook.pdf docs/mind_map.pdf)"
+          # `--diff-filter=M`: a PDF the base does not carry is a document
+          # being introduced, and no rebuild can produce one. The rule exists
+          # to stop a committed PDF drifting per merge, which starts once the
+          # base has it (issue #576).
+          changed="$(git diff --name-only --diff-filter=M "origin/${{ github.base_ref }}"...HEAD -- docs/paper.pdf docs/textbook.pdf docs/api_map.pdf docs/mind_map.pdf)"
           if [ -n "$changed" ] && ! printf '%s' "$TITLE" | grep -q 'Rebuild the documents'; then
             echo "::error::this pull request changes $changed; only a 'Rebuild the documents' pull request may (DEV.md, Documents)"
             exit 1

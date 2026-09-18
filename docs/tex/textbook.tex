@@ -624,6 +624,17 @@ own divergence.
 A hidden path $\hidden = (z_1, \dots, z_T)$ over $k$ states evolves by an
 initial distribution $\bpi$ and a transition matrix $\mathbf{A}$; each position
 emits an observation from an emission family $\emission$ indexed by its state.
+
+A \emph{batch} of such paths is not one longer path. Where the data is
+segmented into $S$ chains of lengths $T_1, \dots, T_S$, each chain restarts at
+$\bpi$ rather than continuing through $\mathbf{A}$, so the batch takes
+$\sum_s (T_s - 1) = T - S$ transitions and not $T - 1$. The segmentation is
+therefore part of the model and not a detail of its storage: at a fixed total
+$T$, a single chain and twenty short ones assign different probabilities to the
+same observations, because a state change \emph{across} a boundary is free
+where the same change one position earlier costs $\log A_{ij}$. A segment of
+one position carries an initial distribution and no transition, and is excluded
+as degenerate.
 The evidence marginalizes $k^T$ paths.
 
 \paragraph{Supported sizes.}
@@ -2050,6 +2061,15 @@ Wolff are defined on Section~\ref{sec:potts}'s lattice and not on
 Section~\ref{sec:frustrated}'s. And a branch-length optimizer has nothing to
 optimize under parsimony, whose score is a count and carries no continuous
 parameter (Section~\ref{sec:parsimony}). Every other blank is work not done.
+
+Table~\ref{tab:declared-instances} then says what each problem is declared
+\emph{at}. Every claim in this document is made on an instance, and an
+instance is a size and a set of parameters rather than a name: the tiers of one
+problem differ in more than one quantity at once --- extent and state count,
+taxa and sites, chain length and transition rate --- so a reader who knows only
+that a result was taken at the smaller of two instances knows almost nothing.
+The table states each in the words its own declaration uses, and it is
+generated, so an instance cannot be described here and declared otherwise.
 
 \input{generated/problems_tables}
 

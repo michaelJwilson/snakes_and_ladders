@@ -34,6 +34,7 @@ from test_kinds import (  # noqa: E402
     EXCLUDED_DIRECTORY,
     KINDS,
     SCHEDULING,
+    SUBJECTS,
 )
 
 
@@ -128,7 +129,7 @@ def test_the_registered_markers_are_these() -> None:
     pytest_config = config["tool"]["pytest"]["ini_options"]
     registered = {entry.split(":", 1)[0] for entry in pytest_config["markers"]}
 
-    assert set(KINDS) | set(SCHEDULING) == registered
+    assert set(KINDS) | set(SCHEDULING) | set(SUBJECTS) == registered
     assert "--strict-markers" in pytest_config["addopts"]
 
 

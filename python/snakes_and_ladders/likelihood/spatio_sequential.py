@@ -280,15 +280,14 @@ def covariate_block(
     do it, and a covariate sliced differently from the block it accompanies is
     a fit conditioning on the wrong exposures that converges anyway (#658).
 
-    The trailing singleton the single-channel families broadcast over their
-    states with is added **only** where the covariate has no axes of its own.
-    A covariate that carries the family's axes --- the two-channel count
-    emission's one-per-channel (#658) --- is passed through as it is, because
-    the singleton then belongs inside each channel and
+    The singleton is added **only** where the covariate has no axes of its own
+    --- :mod:`snakes_and_ladders.emissions` states the contract and enforces
+    it, and #677 stopped the five seams that slice a covariate from each
+    carrying their own copy of it. What is local here: a covariate that
+    carries the family's axes is passed through, because
     :func:`~snakes_and_ladders.sim.count_pairs.split_covariate` is what puts
-    it there. Appending it here instead makes a ``(S, V, 2)`` covariate
-    ``(S, V, 2, 1)``, which broadcasts against the wrong axis and was how this
-    was first written.
+    the singleton inside each channel, and appending it here made a
+    ``(S, V, 2)`` covariate ``(S, V, 2, 1)`` (#670).
 
     Returns
     -------

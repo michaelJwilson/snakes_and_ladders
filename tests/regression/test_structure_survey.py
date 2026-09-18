@@ -215,3 +215,156 @@ def test_a_shape_below_the_rule_is_not_a_cluster(tmp_path: Path) -> None:
         )
 
     assert appraise_structures.clusters(appraise_structures.structures(package)) == []
+
+
+@pytest.mark.structural
+def test_the_implicit_offsets_store_is_in_the_incidence_cluster(
+    grouped: list[appraise_structures.Cluster],
+) -> None:
+    # The ticket's headline (#677). `ragged.Ragged` stores `values` and
+    # `lengths` and derives the offsets, which is the third way this package
+    # writes one relation -- and the classifier knew the other two only, so the
+    # largest addition since the survey was written arrived invisible. The
+    # cluster is where it belongs, beside `SparseIncidence` and `_EdgeLayout`.
+    incidence = next(c for c in grouped if c.key == "role:incidence")
+
+    assert "ragged.Ragged" in incidence.members
+    assert incidence.layouts["ragged.Ragged"] == "csr"
+    assert incidence.layouts["sim.hmm.SimulatedHmmDataset"] == "csr"
+
+
+@pytest.mark.structural
+def test_a_declaration_of_lengths_is_not_a_layout(
+    found: list[appraise_structures.Structure],
+) -> None:
+    # The corroboration rule, and why the payload partner is required rather
+    # than nice to have. `HmmParams.lengths` declares the shape of a batch and
+    # addresses nothing; a params filed as a compressed layout would put
+    # sixteen parameter bundles in the incidence cluster and bury it.
+    params = next(s for s in found if s.qualified == "sim.hmm.HmmParams")
+
+    assert "lengths" in params.fields
+    assert params.layout == "none"
+
+
+@pytest.mark.structural
+@pytest.mark.parametrize(
+    "qualified",
+    [
+        "search.potts_mcmc.ClusterCounter",
+        "search.ground_state.Rung",
+        "sim.potts.SpatioOnlyParams",
+    ],
+)
+def test_sizes_is_not_a_segmentation(
+    found: list[appraise_structures.Structure], qualified: str
+) -> None:
+    # `sizes` is a histogram of cluster sizes in one of these and a set of
+    # problem sizes in the other two. Admitting the name as a length field
+    # misfiles all three, which is the `restarts`-for-`starts` failure the
+    # survey exists to avoid, one spelling later.
+    structure = next(s for s in found if s.qualified == qualified)
+
+    assert structure.layout == "none"
+
+
+@pytest.mark.structural
+def test_reading_the_offsets_is_not_deriving_them(
+    found: list[appraise_structures.Structure],
+) -> None:
+    # `Ragged.segments` reads `self.offsets` once and walks the views. Counting
+    # it as a second derivation reports two costs where the source pays one,
+    # and the fix for the pair would then look like a fix for one of them.
+    ragged = next(s for s in found if s.qualified == "ragged.Ragged")
+
+    assert not any("segments derives" in note for note in ragged.notes)
+    assert any("39.3 us" in note for note in ragged.notes)
+
+
+@pytest.mark.structural
+def test_the_offsets_finding_carries_its_measurement(
+    grouped: list[appraise_structures.Cluster],
+) -> None:
+    # Measured rather than fixed, and the numbers are why: 39.3 us against
+    # 335.11 ms is 0.012% of the iteration that encloses it, and the NumPy
+    # cumsum that would replace the scan saves 6 us of that. A ratio with no
+    # effect size is what root `CLAUDE.md` leaves alone, so the survey reports
+    # the layout and stops calling it a cost.
+    findings = " ".join(f for cluster in grouped for f in cluster.findings)
+
+    assert "ragged.Ragged: offsets rebuilt per call kept" in findings
+    assert "0.012%" in findings
+
+
+@pytest.mark.structural
+def test_a_finding_on_an_unclustered_class_is_reported(
+    found: list[appraise_structures.Structure],
+    grouped: list[appraise_structures.Cluster],
+) -> None:
+    # The second blindness (#677). Findings printed only inside a cluster, so a
+    # cost on a class sharing its shape with nobody was derived and dropped:
+    # nine of them, on `likelihood.schedule.Layout`, `search.gibbs._Indexed`,
+    # `learn.surrogate.Examples` and the rest. What a structure costs does not
+    # depend on how many others look like it.
+    loose = appraise_structures.unclustered_findings(found, grouped)
+    rendered = appraise_structures.render(found, grouped)
+
+    assert "likelihood.schedule.Layout" in " ".join(loose)
+    assert "findings outside every cluster" in rendered
+    assert all(finding in rendered for finding in loose)
+
+
+@pytest.mark.structural
+def test_a_planted_segmented_store_is_reported_without_a_partner_being_guessed(
+    tmp_path: Path,
+) -> None:
+    # The planted control for the new spelling, the form the CSR one already
+    # has: a lengths-plus-payload store the walk has never read is reported,
+    # and a lengths-only one beside it is not.
+    package = tmp_path / "segmented"
+    package.mkdir()
+    (package / "addressed.py").write_text(
+        "from dataclasses import dataclass\n"
+        "import numpy as np\n\n\n"
+        "@dataclass(frozen=True)\n"
+        "class Addressed:\n"
+        "    values: np.ndarray\n"
+        "    lengths: tuple[int, ...]\n"
+    )
+    (package / "declared.py").write_text(
+        "from dataclasses import dataclass\n\n\n"
+        "@dataclass(frozen=True)\n"
+        "class Declared:\n"
+        "    lengths: tuple[int, ...]\n"
+        "    tolerance: float\n"
+    )
+
+    planted = {s.name: s for s in appraise_structures.structures(package)}
+
+    assert planted["Addressed"].layout == "csr"
+    assert planted["Declared"].layout == "none"
+
+
+@pytest.mark.structural
+def test_every_class_added_since_the_survey_was_written_is_in_it() -> None:
+    # #677's own acceptance test, and it reads `git log` rather than memory:
+    # these eight classes are every `class` added under the package since #586
+    # merged, the commit that deleted the hand-written inventories. Seven carry
+    # state and are in the survey; `CovariateNotSupportedError` is an exception
+    # with no fields, excluded by the definition of state-carrying rather than
+    # missed by the walk, which is why it is named here rather than left out.
+    added = {
+        "BetaBinomialEmission",
+        "HmmEnvironment",
+        "NegativeBinomialEmission",
+        "PottsEnvironment",
+        "Ragged",
+        "_SolvedBetaBinomial",
+        "_SolvedDispersion",
+    }
+    stateless = {"CovariateNotSupportedError"}
+
+    names = {structure.name for structure in appraise_structures.structures()}
+
+    assert added <= names
+    assert not (stateless & names)

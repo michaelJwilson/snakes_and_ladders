@@ -39,6 +39,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.parallel
    :members:
 
+.. automodule:: snakes_and_ladders.ragged
+   :members:
+
+.. automodule:: snakes_and_ladders.likelihood.ragged_rust
+   :members:
+
 .. automodule:: snakes_and_ladders.numerics_rust
    :members:
 
@@ -353,6 +359,9 @@ whether or not it has members yet.
    code, frozen before the covariate -- so registering them as cross-reference
    targets makes every bare `:class:` reference to either ambiguous. It is a
    referee, not API: documented, and not something to link to.
+.. automodule:: snakes_and_ladders.sandbox.rectangular_hmm
+   :members:
+
 .. automodule:: snakes_and_ladders.sandbox.count_emissions
    :members:
    :no-index:

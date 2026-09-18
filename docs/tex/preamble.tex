@@ -4,6 +4,9 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{booktabs}
+% The declared-instances table runs to one row per fixture and past a page;
+% a float cannot break, so it is a longtable (issue #622).
+\usepackage{longtable}
 \usepackage{graphicx}
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric}

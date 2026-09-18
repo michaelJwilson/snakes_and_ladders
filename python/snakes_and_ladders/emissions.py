@@ -30,6 +30,21 @@ Recognition and Machine Learning*, section 9.2.1).
 **refuses** rather than clamps when a re-estimate reaches it, because a
 clamped fit returns normally and its intervals mean nothing (issue #122).
 
+**A covariate arrives shaped for the states, and that rule is stated here
+because this is what enforces it.** :func:`trial_count` and :func:`exposure`
+refuse a covariate whose last axis is not a singleton, so what reaches a
+single-channel family carries one: the singleton is what broadcasts the
+per-observation value along the states at the ``+``. A family whose
+observation carries axes of its own --- the two-channel count pair --- takes
+one covariate *per* axis instead, and the singleton belongs inside each
+channel rather than after them. So a seam that slices a covariate adds the
+singleton **only** where the covariate has no axes of its own; appending it to
+a ``(S, V, 2)`` covariate makes ``(S, V, 2, 1)``, whose last axis names no
+channel and broadcasts against the wrong one. Five functions across ``sim``
+and ``likelihood`` slice a covariate and each obeys this; #670 is what a
+fifth copy of the rule costs when one of them drifts, and issue #677 is why
+they now point here rather than restate it.
+
 Parameterization for an unconstrained optimizer belongs to
 ``snakes_and_ladders.opt.constrain``; here it would make
 :mod:`snakes_and_ladders.sim` import ``snakes_and_ladders.opt`` transitively

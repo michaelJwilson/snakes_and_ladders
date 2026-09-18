@@ -29,6 +29,12 @@ KINDS = (
 #: is `key` (#399), which names one declared instance's own budget.
 SCHEDULING = ("critical", "release", "stress", "key")
 
+#: The third axis: what a test's subject is, where it is not one of the
+#: declared problems. Added at collection like the problem markers, never by
+#: an author, so that a module with no problem is a module that says so
+#: (issue #622).
+SUBJECTS = ("infra",)
+
 #: Benchmarks measure rather than assert, so they carry no kind. Excluded here
 #: rather than exempted case by case, because the exclusion is a property of
 #: the directory and not of any test in it.

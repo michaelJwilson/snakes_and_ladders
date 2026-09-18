@@ -209,6 +209,19 @@ SCHEDULING_MARKERS: Mapping[str, str] = {
     ),
 }
 
+#: What a test's subject is, where it is not one of the declared problems. A
+#: third axis: a module is `infra` *and* an oracle test, as it is `critical`
+#: *and* an oracle test. Added at collection by `tests/conftest.py` where the
+#: problem scan finds nothing, so that "unmarked" stops being a state a module
+#: can be in for two different reasons (issue #622).
+SUBJECT_MARKERS: Mapping[str, str] = {
+    "infra": (
+        "exercises no single problem -- shared machinery, a document guard, "
+        "or the build; added at collection where the problem scan finds none, "
+        "and checked against what the module imports (issue #622)"
+    ),
+}
+
 #: Benchmarks measure rather than assert, so they carry no kind. The exclusion
 #: is a property of the directory, not of any test in it.
 KIND_EXEMPT_DIRECTORY = "benchmarks"
@@ -224,6 +237,7 @@ MARKER_REGISTRATION_ORDER: tuple[str, ...] = (
     "critical",
     "stress",
     "key",
+    *SUBJECT_MARKERS,
 )
 
 
@@ -316,7 +330,7 @@ TIERS: tuple[Tier, ...] = (
 
 def marker_registrations() -> str:
     """`pyproject.toml`'s `markers` list, in the order that file registers them."""
-    described = {**KIND_MARKERS, **SCHEDULING_MARKERS}
+    described = {**KIND_MARKERS, **SCHEDULING_MARKERS, **SUBJECT_MARKERS}
     unplaced = [name for name in described if name not in MARKER_REGISTRATION_ORDER]
     if unplaced:
         message = f"markers with no place in the registration order: {unplaced}"

@@ -22,6 +22,7 @@ pub mod potts;
 pub mod pruning;
 #[cfg(feature = "sandbox")]
 pub mod pruning_burn;
+pub mod ragged;
 pub mod sampling;
 
 pub use count_pairs::simulate_count_pairs;
@@ -31,6 +32,7 @@ pub use potts::single_site_sweeps;
 pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
 pub use pruning_burn::pruning_gradient;
+pub use ragged::ragged_posteriors_into;
 pub use sampling::sample_rows;
 
 /// Doubles an integer.
@@ -54,6 +56,7 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "sandbox")]
     m.add_function(wrap_pyfunction!(pruning_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(sample_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(ragged::ragged_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(max_flow, m)?)?;
     m.add_function(wrap_pyfunction!(ising_ground_state, m)?)?;
     m.add_function(wrap_pyfunction!(single_site_sweeps, m)?)?;

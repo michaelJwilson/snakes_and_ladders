@@ -42,6 +42,7 @@ and this release. A milestone not named here did not move.
 
 | Roadmap item | What moved | Pull request |
 | --- | --- | --- |
+| §0 Development loop | A typeset map of the package's Python surface, generated from the docstrings by `ast` and edited by no one: `docs/api_map.pdf`, 1,528 entries over 64 pages --- 151 modules, 251 classes, 587 functions, 539 methods. The entry count is checked against a second walk of the tree, and a public function without a summary line is refused rather than typeset as a blank | [#578](https://github.com/michaelJwilson/snakes_and_ladders/pull/578) (#576) |
 | §0 Development loop | The two documents are named the paper and the textbook, `infra/build_documents.sh` replaces the script named after the retired artifact, and a guard fails any live file naming it | [#379](https://github.com/michaelJwilson/snakes_and_ladders/pull/379) (#377) |
 | §0 Development loop | Validation is one command under five minutes: an inputs stamp beside every committed figure and notebook (the stamps were measured wrong on 476 of 476 decisions and removed by #490); guard-only selection; a per-test duration cap; one BLAS thread per process | [#380](https://github.com/michaelJwilson/snakes_and_ladders/pull/380) (#372) |
 | §0 Development loop | A generator rather than a seed for the relaxed benchmark, and full history for the committed-PDF rule, which every pull request had been failing on a shallow checkout | [#378](https://github.com/michaelJwilson/snakes_and_ladders/pull/378) |
@@ -607,6 +608,27 @@ recursion that preceded it at `T = 100,000`, `K = 8`. The varying form costs
 both shapes stay. The new path is pinned against a path enumeration that shares
 no recursion with it, and a planted two-regime kernel is recovered per regime
 from the pairwise posteriors where the pooled estimate matches neither.
+**A count pair can be drawn under a covariate, and fitted under one**
+([#670](https://github.com/michaelJwilson/snakes_and_ladders/issues/670),
+[#671](https://github.com/michaelJwilson/snakes_and_ladders/issues/671),
+[#672](https://github.com/michaelJwilson/snakes_and_ladders/issues/672)).
+Three seams carried one defect: a covariate that already holds the family's
+channel axis had the broadcast singleton appended anyway, so its last axis read
+1, named no channel, and the pair family refused it. `m_step` re-derived
+`covariate_block`'s slice rather than calling it; `_drawing_covariate` did the
+same and the coupled simulator reshaped every draw to `(S, V)`, so a pair could
+not be drawn at all; and both count-pair simulators passed no covariate, so the
+one problem class whose emission *is* a pair had no covaried planted instance.
+The referee is recovery. Over an exposure spanning a factor of 16, a coupled
+fit **told** it recovers planted rates of 24.0 and 72.0 as **23.3 and 71.3**,
+within 3%; the same fit on the same data **not told** it reaches **47.9 and
+151.7**, factors of 1.99 and 2.11 against an `E[U(0.25, 4)]` of 2.125 --- the
+rate averaged over the exposures. In Rust the exposure scales the drawn gamma
+rather than the distribution, `c Gamma(r, mu/r)` being `Gamma(r, c mu/r)`
+exactly, so a covariate costs one multiply per draw and the per-(class, state)
+objects stay. A fixture declaring no covariate draws what it drew before,
+asserted rather than assumed.
+
 **A covariate reaches the families from a fit, not only from a test**
 ([#657](https://github.com/michaelJwilson/snakes_and_ladders/pull/657)).
 #631's exposure and trial count were reachable only by a test that built a
@@ -3446,6 +3468,42 @@ nothing at the 19,998-bit instance the ticket names --- against a decode paid
 per iteration. `ParityCheck`'s five fields and `compressed_adjacency`'s three
 arrays are bitwise unchanged, and the arrays are now shared and read-only.
 
+**Data structures at #677.** The survey read **218** classes and **8** clusters
+and did not name `Ragged` once, the largest addition since #586 wrote it. Two
+blindnesses, both in the tool. The classifier knew `offsets` and `indptr` and
+not the third spelling of one relation --- lengths beside one flat payload,
+offsets derived --- so `ragged.Ragged` was filed as carrying no layout;
+`role:incidence` is **14 members over 84 consuming references** with it and
+`sim.hmm.SimulatedHmmDataset` in, against 12 over 81. The corroboration rule
+of #586 is what keeps that from over-matching: a payload partner is required,
+so `HmmParams.lengths` stays a declaration rather than a layout, and `sizes`
+is refused as a length field because it is a histogram in
+`search.potts_mcmc.ClusterCounter` and a set of problem sizes in
+`search.ground_state.Rung` and `sim.potts.SpatioOnlyParams` --- the
+`restarts`-for-`starts` failure one spelling later. Second, a finding printed
+only inside a cluster, so a cost on a class sharing its shape with nobody was
+derived and dropped: **nine findings** were invisible, on
+`likelihood.schedule.Layout`, `search.gibbs._Indexed` (three between them),
+`learn.surrogate.Examples`, `learn.surrogate._Batch`,
+`emissions.NegativeBinomialEmission`, `learn.potts.PottsEnvironment` and
+`sandbox.pruning_burn._Flattened`; they are #690's to price. One finding the
+change raised was priced here and declined: `Ragged` rebuilds its offsets per
+call in a Python scan, **39.3 us** on the 600-segment `hmm/ci` batch against
+**335.11 ms** for one Baum-Welch iteration over it --- **0.012%**, and the
+NumPy `cumsum` that would replace it saves 6 us of that (2026-09-16). A ratio
+with no effect size, so it is recorded as measured rather than asked again.
+Reading `self.offsets` is no longer counted as deriving them, which had
+reported two costs where `Ragged` pays one. The covariate rule five seams
+restated --- add the broadcast singleton only where the covariate carries no
+axes of its own --- is stated once in `snakes_and_ladders.emissions`, which is
+what enforces it, and the seams point there; replacing them is #691. One
+finding was considered and declined on the survey's own rule: `suffix:Params`
+is 16 members over 38 references and
+`sim.count_pairs.SpatioSequentialCountsParams` holds a `SpatioSequentialParams`
+where no other row holds a params, but a `suffix:` key says the names agree and
+nothing calls the sixteen polymorphically, so there is no seam to write ---
+`DEV.md`'s three consumers are three consumers *through* a contract.
+
 Three proposals under the ticket were measured and declined, which is the half
 a survey exists to produce. `search.maxflow.FlowNetwork` keeps its list of
 lists: over 16,384 rows of degree six a Dinic row walk is 1.95 ms as lists,
@@ -3784,3 +3842,118 @@ failed: parentheses become brackets, the LaTeX specials are dropped and `_` is
 written `\string_`. Support is the reader's --- Acrobat and most desktop
 readers show it, Chrome's viewer and pdf.js do not --- so the page states every
 role without it.
+## The problem axis reads imports, not only fixture calls ([#622](https://github.com/michaelJwilson/snakes_and_ladders/issues/622))
+
+#619 derived a per-problem selection from the registry call a test module
+makes. Measured over the tree, it missed more than it found.
+
+| | before | after |
+| --- | ---: | ---: |
+| modules carrying no problem marker | 138 of 258 | **70** |
+| of those, application or benchmark code | 78 | **16** |
+
+Both modules #614 names as its motivation --- `search/test_maxflow.py` and
+`search/test_alpha_expansion.py`, "that problem's ground-state tests" --- were
+among the 78, so a green `-m potts_lattice` run over a broken solver was the
+failure the axis was opened to prevent and did not.
+
+Neither loads a fixture, and neither can. They *sweep*: `test_alpha_expansion.py`
+builds 15 lattices, each chosen for the property under test --- zero coupling,
+a dominant one, a negative one, a periodic boundary. There is no single declared
+instance to load, and declaring 15 fixtures to carry 15 deliberate variations
+would make the registry a list of test arguments.
+
+The second reading is over the module's **imports**, against `PROBLEMS.md`'s
+**Defines** column. That file already stated the rule --- *a test module
+importing any of it exercises the problem* --- and `tests/_problems.py` did not
+implement it, so the catalogue's own sentence was untrue. It is held by
+`test_problems_catalogue.py`, which resolves every symbol a row names, so the
+reading is as current as the code rather than a second map to maintain. A
+module-level `PROBLEM = "<name>"` constant was the alternative and is the map
+this work removes, one level up: rewrite a module's model, forget the constant,
+and the axis is confidently wrong rather than visibly empty.
+
+One catalogue gap fell out. `opt.potts` is "a 1-D Potts chain in an external
+field" in its own first line and no row named it; it now defines `potts_chain`.
+
+The upper-bound guard changed with the premise: a module selected for a problem
+must spell the problem's name **or** import code the catalogue says defines it.
+It re-reads `PROBLEMS.md` by regex where the scan uses `ast`, so the two
+readings still share no code.
+
+## Chains of unequal length, and what padding costs ([#666](https://github.com/michaelJwilson/snakes_and_ladders/issues/666))
+
+A batch of chains is not one long chain. The recursions restart at each
+boundary, so the number of boundaries is part of the problem rather than of its
+size, and `snakes_and_ladders.ragged.Ragged` carries the segments end to end
+with their lengths. A segment of one position is refused: it is all initial
+distribution and no transition.
+
+**There is one recursion, not two.** `baum_welch_family` takes either shape and
+the rectangular form converts; the route it replaced is conserved in
+`sandbox.rectangular_hmm` and referees the equal-length case **bit for bit**.
+88 existing HMM tests pass unchanged through the new path.
+
+**The compiled kernel pads nothing, and that is the whole finding.** The Python
+path pads to the longest segment and masks, which buys one batched step per
+position of the longest; `src/ragged.rs` walks the segments in place. Which
+wins is a question about the *lengths*, not about the language. Every number is
+a best of five on this host at `OMP_NUM_THREADS=1`, `torch` single-threaded,
+four states:
+
+| segments | total | padding waste | torch | Rust | ratio |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 64 x 500 | 32,000 | 0.0% | 93.14 ms | **33.41 ms** | 2.8x |
+| 200 mixed, 5 to 400 | 41,546 | 47.8% | 121.63 ms | **43.37 ms** | 2.8x |
+| 63 x 30 and 1 x 2000 | 3,890 | 97.0% | 386.42 ms | **3.98 ms** | **97.1x** |
+
+**The third row is the one to read, and it is not a Rust result.** At 3,890
+positions the padded path takes 386 ms, while at 41,546 positions --- ten times
+the data --- it takes 122 ms. The cost follows the *longest* segment times the
+segment count, which is 128,000 padded positions for 3,890 real ones. A single
+long segment among short ones is therefore the shape where the Python path is
+worst, and it is the shape the downstream consumer has.
+
+The per-segment NumPy oracle runs 980 ms, 1,311 ms and 128 ms on the same
+three, so it referees and does not compete. The compiled kernel is pinned to it
+at a relative `1e-11` on the marginals, the transition counts and the evidence.
+
+**Two keys, not two problems** (#666 step 4). `ragged_hmm` and
+`spatio_sequential_ragged` join the HMM and coupled rows: each model is
+unchanged and only its instance's segmentation differs, which is what
+`PROBLEMS.md` means by a row with two keys. `ragged_hmm/ci` declares 2, 9, 9, 9
+and 60 --- the shortest a segment may be, a run of equal lengths, and one long
+enough that a padded block would be 70.3% padding --- so the batch takes 84
+transitions rather than 88. `spatio_sequential_ragged/ci` splits the same S = 6
+chain as 2 and 4, so enumeration still referees it.
+
+`SpatioSequentialParams` gains `segments`, and the simulator draws the first
+position of every segment from the initial distribution rather than from the
+transition out of the position before it, which belongs to another chain. With
+none declared the draws are the ones it has always made.
+
+**The HMM fixture loader now takes `lengths` or the rectangular pair, and
+exactly one.** A fixture that declared both could contradict itself.
+
+**`lengths` is the only declaration of a batch's shape.** `hmm/ci.yaml` now
+writes its 600 chains of 15 as the lengths themselves, and `HmmParams` derives
+`n_sequences` and `sequence_length` rather than storing them --- a second field
+for a derived fact is a field that can disagree, and on a ragged batch there is
+no shared length to hold. Asking a ragged instance for `sequence_length`
+**raises**; an earlier draft returned the longest, which is the quiet wrong
+number the segmentation exists to prevent.
+
+**The draws did not move.** The simulator groups segments by length and draws
+each group as it always did, so the equal-length case is one group and the same
+RNG stream: `hmm/ci` reproduces its states and observations byte for byte
+against the old spelling, which is checked rather than assumed.
+
+**What is left is the coupled scorer, and it is named rather than deferred
+vaguely.** `sim.spatio_sequential` draws the declared segments; the enumeration
+oracle and the message-passing fit in `likelihood.spatio_sequential` still
+score the chain as one, at eight sites reading `n_positions`. Until they carry
+the segmentation, a fit at `spatio_sequential_ragged` would optimize a
+likelihood the instance does not have, so the three pairings that need it say
+exactly that in `docs/tex/method_notes.yaml`, and the work is issue #669. `ragged_hmm`'s two say something
+different: a path sampler over segments is the unsegmented sampler run S times,
+and a bound over 89 positions costs more than the exact evaluation.
