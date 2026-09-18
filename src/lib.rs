@@ -40,7 +40,7 @@ pub use sampling::sample_rows;
 /// Placeholder binding: it demonstrates the Rust-to-Python pattern real
 /// numerical kernels follow (`pruning::pruning_log_likelihood` is now the
 /// substantive one) and implements no phylogenetics itself. Left in place
-/// because `snakes_and_ladders.__init__` re-exports it and `tests/test_oxiphylo_bindings.py`
+/// because `snakes_and_ladders.__init__` re-exports it and `tests/test_oxi_snakes_and_ladders_bindings.py`
 /// asserts it exists.
 #[pyfunction]
 pub fn double(x: i64) -> i64 {
