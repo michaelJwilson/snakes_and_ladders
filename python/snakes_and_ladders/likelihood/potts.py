@@ -22,14 +22,15 @@ External Field" (Mezard & Montanari, ch. 2).
 
 from __future__ import annotations
 
-import itertools
 from dataclasses import dataclass
 
 import numpy as np
 
 from snakes_and_ladders.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
-    refuse_oversized,
+    configurations,
+    posterior,
+    site_marginals,
 )
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph
@@ -154,35 +155,25 @@ def enumerate_potts(
         if max_configurations is None
         else max_configurations
     )
-    refuse_oversized(
-        n_states**graph.n_nodes,
+    states = configurations(
+        n_states,
+        graph.n_nodes,
         what=f"{n_states}**{graph.n_nodes} spin configurations",
         limit=limit,
     )
-
-    configurations = np.array(
-        list(itertools.product(range(n_states), repeat=graph.n_nodes)), dtype=np.int64
-    )
-    weights = log_weights(graph, field, configurations)
-    peak = weights.max()
-    unnormalized = np.exp(weights - peak)
-    total = unnormalized.sum()
-    probability = unnormalized / total
-
-    single_site = np.zeros((graph.n_nodes, n_states))
-    for node in range(graph.n_nodes):
-        np.add.at(single_site[node], configurations[:, node], probability)
+    log_partition, probability = posterior(log_weights(graph, field, states))
+    single_site = site_marginals(states, probability, n_states)
 
     pairwise = np.zeros((len(graph.edges), n_states, n_states))
     for position, (first, second) in enumerate(graph.edges):
         np.add.at(
             pairwise[position],
-            (configurations[:, first], configurations[:, second]),
+            (states[:, first], states[:, second]),
             probability,
         )
 
     return ExactPotts(
-        log_partition=float(np.log(total) + peak),
+        log_partition=log_partition,
         single_site=single_site,
         pairwise=pairwise,
     )
@@ -246,9 +237,7 @@ def strip_log_partition(
     n_columns, width = shape
     n_states = int(field.shape[-1])
     rows = site_field(field, n_columns * width)
-    columns = np.array(
-        list(itertools.product(range(n_states), repeat=width)), dtype=np.int64
-    )
+    columns = configurations(n_states, width, what=f"{n_states}**{width} column states")
 
     # The bonds running along one column, which the uniform coupling makes
     # the same for every column.
