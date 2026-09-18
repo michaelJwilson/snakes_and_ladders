@@ -372,3 +372,133 @@ def test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point() -
         ).mean(axis=0),
         atol=1e-10,
     )
+
+
+#: Iterations the ascent is read over. Twelve is past the point where the
+#: increments have fallen by an order of magnitude, so a non-monotone step
+#: would have shown.
+_EM_ASCENT = 12
+
+#: Absolute, over probabilities in [0, 1]: a fitted entry of 1e-10 makes a
+#: relative bound on the re-estimation residual a statement about a number
+#: the data does not identify (`DEV.md`, issue #111).
+_ATOL_FIXED_POINT = 1e-9
+
+
+def _re_estimated(
+    observations: np.ndarray,
+    log_initial: torch.Tensor,
+    log_transition: torch.Tensor,
+    log_emission: torch.Tensor,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Baum's re-estimation equations, written out in NumPy over the definition.
+
+    A second implementation and not a route into `opt.hmm`: forward and
+    backward messages held as probabilities rather than in logs, one sequence
+    at a time, and each M step the ratio of expected counts it is defined as
+    --- ``pi_i = mean_n gamma_n(1, i)``, ``A_ij = sum xi / sum gamma`` and
+    ``B_iv = sum_{t: y_t = v} gamma / sum_t gamma``. Returns them and the
+    evidence the same messages give.
+    """
+    initial = np.exp(log_initial.numpy())
+    transition = np.exp(log_transition.numpy())
+    emission = np.exp(log_emission.numpy())
+    n_states, n_symbols = emission.shape
+    length = observations.shape[1]
+
+    start = np.zeros(n_states)
+    pairs = np.zeros((n_states, n_states))
+    left = np.zeros(n_states)
+    emitted = np.zeros((n_states, n_symbols))
+    occupancy = np.zeros(n_states)
+    evidence = 0.0
+    for row in observations:
+        alpha = np.zeros((length, n_states))
+        beta = np.zeros((length, n_states))
+        alpha[0] = initial * emission[:, row[0]]
+        for t in range(1, length):
+            alpha[t] = (alpha[t - 1] @ transition) * emission[:, row[t]]
+        beta[length - 1] = 1.0
+        for t in range(length - 2, -1, -1):
+            beta[t] = transition @ (emission[:, row[t + 1]] * beta[t + 1])
+        total = float(alpha[length - 1].sum())
+        evidence += float(np.log(total))
+
+        gamma = alpha * beta / total
+        start += gamma[0]
+        for t in range(length - 1):
+            pairs += (
+                alpha[t][:, None]
+                * transition
+                * (emission[:, row[t + 1]] * beta[t + 1])[None, :]
+            ) / total
+        left += gamma[:-1].sum(axis=0)
+        for t in range(length):
+            emitted[:, row[t]] += gamma[t]
+        occupancy += gamma.sum(axis=0)
+
+    return (
+        start / observations.shape[0],
+        pairs / left[:, None],
+        emitted / occupancy[:, None],
+        evidence,
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_baum_welch_ascends_and_settles_on_the_re_estimation_equations() -> None:
+    # This rung has nothing below it (issue #734): the pin against the path
+    # enumeration is the row above, and the referee here is outside the
+    # ladder -- EM's own two properties, against the re-estimation equations
+    # written out in `_re_estimated` rather than against another rung. What
+    # they say is that the iteration is EM and not an iteration that happens
+    # to end somewhere: the objective never decreases, and what it stops at
+    # solves the M step it claims to.
+    #
+    # Realized on the same 20-sequence, length-7 slice the enumeration is
+    # taken on: twelve single-iteration runs report -181.992 rising to
+    # -175.403, every increment positive, the smallest 0.314 nats; the
+    # written-out messages put the evidence at the converged fit at
+    # -173.0932201685 against the -173.0932201686 reported, 8.5e-13 relative
+    # against the 1e-11 declared -- the one M step of lag between the
+    # likelihood an iteration reports and the parameters it returns; and the
+    # re-estimation equations applied to the converged parameters return them
+    # to 2.2e-12 (initial), 4.1e-11 (transition) and 4.3e-11 (emission),
+    # against the 1e-9 declared. That residue is the movement left at the
+    # relative stopping tolerance, not a disagreement: it is what one more M
+    # step would have travelled.
+    params = replace(
+        fixture("hmm", "ci").params,
+        lengths=(_EM_LENGTH,) * _EM_SEQUENCES,
+    )
+    observations = simulate_sequences(params).observations
+    start = (
+        torch.log(torch.as_tensor(params.initial)),
+        torch.log(torch.as_tensor(params.transition)),
+        torch.log(torch.as_tensor(params.emission)),
+    )
+
+    walked = start
+    reported = []
+    for _ in range(_EM_ASCENT):
+        initial_step, transition_step, emission_step, likelihood = baum_welch(
+            observations, *walked, max_iterations=1
+        )
+        walked = (initial_step, transition_step, emission_step)
+        reported.append(likelihood)
+    increments = np.diff(np.array(reported))
+    assert (increments > 0.0).all(), reported
+
+    log_initial, log_transition, log_emission, log_likelihood = baum_welch(
+        observations, *start
+    )
+    initial, transition, emission, evidence = _re_estimated(
+        observations, log_initial, log_transition, log_emission
+    )
+    assert_allclose(evidence, log_likelihood, rtol=1e-11)
+    assert_allclose(torch.exp(log_initial).numpy(), initial, atol=_ATOL_FIXED_POINT)
+    assert_allclose(
+        torch.exp(log_transition).numpy(), transition, atol=_ATOL_FIXED_POINT
+    )
+    assert_allclose(torch.exp(log_emission).numpy(), emission, atol=_ATOL_FIXED_POINT)

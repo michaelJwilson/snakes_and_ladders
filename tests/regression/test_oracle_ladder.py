@@ -29,9 +29,10 @@ import ladder  # noqa: E402
 from ladder import LADDER, PROBLEMS, Rung  # noqa: E402
 
 #: What issue #734 counts as unpinned today, one per bullet of its list:
-#: HMM 4, codes 5, mixtures 4. The Potts five (step 2) and the tree four
-#: (step 3) are pinned, so neither ladder carries a ticket.
-UNPINNED_TODAY = 13
+#: codes 5, mixtures 4. The Potts five (step 2), the tree four (step 3) and
+#: the HMM four (step 4) are pinned, so none of those three ladders carries a
+#: ticket.
+UNPINNED_TODAY = 9
 
 #: The package every rung's callable is relative to.
 PACKAGE = "snakes_and_ladders"
@@ -175,7 +176,7 @@ def test_the_unpinned_rungs_are_the_count_the_ticket_states() -> None:
         problem: sum(1 for rung in ladder.rungs(problem) if rung.test is None)
         for problem in PROBLEMS
     }
-    assert per_problem == {"potts": 0, "tree": 0, "hmm": 4, "codes": 5, "mixture": 4}
+    assert per_problem == {"potts": 0, "tree": 0, "hmm": 0, "codes": 5, "mixture": 4}
 
 
 @pytest.mark.critical

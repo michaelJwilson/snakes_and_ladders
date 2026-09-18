@@ -4,6 +4,11 @@ The enumeration is the oracle two decoders are separated by, so it cannot be
 validated by a decoder. It is pinned instead against `snakes_and_ladders.opt.hmm`'s forward
 algorithm --- which shares no code with it --- and against quantities that can
 be worked out by hand.
+
+It referees a sampler here too (issue #734): `forward_backward.sample_path`
+draws whole paths, and the distribution it draws them from is the one
+enumerated below. The sampler has no module of its own, and the law it is
+held to is this one.
 """
 
 from __future__ import annotations
@@ -14,14 +19,44 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.emissions import CategoricalEmission
+from snakes_and_ladders.likelihood.forward_backward import forward_backward, sample_path
 from snakes_and_ladders.likelihood.hmm_paths import (
     MAX_ENUMERABLE_PATHS,
+    emission_log_density,
     enumerate_hidden_paths,
     path_log_probability,
 )
 from snakes_and_ladders.opt.hmm import forward_log_likelihood
+from snakes_and_ladders.search.statistics import chi_square_p_value
 from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
 from snakes_and_ladders.sim.hmm import HmmParams
+
+#: Declared significance, the value every goodness-of-fit test in this
+#: repository is read at (`search/test_potts_mcmc.py`). Over 18 runs --- the
+#: three instances below at six generator seeds each --- the smallest p-value
+#: was 0.0077 for the joint and 0.0053 for a site marginal, so a correct
+#: sampler is not rejected here.
+SIGNIFICANCE = 0.001
+
+#: Draws per instance. Every draw is independent --- a forward filter and a
+#: backward sample is not a Markov chain --- so there is nothing to thin.
+SAMPLED_DRAWS = 6000
+
+#: Expected count a chi-square cell is not cut below, the floor
+#: `search/test_gibbs.py` lumps paths at. A chain of `k ** T` paths puts most
+#: of its cells under one expected count, and those cells decide the
+#: statistic rather than the fit.
+CELL_FLOOR = 25.0
+
+#: Total variation between the sampled frequencies and the enumerated law,
+#: over the whole path space rather than the lumped cells. Realized 0.0099,
+#: 0.0443 and 0.0229 on the three instances; the bound is what 6,000 draws
+#: over up to 81 paths supports, not a fitted value.
+TOTAL_VARIATION = 0.06
+
+#: Largest per-position deviation from the forward--backward marginal.
+#: Realized 0.0164.
+MARGINAL_DEVIATION = 0.03
 
 
 def _params(n_states: int, n_symbols: int, length: int, seed: int) -> HmmParams:
@@ -99,6 +134,95 @@ def test_a_marginal_is_the_summed_joint_over_paths_through_that_state() -> None:
     assert result.posterior[site, state] == pytest.approx(
         through / np.exp(result.log_likelihood)
     )
+
+
+def _lumped(law: np.ndarray, n_draws: int) -> list[list[int]]:
+    """Paths in descending posterior order, cut wherever a cell expects :data:`CELL_FLOOR`."""
+    cells: list[list[int]] = []
+    current: list[int] = []
+    mass = 0.0
+    for index in np.argsort(-law):
+        current.append(int(index))
+        mass += float(law[index])
+        if mass * n_draws >= CELL_FLOOR:
+            cells.append(current)
+            current, mass = [], 0.0
+    cells[-1].extend(current)
+    return cells
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+@pytest.mark.parametrize(
+    ("n_states", "n_symbols", "length", "seed"),
+    [(2, 2, 5, 1), (3, 2, 4, 2), (2, 4, 6, 3)],
+)
+def test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior(
+    n_states: int, n_symbols: int, length: int, seed: int
+) -> None:
+    # The rung below (issue #734): the enumeration, which on a chain short
+    # enough to enumerate carries the whole posterior over paths and not only
+    # its marginals. `sample_path` filters forward and samples backward, so
+    # what it claims is exactness -- the draw is from `p(z | y)` itself --
+    # and the claim is refutable only against the joint. The per-site
+    # marginals are the second half: a sampler that drew each position from
+    # its own marginal would pass a marginal test and fail this one.
+    #
+    # Three instances, 32, 81 and 64 paths, 6,000 independent draws each.
+    # Realized: the joint chi-square over the lumped cells at p 0.0127, 0.1378
+    # and 0.7805 against the 0.001 declared; the per-position marginals at a
+    # smallest p of 0.0754, 0.0255 and 0.0861, deviating from
+    # `forward_backward`'s posterior by at most 0.0164 against the 0.03
+    # declared; total variation 0.0099, 0.0443 and 0.0229 against the 0.06.
+    # `forward_backward`'s posterior is the enumeration's to 2.3e-15, which
+    # is asserted here rather than assumed, so the marginal comparison is
+    # against a quantity this file's own oracle establishes.
+    params = _params(n_states, n_symbols, length, seed)
+    observations = np.random.default_rng(seed).integers(0, n_symbols, size=length)
+    enumerated = enumerate_hidden_paths(params, observations)
+
+    paths = list(itertools.product(range(n_states), repeat=length))
+    joint = np.array(
+        [
+            path_log_probability(params, np.array(path, dtype=np.int64), observations)
+            for path in paths
+        ]
+    )
+    law = np.exp(joint - enumerated.log_likelihood)
+    index = {path: position for position, path in enumerate(paths)}
+
+    log_density = emission_log_density(params, observations)
+    log_initial, log_transition = np.log(params.initial), np.log(params.transition)
+    run = forward_backward(log_density, log_initial, log_transition)
+    assert np.abs(run.posterior - enumerated.posterior).max() < 1e-14
+
+    rng = np.random.default_rng(734)
+    drawn = np.zeros(len(paths))
+    marginal = np.zeros_like(enumerated.posterior)
+    for _ in range(SAMPLED_DRAWS):
+        path = sample_path(log_density, log_initial, log_transition, rng)
+        drawn[index[tuple(int(state) for state in path)]] += 1
+        marginal[np.arange(length), path] += 1
+
+    cells = _lumped(law, SAMPLED_DRAWS)
+    assert (
+        chi_square_p_value(
+            np.array([drawn[cell].sum() for cell in cells]),
+            np.array([law[cell].sum() for cell in cells]) * SAMPLED_DRAWS,
+        )
+        > SIGNIFICANCE
+    )
+    assert 0.5 * np.abs(drawn / SAMPLED_DRAWS - law).sum() < TOTAL_VARIATION
+
+    frequency = marginal / SAMPLED_DRAWS
+    assert np.abs(frequency - run.posterior).max() < MARGINAL_DEVIATION
+    for position in range(length):
+        assert (
+            chi_square_p_value(
+                marginal[position], SAMPLED_DRAWS * run.posterior[position]
+            )
+            > SIGNIFICANCE
+        )
 
 
 @pytest.mark.oracle

@@ -19,6 +19,7 @@ import math
 import numpy as np
 import pytest
 from snakes_and_ladders.emissions import CategoricalEmission
+from snakes_and_ladders.enumeration import configurations
 from snakes_and_ladders.likelihood import message_passing_reference as reference
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
 from snakes_and_ladders.likelihood.hmm_paths import (
@@ -34,6 +35,11 @@ from snakes_and_ladders.likelihood.message_passing import (
 )
 from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
 from snakes_and_ladders.likelihood.pruning import log_likelihood
+from snakes_and_ladders.likelihood.spatio_sequential import (
+    class_log_density,
+    class_posteriors,
+)
+from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.factor_graph import (
     Factor,
     FactorGraph,
@@ -43,10 +49,12 @@ from snakes_and_ladders.sim.factor_graph import (
     from_potts,
     from_tree,
 )
+from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.hmm import HmmParams
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import SMALL_SITES, load_fixture
@@ -325,6 +333,105 @@ def test_the_coupled_log_density_is_the_joint_written_out() -> None:
                 }
             )
             assert math.isclose(graph.log_density(assignment), expected, rel_tol=1e-13)
+
+
+#: Generator seeds the coupled instance is simulated at. Twelve draws, two
+#: classes each: 24 chains, enough that the tie below is met rather than
+#: avoided.
+COUPLED_SEEDS = 12
+
+#: Separation in log mass a path law's mode is called unique above: the
+#: float64 noise floor, below which two paths are tied and the decode is a
+#: tie rule's.
+MODE_MARGIN = 1e-12
+
+#: Separation, in nats, the unique modes are held to. The smallest realized
+#: over the 22 of them is 0.385, so a change that flattened the law towards
+#: its runner-up would fail here before it reached the tie.
+UNIQUE_MARGIN = 0.3
+
+
+def _path_law(
+    posterior: np.ndarray, pairwise: np.ndarray, paths: np.ndarray
+) -> np.ndarray:
+    """``log Q(k_1..k_S)`` for every path, from one class's E-step posteriors.
+
+    The posterior over a chain's paths is itself a Markov chain, so it is
+    determined by what the E step already returns:
+    ``Q(k) = Q(k_1) prod_s Q(k_{s-1}, k_s) / Q(k_{s-1})``. Written out here so
+    the comparison is against the E step's own numbers and not against a
+    second run of a decoder.
+    """
+    log_q = np.log(posterior[0])[paths[:, 0]]
+    for position in range(1, paths.shape[1]):
+        log_q = (
+            log_q
+            + np.log(pairwise[position - 1])[paths[:, position - 1], paths[:, position]]
+            - np.log(posterior[position - 1])[paths[:, position - 1]]
+        )
+    return np.asarray(log_q, dtype=float)
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_max_product_decodes_the_mode_of_the_coupled_e_step_s_path_law() -> None:
+    # The rung below (issue #734): the coupled model's E step, which returns
+    # `Q(k_s | l, x)` and `Q(k_{s-1}, k_s | l, x)` per class and never a path.
+    # Those two determine the whole law over paths -- the posterior of a chain
+    # is a chain -- and the relation pinned is that max-product on the same
+    # class's chain decodes that law's mode, and reports its mass: with
+    # `E = class_posteriors(...).log_evidence[m]`,
+    # `max_product(...).log_partition - E == log Q(decoded path)` exactly.
+    #
+    # Realized over 12 generator seeds of the declared coupled instance, both
+    # classes, 24 chains of 2**6 paths: the law normalizes to within 9.2e-15
+    # of one; the mass identity holds to 8.9e-15 against the 1e-12 declared;
+    # and the decoded path is the law's argmax on 22 of the 24.
+    #
+    # Where it stops, asserted rather than only stated. On the other two
+    # chains the two leading paths are tied -- 1.1e-16 and 8.9e-16 apart in
+    # log mass, which is float64 noise and not a preference -- so which one is
+    # returned is the tie rule's and not the model's, and only the mass
+    # identity survives. The E step's *per-site* argmax is a weaker statement
+    # again: posterior decoding differs from the decoded path on exactly those
+    # two chains, at one position each, which is the distinction
+    # `hmm_paths` exists to keep.
+    params = fixture("spatio_sequential", "ci").params
+    paths = configurations(params.n_states, params.n_positions)
+    modes = ties = disagreements = 0
+    for seed in range(COUPLED_SEEDS):
+        data = simulate_spatio_sequential(params, np.random.default_rng(seed))
+        step = class_posteriors(params, data.observations, data.labels)
+        density = class_log_density(params, data.observations, data.labels)
+        for m in range(params.n_classes):
+            graph = from_hmm(
+                np.log(params.initial[m]), np.log(params.transition), density[m]
+            )
+            assignment, marginals = max_product(graph)
+            decoded = np.array([assignment[f"z{s}"] for s in range(params.n_positions)])
+
+            log_q = _path_law(step.posterior[m], step.pairwise[m], paths)
+            assert abs(float(logsumexp(log_q, axis=0))) < 1e-13
+            at_decoded = float(log_q[np.flatnonzero((paths == decoded).all(axis=1))[0]])
+            assert at_decoded == pytest.approx(
+                marginals.log_partition - step.log_evidence[m], abs=1e-12
+            )
+
+            ranked = np.argsort(-log_q)
+            margin = float(log_q[ranked[0]] - log_q[ranked[1]])
+            if margin > MODE_MARGIN:
+                assert np.array_equal(paths[ranked[0]], decoded)
+                assert margin > UNIQUE_MARGIN
+                modes += 1
+            else:
+                ties += 1
+                assert abs(float(log_q[ranked[0]]) - at_decoded) < 1e-14
+            disagreements += int(
+                not np.array_equal(step.posterior[m].argmax(axis=1), decoded)
+            )
+
+    assert (modes, ties) == (22, 2)
+    assert disagreements == 2
 
 
 # --- the Forney form -------------------------------------------------------------
