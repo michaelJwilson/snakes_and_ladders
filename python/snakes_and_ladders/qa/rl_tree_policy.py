@@ -265,7 +265,7 @@ def build_figure(
         figure.tight_layout()
 
     caption = (
-        "A learned policy against hill climbing on a environment where hill "
+        "A learned policy against hill climbing on a landscape where hill "
         "climbing fails, and why the answer is a null result. Fixture: "
         f"{latex_integer(len(scores))} unrooted topologies on "
         f"{latex_integer(n_taxa)} taxa, "

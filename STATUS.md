@@ -42,6 +42,9 @@ and this release. A milestone not named here did not move.
 
 | Roadmap item | What moved | Pull request |
 | --- | --- | --- |
+| Milestone 1.1 | Polar codes, conserved in `sandbox/` as a declined route rather than catalogued as a problem class: the Kronecker transform, the frozen set from Arikan's exact erasure recursion or the Gaussian approximation, Reed--Muller as the same transform under the weight rule, and successive-cancellation and list decoding. Capacity is conserved exactly under the transform (1e-12 at `n = 3, 5, 8, 11`); at `N = 16` enumeration gives the maximum-likelihood floor and the gap is measured --- 98 block errors for SC against 62 for ML over 200 shared draws at `sigma = 1.0`, a list of 4 recovering 34 of the 36; `SCL(1) == SC` bitwise and `SCL(2^k) == ML`; the naive recursion pins the list layout bitwise over 900 draws | [#605](https://github.com/michaelJwilson/snakes_and_ladders/pull/605) (#593) |
+| Milestone 1.1 | The algebraic codes and the capacity they are read against: repetition, single parity check, Hamming, Golay and Reed--Solomon over `GF(2^m)`, each decoded in closed form at every length, and `sim.capacity` for the three channels. Perfection holds as an integer equality; RS(7,3) meets Singleton with equality at `d = 5` over all 512 enumerated codewords; the algebraic decoder is exact on 900 of 900 draws to `t` and, past it, refused 260 of 300 and was wrong on 40, recovering none by luck. Read against capacity, the (3,6) ensemble leaves 13.8% of the erasure channel unused at its realized rate 0.5020, and the four algebraic pairs give up factors of 2.7 to 5.6 at a block error rate of 1e-2 | [#700](https://github.com/michaelJwilson/snakes_and_ladders/pull/700) (#594) |
+| §0 Development loop | A typeset map of the package's Python surface, generated from the docstrings by `ast` and edited by no one: `docs/api_map.pdf`, 1,528 entries over 64 pages --- 151 modules, 251 classes, 587 functions, 539 methods. The entry count is checked against a second walk of the tree, and a public function without a summary line is refused rather than typeset as a blank | [#578](https://github.com/michaelJwilson/snakes_and_ladders/pull/578) (#576) |
 | §0 Development loop | The two documents are named the paper and the textbook, `infra/build_documents.sh` replaces the script named after the retired artifact, and a guard fails any live file naming it | [#379](https://github.com/michaelJwilson/snakes_and_ladders/pull/379) (#377) |
 | §0 Development loop | Validation is one command under five minutes: an inputs stamp beside every committed figure and notebook (the stamps were measured wrong on 476 of 476 decisions and removed by #490); guard-only selection; a per-test duration cap; one BLAS thread per process | [#380](https://github.com/michaelJwilson/snakes_and_ladders/pull/380) (#372) |
 | §0 Development loop | A generator rather than a seed for the relaxed benchmark, and full history for the committed-PDF rule, which every pull request had been failing on a shallow checkout | [#378](https://github.com/michaelJwilson/snakes_and_ladders/pull/378) |
@@ -246,6 +249,8 @@ sites the plan lists after these — the candidate fits of `search.infer`,
 (`TICKETS.md`).
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
+
+**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700).
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed tree fixture, retaining
@@ -567,6 +572,8 @@ comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
+**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged_rust` is the compiled kernel behind the ragged path, conserved beside `sandbox.rectangular_hmm` (#666).
+
 **A covariate reaches the two-channel family, every seam above it, and the
 compiled backend** ([#660](https://github.com/michaelJwilson/snakes_and_ladders/pull/660)).
 The pair families take one covariate per channel, `(..., 2)` splitting where
@@ -588,6 +595,21 @@ the outer product arithmetically — a larger table, built vectorized and never
 sorted — gives **12.4 ms, 6.5x** the oracle, against **37.2x** uncovaried.
 Fewer rows was the wrong thing to optimize. Agreement with the oracle under a
 covariate: 2.7e-15 relative on the evidence, 2.9e-15 on the field, one thread.
+
+**`FlowNetwork` keeps the contiguous form it built**
+([#659](https://github.com/michaelJwilson/snakes_and_ladders/pull/659)).
+`from_arcs` assembled the compiled consumer's arrays on its way to the list
+store and discarded them, so a network built from arcs and solved in Rust made
+the round trip NumPy → list → NumPy for nothing. `as_arrays` is **289 ns**
+against **2.87 ms** at 20,000 edges; one alpha-expansion sweep of four labels
+is **1.240x** at 16x16 and **1.112x** at 32x32 through the Rust backend, with
+the Python backend — which never calls `as_arrays` — the control at 1.000x.
+The arrays are bit-identical kept or derived, and both writers drop the form.
+The list store stays on #586's measurement (1.95 ms as lists against 3.93 ms
+with offsets). The survey's per-call finding no longer fires against a
+constructor, which runs once per instance and so has no second payment to
+remove; a paired control pins that an accessor over a non-compressed store is
+still reported.
 
 **A chain's transition kernel may be a function of position**
 ([#654](https://github.com/michaelJwilson/snakes_and_ladders/pull/654)).
@@ -1652,6 +1674,8 @@ state.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is.
+
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,
 and a map back to named constrained parameters
@@ -2133,6 +2157,8 @@ reached the closed-form ground state **20/20** against the hand ladder's
 since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
+
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`.
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -2771,6 +2797,7 @@ is checkable against.
 **Two things the harness found in the numbers it reproduces.** The MLP row's 97.5% depends on a hyper-parameter the published row carried silently: at `ppo`'s default step of 0.05 it reads 78 of 81 rather than 79, which is the entire margin between the MLP and linear rows, so `MLP_LEARNING_RATE = 0.01` is declared in the registry rather than defaulted. And greedy's cost is **17.4** scored actions an episode on the chain, not the 48 the planner comparison quotes: 48 is `max_steps x |actions|`, the budget, which hill climbing does not spend because it stops at a local maximum after 2.2 steps. The planner's 8.3 is in its own unit — simulated evaluations inside a tree search, which a trajectory count does not see — so #135's "8.3 against greedy's 48" compares two units and is not reproduced here. One unit for it is step 5's.
 
 **`TopologyEnvironment` is `TreeEnvironment`,** on #644's rule that an environment is named for its problem; the problem is `tree` and its fixtures are `tree_jc`, `tree_scale` and `tree_search`. No behaviour moved. All three retired names — `PottsLandscape`, `StatePathLandscape`, `TopologyEnvironment` — are now refused by a guard over the whole repository rather than the package alone, since the old names survived longest in the suite and in a notebook cell, and `Topology` was the third spelling of one seam.
+**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface.
 
 **The estimator is pinned to a closed form, not to a training curve**
 ([#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135)). With a finite
@@ -2918,6 +2945,8 @@ targets, and what expert iteration taught here is the critic. The
 factor-graph environment and the surrogate reward model wait on #296 and #308.
 
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
+
+**Modules.** The surrogates and the bounds they claim: `likelihood.surrogate`, `search.surrogate` and `learn.surrogate`.
 
 **Landed as bounds first and predictors second**
 ([#317](https://github.com/michaelJwilson/snakes_and_ladders/issues/317)). The
@@ -3446,6 +3475,106 @@ exist.
 
 **Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
+**Generalized belief propagation at #689.** The plaquette regions see the
+4-cycles the Bethe approximation cannot, and the measurement is what the ticket
+was for. On the 3x3 lattice at three states, against exhaustive enumeration of
+all 19,683 configurations (2026-09-16, 4-core host):
+
+| `J` | exact `log Z` | Bethe error | Kikuchi error | factor | sweeps B/K | ms B/K |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.3 | 1.538947 | 8.53e-04 | **3.65e-08** | 23,378x | 49 / 372 | 58.7 / 277.3 |
+| 0.6 | 3.483551 | 1.11e-02 | **6.66e-06** | 1,672x | 69 / 380 | 76.0 / 280.0 |
+| 0.9 | 5.924288 | 2.99e-02 | **7.75e-05** | 386x | 87 / 394 | 95.5 / 291.4 |
+| 1.2 | 8.845411 | 3.13e-02 | **2.41e-04** | 130x | 86 / 402 | 96.5 / 305.5 |
+
+**Both halves of the case.** The ratio is three to four orders of magnitude and
+the cost is **3.7x the wall clock** --- 5.5x the sweeps over tables of 81
+entries rather than 9 --- so the plaquette buys its accuracy at a stated price
+rather than at none. **The advantage decays with coupling**, 23,378x at
+`J = 0.3` to 130x at `J = 1.2`: deep in the ordered phase both approximations
+concentrate on the same configuration and what Bethe neglects stops mattering,
+which is also why Kikuchi is not the tool for a ground state.
+
+**At size, convergence is the binding constraint and not accuracy.** On the
+6x4 open strip, refereed by `strip_log_partition` where enumeration cannot
+reach (2026-09-17, this host):
+
+| `J` | pairwise: sweeps, ms, error | plaquette: sweeps, ms, error | factor |
+| --- | --- | --- | --- |
+| 0.25 | 50, 182.7 ms, 2.147e-03 | 1,176, 5,196.6 ms, **1.510e-07** | 14,219x |
+| 0.5 | 85, 296.8 ms, 3.778e-02 | **does not settle** | --- |
+| 0.875 | 169, 610.5 ms, 2.285e-01 | **does not settle** | --- |
+
+The refusals are not a cap chosen too low: at `J = 0.875` damping 0.7, 0.8,
+0.9, 0.95 and 0.98 all reach 20,000 sweeps with the residual at 0.377, 0.140,
+0.070 and 0.020 against a tolerance of 1e-12 --- rising damping buys a slower
+approach, not a fixed point. So the plaquette regions pay 28x the wall clock
+for four orders of magnitude at weak coupling, and at the couplings where
+Bethe is worst they return nothing at all rather than a number. That is the
+result the ticket asked for, and it is why nothing here is reported as a
+replacement for `belief_propagation`: the module is conserved as a declined
+route in `sandbox/region_graph.py`, imported by `tests/` alone.
+
+The construction is refereed by the case it generalizes rather than by its own
+claim: at the Bethe region graph `-F_K` is `log Z` to **8.9e-16** on a chain
+and the value `likelihood.message_passing` reports to **1.8e-10** on a 3x3 and
+a 4x4, and the parent-to-child updates find that module's fixed point to
+**1.65e-10**. The singleton counting numbers come out `1 - d` --- -1, -2, -3 on
+a 3x3 --- with the closed form written nowhere.
+
+**Kikuchi is not a bound**, and nothing here is read as one: mean field bounds
+`log Z`, Bethe and Kikuchi are stationary points of a non-convex functional and
+may fall either side. Every claim above is accuracy against an exact referee.
+**Compiled kernels at #678.** The crate is **9 modules and 4,048 lines**, and
+**3 take the thread pool** --- `coupled`, `pruning`, `sampling` --- read from
+each module's own parallel iterators by `infra/appraise_kernels.py` rather than
+from a list. Every module exporting a `#[pyfunction]` is pinned against a
+referee its own tests import; the one exclusion is `lib.double`, the
+extension-loads probe, which arithmetic checks. The tool's first draft called
+the ragged kernel unpinned and the tree said otherwise: `test_ragged_rust.py`
+imports `posteriors` and `posteriors_oracle` from one module, so an oracle
+beside the kernel is a third placement, and a survey reporting a false gap is
+worse than one reporting none.
+
+Four paths measured on the 4-core host, 2026-09-16, at a 1-minute load of 1.2
+to 1.7 (a test run held one core; `DEV.md`'s own readings were taken at 1.19
+to 1.30):
+
+*The count-pair draw does not clear its own bar at the size that matters.* At
+the **declared instance** --- 71x71 at `M = K = 10` over 20,000 positions,
+1.008e8 pairs, 384.6 MiB of counts --- the Rust draw is **30.14 s and 30.32 s**
+against the NumPy oracle's **37.32 s and 37.16 s**, two readings each: a ratio
+of **1.23x**, where root `CLAUDE.md` sets **2x** for keeping a Rust backend and
+says a backend that is never faster is a maintenance cost with no counterpart.
+At the CI instance the same comparison reads **2.5x** (50.0 ms against 20.2
+ms), which is the gate-size illusion the same rule names --- a ratio read at a
+gate size decides nothing in either direction. The conclusion is not that the
+kernel is wrong but that **parallelism is what would justify it**: the draw is
+5,041 independent per-vertex streams by construction, `default_rng([seed, v])`,
+which its own docstring states and no thread uses. That is #693.
+
+*The ragged kernel's two recorded ratios measure two different things, and
+neither is the third.* Against the **padded route** at honest padding it is
+**2.8x** (93.14 to 33.41 ms at 0% padding, 121.63 to 43.37 ms at 47.8%) --- that
+is the Rust claim. At **97.0% padding** it is **97.1x** (386.42 to 3.98 ms),
+which is a statement about padding and not about Rust. Against the
+**per-segment Python oracle** at 600 segments of 8 to 40 it is **65x** (519 to
+8 ms), a statement about Python loop overhead. A survey that lists the three in
+one column invites the wrong port next.
+
+*Dinic is the shape a compiled kernel wins on.* `ising_ground_state` on a
+40x40 lattice is **145.6 ms**, of which `_augment` is **42%** and `_levels`
+**25%** of self time --- two thirds of the call in two pure-Python functions,
+over 25,216 and 14 calls. #642 carries the layout half.
+
+*The factor-graph Gibbs sweep is not a port; its first call is.* Warm it is
+**0.20 ms a sweep** (10 ms for 50), already `njit`-compiled, so there is
+nothing for Rust to take. The **cold call pays 738 ms of `llvmlite`
+compilation** --- 74x the entire warm run of 50 sweeps --- which is a caching
+question and not a language one. Its warm profile's top self-time entry is
+`search.gibbs._Indexed.layout` at **30%**, the same line the structure survey
+surfaces once it stops dropping findings outside clusters (#690).
+
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
 more members. `role:incidence` is 12 members over 78 consuming references --- one
@@ -3778,6 +3907,63 @@ makes it a `ValueError` at the write. It decides a real case rather than a
 hypothetical one: `torch.as_tensor` shares a writable NumPy buffer, so the two
 surrogate call sites copy explicitly instead.
 
+## The package has a map, and building it found the roadmap silent on 35 modules ([#664](https://github.com/michaelJwilson/snakes_and_ladders/issues/664))
+
+`docs/mind_map.pdf` is one page: the two concerns, the eight packages, and
+every one of the 139 modules, each labelled with the milestone this file claims
+it under. Generated by `infra/mind_map.py`, never drawn.
+
+**The join is the work; the figure is what it prints.** A module's role is not
+its docstring restated --- it is the roadmap claim it carries, and this file is
+where those are recorded. Reading it that way found the record incomplete:
+
+| | modules |
+| --- | ---: |
+| claimed by a milestone, before | 67 |
+| application modules claimed by none | **35** |
+| of those, named nowhere in this file | **28** |
+| claimed after | **102**, and 0 application modules unclaimed |
+
+The 28 include `sim.jc`, `sim.simulate`, `sim.tree`, `sim.newick`,
+`likelihood.brute_force`, `likelihood.device` and `opt.objective` --- the
+foundations of the simulator, the oracle and the fitting interface. Their work
+had landed years of tickets ago; no milestone section named the module, so no
+reader could get from a roadmap claim to the code that implements it. Six
+milestone sections now carry a **Modules** line, and a guard fails a PR that
+adds an application module without one.
+
+**A first measurement of this was wrong and is corrected here.** Bounding each
+milestone's section at the next *milestone* heading swept the free-form
+sections after Milestone 4.1 into it, crediting 4.1 with 11 modules it claims
+nothing about. Sections end at the next `##` heading of any kind; the numbers
+above are after that fix.
+
+**`forest` was the intended typesetting and is not usable.** `forest.sty` ships
+in this TeX Live, but `environ.sty`, `trimspaces.sty` and `elocalloc.sty` do
+not, so it cannot load without installing TeX packages. TikZ `graphdrawing`
+needs LuaLaTeX where the build runs pdflatex. The polar coordinates are
+computed in the generator instead and emitted as plain TikZ, so no `.tex`
+places a node and no dependency was added.
+
+**The map is radial, and two numbers decide whether that is readable.** Each
+branch takes a wedge proportional to the leaves it carries --- `application`
+draws 95 against `infrastructure`'s 20, so equal halves would give one branch
+four times the room per leaf --- which leaves every leaf the same **3.1
+degrees**. At the 96 mm leaf radius that is 5.2 mm of arc against a name of
+about 15 mm, so a horizontal label collides with its neighbour by a factor of
+three. A label rotated to run radially outward is bounded by its *height*,
+about 2 mm, and fits with room to spare. Past the top of the circle it is
+turned through 180 degrees so it does not read upside down.
+
+**Hovering a module shows its docstring**, as a transparent PDF annotation over
+each label --- 115 of them, one per drawn leaf. `\pdfannot` is a pdfTeX
+primitive so this needs no package: `pdfcomment` is the idiomatic route and is
+absent here, with `soul`, `soulpos`, `zref-abspage` and `marginnote`. The text
+crosses two escapes, LaTeX's before the PDF's, which is where a first attempt
+failed: parentheses become brackets, the LaTeX specials are dropped and `_` is
+written `\string_`. Support is the reader's --- Acrobat and most desktop
+readers show it, Chrome's viewer and pdf.js do not --- so the page states every
+role without it.
 ## The problem axis reads imports, not only fixture calls ([#622](https://github.com/michaelJwilson/snakes_and_ladders/issues/622))
 
 #619 derived a per-problem selection from the registry call a test module
@@ -3893,3 +4079,74 @@ likelihood the instance does not have, so the three pairings that need it say
 exactly that in `docs/tex/method_notes.yaml`, and the work is issue #669. `ragged_hmm`'s two say something
 different: a path sampler over segments is the unsegmented sampler run S times,
 and a bound over 89 positions costs more than the exact evaluation.
+
+## Concurrency shape before a thread pool ([#612](https://github.com/michaelJwilson/snakes_and_ladders/issues/612))
+
+Neither `rayon` nor `tokio` is a dependency. #610 has just put nine of the ten
+`#[pyfunction]`s under `Python::detach`, taking threaded throughput from 1.05x
+to **3.70x** at four threads, so a thread pool inside a kernel can overlap with
+Python for the first time. What it should be is decided here by shape, not by
+subsystem.
+
+Counts are at the declared scale (`ROADMAP.md`: `n` to 1000, `L` to 11,000) on
+a 4-core host.
+
+| axis | independent items | against 4 cores | does an item ever wait? |
+| --- | --- | --- | --- |
+| `pruning_log_likelihood_impl`, sites | up to **11,000** | ~2,750x | no: one contiguous row, no early exit |
+| `count_pairs`, vertex blocks | `n / VERTEX_BLOCK` = 1000/64 ~ **16** | 4x | no |
+| tempering replicas | the ladder length, single digits | ~1x | no |
+| heat-bath sweep | **1** | --- | a Markov chain: the next site reads the last |
+| Dinic maximum flow | **1** | --- | each augmenting path reads the residual the last left |
+
+**`tokio` is declined, and not for the reason first written down.** It is not
+only an I/O runtime --- it carries M:N lightweight tasks over a work-stealing
+scheduler, `spawn_blocking` and `block_in_place`. The argument is the table: a
+lightweight task is cheap because it is a `Future` polled cooperatively, which
+pays where concurrency greatly exceeds cores *and tasks spend their life
+suspended*. Every item above is CPU-saturating with no await point, so it holds
+its worker to completion and achieved parallelism is the worker count --- what
+a plain pool gives with less machinery, and what `tokio`'s own guidance sends
+to `rayon`. That no kernel in `src/` references `std::fs`, `std::net` or
+`std::io` is corroboration, not the argument.
+
+**The deciding property is an ordered reduction.** A parallel sum over sites
+reassociates `log L` and moves its last bits, which the oracle tests pin.
+`rayon` has `fold` and `reduce` over an *indexed* parallel iterator, so
+per-site partials combine in index order and the arithmetic is unchanged.
+`tokio` offers no such primitive; it would be hand-rolled, and hand-rolling is
+where a reassociated sum gets in.
+
+So one crate is worth asking for, and the last two rows are not candidates for
+either: parallelising them means changing what they compute.
+
+**The ranking is now measured**
+([#627](https://github.com/michaelJwilson/snakes_and_ladders/issues/627)).
+`cargo bench --locked` under `OMP_NUM_THREADS=1` on an idle host --- 1-minute
+load 0.07, no agent and no suite running, the condition #598's withdrawn
+profile lacked. Criterion medians of 100 samples:
+
+| kernel | median | independent items, from the table above |
+| --- | --- | --- |
+| `pruning_log_likelihood/8taxa_200000sites` | **117.64 ms** | one per site |
+| `external_field 200x5041 M=K=10` | 93.43 ms | one per site |
+| `pruning_log_likelihood/4taxa_200000sites` | 58.12 ms | one per site |
+| `sample_rows/2000000` | 26.69 ms | one per row |
+| `class_posteriors 200x5041 M=K=10` | 23.06 ms | one per site |
+| `sample_rows/200000` | 2.264 ms | one per row |
+| `max_flow_expansion_network/32x32` | 385.9 us | **1**, Dinic is sequential |
+| `max_flow_expansion_network/16x16` | 92.0 us | 1 |
+| `max_flow_expansion_network/8x8` | 22.2 us | 1 |
+| `double` | 704.8 ps | --- |
+
+Pruning is the top of the ranking *and* the widest axis, so it is the one
+kernel where a pool can pay, and it is what `rayon` should take first. The
+maximum-flow network is three orders of magnitude below it and carries one
+item, so it is a candidate on neither count --- which corroborates #598
+independently: that half was kept for its layout, not for a speed claim.
+`external_field` places second and is not in the table above; its shape is
+counted before anything is written, not assumed.
+
+**Still not measured:** whether a site-parallel pruning clears root
+`CLAUDE.md`'s 2x bar against the NumPy reference at realistic `(sites, taxa)`.
+No number is claimed here that was not taken.

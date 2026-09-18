@@ -16,6 +16,7 @@ than no survey --- it spends a reviewer's attention to say nothing.
 
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -117,18 +118,61 @@ def test_the_per_call_derivation_finding_is_gone_for_the_graph_that_fixed_it(
     assert "sim.graph.PottsGraph: compressed_adjacency" not in findings
 
 
+#: A class with a genuine per-call derivation over a store that is not
+#: compressed: `rows` is an accessor, asked twice it pays twice, and storing
+#: the result would remove the second payment. This is what the finding is for.
+_PER_CALL_ACCESSOR = """
+class Example:
+    def rows(self):
+        offsets = numpy.cumsum(self.degrees)
+        return offsets
+"""
+
+#: The same derivation reached through a constructor. A `classmethod` building
+#: an instance runs once per instance, so there is no second payment to remove
+#: and no rewrite that clears the finding short of deleting the constructor.
+_CONSTRUCTOR = """
+class Example:
+    @classmethod
+    def from_arcs(cls, degrees):
+        offsets = numpy.cumsum(degrees)
+        return cls(offsets)
+"""
+
+
+def _findings(source: str) -> tuple[str, ...]:
+    """The survey's notes for one class, read from source rather than the tree."""
+    node = ast.parse(source).body[0]
+    assert isinstance(node, ast.ClassDef)
+    return appraise_structures._notes("example.Example", node, ("degrees",))
+
+
 @pytest.mark.structural
-def test_the_open_per_call_derivation_finding_names_its_ticket(
+def test_a_per_call_derivation_is_still_reported(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
-    # The survey's live finding, and the reason the test above is narrow: the
-    # same sentence is raised about `FlowNetwork`, where the layout is still
-    # derived per call. It stands until #642 lands.
-    findings = " ".join(f for cluster in grouped for f in cluster.findings)
+    """The positive control for the narrowing #642 made.
 
-    assert "search.maxflow.FlowNetwork: from_arcs derives a compressed layout" in (
-        findings
-    )
+    That change stops the finding being raised about a constructor, which is
+    the whole of what it removes. A narrowing is only as good as the proof it
+    did not go further, so the two halves are asserted against each other here:
+    the accessor is reported and the constructor is not, from sources this file
+    owns rather than from whatever the tree happens to contain.
+
+    Without this, the day the detector stops firing for a real accessor it goes
+    quiet instead of failing, and a survey nobody can trust to fire is the
+    thing `infra/appraise_structures.py` exists to not be.
+    """
+    accessor = _findings(_PER_CALL_ACCESSOR)
+    constructor = _findings(_CONSTRUCTOR)
+
+    assert any("rows derives a compressed layout per call" in f for f in accessor)
+    assert not any("per call" in f for f in constructor)
+
+    # And the tree itself: `FlowNetwork.from_arcs` was the one constructor
+    # carrying it, so no per-call finding stands anywhere now (#642).
+    live = " ".join(f for cluster in grouped for f in cluster.findings)
+    assert "derives a compressed layout per call" not in live
 
 
 @pytest.mark.structural

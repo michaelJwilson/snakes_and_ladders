@@ -1,0 +1,16 @@
+model: polar
+oracle: closed-form
+
+# N = 256, k = 128: past enumeration, so the referee changes. What is exact
+# here is the construction -- Arikan's erasure recursion, which is closed form
+# at every length -- and the decoders are held to each other and to the
+# identities that do not need an oracle: SC is SCL at one path, and a larger
+# list never decodes worse on shared seeds.
+seed: 594
+n_stages: 8
+n_info: 128
+construction: bec
+
+flip_probability: 0.05
+erasure_probability: 0.5
+noise_scale: 0.8
