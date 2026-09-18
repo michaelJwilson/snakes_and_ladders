@@ -37,12 +37,13 @@ before it is published.
   a size chosen so the gate stays affordable is not a size a user works at.
 
   The gate is narrow by design and that is the reason for the rule: `-m
-  critical` collects **368** tests where the CI tier collects **2,860** and the
-  whole suite 2,969 (measured on `main` at #676, 2026-09-16). This session the
-  full tier caught what `critical` could not on two pull requests --- twelve
-  failures on #601, two stale references on #595 --- and #598's headline
-  benchmark was gate-sized, withdrawn as unmeasured at a stress size rather
-  than refuted by one.
+  critical` collects **392** tests where the CI tier collects **3,062** and the
+  whole suite 3,159 over `tests/regression`, the directory CI runs --- 3,089 under `addopts -m "not release"` and 70 `release`; `tests/benchmarks` adds 399
+  (measured 2026-09-18 on `main` 266cb65 with `pytest --collect-only -q`). This
+  session the full tier caught what `critical` could not on two pull requests
+  --- twelve failures on #601, two stale references on #595 --- and #598's
+  headline benchmark was gate-sized, withdrawn as unmeasured at a stress size
+  rather than refuted by one.
 - **Gate:** a maintainer applies `approved`, and only then may a pull request
   open. The pull request must implement the plan already in the thread. A plan
   that turns out to be flawed gets a revised plan posted to the same thread,
@@ -170,7 +171,12 @@ budget.
       Gaussian channels behind one log-likelihood interface, an encoder where
       elimination is affordable, and the Calderbank-Shor-Steane code the
       bicycle matrices define, whose decoder is scored on the coset of the
-      error rather than on the error.
+      error rather than on the error; the turbo code's linear shift registers
+      and interleaver; the elementary and algebraic codes (repetition,
+      Hamming, Golay, Reed--Solomon) read against their channel limits; and
+      the polar code, conserved in `sandbox/` as a declined route.
+    - *Count-emission mixtures:* the mixture over the count families the HMM
+      emits, with the enumerated assignment posterior as its oracle.
     - *Canonical cases:* instances whose answer is known externally, a closed form,
       a published result.
   - *Validation:* tests against generated simulations, analytic, canonical cases.
@@ -221,6 +227,14 @@ budget.
       relaxation and the certificate it yields, so the boundary between what
       is solved exactly and what is only bounded is drawn rather than
       assumed.
+  - *Validation:* a move set against an exhaustive count of the neighbourhood
+    it defines, at the sizes enumeration reaches. A baseline is validated
+    against the exact answer where one exists --- the enumerated ground state,
+    the minimum cut, the enumerated optimum a climb is run to --- and against
+    enumeration at a matched budget where the move is stochastic. A certificate
+    is reported with the solve that produced it, so an approximate relaxation
+    is not read as the theorem's bound. `STATUS.md`'s 1.4 row carries the
+    evidence each deliverable landed with.
 - **Milestone 1.5: Continuous Samplers, HMC & Parallel Tempering**
   - *Deliverable:* Hamiltonian Monte Carlo with a symplectic integrator and
     step-size adaptation, temperature schedules, simulated annealing, and a
@@ -252,6 +266,13 @@ exact or (differentiable) surrogates, e.g. neural networks.
 - **Milestone 2.2: Curriculum Learning**
   - *Deliverable:* a progressive training regimen, since RL policies collapse
     when exposed to combinatorial spaces zero-shot.
+  - *Validation:* the transferred model against its own zero-shot score at the
+    larger size, both reported, so the regimen is measured rather than assumed.
+    `STATUS.md`'s 2.2 row records what this has given: at six taxa the set
+    surrogate falls to `R^2` 0.68 zero-shot and recovers to 0.94 after
+    transfer, the MLP holds 0.92 and reaches 0.95, and a lattice surrogate
+    transfers at 0.99 at a shared field, collapses to -338.6 at a per-site one
+    and recovers to 0.722.
 - **Milestone 2.3: Empirical Validation & Benchmarking**
   - *Deliverable:* the RL agents benchmarked on high-dimensional simulated
     datasets past the size enumeration reaches.
