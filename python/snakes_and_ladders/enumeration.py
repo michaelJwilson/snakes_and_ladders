@@ -1,4 +1,4 @@
-"""One policy for when an enumeration is too large to attempt.
+"""One enumeration, and one policy for when it is too large to attempt.
 
 Enumeration is the oracle almost every claim in this repository rests on, so
 the one thing that should not vary is how it declines. It varied four ways
@@ -16,11 +16,23 @@ things enumerated. A call site converts its own quantity and names it; this
 module decides only whether the count is affordable and what the refusal
 says.
 
+**The enumeration itself is also one** (issues #387 and #717). Five modules
+built the product space ``range(n_states) ** n_sites`` with their own
+``itertools.product``, two of them without the cap, and three took the
+argmax over it with their own loop; :func:`configurations` is the product
+space under the cap, :func:`posterior` the normalized weights and
+``log Z`` over it, :func:`site_marginals` the per-site sums, and
+:func:`argmax` the first maximizer. Each adapter keeps its signature and its
+arithmetic: what moved is the space, not the weight, so every value the
+adapters returned before is the value they return.
+
 The module names no model, so anything may import it, on the same terms as
 :mod:`snakes_and_ladders.numerics`.
 """
 
 from __future__ import annotations
+
+import numpy as np
 
 #: Configurations above which an enumeration is refused rather than attempted.
 #: Chosen where it was already set for two of the four call sites, so this
@@ -70,3 +82,85 @@ def refuse_oversized(
             f"the limit of {limit}"
         )
         raise ValueError(msg)
+
+
+def configurations(
+    n_states: int,
+    n_sites: int,
+    *,
+    what: str | None = None,
+    limit: int = MAX_ENUMERABLE_CONFIGURATIONS,
+) -> np.ndarray:
+    """Every assignment of ``n_states`` states to ``n_sites`` sites, in lexicographic order.
+
+    Parameters
+    ----------
+    n_states : int
+        States per site.
+    n_sites : int
+        Sites.
+    what : str | None
+        What the assignments are, for the refusal; ``None`` names them as
+        ``"{n_states}**{n_sites} configurations"``.
+    limit : int
+        The cap, passed to :func:`refuse_oversized`.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_states ** n_sites, n_sites)``, ``int64``, the order
+        ``itertools.product(range(n_states), repeat=n_sites)`` gives.
+
+    Raises
+    ------
+    ValueError
+        Above the cap.
+
+    Examples
+    --------
+    >>> configurations(2, 2).tolist()
+    [[0, 0], [0, 1], [1, 0], [1, 1]]
+    """
+    count = n_states**n_sites
+    refuse_oversized(
+        count,
+        what=f"{n_states}**{n_sites} configurations" if what is None else what,
+        limit=limit,
+    )
+    if n_sites == 0:
+        return np.zeros((1, 0), dtype=np.int64)
+    grid = np.indices((n_states,) * n_sites, dtype=np.int64)
+    return np.ascontiguousarray(grid.reshape(n_sites, -1).T)
+
+
+def posterior(log_weights: np.ndarray) -> tuple[float, np.ndarray]:
+    """``(log Z, p)`` over an enumeration: the shifted exponential, summed and normalized.
+
+    The arithmetic :func:`snakes_and_ladders.likelihood.potts.enumerate_potts`
+    carried --- shift by the peak, exponentiate, sum, divide --- so the
+    numbers it returned before are the numbers it returns.
+    """
+    peak = float(log_weights.max())
+    unnormalized = np.exp(log_weights - peak)
+    total = float(unnormalized.sum())
+    return float(np.log(total) + peak), unnormalized / total
+
+
+def site_marginals(
+    configurations: np.ndarray, weights: np.ndarray, n_states: int
+) -> np.ndarray:
+    """Per-site sums of ``weights`` over the state each configuration puts there.
+
+    Shape ``(n_sites, n_states)``. The additions run in configuration order
+    at every cell, as a loop over the configurations would run them.
+    """
+    n_sites = configurations.shape[1]
+    marginals = np.zeros((n_sites, n_states))
+    for site in range(n_sites):
+        np.add.at(marginals[site], configurations[:, site], weights)
+    return marginals
+
+
+def argmax(values: np.ndarray) -> int:
+    """The first index of the largest value: ties resolve to the lexicographically first configuration."""
+    return int(np.argmax(values))

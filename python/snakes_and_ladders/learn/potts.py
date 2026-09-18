@@ -37,12 +37,12 @@ episode costs microseconds rather than seconds.
 
 from __future__ import annotations
 
-import itertools
 from collections.abc import Iterator, Sequence
 
 import numpy as np
 import torch
 
+from snakes_and_ladders.enumeration import argmax, configurations
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.opt.potts import PottsParams
 
@@ -346,9 +346,12 @@ def enumerate_configurations(
 
     ``n_states ** chain_length`` of them, so this is an oracle for small
     chains and nothing else -- the same role exhaustive topology enumeration
-    plays for tree search in ``snakes_and_ladders.search.topology``.
+    plays for tree search in ``snakes_and_ladders.search.topology``. The
+    space is :func:`snakes_and_ladders.enumeration.configurations`, so the
+    cap every other oracle declines at applies here too (issue #387).
     """
-    return itertools.product(range(n_states), repeat=chain_length)
+    for row in configurations(n_states, chain_length):
+        yield tuple(row.tolist())
 
 
 def optimum(environment: PottsEnvironment) -> tuple[Configuration, float]:
@@ -363,12 +366,11 @@ def optimum(environment: PottsEnvironment) -> tuple[Configuration, float]:
         The maximizing configuration and its energy. Ties resolve to the
         lexicographically first, so the answer is deterministic.
     """
-    best_state, best_energy = None, -np.inf
-    for candidate in enumerate_configurations(
-        environment.n_states, environment.chain_length
-    ):
-        energy = environment.energy(candidate)
-        if energy > best_energy:
-            best_state, best_energy = candidate, energy
+    candidates = list(
+        enumerate_configurations(environment.n_states, environment.chain_length)
+    )
+    energies = np.array([environment.energy(candidate) for candidate in candidates])
+    best = argmax(energies)
+    best_state, best_energy = candidates[best], float(energies[best])
     assert best_state is not None
     return best_state, float(best_energy)

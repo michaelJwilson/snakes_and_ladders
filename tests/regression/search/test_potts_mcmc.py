@@ -34,7 +34,7 @@ from snakes_and_ladders.opt.schedule import (
     ExponentialTempSchedule,
 )
 from snakes_and_ladders.search import potts_mcmc
-from snakes_and_ladders.search.alpha_expansion import energy, iterated_conditional_modes
+from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.potts_mcmc import _GUARD as GUARD
 from snakes_and_ladders.search.potts_mcmc import (
     PottsChain,
@@ -59,7 +59,7 @@ from snakes_and_ladders.sim.canonical import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling, site_field
+from snakes_and_ladders.sim.potts import critical_coupling, energy, site_field
 
 from tests._scale import at_scale
 

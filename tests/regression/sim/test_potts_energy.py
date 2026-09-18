@@ -77,7 +77,7 @@ def test_the_energy_is_the_negated_log_weight_of_the_configuration(name: str) ->
 def test_one_labelling_is_the_block_of_one(name: str) -> None:
     # The reduction the single-labelling callers take: `state[None]` and
     # element zero. A block scored row by row and a block scored at once
-    # must agree bitwise, or `alpha_expansion.energy` and the sampler's
+    # must agree bitwise, or `sim.potts.energy` and the sampler's
     # `energies` are two functions again.
     graph, field, n_states = INSTANCES[name]
     states = np.random.default_rng(12).integers(0, n_states, size=(8, graph.n_nodes))
