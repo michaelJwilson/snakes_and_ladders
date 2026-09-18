@@ -1,0 +1,53 @@
+name: Coverage
+description: A floor raised, or a gap named with the referee it lacks.
+labels: ["priority:medium", "module:infra"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Three guards read one run: the gate counts every test, the judged
+        guard counts `end2end` and `oracle`, the unjudged guard counts the
+        rest; `qa` is exempt by name and `search` is held higher
+        (`infra/gates.py`). A floor rises as tests land and never falls, and
+        a test written to reach a statement rather than to judge it is not a
+        test (root `CLAUDE.md`, No Coverage Theatre). Open with a TL;DR: the
+        figure, the package and the floor.
+
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. What does not fit belongs where it is
+        refereed — the recut's tables, a `STATUS.md` row.
+  - type: textarea
+    id: figures
+    attributes:
+      label: The figures today
+      description: From `infra/coverage_recut.py` on a run written with `--cov-context=test`, with the tree and date.
+      value: |
+        | guard | package | floor | measured |
+        | --- | --- | ---: | ---: |
+        |  |  |  |  |
+    validations:
+      required: true
+  - type: textarea
+    id: gaps
+    attributes:
+      label: What is not reached, and by what kind
+      description: "The modules, statements and public callables (`--functions`) no counting test enters, and for each the referee that is missing: an `end2end` run on the problem's full path, or an `oracle` — never a test that reaches it."
+    validations:
+      required: true
+  - type: textarea
+    id: floors
+    attributes:
+      label: The floors after
+      description: What each floor reads once the tests land, rounded down from the measured figure.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: Loosening a counting set, exempting a package beyond `qa`, or a test that asserts a shape are out of scope by rule.
+  - type: textarea
+    id: validation
+    attributes:
+      label: How it will be validated
+      description: The recut holds the floors on the push to `main` and at the release gate; the figures before and after come from one run each and are stated in the pull request.

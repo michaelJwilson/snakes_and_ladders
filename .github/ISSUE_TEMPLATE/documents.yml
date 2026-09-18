@@ -1,26 +1,30 @@
-name: Rebuild the documents
-description: Rebuild docs/paper.pdf and docs/textbook.pdf from docs/tex/ and commit them.
-title: "Rebuild the documents"
+name: Documents
+description: Rebuild the committed PDFs, or bring a document back into agreement with the tree.
 labels: ["module:docs", "priority:medium"]
 body:
   - type: markdown
     attributes:
       value: |
         Pull requests change `docs/tex/` and never the PDFs, so the committed
-        PDFs lag the sources until this ticket's pull request rebuilds them
-        (`DEV.md`, Documents). CI refuses a PDF change in any other
-        pull request. File this when the lag matters: before a release, or
-        when a reader needs the rendered document.
+        PDFs lag the sources until a rebuild (`DEV.md`, Documents); CI
+        refuses a PDF change in any other pull request, and a rebuild's pull
+        request title carries "Rebuild the documents". A document that
+        disagrees with the tree is a Documentation Sync failure: the change
+        that made it untrue should have updated it, so the finding names the
+        guard as well as the sentence. Open with a TL;DR.
 
         Bodies carry at most 40 content lines (`DEV.md`); blank lines and
         headings are not charged. What does not fit belongs where it is
         refereed — a measurement in `STATUS.md`, a sweep in an experiment
         file — rather than in a longer ticket.
-  - type: textarea
-    id: since
+  - type: dropdown
+    id: kind
     attributes:
-      label: What changed since the last rebuild
-      description: The pull requests to `docs/tex/` since the PDFs were last committed, from `git log --oneline -- docs/tex/ $(git log -1 --format=%H -- docs/textbook.pdf)..HEAD`.
+      label: Kind
+      options:
+        - "Rebuild the committed PDFs"
+        - "A document disagrees with the tree"
+        - "A document does not build"
     validations:
       required: true
   - type: checkboxes
@@ -30,15 +34,29 @@ body:
       options:
         - label: "`docs/paper.pdf`"
         - label: "`docs/textbook.pdf`"
+        - label: "`docs/api_map.pdf` or `docs/mind_map.pdf`"
+        - label: "`README.md`, `DEV.md`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md`, `TICKETS.md` or `CHECKS.md`"
+        - label: "A notebook under `docs/nb/`"
+        - label: "A module `CLAUDE.md`"
+  - type: textarea
+    id: since
+    attributes:
+      label: What changed, or what disagrees
+      description: For a rebuild, the pull requests to `docs/tex/` since the PDFs were last committed, from `git log --oneline -- docs/tex/ $(git log -1 --format=%H -- docs/textbook.pdf)..HEAD`. For a disagreement, the sentence, number or label, what the tree says instead, and the commit that moved it.
+    validations:
+      required: true
+  - type: textarea
+    id: guard
+    attributes:
+      label: The guard
+      description: Which check should have caught it — `test_planning_documents_agree`, `test_document_labels`, `test_claude_md_pointers`, citation integrity, the Sphinx build — and, where none did, the one to add.
   - type: textarea
     id: acceptance
     attributes:
       label: Acceptance
       description: What the pull request must show.
       value: |
-        - Built with `infra/build_documents.sh` on `main`, nothing edited by hand.
-        - The pull request's title contains "Rebuild the documents" and it changes only the two PDFs and `docs/tex/figures/`.
-        - `latexmk`'s logs report no undefined or multiply-defined reference or citation (CI checks this on every pull request).
-        - The build's wall clock and host in the pull request body.
+        - A rebuild: built with `infra/build_documents.sh` on `main`, nothing edited by hand, the title carrying "Rebuild the documents", only the PDFs and `docs/tex/figures/` changed, `latexmk`'s logs reporting no undefined or multiply-defined reference, and the build's wall clock and host in the body.
+        - A disagreement: the sentence and the tree agree, the guard that holds them there passes, and a guard added fails on the disagreement it was added for.
     validations:
       required: true

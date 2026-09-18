@@ -77,7 +77,9 @@ def test_dev_md_states_the_cap_the_script_enforces() -> None:
 
 
 @pytest.mark.infra
-@pytest.mark.parametrize("name", ["task.yml", "release.yml", "documents.yml"])
+@pytest.mark.parametrize(
+    "name", sorted(p.name for p in TEMPLATES.glob("*.yml") if p.name != "config.yml")
+)
 def test_every_issue_template_states_the_cap(name: str) -> None:
     stated = {int(m) for m in _STATED.findall((TEMPLATES / name).read_text())}
     assert CAP in stated, f"{name} states {sorted(stated)}, not the cap {CAP}"

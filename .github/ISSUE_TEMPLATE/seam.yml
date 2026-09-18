@@ -1,0 +1,57 @@
+name: Seam
+description: One implementation behind several entry points, every pin carried across the fold, and the counts stated before and after.
+labels: ["priority:medium"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A seam is declared in code — a `Protocol`, a base found at import —
+        and never only in a document. Every duplicate is a second place a fix
+        does not land, and every twin module a second import a reader must
+        know to choose. Open with a TL;DR: what is defined how many times,
+        and the one that stays.
+
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. What does not fit belongs where it is
+        refereed — the survey's rows, a pin's realized difference.
+  - type: textarea
+    id: duplicates
+    attributes:
+      label: What is defined more than once
+      description: Measured by `infra/duplication_survey.py` or `grep` over `python/`, with the tree named.
+      value: |
+        | what | count | where | proposal |
+        | --- | ---: | --- | --- |
+        |  |  |  |  |
+    validations:
+      required: true
+  - type: textarea
+    id: seam
+    attributes:
+      label: The one seam
+      description: Its module, signature and owner; which existing implementation it is, since the oracle stays; which callers become calls.
+    validations:
+      required: true
+  - type: textarea
+    id: referees
+    attributes:
+      label: The referees carried unchanged
+      description: The bitwise or tolerance pins that hold across the fold, run before the old entry point is deleted so the same test referees both sides; a pin that backs off states the difference and the tolerance it lands on.
+    validations:
+      required: true
+  - type: textarea
+    id: counts
+    attributes:
+      label: Counts before and after
+      description: Flat modules, API-map entries (`infra/api_map.py`) and the survey's rows, and the `test_duplication_guards.py` pin that holds the new count so the next duplicate fails a test rather than an audit.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: No behaviour change, no number `STATUS.md` records moves, no rename of a problem or a fixture.
+  - type: textarea
+    id: validation
+    attributes:
+      label: How it will be validated
