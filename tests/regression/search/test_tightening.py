@@ -21,7 +21,6 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.search.alpha_expansion import energy
 from snakes_and_ladders.search.tightening import dual_bound
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
@@ -29,6 +28,7 @@ from snakes_and_ladders.sim.graph import (
     lattice_graph,
     triangular_lattice_graph,
 )
+from snakes_and_ladders.sim.potts import energy
 
 FIELD = np.log(np.array([0.5, 0.35, 0.15]))
 

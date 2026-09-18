@@ -52,7 +52,6 @@ from snakes_and_ladders.likelihood.surrogate import (
     saturated_log_partition,
     spanning_tree_log_partition,
 )
-from snakes_and_ladders.search.alpha_expansion import energy
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.surrogate import (
     enumerated_log_partition_target,
@@ -64,7 +63,7 @@ from snakes_and_ladders.search.surrogate import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import SpatioOnlyParams
+from snakes_and_ladders.sim.potts import SpatioOnlyParams, energy
 
 #: Loaded once each: a lattice and a field per rung, from which every instance
 #: below is redrawn.
