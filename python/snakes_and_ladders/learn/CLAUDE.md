@@ -4,37 +4,29 @@ Reinforcement learning applied to discrete search problems. The interface is
 model-agnostic by construction, on exactly the terms `opt/CLAUDE.md` sets.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this module too.  It is referenced here, never restated. What follows is local,
-and is principle: the numbers behind each rule live with the code that
-produces them or in `STATUS.md`.
+section binds this module too, referenced here and never restated. What follows
+is local, and is principle: the numbers live with the code or in `STATUS.md`.
 
 ## What lives here
 
 `environment.py` is the interface — a state, an action set that varies with
 the state, a step returning the next state and a reward, and features of each
-available action.
+available action. `policy.py` holds the softmax-over-scored-actions policy the
+paper specifies. `rollout.py` generates episodes under a policy and under the
+greedy searcher through one loop, since a comparison between them is only
+meaningful if the loop is shared; `reinforce.py` is the score-function
+estimator and `exact.py` its oracle, by enumerating trajectories.
 
-
-`policy.py` currently holds the softmax-over-scored-actions policy the paper
-specifies.
-
-`rollout.py` generates episodes under a policy and under the greedy searcher
-through the same loop: a comparison between them is only meaningful if the
-loop is shared. `reinforce.py` is the score-function estimator and `exact.py`
-its oracle, by enumerating trajectories.
-
-The environments here are **reference instances**, not applications, over the
-same models `sal.opt` fits.
+The environments here are **reference instances** over the models `sal.opt` fits.
 
 ## Local rules
 
 - **No application imports.** Nothing here may import from `sal.sim`,
   `sal.likelihood` or `sal.search`, asserted by
   `tests/regression/test_learn_environment.py`.
-- **Closed form rewards at known parameters are vital for testing**  Rewards will also
-  be solved for in future development.
-- **`gamma = 1` currently, but will be a hyperparameter.** With this, the reward telescopes to the total
-  improvement an episode achieved. Any `gamma < 1` is more greedy.
+- **Closed-form rewards at known parameters are vital for testing.**
+- **`gamma = 1`, so the reward telescopes to the total improvement an episode
+  achieved; any `gamma < 1` is more greedy.** A hyperparameter later.
 - **A sampled return is a diagnostic, never a result.** It is a Monte Carlo
   estimate under a changing policy, so it rises for reasons that include a
   broken estimator. Learning is claimed against the enumerated expected
@@ -55,21 +47,22 @@ same models `sal.opt` fits.
   searcher and a policy score the whole neighbourhood per decision, so
   decisions are the unit at which they are comparable — the same reasoning
   that makes `sal.search.infer` count candidate fits.
-
+- **A match is a result, and a row states what it cost.** Nothing beats an
+  exact baseline, so a learner that reaches one has shown its policy class
+  contains the classical method, and one reaching it more cheaply has shown
+  more; a row carries the evaluations beside the fraction and names which of
+  beat, match and lose it is (#705).
 - **An episode that may leave a local optimum is scored on its best state,
   not its last.** `rollout(..., stop_at_local_optimum=False)` runs to its
   budget, so its final state is wherever the walk happened to stop, and a
   real search keeps the best thing it saw. Scoring the last state instead
   would make a better searcher look worse the longer it ran.
-
 - **A comparison against a wandering searcher is against *restarts*.** Once
-  an episode is no longer bounded by reaching a local optimum, a single
-  greedy run is not a budget-matched baseline: greedy stops after a few
-  decisions and leaves the rest of the budget unspent. Restarting it until
-  the budget is gone is the honest comparison, and on the issue #177 fixture
-  it reaches the enumerated maximum from every start where the best epsilon
-  measured does not (issue #194; the numbers are in `STATUS.md`). A result
-  stated against single-run greedy alone overstates itself.
+  an episode is no longer bounded by a local optimum, one greedy run stops
+  after a few decisions and leaves the budget unspent; restarting it until the
+  budget is gone is the comparison, and on the issue #177 fixture it reaches
+  the enumerated maximum from every start where the best epsilon does not
+  (issue #194). A result stated against single-run greedy overstates itself.
 - **A feature column an arm cannot vary is dropped, not carried.** The gauge
   rule is per arm: a move set whose actions differ in one coordinate has one
   informative column, and a second would be a weight nothing identifies. The
@@ -83,13 +76,23 @@ same models `sal.opt` fits.
   evaluating more successors than hill climbing has not won.
 - **A learned surrogate predicts the gap above an analytic bound**, scored on
   unseen groups, so a poor fit falls back to the bound (issue #308).
-
-- **Randomness inside a move is keyed on the state and the action, never
-  streamed.** `step` is deterministic by contract and `exact.py`'s enumeration
-  depends on it, so a Monte Carlo move draws from a digest of where it is and
-  what it is doing --- `sim/count_pairs.py`'s contract, applied to a move
-  (issue #706). A stream threaded through the caller would make the successor
-  depend on visit order and the enumeration invalid.
+- **`step` is deterministic by contract, so randomness inside a move is keyed
+  on the state and the action, never streamed.** `exact.py`'s enumeration
+  depends on one successor per pair, so a Monte Carlo move draws from a digest
+  of where it is and what it is doing — `sim/count_pairs.py`'s contract,
+  applied to a move (issue #706); a stream threaded through the caller would
+  make the successor depend on visit order. What keying cannot express — a
+  stochastic *reward*, a slippery transition — goes to `TICKETS.md` rather
+  than into a deterministic stand-in that tests nothing (issue #597).
+- **A learner is pinned on a canonical fixture before a research problem.**
+  Every other environment here *is* a research problem, so a tie leaves two
+  readings open — the problem is hard, or the learner is broken.
+  `canonical.py` carries optima known from outside, refereed by a second
+  computation: a sweep over the states against `exact.py` (issue #597).
+- **A learner states which values it converges to.** Q-learning's fixed point
+  is `q*` and SARSA's is `q_pi` for the epsilon-greedy policy it behaves
+  under, so a suite asserting both match value iteration asserts something
+  false: one is held at `V*` and the other held away from it (issue #597).
 
 ## Framework
 
@@ -101,10 +104,9 @@ cannot support.
 
 The count is the point: an interface justified by one model is shaped by that
 model, so this one carries an energy environment, a decoding problem, and — in
-`sal.search`, which may import both halves — a topology search. None of them
-takes an application type. The caller unpacks a model into index and
-log-probability arrays, because the no-application-imports rule admits no
-exception for convenience.
+`sal.search`, which may import both halves — a topology search. None takes an
+application type: the caller unpacks a model into index and log-probability
+arrays, because the no-application-imports rule admits no exception.
 
 ## Relaxations
 

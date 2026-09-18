@@ -2,7 +2,7 @@ model: ldpc
 oracle: enumeration
 
 # The (3,6) Gallager code at the block length exact decoding reaches
-# (docs/nb/ldpc.ipynb). Every field is required -- see
+# (docs/nb/classical_codes.ipynb). Every field is required -- see
 # python/snakes_and_ladders/sim/ldpc.py and sim/CLAUDE.md.
 #
 # n = 12 gives m = 6 checks, at least two of them dependent, so the code has

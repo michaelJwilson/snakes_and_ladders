@@ -15,6 +15,7 @@ parenthesis the only way a ticket is cited.
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 - Support the different lattice types (#231)
+- CRC-aided list decoding of the polar code, and the SC/SCL/CA-SCL figure against the enumerated maximum-likelihood floor --- the fourth step of #593, which needs the elementary codes' CRC (#594)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code (#340)
 - Correlated `X` and `Z` errors on the CSS code, whose one sector landed: a
@@ -84,7 +85,6 @@ parenthesis the only way a ticket is cited.
 - MAP decoding of an LDPC code as energy minimization: sum-product against
   the Gibbs sampler, the annealer and single-site descent at matched
   evaluations on enumerable codes, the ML codeword as referee (#340)
-- Iterated conditional modes over HMM state paths (#176)
 - A learning environment over a per-edge coupling, so a policy can be run on
   the instance no baseline solves. `planted_glass/ci` landed under #406 —
   single-site descent reaches its enumerated ground state from 0.079 of
@@ -132,6 +132,10 @@ parenthesis the only way a ticket is cited.
   and the guard for that is a reader rather than a test (#407)
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
+
+- Tabular Q-learning and SARSA on the canonical fixtures (#597's second pull request): the cliff walk's on-policy against off-policy distinction is untestable without both, and it is the only pass condition in the suite that is a *difference* rather than an agreement
+- The two canonical fixtures a deterministic `Environment.step` cannot express (#597): the k-armed bandit, whose tension is a stochastic reward, and the slippery Frozen Lake. Either the protocol widens for every implementer and `learn.exact`'s enumeration is replaced by an expectation over successors, or the two stay out --- a decision, not a default
+- The gate's per-problem pull requests (#596): the Potts lattice at critical coupling, the planted glass, the coupled model, the two tree surfaces, Max-Cut and the codes, each sized with `opt.failure` until its classical baseline fails and then argued at a matched budget. Step 0, the sizing harness, has landed; a problem whose baseline does not fail inside the budget is reported with its curve and excluded from the gate
 
 - The surrogate-bound columns of #308 in the tree feature set — the plug-in
   lower and parsimony upper bounds — measured at the budget of

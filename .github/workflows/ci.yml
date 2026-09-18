@@ -117,7 +117,11 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}" || true
-          changed="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- docs/paper.pdf docs/textbook.pdf)"
+          # `--diff-filter=M`: a PDF the base does not carry is a document
+          # being introduced, and no rebuild can produce one. The rule exists
+          # to stop a committed PDF drifting per merge, which starts once the
+          # base has it (issue #576).
+          changed="$(git diff --name-only --diff-filter=M "origin/${{ github.base_ref }}"...HEAD -- docs/paper.pdf docs/textbook.pdf docs/api_map.pdf docs/mind_map.pdf)"
           if [ -n "$changed" ] && ! printf '%s' "$TITLE" | grep -q 'Rebuild the documents'; then
             echo "::error::this pull request changes $changed; only a 'Rebuild the documents' pull request may (DEV.md, Documents)"
             exit 1
@@ -586,7 +590,7 @@ jobs:
             texlive-science \
             texlive-pictures
       # Regenerates the QA figures/captions the documents cite, then builds
-      # docs/paper.pdf and docs/textbook.pdf -- the same entry point a local
+      # docs/paper.pdf, docs/textbook.pdf and docs/mind_map.pdf -- the same entry point a local
       # build uses (see infra/CLAUDE.md), so CI and a contributor's machine
       # take one path.
       #

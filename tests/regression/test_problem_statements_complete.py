@@ -25,11 +25,39 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+CATALOGUE = REPO_ROOT / "PROBLEMS.md"
 TEX = REPO_ROOT / "docs" / "tex"
 TEXTBOOK = TEX / "textbook.tex"
 
-#: The ten problem statements, by the stem their labels and figure file use.
-#: An eleventh problem class adds a row here and to ``PROBLEMS.md`` together.
+#: What a catalogue key that **shares** a section must state of its own, as the
+#: label of the sub-part stating it.
+#:
+#: The guard below checks one statement per stem, so a key sharing a stem with
+#: another was invisible to it: `spatio_sequential_counts`,
+#: `spatio_sequential_ragged` and `ragged_hmm` all resolve to a section whose
+#: five parts were complete, while the model each declares was stated nowhere
+#: (issue #681). A key here names the part that states it, so the next shared
+#: key is caught by a failing test rather than by an audit.
+#:
+#: A key absent from this mapping is one whose section states it under the five
+#: parts already --- `tree_jc` under `sec:phylo`, say --- which is why this is a
+#: mapping and not a requirement on every key.
+SHARED_KEYS: dict[str, str] = {
+    "spatio_sequential_counts": "par:coupled:pairs",
+    "spatio_sequential_ragged": "par:coupled:ragged",
+    "ragged_hmm": "par:hmm:ragged",
+}
+
+#: Sections whose own text states every instance they carry, so a key sharing
+#: one needs no sub-part: `sec:phylo` names the Jukes--Cantor and
+#: general-time-reversible trees and the scaled instance together, `sec:potts`
+#: its chain, lattice and per-site-field cases, `sec:ldpc` its three codes, and
+#: `sec:frustrated` both the triangular antiferromagnet and the planted glass,
+#: each at the sizes declared there.
+STATED_IN_SIZES = frozenset({"sec:phylo", "sec:potts", "sec:ldpc", "sec:frustrated"})
+
+#: The problem statements, by the stem their labels and figure file use. A
+#: further problem class adds a row here and to ``PROBLEMS.md`` together.
 PROBLEMS = (
     "phylo",
     "potts",
@@ -134,3 +162,54 @@ def test_the_guard_reads_one_section_and_not_the_next() -> None:
 
     assert "par:phylo:sizes" in first
     assert "par:potts:sizes" not in first
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+@pytest.mark.parametrize(("key", "part"), sorted(SHARED_KEYS.items()))
+def test_a_key_sharing_a_section_states_what_is_its_own(key: str, part: str) -> None:
+    # The gap #681 names. `spatio_sequential_counts` and `sec:coupled`'s other
+    # key resolve to one section, and a guard that checks one statement per
+    # stem passes while the covariate contract and the unequal lengths are
+    # stated nowhere. The part is asserted inside its own section's span, so a
+    # label that drifted into a neighbouring section fails here too.
+    stem = part.split(":")[1]
+    section = problem_section(stem)
+
+    assert f"\\label{{{part}}}" in section, f"{key}: no \\label{{{part}}} in sec:{stem}"
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_every_shared_catalogue_key_is_covered() -> None:
+    # The mapping above is a guard only if it covers what `PROBLEMS.md`
+    # declares. Read from the catalogue rather than from a list, so a key added
+    # there cannot drift away from the statement that has to state it: every
+    # key sharing a section with another is either named in `SHARED_KEYS` or
+    # sits in a section whose own sizes paragraph states its instances.
+    by_statement: dict[str, list[str]] = {}
+    for line in CATALOGUE.read_text().splitlines():
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) < 5 or not cells[2].startswith("`"):
+            continue
+        keys = [key.strip(" `") for key in cells[2].split(",")]
+        by_statement.setdefault(cells[3].strip(" `"), []).extend(keys)
+
+    assert by_statement, "no catalogue rows parsed from PROBLEMS.md"
+    # The **principal** instance of a statement is the first key of its first
+    # row: the one the section's five parts are about. The catalogue's own
+    # reading gives this --- "a row with two keys is one problem declared at
+    # two instances", and a second row on one statement is a second problem
+    # sharing a section. Every other key declares something the five parts do
+    # not, so it needs a sub-part or a section that states its instances.
+    uncovered = {
+        key: statement
+        for statement, keys in by_statement.items()
+        for key in keys[1:]
+        if key not in SHARED_KEYS and statement not in STATED_IN_SIZES
+    }
+
+    assert not uncovered, (
+        "these keys share a statement with another and are neither in "
+        f"SHARED_KEYS nor in a section that states its instances: {uncovered}"
+    )

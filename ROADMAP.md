@@ -37,8 +37,8 @@ before it is published.
   a size chosen so the gate stays affordable is not a size a user works at.
 
   The gate is narrow by design and that is the reason for the rule: `-m
-  critical` collects **212** tests where the CI tier collects **2,641** and the
-  whole suite 2,746 (measured on this branch, 2026-09-15). This session the
+  critical` collects **368** tests where the CI tier collects **2,860** and the
+  whole suite 2,969 (measured on `main` at #676, 2026-09-16). This session the
   full tier caught what `critical` could not on two pull requests --- twelve
   failures on #601, two stale references on #595 --- and #598's headline
   benchmark was gate-sized, withdrawn as unmeasured at a stress size rather
@@ -73,7 +73,7 @@ before it is published.
 
 ### 0.4 Validation
 
-- **Deliverable:** for every new functionaltiy, an oracle that shares no code
+- **Deliverable:** for every new functionality, an oracle that shares no code
   with it — an analytic result, a brute-force on a small problem, an
   exhaustive enumeration, or an independently implemented algorithm — and a
   regression test pinning the claim to it within a stated tolerance.  Further,
@@ -81,7 +81,7 @@ before it is published.
   range of problem sizes.
 - **Gate:** three rules constrain what the suite may contain. Coverage
   theatre is forbidden: a test asserting only shapes, or only that nothing
-  raised, does not count, and a gap is has a placeholder  and a ticket.
+  raised, does not count, and a gap has a placeholder and a ticket.
   Every accelerated path keeps its reference, e.g. vectorized NumPy for Rust,
   Correctness comes from independent sources, generalization across problems,
   validation of analytic properties, external frameworks and agreement across
@@ -94,14 +94,15 @@ before it is published.
 
 ### 0.5 The book
 
-- **Deliverable:** the textbook and the paper (`docs/tex/`, contents in §1.3).  The textbook
+- **Deliverable:** the textbook and the paper (`docs/tex/`, contents in `STATUS.md` §1.3).  The textbook
   contain the formulation of all supported problems in a common notation, the problem size/fixture
   definitions, all supported algorithms, their applicability and efficiency for each problem,
   the analytic results used for validation.  The tone is concise and follows the writing style
-  in Claude.md at root.  Every plot and table in is rendered by from declared fixtures by `snakes_and_ladders.qa`
+  in Claude.md at root.  Every plot and table is rendered from declared fixtures by `snakes_and_ladders.qa`
   using the same code it reports on.  The paper is in the academic style, advertising the work in a
-  measured, authoriative tone.  Plots show key evidence for conclusions drawn, e.g. the optimization performance
-  for key problems and the relative efficiency gains.  The model as a factor graph with a sketch of that structure,
+  measured, authoritative tone.  Plots show key evidence for conclusions drawn, e.g. the optimization performance
+  for key problems and the relative efficiency gains.  Each problem statement carries the model as a
+  factor graph with a sketch of that structure (`docs/CLAUDE.md`).
 
 ## 1. Project Objectives & Specifications
 
@@ -123,7 +124,7 @@ approximate, or bounded likelihoods/energies.
     simulated ground-truth topologies.  Recovery of known parameters and state configurations.
   - *HMMs/Potts:* recovery of true coupling/transition parameters within 95%
     confidence intervals; precise state-sequence decoding.
-  - *Spatio-sequential  model:* recovery of knwoen class labels up to permutation, and
+  - *Spatio-sequential  model:* recovery of known class labels up to permutation, and
     of the emission parameters, on key instances that are too large for enumeration.
   - *Codes:* agreement with exhaustive maximum-likelihood decoding on codes
     short enough to enumerate, and the block error rate reported against the
@@ -158,8 +159,8 @@ budget.
 
 - **Milestone 1.1: Simulation & Ground Truth Engine**
   - *Deliverable:* data generators for every problem.
-    - *C(\theta):*
-    - *GMMs:*
+    - *C(\theta):* the continuous test functions at their known minima (`opt.testfunctions`).
+    - *GMMs:* component labels and draws from planted means, covariances and weights (`sim.mixture`).
     - *HMMs:* hidden state paths and emitted observation sequences.
     - *Phylogenetics:* `k`-state evolutionary models on simulated topologies.
     - *Potts models:* ND lattices and Markov random fields (MRFs) with

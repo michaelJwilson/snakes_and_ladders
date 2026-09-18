@@ -40,7 +40,7 @@ body:
       label: Consistency audit
       value: |
         Check `CLAUDE.md`, `DEV.md`, `RELEASE.md`, `README.md`, `INSTALL.md`,
-        `ROADMAP.md`, `docs/tex/` and the code against each other. Record what is stale, contradictory,
+        `ROADMAP.md`, `PROBLEMS.md`, `docs/tex/`, the latest `docs/reviews/` entry and the code against each other. Record what is stale, contradictory,
         or duplicated (including duplicated machinery/code across modules), and fix it in this
         ticket's PR. Code duplication should be common language.
 
@@ -87,7 +87,9 @@ body:
         - label: Frustrated lattices
         - label: The Gaussian mixture
         - label: Continuous test functions
+        - label: The count-emission mixture
         - label: LDPC decoding
+        - label: Turbo decoding
         - label: A problem class added since the last release has a statement of its own
   - type: textarea
     id: frameworks

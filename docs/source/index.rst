@@ -102,6 +102,18 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.newick
    :members:
 
+.. automodule:: snakes_and_ladders.sim.elementary_codes
+   :members:
+
+.. automodule:: snakes_and_ladders.sim.galois
+   :members:
+
+.. automodule:: snakes_and_ladders.sim.capacity
+   :members:
+
+.. automodule:: snakes_and_ladders.sim.reed_solomon
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.ldpc
    :members:
 
@@ -219,6 +231,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.budget
    :members:
 
+.. automodule:: snakes_and_ladders.opt.failure
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.testfunctions
    :members:
 
@@ -268,6 +283,12 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.learn.exact
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.canonical
+   :members:
+
+.. automodule:: snakes_and_ladders.learn.tabular
    :members:
 
 .. automodule:: snakes_and_ladders.learn.critic
@@ -328,6 +349,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.kernels
    :members:
 
+.. automodule:: snakes_and_ladders.search.decoding
+   :members:
+
+.. automodule:: snakes_and_ladders.search.tightening
+   :members:
+
 .. automodule:: snakes_and_ladders.search.alpha_expansion
    :members:
 
@@ -376,6 +403,18 @@ whether or not it has members yet.
    :no-index:
 
 .. automodule:: snakes_and_ladders.sandbox.circulant_schedule
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.region_graph
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar_decoding
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar_reference
    :members:
 
 .. automodule:: snakes_and_ladders.qa
