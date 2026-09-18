@@ -66,6 +66,7 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import torch
 
+from snakes_and_ladders.enumeration import argmax, configurations
 from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment
 
 #: Below this the softmax saturates in float64 and the gradient underflows, so
@@ -299,15 +300,13 @@ def enumerate_optimum(objective: RelaxedObjective) -> tuple[Configuration, float
     :func:`snakes_and_ladders.learn.potts.optimum` plays for the chain and exhaustive
     topology enumeration plays for tree search.
     """
-    best, best_score = None, -np.inf
-    for candidate in itertools.product(
-        range(objective.n_states), repeat=objective.n_sites
-    ):
-        score = objective.discrete(candidate)
-        if score > best_score:
-            best, best_score = candidate, score
-    assert best is not None
-    return best, best_score
+    candidates = [
+        tuple(row.tolist())
+        for row in configurations(objective.n_states, objective.n_sites)
+    ]
+    scores = np.array([objective.discrete(candidate) for candidate in candidates])
+    best = argmax(scores)
+    return candidates[best], float(scores[best])
 
 
 def exact_expected_score(objective: RelaxedObjective, logits: torch.Tensor) -> float:
