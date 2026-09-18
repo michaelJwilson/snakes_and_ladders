@@ -31,7 +31,6 @@ from snakes_and_ladders.search import ground_state
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_beta_swap,
     alpha_expansion,
-    energy,
     swap,
 )
 from snakes_and_ladders.search.backend import Backend
@@ -46,7 +45,7 @@ from snakes_and_ladders.search.potts_mcmc import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import SpatioOnlyParams
+from snakes_and_ladders.sim.potts import SpatioOnlyParams, energy
 
 #: Two exact routes sum the same weights in a different order, so they agree
 #: to the last bits of a float64 reduction rather than bitwise.
