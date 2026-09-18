@@ -312,6 +312,26 @@ def _notes(
     for item in node.body:
         if not isinstance(item, ast.FunctionDef) or derived_once or stores_offsets:
             continue
+        # A constructor is not a per-call derivation (issue #642). "Derives X
+        # per call" names a cost that repeats on one object: an accessor asked
+        # twice pays twice, and storing the result removes the second payment.
+        # A `classmethod` that builds an instance runs once per instance it
+        # builds, so there is no second payment to remove and no rewrite that
+        # would clear the finding short of deleting the constructor. Reported
+        # of one, the finding is unanswerable, and `FlowNetwork.from_arcs`
+        # carried it on `main` while the survey's *own* next line recorded the
+        # measurement that keeps the store it was objecting to --- the two read
+        # together as the survey contradicting itself about one class.
+        #
+        # This narrows what is reported, so `tests/regression/test_structure_survey.py`
+        # holds it to a positive control: a class with a real per-call accessor
+        # over a non-compressed store is still reported, and the day this stops
+        # firing for one, that test fails rather than this going quiet.
+        if any(
+            isinstance(d, ast.Name) and d.id == "classmethod"
+            for d in item.decorator_list
+        ):
+            continue
         body = ast.unparse(item)
         # A method *reading* `self.offsets` consumes a derivation; the method
         # that computes the scan is the one to report. `Ragged.segments` reads
