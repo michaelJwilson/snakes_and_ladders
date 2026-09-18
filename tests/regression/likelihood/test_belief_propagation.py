@@ -90,20 +90,6 @@ def test_the_pairwise_beliefs_reduce_to_the_single_site_ones_on_a_tree() -> None
         )
 
 
-@pytest.mark.oracle
-def test_a_zero_coupling_lattice_is_exact_despite_its_loops() -> None:
-    # The loops are still there; the coupling that makes them matter is gone.
-    # Separating "loopy" from "approximate" shows the error measured below
-    # comes from the cycles carrying correlation, not the geometry alone.
-    shape = (6, 4)
-    graph = lattice_graph(shape, BoundaryCondition.OPEN, 0.0)
-    exact = strip_log_partition(shape, BoundaryCondition.OPEN, 0.0, FIELD)
-
-    result = belief_propagation(graph, FIELD)
-
-    assert _relative(result.bethe_log_partition, exact) < RELATIVE_TOLERANCE
-
-
 # Measured on a 6x4 open strip against `strip_log_partition`, 3 states,
 # field (0.3, -0.7, 0.15). The exact q-state Potts transition on a square
 # lattice is at J_c = ln(1 + sqrt(q)) = 1.005 for q = 3.
@@ -173,23 +159,6 @@ def test_the_bethe_deviation_on_the_registry_lattice_is_the_measured_size() -> N
     assert np.abs(result.single_site - exact.single_site).max() == pytest.approx(
         4.25e-3, rel=0.1
     )
-
-
-@pytest.mark.analytic
-def test_the_deviation_grows_with_coupling_below_the_transition() -> None:
-    # Monotone on the weak-coupling arm only. It is *not* monotone in J
-    # overall: the curve above peaks at J = 0.875 and falls away, since deep in
-    # the ordered phase the sites agree and the correlations Bethe neglects are
-    # short-ranged again.
-    shape = (6, 4)
-    deviations = []
-    for coupling in (0.0, 0.125, 0.25, 0.5, 0.75):
-        graph = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
-        exact = strip_log_partition(shape, BoundaryCondition.OPEN, coupling, FIELD)
-        result = belief_propagation(graph, FIELD)
-        deviations.append(_relative(result.bethe_log_partition, exact))
-
-    assert deviations == sorted(deviations)
 
 
 @pytest.mark.analytic

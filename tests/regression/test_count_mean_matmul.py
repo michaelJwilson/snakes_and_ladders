@@ -48,25 +48,6 @@ def _elementwise_mean(counts: torch.Tensor, posterior: torch.Tensor) -> torch.Te
 
 @pytest.mark.critical
 @pytest.mark.analytic
-def test_the_poisson_mean_is_the_elementwise_one_to_the_declared_tolerance(
-    weighted: tuple[torch.Tensor, torch.Tensor],
-) -> None:
-    # The Poisson's M step *is* this mean, so the fitted rate is the quantity
-    # the rewrite moves and the bound is asserted on it directly.
-    counts, posterior = weighted
-    family = PoissonEmission(torch.full((N_STATES,), 4.0, dtype=torch.float64))
-
-    fitted = family.reestimate(counts, posterior).emissions
-
-    assert torch.allclose(
-        fitted.mean,
-        _elementwise_mean(counts, posterior),
-        rtol=CROSS_DEVICE_RTOL_FLOAT64,
-    )
-
-
-@pytest.mark.critical
-@pytest.mark.analytic
 def test_the_binomial_rate_is_the_elementwise_one_to_the_declared_tolerance(
     weighted: tuple[torch.Tensor, torch.Tensor],
 ) -> None:

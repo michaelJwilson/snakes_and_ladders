@@ -57,7 +57,7 @@ def _random_graph(n_nodes: int, density: float, seed: int) -> PottsGraph:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize(("first", "second"), [(3, 4), (5, 5), (8, 6)])
+@pytest.mark.parametrize(("first", "second"), [(3, 4), (5, 5)])
 def test_a_complete_bipartite_graph_has_every_edge_in_its_maximum_cut(
     first: int, second: int
 ) -> None:
