@@ -28,7 +28,6 @@ validate the other.
 
 from __future__ import annotations
 
-import itertools
 from dataclasses import dataclass
 
 import numpy as np
@@ -36,7 +35,8 @@ import torch
 
 from snakes_and_ladders.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
-    refuse_oversized,
+    argmax,
+    configurations,
 )
 from snakes_and_ladders.sim.hmm import HmmParams
 
@@ -171,8 +171,9 @@ def enumerate_hidden_paths(
         msg = "observations must be non-empty"
         raise ValueError(msg)
     params.emissions.validate(observations)
-    refuse_oversized(
-        params.n_states**length,
+    paths = configurations(
+        params.n_states,
+        length,
         what=f"{params.n_states}**{length} hidden paths",
         limit=max_paths,
     )
@@ -181,16 +182,12 @@ def enumerate_hidden_paths(
     log_transition = np.log(params.transition)
     log_density = emission_log_density(params, observations)
 
-    log_joint: list[float] = []
-    paths: list[np.ndarray] = []
-    for candidate in itertools.product(range(params.n_states), repeat=length):
-        path = np.array(candidate, dtype=np.int64)
-        paths.append(path)
-        log_joint.append(
+    joint = np.array(
+        [
             _path_log_probability(log_initial, log_transition, log_density, path)
-        )
-
-    joint = np.array(log_joint)
+            for path in paths
+        ]
+    )
     shift = float(joint.max())
     weights = np.exp(joint - shift)
     log_likelihood = shift + float(np.log(weights.sum()))
@@ -200,7 +197,7 @@ def enumerate_hidden_paths(
         posterior[np.arange(length), path] += weight
     posterior /= posterior.sum(axis=1, keepdims=True)
 
-    best = int(joint.argmax())
+    best = argmax(joint)
     return PathEnumeration(
         viterbi=paths[best],
         viterbi_log_probability=float(joint[best]),

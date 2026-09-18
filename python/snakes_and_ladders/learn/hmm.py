@@ -28,6 +28,7 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 import torch
 
+from snakes_and_ladders.enumeration import argmax, configurations
 from snakes_and_ladders.learn.environment import Environment
 
 # (position, new_state): change one position to a state it is not already in.
@@ -239,7 +240,8 @@ def enumerate_paths(n_states: int, length: int) -> Iterator[Path]:
     tree search, and the reference issue #175's Viterbi decoder is pinned
     against.
     """
-    return itertools.product(range(n_states), repeat=length)
+    for row in configurations(n_states, length):
+        yield tuple(row.tolist())
 
 
 def optimum(environment: HmmEnvironment) -> tuple[Path, float]:
@@ -251,11 +253,7 @@ def optimum(environment: HmmEnvironment) -> tuple[Path, float]:
         The maximizing path and its joint log-probability. Ties resolve to
         the lexicographically first, so the answer is deterministic.
     """
-    best_path: Path | None = None
-    best_energy = -float("inf")
-    for path in enumerate_paths(environment.n_states, environment.length):
-        energy = environment.energy(path)
-        if energy > best_energy:
-            best_path, best_energy = path, energy
-    assert best_path is not None
-    return best_path, best_energy
+    paths = list(enumerate_paths(environment.n_states, environment.length))
+    energies = np.array([environment.energy(path) for path in paths])
+    best = argmax(energies)
+    return paths[best], float(energies[best])

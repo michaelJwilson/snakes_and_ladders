@@ -50,7 +50,7 @@ SLIMMING_BASELINE = {
     "root exports": 1,
     "test modules pinning a twin to its oracle beyond the first": 12,
     "flat modules": 150,
-    "API-map entries": 1576,
+    "API-map entries": 1580,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
