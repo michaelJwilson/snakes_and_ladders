@@ -31,6 +31,12 @@ pytest -m "not release"
 [INSTALL.md](INSTALL.md) covers prerequisites, the Rust extension, both test
 suites, the checks CI enforces, dependency audits, and the doc builds.
 
+The root exports the seams the package is built on and nothing else ---
+`Objective`, `Environment`, `FactorGraph`, `PottsGraph`, `fixture`, `Backend`
+and `parallel` --- each resolved on first use, and every package resolves its
+submodules the same way, so `sal.sim.tree` reads as written after
+`import snakes_and_ladders as sal` and a bare import loads nothing.
+
 ---
 
 # Infrastructure
