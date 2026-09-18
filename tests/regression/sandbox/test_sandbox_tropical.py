@@ -261,7 +261,7 @@ def test_the_softmin_bound_is_what_the_derived_temperature_certifies(
         assert temperature > MINIMUM_TEMPERATURE
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("temperature", [0.5, 0.2, 0.1, 0.05, 0.02, 0.01])
 def test_the_corner_bound_holds_at_every_temperature(
     five_taxon: Instance, temperature: float
@@ -289,7 +289,7 @@ def test_the_corner_bound_holds_at_every_temperature(
 # --- the coordinates: what makes them the tropical Grassmannian ----------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("factor", [0.1, 3.7, 100.0])
 def test_the_metric_scale_is_a_gauge(five_taxon: Instance, factor: float) -> None:
     # F_tau(c d) = F_tau(d) exactly, by the unit-mean normalization. Without
@@ -334,7 +334,7 @@ def test_the_combinatorial_resolution_is_the_tropical_plucker_argmin(
         assert_allclose(resolutions(quartets, names, topology), sums.argmin(axis=1))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gradient_matches_central_differences(five_taxon: Instance) -> None:
     # There is no sampled estimator here, so there is no estimator bias to
     # measure: the relaxation is deterministic and its gradient is exact.
@@ -543,7 +543,7 @@ def test_the_two_state_recoding_resolves_every_quartet_as_the_tree_does(
 # --- refusals ------------------------------------------------------------
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_temperature_below_the_floor_is_refused(five_taxon: Instance) -> None:
     with pytest.raises(ValueError, match="temperature must be"):
         relaxed_score(
@@ -554,13 +554,13 @@ def test_a_temperature_below_the_floor_is_refused(five_taxon: Instance) -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_fewer_than_four_taxa_have_no_quartet() -> None:
     with pytest.raises(ValueError, match="at least 4 taxa"):
         quartet_indices(3)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_degenerate_quartet_admits_no_temperature(five_taxon: Instance) -> None:
     # Every distance equal makes all three pairing sums equal, so no
     # temperature separates them. Refused rather than returning a
@@ -570,13 +570,13 @@ def test_a_degenerate_quartet_admits_no_temperature(five_taxon: Instance) -> Non
         temperature_for(five_taxon.table, five_taxon.positions, flat, 1e-11)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_tolerance_is_refused(five_taxon: Instance) -> None:
     with pytest.raises(ValueError, match="tolerance must be positive"):
         temperature_for(five_taxon.table, five_taxon.positions, five_taxon.start(), 0.0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_starting_distance_is_refused(five_taxon: Instance) -> None:
     start = five_taxon.start()
     start[0] = 0.0
@@ -584,14 +584,14 @@ def test_a_non_positive_starting_distance_is_refused(five_taxon: Instance) -> No
         optimize(five_taxon.table, start)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_branch_length_has_no_corner(five_taxon: Instance) -> None:
     topology = next(enumerate_topologies(five_taxon.names))
     with pytest.raises(ValueError, match="branch_length must be positive"):
         corner(topology, 0.0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("start", "end", "steps", "message"),
     [

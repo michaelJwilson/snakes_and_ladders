@@ -26,7 +26,7 @@ FIXTURE = fixture("ldpc", "ci")
 PARAMS = FIXTURE.params
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_layout_joins_every_nonzero_and_nothing_else() -> None:
     # The picture is the matrix: one segment per nonzero, from the bit's
     # coordinate to the check's, and no segment anywhere else.
@@ -70,7 +70,7 @@ def test_the_node_coordinates_are_a_function_of_the_code_alone() -> None:
     assert np.array_equal(np.argsort(first.checks[:, 0]), np.argsort(mean_bit))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_heavy_band_is_the_one_covering_consecutive_bits() -> None:
     # Gallager's construction: the first band's row i covers bits
     # i * row_weight upward, and every later band is that band under a
@@ -93,7 +93,7 @@ def test_the_heavy_band_is_the_one_covering_consecutive_bits() -> None:
         np.testing.assert_array_equal(covered, np.arange(PARAMS.n_bits))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_row_weight_that_forms_no_bands_is_refused() -> None:
     code = PARAMS.code()
 

@@ -112,7 +112,7 @@ def test_a_second_call_on_the_same_generator_draws_fresh_children() -> None:
     assert again == first
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("backend", list(BACKENDS))
 def test_a_task_that_raises_propagates_with_the_item_that_raised(
     backend: Backend,
@@ -131,7 +131,7 @@ def test_a_task_that_raises_propagates_with_the_item_that_raised(
     assert "task 2 of 4 raised on item 3" in "".join(excinfo.value.__notes__)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unusable_worker_count_or_backend_is_refused() -> None:
     with pytest.raises(ValueError, match="at least one"):
         map_tasks(_square, [1], workers=0, backend="serial", intra_op_threads=None)
@@ -141,7 +141,7 @@ def test_an_unusable_worker_count_or_backend_is_refused() -> None:
         map_tasks(_square, [1], workers=2, backend="serial", intra_op_threads=None)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_no_items_is_an_empty_result_and_spawns_nothing() -> None:
     assert (
         map_tasks(_square, [], workers=4, backend="processes", intra_op_threads=1) == []

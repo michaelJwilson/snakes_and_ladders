@@ -68,7 +68,7 @@ def test_a_single_start_makes_the_multi_start_fit_the_ordinary_one() -> None:
     assert through_initializer.spread == 0.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_perturbed_start_leaves_the_stationary_point_the_uniform_hmm_sits_on() -> (
     None
 ):
@@ -242,7 +242,7 @@ def test_independent_restart_sets_come_from_one_generator() -> None:
     assert len(set(drawn)) > 1
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("n_starts", "scale", "match"),
     [
@@ -263,7 +263,7 @@ def test_an_unusable_restart_specification_is_refused(
         RandomRestart(n_starts, scale, np.random.default_rng(0))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_perturbation_is_refused() -> None:
     """A zero tilt does not leave a stationary point, which is the whole job."""
     with pytest.raises(ValueError, match="must be positive"):
@@ -297,7 +297,7 @@ def test_four_workers_fit_the_starts_one_worker_fits() -> None:
         assert four.converged == one.converged
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_multi_start_fit_refuses_no_workers() -> None:
     with pytest.raises(ValueError, match="at least one"):
         fit_from(Himmelblau(), FromObjective(), workers=0)

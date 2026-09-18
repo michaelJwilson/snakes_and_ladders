@@ -78,7 +78,7 @@ def test_each_form_sums_to_one_over_the_support() -> None:
         assert_allclose(mass.numpy(), np.ones(2), atol=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_closed_form_moments_are_the_drawn_ones_in_both_forms() -> None:
     # The joint form's success channel is not a beta-binomial: its variance
     # picks up the varying depth through the law of total variance, and a
@@ -243,7 +243,7 @@ def test_the_likelihood_ratio_prefers_the_form_the_data_came_from() -> None:
     assert sum(statistic > 0.0 for statistic in outcome[False]) == 0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_form_must_be_stated_and_carry_the_trial_count_it_needs() -> None:
     # `joint` is keyword-only with no default: a default would choose a
     # generative model for the caller, and the two are different models.
@@ -257,7 +257,7 @@ def test_the_form_must_be_stated_and_carry_the_trial_count_it_needs() -> None:
         CountPairEmission(DISPERSION, MEAN, [2.0], [6.0], None, joint=True)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_pair_outside_the_support_is_refused_and_scored_at_minus_infinity() -> None:
     joint = _family(joint=True)
     independent = _family(joint=False)

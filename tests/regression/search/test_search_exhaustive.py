@@ -118,7 +118,7 @@ def test_every_enumerated_topology_is_well_formed(n_taxa: int) -> None:
         assert validate_unrooted_newick(to_newick(topology))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("names", "message"),
     [(["A", "B"], "at least 3 leaves"), (["A", "A", "B"], "must be distinct")],

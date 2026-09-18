@@ -158,7 +158,7 @@ def test_the_covaried_tabulation_stays_a_table() -> None:
     assert success_table.shape[0] < n_observations
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_covariate_changes_the_answer() -> None:
     """A backend that quietly dropped one would pass every test above."""
     instance = _instance()

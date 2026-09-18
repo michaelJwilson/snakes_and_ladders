@@ -108,7 +108,7 @@ def test_random_topology_carries_no_branch_lengths() -> None:
     assert all(node.branch_length is None for node in preorder(topology))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("names", "message"),
     [
@@ -163,7 +163,7 @@ def test_score_topology_agrees_with_a_zero_budget_search() -> None:
 # --- the loop ------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
 def test_every_accepted_move_strictly_improves(moves: MoveSet) -> None:
     # A loop that accepted a non-improving move would still terminate and
@@ -176,7 +176,7 @@ def test_every_accepted_move_strictly_improves(moves: MoveSet) -> None:
     assert len(set(result.trace)) == len(result.trace)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
 def test_the_search_converges_and_ends_on_its_best_score(moves: MoveSet) -> None:
     alignment, k = _alignment()
@@ -251,7 +251,7 @@ def test_the_general_model_is_searchable_too() -> None:
     assert result.log_likelihood >= jc - 1e-6
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_too_few_taxa_is_refused() -> None:
     alignment = {name: np.zeros(5, dtype=np.int64) for name in "ABC"}
 
@@ -288,7 +288,7 @@ def test_branch_splits_are_aligned_with_the_branch_order() -> None:
     assert len(set(splits)) == len(splits)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_an_nni_move_replaces_exactly_one_split() -> None:
     # The invariant warm starts rest on: a neighbour keeps every branch but
     # the one across the swapped edge, so the symmetric difference of the two
@@ -425,7 +425,7 @@ def test_lazy_nni_search_reaches_what_the_full_search_reaches() -> None:
         assert lazy.likelihood_evaluations < full.likelihood_evaluations
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_lazy_top_is_refused() -> None:
     alignment, k = _alignment()
     with pytest.raises(ValueError, match="lazy_top must be at least 1"):
@@ -459,7 +459,7 @@ def test_a_radius_at_the_leaf_count_reproduces_the_unbounded_search() -> None:
     assert bounded.likelihood_evaluations == unbounded.likelihood_evaluations
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_radius_with_nni_moves_is_refused() -> None:
     # NNI has no pruning point to measure from, so a radius is meaningless
     # there; ignoring it would report a bounded search that was not one.
@@ -468,7 +468,7 @@ def test_a_radius_with_nni_moves_is_refused() -> None:
         infer(alignment, k, rng=np.random.default_rng(0), moves=MoveSet.NNI, radius=2)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_partial_reoptimization_without_warm_start_is_refused() -> None:
     alignment, k = _alignment()
     with pytest.raises(ValueError, match="warm_start is where they come from"):
@@ -560,7 +560,7 @@ def test_parallel_candidate_fits_reproduce_the_serial_search_exactly() -> None:
     assert parallel.likelihood_evaluations == serial.likelihood_evaluations
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_workers_without_a_pool_is_refused_rather_than_run_serially() -> None:
     # `parallel.map_tasks`'s rule, reached through `infer`: asking for workers
     # while leaving the default serial backend is a mistake worth an error,

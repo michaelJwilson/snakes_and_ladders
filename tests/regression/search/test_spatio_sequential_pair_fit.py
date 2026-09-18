@@ -140,7 +140,7 @@ def test_the_m_step_slices_the_covariate_the_likelihood_module_does() -> None:
     assert isinstance(fitted.emissions[0], IndependentCountPair)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_slice_the_m_step_used_to_build_is_refused_by_the_family() -> None:
     # The defect, reproduced: appending the singleton to a covariate that
     # already carries the channel axis gives a last axis of 1, which names no

@@ -126,7 +126,7 @@ def test_both_cut_move_sets_reach_the_enumerated_optimum(n_states: int) -> None:
     assert swapped.energy == pytest.approx(exact, abs=_EXACT)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_swap_never_raises_the_energy_from_any_start() -> None:
     # Monotonicity over a finite state space is what makes the loop terminate,
     # and a sign error in the capacities breaks it immediately.
@@ -155,7 +155,7 @@ def test_the_enumerated_ground_state_recovers_the_generating_structure() -> None
     assert sum(recovered.occupancy) == rung.n_nodes
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_bracket_contains_the_known_optimum() -> None:
     # Boykov, Veksler & Zabih bound a non-negative energy; this one is
     # negative, so the bound is applied to the shifted form and carried back.
@@ -196,7 +196,7 @@ def test_the_field_accept_step_rejects(move: PottsMove) -> None:
     assert accepts < proposals
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("move", list(PottsMove))
 def test_a_field_repeated_per_site_is_the_shared_field(move: PottsMove) -> None:
     # The per-site widening (issue #551) must be the identity where every row
@@ -212,7 +212,7 @@ def test_a_field_repeated_per_site_is_the_shared_field(move: PottsMove) -> None:
     assert np.array_equal(one.states, two.states)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_no_entry_spends_more_than_its_budget() -> None:
     # The unit is site visits, not sweeps: matched in sweeps, a Wolff step
     # would be handed a free lattice per move. Every entry reports what it
@@ -259,13 +259,13 @@ def test_gibbs_at_zero_temperature_is_the_descent_update() -> None:
 # --- refusals ----------------------------------------------------------------
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_rung_is_refused_at_a_label_count_no_fixture_declares() -> None:
     with pytest.raises(ValueError, match="a rung is built at 2 states"):
         ground_state.rung_field(CI, 5)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_swap_of_a_label_with_itself_is_refused() -> None:
     # The identity move. A caller asking for it has a loop bound wrong, and
     # returning the input unchanged would hide that.
@@ -371,7 +371,7 @@ def test_the_comparison_records_the_labelling_each_entry_returned() -> None:
     assert ground_state.recorded() == ()
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_max_product_that_does_not_settle_reports_no_answer() -> None:
     # Flooding is refused rather than truncated, and the refusal is carried
     # through: an infinite energy and `converged=False`, never the field-only
@@ -386,7 +386,7 @@ def test_max_product_that_does_not_settle_reports_no_answer() -> None:
     assert run.energy == float("inf")
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_swap_refuses_a_backend_it_has_no_cut_for() -> None:
     rung = _rung(CI, 3)
     labelling = np.zeros(rung.n_nodes, dtype=np.int64)
@@ -395,7 +395,7 @@ def test_the_swap_refuses_a_backend_it_has_no_cut_for() -> None:
         swap(rung.graph, rung.field, labelling, 0, 1, backend=Backend.NUMBA)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_swap_of_two_labels_no_site_carries_is_the_identity() -> None:
     # Not an error: a cycle over every pair reaches pairs the labelling does
     # not use, and the move is genuinely empty there.
@@ -408,7 +408,7 @@ def test_a_swap_of_two_labels_no_site_carries_is_the_identity() -> None:
     assert value == pytest.approx(energy(rung.graph, rung.field, labelling))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_swap_refuses_a_negative_coupling() -> None:
     # The binary sub-problem is submodular only for a non-negative coupling,
     # so this is the boundary rather than a slow case.
@@ -418,7 +418,7 @@ def test_the_swap_refuses_a_negative_coupling() -> None:
         alpha_beta_swap(graph, np.zeros((graph.n_nodes, 3)), 3)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_swap_refuses_rather_than_looping_past_its_cycle_cap() -> None:
     # Monotonicity over a finite state space makes reaching the cap
     # impossible on a correct implementation, so it is a defect report and

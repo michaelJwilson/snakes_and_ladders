@@ -47,7 +47,7 @@ def _circulant(first_row: np.ndarray, size: int) -> np.ndarray:
 # --- the matrix the construction defines ---------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_bits", [12, 96, 996])
 def test_the_halves_are_a_circulant_and_its_transpose(n_bits: int) -> None:
     """`H = [A | A^T]` for the circulant of the first row `H` itself carries."""
@@ -61,7 +61,7 @@ def test_the_halves_are_a_circulant_and_its_transpose(n_bits: int) -> None:
     np.testing.assert_array_equal(right, expected.T)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_bits", [12, 96, 996])
 def test_the_degrees_before_deletion_are_the_circulant_weight(n_bits: int) -> None:
     """Every column carries `w` ones and every row `2w`, at every size."""
@@ -73,7 +73,7 @@ def test_the_degrees_before_deletion_are_the_circulant_weight(n_bits: int) -> No
     assert np.all(code.row_weights == 2 * CIRCULANT_WEIGHT)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_checks", [48, 40, 32])
 def test_the_row_space_is_self_orthogonal(n_checks: int) -> None:
     """`H H^T = 0` over GF(2), before and after deletion: the CSS condition.
@@ -92,7 +92,7 @@ def test_the_row_space_is_self_orthogonal(n_checks: int) -> None:
     assert not np.any(product)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_bits", [12, 96, 996])
 def test_the_all_ones_word_is_a_codeword(n_bits: int) -> None:
     """Every row has even weight `2w`, so `d <= n` whatever the draw."""
@@ -106,7 +106,7 @@ def test_the_all_ones_word_is_a_codeword(n_bits: int) -> None:
 # --- the rate the deletion buys -------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_deletion_raises_the_rate_and_keeps_the_row_weight() -> None:
     """Deleting 12 of 48 rows at `n = 96` takes `k` from 50 to 60, `2w` fixed.
 
@@ -183,7 +183,7 @@ def _draw(rng: np.random.Generator) -> tuple[int, ...]:
 # --- refusals -------------------------------------------------------------------
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("n_bits", "n_checks", "weight", "message"),
     [
@@ -201,7 +201,7 @@ def test_a_shape_the_construction_cannot_build_is_refused(
         bicycle_code(n_bits, n_checks, weight, np.random.default_rng(11))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_rate_past_what_the_length_supports_is_refused() -> None:
     """Deleting to 12 of 48 rows leaves a bit in no check, which is refused."""
     with pytest.raises(ValueError, match="left a bit in no check"):

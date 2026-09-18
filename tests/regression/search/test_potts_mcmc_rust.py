@@ -178,7 +178,7 @@ def test_a_chain_is_reproducible_from_its_generator() -> None:
     assert np.array_equal(first.states, second.states)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_state_outside_the_alphabet_is_refused() -> None:
     """The kernel's own precondition, surfaced as a Python error.
 
@@ -250,7 +250,7 @@ def test_the_rust_chain_is_the_oracle_s_chain_state_for_state(
     np.testing.assert_array_equal(python.states, rust.states)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_guard_wide_enough_hands_every_site_back() -> None:
     """The hand-back path itself, which no realistic draw reaches.
 
@@ -303,7 +303,7 @@ def test_a_guard_wide_enough_hands_every_site_back() -> None:
     np.testing.assert_array_equal(state, expected.states[-1])
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_kernel_refuses_a_negative_guard() -> None:
     """A guard is a width, and a negative one would decide every site."""
     from snakes_and_ladders import oxi_snakes_and_ladders

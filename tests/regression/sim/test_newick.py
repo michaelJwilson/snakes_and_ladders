@@ -80,7 +80,7 @@ def test_count_topologies_matches_known_values(n_taxa: int, expected: int) -> No
     assert count_topologies(n_taxa) == expected
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_count_topologies_rejects_non_positive_n_taxa() -> None:
     with pytest.raises(ValueError, match="n_taxa"):
         count_topologies(0)
@@ -100,7 +100,7 @@ def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
     assert validate_newick(dataset.newick)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_validate_newick_rejects_a_trifurcating_root() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
@@ -133,7 +133,7 @@ def test_to_newick_with_node_states_round_trips_ancestor_labels() -> None:
         assert f"[&state={expected_state}]" in labelled
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "malformed",
     [
@@ -153,7 +153,7 @@ def test_validate_newick_rejects_malformed_strings(malformed: str) -> None:
     assert not validate_newick(malformed)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_validate_newick_accepts_a_single_leaf() -> None:
     assert validate_newick("A;")
 
@@ -177,7 +177,7 @@ def test_validate_unrooted_newick_accepts_a_trifurcating_root() -> None:
     assert validate_unrooted_newick(dataset.newick)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_validate_unrooted_newick_rejects_a_strictly_binary_root() -> None:
     # A rooted binary tree (2 children at the root) is not the trifurcating-
     # root convention: validate_newick and validate_unrooted_newick partition
@@ -185,7 +185,7 @@ def test_validate_unrooted_newick_rejects_a_strictly_binary_root() -> None:
     assert not validate_unrooted_newick("(A,(B,C)anc);")
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "malformed",
     [

@@ -241,7 +241,7 @@ def test_the_survey_reports_a_near_duplicate_it_has_never_seen(
     assert any(c.key == "role:incidence" and len(c.members) == 3 for c in clusters)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_shape_below_the_rule_is_not_a_cluster(tmp_path: Path) -> None:
     # Two classes sharing a shape are a pair, not a pattern. The rule is three,
     # the same count root `CLAUDE.md` puts on a seam, and a survey that

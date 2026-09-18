@@ -221,7 +221,7 @@ def test_the_new_door_is_the_old_one(objective: Objective, theta: torch.Tensor) 
         assert_allclose(realized[name].numpy(), value.numpy(), rtol=1e-10)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -> None:
     # The two algorithms share the model and nothing else -- no optimizer, no
     # parameterization, no constraint map -- and converge to the same optimum.
@@ -261,7 +261,7 @@ def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -
         assert_allclose(em_errors[name].numpy(), value.numpy(), rtol=0.01)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_collapsing_component_is_refused_through_the_new_door_too() -> None:
     # A Gaussian emission's likelihood is unbounded as a variance falls, so
     # near a collapsing component there is no maximum to expand around and the
@@ -344,7 +344,7 @@ def test_a_fit_asked_for_its_interval_gets_the_one_the_door_gives() -> None:
         assert torch.equal(with_interval.standard_errors[name], value)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unconverged_fit_is_refused_an_interval_but_not_a_result() -> None:
     # The route decides one thing: whether the point is a maximum. A fit the
     # optimizer left early is not, so asking for its interval raises; not

@@ -34,7 +34,7 @@ def test_recovery_returns_one_entry_per_estimable_parameter() -> None:
     assert truth.shape == (5,)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_root_pair_profile_is_flat_and_the_control_is_not() -> None:
     # Panel (b)'s whole content, as numbers. The threshold separating them is
     # not delicate: the flat curve moves by ~1e-12 and the control by ~90.
@@ -58,7 +58,7 @@ def test_the_control_peaks_at_the_generating_split() -> None:
     assert curved[-1] < curved[-2]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_exactly_flat_profile_is_not_called_noise() -> None:
     # "at most 0.0e+00 -- floating-point noise" says two contradictory
     # things. An exact zero gets its own wording.

@@ -71,7 +71,7 @@ def _dataset(
     return simulate_mixture(params).observations
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gradient_matches_central_differences() -> None:
     objective = GaussianMixtureObjective(_dataset(), 2)
 
@@ -82,7 +82,7 @@ def test_the_gradient_matches_central_differences() -> None:
     assert realized <= 1e-6
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gradient_fit_and_expectation_maximization_reach_the_same_optimum() -> None:
     # EM shares no optimizer, no parameterization and no constraint map with
     # `fit` -- only the model. On a well-separated mixture they agree to the
@@ -163,7 +163,7 @@ def test_the_responsibilities_are_a_distribution_over_components() -> None:
     assert bool((posterior >= 0.0).all())
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_collapsing_component_is_refused_rather_than_returned() -> None:
     # The unbounded likelihood transfers from the Gaussian HMM unchanged,
     # being the same family: a component's mean on one observation with its
@@ -185,7 +185,7 @@ def test_a_collapsing_component_is_refused_rather_than_returned() -> None:
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_mixture_evidence_is_a_density_and_may_exceed_one() -> None:
     # Inherited from the components, and worth pinning here too: a caller who
     # assumed a probability would read a positive log-likelihood as a bug.
@@ -360,7 +360,7 @@ def test_the_initializer_satisfies_the_protocol_and_seeds_the_objective() -> Non
     assert not torch.equal(starts[0], starts[1])
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_initializer_that_reads_the_data_refuses_an_objective_it_cannot_read() -> (
     None
 ):

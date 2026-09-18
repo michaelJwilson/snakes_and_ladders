@@ -129,7 +129,7 @@ def test_a_cited_figure_is_selected_whichever_way_it_is_included(
     }
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_document_citing_an_unknown_figure_is_refused(tmp_path: Path) -> None:
     # Refused rather than skipped: skipping is exactly the silent failure the
     # selection would otherwise introduce.
@@ -155,7 +155,7 @@ def test_a_perturbed_figure_is_reported_as_stale(tmp_path: Path) -> None:
     assert compare(rebuilt, committed) == ["figure.pdf"]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_figure_missing_from_the_committed_set_is_reported_as_stale(
     tmp_path: Path,
 ) -> None:
@@ -265,7 +265,7 @@ def test_leaving_a_document_out_selects_the_wrong_set(tmp_path: Path) -> None:
     assert partial < {spec.stem for spec in selected([paper, textbook], every=False)}
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_selection_over_no_document_is_refused() -> None:
     # An empty union cites nothing and would render nothing, while passing
     # every check that asks whether the cited figures are fresh.

@@ -74,7 +74,7 @@ QUADRATURE_MEAN = (0.72051, -0.61289)
 QUADRATURE_SD = (0.05497, 0.04524)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("integrator", [leapfrog, yoshida])
 @pytest.mark.parametrize(("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (100, 0.02)])
 def test_the_integrator_is_reversible(
@@ -98,7 +98,7 @@ def test_the_integrator_is_reversible(
     assert float((-back_momentum - momentum).abs().max()) < EXACT
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_energy_error_is_second_order_in_the_step_size() -> None:
     # Halving the step must quarter the error. The *trajectory length* is held
     # fixed and the step count scaled with it: varying the step at a fixed
@@ -181,7 +181,7 @@ def test_the_chain_matches_grid_quadrature_on_a_real_objective() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @stress_only(
     "the bias is in the spread, which needs the same chain lengths "
     "as the test above before it is measurable at all"
@@ -224,7 +224,7 @@ def test_a_step_size_that_diverges_biases_the_spread_not_the_mean() -> None:
     assert float(coarse.theta.std(dim=0)[0]) < float(fine.theta.std(dim=0)[0])
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_posterior_is_wider_than_the_laplace_approximation_predicts() -> None:
     # The Laplace standard error is the curvature at the mode; the HMC one is
     # a quantile of the posterior. They agree on this fixture, the expected
@@ -241,7 +241,7 @@ def test_the_posterior_is_wider_than_the_laplace_approximation_predicts() -> Non
     np.testing.assert_allclose(laplace.numpy(), np.array(QUADRATURE_SD), rtol=0.15)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_zero_length_trajectory_is_refused() -> None:
     # It would propose the current point every time: acceptance rate 1, energy
     # error 0, and a chain that has not moved. Every diagnostic reports health.
@@ -255,7 +255,7 @@ def test_a_zero_length_trajectory_is_refused() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_step_size_is_refused() -> None:
     with pytest.raises(ValueError, match="step_size must be positive"):
         sample(
@@ -266,13 +266,13 @@ def test_a_non_positive_step_size_is_refused() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_prior_scale_is_refused() -> None:
     with pytest.raises(ValueError, match="prior scale must be positive"):
         WithGaussianPrior(GAUSSIAN, scale=0.0)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
     # The wrapper turns a likelihood into something with a posterior; if it
     # changed the likelihood term the chain would silently target a different
@@ -285,7 +285,7 @@ def test_the_prior_is_added_to_the_objective_and_nothing_else() -> None:
     assert float(wrapped(point)) == pytest.approx(expected, rel=EXACT)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_prior_leaves_the_coordinates_it_is_stated_in_alone() -> None:
     # The prior is isotropic *in unconstrained coordinates*, so the wrapper
     # adds a term and changes no coordinate. An inverse of its own would put
@@ -346,7 +346,7 @@ def _hand_written_leapfrog(
 @pytest.mark.parametrize(
     ("n_steps", "step_size"), [(20, 0.05), (50, 0.1), (7, 0.13), (1, 0.3)]
 )
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_composition_reproduces_the_hand_written_leapfrog_exactly(
     n_steps: int, step_size: float
 ) -> None:
@@ -363,7 +363,7 @@ def test_the_composition_reproduces_the_hand_written_leapfrog_exactly(
     assert torch.equal(composed[1], written[1])
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_yoshida_middle_sub_step_runs_backwards_in_time() -> None:
     # Not a sign error, and not avoidable: no composition of a second-order
     # symmetric method reaches fourth order with positive coefficients. Pinned
@@ -374,7 +374,7 @@ def test_the_yoshida_middle_sub_step_runs_backwards_in_time() -> None:
     assert math.fsum(YOSHIDA_WEIGHTS) == pytest.approx(1.0, abs=1e-15)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_composition_that_integrates_the_wrong_interval_is_refused() -> None:
     # The one arithmetic slip a reversibility check does not catch: weights
     # that are a palindrome but do not sum to 1 integrate perfectly reversibly
@@ -386,7 +386,7 @@ def test_a_composition_that_integrates_the_wrong_interval_is_refused() -> None:
         Integrator(name="asymmetric", weights=(0.2, 0.3, 0.5), order=2)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
     # The companion of the second-order test above: a slope estimator
     # reporting 4 for both integrators is broken, and only the pair catches
@@ -436,7 +436,7 @@ def test_force_evaluations_counts_what_a_trajectory_actually_costs(
     assert counted.calls == integrator.force_evaluations(n_steps)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> None:
     # **The measurement is negative.** A fourth-order method pays where the
     # step is limited by *accuracy*; here it is limited by *stability*.
@@ -540,7 +540,7 @@ def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_temperature_is_refused() -> None:
     with pytest.raises(ValueError, match="temperature must be positive"):
         sample(
@@ -601,7 +601,7 @@ def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
     assert float(deviation.abs().max()) < 0.1
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() -> None:
     # With exchanges on, replica r targets exp(-U / T_r): on the analytic
     # Gaussian that is the same mean and covariance scaled by T_r. The ladder
@@ -669,7 +669,7 @@ def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
     assert run.positions.shape == (25, 4, 2)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_ladder_that_cannot_exchange_is_refused() -> None:
     with pytest.raises(ValueError, match="at least two temperatures"):
         parallel_tempering(

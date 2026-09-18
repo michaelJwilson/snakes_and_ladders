@@ -154,7 +154,7 @@ def test_the_held_kernel_explains_the_data_better_than_a_constant_one() -> None:
     assert told > fitted + 1.0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_kernel_of_the_wrong_length_is_refused_by_the_fit() -> None:
     """The refusal `forward_backward` makes, made where a fit can hit it."""
     observations = _chain(np.full(9, 0.9), 10, seed=1)
@@ -204,7 +204,7 @@ def test_the_spatial_params_take_a_matrix_for_the_chain_or_one_per_transition() 
     np.testing.assert_array_equal(many.transition, stack)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_transition_that_is_not_row_stochastic_is_refused() -> None:
     """Either matrix form is a kernel, so its rows are distributions."""
     from dataclasses import replace

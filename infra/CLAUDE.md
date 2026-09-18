@@ -55,9 +55,10 @@ stated beside the number, derived from a measurement of the spread and not
 chosen, relative and keyed to the lowest precision in the comparison (root
 `CLAUDE.md`), and tight enough that a change worth catching still fails.
 
-A statement is covered when a test that judged something reached it, and
-not when a test reached it. Reachability, a shape and the absence of an
-exception are what a test costs, not what it establishes, and a gate that
+A statement is covered when an `end2end` or an `oracle` test reached it,
+and not when a test reached it. Reachability, a shape, a property the
+implementation was written to satisfy and a defect pinned are what a test
+costs or finds, not what it establishes about the science, and a gate that
 counts them reads as satisfied because nothing fails (issue #729). What
 counts is stated once, beside the markers, and the number rises by adding
 the referee a module lacks --- never by widening the set, and never by

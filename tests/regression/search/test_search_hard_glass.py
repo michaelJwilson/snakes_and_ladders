@@ -106,7 +106,7 @@ def test_the_ground_state_is_enumerated_and_the_planted_state_is_not_it(
     assert glass.unsatisfied > 0, "an unfrustrated glass is a ferromagnet"
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_descent_failure_stops_at_a_genuine_local_minimum(
     record: Baseline, glass: PlantedSpinGlass
 ) -> None:

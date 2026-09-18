@@ -74,7 +74,7 @@ def test_latex_safe_accepts_a_separated_integer() -> None:
     check_latex_safe(f"simulated over {latex_integer(200_000)} sites")
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("special", ["_", "%", "&", "#", "\\"])
 def test_an_unescaped_special_is_refused(special: str) -> None:
     # The check has to fail on something, or it is decoration. Every
@@ -83,13 +83,13 @@ def test_an_unescaped_special_is_refused(special: str) -> None:
         check_latex_safe(f"a caption containing {special} directly")
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_error_names_the_offending_characters() -> None:
     with pytest.raises(ValueError, match=r"\['#', '_'\]"):
         check_latex_safe("both _ and # are wrong")
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_write_qa_figure_refuses_an_unsafe_caption(tmp_path: Path) -> None:
     # Enforced at the point of writing, so a caption that would break the
     # LaTeX build fails in the QA script rather than in the document build.
@@ -109,7 +109,7 @@ def test_write_qa_table_writes_a_tex_fragment_and_its_caption(tmp_path: Path) ->
     assert written.caption_path.read_text() == "A caption."
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_write_qa_table_refuses_an_unsafe_caption(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="unescaped LaTeX special"):
         write_qa_table(tmp_path, "unsafe", r"\begin{tabular}{l}\end{tabular}", "a_b")

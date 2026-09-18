@@ -73,7 +73,7 @@ def _hmm_objective(seed_offset: int = 0) -> tuple[HmmObjective, torch.Tensor]:
 # --- the fit reaches a maximum, on both instances ------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("build", [_potts_objective, _hmm_objective])
 def test_the_fit_satisfies_the_first_order_condition(build) -> None:  # type: ignore[no-untyped-def]
     objective, _ = build()
@@ -94,7 +94,7 @@ def test_the_fit_beats_the_truth_on_its_own_sample(build) -> None:  # type: igno
     assert result.value < float(objective(truth))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_short_budget_reports_itself_as_unconverged() -> None:
     objective, _ = _hmm_objective()
     result = fit(objective, max_iterations=1)
@@ -115,7 +115,7 @@ def test_a_supplied_starting_point_is_used() -> None:
     assert_allclose(held.value, float(objective(truth)), rtol=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_potts_optimum_does_not_depend_on_the_starting_point() -> None:
     objective, truth = _potts_objective()
     assert_allclose(
@@ -287,13 +287,13 @@ class _Quadratic:
         return (theta[0] - 2.0) ** 2
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_singular_information_matrix_is_reported_as_unidentifiable() -> None:
     with pytest.raises(ValueError, match="not identifiable"):
         parameter_covariance(_Quadratic(), torch.zeros(2, dtype=torch.float64))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_estimate_on_the_boundary_has_no_interval() -> None:
     # Not a contrived matrix: at a small enough sample the HMM's
     # maximum-likelihood estimate puts an emission probability at zero, and
@@ -316,7 +316,7 @@ def test_an_estimate_on_the_boundary_has_no_interval() -> None:
         parameter_covariance(objective, result.theta)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_well_posed_fit_is_far_from_the_conditioning_floor() -> None:
     # The other side of the same threshold: the check must not be so eager
     # that it rejects the fits the recovery tests depend on.
@@ -327,7 +327,7 @@ def test_a_well_posed_fit_is_far_from_the_conditioning_floor() -> None:
     assert ratio > 1e-4, f"eigenvalue ratio {ratio:.2e} is close to the 1e-6 floor"
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.oracle
 def test_the_observed_information_is_the_hessian_of_the_objective() -> None:
     # Pinned against a closed form: d2/dx2 (x - 2)^2 = 2, and zero elsewhere.
@@ -362,7 +362,7 @@ def test_standard_errors_are_shaped_like_their_parameters() -> None:
     assert bool((error["log_initial"] > 0).all())
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_information_grows_with_the_data() -> None:
     # A standard error is a claim about how much the data says. Four times
     # the data must halve it, to within the sampling noise of a different

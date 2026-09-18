@@ -226,7 +226,7 @@ def test_each_guard_fails_on_violating_source() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_slimming_rows_hold_at_their_baseline() -> None:
     # Issue #717 is measured by these rows before and after each of its
     # pull requests. A row above its pin is a new duplicate; a row below it
@@ -238,7 +238,7 @@ def test_the_slimming_rows_hold_at_their_baseline() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_each_slimming_query_counts_a_violating_tree(tmp_path: Path) -> None:
     # The file-and-import queries exercised on a tree built to trip each:
     # a twin beside its oracle, a module without a docstring, a root that
@@ -271,7 +271,7 @@ def test_each_slimming_query_counts_a_violating_tree(tmp_path: Path) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_each_slimming_pattern_matches_its_own_kind() -> None:
     # The regular-expression rows, on one violating and one clean line each.
     patterns = {

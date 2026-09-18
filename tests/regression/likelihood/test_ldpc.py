@@ -239,7 +239,7 @@ def test_flooding_reaches_the_general_fixed_point_on_a_loopy_code(
 # --- the sign symmetry the all-zero shortcut rests on --------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("channel", CHANNELS, ids=lambda c: type(c).__name__)
 @pytest.mark.parametrize("algorithm", list(DecodingAlgorithm))
 def test_negating_the_ratios_at_a_codeword_moves_the_decoding_with_it(
@@ -327,7 +327,7 @@ def test_the_996_bit_code_on_the_erasure_channel_either_side_of_the_threshold() 
 # --- density evolution, and the code at size ------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize(("degrees", "published"), sorted(PUBLISHED_THRESHOLD.items()))
 def test_the_erasure_threshold_matches_its_published_value(
     degrees: tuple[int, int], published: float
@@ -340,7 +340,7 @@ def test_the_erasure_threshold_matches_its_published_value(
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_density_evolution_is_monotone_and_fixed_at_zero() -> None:
     """The recursion is non-increasing below the threshold, stays at its
     fixed point above it, and zero is a fixed point at every `epsilon`."""
@@ -383,7 +383,7 @@ def test_the_20000_bit_code_brackets_the_erasure_threshold() -> None:
 # --- stopping, and the shape of a result ----------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_syndrome_stop_returns_at_the_first_codeword() -> None:
     """With the early stop the loop ends at the first decided codeword, before
     the cap; without it the same ratios run to the cap, sit at an exact fixed
@@ -405,7 +405,7 @@ def test_the_syndrome_stop_returns_at_the_first_codeword() -> None:
     np.testing.assert_array_equal(stopped.bits, unstopped.bits)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_erased_bit_is_not_a_decision_for_zero() -> None:
     """The zero word through an erasure channel satisfies every check at once,
     and must not be reported decoded while a posterior is still zero."""
@@ -427,7 +427,7 @@ def test_an_erased_bit_is_not_a_decision_for_zero() -> None:
     assert np.all(everything_erased.posterior_llr == 0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_decoder_and_the_enumeration_refuse_what_they_cannot_do() -> None:
     code = gallager_code(48, 3, 6, np.random.default_rng(44))
     with pytest.raises(ValueError, match="shape"):

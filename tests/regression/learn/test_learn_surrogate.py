@@ -141,7 +141,7 @@ def test_models_explain_the_target_on_held_out_groups(make: object) -> None:
     assert fitted.epochs <= 200
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize(
     "make",
     [
@@ -213,7 +213,7 @@ def test_calibrated_bound_holds_at_its_coverage_on_fresh_groups() -> None:
         calibrate(fitted, test, Bound.LOWER, 1.0)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_argmax_agreement_and_r_squared_score_what_they_say() -> None:
     target = torch.tensor([1.0, 3.0, 2.0, 5.0, 4.0, 6.0])
     groups = np.array([0, 0, 0, 1, 1, 1])
@@ -250,7 +250,7 @@ def test_augment_keeps_the_original_and_adds_the_copies() -> None:
     assert len(augmented) == 6
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_examples_refuse_mismatched_lengths() -> None:
     with pytest.raises(ValueError, match="need 2 targets"):
         Examples(torch.zeros((2, 3)), torch.zeros(3), np.zeros(2, dtype=np.int64))

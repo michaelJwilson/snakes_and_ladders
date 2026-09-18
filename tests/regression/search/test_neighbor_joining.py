@@ -59,7 +59,7 @@ def _assert_recovered(truth: Node, estimate: Node) -> None:
         assert recovered[split] == pytest.approx(length, abs=EXACT)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("name", FIXTURES)
 def test_the_fixture_tree_is_recovered_exactly_from_its_path_lengths(name: str) -> None:
     """Topology and every branch length, to ``1e-12``, on the additive matrix.
@@ -73,7 +73,7 @@ def test_the_fixture_tree_is_recovered_exactly_from_its_path_lengths(name: str) 
     _assert_recovered(params.tau, neighbor_joining(names, distances))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_taxa", [20, 50])
 def test_a_random_tree_is_recovered_exactly_from_its_path_lengths(n_taxa: int) -> None:
     """Ten random trees at each size, every one recovered to ``1e-12``."""
@@ -84,7 +84,7 @@ def test_a_random_tree_is_recovered_exactly_from_its_path_lengths(n_taxa: int) -
         _assert_recovered(truth, neighbor_joining(names, distances))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_four_point_condition_holds_on_additive_distances_and_fails_off_them() -> (
     None
 ):
@@ -99,7 +99,7 @@ def test_the_four_point_condition_holds_on_additive_distances_and_fails_off_them
     assert four_point_violation(perturbed) == pytest.approx(0.05)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_attesons_radius_is_half_the_shortest_branch() -> None:
     """On the six-taxon fixture the shortest branch is 0.06, so the radius is 0.03."""
     params = load_fixture(SIX_TAXA)
@@ -154,7 +154,7 @@ def test_recovery_rises_with_sites_and_is_certain_inside_attesons_radius() -> No
     assert inside_counts[-1] >= 40, inside_counts
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_unusable_matrices_are_refused() -> None:
     with pytest.raises(ValueError, match="at least 3 taxa"):
         neighbor_joining(["A", "B"], np.zeros((2, 2)))

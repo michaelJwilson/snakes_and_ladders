@@ -96,7 +96,7 @@ def test_forward_matches_brute_force_path_enumeration() -> None:
     assert_allclose(float(actual), expected, rtol=_RTOL_ORACLE)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_likelihood_is_invariant_to_relabelling_the_hidden_states() -> None:
     # The identifiability caveat, asserted rather than only documented: a
     # recovery test that compared parameters without aligning the
@@ -121,7 +121,7 @@ def test_the_likelihood_is_invariant_to_relabelling_the_hidden_states() -> None:
         assert_allclose(permuted, reference, rtol=_RTOL_ORACLE)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("at_truth", [True, False])
 def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
     params = load_hmm_params(FIXTURE)
@@ -192,7 +192,7 @@ def test_the_initial_point_is_uninformative_but_not_symmetric() -> None:
     assert emission[1].argmax() != emission[2].argmax()
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_uniform_point_is_a_stationary_point_of_the_likelihood() -> None:
     # This is why `initial` breaks the symmetry, and it is a property of the
     # model rather than a quirk of the optimizer: with every hidden state
@@ -218,7 +218,7 @@ def test_the_uniform_point_is_a_stationary_point_of_the_likelihood() -> None:
     assert float(gradient[n_free_initial + n_free_transition :].abs().max()) > 1.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_baum_welch_increases_the_likelihood_monotonically() -> None:
     # An exact property of EM, not an empirical one: each iteration
     # maximizes a lower bound that is tight at the current parameters, so

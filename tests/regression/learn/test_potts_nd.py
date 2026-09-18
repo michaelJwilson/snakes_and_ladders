@@ -92,7 +92,7 @@ def test_the_score_is_the_negated_energy_bitwise(side: int, n_states: int) -> No
         assert environment.score(state) == theirs
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_step_is_the_score_difference() -> None:
     """Every action's reward equals the change in `score` it caused.
 
@@ -193,7 +193,7 @@ def test_the_sweep_at_zero_is_one_icm_sweep(side: int) -> None:
     assert environment.score(state) == pytest.approx(-value, abs=1e-9)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_steepest_ascent_is_a_different_baseline() -> None:
     """The best flip anywhere is not ICM, and it converges to its own optimum.
 
@@ -350,7 +350,7 @@ def test_the_features_carry_no_constant_column() -> None:
     assert (features.std(axis=0) > 0.0).all()
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
@@ -383,7 +383,7 @@ def test_an_unusable_construction_is_refused(
         PottsNDEnvironment(**{**base, **kwargs})  # type: ignore[arg-type]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_uniform_field_is_refused_by_shape() -> None:
     """A `(n_states,)` field is the old environment's, and this one refuses it.
 

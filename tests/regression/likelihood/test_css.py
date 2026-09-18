@@ -72,7 +72,7 @@ def _stabilizers(code: CssCode) -> np.ndarray:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_residual_in_the_row_space_is_a_success() -> None:
     """Adding any nonzero stabilizer to the right answer still decodes.
 
@@ -95,7 +95,7 @@ def test_a_residual_in_the_row_space_is_a_success() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_residual_outside_the_row_space_is_a_failure() -> None:
     """A logical operator added to the right answer fails, as does a wrong syndrome.
 
@@ -124,7 +124,7 @@ def test_a_residual_outside_the_row_space_is_a_failure() -> None:
 # --- the oracle: the partition, then the two maximum-likelihood decoders ----------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_cosets_partition_every_error_by_syndrome_and_by_quotient() -> None:
     """`2 ** k` cosets per reachable syndrome, and the probabilities sum to one.
 
@@ -210,7 +210,7 @@ def test_summing_a_coset_beats_maximizing_over_one_error() -> None:
     np.testing.assert_allclose(margin, 2.43832e-03, atol=5e-9)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_no_other_coset_choice_beats_the_degenerate_decoder() -> None:
     """The returned coset carries the greatest probability at every syndrome.
 
@@ -230,7 +230,7 @@ def test_no_other_coset_choice_beats_the_degenerate_decoder() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unreachable_rate_and_an_unreachable_size_are_refused() -> None:
     """A rate outside `(0, 0.5)` and an enumeration past the policy's limit."""
     code = _code("ci")
@@ -244,7 +244,7 @@ def test_an_unreachable_rate_and_an_unreachable_size_are_refused() -> None:
 # --- belief propagation, scored by the criterion above ---------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_correction_depends_on_the_error_only_through_its_syndrome() -> None:
     """Two errors of one syndrome give one correction, which is what makes it a decoder.
 
@@ -367,7 +367,7 @@ def test_a_decode_that_did_not_converge_returns_no_usable_correction() -> None:
     assert unconverged > 0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_run_of_no_trials_is_refused() -> None:
     """A rate over zero draws is not an estimate of anything."""
     code = _code("ci")

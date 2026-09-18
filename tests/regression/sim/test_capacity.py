@@ -49,7 +49,7 @@ PUBLISHED_SIGMA_STAR = 0.9787
 RATES = (0.1, 1.0 / 3.0, 0.5, 4.0 / 7.0, 0.9)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_binary_entropy_peaks_at_one_half_and_vanishes_at_certainty() -> None:
     # Three properties that fix H up to nothing: the endpoints by the
     # `0 log 0 = 0` limit, the symmetry, and the maximum.
@@ -63,7 +63,7 @@ def test_the_binary_entropy_peaks_at_one_half_and_vanishes_at_certainty() -> Non
         assert binary_entropy(probability) < binary_entropy(0.5)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_erasure_capacity_is_the_delivered_fraction() -> None:
     # Exact, not approximate: an unerased symbol arrives intact, so the
     # capacity is the probability of delivery and nothing is integrated.
@@ -72,7 +72,7 @@ def test_the_erasure_capacity_is_the_delivered_fraction() -> None:
     assert capacity(BinaryErasureChannel(0.4)) == 0.6
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_symmetric_capacity_matches_the_mutual_information_it_stands_for() -> None:
     # The independent route: `1 - H(p)` is the closed form, and this sums
     # `sum_xy p(x, y) log2 p(y | x) / p(y)` over the 2x2 joint at a uniform
@@ -94,7 +94,7 @@ def test_the_symmetric_capacity_matches_the_mutual_information_it_stands_for() -
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gaussian_capacity_recovers_the_published_rate_half_limit() -> None:
     # The pin: at the published sigma* the capacity is one half. The tolerance
     # is the quotation, not the quadrature -- 0.9787 is four places, and the
@@ -102,7 +102,7 @@ def test_the_gaussian_capacity_recovers_the_published_rate_half_limit() -> None:
     assert gaussian_capacity(PUBLISHED_SIGMA_STAR) == pytest.approx(0.5, abs=1e-5)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_quadrature_agrees_with_monte_carlo_within_its_sampling_error() -> None:
     # Quadrature against sampling, which shares no node, weight or recursion
     # with it. The tolerance is four standard errors of the sample mean, so it
@@ -116,7 +116,7 @@ def test_the_quadrature_agrees_with_monte_carlo_within_its_sampling_error() -> N
     assert abs(gaussian_capacity(sigma) - sampled) < 4.0 * standard_error
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gaussian_capacity_falls_with_the_noise_and_stays_in_the_unit_interval() -> (
     None
 ):
@@ -129,7 +129,7 @@ def test_the_gaussian_capacity_falls_with_the_noise_and_stays_in_the_unit_interv
     assert all(later < earlier for earlier, later in pairwise(values))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_node_count_is_not_what_the_number_rests_on() -> None:
     # Halving and doubling the default both move the answer under 1e-9, so the
     # quadrature has converged rather than landed near the pin by luck.
@@ -139,7 +139,7 @@ def test_the_node_count_is_not_what_the_number_rests_on() -> None:
         assert abs(gaussian_capacity(sigma, nodes=nodes) - reference) < 1e-9
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("rate", RATES)
 @pytest.mark.parametrize(
     "family",
@@ -154,7 +154,7 @@ def test_the_shannon_limit_round_trips_through_capacity(
     assert capacity(family(noise)) == pytest.approx(rate, abs=1e-7)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("rate", RATES)
 def test_the_erasure_limit_is_one_minus_the_rate(rate: float) -> None:
     # Closed form, so the bisection is held to it rather than to itself.
@@ -163,7 +163,7 @@ def test_the_erasure_limit_is_one_minus_the_rate(rate: float) -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_no_ensemble_threshold_reaches_the_limit_it_is_bounded_by() -> None:
     # The converse, and the only place the suite compares the two: the (3,6)
     # ensemble's density-evolution threshold against the erasure channel's
@@ -216,7 +216,7 @@ def test_the_arguments_each_function_cannot_answer_for_are_refused() -> None:
         gaussian_capacity(1.0, nodes=1)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("rate", RATES)
 @pytest.mark.parametrize("decibels", [-1.0, 0.0, 1.5, 4.0, 9.0])
 def test_the_two_directions_of_the_decibel_map_are_inverses(
@@ -230,7 +230,7 @@ def test_the_two_directions_of_the_decibel_map_are_inverses(
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_rate_half_limit_is_the_published_decibel_figure() -> None:
     # +0.187 dB, the binary-input limit at rate 1/2 every coding text quotes
     # (Richardson and Urbanke 2008, §4.10). Reached here from the capacity
@@ -239,7 +239,7 @@ def test_the_rate_half_limit_is_the_published_decibel_figure() -> None:
     assert decibels_at_capacity(0.5) == pytest.approx(0.187, abs=1e-3)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_limit_in_decibels_rises_with_the_rate() -> None:
     # A code that sends more information per symbol needs a better channel.
     # The turbo fixture's transmitted rate is the low end, at -0.508 dB.

@@ -41,7 +41,7 @@ def _code(n_bits: int, seed: int) -> ParityCheck:
 # --- the ensemble --------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_bits", [12, 96, 996])
 def test_a_gallager_draw_has_the_declared_degrees(n_bits: int) -> None:
     """Every column of a (3,6) draw has three ones and every row six, at every size."""
@@ -56,7 +56,7 @@ def test_a_gallager_draw_has_the_declared_degrees(n_bits: int) -> None:
     assert np.all(dense.sum(axis=1) == ROW_WEIGHT)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_bands_make_at_least_column_weight_minus_one_rows_dependent() -> None:
     """The rows of each band sum to the all-ones vector, so `k >= n - m + 2` for (3,6)."""
     code = _code(96, seed=2)
@@ -102,7 +102,7 @@ def _draw(rng: np.random.Generator) -> tuple[int, ...]:
 # --- the encoder ---------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_bits", [24, 96, MAX_ENCODABLE_BITS - 2])
 def test_every_encoded_word_is_in_the_null_space(n_bits: int) -> None:
     """`H c = 0` on 20 random messages per size, and distinct messages encode distinctly."""
@@ -133,7 +133,7 @@ def test_the_enumerated_code_has_dimension_n_minus_rank() -> None:
 # --- the channels --------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_binary_symmetric_ratio_is_the_closed_form() -> None:
     """Every ratio is `+-log((1 - p) / p)`, negative exactly at a flipped bit."""
     p = 0.11
@@ -165,7 +165,7 @@ def test_the_flip_count_matches_the_flip_probability(p: float, seed: int) -> Non
     assert abs(flips - p * code.n_bits) < 4 * math.sqrt(code.n_bits * p * (1 - p))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.end2end
 def test_the_erasure_channel_is_zero_or_certain() -> None:
     """An erased bit is exactly zero; a delivered one is `+-LLR_CAP` with the bit's sign,
@@ -185,7 +185,7 @@ def test_the_erasure_channel_is_zero_or_certain() -> None:
     assert abs(erased.sum() - epsilon * n) < 4 * math.sqrt(n * epsilon * (1 - epsilon))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.end2end
 def test_the_gaussian_ratio_has_the_closed_form_moments() -> None:
     """`L = 2 y / sigma^2` on the zero word has mean `2 / sigma^2` and variance `4 / sigma^2`."""
@@ -202,7 +202,7 @@ def test_the_gaussian_ratio_has_the_closed_form_moments() -> None:
     assert abs(llr.var() - variance) < 4 * variance * math.sqrt(2 / n)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize(
     "channel", [BinarySymmetricChannel(0.08), BinaryErasureChannel(0.3)]
 )
@@ -258,7 +258,7 @@ def test_the_parity_check_factor_graph_scores_the_definition() -> None:
 # --- refusals ------------------------------------------------------------------
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("n_bits", "column_weight", "row_weight"),
     [(12, 6, 3), (12, 1, 6), (12, 6, 6), (13, 3, 6), (0, 3, 6)],
@@ -270,7 +270,7 @@ def test_degrees_that_do_not_make_a_regular_code_are_refused(
         gallager_code(n_bits, column_weight, row_weight, np.random.default_rng(0))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_repeated_edge_an_empty_check_and_an_unchecked_bit_are_refused() -> None:
     with pytest.raises(ValueError, match="twice"):
         ParityCheck.from_edges(3, 2, np.array([0, 0, 1, 2]), np.array([0, 0, 1, 1]))
@@ -282,7 +282,7 @@ def test_a_repeated_edge_an_empty_check_and_an_unchecked_bit_are_refused() -> No
         ParityCheck.from_edges(3, 2, np.array([0, 3]), np.array([0, 1]))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_channel_parameters_outside_their_ranges_are_refused() -> None:
     with pytest.raises(ValueError, match="flip_probability"):
         BinarySymmetricChannel(0.5)
@@ -296,7 +296,7 @@ def test_channel_parameters_outside_their_ranges_are_refused() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_encoder_refuses_a_wrong_length_and_a_code_past_its_size() -> None:
     code = _code(24, seed=23)
     with pytest.raises(ValueError, match="message bits"):
@@ -332,7 +332,7 @@ def _independent(matrix: np.ndarray, take: int, *, by_row: bool) -> list[int]:
     raise ValueError(msg)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gf2_rank_and_inverse_agree_with_the_elimination_they_share() -> None:
     """The rank against the null space's dimension, and the inverse against `I`.
 
@@ -365,7 +365,7 @@ def test_the_gf2_rank_and_inverse_agree_with_the_elimination_they_share() -> Non
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_square_or_singular_matrix_has_no_inverse_over_gf2() -> None:
     """Singular over GF(2) is a fact about the input, not a numerical near-miss."""
     with pytest.raises(ValueError, match="square matrix"):

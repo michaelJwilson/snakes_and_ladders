@@ -161,7 +161,7 @@ def test_every_leaf_gets_its_own_sequence_aligned_to_its_row() -> None:
         assert drawn[expected] == layout[leaf][1]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_no_sequences_are_drawn_when_no_alignment_is_given() -> None:
     # The parameter is optional, and a tree without an alignment must not
     # acquire an empty column of text.

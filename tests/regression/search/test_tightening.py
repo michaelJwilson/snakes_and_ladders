@@ -92,7 +92,7 @@ def test_the_decoded_labelling_is_certified_optimal_on_the_square_lattice(
     assert certificate.energy == pytest.approx(_ground_state(graph), abs=1e-9)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.potts_lattice
 def test_a_decoded_labelling_is_never_better_than_the_bound() -> None:
     # The two sides of the interval, in the right order: the energy of a
@@ -126,7 +126,7 @@ def test_triangles_tighten_what_the_pairwise_relaxation_cannot_see(
     assert tightened.bound > pairwise.bound
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.frustrated_lattice
 def test_the_pairwise_bound_does_not_depend_on_the_coupling_here() -> None:
     # Stated as its own test because it is the clearest statement of what the

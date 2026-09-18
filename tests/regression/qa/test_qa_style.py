@@ -49,13 +49,13 @@ def test_series_style_pairs_each_colour_with_its_own_encoding(index: int) -> Non
     assert style["linestyle"] == LINESTYLES[index]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_series_style_refuses_to_invent_a_fifth_hue() -> None:
     with pytest.raises(IndexError, match="facet or aggregate"):
         series_style(len(PALETTE))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_series_style_rejects_a_negative_index() -> None:
     with pytest.raises(IndexError, match="outside the"):
         series_style(-1)
@@ -89,6 +89,6 @@ def test_tolerance_note_reports_the_realized_maximum() -> None:
     assert "1e-06" in note
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_tolerance_note_handles_no_deviations() -> None:
     assert "0.00e+00" in tolerance_note([], 1e-6)

@@ -110,7 +110,7 @@ def test_truth_ships_with_the_data() -> None:
     assert dataset.seed == 20260905
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_weights_that_do_not_describe_a_mixture_are_refused() -> None:
     components = GaussianEmission(MEAN, SCALE, FLOOR)
     with pytest.raises(ValueError, match="expected"):
@@ -157,7 +157,7 @@ def test_a_multi_channel_component_draws_every_channel_of_one_observation_togeth
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_declared_instance_is_found_by_its_marker_and_refused_without_one() -> None:
     params = MixtureParams(
         WEIGHTS,

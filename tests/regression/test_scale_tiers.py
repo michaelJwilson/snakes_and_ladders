@@ -60,7 +60,7 @@ def _collected(selector: str) -> int:
     raise AssertionError(msg)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_stress_tier_is_reachable_and_not_empty() -> None:
     # A tier nothing selects is a tier that rots. This is the check that would
     # have caught `stress` being registered but never applied, or applied but
@@ -68,7 +68,7 @@ def test_the_stress_tier_is_reachable_and_not_empty() -> None:
     assert _collected("stress") > 0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_key_tier_is_reachable_and_not_empty() -> None:
     # The tier added by issue #399: exempt from `SAL_DURATION_CAP` and held to
     # `SAL_KEY_DURATION_CAP` instead. An exemption nothing selects is an
@@ -76,7 +76,7 @@ def test_the_key_tier_is_reachable_and_not_empty() -> None:
     assert _collected("key") > 0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_ci_tier_excludes_the_stress_and_key_tiers() -> None:
     # The selections must partition, or the CI tier silently carries the sizes
     # the budget exists to keep out of it. Three tiers now: `key` is not
@@ -90,7 +90,7 @@ def test_the_ci_tier_excludes_the_stress_and_key_tiers() -> None:
     assert ci + stress + key == all_three
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_at_scale_produces_one_case_per_tier() -> None:
     # `at_scale` is what keeps one assertion running at two sizes. If it ever
     # marked both cases or neither, tests would move tiers with no diff to
@@ -104,7 +104,7 @@ def test_at_scale_produces_one_case_per_tier() -> None:
     assert [mark.name for mark in parameters[1].marks] == ["stress"]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_at_fixture_runs_one_case_per_declared_tier() -> None:
     # The registry-driven parameterization: the cases are the fixture files
     # a problem declares, and each carries its own tier's marker, so a
@@ -133,7 +133,7 @@ def test_at_fixture_hands_the_body_a_loaded_instance(instance: Fixture) -> None:
     assert instance.oracle == "enumeration"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unregistered_marker_is_an_error_not_a_silent_deselection() -> None:
     # `--strict-markers` is in `addopts`, so a typo fails at collection. Pinned
     # because the alternative is a test that selects nothing and reports as
@@ -145,7 +145,7 @@ def test_an_unregistered_marker_is_an_error_not_a_silent_deselection() -> None:
     assert "key:" in config
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @at_scale("size", ci=1, stress=2)
 def test_at_scale_runs_its_body_at_both_sizes(size: int) -> None:
     # The decorator exercised end to end: this test is collected twice, and
@@ -153,7 +153,7 @@ def test_at_scale_runs_its_body_at_both_sizes(size: int) -> None:
     assert size in (1, 2)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_key_test_over_its_own_cap_is_named() -> None:
     # The key tier's exemption is not an exemption from measurement: a key
     # fixture is by definition the largest declared instance that fits 120 s,

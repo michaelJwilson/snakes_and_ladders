@@ -91,7 +91,7 @@ def test_the_reward_matches_a_full_evaluation_under_a_periodic_boundary() -> Non
             )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_features_span_the_reward_on_a_lattice() -> None:
     environment = _lattice((3, 3), BoundaryCondition.OPEN)
     state = environment.reset(np.random.default_rng(2))
@@ -122,7 +122,7 @@ def test_hill_climbing_reaches_the_enumerated_optimum_on_a_lattice() -> None:
     assert max(reached) == pytest.approx(best)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.oracle
 def test_the_enumerated_gradient_matches_central_differences_on_a_lattice() -> None:
     # The oracle that makes this an instance rather than a lookalike:
@@ -145,7 +145,7 @@ def test_the_enumerated_gradient_matches_central_differences_on_a_lattice() -> N
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_edge_naming_a_missing_node_is_refused() -> None:
     with pytest.raises(ValueError, match=r"outside \[0, 3\)"):
         PottsEnvironment.on_graph(COUPLING, FIELD, [(0, 3)], 3)

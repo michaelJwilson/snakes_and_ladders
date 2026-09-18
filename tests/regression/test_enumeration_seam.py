@@ -42,12 +42,12 @@ def test_the_product_space_is_itertools_product_in_its_order(
     assert np.array_equal(realized, expected)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_no_sites_is_the_one_empty_configuration() -> None:
     assert configurations(3, 0).shape == (1, 0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_cap_refuses_with_the_callers_name_for_the_space() -> None:
     with pytest.raises(ValueError, match="3\\*\\*12 hidden paths is past the limit"):
         configurations(3, 12, what="3**12 hidden paths", limit=1000)
@@ -80,13 +80,13 @@ def test_site_marginals_add_in_configuration_order() -> None:
     assert np.array_equal(site_marginals(states, weights, 3), expected)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_argmax_is_the_first_maximizer() -> None:
     assert argmax(np.array([1.0, 3.0, 3.0, 2.0])) == 1
     assert argmax(np.array([-np.inf, -np.inf])) == 0
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_learn_enumerators_yield_the_same_tuples_under_the_cap() -> None:
     assert list(enumerate_configurations(3, 3)) == list(
         itertools.product(range(3), repeat=3)

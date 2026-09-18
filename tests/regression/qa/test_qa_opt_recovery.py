@@ -50,7 +50,7 @@ def test_potts_recovery_covers_every_parameter_at_the_fixture() -> None:
     assert bool((spread > 0.0).all())
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_hmm_recovery_reports_probabilities_that_normalize() -> None:
     params = load_hmm_params(HMM_FIXTURE)
     truth, fitted, spread, hits = hmm_recovery(params)

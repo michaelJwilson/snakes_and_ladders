@@ -177,7 +177,7 @@ def test_the_compiled_sweep_reproduces_the_numpy_one_bitwise(
     assert np.array_equal(compiled.log_densities, np.array(oracle))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_log_density_has_no_rust_backend() -> None:
     graph = _lattice_graph(4)
     indexed = _Indexed(graph)
@@ -208,7 +208,7 @@ def test_a_site_the_kernel_declines_is_decided_by_numpy(
     assert np.array_equal(fallen_back.states, expected.states)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_sweep_has_no_rust_backend() -> None:
     graph = _lattice_graph(4)
 
@@ -437,7 +437,7 @@ def test_annealing_reaches_the_closed_form_ground_state_as_the_potts_annealer_do
     assert specialised >= 5, specialised
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_temperature_scales_every_table_so_a_hot_chain_is_nearly_uniform() -> None:
     _, factor_graph = _potts_pair()
 
@@ -528,7 +528,7 @@ def test_the_annealed_topology_move_reaches_the_enumerated_best() -> None:
     assert hits >= 5, hits
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_refusals() -> None:
     _, factor_graph = _potts_pair()
     rng = np.random.default_rng(0)

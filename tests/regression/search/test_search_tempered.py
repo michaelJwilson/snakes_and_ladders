@@ -215,7 +215,7 @@ def test_a_seed_reproduces_the_run_and_every_recorded_density_is_its_structure_s
             )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unusable_ladder_and_a_ladder_without_temperature_one_are_refused() -> None:
     graph = _potts_lattice()
     rng = np.random.default_rng(0)

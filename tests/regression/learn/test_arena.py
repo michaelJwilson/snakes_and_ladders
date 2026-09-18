@@ -234,7 +234,7 @@ def test_the_greedy_row_is_the_greedy_rollout_and_not_a_policy() -> None:
 # --- the metric, and what it costs ---------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_cost_is_the_scored_actions_and_greedy_spends_fewer_than_its_budget() -> (
     None
 ):
@@ -261,7 +261,7 @@ def test_the_cost_is_the_scored_actions_and_greedy_spends_fewer_than_its_budget(
     assert float(np.mean(counted)) < per_state * PUBLISHED.max_steps
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_two_scorings_differ_exactly_where_an_episode_walks_out() -> None:
     """`VISITED` is the module's best-state rule, `FINAL` the published one.
 
@@ -281,7 +281,7 @@ def test_the_two_scorings_differ_exactly_where_an_episode_walks_out() -> None:
     assert reached_optimum(episode, value, 2.0, scoring=Scoring.FINAL)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_row_reads_beat_match_or_lose_against_its_baseline() -> None:
     """Three outcomes, compared as fractions so unequal start counts are safe.
 
@@ -302,7 +302,7 @@ def test_a_row_reads_beat_match_or_lose_against_its_baseline() -> None:
     assert same.evaluations < baseline.evaluations
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_budget_is_three_positive_numbers_and_reports_their_product() -> None:
     """The decision count a row states, and the refusal that keeps it meaningful."""
     assert PUBLISHED.decisions == 60 * 32 * 6
@@ -311,7 +311,7 @@ def test_a_budget_is_three_positive_numbers_and_reports_their_product() -> None:
             TrainingBudget(*bad)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_table_names_its_rows_and_refuses_one_it_does_not_carry() -> None:
     """A partial table says which rows it is; an unknown name is not silent."""
     environment = _environment()

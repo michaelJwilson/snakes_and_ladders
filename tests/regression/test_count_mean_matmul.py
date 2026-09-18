@@ -47,7 +47,7 @@ def _elementwise_mean(counts: torch.Tensor, posterior: torch.Tensor) -> torch.Te
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_poisson_mean_is_the_elementwise_one_to_the_declared_tolerance(
     weighted: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
@@ -66,7 +66,7 @@ def test_the_poisson_mean_is_the_elementwise_one_to_the_declared_tolerance(
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_binomial_rate_is_the_elementwise_one_to_the_declared_tolerance(
     weighted: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
@@ -85,7 +85,7 @@ def test_the_binomial_rate_is_the_elementwise_one_to_the_declared_tolerance(
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_difference_is_inside_the_floor_and_not_merely_under_it(
     weighted: tuple[torch.Tensor, torch.Tensor],
 ) -> None:

@@ -68,7 +68,7 @@ def test_equal_lengths_reproduce_the_conserved_route_bitwise() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_evidence_is_the_sum_over_segments() -> None:
     """A batch's evidence is its segments', added --- the free referee.
 
@@ -91,7 +91,7 @@ def test_the_evidence_is_the_sum_over_segments() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_boundary_is_not_a_transition() -> None:
     """The closed form that says the segmentation was honoured.
 
@@ -132,7 +132,7 @@ def test_the_planted_rates_are_recovered_from_ragged_segments() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_segment_of_one_position_never_reaches_the_fit() -> None:
     """Refused at the carrier, which is where the shape is declared."""
     with pytest.raises(ValueError, match="at least 2 positions"):

@@ -67,7 +67,7 @@ def test_float64_is_kept_wherever_it_is_supported(device: str) -> None:
     assert default_dtype(device) == torch.float64
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unknown_device_is_refused() -> None:
     with pytest.raises(ValueError, match="unknown device"):
         default_dtype("tpu")
@@ -91,13 +91,13 @@ def test_the_float32_tolerance_is_the_looser_one() -> None:
     assert CROSS_DEVICE_RTOL_FLOAT32 > CROSS_DEVICE_RTOL_FLOAT64
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_tolerance_needs_a_dtype() -> None:
     with pytest.raises(ValueError, match="at least one dtype"):
         cross_device_rtol()
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unsupported_dtype_is_refused() -> None:
     with pytest.raises(ValueError, match="unsupported dtype"):
         cross_device_rtol(torch.float16)
@@ -106,7 +106,7 @@ def test_an_unsupported_dtype_is_refused() -> None:
 # --- the tolerance against real arithmetic, on CPU -----------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("fixture", [SMALL_SITES, FOUR_TAXA])
 def test_float32_agrees_with_float64_inside_the_stated_tolerance(
     fixture: str,
@@ -217,7 +217,7 @@ def test_float64_default_is_unchanged_by_the_dtype_parameter() -> None:
 # --- device-specific, skipped where the hardware is absent ---------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="no CUDA device on this machine"
 )
@@ -250,7 +250,7 @@ def test_cuda_agrees_with_cpu() -> None:  # pragma: no cover
     assert_allclose(float(on_cuda), float(on_cpu), rtol=cross_device_rtol(dtype, dtype))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.skipif(
     not torch.backends.mps.is_available(), reason="no Metal device on this machine"
 )

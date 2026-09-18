@@ -139,7 +139,7 @@ def test_the_responsibilities_are_the_enumerated_posterior(
     assert_allclose(posterior.numpy(), enumerated.numpy(), rtol=1e-12)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_enumeration_oracle_refuses_a_dataset_it_cannot_enumerate() -> None:
     # The oracle is exponential in the observations; the refusal keeps a
     # caller from discovering that by exhausting the host.
@@ -198,7 +198,7 @@ def test_the_fit_recovers_the_planted_mixture_at_the_ci_size(
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_observation_is_explained_by_exactly_one_unit_of_responsibility(
     ci_instance: tuple[EmissionMixtureParams, np.ndarray, EmissionMixtureFit],
 ) -> None:
@@ -315,7 +315,7 @@ def test_the_seeded_start_is_measured_against_the_uniform_one() -> None:
     assert np.isfinite(difference).all()
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_seeding_places_a_component_on_a_pair_and_refuses_a_form_it_cannot() -> None:
     # The one place a component's parameters are read off a single
     # observation, and what it reads is a location and not a shape: the depth

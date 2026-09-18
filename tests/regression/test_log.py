@@ -56,7 +56,7 @@ def test_the_phase_is_shared_across_loggers_and_restored_on_exit() -> None:
     assert first.runtime_phase is None
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_once_only_messages_are_emitted_once_per_message() -> None:
     stream = io.StringIO()
     logger = _logger("sal.test.once", stream, [0.0] * 10)
@@ -89,7 +89,7 @@ def test_reconfiguring_leaves_one_handler_and_nothing_propagates() -> None:
         logging.getLogger().removeHandler(root_handler)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_pre_existing_plain_logger_is_refused() -> None:
     logging.setLoggerClass(logging.Logger)
     logging.getLogger("sal.test.plain")

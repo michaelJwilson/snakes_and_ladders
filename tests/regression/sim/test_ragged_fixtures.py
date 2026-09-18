@@ -30,7 +30,7 @@ def test_the_ragged_hmm_fixture_declares_segments_that_differ() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_batch_took_one_transition_fewer_per_boundary() -> None:
     """`T - S` transitions, not `T - 1`: each boundary is a restart."""
     lengths = fixtures.fixture("ragged_hmm", "ci").params.segment_lengths

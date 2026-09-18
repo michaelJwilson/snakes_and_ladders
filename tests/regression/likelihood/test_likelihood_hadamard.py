@@ -65,7 +65,7 @@ def _exact_spectrum(tau: Node, names: list[str], k: int) -> np.ndarray:
     return spectrum
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_transform_is_the_sylvester_matrix_and_its_own_inverse_up_to_size() -> None:
     """``H`` has entries ``(-1)^|A and B|`` and ``H H = N I``."""
     size = 8
@@ -126,7 +126,7 @@ def test_the_four_state_recoding_returns_two_thirds_of_every_branch(name: str) -
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("name", [FOUR_TAXA, FIVE_TAXA, SIX_TAXA, HARD, EIGHT_TAXA])
 def test_the_closest_tree_of_the_exact_weights_is_the_tree(name: str) -> None:
     """The ``n - 3`` largest compatible weights are the tree's own splits, lengths exact."""
@@ -195,7 +195,7 @@ def test_the_closest_tree_of_the_fixture_alignment_is_the_generating_topology(
     assert leaf_bipartitions(tree) == leaf_bipartitions(params.tau)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_spectrum_the_logarithm_cannot_take_is_refused() -> None:
     """The hard fixture at its 2,000 sites: ``H s`` has a non-positive entry, and it is refused.
 
@@ -217,7 +217,7 @@ def test_a_spectrum_the_logarithm_cannot_take_is_refused() -> None:
         hadamard_conjugation(spectrum)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_unusable_inputs_are_refused() -> None:
     with pytest.raises(ValueError, match="power-of-two"):
         walsh_hadamard(np.ones(6))

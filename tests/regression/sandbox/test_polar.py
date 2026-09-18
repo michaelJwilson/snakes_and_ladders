@@ -55,7 +55,7 @@ def _declared(tier: str = "ci") -> PolarParams:
     return load_polar_params(FIXTURES / f"{tier}.yaml")
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_transform_is_its_own_inverse_over_gf2() -> None:
     # `F F = I` on the kernel, and the Kronecker power of an involution is
     # one. Every decoder here recovers a source vector by applying the
@@ -68,7 +68,7 @@ def test_the_transform_is_its_own_inverse_over_gf2() -> None:
         assert np.array_equal(product, np.eye(2**stages, dtype=np.int64))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("stages", [3, 5, 8, 11])
 def test_the_erasure_recursion_conserves_capacity_exactly(stages: int) -> None:
     # The one law that holds at every length: the transform moves capacity
@@ -79,7 +79,7 @@ def test_the_erasure_recursion_conserves_capacity_exactly(stages: int) -> None:
     assert total == pytest.approx(2**stages * (1.0 - erasure), abs=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_polarisation_shows_as_a_thinning_middle() -> None:
     # Polarisation is asymptotic, so it is reported as a trend and asserted
     # only as monotone: the fraction of channels that are neither good nor bad
@@ -181,7 +181,7 @@ def test_the_gaussian_approximation_orders_the_channels_as_a_decoder_does() -> N
     assert int(np.argmax(approximate)) == int(np.argmax(measured))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_two_constructions_pick_the_same_code_at_the_declared_instance() -> None:
     # Not a theorem, and recorded because it is convenient rather than
     # assumed: at `N = 16`, rate 1/2, the Gaussian approximation and the exact
@@ -193,7 +193,7 @@ def test_the_two_constructions_pick_the_same_code_at_the_declared_instance() -> 
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_tie_in_the_reliabilities_breaks_on_the_index() -> None:
     # A stable sort makes the information set a function of the reliabilities
     # alone. With every channel equal the first `k` indices are taken, which
@@ -202,7 +202,7 @@ def test_a_tie_in_the_reliabilities_breaks_on_the_index() -> None:
     assert polar_information_set(flat, 3).tolist() == [0, 1, 2]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_constructions_refuse_what_they_cannot_answer_for() -> None:
     with pytest.raises(ValueError, match="past MAX_DENSE_LENGTH"):
         polar_transform(int(np.log2(MAX_DENSE_LENGTH)) + 1)
@@ -224,7 +224,7 @@ def test_the_constructions_refuse_what_they_cannot_answer_for() -> None:
         PolarCode(2, np.arange(4)).encode(np.zeros(3))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_fixture_asking_for_an_impossible_reed_muller_rate_is_refused() -> None:
     # The weight rule fixes `k`, so a fixture cannot ask for another one: the
     # error names the sizes RM does produce rather than silently returning the
@@ -244,7 +244,7 @@ def test_a_fixture_asking_for_an_impossible_reed_muller_rate_is_refused() -> Non
         impossible.code()
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_reed_muller_as_a_polar_code_carries_the_weight_rule() -> None:
     # The constructor and the rule are one object, so the code RM builds is
     # the rule's set and its rate follows from the length rather than being

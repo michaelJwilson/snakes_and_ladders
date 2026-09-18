@@ -168,7 +168,7 @@ def test_every_experiment_a_note_cites_exists() -> None:
     assert problems_tables.missing_experiments() == []
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_note_citing_an_absent_experiment_is_refused() -> None:
     # Guards the guard.
     fabricated = {"Made up": {"optimizers": "wins here (experiment 999)"}}
@@ -180,7 +180,7 @@ def test_a_note_citing_an_absent_experiment_is_refused() -> None:
     assert problems_tables.missing_experiments(fabricated) == ["999"]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_pairing_with_no_note_is_refused() -> None:
     # Guards the guard: the failure mode is a family that exists and says
     # nothing, which reads as a family that does not exist.
@@ -188,7 +188,7 @@ def test_a_pairing_with_no_note_is_refused() -> None:
         problems_tables.method_cells(note_map={})
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_family_the_suite_runs_and_no_note_claims_is_refused() -> None:
     # Guards the guard, and the direction reversed with issue #640. The
     # catalogue no longer inventories a problem's methods, so it can no longer
@@ -208,7 +208,7 @@ def test_a_family_the_suite_runs_and_no_note_claims_is_refused() -> None:
         problems_tables.method_cells(note_map=silent)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_row_reads_its_key_and_its_defining_code(tmp_path: Path) -> None:
     # The two hand-written columns, read from a table of one row. `Defines`
     # names code and fills no column of either table -- a simulator is not a
@@ -272,7 +272,7 @@ def test_the_declared_shapes_name_no_code() -> None:
             assert forbidden not in shape, f"{title} / {tier} names code: {shape}"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_nested_declaration_is_left_to_the_file() -> None:
     # A transition matrix and a tree are the instance's parameters rather than
     # its extent; printing either would fill the page with numbers no reader

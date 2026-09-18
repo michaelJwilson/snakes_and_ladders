@@ -307,7 +307,7 @@ def test_every_full_set_column_varies_within_some_neighbourhood(
             assert float(rows[:, column].std()) > 0.0, (state, column)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_planted_constant_column_is_refused(
     full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
@@ -332,7 +332,7 @@ def test_a_planted_constant_column_is_refused(
     assert _constant_columns(Planted, starts) == {7}  # type: ignore[arg-type]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_shifting_a_column_by_a_constant_leaves_the_policy_unchanged(
     full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:

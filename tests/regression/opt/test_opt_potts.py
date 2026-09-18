@@ -64,7 +64,7 @@ def test_transfer_matrix_matches_brute_force_enumeration(length: int) -> None:
     assert_allclose(float(actual), expected, rtol=_RTOL_ORACLE)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("shift", [-1.5, 0.75])
 def test_log_partition_shifts_exactly_with_the_field_gauge(shift: float) -> None:
     # Every configuration occupies all `length` sites, so adding a constant
@@ -108,7 +108,7 @@ def test_objective_matches_a_naive_per_chain_log_likelihood() -> None:
     assert_allclose(float(objective(theta)), -naive, rtol=_RTOL_ORACLE)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("at_truth", [True, False])
 def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
     params = load_potts_params(FIXTURE)
@@ -179,7 +179,7 @@ def test_coupling_raises_the_frequency_of_adjacent_agreement() -> None:
     assert observed > independent
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("field", "message"),
     [
@@ -199,7 +199,7 @@ def test_a_missing_field_is_refused(field: str, message: str, tmp_path: Path) ->
         load_potts_params(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("replace", "with_", "message"),
     [

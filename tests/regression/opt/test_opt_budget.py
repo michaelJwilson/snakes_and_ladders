@@ -30,7 +30,7 @@ def _draw(instance: float, budget: Budget, rng: np.random.Generator) -> Outcome:
     return Outcome(instance + float(rng.random()), budget.size)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_restarts_run_as_many_times_as_the_budget_allows_and_keep_the_minimum() -> None:
     budget = Budget("evaluations", 10)
     method = restarts(_draw, cost=3)
@@ -42,7 +42,7 @@ def test_restarts_run_as_many_times_as_the_budget_allows_and_keep_the_minimum() 
     assert outcome.value == float(draws.min())
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_compare_scores_the_best_over_seeds_against_the_best_any_method_found() -> None:
     budget = Budget("evaluations", 4)
     instances = [0.0, 10.0]
@@ -72,7 +72,7 @@ def test_compare_scores_the_best_over_seeds_against_the_best_any_method_found() 
     assert result.spent.max() <= budget.size
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_known_optimum_is_the_reference_when_given() -> None:
     result = compare(
         {"single": _draw},
@@ -101,7 +101,7 @@ def test_the_table_names_the_unit_the_hits_and_the_spend() -> None:
     assert isinstance(result, Comparison)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_method_that_spends_past_its_budget_is_refused() -> None:
     def greedy(instance: float, budget: Budget, _rng: np.random.Generator) -> Outcome:
         return Outcome(instance, budget.size + 1)
@@ -112,7 +112,7 @@ def test_a_method_that_spends_past_its_budget_is_refused() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_restart_that_costs_more_than_the_whole_budget_is_refused() -> None:
     with pytest.raises(ValueError, match="above the budget"):
         restarts(_draw, cost=5)(0.0, Budget("evaluations", 4), np.random.default_rng(0))
@@ -120,7 +120,7 @@ def test_a_restart_that_costs_more_than_the_whole_budget_is_refused() -> None:
         restarts(_draw, cost=0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("methods", "instances", "seeds", "known", "match"),
     [
@@ -143,7 +143,7 @@ def test_an_empty_or_inconsistent_comparison_is_refused(
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_budget_without_a_unit_or_a_size_is_refused() -> None:
     with pytest.raises(ValueError, match="names its unit"):
         Budget("", 1)
@@ -151,7 +151,7 @@ def test_a_budget_without_a_unit_or_a_size_is_refused() -> None:
         Budget("evaluations", 0)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_mcnemar_is_the_two_sided_binomial_tail_on_the_discordant_pairs() -> None:
     # Ten discordant instances split 1 against 9: the tail is
     # (C(10,0) + C(10,1)) / 2**10 = 11 / 1024, doubled. Concordant instances
@@ -168,13 +168,13 @@ def test_mcnemar_is_the_two_sided_binomial_tail_on_the_discordant_pairs() -> Non
     assert mcnemar(np.array([True, False]), np.array([False, True])) == 1.0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_mcnemar_refuses_hits_that_are_not_paired() -> None:
     with pytest.raises(ValueError, match="not paired"):
         mcnemar(np.ones(3, dtype=bool), np.ones(4, dtype=bool))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_relative_tolerance_scales_with_the_reference_and_the_paired_p_reads_the_hits() -> (
     None
 ):

@@ -84,7 +84,8 @@ def test_the_recut_counts_the_judged_lines_and_the_import(
     `root.py`: the oracle test reaches `judged`'s body and the smoke test
     `smoke`'s, so the gate counts 7 of 8 and the guard 6 of 8, one statement
     in deficit and `never`'s body reached by nothing. `search/kernel.py`: the
-    `infra` test reaches `judged`'s body and counts, as a guard of the tree.
+    `infra` test reaches `judged`'s body and does not count, so the guard
+    reads 5 of 8 there with two statements in deficit.
     """
     package, data_file = _run(tmp_path)
     monkeypatch.setattr(coverage_recut, "PACKAGE", package)
@@ -102,7 +103,7 @@ def test_the_recut_counts_the_judged_lines_and_the_import(
     assert (root.gate, root.counted, root.deficit, root.never) == (7, 6, 1, 1)
     kernel = reach["search/kernel.py"]
     assert kernel.package == "search"
-    assert (kernel.gate, kernel.counted, kernel.deficit, kernel.never) == (7, 6, 1, 1)
+    assert (kernel.gate, kernel.counted, kernel.deficit, kernel.never) == (7, 5, 2, 1)
 
 
 @pytest.mark.critical
@@ -112,10 +113,10 @@ def test_the_guard_fails_one_statement_above_what_the_run_reaches(
 ) -> None:
     """The floors are compared, and an exempt package is left out of the whole.
 
-    Both files count 6 of 8; with `search` exempt the whole is `root.py`
-    alone at 75.00%. A floor of 75 passes, one of 75.01 fails, and a package
-    floor on `search` is judged on its own 75.00% whether or not the package
-    is exempt from the whole.
+    `root.py` counts 6 of 8 and `search/kernel.py` 5 of 8; with `search`
+    exempt the whole is `root.py` alone at 75.00%. A floor of 75 passes, one
+    of 75.01 fails, and a package floor on `search` is judged on its own
+    62.50% whether or not the package is exempt from the whole.
     """
     package, data_file = _run(tmp_path)
     monkeypatch.setattr(coverage_recut, "PACKAGE", package)
@@ -129,18 +130,18 @@ def test_the_guard_fails_one_statement_above_what_the_run_reaches(
             package_floors={"search": search},
         )
 
-    assert coverage_recut.shortfalls(reach, guard(75.0, 75.0, ("search",))) == []
-    assert coverage_recut.shortfalls(reach, guard(75.01, 75.0, ("search",))) == [
+    assert coverage_recut.shortfalls(reach, guard(75.0, 62.5, ("search",))) == []
+    assert coverage_recut.shortfalls(reach, guard(75.01, 62.5, ("search",))) == [
         "judged coverage 75.00% is below the 75.01% floor"
     ]
-    assert coverage_recut.shortfalls(reach, guard(75.0, 75.01, ())) == [
-        "search: judged coverage 75.00% is below its 75.01% floor"
+    assert coverage_recut.shortfalls(reach, guard(75.0, 62.51, ("search",))) == [
+        "search: judged coverage 62.50% is below its 62.51% floor"
     ]
     whole = coverage_recut.figure(reach)
     assert (whole.statements, whole.gate, whole.counted, whole.import_only) == (
         16,
         14,
-        12,
+        11,
         10,
     )
 
@@ -175,19 +176,20 @@ def test_the_collection_names_the_markers_the_hook_adds(tmp_path: Path) -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_the_counting_set_is_every_kind_but_smoke_and_the_two_findings() -> None:
+def test_the_counting_set_is_end2end_and_oracle_alone() -> None:
     """What counts is stated once in `infra/gates.py`, and this is what it says.
 
-    Read against the marker tables rather than restated: the set is every kind
-    except `smoke`, plus `bug` and `backend`, and never `warning`, `baseline`
-    or a scheduling marker.
+    Read against the marker tables rather than restated: the two kinds that
+    judge the science against something outside the implementation, and no
+    finding, no scheduling marker and no `infra`.
     """
     from gates import FINDING_MARKERS, KIND_MARKERS, SCHEDULING_MARKERS
 
     counting = set(JUDGED_COVERAGE.counting)
 
-    assert counting & set(KIND_MARKERS) == set(KIND_MARKERS) - {"smoke"}
-    assert counting & set(FINDING_MARKERS) == {"bug", "backend"}
+    assert counting == {"end2end", "oracle"}
+    assert counting < set(KIND_MARKERS)
+    assert not counting & set(FINDING_MARKERS)
     assert not counting & set(SCHEDULING_MARKERS)
     assert JUDGED_COVERAGE.exempt_packages == ("qa",)
     assert 0.0 < JUDGED_COVERAGE.floor <= 100.0

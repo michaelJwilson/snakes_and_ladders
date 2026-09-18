@@ -87,7 +87,7 @@ def test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_suppor
     assert abs(neighbourhood.margin - enumerated.margin) < 1e-9 * abs(enumerated.margin)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.release
 def test_the_neighbourhood_weight_bounds_the_enumerated_one_and_the_best_tree_has_a_positive_margin() -> (
     None
@@ -375,7 +375,7 @@ def test_the_enumerated_decoding_weight_is_the_path_posterior_and_pins_the_ambig
     assert near.margin >= viterbi.margin - 1e-12
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_labelling_outside_its_domain_or_past_the_cap_is_refused() -> None:
     graph = _two_site_chain(None)
     with pytest.raises(ValueError, match="inside its cardinality"):
@@ -386,7 +386,7 @@ def test_a_labelling_outside_its_domain_or_past_the_cap_is_refused() -> None:
         enumerated_labelling_support(graph, np.array([0, 0]), max_configurations=8)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_enumeration_past_the_limit_and_an_empty_bootstrap_are_refused() -> None:
     params = load_fixture(FOUR_TAXA)
     alignment = _alignment(params, 1, 50)
@@ -400,7 +400,7 @@ def test_an_enumeration_past_the_limit_and_an_empty_bootstrap_are_refused() -> N
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_topology_with_no_competitor_has_all_the_weight() -> None:
     # Three taxa have one unrooted topology, so the neighbourhood is empty.
     params = load_fixture(FOUR_TAXA)
@@ -500,7 +500,7 @@ def test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_re
         assert split_pattern_support(split, alignment, params.k) < winner
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None:
     params = load_simulation_params(fixture_path(FOUR_TAXA))
     alignment = _alignment(params, 12, 20)

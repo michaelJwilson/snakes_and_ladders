@@ -358,7 +358,7 @@ def test_the_cache_is_reread_when_the_file_changes(tmp_path: Path) -> None:
     assert fixtures_named_in(module) == {"mixture"}
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_damaged_cache_is_ignored_rather_than_raised_on() -> None:
     """A cache decides when work is redone, never whether a check runs.
 
@@ -494,7 +494,7 @@ def test_the_problem_marker_intersects_the_tier(mini_suite: Path) -> None:
     assert tier == {"test_literal.py::test_gating"}
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_misspelled_problem_marker_fails_collection(mini_suite: Path) -> None:
     """Registration is what keeps `--strict-markers` able to refuse a typo.
 

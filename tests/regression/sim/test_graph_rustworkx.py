@@ -85,7 +85,7 @@ def test_the_converted_graph_carries_the_coupling_as_edge_data() -> None:
     ]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_graph_with_a_removed_node_is_refused() -> None:
     converted = lattice_graph((3, 3), BoundaryCondition.OPEN, 1.0).to_rustworkx()
     converted.remove_node(4)
@@ -93,7 +93,7 @@ def test_a_graph_with_a_removed_node_is_refused() -> None:
         PottsGraph.from_rustworkx(converted)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_edge_carrying_no_coupling_is_refused() -> None:
     converted = rustworkx.PyGraph()
     converted.add_nodes_from(range(2))

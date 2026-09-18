@@ -75,7 +75,7 @@ def test_the_reference_environment_satisfies_the_protocol() -> None:
 # --- the return telescopes -----------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_total_reward_is_the_improvement_between_first_and_last_state() -> None:
     # eq:return of docs/tex/textbook.tex: the return of an episode is exactly the
     # total improvement it
@@ -90,7 +90,7 @@ def test_total_reward_is_the_improvement_between_first_and_last_state() -> None:
     assert_allclose(episode.total_reward, improvement, atol=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_returns_to_go_are_undiscounted_suffix_sums() -> None:
     episode: Episode[int, str] = Episode(
         states=(0, 1, 2, 3),
@@ -102,7 +102,7 @@ def test_returns_to_go_are_undiscounted_suffix_sums() -> None:
     assert episode.total_reward == 3.0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_empty_episode_has_zero_return() -> None:
     episode: Episode[int, str] = Episode(
         states=(0,), actions=(), rewards=(), terminated=True
@@ -139,7 +139,7 @@ def test_a_rollout_stops_on_reaching_a_local_maximum() -> None:
     assert len(episode.actions) < 50
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_rollout_started_at_a_local_maximum_takes_no_action() -> None:
     environment = _environment()
     optimum_state = (0, 0, 0, 0)
@@ -177,13 +177,13 @@ def test_greedy_takes_the_best_rewarded_action_at_every_step() -> None:
         assert taken in environment.actions(state)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_negative_budget_is_rejected_by_a_policy_rollout() -> None:
     with pytest.raises(ValueError, match="max_steps must be >= 0"):
         rollout(_environment(), LinearPolicy(2), np.random.default_rng(0), -1)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_negative_budget_is_rejected_by_the_greedy_rollout() -> None:
     with pytest.raises(ValueError, match="max_steps must be >= 0"):
         greedy_rollout(_environment(), (0, 1, 0, 1), -1)
@@ -192,7 +192,7 @@ def test_a_negative_budget_is_rejected_by_the_greedy_rollout() -> None:
 # --- the gauge -----------------------------------------------------------
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_score_shared_by_every_action_is_unidentifiable() -> None:
     # Adding the same feature row to every action shifts every score by the
     # same amount, and the softmax is invariant to that. So a feature that
@@ -210,7 +210,7 @@ def test_a_score_shared_by_every_action_is_unidentifiable() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_scaling_the_weights_drives_the_policy_to_its_argmax() -> None:
     # The zero-temperature limit. It is why a greedy searcher is a member of
     # this policy class rather than a different kind of thing, which is what
@@ -224,7 +224,7 @@ def test_scaling_the_weights_drives_the_policy_to_its_argmax() -> None:
     assert float(probabilities[0]) > 1.0 - 1e-9
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_log_probabilities_are_normalized() -> None:
     policy = LinearPolicy(3)
     policy.set_weights(torch.tensor([0.2, -0.5, 1.1], dtype=torch.float64))
@@ -236,20 +236,20 @@ def test_log_probabilities_are_normalized() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_policy_rejects_features_of_the_wrong_width() -> None:
     policy = LinearPolicy(2)
     with pytest.raises(ValueError, match=r"expected features of shape"):
         policy.log_probabilities(torch.zeros((3, 5), dtype=torch.float64))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_policy_needs_at_least_one_feature() -> None:
     with pytest.raises(ValueError, match="n_features must be >= 1"):
         LinearPolicy(0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_set_weights_rejects_the_wrong_shape() -> None:
     policy = LinearPolicy(2)
     with pytest.raises(ValueError, match="expected weights of shape"):

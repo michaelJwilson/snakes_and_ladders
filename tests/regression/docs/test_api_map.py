@@ -118,7 +118,7 @@ def test_no_public_function_would_be_typeset_as_a_blank() -> None:
     assert generator.without_summary(generator.modules()) == []
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_refusal_fires_on_a_function_without_a_summary(tmp_path: Path) -> None:
     # Guarding the guard: the check above passes on a clean tree whether or
     # not the detector works, so the detector is shown a tree that is not.

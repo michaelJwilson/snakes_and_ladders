@@ -118,7 +118,7 @@ def test_a_zero_coupling_ground_state_follows_the_field_site_by_site() -> None:
     assert realized == pytest.approx(-field_values.max(axis=1).sum(), abs=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_flow_value_equals_the_capacity_of_the_cut_it_induces() -> None:
     # The max-flow min-cut theorem, as a self-check. Nothing here searches for
     # a cut: the source side is residual reachability on termination, and the
@@ -220,7 +220,7 @@ def test_the_rust_min_cut_returns_the_python_cut_on_seeded_networks(
     assert realized.source_side.tolist() == expected.source_side.tolist()
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_rust_min_cut_leaves_the_network_it_was_given_alone() -> None:
     # The one contract that differs from the pure implementation, so it is
     # asserted rather than only documented: the residual graph lives in Rust.
@@ -233,7 +233,7 @@ def test_the_rust_min_cut_leaves_the_network_it_was_given_alone() -> None:
     assert network.capacity == before
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_negative_coupling_is_refused_by_both_implementations() -> None:
     # The submodularity boundary. Past it the ground state is NP-hard and no
     # cut computes it, so both return nothing rather than a lattice-shaped
@@ -246,7 +246,7 @@ def test_a_negative_coupling_is_refused_by_both_implementations() -> None:
         maxflow_rust.ising_ground_state(graph, FIELD)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_more_than_two_states_is_refused_and_names_alpha_expansion() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
@@ -254,7 +254,7 @@ def test_more_than_two_states_is_refused_and_names_alpha_expansion() -> None:
         ising_ground_state(graph, np.zeros(3))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_per_node_field_of_the_wrong_shape_is_refused() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
@@ -262,7 +262,7 @@ def test_a_per_node_field_of_the_wrong_shape_is_refused() -> None:
         ising_ground_state(graph, np.zeros((4, 2)))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_coincident_terminals_are_refused() -> None:
     network = FlowNetwork(n_nodes=3)
 
@@ -270,7 +270,7 @@ def test_coincident_terminals_are_refused() -> None:
         max_flow(network, 1, 1)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_negative_capacity_is_refused() -> None:
     network = FlowNetwork(n_nodes=2)
 
@@ -278,7 +278,7 @@ def test_a_negative_capacity_is_refused() -> None:
         network.add_edge(0, 1, -1.0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_disconnected_sink_carries_no_flow() -> None:
     network = FlowNetwork(n_nodes=3)
     network.add_edge(0, 1, 4.0)
@@ -314,7 +314,7 @@ def test_from_arcs_builds_what_add_edge_builds() -> None:
         assert built.outgoing == appended.outgoing
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_from_arcs_refuses_what_add_edge_refuses() -> None:
     ones = np.array([1.0])
     with pytest.raises(ValueError, match="non-negative"):
@@ -345,7 +345,7 @@ def test_the_batch_entry_point_returns_each_instance_s_own_ground_state() -> Non
         assert np.array_equal(realized, expected)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_batch_of_the_wrong_shape_is_refused() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.6)
     with pytest.raises(ValueError, match="fields must be"):

@@ -226,7 +226,7 @@ def test_simulation_is_reproducible_from_the_seed() -> None:
     assert np.array_equal(first.configurations, second.configurations)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("replace", "with_", "message"),
     [
@@ -246,7 +246,7 @@ def test_a_malformed_fixture_is_refused(
         load_potts_lattice_params(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_missing_field_is_refused(tmp_path: Path) -> None:
     text = "\n".join(
         line

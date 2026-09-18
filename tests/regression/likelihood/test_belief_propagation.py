@@ -70,7 +70,7 @@ def test_the_beliefs_are_the_exact_marginals_on_a_tree() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_pairwise_beliefs_reduce_to_the_single_site_ones_on_a_tree() -> None:
     # A consistency the beliefs owe each other wherever BP is exact. On a loop
     # it holds by construction of the pairwise belief, as consistency between
@@ -175,7 +175,7 @@ def test_the_bethe_deviation_on_the_registry_lattice_is_the_measured_size() -> N
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_deviation_grows_with_coupling_below_the_transition() -> None:
     # Monotone on the weak-coupling arm only. It is *not* monotone in J
     # overall: the curve above peaks at J = 0.875 and falls away, since deep in
@@ -192,7 +192,7 @@ def test_the_deviation_grows_with_coupling_below_the_transition() -> None:
     assert deviations == sorted(deviations)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_deviation_peaks_in_the_neighbourhood_of_the_transition() -> None:
     # The reason to have the curve rather than one number. `J_c` is a closed
     # form, pinned here rather than chosen: the peak is a prediction this
@@ -218,7 +218,7 @@ def test_the_deviation_peaks_in_the_neighbourhood_of_the_transition() -> None:
     assert transition - 0.25 <= peak <= transition + 0.125
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_frustrated_lattice_that_does_not_settle_is_refused() -> None:
     # The loudest way BP fails: strong antiferromagnetic coupling on a
     # periodic lattice, where the messages orbit rather than converge. A Bethe
@@ -230,7 +230,7 @@ def test_a_frustrated_lattice_that_does_not_settle_is_refused() -> None:
         belief_propagation(graph, FIELD, damping=0.0, max_iterations=500)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_refusal_carries_the_residual_it_stopped_at() -> None:
     graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, -3.0)
 
@@ -241,7 +241,7 @@ def test_the_refusal_carries_the_residual_it_stopped_at() -> None:
     assert failure.value.residual > failure.value.tolerance
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_undamped_updates_are_permitted_and_converge_on_a_tree() -> None:
     # Damping is a default, not a requirement. A tree needs none, and pinning
     # that keeps the damped path from being load-bearing for correctness.
@@ -252,7 +252,7 @@ def test_undamped_updates_are_permitted_and_converge_on_a_tree() -> None:
     assert _relative(result.bethe_log_partition, exact.log_partition) < 1e-14
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_damping_of_one_is_refused() -> None:
     # At 1 no message ever updates, so the residual is zero on the first sweep
     # and every graph "converges" immediately to the uniform initialization.
@@ -261,7 +261,6 @@ def test_damping_of_one_is_refused() -> None:
         belief_propagation(TREE, FIELD, damping=1.0)
 
 
-@pytest.mark.edge_case
 @pytest.mark.oracle
 def test_an_edgeless_graph_is_exactly_its_independent_sites() -> None:
     # No messages exist, so there is no residual to converge; handled as its

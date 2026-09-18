@@ -62,7 +62,7 @@ def _states(environment: PottsEnvironment) -> list[tuple[int, ...]]:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_action_values_satisfy_bellmans_equation() -> None:
     # V^pi(s) = sum_a pi(a | s) Q^pi(s, a), the two sides computed by different
     # recursions; and the optimal value dominates every policy's value.
@@ -139,7 +139,7 @@ def test_a_fitted_critic_explains_the_enumerated_state_values(
     assert features.shape[1] == n_state_features(environment)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.release
 def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient() -> (
     None

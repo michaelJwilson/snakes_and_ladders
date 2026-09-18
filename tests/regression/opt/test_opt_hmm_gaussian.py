@@ -144,7 +144,7 @@ def test_the_forward_recursion_matches_enumeration_over_every_path(
     assert_allclose(recursed, enumerated.log_likelihood, rtol=1e-11)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_evidence_of_a_continuous_emission_can_exceed_one() -> None:
     # The assertion the categorical case could make and this one cannot: a
     # narrow state sitting on its observations makes the evidence a density
@@ -166,7 +166,7 @@ def test_the_evidence_of_a_continuous_emission_can_exceed_one() -> None:
     assert enumerated.log_likelihood > 0.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gradient_matches_central_differences() -> None:
     observations = simulate_sequences(_params(_truth(), seed=21)).observations
     objective = GaussianHmmObjective(observations, 2)
@@ -178,7 +178,7 @@ def test_the_gradient_matches_central_differences() -> None:
     assert realized <= 1e-6
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum() -> None:
     # Two fitting algorithms sharing only the model: one is L-BFGS in
     # unconstrained coordinates through a constraint map, the other is EM
@@ -223,7 +223,7 @@ def test_the_alignment_recovers_a_known_permutation_of_the_states() -> None:
     assert align_families(truth, truth) == (0, 1)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_start_places_the_means_on_the_data_and_breaks_the_symmetry() -> None:
     # A shared mean would leave the states exchangeable and the gradient in
     # that block exactly zero, which is the failure `opt/CLAUDE.md` names. A
@@ -262,7 +262,7 @@ def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> No
     assert_allclose(estimate["scale"].numpy(), truth.scale.numpy(), rtol=1e-13)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_collapsing_fit_is_refused_rather_than_returned() -> None:
     # Started with one state's mean on a single observation and a scale far
     # below the floor, EM drives that state's variance down. The refusal is the

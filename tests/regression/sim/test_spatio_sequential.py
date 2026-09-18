@@ -97,7 +97,7 @@ def test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_ch
             assert chi_square_p_value(counts, expected) > SIGNIFICANCE, (m, k)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_circulant_transition_is_row_stochastic_with_the_declared_diagonal() -> (
     None
 ):
@@ -125,7 +125,7 @@ def test_planted_labels_are_kept_and_the_generator_reproduces_the_draw() -> None
     assert first.observations.shape == (params.n_positions, params.graph.n_nodes)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("change", "match"),
     [
@@ -168,7 +168,7 @@ def test_an_inconsistent_truth_is_refused(change: dict[str, Any], match: str) ->
         replace(params, **change)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_planted_labels_of_the_wrong_shape_or_range_are_refused() -> None:
     params = fixture("spatio_sequential", "ci").params
     with pytest.raises(ValueError, match="planted labels"):
@@ -181,7 +181,7 @@ def test_planted_labels_of_the_wrong_shape_or_range_are_refused() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_open_lattice_is_the_graph_the_canonical_instance_declares() -> None:
     params = fixture("spatio_sequential", "ci").params
     assert params.graph == lattice_graph((2, 2), BoundaryCondition.OPEN, 1.0)

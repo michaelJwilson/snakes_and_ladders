@@ -149,7 +149,7 @@ def test_every_algorithm_the_textbook_defines_is_cited() -> None:
     assert defined <= cited, f"algorithms defined and never cited: {defined - cited}"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_guard_reads_one_section_and_not_the_next() -> None:
     # Guards the guard: a section span that ran past its own \section would
     # let a missing part be satisfied by its neighbour's, which is the one

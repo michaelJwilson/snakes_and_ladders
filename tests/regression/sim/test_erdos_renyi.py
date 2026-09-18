@@ -161,7 +161,7 @@ def test_the_expected_edge_count_matches_the_closed_form(n_nodes: int) -> None:
     assert abs(float(np.mean(counts)) - expected) < 3.0 * error
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_zero_and_one_give_the_empty_and_complete_graphs_exactly() -> None:
     # Equalities rather than tolerances: at these probabilities no randomness
     # is left, so anything but an exact answer is a bug in the comparison.
@@ -207,7 +207,7 @@ def test_independent_draws_come_from_one_generator() -> None:
     assert len(set(drawn)) > 1
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("probability", [-0.1, 1.1])
 def test_a_probability_outside_the_unit_interval_is_refused(
     probability: float,
@@ -216,7 +216,7 @@ def test_a_probability_outside_the_unit_interval_is_refused(
         erdos_renyi_graph(5, probability, 1.0, np.random.default_rng(0))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_empty_graph_is_refused() -> None:
     with pytest.raises(ValueError, match="n_nodes must be at least 1"):
         erdos_renyi_graph(0, 0.5, 1.0, np.random.default_rng(0))

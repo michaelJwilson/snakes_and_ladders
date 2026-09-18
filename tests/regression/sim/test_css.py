@@ -58,7 +58,7 @@ def _all_vectors(n_bits: int) -> np.ndarray:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("tier", sorted(DECLARED))
 def test_the_declared_instance_satisfies_the_css_condition(tier: str) -> None:
     """`H H^T = 0` over GF(2), which is what makes `Hx = Hz = H` a code."""
@@ -70,7 +70,7 @@ def test_the_declared_instance_satisfies_the_css_condition(tier: str) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("tier", sorted(DECLARED))
 def test_the_declared_instance_encodes_the_logical_qubits_it_claims(tier: str) -> None:
     """`k = n - 2 rank(H)`, positive and equal to the count the fixture is for."""
@@ -84,7 +84,7 @@ def test_the_declared_instance_encodes_the_logical_qubits_it_claims(tier: str) -
     assert code.n_logical == n_bits - 2 * rank == n_logical > 0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_bits", [12, 96])
 def test_the_classical_fixture_lengths_encode_nothing_at_half_the_rows(
     n_bits: int,
@@ -104,7 +104,7 @@ def test_the_classical_fixture_lengths_encode_nothing_at_half_the_rows(
         CssCode.from_parity_check(checks)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_matrix_that_is_not_self_orthogonal_is_refused() -> None:
     """A Gallager draw defines no CSS code, and says so rather than decoding."""
     checks = gallager_code(12, 3, 6, np.random.default_rng(4))
@@ -114,7 +114,7 @@ def test_a_matrix_that_is_not_self_orthogonal_is_refused() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("tier", sorted(DECLARED))
 def test_the_logical_basis_lies_in_the_kernel_and_outside_the_row_space(
     tier: str,
@@ -140,7 +140,7 @@ def test_the_logical_basis_lies_in_the_kernel_and_outside_the_row_space(
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("tier", sorted(DECLARED))
 def test_the_two_logical_bases_pair_to_the_identity(tier: str) -> None:
     """`logical_z logical_x^T = I`, which is what makes a label read a coset."""
@@ -154,7 +154,7 @@ def test_the_two_logical_bases_pair_to_the_identity(tier: str) -> None:
 # --- the quotient, two ways ------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_label_and_the_rank_test_agree_on_every_kernel_word() -> None:
     """A stabilizer is a kernel word of zero label, over all 512 kernel words.
 
@@ -183,7 +183,7 @@ def test_the_label_and_the_rank_test_agree_on_every_kernel_word() -> None:
     assert not any(code.is_stabilizer(word) for word in outside)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_coset_of_the_quotient_is_reached_exactly_once_per_label() -> None:
     """The `2 ** k` labels partition `ker H` into cosets of equal size.
 
@@ -204,7 +204,7 @@ def test_every_coset_of_the_quotient_is_reached_exactly_once_per_label() -> None
     np.testing.assert_array_equal(counts, np.full(counts.size, 2**code.stabilizer_rank))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_word_of_the_wrong_length_is_refused_by_both_routes() -> None:
     """A residual that is not `n` bits is a caller's error, not a failed decode."""
     code = _code("ci")
@@ -218,7 +218,7 @@ def test_a_word_of_the_wrong_length_is_refused_by_both_routes() -> None:
 # --- what the CSS condition costs the graph --------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("tier", sorted(DECLARED))
 def test_self_orthogonality_makes_every_row_overlap_even(tier: str) -> None:
     """`H H^T = 0` over GF(2) says each pair of checks meets an even number of bits.
@@ -238,7 +238,7 @@ def test_self_orthogonality_makes_every_row_overlap_even(tier: str) -> None:
     assert code.four_cycles() == four_cycles
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_four_cycle_count_is_the_pairs_of_bits_two_checks_share() -> None:
     """Counted a second way: over pairs of bits, the checks covering both.
 

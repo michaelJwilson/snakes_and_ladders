@@ -170,14 +170,14 @@ KIND_MARKERS: Mapping[str, str] = {
         "drives a real path -- simulate, fit, decode -- and checks a scientific "
         "output against the truth that generated the data, to a stated tolerance"
     ),
-    "mathematical": (
-        "checked against a property the model must satisfy regardless of implementation"
+    "analytic": (
+        "judges against a mathematical property the model must satisfy whatever "
+        "the implementation does -- conservation, a limit, a symmetry, a "
+        "monotonicity, a calibration"
     ),
-    "edge_case": "checked at a boundary, or that an unusable input is refused",
     "smoke": (
         "checked against itself -- reachability, a shape, the absence of an "
-        "exception, an invariant the implementation chose; the one kind the "
-        "judged coverage does not count (issue #729)"
+        "exception, a boundary, a refusal, an invariant the implementation chose"
     ),
     "infra": (
         "exercises no single problem -- shared machinery, a document guard, "
@@ -188,10 +188,18 @@ KIND_MARKERS: Mapping[str, str] = {
 }
 
 #: What a finding is: the second axis issue #729 added, beside the kind and
-#: never instead of one. `bug` and `backend` count toward the judged coverage
-#: -- a defect pinned against an external reference is a scientific claim, and
-#: so is a substitution proved safe -- and `warning` and `baseline` do not.
+#: never instead of one. None of these counts toward the judged coverage:
+#: only `end2end` and `oracle` do, since only they judge the science against
+#: something outside the implementation.
 FINDING_MARKERS: Mapping[str, str] = {
+    "patch": (
+        "a change reproduces the sal call it replaces, bitwise or to a stated tolerance"
+    ),
+    "backend": (
+        "the same algorithm, or the same oracle, on another backend -- Rust, "
+        "Numba, Torch, a vectorized path -- reproduced bitwise or to a stated "
+        "tolerance"
+    ),
     "bug": (
         "pins a defect against the paper, an oracle or the code's own contract, "
         "and is written to fail when the defect is fixed"
@@ -201,15 +209,9 @@ FINDING_MARKERS: Mapping[str, str] = {
         "that asserts more than the data carries, a silent limit; nobody is "
         "wrong and somebody should know"
     ),
-    "backend": (
-        "the same algorithm, or the same oracle, on another backend -- Rust, "
-        "Numba, Torch, a vectorized path -- reproduced bitwise or to a stated "
-        "tolerance"
-    ),
-    "baseline": (
-        "a snapshot of current behaviour to be conserved -- a number STATUS.md "
-        "records, a seed-for-seed pin -- with no judgement attached beyond as "
-        "it was"
+    "snapshot": (
+        "pins current behaviour with no judgement attached, to be conserved -- "
+        "a number STATUS.md records, a seed-for-seed pin"
     ),
 }
 
@@ -282,18 +284,18 @@ class JudgedCoverage:
 
     `--cov-fail-under` counts a statement whichever test reached it, and 34.3
     points of the 94.3 it read on 2026-09-18 were reached by importing the
-    package with no test at all. This counts a statement when a test that
-    *judged* something reached it -- an oracle, a planted truth, a stated
-    property, a boundary, a guard of the tree, a pinned defect, a backend
-    reproduced -- and `smoke`, `warning` and `baseline` tests, which check the
-    implementation against itself, reach nothing it counts.
+    package with no test at all. This counts a statement when an `end2end`
+    or an `oracle` test reached it -- a real path judged against the truth
+    that generated the data, or an exact independent answer -- and nothing
+    else does: `analytic`, `patch`, `backend`, `bug`, `warning`, `snapshot`
+    and `smoke` say what a test is, and `infra` is used sparingly.
     `infra/coverage_recut.py` reads the run's per-test contexts and applies it.
     """
 
     #: The markers whose tests count. A test carrying any of them counts.
     counting: tuple[str, ...]
     #: Packages under `snakes_and_ladders` outside the guard: a renderer has
-    #: no oracle, and `qa` is held by `baseline` pins and stated beside the
+    #: no oracle, and `qa` is held by `snapshot` pins and stated beside the
     #: figure, never inside it.
     exempt_packages: tuple[str, ...]
     #: The floor over every package not exempt, as `--cov-fail-under` states
@@ -305,18 +307,10 @@ class JudgedCoverage:
 
 
 JUDGED_COVERAGE = JudgedCoverage(
-    counting=(
-        "oracle",
-        "end2end",
-        "mathematical",
-        "edge_case",
-        "infra",
-        "bug",
-        "backend",
-    ),
+    counting=("end2end", "oracle"),
     exempt_packages=("qa",),
-    floor=93.4,
-    package_floors={"search": 94.4},
+    floor=82.6,
+    package_floors={"search": 86.1},
 )
 
 

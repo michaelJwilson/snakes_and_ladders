@@ -45,7 +45,7 @@ def test_no_seeding_beats_the_exact_optimal_cost_and_kmeanspp_meets_its_bound() 
     assert ratios.kmeans_plus_plus.mean() <= seeding_guarantee(TRUTH.n_components)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_generating_density_integrates_to_one() -> None:
     truth = TRUTH
     grid = np.linspace(-15.0, 15.0, 30001)

@@ -56,7 +56,7 @@ def test_the_component_labels_appear_at_their_declared_weights() -> None:
     assert_allclose(frequencies, WEIGHTS, atol=0.005)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_each_channel_matches_its_own_law_of_total_variance() -> None:
     # `E[Y] = sum_k w_k m_k` and
     # `Var[Y] = sum_k w_k (v_k + m_k**2) - E[Y]**2`, once per channel, with
@@ -114,7 +114,7 @@ def test_the_declared_instance_loads_and_draws_what_it_declares() -> None:
     assert_allclose(frequencies, params.weights, atol=0.05)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_loader_refuses_a_family_or_a_form_it_cannot_build(tmp_path: Path) -> None:
     fields = (
         "seed: 1\nn_samples: 10\ntolerance: 0.1\nweights: [0.5, 0.5]\n"
@@ -134,7 +134,7 @@ def test_the_loader_refuses_a_family_or_a_form_it_cannot_build(tmp_path: Path) -
             load_emission_mixture_params(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_weights_that_are_not_a_distribution_over_the_components_are_refused() -> None:
     components = CountPairEmission(DISPERSION, MEAN, ALPHA, BETA, None, joint=True)
     for weights, message in (

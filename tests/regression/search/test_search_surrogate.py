@@ -217,7 +217,7 @@ def test_surrogate_ranked_search_reaches_what_the_full_search_reaches() -> None:
         assert ranked.likelihood_evaluations < full.likelihood_evaluations
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_surrogate_without_lazy_top_is_refused() -> None:
     alignments, k, pi = _alignments(1)
     with pytest.raises(ValueError, match="give both"):

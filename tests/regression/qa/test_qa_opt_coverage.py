@@ -51,7 +51,7 @@ def test_hmm_coverage_counts_every_parameter_of_every_replicate() -> None:
     assert 0 <= covered <= total
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_boundary_fit_is_counted_and_contributes_no_intervals() -> None:
     # The reason hmm_coverage returns a third number. At a small enough
     # sample some fits put an emission probability at zero, where the
@@ -128,7 +128,7 @@ def test_main_writes_a_figure_and_caption(
     assert written.caption_path.read_text() == written.caption
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_size_where_every_fit_hits_the_boundary_is_refused() -> None:
     # Rather than a ZeroDivisionError from an empty count. The message says
     # what to change, since the fix is a larger size, not a code change.

@@ -118,7 +118,7 @@ def test_gradient_matches_central_differences(fixture_name: str, n_sites: int) -
     assert_allclose(gradient, quotient, rtol=CENTRAL_DIFFERENCE_RTOL)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_gradcheck_in_float64() -> None:
     """``torch.autograd.gradcheck``, which is the referee this route is held to."""
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 200)
@@ -131,7 +131,7 @@ def test_gradcheck_in_float64() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_weighted_patterns_give_the_uncompressed_gradient() -> None:
     """The compressed alignment with its weights is the full alignment's gradient.
 
@@ -152,7 +152,7 @@ def test_weighted_patterns_give_the_uncompressed_gradient() -> None:
     assert_allclose(weighted, full, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_general_rate_matrix_agrees_with_the_taped_path() -> None:
     """``dP/dt = Q P(t)`` reproduces the tape's gradient through ``matrix_exp``."""
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 500)
@@ -168,7 +168,7 @@ def test_a_general_rate_matrix_agrees_with_the_taped_path() -> None:
     assert_allclose(actual, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_zero_message_does_not_produce_a_nan_gradient() -> None:
     """A site an observation forbids has a finite derivative, not a NaN.
 
@@ -204,7 +204,7 @@ def test_a_zero_message_does_not_produce_a_nan_gradient() -> None:
     assert_allclose(actual, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_rate_matrix_that_requires_a_gradient_is_refused() -> None:
     """Refused rather than silently returning no gradient for it."""
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 100)
@@ -215,7 +215,7 @@ def test_a_rate_matrix_that_requires_a_gradient_is_refused() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_branch_lengths_of_the_wrong_length_are_refused() -> None:
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 100)
     with pytest.raises(ValueError, match="branch_order"):

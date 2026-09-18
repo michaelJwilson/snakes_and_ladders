@@ -73,7 +73,7 @@ def _objective(
 # --- the identifiability finding, and what follows from it ---------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
     # The pulley principle, measured. Under a reversible model the
     # likelihood does not depend on where the root sits along the branch it
@@ -111,7 +111,7 @@ def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
         assert_allclose(score(fraction), reference, rtol=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_two_non_root_siblings_are_not_confounded() -> None:
     # The control. Without it the test above would also pass on a likelihood
     # that ignored branch lengths entirely.
@@ -176,7 +176,7 @@ class _Unmerged:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
     # The consequence of the confounding: a flat direction makes the
     # observed information singular, and `snakes_and_ladders.opt.fit` refuses to invert
@@ -198,7 +198,7 @@ def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
         parameter_covariance(naive, result.theta)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_merged_parameterization_does_have_intervals() -> None:
     objective = _objective(EIGHT_TAXA)
     errors = constrained_standard_errors(objective, fit(objective).theta)
@@ -242,7 +242,7 @@ def test_expansion_reproduces_the_tree_s_own_branch_lengths() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_root_with_one_child_is_refused() -> None:
     stunted = Node(name="root", branch_length=None, children=(Node("A", 0.1),))
     with pytest.raises(ValueError, match="at least 2"):
@@ -259,7 +259,7 @@ def test_the_initial_point_is_uninformative() -> None:
 # --- the fit -------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("fixture", [SMALL_SITES, EIGHT_TAXA])
 def test_gradient_matches_central_finite_differences(fixture: str) -> None:
     objective = _objective(fixture, sites=500)
@@ -429,7 +429,7 @@ def test_the_substitution_model_has_one_parameter_per_free_quantity() -> None:
     assert objective.parameter_names[-4:] == ["s4", "pi1", "pi2", "pi3"]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_substitution_model_gradient_matches_finite_differences() -> None:
     objective, truth = _gtr_objective(sites=500)
     assert_gradient_matches_finite_differences(
@@ -445,7 +445,7 @@ def test_the_substitution_model_fit_beats_the_generating_parameters() -> None:
     assert result.value < float(objective(truth))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_three_gauges_leave_a_well_conditioned_problem() -> None:
     # The direct test that the rate normalization, the pinned
     # exchangeability and the simplex gauge between them remove every flat
@@ -652,7 +652,7 @@ def test_the_analytic_route_fits_to_the_same_optimum() -> None:
     assert_allclose(analytic.theta.numpy(), taped.theta.numpy(), rtol=1e-5, atol=1e-7)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unknown_gradient_route_is_refused() -> None:
     params = load_fixture(FOUR_TAXA)
     with pytest.raises(ValueError, match="gradient is one of"):

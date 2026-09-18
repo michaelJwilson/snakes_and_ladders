@@ -70,7 +70,7 @@ def test_binning_is_the_sum_over_each_block_of_positions(factor: int) -> None:
     assert binned.observations.shape == (n_bins, fine.observations.shape[1], 2)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_pair_density_is_a_distribution_over_its_support() -> None:
     # The two channels multiply, so the pair's mass is the product of two
     # masses and must sum to one over the joint support. The negative
@@ -217,7 +217,7 @@ def test_the_beta_binomial_channel_is_misspecified_under_aggregation() -> None:
         assert distance > 0.3
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_chain_is_the_circulant_walk_the_transition_states() -> None:
     # The path is drawn as a walk on Z_K rather than by a categorical draw per
     # position, which is exact for a circulant transition and is what makes a
@@ -285,7 +285,7 @@ def test_the_key_instance_is_the_one_the_5k_file_marks() -> None:
     assert fixture(CI, "ci").params.factors == (1, 5, 10)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("edit", "message"),
     [
@@ -320,7 +320,7 @@ def test_a_fixture_that_cannot_mean_what_it_says_is_refused(
         load_spatio_sequential_counts_params(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_shifted_beta_binomial_rate_outside_the_unit_interval_is_refused(
     tmp_path: Path,
 ) -> None:

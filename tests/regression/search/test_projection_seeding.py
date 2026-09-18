@@ -130,7 +130,7 @@ def test_the_sampled_seedings_recover_the_generating_means_at_the_ci_size() -> N
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("name", list(SEEDINGS))
 def test_the_projected_likelihood_does_not_decrease_under_the_fit(name: str) -> None:
     # Expectation-maximization increases the likelihood at every step, so a
@@ -234,7 +234,7 @@ def test_the_chain_starts_satisfy_the_initializer_seam() -> None:
     assert isinstance(FromTempering((1.0, 2.0), 2, 1e-3, generator), Initializer)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_projection_of_fewer_than_one_observation_is_refused() -> None:
     declared = fixture(PROBLEM, "ci").params
 
@@ -242,7 +242,7 @@ def test_a_projection_of_fewer_than_one_observation_is_refused() -> None:
         project(binned_model(declared.model, 1), 0, np.random.default_rng(0))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_bin_factor_that_does_not_divide_the_positions_is_refused() -> None:
     declared = fixture(PROBLEM, "ci").params
 

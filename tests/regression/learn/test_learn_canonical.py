@@ -100,7 +100,7 @@ def test_the_two_oracles_agree_on_the_optimal_value(
     assert swept.values[start] == pytest.approx(recursed, abs=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize(
     ("environment", "start"),
     [
@@ -163,7 +163,7 @@ def test_hanoi_costs_two_to_the_disks_minus_one(disks: int) -> None:
     assert len(reachable_states(hanoi, hanoi.start)) == 3**disks
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_chain_separates_the_far_prize_from_the_near_reward() -> None:
     # What the fixture is for. The optimum walks to the far end and collects
     # the prize; the myopic choice -- the action with the largest immediate
@@ -181,7 +181,7 @@ def test_the_chain_separates_the_far_prize_from_the_near_reward() -> None:
     assert chain.is_terminal(successor)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_cliff_walk_optimum_leaves_the_bottom_row() -> None:
     # The route along the cliff's edge is the shortest and every step of it
     # would fall in, so the optimum goes up first. That is the structure
@@ -252,7 +252,7 @@ def test_ppo_reaches_the_optimum_on_the_plain_case() -> None:
     assert all(reached), f"{sum(reached)} of {len(reached)} starts optimal"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_positive_cycle_is_refused_rather_than_returned() -> None:
     # An undiscounted optimum is unbounded where a cycle pays, and this is
     # where that shows. A value function read off unfinished sweeps is not an
@@ -262,7 +262,7 @@ def test_a_positive_cycle_is_refused_rather_than_returned() -> None:
         value_iteration(_Rewarding(cycle), 0, residual=1e-13, max_sweeps=50)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_fixtures_refuse_a_shape_they_cannot_be() -> None:
     with pytest.raises(ValueError, match="at least two states"):
         ChainMdp(n_states=1)

@@ -36,7 +36,7 @@ from snakes_and_ladders.qa.style import (
 )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_blend_with_white_interpolates_between_white_and_the_colour() -> None:
     assert blend_with_white("#0072B2", 0.0) == (1.0, 1.0, 1.0, 1.0)
     r, g, b, a = blend_with_white("#0072B2", 1.0)
@@ -47,7 +47,7 @@ def test_blend_with_white_interpolates_between_white_and_the_colour() -> None:
         blend_with_white("#000000", 1.5)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_with_opacity_keeps_the_colour_and_clips_the_alpha() -> None:
     rgba = with_opacity(["#000000", "#FFFFFF", "#0072B2"], [-0.5, 0.25, 7.0])
     np.testing.assert_allclose(rgba[:, 3], [0.0, 0.25, 1.0])
@@ -82,7 +82,7 @@ def test_notebook_style_lowers_the_dpi_and_keeps_the_letter_face() -> None:
     assert letter_dpi == 200
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_marker_size_shrinks_with_density_inside_its_clamps() -> None:
     assert marker_size(1) == 25.0
     assert marker_size(1_200) == pytest.approx(10.0)

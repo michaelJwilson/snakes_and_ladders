@@ -108,7 +108,7 @@ def test_the_declared_height_bounds_every_root_to_tip_path() -> None:
         assert max(_root_to_tip(tree)) == pytest.approx(0.25)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("n_taxa", "height", "match"),
     [

@@ -151,7 +151,7 @@ def test_the_expected_discrete_score_equals_the_score_at_the_marginals(
         assert enumerated == pytest.approx(closed_form, rel=1e-11)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_term_over_three_distinct_sites_does_not_break_the_identity() -> None:
     # The boundary is easy to state wrongly, and "the terms must be pairwise"
     # is one of the wrong statements. Three distinct sites is still one factor
@@ -175,7 +175,7 @@ def test_a_term_over_three_distinct_sites_does_not_break_the_identity() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_term_using_one_site_twice_does_break_the_identity() -> None:
     # What actually breaks it: `E[X**2]` is `E[X]` for an indicator and not
     # `E[X]**2`. Not hypothetical -- `PottsGraph` permits a doubled bond,
@@ -511,7 +511,7 @@ def test_the_gumbel_draws_are_independent_across_calls() -> None:
     assert len(drawn) > 1
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_temperature_below_the_floor_is_refused() -> None:
     with pytest.raises(ValueError, match="temperature must be >="):
         gumbel_softmax(
@@ -547,7 +547,7 @@ def test_a_single_step_schedule_stays_at_the_start() -> None:
         (1.0, 0.1, 0, "steps must be at least 1"),
     ],
 )
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_invalid_schedule_is_refused(
     start: float, end: float, steps: int, message: str
 ) -> None:

@@ -48,7 +48,7 @@ def _pair_from_frequencies(
     return first, second
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("t", LENGTHS)
 @pytest.mark.parametrize("k", [2, 4])
 def test_the_jukes_cantor_distance_inverts_the_transition_probabilities(
@@ -75,7 +75,7 @@ def test_the_jukes_cantor_distance_inverts_the_transition_probabilities(
     assert estimate.value == pytest.approx(t, abs=1e-4)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("t", LENGTHS)
 def test_the_log_det_distance_equals_the_branch_length_under_jukes_cantor(
     t: float,
@@ -90,7 +90,7 @@ def test_the_log_det_distance_equals_the_branch_length_under_jukes_cantor(
     assert estimate.value == pytest.approx(t, abs=2e-4)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_log_det_distance_is_proportional_to_the_branch_length_under_gtr() -> None:
     """Under a reversible ``Q`` the log-det distance is ``-tr(Q)/k`` times ``t``.
 
@@ -113,7 +113,7 @@ def test_the_log_det_distance_is_proportional_to_the_branch_length_under_gtr() -
     assert factor != pytest.approx(1.0)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_delta_variance_reduces_to_the_binomial_one() -> None:
     """A statistic linear in one proportion has variance ``p (1 - p) / L``."""
     frequencies = np.array([0.7, 0.3])
@@ -187,7 +187,7 @@ def test_the_stated_variance_covers_the_truth_at_the_nominal_rate(
     assert abs(rate - 0.95) <= band, rate
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("name", [FOUR_TAXA, EIGHT_TAXA])
 def test_tree_distances_are_the_path_lengths(name: str) -> None:
     """Path length between two leaves is the sum of the branches between them.
@@ -214,7 +214,7 @@ def test_tree_distances_are_the_path_lengths(name: str) -> None:
         assert matrix[names.index("A"), names.index("B")] == pytest.approx(0.25)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_saturated_pair_is_refused() -> None:
     """Three quarters of sites differing has no finite four-state distance."""
     first = np.array([0, 1, 2, 3] * 25)
@@ -224,7 +224,7 @@ def test_a_saturated_pair_is_refused() -> None:
         jukes_cantor_distance(first, second, 4)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_singular_pair_frequency_matrix_is_refused() -> None:
     """An unobserved state makes ``det F`` zero and the log-det undefined."""
     first = np.array([0, 1, 0, 1, 2, 2])
@@ -234,7 +234,7 @@ def test_a_singular_pair_frequency_matrix_is_refused() -> None:
         log_det_distance(first, second, 4)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_mismatched_or_empty_sequences_are_refused() -> None:
     with pytest.raises(ValueError, match="shapes"):
         pair_counts(np.array([0, 1]), np.array([0]), 4)

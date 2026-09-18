@@ -147,7 +147,7 @@ def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
     assert abs(float(np.median(shortfalls)) - _NNI_MEDIAN_GAP) < 10.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_nni_failure_stops_at_a_genuine_local_optimum(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:

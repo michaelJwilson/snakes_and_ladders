@@ -47,7 +47,7 @@ def five_taxon() -> Surfaces:
 # --- the statistic --------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_correlation_is_invariant_to_affine_rescaling() -> None:
     # The property that makes it the right statistic here: the two surfaces
     # are log-likelihoods in the same units, separated by a shift and a
@@ -81,7 +81,7 @@ def test_the_correlation_is_continuous_where_a_rank_statistic_is_not() -> None:
     assert abs(pearson_correlation(first, jittered) - baseline) < 1e-9
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("first", "second", "message"),
     [

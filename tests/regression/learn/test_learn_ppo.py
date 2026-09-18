@@ -88,7 +88,7 @@ def _mean_return(
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_generalized_advantages_reduce_to_their_two_limits() -> None:
     rewards, values = [1.0, -0.5, 2.0], [1.0, 2.0, 0.5, 0.0]
     monte_carlo = generalized_advantages(rewards, values, lam=1.0, terminated=True)
@@ -110,7 +110,7 @@ def test_generalized_advantages_reduce_to_their_two_limits() -> None:
         generalized_advantages(rewards, values, lam=1.5, terminated=True)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_unclipped_ppo_at_the_collecting_policy_has_the_actor_critic_gradient() -> None:
     # Every ratio is one, so min(rho A, clip(rho) A) = A and the gradient of
     # the clipped objective is the advantage-weighted score function.
@@ -245,7 +245,7 @@ def test_an_mlp_policy_trained_by_ppo_reaches_the_optimum() -> None:
     assert _mean_return(environment, policy) > 2.3
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_ppo_refuses_a_non_positive_budget() -> None:
     environment = _environment()
     critic = Critic(

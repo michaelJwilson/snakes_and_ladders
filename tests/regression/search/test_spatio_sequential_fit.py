@@ -142,7 +142,7 @@ def test_the_burn_in_start_reaches_the_enumerated_map_of_the_model_it_reached() 
     assert float(np.mean(cold_gaps)) > 100.0 * float(np.mean(gaps)), (gaps, cold_gaps)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("solver", list(LabelSolver))
 def test_the_labelled_joint_never_decreases_across_blocks(solver: LabelSolver) -> None:
     params = fixture("spatio_sequential", "ci").params
@@ -245,7 +245,7 @@ def test_the_annealed_start_beats_every_cold_solver_at_equal_blocks() -> None:
     assert means["burn_in"] >= 0.9, means
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_emission_mixture_plus_plus_is_kmeans_plus_plus_under_a_squared_distance() -> (
     None
 ):
@@ -276,14 +276,14 @@ def test_seeding_replaces_every_categorical_row_with_a_seeded_one() -> None:
         assert (matrix.max(axis=1) == 0.9).all()
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_label_accuracy_is_taken_over_permutations() -> None:
     planted = np.array([0, 0, 1, 1, 2])
     assert label_accuracy(np.array([2, 2, 0, 0, 1]), planted, 3) == 1.0
     assert label_accuracy(np.array([0, 0, 1, 1, 1]), planted, 3) == 0.8
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_wolff_solver_needs_a_schedule_and_a_block_count_is_positive() -> None:
     params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(1))

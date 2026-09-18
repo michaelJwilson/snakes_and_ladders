@@ -95,7 +95,7 @@ def test_the_free_energy_reproduces_the_bethe_value_on_a_loop(
     assert -energy == pytest.approx(loopy.log_partition, rel=1e-9)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_counting_numbers_are_one_minus_the_degree() -> None:
     # The closed form the pairwise case carries, and the reason the Bethe
     # region graph is built by the general construction rather than written
@@ -119,7 +119,7 @@ def test_the_counting_numbers_are_one_minus_the_degree() -> None:
     assert sorted(set(singletons.values())) == [-3, -2, -1]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize(("shape", "expected"), [((3, 3), 9), ((4, 4), 25)])
 def test_the_plaquette_closure_counts_everything_once(
     shape: tuple[int, int], expected: int
@@ -138,7 +138,7 @@ def test_the_plaquette_closure_counts_everything_once(
     assert {len(r.variables) for r in regions.regions} == {4, 2, 1}
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_cluster_that_leaves_a_factor_outside_is_refused() -> None:
     # A factor whose scope fits in no cluster has its energy dropped, not
     # approximated, and the free energy would still return a number. Refused
@@ -151,7 +151,7 @@ def test_a_cluster_that_leaves_a_factor_outside_is_refused() -> None:
         region_graph(graph, too_small)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_belief_that_is_not_a_distribution_is_refused() -> None:
     # A caller who has not normalized has not converged, so renormalizing here
     # would hide an unconverged run inside a plausible number.
@@ -165,7 +165,7 @@ def test_a_belief_that_is_not_a_distribution_is_refused() -> None:
         kikuchi_free_energy(regions, beliefs)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_region_graph_that_counts_a_variable_twice_is_refused() -> None:
     # The validity condition, triggered rather than described: two overlapping
     # clusters whose intersection is not among the regions count the shared
@@ -250,7 +250,7 @@ def test_the_plaquette_regions_are_nearer_the_truth_than_the_pairwise_ones() -> 
     assert kikuchi.iterations > bethe.iterations
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_at_size_the_plaquette_graph_settles_where_the_pairwise_one_always_does() -> (
     None
 ):
@@ -277,7 +277,7 @@ def test_at_size_the_plaquette_graph_settles_where_the_pairwise_one_always_does(
         generalized_belief_propagation(plaquette, damping=0.7, max_iterations=cap)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_damping_that_freezes_every_message_is_refused() -> None:
     # At damping 1 no message moves, so the residual is zero on the first sweep
     # and every graph "converges" -- a silent wrong answer rather than a loud
@@ -288,7 +288,7 @@ def test_damping_that_freezes_every_message_is_refused() -> None:
         generalized_belief_propagation(regions, damping=1.0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_run_that_does_not_settle_raises_rather_than_reporting() -> None:
     # A free energy read off messages that never settled estimates nothing, and
     # the caller cannot tell it from one that did.

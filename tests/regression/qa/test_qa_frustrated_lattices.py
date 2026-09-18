@@ -43,7 +43,7 @@ def test_the_coloured_ground_state_agrees_on_exactly_one_bond_in_three() -> None
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_drawn_bond_has_unit_length_and_wraps_only_across_the_torus() -> None:
     graph = PARAMS.lattice()
     layout = lattice_layout(graph)
@@ -71,7 +71,7 @@ def test_every_drawn_bond_has_unit_length_and_wraps_only_across_the_torus() -> N
     assert wrapped == 27 - 16
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_lattice_graph_is_refused_by_the_layout() -> None:
     chain = lattice_graph((4,), BoundaryCondition.OPEN, 1.0)
     with pytest.raises(ValueError, match="2-D lattice"):

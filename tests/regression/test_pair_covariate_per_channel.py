@@ -88,7 +88,7 @@ def test_the_neutral_covariate_is_not_ones_on_both_channels() -> None:
     assert torch.isfinite(family.log_density(observations)).all()
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_each_channel_moves_the_score_on_its_own() -> None:
     """Both covariates reach a family, and neither is the other's.
 
@@ -115,7 +115,7 @@ def test_each_channel_moves_the_score_on_its_own() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_covariate_without_the_channel_axis_is_refused() -> None:
     """The tensor #631 was right about: nothing says which channel it is.
 

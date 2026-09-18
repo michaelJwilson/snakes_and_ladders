@@ -74,7 +74,7 @@ def test_the_template_names_every_section_and_field() -> None:
     assert template.body_lines <= experiments.BODY_LINE_CAP
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_body_over_ten_lines_fails_and_no_heading_is_one_of_them(
     tmp_path: Path,
 ) -> None:
@@ -98,7 +98,7 @@ def test_a_body_over_ten_lines_fails_and_no_heading_is_one_of_them(
     assert experiments.main(["--check", "--directory", str(tmp_path)]) == 1
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_guard_catches_a_file_that_drifted(tmp_path: Path) -> None:
     good = tmp_path / "001-potts-cluster-autocorrelation.md"
     good.write_text(VALID)

@@ -38,7 +38,7 @@ def test_a_slow_unmarked_test_is_named_and_a_gated_one_is_not() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_test_exactly_at_the_cap_is_inside_it() -> None:
     assert over_cap([("t::x", 10.0, frozenset())], cap=10.0) == []
 
@@ -68,7 +68,7 @@ def test_a_scale_marked_critical_test_is_named_and_the_other_three_are_not() -> 
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_every_scale_marker_is_a_conflict_and_the_message_names_them_all() -> None:
     """`key` and `stress` are the tier's other two exits, and both conflict."""
     for marker in ("release", "stress", "key"):

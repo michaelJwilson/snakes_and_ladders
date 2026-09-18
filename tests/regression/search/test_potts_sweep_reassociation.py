@@ -58,7 +58,7 @@ def _reassociation_ulps() -> tuple[np.ndarray, np.ndarray]:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_scaling_the_parts_leaves_the_guard_behind() -> None:
     # The refusal, as a number. The guard absorbs 16 units of the last place;
     # the reassociation reaches five orders past that, so the cheaper form
@@ -74,7 +74,7 @@ def test_scaling_the_parts_leaves_the_guard_behind() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_error_concentrates_where_the_conditional_is_finely_balanced() -> None:
     # Why the tail is not a tail to be tolerated. `h + sum J` cancels, so the
     # scaled-parts form's absolute error is set by the parts while the result

@@ -153,7 +153,7 @@ def test_the_two_simulators_agree_under_a_varying_covariate() -> None:
                 assert abs(first - second) < max(first, second) * MOMENT
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_covariate_that_names_no_channel_is_refused() -> None:
     declared = _declared()
     params = declared.model
@@ -169,7 +169,7 @@ def test_a_covariate_that_names_no_channel_is_refused() -> None:
             simulate(covaried)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_binning_sums_the_covariate_with_the_counts() -> None:
     # A binned count was drawn at the sum of its bin's exposures and out of
     # the sum of its trial counts, so the coarse covariate is the same

@@ -39,7 +39,7 @@ def _body(content: int, headings: int = 0) -> str:
     return "\n\n".join(parts) + "\n"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_body_one_line_over_the_cap_is_refused_with_its_count() -> None:
     found = check_pr_body.problem(_body(CAP + 1))
     assert found, f"a body of {CAP + 1} content lines was accepted"
@@ -47,12 +47,12 @@ def test_a_body_one_line_over_the_cap_is_refused_with_its_count() -> None:
     assert str(CAP) in found, f"the message does not name the cap: {found}"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_body_at_the_cap_passes() -> None:
     assert check_pr_body.problem(_body(CAP)) == ""
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_headings_and_blank_lines_are_not_charged() -> None:
     """The cap charges content, so structure cannot push a body over it."""
     assert check_pr_body.problem(_body(CAP, headings=12)) == ""

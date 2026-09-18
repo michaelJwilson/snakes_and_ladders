@@ -47,7 +47,7 @@ def test_every_backend_agrees_with_brute_force(
         assert worst < _AGREEMENT, f"{name} deviates by {worst:.2e}"
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_deviation_does_not_grow_with_the_sum() -> None:
     # The reason the figure reports a relative deviation. An absolute one
     # grows with the site count, since the log-likelihood is a sum; the

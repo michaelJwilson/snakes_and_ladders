@@ -54,7 +54,7 @@ def _covariate(observations: np.ndarray, spread: float) -> np.ndarray:
     return covariate
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.critical
 def test_every_spatial_seam_changes_when_the_covariate_does() -> None:
     """The claim the replaced test named and could not make.
@@ -86,7 +86,7 @@ def test_every_spatial_seam_changes_when_the_covariate_does() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_field_and_the_posterior_agree_about_the_model() -> None:
     """The defect: a field scored without the covariate the posterior was scored with.
 

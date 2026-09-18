@@ -80,7 +80,7 @@ def test_the_zero_field_optimum_is_a_closed_form_three_ways(side: int) -> None:
     assert rung.optimum == closed
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_closed_form_is_refused_in_a_field() -> None:
     """A field breaks the derivation, so the closed form refuses rather than lies.
 
@@ -144,7 +144,7 @@ def test_alpha_expansion_is_exact_at_two_labels(side: int) -> None:
     assert expansion.value == exact
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_two_instruments_disagree_on_the_same_runs() -> None:
     """Exact hit reads 0.00 where the relative reading reads the failure.
 
@@ -193,7 +193,7 @@ def test_the_two_instruments_disagree_on_the_same_runs() -> None:
     assert loose_anneal.fraction > 0.0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_negative_relative_allowance_is_refused() -> None:
     """An allowance below zero would count nothing as reaching anything."""
     rung = lattice_rung(4, 2)
@@ -238,7 +238,7 @@ def test_beating_the_target_counts_as_reaching_it() -> None:
     assert probe.fraction == 1.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_field_baseline_fails_and_wolff_fails_hardest() -> None:
     """At 576 sites every local method sits 3--34% above alpha-expansion.
 
@@ -283,7 +283,7 @@ def test_the_field_baseline_fails_and_wolff_fails_hardest() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_icm_s_shortfall_is_flat_in_the_budget() -> None:
     """A single descent gains nothing from 25x the budget; its restarts do.
 

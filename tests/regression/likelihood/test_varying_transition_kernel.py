@@ -214,7 +214,7 @@ def test_a_planted_two_regime_kernel_is_recovered_per_regime() -> None:
     assert np.abs(pooled - mixing).max() > 0.2
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_kernel_of_the_wrong_length_is_refused() -> None:
     """A step axis that is not ``T - 1`` is a model error, not a broadcast."""
     log_density, log_initial, log_transition = _chain(3, 7, 9)

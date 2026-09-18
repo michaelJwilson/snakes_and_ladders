@@ -209,7 +209,7 @@ def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
         assert read_baseline(record.path).libraries == record.libraries
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
     tmp_path: Path,
 ) -> None:
@@ -240,7 +240,7 @@ def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
     assert any("enumerated_optimum" in line for line in found), found
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_edited_budget_is_a_disagreement_the_recomputation_reports(
     tmp_path: Path,
 ) -> None:
@@ -257,7 +257,7 @@ def test_an_edited_budget_is_a_disagreement_the_recomputation_reports(
     assert any("budget" in line for line in found), found
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_record_computed_against_another_library_is_refused(tmp_path: Path) -> None:
     # The one input to a number that a recomputation elsewhere cannot check,
     # because it is a fact about this machine and not about the tree. It is
@@ -390,7 +390,7 @@ def _moved(record: Baseline, name: str, **fields: Any) -> Baseline:
     return replace(record, measurements=held)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_fit_is_compared_within_its_declared_tolerance_and_not_bitwise() -> None:
     # The comparison issue #527 is about, against the observation that raised
     # it. A recorded maximum-likelihood fit is an iterative optimiser over a
@@ -424,7 +424,7 @@ def test_a_fit_is_compared_within_its_declared_tolerance_and_not_bitwise() -> No
     assert "index 0" in found[0], found[0]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_value_that_declares_no_tolerance_is_still_compared_exactly() -> None:
     # The other half of the rule: an enumerated optimum, a ground-state
     # energy and a rate over seeded rollouts are counted or enumerated, not
@@ -441,7 +441,7 @@ def test_a_value_that_declares_no_tolerance_is_still_compared_exactly() -> None:
     assert any("enumerated_optimum" in line for line in found), found
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_record_cannot_loosen_the_tolerance_it_is_checked_at() -> None:
     # A tolerance is a declaration, and the record is not what gets to relax
     # the check it is caught by --- the failure #527 names is a record edited
@@ -462,7 +462,7 @@ def test_a_record_cannot_loosen_the_tolerance_it_is_checked_at() -> None:
     assert any("rtol 0.001" in line for line in found), found
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_writer_refuses_a_record_it_does_not_know() -> None:
     with pytest.raises(ValueError, match="no baseline spec"):
         baseline_script.selected(["tree_search/nonexistent"])
@@ -554,7 +554,7 @@ def test_no_notebook_builds_its_own_instance() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_guard_catches_a_constructed_instance() -> None:
     # Guards the guard, per the repository's pattern: an import or an
     # annotation is not a construction, and a call is.

@@ -163,7 +163,7 @@ def test_spr_neighbour_count_and_validity(n_taxa: int) -> None:
         _assert_valid_neighbourhood(topology, list(spr_neighbours(topology)), expected)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_nni_neighbours_are_symmetric(n_taxa: int) -> None:
     neighbour_keys = {
@@ -177,7 +177,7 @@ def test_nni_neighbours_are_symmetric(n_taxa: int) -> None:
             )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_taxa", EXHAUSTIVE_PARAMS)
 def test_nni_neighbours_are_spr_neighbours(n_taxa: int) -> None:
     for topology in _all_unrooted(n_taxa):
@@ -331,7 +331,7 @@ def test_spr_radius_one_is_the_nni_neighbourhood(n_taxa: int) -> None:
     assert len(bounded) == 2 * (n_taxa - 3)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("n_taxa", [6, 8])
 def test_spr_radius_nests(n_taxa: int) -> None:
     # A radius is a bound on one distance, so the neighbourhoods are nested
@@ -356,7 +356,7 @@ def test_spr_radius_nests(n_taxa: int) -> None:
     }
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_spr_radius_below_one_is_refused() -> None:
     # Radius 0 admits only the vacated edge, which reconstructs the parent,
     # so the neighbourhood is empty and a search from it cannot move.

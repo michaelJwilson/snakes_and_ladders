@@ -98,7 +98,7 @@ def test_the_ground_state_energy_is_known_without_enumerating(
     assert attained == pytest.approx(1.5 * graph.n_nodes)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_square_lattice_is_unfrustrated_and_a_triangular_one_is_not() -> None:
     # A square lattice is bipartite, so every edge can disagree and the
     # ground-state energy is exactly zero; adding the diagonal makes it
@@ -124,7 +124,7 @@ def test_the_frustrated_optimum_is_the_maximum_cut(shape: tuple[int, int]) -> No
     assert maximum == pytest.approx(2.0 * graph.n_nodes)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_a_cluster_move_refuses_this_instance(move: PottsMove) -> None:
     # `1 - exp(-J)` is not a probability at `J < 0` and an antiferromagnet has
@@ -144,7 +144,7 @@ def test_a_cluster_move_refuses_this_instance(move: PottsMove) -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_single_site_sampling_still_runs_on_the_frustrated_instance() -> None:
     # The refusal above is specific to the cluster construction, not a blanket
     # ban on a negative coupling. Without this the test above would also pass
@@ -209,13 +209,13 @@ def test_an_open_boundary_is_frustrated_but_has_no_closed_form() -> None:
         minimum_frustrated_edges(graph)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_ferromagnetic_coupling_on_this_graph_is_refused() -> None:
     with pytest.raises(ValueError, match="coupling must be negative"):
         frustrated_triangular_lattice((3, 3), coupling=1.0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_periodic_extent_below_three_is_refused() -> None:
     # At extent 2 the "+1" and "-1" neighbours coincide, so the wrap doubles a
     # bond -- which `PottsGraph` permits and which silently doubles that
@@ -227,8 +227,7 @@ def test_a_periodic_extent_below_three_is_refused() -> None:
 # --- 2. The planted Viana-Bray spin glass --------------------------------
 
 
-@pytest.mark.edge_case
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_zero_frustration_is_a_gauge_transform_of_the_ferromagnet() -> None:
     # The reason not to use `frustration = 0` as a hard case, checked rather
     # than trusted: with the gauge `sigma_i = +/-1` read off the planted
@@ -302,7 +301,7 @@ def test_the_couplings_carry_both_signs_at_positive_frustration() -> None:
     assert {abs(weight) for weight in instance.graph.coupling} == {1.0}
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("n_nodes", "mean_degree", "frustration", "magnitude", "message"),
     [

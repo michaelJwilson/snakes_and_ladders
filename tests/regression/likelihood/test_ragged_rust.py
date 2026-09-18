@@ -49,7 +49,7 @@ def test_the_compiled_kernel_matches_the_oracle(lengths: tuple[int, ...]) -> Non
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_marginals_are_normalized_within_every_segment() -> None:
     """Each position's posterior sums to one, boundaries included."""
     density, initial, transition = _instance((6, 19, 3), seed=9)
@@ -58,7 +58,7 @@ def test_the_marginals_are_normalized_within_every_segment() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_counts_hold_one_transition_fewer_than_the_positions() -> None:
     """The boundary pairs are absent, and the arithmetic says how many.
 

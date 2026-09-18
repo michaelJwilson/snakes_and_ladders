@@ -75,7 +75,7 @@ def test_one_step_search_with_the_exact_leaf_value_picks_an_optimal_action() -> 
     assert checked >= 10
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_visit_distribution_improves_on_the_prior_at_depth_three() -> None:
     # Policy improvement: the one-step mixture of the exact action values under
     # the visit distribution is no worse than under the prior on 13 of 14
@@ -168,7 +168,7 @@ def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_g
     assert all(len(e.distributions) == len(e.actions) for e in planned)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_search_refuses_a_non_positive_budget_and_handles_a_terminal_root() -> None:
     environment, policy = _environment(), _policy()
     leaf = critic_leaf_value(

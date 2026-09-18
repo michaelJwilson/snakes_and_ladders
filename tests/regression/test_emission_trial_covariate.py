@@ -101,7 +101,7 @@ def test_no_covariate_is_the_conserved_family(
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_observation_above_its_own_trial_count_scores_negative_infinity() -> None:
     # On the joint form's precedent: the support is a property of the pair, so
     # a sequence carrying one impossible site is scored, not refused.

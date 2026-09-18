@@ -143,7 +143,7 @@ def test_the_declared_digest_is_the_draw_the_file_names() -> None:
     assert counts_digest(fine_instance(entry.path)) == entry.params.counts_digest
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_draw_that_disagrees_with_the_recorded_digest_is_refused(
     tmp_path: Path,
 ) -> None:
@@ -158,7 +158,7 @@ def test_a_draw_that_disagrees_with_the_recorded_digest_is_refused(
         fine_instance(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_family_that_is_not_a_count_pair_is_refused() -> None:
     # The kernel draws two channels from five parameter tables. A declaration
     # it cannot fill is refused by name rather than by a shape error inside.

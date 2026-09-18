@@ -79,7 +79,7 @@ def test_sim_example_alignment_matches_independent_simulation() -> None:
         assert leaf in expected.newick
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_n_sites_shown_is_capped_at_the_fixture_site_count() -> None:
     params = load_simulation_params(PARAMS_PATH)
     caption = build_caption(params, n_sites_shown=params.n_sites + 1000)
@@ -149,7 +149,7 @@ def test_display_newick_names_every_leaf_exactly_once() -> None:
         assert rendered.count(f"{leaf}\\_") == 1
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_display_newick_refuses_a_tree_with_too_many_ancestors() -> None:
     # Guards the guard: the symbol table is finite, and running off its end
     # must say so rather than raise IndexError from inside a comprehension.

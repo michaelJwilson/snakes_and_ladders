@@ -115,7 +115,7 @@ def test_the_published_evaluation_figure_matches_the_allocator(
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
     """The table reports the worst case, and this is what says so.
 
@@ -156,7 +156,7 @@ def test_the_declared_maximum_sits_inside_the_memory_requirement() -> None:
     assert total < MEMORY_BUDGET_BYTES / 10
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_check_would_fail_on_a_model_missing_a_term() -> None:
     """The tolerance rejects the error it exists to reject.
 

@@ -36,7 +36,7 @@ FIVE_TAXA = FIXTURES_DIR / "tree_search/ci.yaml"
 # --- the distance ---------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_topology_is_at_distance_zero_from_itself() -> None:
     for topology in enumerate_topologies(list("ABCDE")):
         assert robinson_foulds(topology, topology) == 0
@@ -58,7 +58,7 @@ def test_the_distance_is_the_symmetric_difference_of_the_splits() -> None:
             assert robinson_foulds(first, second) == expected
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_normalizer_is_the_internal_split_count() -> None:
     # 2(n - 3) for two binary unrooted trees on n leaves. Trivial splits are
     # excluded deliberately: every tree over the same leaves induces all of
@@ -74,7 +74,7 @@ def test_the_normalizer_is_the_internal_split_count() -> None:
         assert raw == 2 * (len(names) - 3)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_tree_with_no_internal_edge_scores_zero() -> None:
     # Below four taxa there is no internal split, so the normalizer is zero
     # and the ratio undefined. Reporting 0.0 is right -- three leaves admit
@@ -84,7 +84,7 @@ def test_a_tree_with_no_internal_edge_scores_zero() -> None:
     assert normalized_robinson_foulds(star, star) == 0.0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_distance_refuses_trees_over_different_leaves() -> None:
     first = next(iter(enumerate_topologies(list("ABCDE"))))
     second = next(iter(enumerate_topologies(list("ABCDF"))))

@@ -69,7 +69,7 @@ def _marginals(configurations: np.ndarray, n_states: int) -> np.ndarray:
 # --- the widened shape ------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_field_repeated_at_every_site_is_the_shared_field() -> None:
     # A per-site field whose rows are equal is the same model as the shared
     # field it was built from. A broadcast applied along the state axis rather
@@ -120,7 +120,7 @@ def test_the_exact_open_chain_sampler_carries_the_field_of_each_site() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_field_of_neither_shape_is_refused() -> None:
     # A field with one row per *state* on a graph whose node count differs is
     # the mistake the two accepted shapes allow; refused rather than broadcast
@@ -129,7 +129,7 @@ def test_a_field_of_neither_shape_is_refused() -> None:
         site_field(np.zeros((4, 3)), 9)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_size_that_is_not_positive_is_refused() -> None:
     # `log(size)` is the whole construction, so a size of zero is refused
     # where it is declared rather than becoming a field of -inf.
@@ -162,7 +162,7 @@ def test_gibbs_matches_enumeration_at_the_declared_spatio_only_instance() -> Non
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_declared_sizes_move_the_marginals() -> None:
     # Replacing the per-site field by its site average must change the exact
     # marginals by more than the tolerance the sampler is checked within, or

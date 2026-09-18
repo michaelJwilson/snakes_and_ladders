@@ -105,7 +105,7 @@ def test_the_enumerated_statistics_count_every_configuration() -> None:
     assert int((agreements == len(edges)).sum()) == N_STATES
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gradient_matches_central_differences() -> None:
     edges, _ = _graph()
     graph = lattice_graph(SHAPE, boundary=BoundaryCondition.OPEN, coupling=COUPLING)

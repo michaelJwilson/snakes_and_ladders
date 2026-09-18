@@ -94,18 +94,20 @@ release-gated suite is excluded per pull request — 138 s over 540 tests agains
 989 s for the full suite
 ([#159](https://github.com/michaelJwilson/snakes_and_ladders/pull/159)).
 
-**Coverage counts a test only when it judged something** (issue #729, PR
-[#731](https://github.com/michaelJwilson/snakes_and_ladders/pull/731)). One run of the regression tier on that branch with a context per test
-read **94.05%** of 16,780 statements under `--cov-fail-under`, **34.28%** of
-them reached by importing the package with no test at all; recut to the tests
-that judge something --- `oracle`, `end2end`, `mathematical`, `edge_case`,
-`infra`, `bug`, `backend` --- the figure is **90.05%**, and **93.43%** with
-`qa` exempt, which `infra/coverage_recut.py` now holds on the push to `main`
-and at the release gate, `search` at its own **94.46%**. The contexts cost
-the tier 33 s of 934 s. `structural` is retired (295 tests became `infra`, 374
-`smoke`), `simulated_truth` is `end2end`, and `bug`, `warning`, `backend` and
-`baseline` are registered as the finding axis for the audit the ticket plans,
-directory by directory, `search` first to 97%.
+**Coverage counts a test only when it judges the science** (issue #729, PR
+[#731](https://github.com/michaelJwilson/snakes_and_ladders/pull/731)). One run of
+the regression tier on that branch with a context per test read **94.37%** of
+16,797 statements under `--cov-fail-under`, **34.37%** of them reached by
+importing the package with no test at all; recut to the tests carrying
+`end2end` or `oracle` the figure is **77.92%**, and **82.69%** with `qa`
+exempt, which `infra/coverage_recut.py` now holds on the push to `main` and at
+the release gate, `search` at its own **86.14%**. The contexts cost the tier
+33 s of 934 s. `structural` and `edge_case` are retired into `infra` and
+`smoke`, `simulated_truth` is `end2end`, `mathematical` is `analytic`, and
+`patch`, `backend`, `bug`, `warning` and `snapshot` are registered as the
+finding axis, none of which counts; root `CLAUDE.md` states the rule and the
+audit the ticket plans raises the judged figure directory by directory,
+`search` first.
 
 Two releases have been cut under the procedure, each from a Release ticket
 gated on `infra/release.sh`: `0.1.0`

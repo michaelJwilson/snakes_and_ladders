@@ -321,8 +321,8 @@ def test_the_writer_restores_a_block_that_drifted(
     """
     edits = {
         "pyproject.toml": (
-            "edge_case: checked at a boundary",
-            "edge_case: checked somewhere",
+            "smoke: checked against itself",
+            "smoke: checked somewhere",
         ),
         "DEV.md": ("**120 s per test**", "**121 s per test**"),
     }
@@ -373,7 +373,7 @@ def test_the_guard_fails_on_a_copy_that_drifted(tmp_path: Path) -> None:
     reworded = tmp_path / "pyproject.toml"
     reworded.write_text(
         PYPROJECT.read_text().replace(
-            "edge_case: checked at a boundary", "edge_case: checked somewhere"
+            "smoke: checked against itself", "smoke: checked somewhere"
         )
     )
 
@@ -381,7 +381,7 @@ def test_the_guard_fails_on_a_copy_that_drifted(tmp_path: Path) -> None:
     assert "head carries the base" not in rows
     assert len(rows) == len(gates.REVIEW_GATE.rows) - 1
     assert _exported_caps(without_a_row) == {"SAL_DURATION_CAP": 11}
-    assert _registered_markers(reworded)["edge_case"] != gates.KIND_MARKERS["edge_case"]
+    assert _registered_markers(reworded)["smoke"] != gates.KIND_MARKERS["smoke"]
 
 
 @pytest.mark.infra

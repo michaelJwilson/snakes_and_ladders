@@ -206,7 +206,7 @@ def test_max_product_on_the_trellis_graph_gives_the_viterbi_path() -> None:
 # --- the a priori input and the boundary conditions ------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_an_a_priori_ratio_enters_the_posterior_exactly_once() -> None:
     """`posterior = channel + a priori + extrinsic`, the decomposition eq:extrinsic.
 
@@ -253,7 +253,7 @@ def test_an_a_priori_ratio_is_the_same_evidence_as_a_second_channel() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_an_unterminated_decoder_computes_a_different_posterior() -> None:
     """Telling the decoder the register was not emptied changes the answer.
 
@@ -274,7 +274,7 @@ def test_an_unterminated_decoder_computes_a_different_posterior() -> None:
     assert np.abs(free.posterior_llr - terminated.posterior_llr).max() > 1e-3
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_streams_of_disagreeing_length_are_refused() -> None:
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
 
@@ -284,7 +284,7 @@ def test_streams_of_disagreeing_length_are_refused() -> None:
         from_trellis(trellis, np.zeros(6), np.zeros(5))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_impossible_edge_is_a_finite_floor_and_not_minus_infinity() -> None:
     """A hard zero would make the general sum-product return `nan`, not a number.
 

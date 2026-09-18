@@ -46,7 +46,7 @@ def test_the_schedule_is_what_the_matrix_form_takes_bitwise() -> None:
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_constant_schedule_is_the_scalar_the_params_take() -> None:
     """Where the rate does not vary, the two forms meet the scalar default."""
     params = canonical_spatio_sequential()
@@ -59,7 +59,7 @@ def test_a_constant_schedule_is_the_scalar_the_params_take() -> None:
         assert np.array_equal(stack[step], scalar)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_schedule_that_is_not_one_rate_per_step_is_refused() -> None:
     """The shape the route is for, and nothing else."""
     with pytest.raises(ValueError, match="one rate per transition"):

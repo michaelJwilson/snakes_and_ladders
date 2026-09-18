@@ -65,7 +65,7 @@ def test_the_planting_is_the_one_the_suite_plants() -> None:
     ]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("flipped", [0, 7, 100])
 def test_the_permutation_the_panels_are_drawn_under_is_the_accuracy_one(
     flipped: int,
@@ -117,7 +117,7 @@ def test_the_recovered_labelling_agrees_with_the_planted_one() -> None:
     np.testing.assert_array_equal(again.labels, recovery.labels)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_lattice_the_figure_cannot_draw_is_refused() -> None:
     chain = lattice_graph((4,), BoundaryCondition.OPEN, 1.0)
     with pytest.raises(ValueError, match="2-D lattice"):

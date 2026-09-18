@@ -54,13 +54,13 @@ def test_transition_probabilities_reproduce_the_jc_closed_form(
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_rows_of_the_rate_matrix_sum_to_zero() -> None:
     rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
     assert_allclose(rate.sum(axis=1), np.zeros(4), atol=1e-15)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_model_satisfies_detailed_balance() -> None:
     # Reversibility is the property everything else here rests on: it is what
     # makes the symmetric eigendecomposition exact, and what makes the two
@@ -70,19 +70,19 @@ def test_the_model_satisfies_detailed_balance() -> None:
     assert_allclose(flux, flux.T, atol=1e-15)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_pi_is_stationary() -> None:
     rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
     assert_allclose(TRUE_PI @ rate, np.zeros(4), atol=1e-15)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_rate_is_normalized_to_one_substitution_per_unit_time() -> None:
     rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
     assert_allclose(-(TRUE_PI * np.diag(rate)).sum(), 1.0, rtol=1e-14)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("scale", [0.1, 3.7, 100.0])
 def test_scaling_every_exchangeability_changes_nothing(scale: float) -> None:
     # Why one exchangeability has to be pinned. This is an exact invariance,
@@ -96,7 +96,7 @@ def test_scaling_every_exchangeability_changes_nothing(scale: float) -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("t", [0.05, 0.4, 1.5])
 def test_transition_probabilities_are_a_stochastic_matrix(t: float) -> None:
     rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
@@ -105,7 +105,6 @@ def test_transition_probabilities_are_a_stochastic_matrix(t: float) -> None:
     assert bool((probabilities > 0.0).all())
 
 
-@pytest.mark.edge_case
 @pytest.mark.oracle
 def test_zero_branch_length_gives_the_identity() -> None:
     rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
@@ -114,7 +113,7 @@ def test_zero_branch_length_gives_the_identity() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_long_branch_converges_to_the_stationary_distribution() -> None:
     # An analytic limit, so this pins the eigendecomposition against the
     # model rather than against another implementation of it.
@@ -124,7 +123,7 @@ def test_a_long_branch_converges_to_the_stationary_distribution() -> None:
         assert_allclose(row, TRUE_PI, atol=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_transition_probabilities_compose_along_a_branch() -> None:
     # P(s) P(t) == P(s + t), the defining property of a Markov semigroup.
     rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
@@ -143,7 +142,7 @@ def test_free_exchangeabilities_are_completed_with_a_pinned_one() -> None:
     assert_allclose(exchangeabilities_from_free(free, 4), TRUE_EXCHANGEABILITIES)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("call", "message"),
     [

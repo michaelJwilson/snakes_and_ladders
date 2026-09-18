@@ -132,7 +132,7 @@ def test_every_declined_kernel_finds_the_enumerated_minimum(
     assert realized == pytest.approx(exact, abs=1e-12)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("kernel", KERNELS, ids=str)
 def test_every_declined_kernel_terminates_when_nothing_reaches_the_sink(
     kernel: DeclinedKernel,
@@ -166,7 +166,7 @@ def _copy(network: FlowNetwork) -> FlowNetwork:
     return copied
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("threads", [1, 2, 4])
 def test_the_parallel_kernel_is_bitwise_independent_of_its_thread_count(
     threads: int,
@@ -240,7 +240,7 @@ def test_every_declined_kernel_gives_the_package_expansion(
     assert np.array_equal(swapped.labelling, reference_swap.labelling)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unknown_kernel_is_refused_by_name() -> None:
     from snakes_and_ladders import oxi_snakes_and_ladders
 

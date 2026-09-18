@@ -312,14 +312,14 @@ def test_a_rooted_binary_topology_places_the_root_pair_as_its_sum() -> None:
         assert placed[split] == pytest.approx(length)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("initializer", [FromDistances(), FromHadamard()])
 def test_an_objective_that_is_not_a_tree_is_refused(initializer: Initializer) -> None:
     with pytest.raises(TypeError, match="does not know"):
         initializer.starts(Rosenbrock())
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_floor_is_refused() -> None:
     with pytest.raises(ValueError, match="positive"):
         FromDistances(minimum_length=0.0)

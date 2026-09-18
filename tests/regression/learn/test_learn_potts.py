@@ -61,7 +61,7 @@ def test_the_local_reward_equals_a_full_energy_difference() -> None:
             assert_allclose(reward, environment.energy(successor) - base, atol=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_features_span_the_reward_exactly() -> None:
     # delta_energy = J * agreement_delta + field_delta, which is why the
     # greedy searcher is inside the policy class. If this ever stopped
@@ -99,7 +99,7 @@ def test_a_terminal_state_is_one_no_flip_improves() -> None:
 # --- the gauge ------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_shifting_the_field_leaves_every_reward_unchanged() -> None:
     # h and h + c are the same model, and `snakes_and_ladders.opt.potts` has to fix that
     # gauge because a fitted field would otherwise have no value. Here it
@@ -199,7 +199,7 @@ def test_the_fixture_yaml_builds_the_same_environment() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("coupling", "field", "chain_length", "message"),
     [

@@ -48,7 +48,7 @@ def test_an_octal_generator_reads_as_the_polynomial_the_textbook_states() -> Non
     assert octal_taps(0o15, 3).tolist() == [1, 1, 0, 1]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("polynomial", "memory"),
     [(0o17, 2), (0o2, 2), (0o6, 3)],
@@ -62,7 +62,7 @@ def test_a_generator_that_does_not_fit_the_register_is_refused(
         octal_taps(polynomial, memory)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_feedback_generator_without_its_top_term_is_refused() -> None:
     # `6` at memory 2 is `1 + D`: a memory-1 register spelled as a memory-2
     # one. Its two edges into a state collide, so the trellis it would build
@@ -110,7 +110,7 @@ def test_the_trellis_runs_the_polynomial_division_the_generators_state(
     np.testing.assert_array_equal(parity, np.array(expected, dtype=np.uint8))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize(
     ("feedback", "feedforward", "memory"), [(FEEDBACK, FEEDFORWARD, MEMORY), LTE]
 )
@@ -132,7 +132,7 @@ def test_the_two_edges_leaving_a_state_enter_different_states(
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize(
     ("feedback", "feedforward", "memory"), [(FEEDBACK, FEEDFORWARD, MEMORY), LTE]
 )
@@ -159,7 +159,7 @@ def test_the_tail_empties_the_register_from_every_state(
 # --- the interleaver ------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("length", [12, 256, 1024])
 def test_the_interleaver_is_a_permutation_and_its_inverse_undoes_it(
     length: int,
@@ -189,7 +189,7 @@ def test_two_interleavers_from_one_generator_differ_and_seeds_agree() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_array_that_repeats_an_index_is_refused_as_a_permutation() -> None:
     with pytest.raises(ValueError, match="not a permutation"):
         inverse_permutation(np.array([0, 1, 1, 3]))
@@ -209,7 +209,7 @@ def test_the_declared_instances_draw_the_interleaver_their_seed_names() -> None:
 # --- the encoder ----------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("message_length", [12, 40])
 def test_encoding_is_gf2_linear_and_systematic(message_length: int) -> None:
     """`c(u + v) = c(u) + c(v)`, and the first `K` bits of a word are the message."""
@@ -234,7 +234,7 @@ def test_encoding_is_gf2_linear_and_systematic(message_length: int) -> None:
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_block_length_and_rate_are_three_k_plus_four_m() -> None:
     """Both encoders terminated: `K + m` systematic, two parity streams, one tail."""
     code = turbo_code(FEEDBACK, FEEDFORWARD, MEMORY, 12, np.random.default_rng(3))
@@ -280,7 +280,7 @@ def test_the_code_is_the_null_space_a_parity_check_matrix_defines() -> None:
     assert {word.tobytes() for word in enumerate_codewords(check)} == from_generator
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_dense_parity_check_is_refused_past_its_stated_length() -> None:
     # Cubic, and the trellis decoders are linear: past the ceiling the
     # caller wanted those, and a refusal says so rather than running for
@@ -293,7 +293,7 @@ def test_the_dense_parity_check_is_refused_past_its_stated_length() -> None:
         parity_check(code)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_message_of_the_wrong_length_or_outside_gf2_is_refused() -> None:
     code = turbo_code(FEEDBACK, FEEDFORWARD, MEMORY, 8, np.random.default_rng(10))
 

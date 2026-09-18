@@ -232,7 +232,7 @@ def test_realized_path_posterior_matches_brute_force_enumeration() -> None:
     assert_allclose(estimated_posterior, exact_posterior, atol=5 * params.tolerance)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("replace", "with_", "message"),
     [
@@ -255,7 +255,7 @@ def test_a_malformed_fixture_is_refused(
         load_hmm_params(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_batch_of_no_chains_is_refused(tmp_path: Path) -> None:
     # Not a substitution like the cases above: emptying the list means
     # replacing the whole block, and the guard it reaches reads `lengths`
@@ -268,7 +268,7 @@ def test_a_batch_of_no_chains_is_refused(tmp_path: Path) -> None:
         load_hmm_params(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_missing_field_is_refused(tmp_path: Path) -> None:
     text = "\n".join(
         line

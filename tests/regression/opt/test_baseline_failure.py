@@ -75,7 +75,7 @@ def _never_fails(size: int) -> tuple[_Basin, float]:
     return _Basin(1.0), 0.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_probe_counts_what_it_ran_and_what_it_reached() -> None:
     # The arithmetic, against a declared probability: at a basin fraction of
     # one every start reaches, at zero none does, and the fraction is over the
@@ -107,7 +107,7 @@ def test_a_probe_counts_what_it_ran_and_what_it_reached() -> None:
     assert never.best == 1.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_sweep_stops_at_the_size_the_binomial_predicts() -> None:
     # `0.5 ** (size - 1)` is 1 at size 1, so the sweep cannot fail there; at
     # size 2 it is one half and 32 starts miss the target with probability
@@ -131,7 +131,7 @@ def test_the_sweep_stops_at_the_size_the_binomial_predicts() -> None:
     assert curve.probes[0].fraction == 1.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_whole_curve_is_available_when_the_sweep_is_asked_for_it() -> None:
     # A report carries the curve, not only its first failure, and the
     # fractions must fall with the size for a family whose basin halves.
@@ -151,7 +151,7 @@ def test_the_whole_curve_is_available_when_the_sweep_is_asked_for_it() -> None:
     assert fractions[-1] < fractions[1] < fractions[0]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_baseline_that_never_fails_reports_no_failure() -> None:
     # The outcome issue #596 says to bring the curve for: the baseline held at
     # every size measured, so the gate cannot be argued here. `None` is the
@@ -169,7 +169,7 @@ def test_a_baseline_that_never_fails_reports_no_failure() -> None:
     assert len(curve.probes) == 3
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_clock_truncates_a_probe_and_the_probe_says_so() -> None:
     # A fraction read off a sample the run did not take is the silent failure
     # a ceiling would otherwise introduce, so a truncated probe reports the
@@ -190,7 +190,7 @@ def test_the_clock_truncates_a_probe_and_the_probe_says_so() -> None:
     assert probe.fraction == 1.0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_harness_refuses_what_it_cannot_measure() -> None:
     budget = Budget("decisions", 10)
     with pytest.raises(ValueError, match="at least one start"):

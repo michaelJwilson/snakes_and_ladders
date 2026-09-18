@@ -39,7 +39,7 @@ def _exhaustive(graph: PottsGraph) -> tuple[np.ndarray, np.ndarray]:
     return labellings, energies
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.potts_lattice
 def test_the_marginal_decoder_minimizes_the_expected_wrong_sites() -> None:
     # The theorem, checked rather than argued: `sum_i (1 - p_i(y_i))` is
@@ -102,7 +102,7 @@ def test_the_marginal_labelling_can_be_a_configuration_nobody_would_pick() -> No
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.potts_lattice
 def test_the_estimators_agree_where_the_posterior_is_unimodal() -> None:
     # The null case, stated so the difference above is not read as general: on
@@ -118,7 +118,7 @@ def test_the_estimators_agree_where_the_posterior_is_unimodal() -> None:
     np.testing.assert_array_equal(marginal, labellings[int(np.argmin(energies))])
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.potts_lattice
 def test_marginals_that_are_not_a_distribution_are_refused() -> None:
     # A caller who has not normalized has not converged, and normalizing here
@@ -132,7 +132,7 @@ def test_marginals_that_are_not_a_distribution_are_refused() -> None:
         marginal_decode(np.array([0.5, 0.5]))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.potts_lattice
 def test_a_labelling_of_the_wrong_length_is_refused() -> None:
     # The loss reads one marginal per site, so a labelling of another length

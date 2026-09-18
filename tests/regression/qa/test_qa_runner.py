@@ -44,7 +44,7 @@ def _write_params(tmp_path: Path, name: str, text: str) -> Path:
     return path
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_figure_is_closed_even_when_writing_it_fails(tmp_path: Path) -> None:
     # The reason the close lives in a `finally` in the runner rather than in
     # each builder. A caption carrying an unescaped LaTeX special is refused
@@ -192,7 +192,7 @@ def test_an_option_given_on_the_command_line_overrides_its_default(
     assert written.table_path.read_text().strip() == "3"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_missing_parameters_file_argument_is_refused(tmp_path: Path) -> None:
     # Every parameters file is required: a figure rendered from a default
     # fixture nobody named would carry a caption claiming provenance it was
