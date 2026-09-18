@@ -2162,7 +2162,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`. `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -3508,6 +3508,7 @@ Pull request 3 (issue #387) put one enumeration behind the oracles: `enumeration
 
 Pull request 5 folded the first compiled twin: `numerics_rust.sample_rows` is `numerics.sample_rows(backend=)`, the extension by default since the two agree bitwise on the same generator state, and `Backend` moved from `search.backend` to `snakes_and_ladders.backend` so a module below `search` can name it; the rows read twins 7, flat modules 149, API-map entries 1,575. The remaining six twins follow one per pull request, `maxflow_rust` after #716 lands on it.
 Pull request 7 made the root a surface: `snakes_and_ladders` exports `Objective`, `Environment`, `FactorGraph`, `PottsGraph`, `fixture`, `Backend` and `parallel`, each resolved on first use so the bare import loads no submodule (asserted in a fresh process), and `double` is the extension's alone; `scripts` gained the docstring it lacked. The rows read root exports 7, modules without a docstring 0.
+Pull request 8 folded the second twin, `search.potts_mcmc_rust`, which since #599 was one line of dispatch onto `potts_mcmc.sample_potts(backend=Backend.RUST)`, that function's default; the name issue #246 published lives on in the test and benchmark that cite it. The rows read twins 6, flat modules 148.
 
 **A dual bound on a ground state at #696.** `search.tightening` decomposes the
 energy into subproblems whose shares sum to it, so

@@ -21,15 +21,37 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search import potts_mcmc_rust
 from snakes_and_ladders.search.potts_mcmc import (
     _GUARD,
+    PottsChain,
     PottsMove,
     parallel_tempering,
     sample_potts,
 )
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import site_field
+
+
+def _rust_sample_potts(
+    graph: PottsGraph,
+    field: np.ndarray,
+    rng: np.random.Generator,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+) -> PottsChain:
+    # The name issue #246 published: the single-site move on the extension.
+    return sample_potts(
+        graph,
+        field,
+        PottsMove.SINGLE_SITE,
+        rng,
+        n_sweeps,
+        burn_in,
+        thin,
+        backend=Backend.RUST,
+    )
+
 
 SWEEPS = 100
 FIELD = np.zeros(2)
@@ -70,7 +92,7 @@ def test_rust_single_site_sweep(benchmark: BenchmarkFixture, extent: int) -> Non
     graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 0.4)
 
     chain = benchmark(
-        potts_mcmc_rust.sample_potts,
+        _rust_sample_potts,
         graph,
         FIELD,
         np.random.default_rng(1),
