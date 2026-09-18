@@ -20,13 +20,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.learn.rollout import greedy_rollout
-from snakes_and_ladders.opt.budget import Budget, Outcome, OverspendError, restarts
-from snakes_and_ladders.opt.failure import (
+from snakes_and_ladders.learn.failure import (
     FailureCurve,
     failure_curve,
     probe_failure,
 )
+from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.opt.budget import Budget, Outcome, OverspendError, restarts
 from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import enumerate_topologies

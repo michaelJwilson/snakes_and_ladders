@@ -23,7 +23,6 @@ from snakes_and_ladders.learn.relaxed import (
     RelaxedHmmPath,
     RelaxedObjective,
     RelaxedPotts,
-    anneal,
     enumerate_optimum,
     estimate_gradient,
     exact_expected_gradient,
@@ -521,26 +520,8 @@ def test_a_temperature_below_the_floor_is_refused() -> None:
         )
 
 
-@pytest.mark.smoke
-def test_the_anneal_schedule_is_geometric_and_hits_both_endpoints() -> None:
-    # Geometric because the relaxation's behaviour is set by the ratio of
-    # logit gaps to `tau`, so equal multiplicative steps are equal steps in
-    # the thing that matters.
-    values = [anneal(1.0, 0.01, 5, step) for step in range(5)]
-
-    assert values[0] == pytest.approx(1.0)
-    assert values[-1] == pytest.approx(0.01)
-    ratios = [second / first for first, second in itertools.pairwise(values)]
-    assert ratios == pytest.approx([ratios[0]] * len(ratios))
-
-
-@pytest.mark.smoke
-def test_a_single_step_schedule_stays_at_the_start() -> None:
-    assert anneal(0.5, 0.1, 1, 0) == pytest.approx(0.5)
-
-
 @pytest.mark.parametrize(
-    ("start", "end", "steps", "message"),
+    ("temperature", "final_temperature", "steps", "message"),
     [
         (1.0, 1e-9, 10, "endpoints must be >="),
         (0.1, 0.5, 10, "end must not exceed start"),
@@ -548,11 +529,19 @@ def test_a_single_step_schedule_stays_at_the_start() -> None:
     ],
 )
 @pytest.mark.smoke
-def test_an_invalid_schedule_is_refused(
-    start: float, end: float, steps: int, message: str
+def test_an_invalid_annealing_is_refused(
+    temperature: float, final_temperature: float, steps: int, message: str
 ) -> None:
+    # The geometric schedule is `opt.schedule`'s since issue #717 and is
+    # pinned there; what stays here is what `optimize` refuses.
     with pytest.raises(ValueError, match=message):
-        anneal(start, end, steps, 0)
+        optimize(
+            RelaxedPotts(_environment()),
+            torch.Generator().manual_seed(0),
+            temperature=temperature,
+            final_temperature=final_temperature,
+            steps=steps,
+        )
 
 
 @pytest.mark.smoke

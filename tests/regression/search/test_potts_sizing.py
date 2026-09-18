@@ -29,8 +29,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.learn.failure import probe_failure
 from snakes_and_ladders.opt.budget import Budget, restarts
-from snakes_and_ladders.opt.failure import probe_failure
 from snakes_and_ladders.search.ground_state import (
     Entry,
     lattice_rung,
