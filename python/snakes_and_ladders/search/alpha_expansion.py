@@ -33,7 +33,7 @@ from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
 from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energies
+from snakes_and_ladders.sim.potts import energy, site_field
 
 # The bound is `2 * c_max / c_min` for a metric pairwise term; with a uniform
 # coupling the ratio is 1 and the factor is exactly 2.
@@ -67,20 +67,6 @@ class ExpansionResult:
     moves: int
 
 
-def energy(graph: PottsGraph, field_values: np.ndarray, labelling: np.ndarray) -> float:
-    """``-sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]``, for any state count.
-
-    One labelling is the single-configuration case of
-    :func:`snakes_and_ladders.sim.potts.energies`, which this passes
-    ``labelling[None]`` and reads element zero of: the block form is
-    vectorized over the edges, where the loop this held measured 92% of the
-    self time (issue #341), so scoring one labelling through it is faster
-    than the loop it replaces rather than slower (issue #277).
-    """
-    values = _site_field(graph, field_values)
-    return float(energies(graph, values, np.asarray(labelling)[None])[0])
-
-
 def _expansion_network(
     graph: PottsGraph, values: np.ndarray, labelling: np.ndarray, alpha: int
 ) -> FlowNetwork:
@@ -101,7 +87,7 @@ def _expansion_network(
         The graph.
     values : np.ndarray
         Per-site field, shape ``(n_nodes, n_states)``, as
-        :func:`_site_field` widens it.
+        :func:`snakes_and_ladders.sim.potts.site_field` widens it.
     labelling : np.ndarray
         The labelling to expand, one label per node.
     alpha : int
@@ -237,7 +223,7 @@ def expand(
         msg = f"alpha expansion has no {backend} minimum-cut backend"
         raise ValueError(msg)
 
-    values = _site_field(graph, field_values)
+    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     network = _expansion_network(graph, values, labelling, alpha)
     source, sink = graph.n_nodes, graph.n_nodes + 1
 
@@ -309,7 +295,9 @@ def alpha_expansion(
         )
         raise ValueError(msg)
 
-    values = _site_field(graph, field_values, n_states)
+    values = site_field(
+        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=n_states
+    )
     labelling = (
         values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
     )
@@ -377,7 +365,7 @@ def iterated_conditional_modes(
     tuple[np.ndarray, float]
         The labelling it settles on, and its energy.
     """
-    values = _site_field(graph, field_values)
+    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     labelling = rng.integers(0, n_states, size=graph.n_nodes)
 
     if backend is Backend.NUMBA:
@@ -436,28 +424,6 @@ def _infinite_capacity(graph: PottsGraph, values: np.ndarray) -> float:
     return 1.0 + float(np.abs(values).sum()) + float(graph.edge_coupling.sum())
 
 
-def _site_field(
-    graph: PottsGraph, field_values: np.ndarray, n_states: int | None = None
-) -> np.ndarray:
-    """Broadcast a shared field to one per node, or pass a per-node one through.
-
-    ``n_states`` is checked where the caller knows it, because a field with
-    the wrong number of *columns* is the error that would otherwise surface as
-    an ``IndexError`` deep inside a cut construction rather than at the call
-    site that got it wrong.
-    """
-    values = np.asarray(field_values, dtype=float)
-    if values.ndim == 1:
-        values = np.tile(values, (graph.n_nodes, 1))
-    elif values.shape[0] != graph.n_nodes:
-        msg = f"a per-node field must have {graph.n_nodes} rows, got {values.shape[0]}"
-        raise ValueError(msg)
-    if n_states is not None and values.shape[1] != n_states:
-        msg = f"a field for {n_states} states must have {n_states} columns, got {values.shape[1]}"
-        raise ValueError(msg)
-    return values
-
-
 def swap(
     graph: PottsGraph,
     field_values: np.ndarray,
@@ -503,7 +469,7 @@ def swap(
         msg = f"a swap needs two distinct labels, got {alpha} twice"
         raise ValueError(msg)
 
-    values = _site_field(graph, field_values)
+    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
     moving = np.flatnonzero((labelling == alpha) | (labelling == beta))
     if moving.size == 0:
         return labelling, energy(graph, values, labelling)
@@ -585,7 +551,9 @@ def alpha_beta_swap(
         )
         raise ValueError(msg)
 
-    values = _site_field(graph, field_values, n_states)
+    values = site_field(
+        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=n_states
+    )
     labelling = (
         values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
     )

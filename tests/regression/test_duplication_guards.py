@@ -39,8 +39,8 @@ import duplication_survey  # noqa: E402
 #: modules without a docstring and there is one (`scripts/__init__.py`), and
 #: nine compiled twins where eight sit beside an oracle.
 SLIMMING_BASELINE = {
-    "Potts energies of a labelling": 3,
-    "site-field broadcasts": 2,
+    "Potts energies of a labelling": 1,
+    "site-field broadcasts": 0,
     "annealers": 4,
     "ground-state run_ wrappers": 10,
     "backend enums": 1,
@@ -50,7 +50,7 @@ SLIMMING_BASELINE = {
     "root exports": 1,
     "test modules pinning a twin to its oracle beyond the first": 13,
     "flat modules": 150,
-    "API-map entries": 1580,
+    "API-map entries": 1578,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.

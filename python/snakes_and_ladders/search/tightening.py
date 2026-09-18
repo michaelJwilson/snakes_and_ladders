@@ -36,9 +36,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from snakes_and_ladders.search.alpha_expansion import energy
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.sim.potts import energy, site_field
 
 
 @dataclass(frozen=True)
@@ -50,7 +49,7 @@ class Certificate:
     labelling : np.ndarray
         The decoded labelling, one state per site.
     energy : float
-        Its energy, in the sign `search.alpha_expansion.energy` uses: a ground
+        Its energy, in the sign `sim.potts.energy` uses: a ground
         state **minimizes** it, so this is an **upper** bound on the minimum
         --- some labelling achieves it, so the best does at least this well.
     bound : float

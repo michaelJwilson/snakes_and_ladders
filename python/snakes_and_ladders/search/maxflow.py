@@ -32,7 +32,7 @@ import numpy as np
 
 from snakes_and_ladders.incidence import SparseIncidence
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energies
+from snakes_and_ladders.sim.potts import energy, site_field
 
 
 @dataclass
@@ -357,69 +357,6 @@ def _augment(
     return 0.0
 
 
-def site_field(graph: PottsGraph, field_values: np.ndarray) -> np.ndarray:
-    """Broadcast a shared field to one per node, or pass a per-node one through.
-
-    A **uniform** field makes the ferromagnetic ground state trivial: every
-    coupling favours agreement and every site prefers the same state, so the
-    answer is `argmax(h)` everywhere and a cut is an expensive way to say so.
-    The problem only has content when the field varies by site, which is also
-    the shape alpha expansion (issue #207) needs --- its binary sub-problem
-    has a per-node data term read off the current labelling. So both are
-    accepted and the per-node case is the one worth solving.
-
-    Parameters
-    ----------
-    graph : PottsGraph
-        Supplies the node count.
-    field_values : np.ndarray
-        Either ``(2,)``, shared by every node, or ``(n_nodes, 2)``.
-
-    Returns
-    -------
-    np.ndarray
-        Shape ``(n_nodes, 2)``.
-
-    Raises
-    ------
-    ValueError
-        If the shape is neither, or the state count is not 2.
-    """
-    values = np.asarray(field_values, dtype=float)
-    if values.ndim == 1:
-        if values.shape[0] != 2:
-            msg = (
-                f"a cut solves the two-state case only, got {values.shape[0]} "
-                "states; alpha expansion (issue #207) covers more"
-            )
-            raise ValueError(msg)
-        return np.tile(values, (graph.n_nodes, 1))
-    if values.shape != (graph.n_nodes, 2):
-        msg = f"a per-node field must be ({graph.n_nodes}, 2), got {values.shape}"
-        raise ValueError(msg)
-    return values
-
-
-def energy(
-    graph: PottsGraph, field_values: np.ndarray, configurations: np.ndarray
-) -> np.ndarray:
-    """``E(s) = -sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]``.
-
-    The negated log weight :func:`snakes_and_ladders.likelihood.potts.log_weights` computes,
-    generalized to a per-node field. With a shared field the two agree
-    exactly, which a test pins --- so the generalization cannot drift from the
-    model the rest of the repository fits.
-
-    The arithmetic is :func:`snakes_and_ladders.sim.potts.energies`, whose
-    gather-and-dot over the edges this module supplied when issue #341
-    measured the per-edge loop at 92% of the self time; what stays here is
-    the **two-state refusal** :func:`site_field` carries, since a cut solves
-    ``k = 2`` and a caller reaching this with more states is asking the wrong
-    module (issue #277).
-    """
-    return energies(graph, site_field(graph, field_values), configurations)
-
-
 def ising_ground_state(
     graph: PottsGraph, field_values: np.ndarray
 ) -> tuple[np.ndarray, float]:
@@ -443,8 +380,13 @@ def ising_ground_state(
     graph : PottsGraph
         Every coupling must be non-negative.
     field_values : np.ndarray
-        ``(2,)`` or ``(n_nodes, 2)``. See :func:`site_field` for why the
-        second is the case with content.
+        ``(2,)`` or ``(n_nodes, 2)``. A **uniform** field makes the
+        ferromagnetic ground state trivial: every coupling favours agreement
+        and every site prefers the same state, so the answer is
+        ``argmax(h)`` everywhere and a cut is an expensive way to say so. The
+        problem has content when the field varies by site, which is also the
+        shape alpha expansion (issue #207) needs. More than two states is
+        refused: a cut solves ``k = 2`` and alpha expansion covers the rest.
 
     Returns
     -------
@@ -458,7 +400,9 @@ def ising_ground_state(
         is the submodularity boundary: the problem is NP-hard there and this
         returns nothing rather than a lattice-shaped wrong answer.
     """
-    values = site_field(graph, field_values)
+    values = site_field(
+        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
+    )
     couplings = graph.edge_coupling
     if couplings.size and couplings.min() < 0.0:
         msg = (
@@ -482,7 +426,7 @@ def ising_ground_state(
 
     cut = max_flow(network, source, sink)
     configuration = (~cut.source_side[: graph.n_nodes]).astype(np.int64)
-    return configuration, float(energy(graph, values, configuration))
+    return configuration, energy(graph, values, configuration)
 
 
 def cut_energy(graph: PottsGraph, field_values: np.ndarray, cut_value: float) -> float:
@@ -493,6 +437,8 @@ def cut_energy(graph: PottsGraph, field_values: np.ndarray, cut_value: float) ->
     agree; if they do not, the construction is wrong in a way that reading the
     configuration back and scoring it would hide.
     """
-    values = site_field(graph, field_values)
+    values = site_field(
+        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
+    )
     offsets = (-values).min(axis=1)
     return cut_value + float(offsets.sum()) - float(graph.edge_coupling.sum())
