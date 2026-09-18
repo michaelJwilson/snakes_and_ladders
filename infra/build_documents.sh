@@ -106,7 +106,13 @@ uv run --no-sync python infra/api_map.py --write
 # 15.8 s, so it runs here and fails before the build rather than beside it.
 uv run --no-sync python infra/check_citations.py
 
-for document in paper textbook api_map; do
+# The mind map's tree, written from the package rather than drawn (issue #664).
+# Regenerated here for the same reason the tables are: what the document
+# typesets is what the tree says today, not what it said when someone last ran
+# the script by hand.
+uv run --no-sync python infra/mind_map.py
+
+for document in paper textbook api_map mind_map; do
   (
     cd docs/tex
     latexmk -pdf -interaction=nonstopmode -halt-on-error \
@@ -114,4 +120,4 @@ for document in paper textbook api_map; do
   )
 done
 
-echo "Built docs/paper.pdf, docs/textbook.pdf and docs/api_map.pdf"
+echo "Built docs/paper.pdf, docs/textbook.pdf, docs/api_map.pdf and docs/mind_map.pdf"
