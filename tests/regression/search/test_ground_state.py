@@ -32,14 +32,10 @@ from snakes_and_ladders.search.alpha_expansion import (
     alpha_beta_swap,
     alpha_expansion,
     energy,
-    expand,
     swap,
 )
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.search.maxflow_rust import (
-    MaxFlowAlgorithm,
-)
 from snakes_and_ladders.search.maxflow_rust import (
     ising_ground_state as rust_ground_state,
 )
@@ -49,13 +45,8 @@ from snakes_and_ladders.search.potts_mcmc import (
     sample_potts,
 )
 from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.graph import (
-    BoundaryCondition,
-    PottsGraph,
-    lattice_graph,
-    triangular_lattice_graph,
-)
-from snakes_and_ladders.sim.potts import SpatioOnlyParams, spatio_only_field
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import SpatioOnlyParams
 
 #: Two exact routes sum the same weights in a different order, so they agree
 #: to the last bits of a float64 reduction rather than bitwise.
@@ -438,78 +429,3 @@ def test_the_swap_refuses_rather_than_looping_past_its_cycle_cap() -> None:
 
     with pytest.raises(ValueError, match="did not settle in 1 cycles"):
         alpha_beta_swap(rung.graph, rung.field, 3, start=start, max_cycles=1)
-
-
-# --- every max-flow kernel as the inner solver (issue #715) -------------------
-
-KERNELS = list(MaxFlowAlgorithm)
-
-
-def _spots(extent: int, n_states: int) -> tuple[PottsGraph, np.ndarray]:
-    """`spatio_only`'s construction past enumeration: triangular, lognormal sizes."""
-    graph = triangular_lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.7)
-    rng = np.random.default_rng(extent * 10 + n_states)
-    sizes = np.exp(rng.normal(0.0, 0.6, size=graph.n_nodes))
-    return graph, spatio_only_field(np.linspace(-0.9, 0.9, n_states), sizes)
-
-
-@pytest.mark.oracle
-@pytest.mark.critical
-@pytest.mark.parametrize("algorithm", KERNELS, ids=str)
-@pytest.mark.parametrize("n_states", [2, 3])
-def test_every_kernel_reaches_the_enumerated_optimum_through_both_move_sets(
-    algorithm: MaxFlowAlgorithm, n_states: int
-) -> None:
-    rung = _rung(CI, n_states)
-    _, exact = _enumerated(rung)
-
-    expansion = alpha_expansion(
-        rung.graph, rung.field, n_states, backend=Backend.RUST, algorithm=algorithm
-    )
-    swapped = alpha_beta_swap(
-        rung.graph, rung.field, n_states, backend=Backend.RUST, algorithm=algorithm
-    )
-
-    assert expansion.energy == pytest.approx(exact, abs=_EXACT)
-    assert swapped.energy == pytest.approx(exact, abs=_EXACT)
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize("n_states", [3, 10])
-def test_every_kernel_gives_the_same_expansion_past_enumeration(
-    n_states: int,
-) -> None:
-    # Where enumeration does not reach, the kernels referee each other: the
-    # same cut per expansion, so the same labelling after every one, and the
-    # final energy bitwise equal. A labelling may differ only where a cut is
-    # degenerate, and none is on this instance.
-    graph, field = _spots(12, n_states)
-    reference = alpha_expansion(
-        graph, field, n_states, backend=Backend.RUST, algorithm=KERNELS[0]
-    )
-
-    for algorithm in KERNELS[1:]:
-        result = alpha_expansion(
-            graph, field, n_states, backend=Backend.RUST, algorithm=algorithm
-        )
-        assert result.energy.hex() == reference.energy.hex(), algorithm
-        assert np.array_equal(result.labelling, reference.labelling), algorithm
-        assert result.cycles == reference.cycles, algorithm
-
-
-@pytest.mark.mathematical
-@pytest.mark.parametrize("algorithm", KERNELS, ids=str)
-def test_no_expansion_raises_the_energy_under_any_kernel(
-    algorithm: MaxFlowAlgorithm,
-) -> None:
-    graph, field = _spots(10, 4)
-    rng = np.random.default_rng(716)
-    labelling = rng.integers(0, 4, size=graph.n_nodes)
-    current = energy(graph, field, labelling)
-
-    for alpha in range(4):
-        labelling, candidate = expand(
-            graph, field, labelling, alpha, backend=Backend.RUST, algorithm=algorithm
-        )
-        assert candidate <= current + _EXACT
-        current = candidate

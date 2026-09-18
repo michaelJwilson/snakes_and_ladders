@@ -31,11 +31,7 @@ import numpy as np
 
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
-from snakes_and_ladders.search.maxflow_rust import (
-    DEFAULT_ALGORITHM,
-    MaxFlowAlgorithm,
-    min_cut,
-)
+from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energies
 
@@ -184,7 +180,6 @@ def expand(
     alpha: int,
     *,
     backend: Backend = Backend.PYTHON,
-    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
 ) -> tuple[np.ndarray, float]:
     """The optimal ``alpha``-expansion of ``labelling``, by one minimum cut.
 
@@ -247,7 +242,7 @@ def expand(
     source, sink = graph.n_nodes, graph.n_nodes + 1
 
     cut = (
-        min_cut(network, source, sink, algorithm)
+        min_cut(network, source, sink)
         if backend is Backend.RUST
         else max_flow(network, source, sink)
     )
@@ -271,7 +266,6 @@ def alpha_expansion(
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.PYTHON,
-    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
 ) -> ExpansionResult:
     """Cycle over labels until a full sweep lowers nothing.
 
@@ -326,7 +320,7 @@ def alpha_expansion(
         improved = False
         for alpha in range(n_states):
             labelling, candidate = expand(
-                graph, values, labelling, alpha, backend=backend, algorithm=algorithm
+                graph, values, labelling, alpha, backend=backend
             )
             if candidate < current - 1e-12:
                 current = candidate
@@ -472,7 +466,6 @@ def swap(
     beta: int,
     *,
     backend: Backend = Backend.PYTHON,
-    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
 ) -> tuple[np.ndarray, float]:
     """The optimal ``alpha``-``beta`` swap of ``labelling``, by one minimum cut.
 
@@ -541,7 +534,7 @@ def swap(
             )
 
     cut = (
-        min_cut(network, source, sink, algorithm)
+        min_cut(network, source, sink)
         if backend is Backend.RUST
         else max_flow(network, source, sink)
     )
@@ -565,7 +558,6 @@ def alpha_beta_swap(
     start: np.ndarray | None = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     backend: Backend = Backend.PYTHON,
-    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
 ) -> ExpansionResult:
     """Cycle over every label pair until a full sweep lowers nothing.
 
@@ -605,13 +597,7 @@ def alpha_beta_swap(
         for alpha in range(n_states):
             for beta in range(alpha + 1, n_states):
                 labelling, candidate = swap(
-                    graph,
-                    values,
-                    labelling,
-                    alpha,
-                    beta,
-                    backend=backend,
-                    algorithm=algorithm,
+                    graph, values, labelling, alpha, beta, backend=backend
                 )
                 if candidate < current - 1e-12:
                     current = candidate

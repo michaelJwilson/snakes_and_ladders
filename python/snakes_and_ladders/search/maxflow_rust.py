@@ -1,47 +1,46 @@
-"""Rust max-flow kernels (`snakes_and_ladders.oxi_snakes_and_ladders`), pinned against `snakes_and_ladders.search.maxflow`.
+"""Rust Boykov--Kolmogorov max flow (`snakes_and_ladders.oxi_snakes_and_ladders`), pinned against `snakes_and_ladders.search.maxflow`.
 
-The NumPy/Python implementation stays as the oracle, per root ``CLAUDE.md``
-("Every accelerated kernel keeps its pure Python/NumPy implementation as an
-oracle") and the same rule ``likelihood/CLAUDE.md`` states for pruning.
+The NumPy/Python implementation --- Dinic, kept readable --- stays as the
+oracle, per root ``CLAUDE.md`` ("Every accelerated kernel keeps its pure
+Python/NumPy implementation as an oracle") and the same rule
+``likelihood/CLAUDE.md`` states for pruning.
 
 **Why this one is a Rust port and the samplers are not.** Root ``CLAUDE.md``
 reserves the Rust backend for CPU-bound hot paths built from control flow and
-irregular memory access, which is exactly a level graph and a blocking flow
-over an adjacency structure: there is no array arithmetic here for NumPy to
+irregular memory access, which is exactly a search tree or a level graph over
+an adjacency structure: there is no array arithmetic here for NumPy to
 vectorize, so the reference pays full Python interpreter cost per arc.
 
-Measured on square lattices with a random per-node field, **two numbers, and
-both belong in any claim made here**: the kernel alone is 26-32x the Python
-reference, while a caller of this wrapper sees 6.3-10.7x. Issue #220 attributed
-the difference to the Python lists that crossed the boundary by copy, and
-issue #336 replaced them with `rust-numpy` buffers, the fix issue #202
-applied to the categorical sampler. Measured, that copy was 0.03-0.2 ms of a
-0.7-17 ms call at extents 16-64, and removing it moved the caller-visible
-number by under 3%. The term that remained was
-:func:`snakes_and_ladders.search.maxflow.energy`, which scored the returned
-configuration edge by edge in Python: 0.6, 2.6 and 9.9 ms at extents 16, 32
-and 64, against 0.14, 0.84 and 6.9 ms for the kernel. Issue #341 vectorized
-it to 0.08, 0.28 and 1.0 ms, below the kernel at every extent. `STATUS.md`
-carries both tables.
+**Why Boykov--Kolmogorov.** Issue #715 built four kernels behind this seam
+--- Dinic (the port issue #220 made), highest-label push-relabel,
+Boykov--Kolmogorov and a synchronous parallel push-relabel on rayon ---
+pinned each to the Python Dinic arc for arc, and timed them on square
+lattices with a random per-node field and as the inner solver of alpha
+expansion. Boykov--Kolmogorov won both tables: **61 ms** on the 256x256 cut
+against Dinic's 234, push-relabel's 1,680 and the parallel kernel's 339, at
+a fitted exponent of 1.03 in the site count against Dinic's 1.15; **352 ms**
+on the 64x64 x 10-label expansion against Dinic's 637. The other three are
+conserved in :mod:`snakes_and_ladders.sandbox.maxflow_declined` behind the
+``sandbox`` Cargo feature with the tests that measured them, so the
+comparison stays re-runnable. `STATUS.md` carries both tables.
+
+**Two numbers, and both belong in any claim made here.** The kernel alone
+against a caller of this wrapper: issue #336 measured the boundary copy at
+0.03-0.2 ms of a 0.7-17 ms call and the term that remained was
+:func:`snakes_and_ladders.search.maxflow.energy`, which issue #341 vectorized
+to 0.08, 0.28 and 1.0 ms at extents 16, 32 and 64.
 
 A caller that needs only the configuration can call the extension directly
-with the arrays this wrapper builds and skip that term.
-
-The port also removes a fragility rather than only a cost. The reference
-recurses to the depth of the level graph, so a lattice past a few thousand
-nodes needs ``sys.setrecursionlimit`` raised and a deep one is a stack
-overflow rather than a slow answer. The Rust blocking flow uses an explicit
-stack and has no such bound.
+with the arrays this wrapper builds and skip that term; a caller with a
+batch of fields calls :func:`ising_ground_states`, which is where threads pay.
 
 Agreement is **exact**, not a tolerance: a ground state is a combinatorial
 minimum, so the two implementations must report the same energy. The
-*configuration* may legitimately differ where the minimum is degenerate,
-which is why the tests compare energies.
+configuration is read off the minimal minimum cut, which every maximum flow
+shares, so it too is compared element for element.
 """
 
 from __future__ import annotations
-
-from enum import StrEnum
 
 import numpy as np
 
@@ -50,38 +49,8 @@ from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut, energy, site_
 from snakes_and_ladders.sim.graph import PottsGraph
 
 
-class MaxFlowAlgorithm(StrEnum):
-    """The kernel behind the seam (issue #715).
-
-    Every kernel returns the same cut: the nodes reachable from the source in
-    the residual graph on termination, which is the minimal minimum cut and
-    the same for every maximum flow. So a configuration read off the cut does
-    not depend on which kernel produced the flow, and the kernels are pinned
-    against each other element for element.
-    """
-
-    DINIC = "dinic"
-    """Level graphs and blocking flows; the reference the others are pinned to."""
-
-    PUSH_RELABEL = "push-relabel"
-    """Goldberg--Tarjan, highest label first, with global relabel and gap."""
-
-    BOYKOV_KOLMOGOROV = "boykov-kolmogorov"
-    """Two search trees from the terminals, with orphan adoption."""
-
-    PARALLEL_PUSH_RELABEL = "parallel-push-relabel"
-    """Synchronous push-relabel on rayon; schedule-independent output."""
-
-
-#: The kernel a caller gets by naming none.
-DEFAULT_ALGORITHM = MaxFlowAlgorithm.DINIC
-
-
 def ising_ground_state(
-    graph: PottsGraph,
-    field_values: np.ndarray,
-    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
-    threads: int | None = None,
+    graph: PottsGraph, field_values: np.ndarray
 ) -> tuple[np.ndarray, float]:
     """The exact two-state ferromagnetic ground state, computed in Rust.
 
@@ -91,11 +60,6 @@ def ising_ground_state(
         Every coupling must be non-negative.
     field_values : np.ndarray
         ``(2,)`` or ``(n_nodes, 2)``, as :func:`snakes_and_ladders.search.maxflow.site_field`.
-    algorithm : MaxFlowAlgorithm
-        The kernel; :data:`DEFAULT_ALGORITHM` unless named.
-    threads : int | None
-        The rayon pool the parallel kernel runs on; ``None`` is the global
-        pool. The sequential kernels ignore it.
 
     Returns
     -------
@@ -115,18 +79,13 @@ def ising_ground_state(
         np.ascontiguousarray(values, dtype=np.float64).reshape(-1),
         graph.edge_index.reshape(-1),
         graph.edge_coupling,
-        str(algorithm),
-        threads,
     )
     configuration = np.asarray(states, dtype=np.int64)
     return configuration, float(energy(graph, values, configuration))
 
 
 def ising_ground_states(
-    graph: PottsGraph,
-    fields: np.ndarray,
-    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
-    threads: int | None = None,
+    graph: PottsGraph, fields: np.ndarray, threads: int | None = None
 ) -> np.ndarray:
     """The ground states of a batch of per-node fields on one graph.
 
@@ -134,8 +93,11 @@ def ising_ground_states(
     network per field, solved on the pool, the GIL released for the whole
     call (root ``CLAUDE.md``, parallel over independent tasks). This is the
     entry point a sweep over instances or seeded starts calls, and the one
-    place a linear-in-cores speedup is on the table --- a single cut's
-    kernel is sequential unless it is the parallel one.
+    place threads pay: eight 256x256 cuts took 2.16 s on one thread and 0.90 s
+    on four of this 4-core host, and eight 64x64 cuts 77 ms and 21 (issue
+    #715). Inside one cut nothing parallelizes --- the synchronous parallel
+    push-relabel the ticket measured was no faster on four threads than on
+    one, and is conserved in ``sandbox/maxflow_declined.py`` with the number.
 
     Parameters
     ----------
@@ -143,8 +105,6 @@ def ising_ground_states(
         Every coupling must be non-negative.
     fields : np.ndarray
         ``(batch, n_nodes, 2)``: one per-node field per instance.
-    algorithm : MaxFlowAlgorithm
-        The kernel each cut runs; the sequential ones are what a batch wants.
     threads : int | None
         The pool's size; ``None`` is the global pool.
 
@@ -162,19 +122,12 @@ def ising_ground_states(
         batch.reshape(-1),
         graph.edge_index.reshape(-1),
         graph.edge_coupling,
-        str(algorithm),
         threads,
     )
     return np.asarray(states, dtype=np.int64).reshape(batch.shape[0], graph.n_nodes)
 
 
-def min_cut(
-    network: FlowNetwork,
-    source: int,
-    sink: int,
-    algorithm: MaxFlowAlgorithm = DEFAULT_ALGORITHM,
-    threads: int | None = None,
-) -> MinCut:
+def min_cut(network: FlowNetwork, source: int, sink: int) -> MinCut:
     """Maximum flow and the minimum cut it certifies, computed in Rust.
 
     The same signature and the same return as
@@ -198,6 +151,6 @@ def min_cut(
     """
     arcs, capacity, reverse = network.as_arrays()
     value, side = oxi_snakes_and_ladders.max_flow(
-        network.n_nodes, arcs, capacity, source, sink, reverse, str(algorithm), threads
+        network.n_nodes, arcs, capacity, source, sink, reverse
     )
     return MinCut(value=float(value), source_side=np.asarray(side, dtype=bool))

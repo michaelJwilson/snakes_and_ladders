@@ -18,7 +18,9 @@ use oxi_snakes_and_ladders::coupled::{
     class_posteriors_into, external_field_into, CoupledShape, EmissionTables,
 };
 use oxi_snakes_and_ladders::double;
-use oxi_snakes_and_ladders::maxflow::{max_flow_impl, max_flow_with, Algorithm, FlowNetwork};
+use oxi_snakes_and_ladders::maxflow::{max_flow_impl, FlowNetwork};
+#[cfg(feature = "sandbox")]
+use oxi_snakes_and_ladders::maxflow_declined::{max_flow_with, Algorithm};
 use oxi_snakes_and_ladders::pruning::{pruning_log_likelihood_impl, LeafObservations};
 #[cfg(feature = "sandbox")]
 use oxi_snakes_and_ladders::pruning_burn::pruning_gradient_impl;
@@ -359,16 +361,17 @@ fn bench_max_flow(c: &mut Criterion) {
 }
 
 /// Every kernel on the expansion network (issue #715), the Rust half of the
-/// table `tests/benchmarks/test_maxflow_bench.py` decides the package's
-/// kernel on.
+/// table `tests/benchmarks/test_maxflow_bench.py` decided the package's
+/// kernel on; the declined three build only with the `sandbox` feature.
+#[cfg(feature = "sandbox")]
 fn bench_max_flow_kernels(c: &mut Criterion) {
     let mut group = c.benchmark_group("max_flow_kernels_expansion_network");
     for extent in [16usize, 32, 64] {
         let n_nodes = extent * extent;
         for (name, algorithm) in [
+            ("boykov-kolmogorov", Algorithm::BoykovKolmogorov),
             ("dinic", Algorithm::Dinic),
             ("push-relabel", Algorithm::PushRelabel),
-            ("boykov-kolmogorov", Algorithm::BoykovKolmogorov),
             ("parallel-push-relabel", Algorithm::ParallelPushRelabel),
         ] {
             group.bench_function(format!("{name}/{extent}x{extent}"), |b| {
@@ -403,7 +406,6 @@ criterion_group!(
     bench_pruning_log_likelihood,
     bench_sample_rows,
     bench_class_posteriors,
-    bench_max_flow,
-    bench_max_flow_kernels
+    bench_max_flow
 );
 criterion_main!(benches);

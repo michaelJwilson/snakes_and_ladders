@@ -326,131 +326,22 @@ def test_from_arcs_refuses_what_add_edge_refuses() -> None:
         FlowNetwork.from_arcs(2, np.array([0, 1]), np.array([1]), ones, ones)
 
 
-# --- the kernels behind one seam (issue #715) --------------------------------
-
-ALGORITHMS = list(maxflow_rust.MaxFlowAlgorithm)
-
-
-def _seeded_network(n_nodes: int, seed: int) -> FlowNetwork:
-    """The seeded network with back capacities the binding is pinned on."""
-    rng = np.random.default_rng(seed)
-    tails = rng.integers(0, n_nodes, size=4 * n_nodes)
-    heads = rng.integers(0, n_nodes, size=4 * n_nodes)
-    forward = rng.uniform(0.1, 3.0, size=4 * n_nodes)
-    reverse = rng.uniform(0.0, 1.0, size=4 * n_nodes)
-    network = FlowNetwork(n_nodes=n_nodes)
-    for tail, head, capacity, back in zip(tails, heads, forward, reverse, strict=True):
-        if tail != head:
-            network.add_edge(int(tail), int(head), float(capacity), float(back))
-    return network
+# --- the batch entry point (issue #715) ---------------------------------------
 
 
 @pytest.mark.oracle
-@pytest.mark.critical
-@pytest.mark.parametrize("algorithm", ALGORITHMS, ids=str)
-@pytest.mark.parametrize("n_nodes", [6, 12, 24, 96])
-@pytest.mark.parametrize("seed", range(715, 725))
-def test_every_kernel_returns_the_python_cut_on_seeded_networks(
-    algorithm: maxflow_rust.MaxFlowAlgorithm, n_nodes: int, seed: int
-) -> None:
-    # The claim every kernel rests on: the value to the last bits, and the
-    # side arc for arc. The side is the minimal minimum cut, which every
-    # maximum flow shares, so it is compared element for element and not
-    # only by its capacity.
-    expected = max_flow(_seeded_network(n_nodes, seed), 0, n_nodes - 1)
-    realized = maxflow_rust.min_cut(
-        _seeded_network(n_nodes, seed), 0, n_nodes - 1, algorithm
-    )
-
-    assert realized.value == pytest.approx(expected.value, rel=1e-12)
-    assert realized.source_side.tolist() == expected.source_side.tolist()
-
-
-@pytest.mark.oracle
-@pytest.mark.critical
-@pytest.mark.parametrize("algorithm", ALGORITHMS, ids=str)
-@pytest.mark.parametrize("extent", [4, 8, 16])
-def test_every_kernel_reproduces_the_python_ground_state_exactly(
-    algorithm: maxflow_rust.MaxFlowAlgorithm, extent: int
-) -> None:
-    # Energy and configuration both: the configuration is read off the
-    # minimal minimum cut, so a kernel that returned a different one would
-    # have returned a different cut, not a tie.
-    rng = np.random.default_rng(extent)
-    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
-    field_values = rng.normal(size=(graph.n_nodes, 2))
-
-    expected_state, expected = ising_ground_state(graph, field_values)
-    realized_state, realized = maxflow_rust.ising_ground_state(
-        graph, field_values, algorithm
-    )
-
-    assert realized == expected
-    assert np.array_equal(realized_state, expected_state)
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize("algorithm", ALGORITHMS, ids=str)
-def test_every_kernel_finds_the_enumerated_minimum(
-    algorithm: maxflow_rust.MaxFlowAlgorithm,
-) -> None:
-    graph = lattice_graph((4, 3), BoundaryCondition.OPEN, 0.4)
-    field_values = np.random.default_rng(715).normal(size=(graph.n_nodes, 2))
-
-    _, realized = maxflow_rust.ising_ground_state(graph, field_values, algorithm)
-
-    assert realized == pytest.approx(
-        _enumerated_minimum(graph, field_values), abs=1e-12
-    )
-
-
-@pytest.mark.structural
-@pytest.mark.parametrize("threads", [1, 2, 4])
-def test_the_parallel_kernel_is_bitwise_independent_of_its_thread_count(
-    threads: int,
-) -> None:
-    # A round's pushes are computed in parallel and applied in vertex order,
-    # so the floating-point sequence is fixed whatever the pool: the value
-    # to the bit and the side element for element.
-    n_nodes = 96
-    reference = maxflow_rust.min_cut(
-        _seeded_network(n_nodes, 715),
-        0,
-        n_nodes - 1,
-        maxflow_rust.MaxFlowAlgorithm.PARALLEL_PUSH_RELABEL,
-        threads=1,
-    )
-    realized = maxflow_rust.min_cut(
-        _seeded_network(n_nodes, 715),
-        0,
-        n_nodes - 1,
-        maxflow_rust.MaxFlowAlgorithm.PARALLEL_PUSH_RELABEL,
-        threads=threads,
-    )
-
-    assert realized.value.hex() == reference.value.hex()
-    assert realized.source_side.tolist() == reference.source_side.tolist()
-
-
-@pytest.mark.oracle
-@pytest.mark.parametrize("algorithm", ALGORITHMS, ids=str)
-def test_the_batch_entry_point_returns_each_instance_s_own_ground_state(
-    algorithm: maxflow_rust.MaxFlowAlgorithm,
-) -> None:
+def test_the_batch_entry_point_returns_each_instance_s_own_ground_state() -> None:
     # One call over a batch of fields is the per-instance call repeated,
     # element for element, on the pool and off it.
     graph = lattice_graph((6, 6), BoundaryCondition.OPEN, 0.6)
     fields = np.random.default_rng(715).normal(size=(5, graph.n_nodes, 2))
 
     expected = np.stack(
-        [
-            maxflow_rust.ising_ground_state(graph, field, algorithm)[0]
-            for field in fields
-        ]
+        [maxflow_rust.ising_ground_state(graph, field)[0] for field in fields]
     )
 
     for threads in (None, 1, 3):
-        realized = maxflow_rust.ising_ground_states(graph, fields, algorithm, threads)
+        realized = maxflow_rust.ising_ground_states(graph, fields, threads)
         assert realized.shape == (5, graph.n_nodes)
         assert np.array_equal(realized, expected)
 
@@ -462,14 +353,20 @@ def test_a_batch_of_the_wrong_shape_is_refused() -> None:
         maxflow_rust.ising_ground_states(graph, np.zeros((2, graph.n_nodes, 3)))
 
 
-@pytest.mark.edge_case
-def test_an_unknown_kernel_is_refused_by_name() -> None:
-    from snakes_and_ladders import oxi_snakes_and_ladders
+@pytest.mark.oracle
+@pytest.mark.parametrize("extent", [4, 8, 16])
+def test_the_kernel_returns_the_python_configuration_as_well_as_its_energy(
+    extent: int,
+) -> None:
+    # The configuration is read off the minimal minimum cut, which every
+    # maximum flow shares, so a kernel that returned a different one would
+    # have returned a different cut and not a tie (issue #715).
+    rng = np.random.default_rng(extent)
+    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
+    field_values = rng.normal(size=(graph.n_nodes, 2))
 
-    network = FlowNetwork(n_nodes=2)
-    network.add_edge(0, 1, 1.0)
-    arcs, capacity, reverse = network.as_arrays()
-    with pytest.raises(ValueError, match="unknown max-flow algorithm"):
-        oxi_snakes_and_ladders.max_flow(
-            2, arcs, capacity, 0, 1, reverse, "ford-fulkerson"
-        )
+    expected_state, expected = ising_ground_state(graph, field_values)
+    realized_state, realized = maxflow_rust.ising_ground_state(graph, field_values)
+
+    assert realized == expected
+    assert np.array_equal(realized_state, expected_state)
