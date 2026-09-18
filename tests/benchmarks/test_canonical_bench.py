@@ -12,6 +12,8 @@ reach the optimum, which is the other half of the comparison and not a time.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import pytest
 import torch
@@ -22,11 +24,19 @@ from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.ppo import ppo
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.learn.tabular import ActionValues, q_learning, sarsa
+
+#: What both tabular learners are, seen from here: same signature, same return.
+TabularLearner = Callable[..., ActionValues[tuple[int, int], tuple[int, int]]]
 
 GRID = GridWorld(shape=(4, 4), goal=(3, 3))
 ITERATIONS = 20
 BATCH = 8
 STEPS = 16
+#: Episodes the tabular learners are billed over. Fewer than the suite's 2,000
+#: so the bench stays inside the per-PR tier; the cost is linear in it, so a
+#: reading here converts to any count by multiplying.
+TABULAR_EPISODES = 200
 
 
 def test_reinforce_on_the_grid_benchmark(benchmark: BenchmarkFixture) -> None:
@@ -92,3 +102,26 @@ def test_one_episode_benchmark(benchmark: BenchmarkFixture) -> None:
     episode = benchmark(rollout, GRID, policy, rng, STEPS)
 
     assert len(episode.states) >= 1
+
+
+@pytest.mark.parametrize("learner", [q_learning, sarsa], ids=["q_learning", "sarsa"])
+def test_tabular_control_benchmark(
+    benchmark: BenchmarkFixture, learner: TabularLearner
+) -> None:
+    # The two tabular methods on the same environment as the policy-gradient
+    # learners above, which is the only like-for-like axis this module has:
+    # everywhere else the problem differs with the method. Both run the same
+    # loop and differ in one expression, so a gap between these two readings is
+    # the cost of the `max` and nothing else.
+    def train() -> ActionValues[tuple[int, int], tuple[int, int]]:
+        return learner(
+            GRID,
+            np.random.default_rng(597),
+            episodes=TABULAR_EPISODES,
+            max_steps=STEPS,
+        )
+
+    learned = benchmark(train)
+
+    assert learned.episodes == TABULAR_EPISODES
+    assert learned.updates > 0
