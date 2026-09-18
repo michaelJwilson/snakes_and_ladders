@@ -1,0 +1,57 @@
+name: Review
+description: A dated review of the whole between releases — what is established, where the documents and the code disagree, what is missing, and what is worth doing next.
+labels: ["priority:high", "module:infra"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A review reads `ROADMAP.md`, `STATUS.md` and `TICKETS.md` against
+        each other and against the tree, fixes what is stale in its own pull
+        request and tickets the rest; it lands as `docs/reviews/<date>.md`
+        in the shape the last one has. Every count is re-measured on a named
+        tree and host, or the review says why not. Open with a TL;DR: what
+        holds, how many disagreements, how many tickets.
+
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. The review file carries the rows; the
+        ticket carries the baseline and the questions.
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Baseline
+      description: The review or release this one starts from, the tree read (`main` at a commit), the host, and the date.
+    validations:
+      required: true
+  - type: checkboxes
+    id: sections
+    attributes:
+      label: Sections
+      description: The shape of the file; untick only with a reason in the scope field.
+      options:
+        - label: What moved since the baseline, by milestone, with the pull requests
+        - label: Consistency audit — each row names the two texts, or the text and the tree, that disagree, and whether it is fixed here or ticketed
+        - label: Quality — the tiers, the floors, the durations, re-measured
+        - label: Problem statements — the five parts per problem, and the content that is untrue
+        - label: Frameworks — validation, extension, replacement
+        - label: Gaps — what the roadmap promises and the tree lacks
+        - label: Opportunities — new or similar problems and algorithms, each named with the referee the tree already carries for it
+        - label: Blue sky — candidates with a referee named or stated absent
+        - label: Counts re-measured
+        - label: Follow-up tickets
+  - type: textarea
+    id: questions
+    attributes:
+      label: Questions the review must answer
+      description: What this review is for beyond the standing shape — a milestone in doubt, a claim to re-measure, a direction to weigh.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: What the review reads and what it leaves to the release audit; a review fixes text and tickets work, and lands no feature.
+  - type: textarea
+    id: validation
+    attributes:
+      label: How it will be validated
+      description: "`test_planning_documents_agree`, `test_repository_links` and the pointer guards pass on the fixed text; every ticketed row names its issue; every count in the file names its tree, host and date."

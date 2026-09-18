@@ -30,6 +30,7 @@ EXPECTED = {
     "seam.yml",
     "coverage.yml",
     "markers.yml",
+    "review.yml",
 }
 
 

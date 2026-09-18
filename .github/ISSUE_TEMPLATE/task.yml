@@ -8,7 +8,7 @@ body:
         Priority defaults to `low`. Change the label after filing if the work
         should run sooner; `DEV.md` explains what each priority schedules.
         A shape that recurs has its own template: a mis-merged pull request,
-        an optimization, a seam, the documents, coverage, markers, a release.
+        an optimization, a seam, the documents, coverage, markers, a review, a release.
 
         Bodies carry at most 40 content lines (`DEV.md`); blank lines and
         headings are not charged. What does not fit belongs where it is
