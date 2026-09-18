@@ -135,6 +135,7 @@ parenthesis the only way a ticket is cited.
 
 - Tabular Q-learning and SARSA on the canonical fixtures (#597's second pull request): the cliff walk's on-policy against off-policy distinction is untestable without both, and it is the only pass condition in the suite that is a *difference* rather than an agreement
 - The two canonical fixtures a deterministic `Environment.step` cannot express (#597): the k-armed bandit, whose tension is a stochastic reward, and the slippery Frozen Lake. Either the protocol widens for every implementer and `learn.exact`'s enumeration is replaced by an expectation over successors, or the two stay out --- a decision, not a default
+- The gate's per-problem pull requests (#596): the Potts lattice at critical coupling, the planted glass, the coupled model, the two tree surfaces, Max-Cut and the codes, each sized with `opt.failure` until its classical baseline fails and then argued at a matched budget. Step 0, the sizing harness, has landed; a problem whose baseline does not fail inside the budget is reported with its curve and excluded from the gate
 
 - The surrogate-bound columns of #308 in the tree feature set — the plug-in
   lower and parsimony upper bounds — measured at the budget of
