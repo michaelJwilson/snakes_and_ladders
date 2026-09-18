@@ -28,12 +28,11 @@ import pytest
 from snakes_and_ladders.search import maxflow_rust
 from snakes_and_ladders.search.maxflow import (
     FlowNetwork,
-    energy,
     ising_ground_state,
     max_flow,
-    site_field,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import energies, site_field
 
 # The Python blocking flow recurses to the depth of the level graph. The Rust
 # port uses an explicit stack and needs no such raise, which is one of the two
@@ -47,7 +46,7 @@ def _enumerated_minimum(graph: PottsGraph, field_values: np.ndarray) -> float:
     configurations = np.array(
         list(itertools.product(range(2), repeat=graph.n_nodes)), dtype=np.int64
     )
-    return float(energy(graph, field_values, configurations).min())
+    return float(energies(graph, field_values, configurations).min())
 
 
 @pytest.mark.oracle
@@ -83,7 +82,7 @@ def test_the_uniform_field_energy_is_the_negated_model_log_weight() -> None:
         list(itertools.product(range(2), repeat=9)), dtype=np.int64
     )
 
-    realized = energy(graph, FIELD, configurations)
+    realized = energies(graph, FIELD, configurations)
 
     # Relative rather than exact: `energy` sums its edge terms in one ``dot``
     # (issue #341) where `log_weights` adds them left to right in edge order,
@@ -128,7 +127,7 @@ def test_the_flow_value_equals_the_capacity_of_the_cut_it_induces() -> None:
     rng = np.random.default_rng(11)
     graph = lattice_graph((5, 5), BoundaryCondition.OPEN, 0.6)
     field_values = rng.normal(size=(graph.n_nodes, 2))
-    values = site_field(graph, field_values)
+    values = site_field(field_values, graph.n_nodes)
 
     source, sink = graph.n_nodes, graph.n_nodes + 1
     network = FlowNetwork(n_nodes=graph.n_nodes + 2)
@@ -251,7 +250,7 @@ def test_a_negative_coupling_is_refused_by_both_implementations() -> None:
 def test_more_than_two_states_is_refused_and_names_alpha_expansion() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
-    with pytest.raises(ValueError, match="two-state case only"):
+    with pytest.raises(ValueError, match="2 states must have 2 columns"):
         ising_ground_state(graph, np.zeros(3))
 
 
@@ -259,7 +258,7 @@ def test_more_than_two_states_is_refused_and_names_alpha_expansion() -> None:
 def test_a_per_node_field_of_the_wrong_shape_is_refused() -> None:
     graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
 
-    with pytest.raises(ValueError, match=r"must be \(9, 2\)"):
+    with pytest.raises(ValueError, match=r"expected \(n_states,\) or \(9, n_states\)"):
         ising_ground_state(graph, np.zeros((4, 2)))
 
 
@@ -324,3 +323,49 @@ def test_from_arcs_refuses_what_add_edge_refuses() -> None:
         FlowNetwork.from_arcs(2, np.array([0]), np.array([1]), ones, -ones)
     with pytest.raises(ValueError, match="agree in shape"):
         FlowNetwork.from_arcs(2, np.array([0, 1]), np.array([1]), ones, ones)
+
+
+# --- the batch entry point (issue #715) ---------------------------------------
+
+
+@pytest.mark.oracle
+def test_the_batch_entry_point_returns_each_instance_s_own_ground_state() -> None:
+    # One call over a batch of fields is the per-instance call repeated,
+    # element for element, on the pool and off it.
+    graph = lattice_graph((6, 6), BoundaryCondition.OPEN, 0.6)
+    fields = np.random.default_rng(715).normal(size=(5, graph.n_nodes, 2))
+
+    expected = np.stack(
+        [maxflow_rust.ising_ground_state(graph, field)[0] for field in fields]
+    )
+
+    for threads in (None, 1, 3):
+        realized = maxflow_rust.ising_ground_states(graph, fields, threads)
+        assert realized.shape == (5, graph.n_nodes)
+        assert np.array_equal(realized, expected)
+
+
+@pytest.mark.edge_case
+def test_a_batch_of_the_wrong_shape_is_refused() -> None:
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.6)
+    with pytest.raises(ValueError, match="fields must be"):
+        maxflow_rust.ising_ground_states(graph, np.zeros((2, graph.n_nodes, 3)))
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("extent", [4, 8, 16])
+def test_the_kernel_returns_the_python_configuration_as_well_as_its_energy(
+    extent: int,
+) -> None:
+    # The configuration is read off the minimal minimum cut, which every
+    # maximum flow shares, so a kernel that returned a different one would
+    # have returned a different cut and not a tie (issue #715).
+    rng = np.random.default_rng(extent)
+    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
+    field_values = rng.normal(size=(graph.n_nodes, 2))
+
+    expected_state, expected = ising_ground_state(graph, field_values)
+    realized_state, realized = maxflow_rust.ising_ground_state(graph, field_values)
+
+    assert realized == expected
+    assert np.array_equal(realized_state, expected_state)

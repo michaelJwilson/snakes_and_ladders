@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling

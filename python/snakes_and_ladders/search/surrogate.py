@@ -23,6 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 import numpy as np
 import torch
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.bound import Bound, Surrogate
 from snakes_and_ladders.learn.surrogate import CalibratedBound, Examples, Fitted
 from snakes_and_ladders.likelihood.features import (
@@ -37,7 +38,6 @@ from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_parti
 from snakes_and_ladders.likelihood.pruning_torch import branch_order, log_likelihood
 from snakes_and_ladders.likelihood.surrogate import decoupled_ground_energy
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.infer import Model, score_topology
 from snakes_and_ladders.search.topology import Topology
 from snakes_and_ladders.sim.graph import PottsGraph

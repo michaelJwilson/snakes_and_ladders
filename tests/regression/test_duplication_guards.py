@@ -21,12 +21,37 @@ source files is exactly the kind that silently matches nothing.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
+sys.path.insert(0, str(REPO_ROOT / "infra"))
+
+import duplication_survey  # noqa: E402
+
+#: Issue #717's rows, pinned at the count on the day each was first measured
+#: (2026-09-18, `main` at a5b6fa4) so nothing grows while the eight pull
+#: requests land; the pull request that lowers a row lowers its pin. Two of
+#: the ticket's numbers were impressions this query corrected: it named 14
+#: modules without a docstring and there is one (`scripts/__init__.py`), and
+#: nine compiled twins where eight sit beside an oracle.
+SLIMMING_BASELINE = {
+    "Potts energies of a labelling": 1,
+    "site-field broadcasts": 0,
+    "annealers": 4,
+    "ground-state run_ wrappers": 10,
+    "backend enums": 1,
+    "Python paths above a compiled kernel": 7,
+    "surrogate modules": 4,
+    "modules without a docstring": 1,
+    "root exports": 1,
+    "test modules pinning a twin to its oracle beyond the first": 13,
+    "flat modules": 149,
+    "API-map entries": 1581,
+}
 
 # The consolidated home of each pattern, which legitimately contains it once.
 LOGSUMEXP_OWNER = "numerics.py"
@@ -198,3 +223,76 @@ def test_each_guard_fails_on_violating_source() -> None:
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
     assert [p for p, text in clean.items() if p.search(text)] == []
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_the_slimming_rows_hold_at_their_baseline() -> None:
+    # Issue #717 is measured by these rows before and after each of its
+    # pull requests. A row above its pin is a new duplicate; a row below it
+    # is a pull request that landed and did not lower the pin.
+    rows = {finding.name: finding for finding in duplication_survey.FINDINGS}
+    realized = {name: rows[name].now() for name in SLIMMING_BASELINE}
+
+    assert realized == SLIMMING_BASELINE
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_each_slimming_query_counts_a_violating_tree(tmp_path: Path) -> None:
+    # The file-and-import queries exercised on a tree built to trip each:
+    # a twin beside its oracle, a module without a docstring, a root that
+    # exports one name, and two test modules that both pin the twin.
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "__init__.py").write_text('"""Root."""\n\n__all__ = ["one"]\n')
+    (package / "kernel.py").write_text('"""The oracle."""\n')
+    (package / "kernel_rust.py").write_text("import numpy\n")
+    (package / "surrogate.py").write_text('"""A surrogate."""\n')
+    (package / "sandbox").mkdir()
+    (package / "sandbox" / "declined_rust.py").write_text("x = 1\n")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    for name in ("test_a.py", "test_b.py"):
+        (tests / name).write_text(
+            "from pkg import kernel\nfrom pkg.kernel_rust import run\n"
+        )
+    (tests / "test_c.py").write_text("from pkg import kernel\n")
+
+    assert duplication_survey.flat_modules(package) == 3
+    assert duplication_survey.twin_modules(package) == 1
+    assert duplication_survey.surrogate_modules(package) == 1
+    assert duplication_survey.undocumented_modules(package) == 1
+    assert duplication_survey.root_exports(package) == 1
+    assert duplication_survey.twin_pins_beyond_the_first(package, tests) == 1
+
+    (package / "kernel_rust.py").write_text('"""Now documented."""\n')
+    assert duplication_survey.undocumented_modules(package) == 0
+
+
+@pytest.mark.critical
+@pytest.mark.structural
+def test_each_slimming_pattern_matches_its_own_kind() -> None:
+    # The regular-expression rows, on one violating and one clean line each.
+    patterns = {
+        finding.name: re.compile(finding.pattern, re.MULTILINE)
+        for finding in duplication_survey.FINDINGS
+        if finding.pattern
+    }
+    violating = {
+        "Potts energies of a labelling": "def energy(graph, field, labelling):\n",
+        "site-field broadcasts": "def _site_field(graph, values):\n",
+        "annealers": "def anneal_potts(graph, field, schedule):\n",
+        "ground-state run_ wrappers": "def run_wolff(rung, budget, rng):\n",
+        "backend enums": "class CoupledBackend:\n",
+    }
+    clean = {
+        "Potts energies of a labelling": "    energy = energies(graph, f, s)[0]\n",
+        "site-field broadcasts": "values = site_field(field, graph.n_nodes)\n",
+        "annealers": "schedule = geometric_schedule(1.0, 0.1, 100)\n",
+        "ground-state run_ wrappers": "result = METHODS[name](rung, budget, rng)\n",
+        "backend enums": "backend = Backend.RUST\n",
+    }
+
+    assert [n for n, text in violating.items() if not patterns[n].search(text)] == []
+    assert [n for n, text in clean.items() if patterns[n].search(text)] == []

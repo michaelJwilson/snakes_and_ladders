@@ -42,6 +42,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
 from profile_harness import format_table, self_time_table
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.reinforce import reinforce
@@ -54,17 +55,16 @@ from snakes_and_ladders.likelihood.message_passing import (
 )
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.likelihood.parsimony import fitch_score
-from snakes_and_ladders.numerics_rust import sample_rows
+from snakes_and_ladders.numerics import sample_rows
 from snakes_and_ladders.opt import hmc
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.gibbs import sample_factor_graph
 from snakes_and_ladders.search.infer import MoveSet, infer
-from snakes_and_ladders.search.maxflow import energy, ising_ground_state
+from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.search.surrogate import fixed_length_target, tree_examples
 from snakes_and_ladders.search.topology import (
@@ -75,6 +75,7 @@ from snakes_and_ladders.search.topology import (
 )
 from snakes_and_ladders.sim.factor_graph import from_hmm, from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import energies
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
@@ -321,7 +322,7 @@ def search_sections(mid: bool) -> list[Section]:
         ising_ground_state(graph, ising_field)
 
     def _energy() -> None:
-        energy(graph, ising_field, configurations)
+        energies(graph, ising_field, configurations)
 
     def _expansion() -> None:
         alpha_expansion(graph, potts_field, 3)
@@ -350,7 +351,7 @@ def search_sections(mid: bool) -> list[Section]:
         (f"search.infer NNI @ {n_taxa} taxa, 20 evaluations", _nni, 1),
         (f"search.infer SPR @ {n_taxa} taxa, 20 evaluations", _spr, 1),
         (f"search.maxflow.ising_ground_state @ {extent}x{extent}", _ground_state, 1),
-        (f"search.maxflow.energy @ {extent}x{extent}, 64 configurations", _energy, 20),
+        (f"sim.potts.energies @ {extent}x{extent}, 64 configurations", _energy, 20),
         (f"search.alpha_expansion @ {extent}x{extent}, 3 labels", _expansion, 1),
         (
             f"search.potts_mcmc single-site @ {extent}x{extent}, {sweeps} sweeps",

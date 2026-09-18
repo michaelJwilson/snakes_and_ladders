@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from snakes_and_ladders.numerics_rust import sample_rows
+from snakes_and_ladders.numerics import sample_rows
 from snakes_and_ladders.sim.gtr import reversible_transition_probabilities
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.newick import to_newick

@@ -20,7 +20,7 @@ import numpy as np
 
 from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
 from snakes_and_ladders.fixtures import load_declared
-from snakes_and_ladders.numerics_rust import sample_rows
+from snakes_and_ladders.numerics import sample_rows
 from snakes_and_ladders.ragged import Ragged
 
 _REQUIRED_FIELDS = frozenset(

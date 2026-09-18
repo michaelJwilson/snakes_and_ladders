@@ -27,7 +27,6 @@ import itertools
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.search.alpha_expansion import energy
 from snakes_and_ladders.search.max_cut import (
     GOEMANS_WILLIAMSON_RATIO,
     complete_bipartite,
@@ -36,6 +35,7 @@ from snakes_and_ladders.search.max_cut import (
     goemans_williamson,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import energy
 
 
 def _random_graph(n_nodes: int, density: float, seed: int) -> PottsGraph:

@@ -23,15 +23,28 @@ from __future__ import annotations
 
 import numpy as np
 
+from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.backend import Backend
+
 
 def sample_rows(
-    rng: np.random.Generator, distributions: np.ndarray, rows: np.ndarray
+    rng: np.random.Generator,
+    distributions: np.ndarray,
+    rows: np.ndarray,
+    *,
+    backend: Backend = Backend.RUST,
 ) -> np.ndarray:
     """Draw one categorical index per entry of ``rows``, from the row it selects.
 
     Inverse-CDF sampling, vectorized over the whole batch: one uniform draw
     per entry, placed against the cumulative probabilities of the row that
-    entry names.
+    entry names. The uniforms are drawn here whichever backend runs the
+    lookup, in the same order and the same count, so the two differ in
+    arithmetic alone and agree **bitwise** for the same generator state ---
+    which is why the compiled path is the default (issue #187) and why
+    `sim`'s reproducibility contract, that a seeded generator determines the
+    sample, holds on both. Until issue #717 the compiled path was a twin
+    module, `numerics_rust`, and a caller chose by import.
 
     **The last cumulative column is clamped to 1.** A probability row that
     sums to ``1 - 4e-16`` after rounding leaves a sliver of the unit interval
@@ -53,19 +66,27 @@ def sample_rows(
     rows : np.ndarray
         Which row each draw comes from, shape ``(n_draws,)``, entries in
         ``[0, n_rows)``.
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.RUST` performs the lookup
+        in the extension over borrowed arrays (issue #202: passing lists
+        cost more marshalling than the NumPy oracle's whole run);
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the NumPy
+        oracle. :data:`~snakes_and_ladders.backend.Backend.NUMBA` is
+        refused: no such kernel exists here.
 
     Returns
     -------
     np.ndarray
         Sampled category per entry, shape ``(n_draws,)``, entries in
-        ``[0, n_categories)``.
+        ``[0, n_categories)``, ``int64``.
 
     Raises
     ------
     ValueError
         If ``distributions`` is not 2-D. A 1-D distribution has no row to
         select, and passing one is a mistake worth naming rather than
-        broadcasting past.
+        broadcasting past. The extension refuses a row index outside the
+        distribution count.
     """
     if distributions.ndim != 2:
         msg = (
@@ -74,9 +95,25 @@ def sample_rows(
         )
         raise ValueError(msg)
 
+    draws = rng.random(size=(int(rows.shape[0]),))
+    if backend is Backend.RUST:
+        # `ascontiguousarray` is what makes the borrow safe: Rust's
+        # `as_slice` accepts only a C-contiguous array, and this is free when
+        # the input already is one.
+        sampled = np.empty(int(rows.shape[0]), dtype=np.int64)
+        oxi_snakes_and_ladders.sample_rows(
+            np.ascontiguousarray(distributions, dtype=np.float64).reshape(-1),
+            int(distributions.shape[1]),
+            np.ascontiguousarray(rows, dtype=np.int64),
+            draws,
+            sampled,
+        )
+        return sampled
+    if backend is not Backend.PYTHON:
+        msg = f"sample_rows runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
+        raise ValueError(msg)
     cumulative = np.cumsum(distributions, axis=1)
     cumulative[:, -1] = 1.0
-    draws = rng.random(size=(int(rows.shape[0]),))
     selected: np.ndarray = np.argmax(draws[:, np.newaxis] < cumulative[rows], axis=1)
     return selected
 

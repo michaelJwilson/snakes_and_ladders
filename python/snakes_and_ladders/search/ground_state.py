@@ -54,6 +54,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.message_passing import (
     ConvergenceError,
     MessageScheduleName,
@@ -64,10 +65,8 @@ from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_beta_swap,
     alpha_expansion,
-    energy,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import (
     ClusterCounter,
     PottsMove,
@@ -79,6 +78,7 @@ from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_
 from snakes_and_ladders.sim.potts import (
     SpatioOnlyParams,
     critical_coupling,
+    energy,
     spatio_only_field,
 )
 

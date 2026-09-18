@@ -21,9 +21,7 @@ import numpy as np
 import pytest
 from snakes_and_ladders.search.maxflow import (
     cut_energy,
-    energy,
     ising_ground_state,
-    site_field,
 )
 from snakes_and_ladders.sim.canonical import planted_spin_glass
 from snakes_and_ladders.sim.graph import (
@@ -33,6 +31,7 @@ from snakes_and_ladders.sim.graph import (
     lattice_graph,
     triangular_lattice_graph,
 )
+from snakes_and_ladders.sim.potts import energies, energy, site_field
 
 rustworkx = pytest.importorskip("rustworkx")
 
@@ -205,7 +204,7 @@ def test_the_ground_state_energy_matches_networkx_s_minimum_cut(extent: int) -> 
     nx = pytest.importorskip("networkx")
     graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
     field_values = np.random.default_rng(extent).normal(size=(graph.n_nodes, 2))
-    values = site_field(graph, field_values)
+    values = site_field(field_values, graph.n_nodes)
     cost = -values
     offsets = cost.min(axis=1)
     source, sink = "s", "t"
@@ -238,10 +237,10 @@ def test_the_networkx_cut_is_the_enumerated_minimum_where_enumeration_fits() -> 
     configurations = np.array(
         list(itertools.product(range(2), repeat=graph.n_nodes)), dtype=np.int64
     )
-    enumerated = float(energy(graph, field_values, configurations).min())
+    enumerated = float(energies(graph, field_values, configurations).min())
     _, ours = ising_ground_state(graph, field_values)
     assert ours == enumerated
-    values = site_field(graph, field_values)
+    values = site_field(field_values, graph.n_nodes)
     cost = -values
     offsets = cost.min(axis=1)
     network = nx.DiGraph()

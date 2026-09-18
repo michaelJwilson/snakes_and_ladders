@@ -26,9 +26,9 @@ import itertools
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.search import potts_mcmc
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import _GUARD, PottsMove
 from snakes_and_ladders.search.potts_mcmc import sample_potts as oracle_sample_potts
 from snakes_and_ladders.search.potts_mcmc_rust import sample_potts
@@ -223,7 +223,7 @@ def test_the_rust_chain_is_the_oracle_s_chain_state_for_state(
 ) -> None:
     """Every recorded configuration, not a distribution over them.
 
-    This is what makes :data:`~snakes_and_ladders.search.backend.Backend.RUST`
+    This is what makes :data:`~snakes_and_ladders.backend.Backend.RUST`
     the default without moving a committed number: a chain of the same law
     would move every autocorrelation figure `STATUS.md` pins.
     """

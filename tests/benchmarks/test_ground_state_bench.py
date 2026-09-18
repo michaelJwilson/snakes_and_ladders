@@ -22,9 +22,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sandbox import maxflow_declined
+from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
+from snakes_and_ladders.search import alpha_expansion as expansion_module
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
-from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut
 from snakes_and_ladders.search.potts_mcmc import PottsMove, anneal_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
 from snakes_and_ladders.sim.potts import spatio_only_field
@@ -95,3 +99,42 @@ def test_annealed_move_set_benchmark(
     )
 
     assert result.n_sweeps == STEPS
+
+
+# --- every max-flow kernel as the inner solver (issue #715) -------------------
+
+#: The package kernel beside the three declined ones; the declined rows skip
+#: unless the extension carries the `sandbox` feature.
+KERNELS = ["boykov-kolmogorov", *(str(kernel) for kernel in DeclinedKernel)]
+
+
+@pytest.mark.parametrize("kernel", KERNELS)
+@pytest.mark.parametrize("n_states", [3, 10])
+@pytest.mark.parametrize(
+    "extent", [8, 16, 32, pytest.param(64, marks=pytest.mark.release)]
+)
+def test_alpha_expansion_by_kernel_benchmark(
+    benchmark: BenchmarkFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    extent: int,
+    n_states: int,
+    kernel: str,
+) -> None:
+    # The effect-size row of issue #715: what a Potts caller pays is `q`
+    # cuts per sweep, so the kernel was decided here as well as on the cut.
+    # The package seam carries one kernel, so a declined one is routed in by
+    # replacing the cut the expansion calls.
+    if kernel != "boykov-kolmogorov":
+        if not maxflow_declined.AVAILABLE:
+            pytest.skip("the extension was built without the sandbox feature")
+        declined = DeclinedKernel(kernel)
+
+        def cut(network: FlowNetwork, source: int, sink: int) -> MinCut:
+            return maxflow_declined.min_cut(network, source, sink, declined)
+
+        monkeypatch.setattr(expansion_module, "min_cut", cut)
+    graph, field = _problem(extent, n_states)
+
+    result = benchmark(alpha_expansion, graph, field, n_states, backend=Backend.RUST)
+
+    assert result.cycles >= 1

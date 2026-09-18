@@ -24,7 +24,7 @@ from snakes_and_ladders.likelihood.hmm_paths import (
     enumerate_hidden_paths,
     path_log_probability,
 )
-from snakes_and_ladders.search.alpha_expansion import energy, iterated_conditional_modes
+from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.max_cut import enumerate_max_cut
 from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.sim.canonical import (
@@ -36,6 +36,7 @@ from snakes_and_ladders.sim.canonical import (
     planted_spin_glass,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import energy
 
 ZERO_FIELD = np.zeros(2)
 
@@ -82,7 +83,7 @@ def test_the_ground_state_energy_is_known_without_enumerating(
     shape: tuple[int, int],
 ) -> None:
     # What the closed form buys: the ground-state *energy* at any size, in the
-    # convention `snakes_and_ladders.search.alpha_expansion.energy` uses.
+    # convention `snakes_and_ladders.sim.potts.energy` uses.
     # Every other discrete claim here stops where enumeration does.
     graph = frustrated_triangular_lattice(shape, coupling=-1.5)
     field = np.zeros((graph.n_nodes, 2))
@@ -281,7 +282,7 @@ def test_the_planted_state_stops_being_the_ground_state_as_frustration_rises(
 def test_the_planted_energy_matches_the_energy_of_the_planted_state() -> None:
     # The construction records its own answer, so a drift between the recorded
     # energy and the model's would make every comparison against it wrong.
-    # Checked against `snakes_and_ladders.search.alpha_expansion.energy`,
+    # Checked against `snakes_and_ladders.sim.potts.energy`,
     # which shares no code with it.
     instance = planted_spin_glass(12, 4.0, 0.25, np.random.default_rng(3))
 

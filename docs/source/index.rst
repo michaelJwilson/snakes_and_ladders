@@ -45,9 +45,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.ragged_rust
    :members:
 
-.. automodule:: snakes_and_ladders.numerics_rust
-   :members:
-
 .. automodule:: snakes_and_ladders.sim
    :members:
 
@@ -348,7 +345,7 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.gym
    :members:
 
-.. automodule:: snakes_and_ladders.search.backend
+.. automodule:: snakes_and_ladders.backend
    :members:
 
 .. automodule:: snakes_and_ladders.search.kernels
@@ -408,6 +405,9 @@ whether or not it has members yet.
    :no-index:
 
 .. automodule:: snakes_and_ladders.sandbox.circulant_schedule
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.maxflow_declined
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox.region_graph

@@ -31,11 +31,11 @@ import numpy as np
 import pytest
 from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.search.alpha_expansion import (
-    energy,
     iterated_conditional_modes,
 )
 from snakes_and_ladders.sim.canonical import FrustratedLatticeParams, PlantedSpinGlass
 from snakes_and_ladders.sim.fixtures import Baseline, baseline, fixture
+from snakes_and_ladders.sim.potts import energy
 
 PROBLEM, TIER = "planted_glass", Scale.CI
 #: Zero field: the difficulty is in the couplings, not in a site preference.
