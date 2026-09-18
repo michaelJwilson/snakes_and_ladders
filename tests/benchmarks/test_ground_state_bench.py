@@ -22,12 +22,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sandbox import maxflow_declined
 from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
 from snakes_and_ladders.search import alpha_expansion as expansion_module
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut
 from snakes_and_ladders.search.potts_mcmc import PottsMove, anneal_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph

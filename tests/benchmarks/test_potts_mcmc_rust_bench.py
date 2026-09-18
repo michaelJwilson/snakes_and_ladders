@@ -20,8 +20,8 @@ import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search import potts_mcmc_rust
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import (
     _GUARD,
     PottsMove,

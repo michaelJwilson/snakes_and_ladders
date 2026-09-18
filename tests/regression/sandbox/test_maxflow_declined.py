@@ -23,12 +23,12 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.sandbox import maxflow_declined
 from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
 from snakes_and_ladders.search import alpha_expansion as expansion_module
 from snakes_and_ladders.search import maxflow_rust
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import (
     FlowNetwork,
     ising_ground_state,
