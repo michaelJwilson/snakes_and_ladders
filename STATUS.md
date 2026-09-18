@@ -115,8 +115,9 @@ judge --- is the third guard (issue #732, PR
 The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
-over the five problems, 67 pinned by a named `oracle` test and 22 carrying the
-ticket instead of one.
+over the five problems, 72 pinned by a named `oracle` test and 17 carrying the
+ticket instead of one --- the Potts ladder pinned to the foot, each of its five
+open rungs against the rung below it (issue #734, step 2).
 
 Two releases have been cut under the procedure, each from a Release ticket
 gated on `infra/release.sh`: `0.1.0`

@@ -27,6 +27,7 @@ import itertools
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.max_cut import (
     GOEMANS_WILLIAMSON_RATIO,
     complete_bipartite,
@@ -34,6 +35,7 @@ from snakes_and_ladders.search.max_cut import (
     enumerate_max_cut,
     goemans_williamson,
 )
+from snakes_and_ladders.sim.canonical import frustrated_triangular_lattice
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import energy
 
@@ -176,6 +178,82 @@ def test_max_cut_is_the_antiferromagnetic_ising_ground_state(weight: float) -> N
     # And the instance is genuinely non-bipartite, so the relation is not
     # degenerate: some edge is uncut at the optimum.
     assert maximum_cut < weight * len(positive.edges)
+
+
+def _bipartite(left: int, right: int, seed: int) -> tuple[PottsGraph, np.ndarray]:
+    """A connected bipartite graph with drawn weights, and the side of each node.
+
+    Weights differ per edge so a solver counting edges rather than weighing
+    them is not handed the same answer.
+    """
+    rng = np.random.default_rng(seed)
+    edges, weights = [], []
+    for first in range(left):
+        for second in range(left, left + right):
+            if rng.random() < 0.6 or first == 0 or second == left:
+                edges.append((first, second))
+                weights.append(float(rng.uniform(0.5, 2.0)))
+    graph = PottsGraph(
+        n_nodes=left + right, edges=tuple(edges), coupling=tuple(weights)
+    )
+    return graph, np.array([0] * left + [1] * right, dtype=np.int64)
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_rounded_cut_is_the_gauged_alpha_expansion_optimum_at_two_labels() -> None:
+    # The rung below (issue #734), on the instances where both callables
+    # apply -- which is not every two-label instance, and saying which it is
+    # is half the test.
+    #
+    # Max-Cut is the *antiferromagnetic* Ising ground state, and a negative
+    # coupling is not submodular: `alpha_expansion` refuses it outright, as
+    # the second half below asserts. The two meet where the antiferromagnet
+    # can be gauged into a ferromagnet, which for an all-negative instance is
+    # exactly where the graph is bipartite: flipping one side of the
+    # bipartition turns every disagreeing edge into an agreeing one, so the
+    # expansion's optimum maps to a cut of the same weight. On a
+    # non-bipartite instance no such gauge exists, which is the boundary this
+    # rung of the ladder stops at, and there the rounded cut carries the
+    # relaxation ratio instead of a rung below it.
+    #
+    # Realized: the expansion's energy -17.09743549305819 from a drawn start,
+    # the rounded cut 17.09743549305819, difference 0.0 against the 1e-12
+    # declared, and the two assignments equal up to the global flip. On the
+    # frustrated instance the rounded cut is the enumerated maximum, 18.0,
+    # at a ratio of 0.8898 against the 0.87856 the rounding guarantees.
+    graph, side = _bipartite(4, 5, seed=17)
+    total = float(graph.edge_coupling.sum())
+    start = np.random.default_rng(3).integers(0, 2, size=graph.n_nodes)
+
+    expansion = alpha_expansion(graph, np.zeros(2), 2, start=start)
+    rounded = goemans_williamson(graph, generator=torch.Generator().manual_seed(5))
+
+    # The gauge: the expansion agrees across every edge, and flipping one side
+    # of the bipartition turns that labelling into a cut of the same weight.
+    gauged = expansion.labelling.astype(np.int64) ^ side
+    assert expansion.energy == pytest.approx(-total, abs=1e-12)
+    assert cut_value(graph, gauged) == pytest.approx(-expansion.energy, abs=1e-12)
+    assert rounded.value == pytest.approx(-expansion.energy, abs=1e-12)
+    assert np.array_equal(rounded.assignment, gauged) or np.array_equal(
+        1 - rounded.assignment, gauged
+    )
+
+    # The boundary: the frustrated instance the gauge cannot reach.
+    frustrated = frustrated_triangular_lattice((3, 3), BoundaryCondition.PERIODIC, -1.0)
+    with pytest.raises(ValueError, match="every coupling must be non-negative"):
+        alpha_expansion(frustrated, np.zeros(2), 2)
+
+    positive = PottsGraph(
+        n_nodes=frustrated.n_nodes,
+        edges=frustrated.edges,
+        coupling=tuple(abs(value) for value in frustrated.coupling),
+    )
+    certified = goemans_williamson(positive, generator=torch.Generator().manual_seed(5))
+    _, optimum = enumerate_max_cut(positive)
+
+    assert certified.value == pytest.approx(optimum)
+    assert certified.ratio > GOEMANS_WILLIAMSON_RATIO
 
 
 @pytest.mark.analytic
