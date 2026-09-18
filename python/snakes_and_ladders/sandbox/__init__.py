@@ -20,4 +20,8 @@ the same rule: `burn`'s taped gradient over the Felsenstein recursion (issue
 #449), which cost 46.80 ms against the route that replaced it at 16.36. Its
 Rust half is behind the ``sandbox`` Cargo feature and absent from the default
 build, so the module imports either way and refuses to run without it.
+``polar``, ``polar_decoding`` and ``polar_reference`` are here as ``tropical``
+is, declined: the polar construction with successive-cancellation and list
+decoding (issue #593), refereed by enumeration at the declared length and
+taken no further.
 """
