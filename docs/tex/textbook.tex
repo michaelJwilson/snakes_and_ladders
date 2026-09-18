@@ -648,6 +648,30 @@ recursions, exact at every length since the chain is a tree; the release tier
 fits sequences past the enumerable length, refereed by recovery of the
 simulated parameters alone, up to the permutation of hidden states.
 
+\paragraph{Chains of unequal length.}
+\label{par:hmm:ragged}
+A batch need not be rectangular. Writing $y^{(r)}_{1:T_r}$ for the $r$th
+sequence, the likelihood of $R$ sequences of lengths $T_1, \dots, T_R$ is the
+product
+\begin{equation}
+  p(\data \mid \params)
+    = \prod_{r=1}^{R} p\big(y^{(r)}_{1:T_r} \mid \params\big),
+  \label{eq:hmm-ragged}
+\end{equation}
+each factor the forward recursion of Equation~\ref{eq:forward} run to its own
+length $T_r$. Nothing in the model couples the sequences, so this is a statement
+about the data and not a second model: the parameters are shared and the
+lengths are not.
+
+\emph{Padding is an implementation of Equation~\ref{eq:hmm-ragged} and never
+a model.} A batch padded to its longest member and masked computes the same
+product, and what it costs is the padding: the work grows as
+$R \cdot \max_r T_r$ where the sum $\sum_r T_r$ is what the likelihood needs.
+The two agree to floating point and the gap between them is the padding
+fraction, which is a property of the batch rather than of either route. An
+unmasked padded position is a different likelihood, so every consumer masks
+--- in the expectation step and in the emission re-estimation alike.
+
 \subsection{As a factor graph}
 The variables are the hidden states, $x_t \equiv z_t$. The factors are
 $\psi_1(z_1) = \pi_{z_1}\, \emission_{z_1}(y_1)$ at the first position and,
@@ -1407,6 +1431,49 @@ request, and a triangular $71 \times 71$ at $M = K = 10$ over 20,000 positions
 past it. There the reference implementation of the posterior is the oracle, an
 accelerated one pinned to it, and the planted labels referee the fit above
 that.
+
+\paragraph{The count-pair instance, and what a covariate conditions on.}
+\label{par:coupled:pairs}
+Under the paired count emission a spot's observation at a position is two
+counts, a total and a successes, and each channel may carry a
+\emph{covariate}: a per-observation quantity the model conditions on rather
+than fits. The two channels take different ones, and the difference is the
+whole of the contract:
+\begin{itemize}
+  \item an \emph{exposure} $c_{s,n} > 0$ on the total channel multiplies the
+    rate the count is drawn at, so a negative-binomial total at mean $\mu$
+    becomes one at mean $c_{s,n}\mu$. The identity that makes this a
+    conditioning and not a reparameterization is
+    $c\,\Gamma(r, \mu/r) = \Gamma(r, c\mu/r)$: the shape is untouched, so the
+    dispersion the fit estimates is the same parameter it would estimate at
+    unit exposure;
+  \item a \emph{trial count} $m_{s,n}$ on the successes channel
+    \emph{replaces} the declared number of trials, so the beta-binomial is
+    scored out of what was actually observed rather than out of a constant.
+\end{itemize}
+A covariate that varies and is not conditioned on is not neutral: the fit then
+estimates the rate averaged over the exposures. On the fixture below, planted
+rates of $24$ and $72$ with exposures spanning a factor of sixteen are
+recovered as $23.3$ and $71.3$ when the fit is told them, and as $47.9$ and
+$151.7$ when it is not --- factors of $1.99$ and $2.11$ against the
+$\mathbb{E}[U(0.25, 4)] = 2.125$ the exposures average to.
+
+Two instances are declared. The per-pull-request one is an $8 \times 8$
+lattice at $M = K = 2$ over $1{,}000$ positions; past it a triangular
+$71 \times 71$ at $M = K = 10$ over $20{,}000$ positions, which is
+$1.008 \times 10^{8}$ count pairs and past every oracle in this document ---
+there the reference implementation is the referee for the accelerated one, and
+the planted labels for the fit.
+
+\paragraph{Chains of unequal length.}
+\label{par:coupled:ragged}
+The chains of Equation~\ref{eq:joint} need not share a length. Class $m$
+carries $S_m$ states and the joint is the same product with $S$ replaced by
+$S_m$ per class, exactly as Equation~\ref{eq:hmm-ragged} states for a batch of
+sequences: the classes are coupled through the labels, not through their
+lengths. Padding to the longest chain and masking computes the same joint and
+is an implementation of it, never the model --- and what it costs is the
+padding fraction of the batch, not a property of either route.
 
 \subsection{As a factor graph}
 The variables are the $N$ labels and the $S M$ chain states. The factors are

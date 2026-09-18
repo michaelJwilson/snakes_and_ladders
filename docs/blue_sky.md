@@ -1,6 +1,6 @@
-# Blue sky: Stage 3 candidates
+# Blue sky: Stage 5 candidates
 
-What `ROADMAP.md` Stage 3 has proposed so far, the state of each proposal, and
+What `ROADMAP.md` Stage 5 has proposed so far, the state of each proposal, and
 the candidates that would follow — each stated with the oracle that referees
 it and the tier it runs at (`DEV.md`: CI is the size an exact oracle still
 holds at, stress the same claim at a size CI cannot hold, release unbounded).
@@ -27,13 +27,13 @@ three that have none at the size that matters say so.
 | `docs/nb/phylo_tree.ipynb` Further Work | A richer feature set | Open (#328) | Every algorithm lands on greedy's 0.48 with one feature (`STATUS.md` 2.1) |
 | `docs/nb/phylo_tree.ipynb` Further Work | Comparison against established software | Open (#126), no external tool installed | `STATUS.md` What Is Not Claimed |
 | `docs/nb/phylo_tree.ipynb` Further Work | Scaling past eight taxa | Open | Enumeration is the oracle below eight taxa; a certified bound (#329) is the candidate replacement |
-| `docs/nb/hmm.ipynb` Further Work | Viterbi, iterated conditional modes, forward-backward as an evaluator | Open (#175, #176, #173) | Decoding by enumeration of `3**8` paths in the notebook |
+| `docs/nb/hmm.ipynb` Further Work | Viterbi, iterated conditional modes, forward-backward as an evaluator | Viterbi and the posteriors landed (#175, #173); iterated conditional modes open (#176) | The notebook still decodes by enumeration of `3**8` paths (#407) |
 | `docs/nb/potts_chain.ipynb`, `spatio_sequential.ipynb` Further Work | The lattice pass, cluster-move autocorrelation, equal-budget solver rows | Open (#278, #281, #290) | The chain is shown; the lattice, belief propagation and cluster moves exist and are not in the notebook |
 | `TICKETS.md` 1.2 | Branch-and-bound over the certified bounds, a non-JC bound, multi-SPR | Open (#329) | Bounds certified, used only for ranking |
 | `TICKETS.md` 1.4 | The Max-Cut SDP certificate behind an approved dependency | Open (#334) | `search/max_cut.py` states its bound is not rigorous |
 | `TICKETS.md` 1.3 | NUTS | Open, conditional on #268 | #352's fixed trajectory length adapted instead |
 | `TICKETS.md` 1.2 | CUDA and Metal dispatch, a Triton or JAX kernel | Open (#227 for coloured ICM) | GPU dispatch specified and not built (`STATUS.md` What Is Not Claimed) |
-| #340 | An LDPC problem class at `10,000 × 20,000` | Open, drafted | No code |
+| #340 | An LDPC problem class at `10,000 × 20,000` | Open, parts 2 and 3 | The 19,998-bit erasure bracket runs at the release gate; `ldpc.ipynb` stops at 996 bits and decoding as optimization is unbuilt |
 
 ## 2. Candidates
 

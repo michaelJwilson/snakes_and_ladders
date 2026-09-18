@@ -591,6 +591,21 @@ sorted — gives **12.4 ms, 6.5x** the oracle, against **37.2x** uncovaried.
 Fewer rows was the wrong thing to optimize. Agreement with the oracle under a
 covariate: 2.7e-15 relative on the evidence, 2.9e-15 on the field, one thread.
 
+**`FlowNetwork` keeps the contiguous form it built**
+([#659](https://github.com/michaelJwilson/snakes_and_ladders/pull/659)).
+`from_arcs` assembled the compiled consumer's arrays on its way to the list
+store and discarded them, so a network built from arcs and solved in Rust made
+the round trip NumPy → list → NumPy for nothing. `as_arrays` is **289 ns**
+against **2.87 ms** at 20,000 edges; one alpha-expansion sweep of four labels
+is **1.240x** at 16x16 and **1.112x** at 32x32 through the Rust backend, with
+the Python backend — which never calls `as_arrays` — the control at 1.000x.
+The arrays are bit-identical kept or derived, and both writers drop the form.
+The list store stays on #586's measurement (1.95 ms as lists against 3.93 ms
+with offsets). The survey's per-call finding no longer fires against a
+constructor, which runs once per instance and so has no second payment to
+remove; a paired control pins that an accessor over a non-compressed store is
+still reported.
+
 **A chain's transition kernel may be a function of position**
 ([#654](https://github.com/michaelJwilson/snakes_and_ladders/pull/654)).
 `forward_backward`, `sample_path` and `forward_log_likelihood_from_density`
@@ -3442,6 +3457,56 @@ exist.
 
 **Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
+**Compiled kernels at #678.** The crate is **9 modules and 4,048 lines**, and
+**3 take the thread pool** --- `coupled`, `pruning`, `sampling` --- read from
+each module's own parallel iterators by `infra/appraise_kernels.py` rather than
+from a list. Every module exporting a `#[pyfunction]` is pinned against a
+referee its own tests import; the one exclusion is `lib.double`, the
+extension-loads probe, which arithmetic checks. The tool's first draft called
+the ragged kernel unpinned and the tree said otherwise: `test_ragged_rust.py`
+imports `posteriors` and `posteriors_oracle` from one module, so an oracle
+beside the kernel is a third placement, and a survey reporting a false gap is
+worse than one reporting none.
+
+Four paths measured on the 4-core host, 2026-09-16, at a 1-minute load of 1.2
+to 1.7 (a test run held one core; `DEV.md`'s own readings were taken at 1.19
+to 1.30):
+
+*The count-pair draw does not clear its own bar at the size that matters.* At
+the **declared instance** --- 71x71 at `M = K = 10` over 20,000 positions,
+1.008e8 pairs, 384.6 MiB of counts --- the Rust draw is **30.14 s and 30.32 s**
+against the NumPy oracle's **37.32 s and 37.16 s**, two readings each: a ratio
+of **1.23x**, where root `CLAUDE.md` sets **2x** for keeping a Rust backend and
+says a backend that is never faster is a maintenance cost with no counterpart.
+At the CI instance the same comparison reads **2.5x** (50.0 ms against 20.2
+ms), which is the gate-size illusion the same rule names --- a ratio read at a
+gate size decides nothing in either direction. The conclusion is not that the
+kernel is wrong but that **parallelism is what would justify it**: the draw is
+5,041 independent per-vertex streams by construction, `default_rng([seed, v])`,
+which its own docstring states and no thread uses. That is #693.
+
+*The ragged kernel's two recorded ratios measure two different things, and
+neither is the third.* Against the **padded route** at honest padding it is
+**2.8x** (93.14 to 33.41 ms at 0% padding, 121.63 to 43.37 ms at 47.8%) --- that
+is the Rust claim. At **97.0% padding** it is **97.1x** (386.42 to 3.98 ms),
+which is a statement about padding and not about Rust. Against the
+**per-segment Python oracle** at 600 segments of 8 to 40 it is **65x** (519 to
+8 ms), a statement about Python loop overhead. A survey that lists the three in
+one column invites the wrong port next.
+
+*Dinic is the shape a compiled kernel wins on.* `ising_ground_state` on a
+40x40 lattice is **145.6 ms**, of which `_augment` is **42%** and `_levels`
+**25%** of self time --- two thirds of the call in two pure-Python functions,
+over 25,216 and 14 calls. #642 carries the layout half.
+
+*The factor-graph Gibbs sweep is not a port; its first call is.* Warm it is
+**0.20 ms a sweep** (10 ms for 50), already `njit`-compiled, so there is
+nothing for Rust to take. The **cold call pays 738 ms of `llvmlite`
+compilation** --- 74x the entire warm run of 50 sweeps --- which is a caching
+question and not a language one. Its warm profile's top self-time entry is
+`search.gibbs._Indexed.layout` at **30%**, the same line the structure survey
+surfaces once it stops dropping findings outside clusters (#690).
+
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
 rather than a hand list: **202 state-carrying classes, 7 clusters** at three or
 more members. `role:incidence` is 12 members over 78 consuming references --- one
@@ -3889,3 +3954,74 @@ likelihood the instance does not have, so the three pairings that need it say
 exactly that in `docs/tex/method_notes.yaml`, and the work is issue #669. `ragged_hmm`'s two say something
 different: a path sampler over segments is the unsegmented sampler run S times,
 and a bound over 89 positions costs more than the exact evaluation.
+
+## Concurrency shape before a thread pool ([#612](https://github.com/michaelJwilson/snakes_and_ladders/issues/612))
+
+Neither `rayon` nor `tokio` is a dependency. #610 has just put nine of the ten
+`#[pyfunction]`s under `Python::detach`, taking threaded throughput from 1.05x
+to **3.70x** at four threads, so a thread pool inside a kernel can overlap with
+Python for the first time. What it should be is decided here by shape, not by
+subsystem.
+
+Counts are at the declared scale (`ROADMAP.md`: `n` to 1000, `L` to 11,000) on
+a 4-core host.
+
+| axis | independent items | against 4 cores | does an item ever wait? |
+| --- | --- | --- | --- |
+| `pruning_log_likelihood_impl`, sites | up to **11,000** | ~2,750x | no: one contiguous row, no early exit |
+| `count_pairs`, vertex blocks | `n / VERTEX_BLOCK` = 1000/64 ~ **16** | 4x | no |
+| tempering replicas | the ladder length, single digits | ~1x | no |
+| heat-bath sweep | **1** | --- | a Markov chain: the next site reads the last |
+| Dinic maximum flow | **1** | --- | each augmenting path reads the residual the last left |
+
+**`tokio` is declined, and not for the reason first written down.** It is not
+only an I/O runtime --- it carries M:N lightweight tasks over a work-stealing
+scheduler, `spawn_blocking` and `block_in_place`. The argument is the table: a
+lightweight task is cheap because it is a `Future` polled cooperatively, which
+pays where concurrency greatly exceeds cores *and tasks spend their life
+suspended*. Every item above is CPU-saturating with no await point, so it holds
+its worker to completion and achieved parallelism is the worker count --- what
+a plain pool gives with less machinery, and what `tokio`'s own guidance sends
+to `rayon`. That no kernel in `src/` references `std::fs`, `std::net` or
+`std::io` is corroboration, not the argument.
+
+**The deciding property is an ordered reduction.** A parallel sum over sites
+reassociates `log L` and moves its last bits, which the oracle tests pin.
+`rayon` has `fold` and `reduce` over an *indexed* parallel iterator, so
+per-site partials combine in index order and the arithmetic is unchanged.
+`tokio` offers no such primitive; it would be hand-rolled, and hand-rolling is
+where a reassociated sum gets in.
+
+So one crate is worth asking for, and the last two rows are not candidates for
+either: parallelising them means changing what they compute.
+
+**The ranking is now measured**
+([#627](https://github.com/michaelJwilson/snakes_and_ladders/issues/627)).
+`cargo bench --locked` under `OMP_NUM_THREADS=1` on an idle host --- 1-minute
+load 0.07, no agent and no suite running, the condition #598's withdrawn
+profile lacked. Criterion medians of 100 samples:
+
+| kernel | median | independent items, from the table above |
+| --- | --- | --- |
+| `pruning_log_likelihood/8taxa_200000sites` | **117.64 ms** | one per site |
+| `external_field 200x5041 M=K=10` | 93.43 ms | one per site |
+| `pruning_log_likelihood/4taxa_200000sites` | 58.12 ms | one per site |
+| `sample_rows/2000000` | 26.69 ms | one per row |
+| `class_posteriors 200x5041 M=K=10` | 23.06 ms | one per site |
+| `sample_rows/200000` | 2.264 ms | one per row |
+| `max_flow_expansion_network/32x32` | 385.9 us | **1**, Dinic is sequential |
+| `max_flow_expansion_network/16x16` | 92.0 us | 1 |
+| `max_flow_expansion_network/8x8` | 22.2 us | 1 |
+| `double` | 704.8 ps | --- |
+
+Pruning is the top of the ranking *and* the widest axis, so it is the one
+kernel where a pool can pay, and it is what `rayon` should take first. The
+maximum-flow network is three orders of magnitude below it and carries one
+item, so it is a candidate on neither count --- which corroborates #598
+independently: that half was kept for its layout, not for a speed claim.
+`external_field` places second and is not in the table above; its shape is
+counted before anything is written, not assumed.
+
+**Still not measured:** whether a site-parallel pruning clears root
+`CLAUDE.md`'s 2x bar against the NumPy reference at realistic `(sites, taxa)`.
+No number is claimed here that was not taken.
