@@ -43,9 +43,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.opt.schedule import TempSchedule
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
 from snakes_and_ladders.search.topology import (
     Topology,
@@ -270,7 +270,7 @@ class _Indexed:
         definition and the oracle: a dictionary lookup per variable and a tuple
         key per factor, which #561 promoted to 47.8% of a run once the sweep
         was compiled. The
-        :data:`~snakes_and_ladders.search.backend.Backend.NUMBA` path
+        :data:`~snakes_and_ladders.backend.Backend.NUMBA` path
         (:func:`snakes_and_ladders.search.kernels.factor_graph_log_density`) reads
         the same tables through the edge layout and sums the same terms in the
         same order, so it reproduces it **bitwise** (#563).
@@ -352,14 +352,14 @@ def gibbs_sweep(
     agree draw for draw on a Potts graph up to rounding.
 
     ``backend`` chooses the implementation and nothing else. The
-    :data:`~snakes_and_ladders.search.backend.Backend.NUMBA` kernel
+    :data:`~snakes_and_ladders.backend.Backend.NUMBA` kernel
     (:func:`snakes_and_ladders.search.kernels.gibbs_sweep_sites`) walks the edge
     layout and returns the state the NumPy path returns **bitwise**, deciding
     a site itself only where the last place of ``exp`` cannot reach the draw
     and leaving the rest to NumPy, which is what lets it be the default: the
     audit behind it (#341, #561) measured the conditional at 43.4% of a
     32x32 run and the sweep around it at a further 18.0%, and no recorded
-    chain moves. :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` is the
+    chain moves. :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the
     oracle that pins it.
 
     Raises

@@ -122,7 +122,7 @@ def gibbs_sweep_sites(
     the *same chain* rather than a chain of the same law, and it is why this
     kernel is the default. Issue #599 has since carried the same
     construction into the Rust sampling sweep, which is the default too
-    (:mod:`snakes_and_ladders.search.backend`).
+    (:mod:`snakes_and_ladders.backend`).
 
     ``guard`` sets that boundary in units of the last place, per state:
     :func:`snakes_and_ladders.search.gibbs.gibbs_sweep` passes the bound it derives,

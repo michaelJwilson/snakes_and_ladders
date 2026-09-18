@@ -20,6 +20,7 @@ import sys
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.alpha_expansion import (
     UNIFORM_POTTS_BOUND,
     _expansion_network,
@@ -28,7 +29,6 @@ from snakes_and_ladders.search.alpha_expansion import (
     expand,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, ising_ground_state
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,

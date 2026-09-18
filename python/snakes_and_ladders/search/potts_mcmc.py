@@ -45,8 +45,8 @@ from typing import NamedTuple
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.schedule import AdaptedLadder, TempSchedule, adapt_ladder
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energies, heat_bath_log_weights, site_field
 
@@ -279,7 +279,7 @@ def sample_potts(
         Which implementation runs the **heat-bath** sweep; the cluster moves
         have one and ignore it. The chain is the same either way, state for
         state, which is what makes
-        :data:`~snakes_and_ladders.search.backend.Backend.RUST` the default
+        :data:`~snakes_and_ladders.backend.Backend.RUST` the default
         (:func:`_sweep_at`, issue #599).
 
     Returns
@@ -416,9 +416,9 @@ def anneal_potts(
         seeded here, for the reason :func:`sample_potts` gives.
 
     backend : Backend
-        :data:`~snakes_and_ladders.search.backend.Backend.RUST` runs the
+        :data:`~snakes_and_ladders.backend.Backend.RUST` runs the
         extension's sweep and is the default;
-        :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` runs the
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` runs the
         oracle that pins it. The two produce the same chain state for state,
         on the same uniforms in the same order (:func:`_sweep_at`).
 
@@ -725,7 +725,7 @@ def _sweep_at(
     temperature rather than only at 1.0 (issue #571).
 
     **The two produce the same chain, not a chain of the same law**, which is
-    why :data:`~snakes_and_ladders.search.backend.Backend.RUST` is the default
+    why :data:`~snakes_and_ladders.backend.Backend.RUST` is the default
     (issue #599). Every step of the conditional is the arithmetic NumPy
     performs, operation for operation, but ``exp`` is not: NumPy computes it
     by its own SIMD polynomial and the kernel by ``libm``, and one draw across
