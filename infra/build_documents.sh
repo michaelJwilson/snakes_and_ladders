@@ -120,4 +120,4 @@ for document in paper textbook api_map mind_map; do
   )
 done
 
-echo "Built docs/paper.pdf, docs/textbook.pdf and docs/api_map.pdf"
+echo "Built docs/paper.pdf, docs/textbook.pdf, docs/api_map.pdf and docs/mind_map.pdf"
