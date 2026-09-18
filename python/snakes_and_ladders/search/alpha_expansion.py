@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from snakes_and_ladders.search.backend import Backend
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
 from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -211,7 +211,7 @@ def expand(
     in the same network.
 
     ``backend`` chooses the minimum-cut solver and nothing else; the network
-    is built here either way. :data:`~snakes_and_ladders.search.backend.Backend.RUST`
+    is built here either way. :data:`~snakes_and_ladders.backend.Backend.RUST`
     runs :func:`snakes_and_ladders.search.maxflow_rust.min_cut`, which issue
     #528 measured at 49.0% of this function's caller by `cProfile` self time.
     It is **opt-in**, unlike the `numba` sweep of
@@ -363,13 +363,13 @@ def iterated_conditional_modes(
     baseline made slow by its implementation is not one.
 
     ``backend`` chooses the sweep's implementation and nothing else. The
-    :data:`~snakes_and_ladders.search.backend.Backend.NUMBA` kernel in
+    :data:`~snakes_and_ladders.backend.Backend.NUMBA` kernel in
     :mod:`snakes_and_ladders.search.kernels` walks the compressed-row adjacency and
     returns the labelling the Python loop returns **bitwise** -- same update,
     same index order, same first-minimum tie rule -- which is what lets it be
     the default: the audit behind it (#264) measured the Python sweep at
     the top of the descent's self time, and the labelling a caller sees does
-    not move. :data:`~snakes_and_ladders.search.backend.Backend.PYTHON` is the oracle
+    not move. :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the oracle
     that pins it.
 
     Returns

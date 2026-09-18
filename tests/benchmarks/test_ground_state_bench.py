@@ -22,9 +22,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_expansion
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import PottsMove, anneal_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
 from snakes_and_ladders.sim.potts import spatio_only_field

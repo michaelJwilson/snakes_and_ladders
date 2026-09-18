@@ -21,7 +21,7 @@ from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 
 # The Rust backend arrives with the #287 audit; without it this benchmark has
 # nothing to compare and skips rather than fails.
-Backend = pytest.importorskip("snakes_and_ladders.search.backend").Backend
+Backend = pytest.importorskip("snakes_and_ladders.backend").Backend
 
 SHAPE = (8, 8)
 DENSITY_SHAPE = (32, 32)

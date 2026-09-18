@@ -16,13 +16,13 @@ import sys
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.alpha_expansion import (
     _expansion_network,
     _site_field,
     alpha_expansion,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 sys.setrecursionlimit(50_000)

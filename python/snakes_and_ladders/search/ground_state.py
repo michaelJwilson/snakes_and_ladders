@@ -54,6 +54,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.message_passing import (
     ConvergenceError,
     MessageScheduleName,
@@ -67,7 +68,6 @@ from snakes_and_ladders.search.alpha_expansion import (
     energy,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.potts_mcmc import (
     ClusterCounter,
     PottsMove,

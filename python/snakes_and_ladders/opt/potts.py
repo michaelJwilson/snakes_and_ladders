@@ -41,8 +41,7 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.fixtures import load_declared
-from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.numerics_rust import sample_rows
+from snakes_and_ladders.numerics import logsumexp, sample_rows
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
 from snakes_and_ladders.opt.objective import Objective
 

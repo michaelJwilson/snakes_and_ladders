@@ -42,6 +42,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 
 from profile_harness import format_table, self_time_table
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.reinforce import reinforce
@@ -54,14 +55,13 @@ from snakes_and_ladders.likelihood.message_passing import (
 )
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.likelihood.parsimony import fitch_score
-from snakes_and_ladders.numerics_rust import sample_rows
+from snakes_and_ladders.numerics import sample_rows
 from snakes_and_ladders.opt import hmc
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.gibbs import sample_factor_graph
 from snakes_and_ladders.search.infer import MoveSet, infer
 from snakes_and_ladders.search.maxflow import energy, ising_ground_state
