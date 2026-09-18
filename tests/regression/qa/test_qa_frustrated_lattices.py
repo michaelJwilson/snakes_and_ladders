@@ -71,7 +71,7 @@ def test_every_drawn_bond_has_unit_length_and_wraps_only_across_the_torus() -> N
     assert wrapped == 27 - 16
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_a_non_lattice_graph_is_refused_by_the_layout() -> None:
     chain = lattice_graph((4,), BoundaryCondition.OPEN, 1.0)
     with pytest.raises(ValueError, match="2-D lattice"):
@@ -94,7 +94,7 @@ def test_descent_reaches_the_planted_energy_where_nothing_is_frustrated() -> Non
     assert scan.planted.shape == scan.descended.shape == (len(FRUSTRATIONS),)
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_the_caption_counts_matches_and_undercuts(tmp_path: Path) -> None:
     graph = PARAMS.lattice()
     labelling, agreeing = ground_state(graph)

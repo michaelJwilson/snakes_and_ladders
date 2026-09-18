@@ -21,7 +21,7 @@ from snakes_and_ladders.qa.manifest import (
 
 
 @pytest.mark.critical
-@pytest.mark.infra
+@pytest.mark.exempt
 def test_a_cited_figure_renders_inside_the_cap_or_carries_a_waiver() -> None:
     # The documents build is the sum of its cited figures, every one of them
     # since #490 removed the stamps that skipped some, so a cited figure over
@@ -42,6 +42,6 @@ def test_a_cited_figure_renders_inside_the_cap_or_carries_a_waiver() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.infra
+@pytest.mark.exempt
 def test_every_manifest_entry_states_a_measured_time() -> None:
     assert all(spec.seconds > 0 for spec in FIGURES)

@@ -88,7 +88,7 @@ def test_the_ranking_is_sorted_and_the_climb_lands_on_an_enumerated_score() -> N
     assert ranked.found >= ranked.scores[0]
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_the_caption_reports_the_numbers_it_was_handed() -> None:
     params = load_simulation_params(PARAMS_PATH)
     gaps = {
@@ -112,7 +112,7 @@ def test_the_caption_reports_the_numbers_it_was_handed() -> None:
     assert str(params.seed) in caption
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     qa_figure = main(["--params", str(PARAMS_PATH), "--output-dir", str(tmp_path)])
 

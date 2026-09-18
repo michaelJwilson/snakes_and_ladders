@@ -91,7 +91,7 @@ def test_known_minimizers_are_the_published_ones() -> None:
     assert np.array_equal(known_minimizers(DECLARED["Rastrigin"]), np.zeros((1, 2)))
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_the_caption_counts_the_endpoints_it_was_handed(tmp_path: Path) -> None:
     results = endpoints(SUITE, np.random.default_rng(SUITE.seed))
     _, caption = build_figure(SUITE, results)

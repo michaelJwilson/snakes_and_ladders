@@ -127,7 +127,7 @@ def test_the_adapted_chain_settles_first() -> None:
     assert adapted_draw < fixed_draw
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_settling_takes_the_last_excursion_and_not_the_first_entry() -> None:
     # A running mean that enters the band, leaves it, and returns is credited
     # with the return: the statistic is where it stays, not where it arrived.
@@ -140,7 +140,7 @@ def test_settling_takes_the_last_excursion_and_not_the_first_entry() -> None:
     assert settling_draw(np.array([SETTLED]), 0.0, 1.0) == 1
 
 
-@pytest.mark.infra
+@pytest.mark.exempt
 def test_the_running_mean_is_a_running_mean() -> None:
     trace = running_mean(ADAPTED, TRACKED)
     draws = ADAPTED.theta[:, TRACKED].detach().numpy()
@@ -150,7 +150,7 @@ def test_the_running_mean_is_a_running_mean() -> None:
     assert trace[-1] == pytest.approx(draws.mean())
 
 
-@pytest.mark.infra
+@pytest.mark.exempt
 def test_the_caption_reports_the_constants_the_figure_was_drawn_from(
     tmp_path: Path,
 ) -> None:

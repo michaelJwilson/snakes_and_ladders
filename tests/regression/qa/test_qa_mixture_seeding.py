@@ -70,7 +70,7 @@ def test_the_fit_lands_within_the_generating_density_scale() -> None:
     assert (fit.components.scale.numpy() < 3.0).all()
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_the_caption_reports_the_numbers_it_was_handed(tmp_path: Path) -> None:
     truth = TRUTH
     observations = simulate_mixture(truth).observations

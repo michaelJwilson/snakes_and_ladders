@@ -74,7 +74,7 @@ def test_the_normalizer_is_the_internal_split_count() -> None:
         assert raw == 2 * (len(names) - 3)
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_a_tree_with_no_internal_edge_scores_zero() -> None:
     # Below four taxa there is no internal split, so the normalizer is zero
     # and the ratio undefined. Reporting 0.0 is right -- three leaves admit
@@ -84,7 +84,7 @@ def test_a_tree_with_no_internal_edge_scores_zero() -> None:
     assert normalized_robinson_foulds(star, star) == 0.0
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_the_distance_refuses_trees_over_different_leaves() -> None:
     first = next(iter(enumerate_topologies(list("ABCDE"))))
     second = next(iter(enumerate_topologies(list("ABCDF"))))
@@ -95,7 +95,7 @@ def test_the_distance_refuses_trees_over_different_leaves() -> None:
 # --- the figure -----------------------------------------------------------
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_the_sweep_covers_sizes_on_both_sides_of_the_requirement() -> None:
     # A sweep that only covers sizes already known to work locates no margin,
     # which is the whole point of plotting against the site count.
@@ -104,7 +104,7 @@ def test_the_sweep_covers_sizes_on_both_sides_of_the_requirement() -> None:
     assert REQUIREMENT == 0.05
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_the_caption_states_the_sweep_this_module_declares() -> None:
     # Every number the committed caption asserts, pinned. The caption reads
     # them from the module and the fixture rather than restating them, so
@@ -132,7 +132,7 @@ def test_the_manifest_renders_this_figure_from_the_fixture_the_caption_names() -
     assert len(params.pi) == 4
 
 
-@pytest.mark.smoke
+@pytest.mark.exempt
 def test_main_writes_a_figure_and_caption(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

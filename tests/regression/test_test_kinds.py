@@ -205,6 +205,32 @@ def test_a_written_infra_sits_in_a_module_naming_no_problem() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_an_exempt_test_sits_in_the_exempt_directory_and_nothing_else_does() -> None:
+    """`exempt` is the `qa` renderers' kind, and the `qa` directory's only self-check.
+
+    The judged guard leaves the `qa` package out (issue #729); a test that
+    exercises a renderer and judges nothing carries `exempt` so the exemption
+    is written where the tests are. Outside `tests/regression/qa/` the marker
+    would exempt code the guard counts, and inside it a `smoke` or a written
+    `infra` would be a self-check the exemption already names.
+    """
+    exempt_directory = REPO_ROOT / "tests" / "regression" / "qa"
+    misplaced = [
+        f"{path.relative_to(REPO_ROOT)}::{node.name}"
+        for path in _marked_test_files()
+        for node in _test_functions(path)
+        if ("exempt" in _markers(node)) != (exempt_directory in path.parents)
+        and _markers(node) & {"exempt", "smoke", "infra"}
+    ]
+
+    assert misplaced == [], (
+        f"{len(misplaced)} tests carry `exempt` outside tests/regression/qa/ or a "
+        f"`smoke` or `infra` inside it: {misplaced[:10]}"
+    )
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_a_finding_is_carried_beside_a_kind() -> None:
     """The second axis is never instead of the first.
 

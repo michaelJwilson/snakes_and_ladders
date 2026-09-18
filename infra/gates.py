@@ -179,6 +179,11 @@ KIND_MARKERS: Mapping[str, str] = {
         "checked against itself -- reachability, a shape, the absence of an "
         "exception, a boundary, a refusal, an invariant the implementation chose"
     ),
+    "exempt": (
+        "exercises the qa renderers, which the judged coverage leaves out -- a "
+        "figure has no oracle -- so it counts for nothing and lives in "
+        "tests/regression/qa alone (issue #729)"
+    ),
     "infra": (
         "exercises no single problem -- shared machinery, a document guard, "
         "or the build; written on a test of that machinery, added at collection "
@@ -298,6 +303,9 @@ class JudgedCoverage:
     #: no oracle, and `qa` is held by `snapshot` pins and stated beside the
     #: figure, never inside it.
     exempt_packages: tuple[str, ...]
+    #: The kind a test of an exempt package carries, so the exemption is
+    #: written where the tests are and not only here.
+    exempt_marker: str
     #: The floor over every package not exempt, as `--cov-fail-under` states
     #: one. Recut to the measurement and rounded down, never lowered.
     floor: float
@@ -309,6 +317,7 @@ class JudgedCoverage:
 JUDGED_COVERAGE = JudgedCoverage(
     counting=("end2end", "oracle"),
     exempt_packages=("qa",),
+    exempt_marker="exempt",
     floor=82.6,
     package_floors={"search": 86.1},
 )
