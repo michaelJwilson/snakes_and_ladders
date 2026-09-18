@@ -1,0 +1,65 @@
+name: Mis-merged pull request
+description: Work a merge dropped — a stale head, a stack that never landed, a closed pull request, a release cut against a union.
+labels: ["priority:high", "module:infra"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A merged pull request is finished and is never reused: the recovery is
+        a fresh branch from `main` carrying only what is missing, and history
+        on a shared branch is never rewritten. Open with a TL;DR: what `main`
+        lacks, in one line, before any context.
+
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. What does not fit belongs where it is
+        refereed — a measurement in `STATUS.md`, a diff on the pull request.
+  - type: textarea
+    id: pull_requests
+    attributes:
+      label: The pull requests and their heads
+      description: One row per pull request — the commit it merged or closed at, the branch tip, and the commits between.
+      value: |
+        | pull request | merged or closed at | branch tip | stranded |
+        | --- | --- | --- | --- |
+        |  |  |  |  |
+    validations:
+      required: true
+  - type: textarea
+    id: missing
+    attributes:
+      label: What main lacks
+      description: The files, tests or behaviour that never landed, read from `git diff main...<tip>` and named; and what it costs today — a guard that does not run, a number `STATUS.md` claims that the tree does not carry.
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How it escaped
+      options:
+        - "Merged at a stale head: the author pushed after the merge (#123)"
+        - "A stacked pull request, so no checks ran (#685)"
+        - "Closed unmerged, the work stranded on its branch"
+        - "Merged before its own checks finished"
+        - "Cut against the union of open branches, not main (#467)"
+        - "Other, stated above"
+    validations:
+      required: true
+  - type: textarea
+    id: recovery
+    attributes:
+      label: Recovery
+      description: The fresh branch from `main`, the commits carried by cherry-pick or re-applied, and the pull request that carries them.
+    validations:
+      required: true
+  - type: textarea
+    id: guard
+    attributes:
+      label: The guard that keeps it from recurring
+      description: The check, convention or `DEV.md` line that would have caught this, and whether it exists. A mis-merge with no guard named is a mis-merge that repeats.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: How it will be validated
+      description: The recovered pull request's diff against `main` equals `git diff main...<tip>` minus what landed elsewhere, file by file; the check that failed on `main` passes at the new head.

@@ -7,6 +7,8 @@ body:
       value: |
         Priority defaults to `low`. Change the label after filing if the work
         should run sooner; `DEV.md` explains what each priority schedules.
+        A shape that recurs has its own template: a mis-merged pull request,
+        an optimization, a seam, the documents, coverage, markers, a review, a release.
 
         Bodies carry at most 40 content lines (`DEV.md`); blank lines and
         headings are not charged. What does not fit belongs where it is
@@ -16,7 +18,7 @@ body:
     id: outcome
     attributes:
       label: Desired outcome
-      description: What is true once this is done, stated so it can be checked.
+      description: Open with a TL;DR — the result in O(1) lines before any context — then what is true once this is done, stated so it can be checked.
     validations:
       required: true
   - type: textarea
@@ -36,6 +38,9 @@ body:
         - "likelihood"
         - "opt"
         - "search"
+        - "learn"
+        - "qa"
+        - "sandbox"
         - "infra"
         - "docs"
         - "cross-cutting"

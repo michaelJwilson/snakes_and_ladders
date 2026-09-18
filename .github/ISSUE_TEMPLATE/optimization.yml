@@ -1,0 +1,77 @@
+name: Optimization
+description: A hot path measured, then vectorized, ported or parallelized where the profile says so, and reverted where it does not earn its bar.
+labels: ["priority:low"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Root `CLAUDE.md`'s rules, cited and not restated: profile first; do
+        less work before doing the same work faster; a ratio is half the case
+        and the effect size against the enclosing call is the other half; a
+        speedup is established at stress sizes alone, so a ratio read at a
+        gate size decides nothing; Rust keeps 2x and the GPU 10x over the
+        NumPy reference, which stays as the oracle; below the bar the port is
+        reverted. Open with a TL;DR: the term, its fraction and the bar.
+
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. What does not fit belongs where it is
+        refereed — a measurement in `STATUS.md`, a sweep in an experiment
+        file.
+  - type: textarea
+    id: profile
+    attributes:
+      label: The profile
+      description: "`cProfile` self time at the stress size on a named host: the term, its seconds, the enclosing call's seconds and the fraction, and where it ranks. A small fraction is recorded and left, with the fraction stated."
+      value: |
+        | term | self | enclosing call | fraction | host, tree, date |
+        | --- | ---: | ---: | ---: | --- |
+        |  |  |  |  |  |
+    validations:
+      required: true
+  - type: dropdown
+    id: route
+    attributes:
+      label: Route
+      options:
+        - "Do less work: an algorithmic cut"
+        - "A warm start or an incremental update"
+        - "Recompute or store, decided"
+        - "NumPy vectorization"
+        - "numba njit"
+        - "A Rust kernel"
+        - "rayon over independent tasks, or snakes_and_ladders.parallel"
+        - "The GIL released around a kernel"
+        - "GPU through torch"
+    validations:
+      required: true
+  - type: textarea
+    id: sizes
+    attributes:
+      label: Sizes
+      description: The gate and stress instances by fixture name and tier; the stress instance is where the numbers are taken.
+    validations:
+      required: true
+  - type: textarea
+    id: oracle
+    attributes:
+      label: Oracle and tolerance
+      description: The reference the accelerated path is pinned against, the tolerance — bitwise, or the declared one with the measured difference beside it — and the existing test that pins it.
+    validations:
+      required: true
+  - type: textarea
+    id: bar
+    attributes:
+      label: The bar and the revert
+      description: The ratio that keeps the change at the stress size, the absolute saving against the enclosing call or `DEV.md`'s budget, and what is reverted if it is missed.
+    validations:
+      required: true
+  - type: textarea
+    id: prior
+    attributes:
+      label: Prior measurements
+      description: Earlier tickets and `STATUS.md` rows on this path, with their negative results, so nothing is re-measured.
+  - type: textarea
+    id: validation
+    attributes:
+      label: How it will be validated
+      description: Both numbers, two readings each, at the stress size, in the pull request and in `STATUS.md`; the oracle pin unchanged; the benchmark file that reports before and after.

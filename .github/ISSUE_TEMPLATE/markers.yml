@@ -1,0 +1,58 @@
+name: Markers
+description: A test says what it is checked against — its kind, its findings, its tier and its problem — and the census that shows where it does not.
+labels: ["priority:medium", "module:infra"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The kinds are `oracle`, `end2end`, `analytic`, `smoke` and `infra`,
+        and every test carries one; the findings `patch`, `backend`, `bug`,
+        `warning` and `snapshot` are carried beside a kind; the tiers are
+        `critical`, `release`, `stress` and `key`; the problem is derived
+        from the fixture at collection. Only `end2end` and `oracle` count
+        toward coverage. Every test states an intention and none an
+        exemption. The set is registered once in `infra/gates.py` and held
+        by `test_test_kinds.py`; the port mirrors it (#730). Open with a
+        TL;DR: how many tests, misnamed how.
+
+        Bodies carry at most 40 content lines (`DEV.md`); blank lines and
+        headings are not charged. What does not fit belongs where it is
+        refereed — the census, a script in the pull request.
+  - type: textarea
+    id: today
+    attributes:
+      label: The census today
+      description: Counts per marker on the tree, with the tree and date, from one collection (`infra/coverage_recut.py`'s collector, or `pytest --collect-only -q`).
+    validations:
+      required: true
+  - type: textarea
+    id: misnamed
+    attributes:
+      label: What is misnamed
+      description: Each test, what it carries, what it should carry, and the referee that decides it.
+      value: |
+        | test | carries | should carry | referee |
+        | --- | --- | --- | --- |
+        |  |  |  |  |
+    validations:
+      required: true
+  - type: dropdown
+    id: method
+    attributes:
+      label: Method
+      options:
+        - "Mechanical: a script, idempotent, re-run after every merge"
+        - "Read test by test"
+        - "Both: mechanical first, read where the script cannot decide"
+    validations:
+      required: true
+  - type: textarea
+    id: guard
+    attributes:
+      label: The guard
+      description: The `test_test_kinds.py` rule that holds it — a kind on every test, a finding beside a kind, a written `infra` only in a module naming no problem — and the port's copy.
+  - type: textarea
+    id: validation
+    attributes:
+      label: How it will be validated
+      description: The census before and after from one collection each; `test_test_kinds.py` passes; the judged figure from `infra/coverage_recut.py` stated, since a renamed marker moves it.

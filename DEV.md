@@ -28,7 +28,7 @@ keeping the two liftable matters.
 
 *Note: each directory carries a localized `CLAUDE.md`, appending to rather than overriding the root.*
 
-New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`; blank issues are disabled via `.github/ISSUE_TEMPLATE/config.yml`.
+New issues are filed through `.github/ISSUE_TEMPLATE/task.yml`, or through the template for a shape that recurs — `mis_merge.yml`, `optimization.yml`, `seam.yml`, `documents.yml`, `coverage.yml`, `markers.yml`, `review.yml`, `release.yml` — each of which asks for what its tickets had been restating (issue #381); blank issues are disabled via `.github/ISSUE_TEMPLATE/config.yml`.
 
 ## Test Layout
 
