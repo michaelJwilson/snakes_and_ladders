@@ -292,6 +292,8 @@ class JudgedCoverage:
     `infra/coverage_recut.py` reads the run's per-test contexts and applies it.
     """
 
+    #: What the guard is called in a report and a floor's message.
+    name: str
     #: The markers whose tests count. A test carrying any of them counts.
     counting: tuple[str, ...]
     #: Packages under `snakes_and_ladders` outside the guard: a renderer has
@@ -307,11 +309,30 @@ class JudgedCoverage:
 
 
 JUDGED_COVERAGE = JudgedCoverage(
+    name="judged",
     counting=("end2end", "oracle"),
     exempt_packages=("qa",),
     floor=82.6,
     package_floors={"search": 86.1},
 )
+
+#: The complement (issue #732): every kind and finding but the two that
+#: judge, so what the self-checking tests reach is a number of its own
+#: rather than the difference of two. Same exemption, its own floors.
+UNJUDGED_COVERAGE = JudgedCoverage(
+    name="unjudged",
+    counting=tuple(
+        name
+        for name in (*KIND_MARKERS, *FINDING_MARKERS)
+        if name not in JUDGED_COVERAGE.counting
+    ),
+    exempt_packages=("qa",),
+    floor=89.2,
+    package_floors={"search": 88.6},
+)
+
+#: The two recuts of one run, in the order the report prints them.
+COVERAGE_GUARDS: tuple[JudgedCoverage, ...] = (JUDGED_COVERAGE, UNJUDGED_COVERAGE)
 
 
 @dataclass(frozen=True)

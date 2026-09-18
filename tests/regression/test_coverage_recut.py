@@ -21,7 +21,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 import coverage_recut  # noqa: E402
-from gates import JUDGED_COVERAGE, JudgedCoverage  # noqa: E402
+from gates import (  # noqa: E402
+    COVERAGE_GUARDS,
+    JUDGED_COVERAGE,
+    UNJUDGED_COVERAGE,
+    JudgedCoverage,
+)
 
 #: Eight statements. Five run at import -- the two assignments and the three
 #: `def` lines -- and each body is one statement a test may reach.
@@ -124,6 +129,7 @@ def test_the_guard_fails_one_statement_above_what_the_run_reaches(
 
     def guard(floor: float, search: float, exempt: tuple[str, ...]) -> JudgedCoverage:
         return JudgedCoverage(
+            name="judged",
             counting=JUDGED_COVERAGE.counting,
             exempt_packages=exempt,
             floor=floor,
@@ -194,3 +200,67 @@ def test_the_counting_set_is_end2end_and_oracle_alone() -> None:
     assert JUDGED_COVERAGE.exempt_packages == ("qa",)
     assert 0.0 < JUDGED_COVERAGE.floor <= 100.0
     assert JUDGED_COVERAGE.package_floors["search"] > JUDGED_COVERAGE.floor
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_complement_counts_what_the_judged_guard_leaves_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The third guard (issue #732): the smoke and infra lines, and the import.
+
+    `root.py`: the smoke test reaches `smoke`'s body, so the complement counts
+    6 of 8. `search/kernel.py`: the infra test reaches `judged`'s body and the
+    smoke test `smoke`'s, so it counts 7 of 8 and leaves `never`'s alone. The
+    two guards' counting sets partition the kinds and findings.
+    """
+    package, data_file = _run(tmp_path)
+    monkeypatch.setattr(coverage_recut, "PACKAGE", package)
+
+    reach = {
+        one.module: one
+        for one in coverage_recut.read_reach(
+            data_file, MARKERS, UNJUDGED_COVERAGE.counting
+        )
+    }
+
+    assert reach["root.py"].counted == 6
+    assert reach["search/kernel.py"].counted == 7
+    assert set(JUDGED_COVERAGE.counting).isdisjoint(UNJUDGED_COVERAGE.counting)
+    assert COVERAGE_GUARDS == (JUDGED_COVERAGE, UNJUDGED_COVERAGE)
+    assert UNJUDGED_COVERAGE.package_floors["search"] < UNJUDGED_COVERAGE.floor
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_public_callables_are_listed_by_the_set_that_enters_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--functions`: per module, which guard's tests enter each body.
+
+    `root.py`: `judged` is entered by the judged set, `smoke` by the
+    complement alone, `never` by nothing. `search/kernel.py`: `judged` is
+    entered by the infra test, which is the complement's, so no judged test
+    enters any of its three.
+    """
+    package, data_file = _run(tmp_path)
+    monkeypatch.setattr(coverage_recut, "PACKAGE", package)
+    reaches = {
+        guard.name: coverage_recut.read_reach(data_file, MARKERS, guard.counting)
+        for guard in COVERAGE_GUARDS
+    }
+
+    found = {
+        (one.module, one.name): (one.entered_by, one.tested)
+        for one in coverage_recut.callables(reaches)
+    }
+    table = coverage_recut.functions_table(reaches, "judged")
+
+    assert found[("root.py", "judged")] == (frozenset({"judged"}), True)
+    assert found[("root.py", "smoke")] == (frozenset({"unjudged"}), True)
+    assert found[("root.py", "never")] == (frozenset(), False)
+    assert found[("search/kernel.py", "judged")] == (frozenset({"unjudged"}), True)
+    rows = {line.split()[0]: line.split()[1:] for line in table.splitlines()[1:3]}
+    assert rows["(root)"] == ["3", "1", "1", "1"]
+    assert rows["search"] == ["3", "0", "2", "1"]
+    assert "  search/kernel.py: judged, smoke, never (never)" in table
