@@ -70,9 +70,32 @@ class FlowNetwork:
     capacity: list[float] = field(default_factory=list)
     outgoing: list[list[int]] = field(default_factory=list)
 
+    #: The contiguous form :meth:`as_arrays` hands the compiled consumer, kept
+    #: when it is already known rather than derived again (issue #642).
+    #: :meth:`from_arcs` builds these arrays on its way to the list store and
+    #: used to discard them, so a network built from arcs and solved in Rust
+    #: made the round trip NumPy -> list -> NumPy for nothing. ``None`` means
+    #: *not known*, never *empty*: it is what every mutation sets, and
+    #: :meth:`as_arrays` derives the form from the lists whenever it is unset,
+    #: so the lists remain the single store and this is only ever a shortcut
+    #: to a value they would have produced.
+    _arcs: np.ndarray | None = field(default=None, repr=False, compare=False)
+    _forward: np.ndarray | None = field(default=None, repr=False, compare=False)
+    _backward: np.ndarray | None = field(default=None, repr=False, compare=False)
+
     def __post_init__(self) -> None:
         if not self.outgoing:
             self.outgoing = [[] for _ in range(self.n_nodes)]
+
+    def _forget_arrays(self) -> None:
+        """Drop the contiguous form, because the lists it was derived from moved.
+
+        Every write to ``target``, ``capacity`` or ``outgoing`` calls this.
+        A cache that outlives its store is the defect this class would be
+        trading for the one it fixes, and the two writers --- :meth:`add_edge`
+        and :func:`max_flow`'s in-place push --- are the whole set.
+        """
+        self._arcs = self._forward = self._backward = None
 
     @classmethod
     def from_arcs(
@@ -143,6 +166,13 @@ class FlowNetwork:
         grouped = SparseIncidence.from_pairs(
             n_nodes, n_arcs, leaves, np.arange(n_arcs, dtype=np.int64)
         )
+        # The contiguous form `as_arrays` would rebuild, kept rather than
+        # derived again (issue #642). One `(from, to)` pair per *edge*, not per
+        # arc: `as_arrays` reshapes `target` to `(n_edges, 2)` and reverses each
+        # row, and edge `e` reversed is `(tail, head)` -- which is this method's
+        # own arguments, as the two capacity arrays are.
+        arcs = np.empty(n_arcs, dtype=np.int64)
+        arcs[0::2], arcs[1::2] = tail, head
         return cls(
             n_nodes=n_nodes,
             target=target.tolist(),
@@ -153,6 +183,9 @@ class FlowNetwork:
                     grouped.offsets[:-1], grouped.offsets[1:], strict=True
                 )
             ],
+            _arcs=arcs,
+            _forward=np.ascontiguousarray(forward),
+            _backward=np.ascontiguousarray(backward),
         )
 
     def add_edge(
@@ -169,6 +202,7 @@ class FlowNetwork:
         if capacity < 0.0 or reverse < 0.0:
             msg = f"capacities must be non-negative, got {capacity} and {reverse}"
             raise ValueError(msg)
+        self._forget_arrays()
         self.outgoing[source].append(len(self.target))
         self.target.append(sink)
         self.capacity.append(capacity)
@@ -191,6 +225,10 @@ class FlowNetwork:
         second call would see --- the arrays are read from the current state
         and not from the network as it was built.
         """
+        if self._arcs is not None and self._forward is not None:
+            # The three are set and cleared together, never singly.
+            assert self._backward is not None
+            return self._arcs, self._forward, self._backward
         target = np.asarray(self.target, dtype=np.int64).reshape(-1, 2)
         capacity = np.asarray(self.capacity, dtype=np.float64).reshape(-1, 2)
         # Column 0 of a row is the head (`add_edge` appends the sink first),
@@ -245,6 +283,13 @@ def max_flow(network: FlowNetwork, source: int, sink: int) -> MinCut:
     if source == sink:
         msg = f"source and sink must differ, both are {source}"
         raise ValueError(msg)
+
+    # This function turns capacities into residual capacities, so the
+    # contiguous form a `from_arcs` network carries is about to go stale
+    # (issue #642). Dropped here, once per solve, rather than at the push that
+    # invalidates it: that push is Dinic's inner loop, where a Python call per
+    # arc would cost more than the derivation this whole change avoids.
+    network._forget_arrays()
 
     total = 0.0
     while True:
