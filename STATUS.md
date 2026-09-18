@@ -42,6 +42,8 @@ and this release. A milestone not named here did not move.
 
 | Roadmap item | What moved | Pull request |
 | --- | --- | --- |
+| Milestone 1.1 | Polar codes, conserved in `sandbox/` as a declined route rather than catalogued as a problem class: the Kronecker transform, the frozen set from Arikan's exact erasure recursion or the Gaussian approximation, Reed--Muller as the same transform under the weight rule, and successive-cancellation and list decoding. Capacity is conserved exactly under the transform (1e-12 at `n = 3, 5, 8, 11`); at `N = 16` enumeration gives the maximum-likelihood floor and the gap is measured --- 98 block errors for SC against 62 for ML over 200 shared draws at `sigma = 1.0`, a list of 4 recovering 34 of the 36; `SCL(1) == SC` bitwise and `SCL(2^k) == ML`; the naive recursion pins the list layout bitwise over 900 draws | [#605](https://github.com/michaelJwilson/snakes_and_ladders/pull/605) (#593) |
+| Milestone 1.1 | The algebraic codes and the capacity they are read against: repetition, single parity check, Hamming, Golay and Reed--Solomon over `GF(2^m)`, each decoded in closed form at every length, and `sim.capacity` for the three channels. Perfection holds as an integer equality; RS(7,3) meets Singleton with equality at `d = 5` over all 512 enumerated codewords; the algebraic decoder is exact on 900 of 900 draws to `t` and, past it, refused 260 of 300 and was wrong on 40, recovering none by luck. Read against capacity, the (3,6) ensemble leaves 13.8% of the erasure channel unused at its realized rate 0.5020, and the four algebraic pairs give up factors of 2.7 to 5.6 at a block error rate of 1e-2 | [#700](https://github.com/michaelJwilson/snakes_and_ladders/pull/700) (#594) |
 | §0 Development loop | A typeset map of the package's Python surface, generated from the docstrings by `ast` and edited by no one: `docs/api_map.pdf`, 1,528 entries over 64 pages --- 151 modules, 251 classes, 587 functions, 539 methods. The entry count is checked against a second walk of the tree, and a public function without a summary line is refused rather than typeset as a blank | [#578](https://github.com/michaelJwilson/snakes_and_ladders/pull/578) (#576) |
 | §0 Development loop | The two documents are named the paper and the textbook, `infra/build_documents.sh` replaces the script named after the retired artifact, and a guard fails any live file naming it | [#379](https://github.com/michaelJwilson/snakes_and_ladders/pull/379) (#377) |
 | §0 Development loop | Validation is one command under five minutes: an inputs stamp beside every committed figure and notebook (the stamps were measured wrong on 476 of 476 decisions and removed by #490); guard-only selection; a per-test duration cap; one BLAS thread per process | [#380](https://github.com/michaelJwilson/snakes_and_ladders/pull/380) (#372) |
@@ -247,6 +249,8 @@ sites the plan lists after these — the candidate fits of `search.infer`,
 (`TICKETS.md`).
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
+
+**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700).
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed tree fixture, retaining
@@ -567,6 +571,8 @@ and `docs/experiments/015-css-decoding-under-degeneracy.md` carries the
 comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
+
+**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged_rust` is the compiled kernel behind the ragged path, conserved beside `sandbox.rectangular_hmm` (#666).
 
 **A covariate reaches the two-channel family, every seam above it, and the
 compiled backend** ([#660](https://github.com/michaelJwilson/snakes_and_ladders/pull/660)).
@@ -1668,6 +1674,8 @@ state.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is.
+
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,
 and a map back to named constrained parameters
@@ -2149,6 +2157,8 @@ reached the closed-form ground state **20/20** against the hand ladder's
 since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
+
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`. `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -2782,6 +2792,8 @@ is checkable against.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
+**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface.
+
 **The estimator is pinned to a closed form, not to a training curve**
 ([#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135)). With a finite
 action set and horizon the expected return is exact by trajectory enumeration,
@@ -2928,6 +2940,8 @@ targets, and what expert iteration taught here is the critic. The
 factor-graph environment and the surrogate reward model wait on #296 and #308.
 
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
+
+**Modules.** The surrogates and the bounds they claim: `likelihood.surrogate`, `search.surrogate` and `learn.surrogate`.
 
 **Landed as bounds first and predictors second**
 ([#317](https://github.com/michaelJwilson/snakes_and_ladders/issues/317)). The
@@ -3514,6 +3528,56 @@ at its own field-preferred label, which no draw would produce. That is the
 cost of the loss, and it is why a decoder reported without naming its loss
 hides the question it answered. On a ferromagnet at the same field the two
 agree exactly, which is recorded so the difference is not read as general.
+**Generalized belief propagation at #689.** The plaquette regions see the
+4-cycles the Bethe approximation cannot, and the measurement is what the ticket
+was for. On the 3x3 lattice at three states, against exhaustive enumeration of
+all 19,683 configurations (2026-09-16, 4-core host):
+
+| `J` | exact `log Z` | Bethe error | Kikuchi error | factor | sweeps B/K | ms B/K |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.3 | 1.538947 | 8.53e-04 | **3.65e-08** | 23,378x | 49 / 372 | 58.7 / 277.3 |
+| 0.6 | 3.483551 | 1.11e-02 | **6.66e-06** | 1,672x | 69 / 380 | 76.0 / 280.0 |
+| 0.9 | 5.924288 | 2.99e-02 | **7.75e-05** | 386x | 87 / 394 | 95.5 / 291.4 |
+| 1.2 | 8.845411 | 3.13e-02 | **2.41e-04** | 130x | 86 / 402 | 96.5 / 305.5 |
+
+**Both halves of the case.** The ratio is three to four orders of magnitude and
+the cost is **3.7x the wall clock** --- 5.5x the sweeps over tables of 81
+entries rather than 9 --- so the plaquette buys its accuracy at a stated price
+rather than at none. **The advantage decays with coupling**, 23,378x at
+`J = 0.3` to 130x at `J = 1.2`: deep in the ordered phase both approximations
+concentrate on the same configuration and what Bethe neglects stops mattering,
+which is also why Kikuchi is not the tool for a ground state.
+
+**At size, convergence is the binding constraint and not accuracy.** On the
+6x4 open strip, refereed by `strip_log_partition` where enumeration cannot
+reach (2026-09-17, this host):
+
+| `J` | pairwise: sweeps, ms, error | plaquette: sweeps, ms, error | factor |
+| --- | --- | --- | --- |
+| 0.25 | 50, 182.7 ms, 2.147e-03 | 1,176, 5,196.6 ms, **1.510e-07** | 14,219x |
+| 0.5 | 85, 296.8 ms, 3.778e-02 | **does not settle** | --- |
+| 0.875 | 169, 610.5 ms, 2.285e-01 | **does not settle** | --- |
+
+The refusals are not a cap chosen too low: at `J = 0.875` damping 0.7, 0.8,
+0.9, 0.95 and 0.98 all reach 20,000 sweeps with the residual at 0.377, 0.140,
+0.070 and 0.020 against a tolerance of 1e-12 --- rising damping buys a slower
+approach, not a fixed point. So the plaquette regions pay 28x the wall clock
+for four orders of magnitude at weak coupling, and at the couplings where
+Bethe is worst they return nothing at all rather than a number. That is the
+result the ticket asked for, and it is why nothing here is reported as a
+replacement for `belief_propagation`: the module is conserved as a declined
+route in `sandbox/region_graph.py`, imported by `tests/` alone.
+
+The construction is refereed by the case it generalizes rather than by its own
+claim: at the Bethe region graph `-F_K` is `log Z` to **8.9e-16** on a chain
+and the value `likelihood.message_passing` reports to **1.8e-10** on a 3x3 and
+a 4x4, and the parent-to-child updates find that module's fixed point to
+**1.65e-10**. The singleton counting numbers come out `1 - d` --- -1, -2, -3 on
+a 3x3 --- with the closed form written nowhere.
+
+**Kikuchi is not a bound**, and nothing here is read as one: mean field bounds
+`log Z`, Bethe and Kikuchi are stationary points of a non-convex functional and
+may fall either side. Every claim above is accuracy against an exact referee.
 **Compiled kernels at #678.** The crate is **9 modules and 4,048 lines**, and
 **3 take the thread pool** --- `coupled`, `pruning`, `sampling` --- read from
 each module's own parallel iterators by `infra/appraise_kernels.py` rather than
@@ -3896,6 +3960,63 @@ makes it a `ValueError` at the write. It decides a real case rather than a
 hypothetical one: `torch.as_tensor` shares a writable NumPy buffer, so the two
 surrogate call sites copy explicitly instead.
 
+## The package has a map, and building it found the roadmap silent on 35 modules ([#664](https://github.com/michaelJwilson/snakes_and_ladders/issues/664))
+
+`docs/mind_map.pdf` is one page: the two concerns, the eight packages, and
+every one of the 139 modules, each labelled with the milestone this file claims
+it under. Generated by `infra/mind_map.py`, never drawn.
+
+**The join is the work; the figure is what it prints.** A module's role is not
+its docstring restated --- it is the roadmap claim it carries, and this file is
+where those are recorded. Reading it that way found the record incomplete:
+
+| | modules |
+| --- | ---: |
+| claimed by a milestone, before | 67 |
+| application modules claimed by none | **35** |
+| of those, named nowhere in this file | **28** |
+| claimed after | **102**, and 0 application modules unclaimed |
+
+The 28 include `sim.jc`, `sim.simulate`, `sim.tree`, `sim.newick`,
+`likelihood.brute_force`, `likelihood.device` and `opt.objective` --- the
+foundations of the simulator, the oracle and the fitting interface. Their work
+had landed years of tickets ago; no milestone section named the module, so no
+reader could get from a roadmap claim to the code that implements it. Six
+milestone sections now carry a **Modules** line, and a guard fails a PR that
+adds an application module without one.
+
+**A first measurement of this was wrong and is corrected here.** Bounding each
+milestone's section at the next *milestone* heading swept the free-form
+sections after Milestone 4.1 into it, crediting 4.1 with 11 modules it claims
+nothing about. Sections end at the next `##` heading of any kind; the numbers
+above are after that fix.
+
+**`forest` was the intended typesetting and is not usable.** `forest.sty` ships
+in this TeX Live, but `environ.sty`, `trimspaces.sty` and `elocalloc.sty` do
+not, so it cannot load without installing TeX packages. TikZ `graphdrawing`
+needs LuaLaTeX where the build runs pdflatex. The polar coordinates are
+computed in the generator instead and emitted as plain TikZ, so no `.tex`
+places a node and no dependency was added.
+
+**The map is radial, and two numbers decide whether that is readable.** Each
+branch takes a wedge proportional to the leaves it carries --- `application`
+draws 95 against `infrastructure`'s 20, so equal halves would give one branch
+four times the room per leaf --- which leaves every leaf the same **3.1
+degrees**. At the 96 mm leaf radius that is 5.2 mm of arc against a name of
+about 15 mm, so a horizontal label collides with its neighbour by a factor of
+three. A label rotated to run radially outward is bounded by its *height*,
+about 2 mm, and fits with room to spare. Past the top of the circle it is
+turned through 180 degrees so it does not read upside down.
+
+**Hovering a module shows its docstring**, as a transparent PDF annotation over
+each label --- 115 of them, one per drawn leaf. `\pdfannot` is a pdfTeX
+primitive so this needs no package: `pdfcomment` is the idiomatic route and is
+absent here, with `soul`, `soulpos`, `zref-abspage` and `marginnote`. The text
+crosses two escapes, LaTeX's before the PDF's, which is where a first attempt
+failed: parentheses become brackets, the LaTeX specials are dropped and `_` is
+written `\string_`. Support is the reader's --- Acrobat and most desktop
+readers show it, Chrome's viewer and pdf.js do not --- so the page states every
+role without it.
 ## The problem axis reads imports, not only fixture calls ([#622](https://github.com/michaelJwilson/snakes_and_ladders/issues/622))
 
 #619 derived a per-problem selection from the registry call a test module
