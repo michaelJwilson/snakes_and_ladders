@@ -18,12 +18,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from itertools import product
 
 import numpy as np
 import torch
 
 from snakes_and_ladders.enumeration import (
+    configurations,
     refuse_oversized,
 )
 from snakes_and_ladders.likelihood.forward_backward import forward_backward
@@ -59,17 +59,22 @@ class ExactSpatioSequential:
 
 
 def _labellings(params: SpatioSequentialParams) -> np.ndarray:
-    return np.array(
-        list(product(range(params.n_classes), repeat=params.graph.n_nodes)),
-        dtype=np.int64,
-    ).reshape(-1, params.graph.n_nodes)
+    # `_log_joint` refuses the product of the two factors first, which is
+    # what a caller pays for; the cap here reaches only the callers that
+    # enumerate one factor alone.
+    return configurations(
+        params.n_classes,
+        params.graph.n_nodes,
+        what=f"{params.n_classes}**{params.graph.n_nodes} labellings",
+    )
 
 
 def _paths(params: SpatioSequentialParams) -> np.ndarray:
-    return np.array(
-        list(product(range(params.n_states), repeat=params.n_positions)),
-        dtype=np.int64,
-    ).reshape(-1, params.n_positions)
+    return configurations(
+        params.n_states,
+        params.n_positions,
+        what=f"{params.n_states}**{params.n_positions} paths",
+    )
 
 
 def log_prior(params: SpatioSequentialParams, labellings: np.ndarray) -> np.ndarray:
@@ -99,9 +104,10 @@ def _log_joint(
     Returns the labellings ``(L, n_nodes)``, the paths ``(P, S)`` and the table
     of shape ``(L, P, ..., P)`` with one path axis per class, in that order.
     """
-    labellings = _labellings(params)
-    paths = _paths(params)
-    n_labellings, n_paths = labellings.shape[0], paths.shape[0]
+    # The joint space is refused before either factor is built, so the
+    # refusal names the product a caller pays for rather than one factor.
+    n_labellings = params.n_classes**params.graph.n_nodes
+    n_paths = params.n_states**params.n_positions
     refuse_oversized(
         n_labellings * n_paths**params.n_classes,
         what=(
@@ -110,6 +116,8 @@ def _log_joint(
             f"{params.n_classes} classes"
         ),
     )
+    labellings = _labellings(params)
+    paths = _paths(params)
     gated = gated_log_density(params, observations)  # (n_nodes, S, M, K)
     # emission[n, m, p]: what node n contributes if it belongs to class m and
     # class m's chain follows path p.
