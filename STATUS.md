@@ -43,6 +43,7 @@ and this release. A milestone not named here did not move.
 | Roadmap item | What moved | Pull request |
 | --- | --- | --- |
 | Milestone 2.1 | Canonical control fixtures, the control arm of #596: a chain, a gridworld, a cliff walk and Towers of Hanoi, each with an optimum known from outside, and `value_iteration` as a second computation of it --- a sweep over an enumerated state set against `learn.exact`'s recursion over trajectories, agreeing to 1e-12 on all four. Hanoi's `2^d - 1` is asserted as an integer at d = 1..4 over `3^d` states. Both learners measured reach the optimum from every start of the 4x4 grid: REINFORCE at 300 iterations of 16 episodes, PPO at 60 of 16 --- 5x fewer iterations at 5.9x the cost each, 3.1 s against 3.6 s. The k-armed bandit and slippery Frozen Lake are **not** here: `Environment.step` is deterministic by contract and `learn.exact`'s enumeration depends on it | [#597](https://github.com/michaelJwilson/snakes_and_ladders/issues/597) |
+| Milestone 2.1 | The sizing harness the gate needs before any learning: `opt.failure` runs a baseline from seeded starts at one budget and sweeps sizes for the first at which it falls below a threshold. Refereed by reproducing #194 --- on the 7-taxon tree at 60 decisions a single greedy descent reaches the enumerated maximum from 0.560 of 50 starts and random restarts from 50 of 50, so the baseline to beat there is 1.000. A baseline that never fails reports no failure, which is the reportable outcome and not a gap | [#596](https://github.com/michaelJwilson/snakes_and_ladders/issues/596) |
 | Milestone 1.1 | Polar codes, conserved in `sandbox/` as a declined route rather than catalogued as a problem class: the Kronecker transform, the frozen set from Arikan's exact erasure recursion or the Gaussian approximation, Reed--Muller as the same transform under the weight rule, and successive-cancellation and list decoding. Capacity is conserved exactly under the transform (1e-12 at `n = 3, 5, 8, 11`); at `N = 16` enumeration gives the maximum-likelihood floor and the gap is measured --- 98 block errors for SC against 62 for ML over 200 shared draws at `sigma = 1.0`, a list of 4 recovering 34 of the 36; `SCL(1) == SC` bitwise and `SCL(2^k) == ML`; the naive recursion pins the list layout bitwise over 900 draws | [#605](https://github.com/michaelJwilson/snakes_and_ladders/pull/605) (#593) |
 | Milestone 1.1 | The algebraic codes and the capacity they are read against: repetition, single parity check, Hamming, Golay and Reed--Solomon over `GF(2^m)`, each decoded in closed form at every length, and `sim.capacity` for the three channels. Perfection holds as an integer equality; RS(7,3) meets Singleton with equality at `d = 5` over all 512 enumerated codewords; the algebraic decoder is exact on 900 of 900 draws to `t` and, past it, refused 260 of 300 and was wrong on 40, recovering none by luck. Read against capacity, the (3,6) ensemble leaves 13.8% of the erasure channel unused at its realized rate 0.5020, and the four algebraic pairs give up factors of 2.7 to 5.6 at a block error rate of 1e-2 | [#700](https://github.com/michaelJwilson/snakes_and_ladders/pull/700) (#594) |
 | §0 Development loop | A typeset map of the package's Python surface, generated from the docstrings by `ast` and edited by no one: `docs/api_map.pdf`, 1,528 entries over 64 pages --- 151 modules, 251 classes, 587 functions, 539 methods. The entry count is checked against a second walk of the tree, and a public function without a summary line is refused rather than typeset as a blank | [#578](https://github.com/michaelJwilson/snakes_and_ladders/pull/578) (#576) |
@@ -2159,7 +2160,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`.
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics`, `search.potts_mcmc_rust` and `search.kernels`. `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -2793,7 +2794,7 @@ is checkable against.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface. `learn.canonical`: canonical control problems, with an exact optimum written a second way (#597).
+**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface. `learn.canonical`: canonical control problems, with an exact optimum written a second way (#597). `opt.failure`: where a classical baseline first fails, which is where a gate can be argued (#597).
 
 **The estimator is pinned to a closed form, not to a training curve**
 ([#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135)). With a finite
@@ -3471,6 +3472,64 @@ exist.
 
 **Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
+**A dual bound on a ground state at #696.** `search.tightening` decomposes the
+energy into subproblems whose shares sum to it, so
+`max_x E(x) <= sum_s max_{x_s} E_s(x_s)` holds **at every iteration by
+construction** and not at convergence --- which is what lets validity be
+asserted after one sweep rather than after two hundred. Measured 2026-09-17
+against exhaustive enumeration of all 19,683 labellings:
+
+| instance | ground state | bound | gap | verdict |
+| --- | --- | --- | --- | --- |
+| square 3x3, `J = +0.6` | -0.961675 | **-0.961675** | 0 | certified optimal, 1 sweep |
+| square 3x3, `J = -0.8` | 7.665024 | **7.665024** | 0 | certified optimal, 4 sweeps |
+| triangular 3x3, `J = -0.8`, pairwise | 10.112322 | 7.843362 | 2.27 | |
+| triangular 3x3, `J = -0.8`, **+ triangles** | 10.112322 | **9.668997** | 0.44 | **80%** of the gap closed |
+| triangular 3x3, `J = -1.5`, pairwise | 10.920268 | 7.843362 | 3.08 | |
+| triangular 3x3, `J = -1.5`, **+ triangles** | 10.920268 | **10.221722** | 0.70 | **77%** closed |
+
+The square rows include `J = -0.8`, which is **non-submodular**: minimum cut
+cannot take it and this certifies the labelling anyway, with no oracle
+consulted --- the enumeration checks the claim rather than supplying it.
+
+**The pairwise bound is the same number at both couplings**, 7.843362, and
+that is the clearest statement of what the relaxation misses: with three
+states every triangle is 3-colourable, so the relaxation satisfies every edge
+at no cost whatever the coupling, and only a constraint *over* the triangle
+can charge for the frustration. It is asserted as a prediction, not recorded
+as an observation.
+
+Two implementation notes worth keeping. The block update is the exact
+minimizer of its own block, checked against a numerical minimum over the
+block's messages; an early version left the site's own share inside the
+maximization, which adds half of it to every update and reads as a coordinate
+descent that does not descend. And the tightest iterate is retained rather
+than the last: every iterate is a valid bound, so this costs one comparison
+and removes any need to rely on monotonicity (none of 480 updates raised the
+dual once the block update was right).
+
+**Label marginals, and which estimator the reported metric asks for (#696).**
+`search.decoding` carries the maximum-posterior-marginal labelling and the
+loss it minimizes. The distinction is not a preference: `label_accuracy`
+scores **per-site** agreement, and the estimator minimizing per-site error is
+the marginal one, while a maximum-a-posteriori labelling minimizes the chance
+of getting the **whole field** wrong. Measured 2026-09-17 on the 3x3
+triangular antiferromagnet at `J = -0.9`, against exhaustive enumeration of
+all 19,683 labellings:
+
+| labelling | energy | posterior | rank | expected wrong sites |
+| --- | ---: | ---: | ---: | ---: |
+| maximum a posteriori | 10.37330 | 1.668e-03 | **1** of 19,683 | 6.0051 |
+| maximum posterior marginal | 21.58657 | 2.251e-08 | **19,555** of 19,683 | **5.4906** |
+
+The two differ at **six of nine sites**, and each wins on its own loss and
+loses on the other's. The marginal labelling sits in the worst one per cent of
+configurations by posterior --- minimizing per-site error does not require the
+answer to be jointly plausible, and on an antiferromagnet it puts every site
+at its own field-preferred label, which no draw would produce. That is the
+cost of the loss, and it is why a decoder reported without naming its loss
+hides the question it answered. On a ferromagnet at the same field the two
+agree exactly, which is recorded so the difference is not read as general.
 **Generalized belief propagation at #689.** The plaquette regions see the
 4-cycles the Bethe approximation cannot, and the measurement is what the ticket
 was for. On the 3x3 lattice at three states, against exhaustive enumeration of
