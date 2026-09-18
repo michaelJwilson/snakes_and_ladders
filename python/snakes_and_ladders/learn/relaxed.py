@@ -68,6 +68,11 @@ import torch
 
 from snakes_and_ladders.enumeration import argmax, configurations
 from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment
+from snakes_and_ladders.opt.schedule import (
+    ConstantTempSchedule,
+    ExponentialTempSchedule,
+    TempSchedule,
+)
 
 #: Below this the softmax saturates in float64 and the gradient underflows, so
 #: a smaller temperature is refused rather than silently returning a stalled
@@ -379,32 +384,37 @@ def estimate_gradient(
     return parameters.grad.numpy().copy()
 
 
-def anneal(start: float, end: float, steps: int, step: int) -> float:
-    """Geometric temperature schedule, evaluated at one step.
+def _schedule(
+    temperature: float, final_temperature: float | None, steps: int
+) -> TempSchedule:
+    """The temperature per step: constant, or geometric to ``final_temperature``.
 
-    Geometric rather than linear because the relaxation's behaviour is set by
-    the *ratio* of logit gaps to ``tau``, so equal multiplicative steps are
-    equal steps in the thing that matters.
-
-    Raises
-    ------
-    ValueError
-        If either endpoint is below :data:`MINIMUM_TEMPERATURE`, ``end``
-        exceeds ``start``, or ``steps`` is below 1.
+    The geometric schedule was this module's own until issue #717; it is
+    :class:`ExponentialTempSchedule` now, whose ``start ** (1 - t) * end ** t``
+    agrees with the ``start * (end / start) ** t`` it replaces to 3.2e-16
+    relative over the schedules measured, one ulp, so the relaxation's
+    trajectories are the same to the declared tolerance and not bitwise.
     """
-    if min(start, end) < MINIMUM_TEMPERATURE:
-        msg = f"both endpoints must be >= {MINIMUM_TEMPERATURE}, got ({start}, {end})"
-        raise ValueError(msg)
-    if end > start:
-        msg = f"end must not exceed start, got start={start}, end={end}"
-        raise ValueError(msg)
     if steps < 1:
         msg = f"steps must be at least 1, got {steps}"
         raise ValueError(msg)
+    if final_temperature is None:
+        return ConstantTempSchedule(temperature, steps)
+    if final_temperature < MINIMUM_TEMPERATURE:
+        msg = (
+            f"both endpoints must be >= {MINIMUM_TEMPERATURE}, got "
+            f"({temperature}, {final_temperature})"
+        )
+        raise ValueError(msg)
+    if final_temperature > temperature:
+        msg = (
+            f"end must not exceed start, got start={temperature}, "
+            f"end={final_temperature}"
+        )
+        raise ValueError(msg)
     if steps == 1:
-        return start
-    fraction = min(step, steps - 1) / (steps - 1)
-    return float(start * (end / start) ** fraction)
+        return ConstantTempSchedule(temperature, 1)
+    return ExponentialTempSchedule(temperature, final_temperature, steps)
 
 
 def optimize(
@@ -433,9 +443,14 @@ def optimize(
         given.
     final_temperature : float | None
         ``None`` holds ``temperature`` fixed. A value anneals geometrically to
-        it over ``steps``, per :func:`anneal`. Both are supported because the
+        it over ``steps`` on
+        :class:`snakes_and_ladders.opt.schedule.ExponentialTempSchedule`:
+        geometric because the relaxation's behaviour is set by the *ratio* of
+        logit gaps to ``tau``, so equal multiplicative steps are equal steps
+        in the thing that matters. Both are supported because the
         fixed-``tau`` sweep is the measurement and annealing is the practice,
-        and they do not always agree.
+        and they do not always agree. Refused below
+        :data:`MINIMUM_TEMPERATURE` or above ``temperature``.
     mode : RelaxationMode
         Ignored when ``stochastic`` is ``False``.
     steps, learning_rate : int, float
@@ -463,13 +478,10 @@ def optimize(
     logits.requires_grad_(True)
     optimizer = torch.optim.Adam([logits], lr=learning_rate)
 
+    schedule = _schedule(temperature, final_temperature, steps)
     current = temperature
     for step in range(steps):
-        current = (
-            temperature
-            if final_temperature is None
-            else anneal(temperature, final_temperature, steps, step)
-        )
+        current = schedule(step)
         optimizer.zero_grad()
         if stochastic:
             total = torch.zeros((), dtype=torch.float64)

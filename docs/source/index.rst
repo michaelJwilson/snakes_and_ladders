@@ -228,7 +228,7 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.budget
    :members:
 
-.. automodule:: snakes_and_ladders.opt.failure
+.. automodule:: snakes_and_ladders.learn.failure
    :members:
 
 .. automodule:: snakes_and_ladders.opt.testfunctions
