@@ -41,8 +41,8 @@ import duplication_survey  # noqa: E402
 SLIMMING_BASELINE = {
     "Potts energies of a labelling": 1,
     "site-field broadcasts": 0,
-    "annealers": 4,
-    "ground-state run_ wrappers": 10,
+    "annealers": 3,
+    "ground-state run_ wrappers": 7,
     "backend enums": 1,
     "Python paths above a compiled kernel": 8,
     "surrogate modules": 4,
@@ -50,7 +50,7 @@ SLIMMING_BASELINE = {
     "root exports": 1,
     "test modules pinning a twin to its oracle beyond the first": 13,
     "flat modules": 150,
-    "API-map entries": 1578,
+    "API-map entries": 1574,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
