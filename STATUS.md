@@ -2759,6 +2759,17 @@ What survives both is the offset --- every prediction, the diverged fit
 included, stays inside the bracket, which is what predicting a gap above a
 bound buys. Both failures are ticketed rather than worked around.
 
+**Four max-flow kernels measured, one kept** ([#715](https://github.com/michaelJwilson/snakes_and_ladders/issues/715)). Boykov-Kolmogorov replaces Dinic as the package kernel behind `search.maxflow_rust`, and Dinic, highest-label push-relabel and a synchronous parallel push-relabel move to `sandbox.maxflow_declined` behind the `sandbox` Cargo feature, each still pinned to the package kernel's cut: every kernel certifies the source-reachable set of the residual graph, the minimal minimum cut every maximum flow shares, so 40 seeded networks agree arc for arc and the expansion gives the same labelling, cycle count and bitwise energy under each. Measured 2026-09-18 on the 4-core host, min of 5 rounds, ms, a random per-node field on an open lattice:
+
+| kernel | 16x16 | 32x32 | 64x64 | 128x128 | 256x256 | exponent in `n` | 64x64 x 10-label expansion |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Boykov-Kolmogorov** | 0.20 | 0.75 | 2.73 | 12.8 | **61.4** | **1.03** | **352** |
+| Dinic (the kernel before) | 0.41 | 1.70 | 11.8 | 44.9 | 234 | 1.15 | 637 |
+| push-relabel, highest label | 0.31 | 1.30 | 8.74 | 108 | 1,680 | 1.56 | 437 |
+| parallel push-relabel | 2.16 | 3.74 | 16.1 | 287 | 339 | 1.04 | 2,036 |
+
+3.8x on the 256x256 cut and 1.8x on the expansion, both at stress size. Push-relabel has the best generic worst case and the worst constant on a grid: its gap and global-relabel scans are `O(n)` each, and its last doubling reads 1.98. The parallel kernel's rounds are barrier-bound, 269 / 255 / 297 ms at 1 / 2 / 4 threads on 256x256, so no thread buys anything inside a cut; threads pay across cuts, where the batch entry `ising_ground_states` releases the GIL over eight independent 256x256 cuts, 2,158 to 900 ms from one thread to four (2.4x). One defect found by the move: the parallel kernel's global relabel kept a source-side node's running label, which on a network with no path to the sink (the expansion's first swap network, 81 nodes, flow 0) pinned every label at `n`, so none reached `n + 1` and pushed its excess back, and the round never ended. It is two-sided now, as the sequential kernel's, and the case is a test.
+
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 
 **Landed, and one of its two integrators was declined on measurement.** A
