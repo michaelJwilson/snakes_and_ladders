@@ -153,9 +153,13 @@ def test_dropping_the_field_accept_step_is_caught(
         members: np.ndarray,
         rows: np.ndarray,
         rng: np.random.Generator,
+        proposed: int | None = None,
     ) -> potts_mcmc.Recolour:
         # `rows` is the field widened to one row per site (issue #551), so the
-        # colour count is its column count.
+        # colour count is its column count. `proposed` is the colour issue
+        # #706's Wolff action names; unused here, since the point of this stub
+        # is that the accept step is gone, not which colour it skipped.
+        del proposed
         state[members] = int(rng.integers(rows.shape[1]))
         return potts_mcmc.Recolour(proposed=True, accepted=True)
 

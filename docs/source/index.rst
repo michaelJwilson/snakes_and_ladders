@@ -367,6 +367,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.maxflow_rust
    :members:
 
+.. automodule:: snakes_and_ladders.search.potts_keyed
+   :members:
+
 .. automodule:: snakes_and_ladders.search.potts_mcmc
    :members:
 
