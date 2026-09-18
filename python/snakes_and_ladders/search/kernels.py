@@ -12,7 +12,7 @@ loop would match only to the last place.
 That exactness is why these are ``numba`` rather than Rust. Root
 ``CLAUDE.md``'s backend rule admits one compiled path per measurement; the
 Rust extension already carries the Potts *sampling* sweep
-(:mod:`snakes_and_ladders.search.potts_mcmc_rust`), and a second copy of it
+(:func:`snakes_and_ladders.search.potts_mcmc.sample_potts` on the extension), and a second copy of it
 is what the rule exists to refuse. A kernel whose pin is exact carries no
 such cost and lives here.
 
