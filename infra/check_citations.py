@@ -31,7 +31,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEX_DIR = REPO_ROOT / "docs" / "tex"
 BIBLIOGRAPHY = "references.bib"
-DEFAULT_DOCUMENTS = (TEX_DIR / "paper.tex", TEX_DIR / "textbook.tex")
+DEFAULT_DOCUMENTS = (
+    TEX_DIR / "paper.tex",
+    TEX_DIR / "textbook.tex",
+    TEX_DIR / "api_map.tex",
+)
 
 #: Extensions ``\includegraphics`` resolves without being written down;
 #: `graphicx` searches them in order and the documents commit PDFs.
