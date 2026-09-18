@@ -27,7 +27,7 @@ comparison stays re-runnable. `STATUS.md` carries both tables.
 **Two numbers, and both belong in any claim made here.** The kernel alone
 against a caller of this wrapper: issue #336 measured the boundary copy at
 0.03-0.2 ms of a 0.7-17 ms call and the term that remained was
-:func:`snakes_and_ladders.search.maxflow.energy`, which issue #341 vectorized
+:func:`snakes_and_ladders.sim.potts.energy`, which issue #341 vectorized
 to 0.08, 0.28 and 1.0 ms at extents 16, 32 and 64.
 
 A caller that needs only the configuration can call the extension directly
@@ -45,8 +45,9 @@ from __future__ import annotations
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut, energy, site_field
+from snakes_and_ladders.search.maxflow import FlowNetwork, MinCut
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import energy, site_field
 
 
 def ising_ground_state(
@@ -59,7 +60,7 @@ def ising_ground_state(
     graph : PottsGraph
         Every coupling must be non-negative.
     field_values : np.ndarray
-        ``(2,)`` or ``(n_nodes, 2)``, as :func:`snakes_and_ladders.search.maxflow.site_field`.
+        ``(2,)`` or ``(n_nodes, 2)``, as :func:`snakes_and_ladders.search.maxflow.ising_ground_state`.
 
     Returns
     -------
@@ -70,7 +71,9 @@ def ising_ground_state(
         function independent, so a construction that were wrong could not
         also report itself as right.
     """
-    values = site_field(graph, field_values)
+    values = site_field(
+        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
+    )
     # `as_slice` on the Rust side succeeds only for a C-contiguous array, so
     # every argument is normalized here; `ascontiguousarray` is free when the
     # array already is one, and `site_field` already returns `float64`.
@@ -81,7 +84,7 @@ def ising_ground_state(
         graph.edge_coupling,
     )
     configuration = np.asarray(states, dtype=np.int64)
-    return configuration, float(energy(graph, values, configuration))
+    return configuration, energy(graph, values, configuration)
 
 
 def ising_ground_states(

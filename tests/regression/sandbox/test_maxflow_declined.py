@@ -31,7 +31,6 @@ from snakes_and_ladders.search.alpha_expansion import alpha_beta_swap, alpha_exp
 from snakes_and_ladders.search.backend import Backend
 from snakes_and_ladders.search.maxflow import (
     FlowNetwork,
-    energy,
     ising_ground_state,
     max_flow,
 )
@@ -41,7 +40,7 @@ from snakes_and_ladders.sim.graph import (
     lattice_graph,
     triangular_lattice_graph,
 )
-from snakes_and_ladders.sim.potts import spatio_only_field
+from snakes_and_ladders.sim.potts import energies, spatio_only_field
 
 pytestmark = pytest.mark.skipif(
     not maxflow_declined.AVAILABLE,
@@ -126,7 +125,7 @@ def test_every_declined_kernel_finds_the_enumerated_minimum(
     configurations = np.array(
         list(itertools.product(range(2), repeat=graph.n_nodes)), dtype=np.int64
     )
-    exact = float(energy(graph, field_values, configurations).min())
+    exact = float(energies(graph, field_values, configurations).min())
 
     _, realized = maxflow_declined.ising_ground_state(graph, field_values, kernel)
 

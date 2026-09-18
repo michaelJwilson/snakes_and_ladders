@@ -27,9 +27,10 @@ from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.sandbox import maxflow_declined
 from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
 from snakes_and_ladders.search import maxflow_rust
-from snakes_and_ladders.search.maxflow import ising_ground_state, site_field
+from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.sim import fixtures
 from snakes_and_ladders.sim.graph import PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import site_field
 
 # The Python blocking flow recurses to the depth of the level graph; the Rust
 # one uses an explicit stack. This raise is itself part of what the port buys.
@@ -81,7 +82,9 @@ def test_rust_kernel_ising_ground_state_benchmark(
     # The kernel with its arrays already contiguous: what remains above the
     # `maxflow_rust` timing is the wrapper's own array construction.
     graph, field_values = _problem(extent)
-    field = np.ascontiguousarray(site_field(graph, field_values)).reshape(-1)
+    field = np.ascontiguousarray(
+        site_field(field_values, graph.n_nodes, n_states=2)
+    ).reshape(-1)
     edges = np.asarray(graph.edges, dtype=np.int64).reshape(-1)
     coupling = np.asarray(graph.coupling, dtype=np.float64)
 
