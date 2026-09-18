@@ -1,7 +1,7 @@
 """What `infra/build_documents.sh` writes is what `DEV.md` says it writes.
 
-Issue #429. The build rewrites `docs/paper.pdf` and `docs/textbook.pdf` on every
-run and only a "Rebuild the documents" pull request may carry that change; it
+Issue #429. The build rewrites every PDF it builds on every run and only a
+"Rebuild the documents" pull request may carry that change; it
 also rewrites a cited figure whose stamp is stale, and those *are* committed by
 the pull request that changed them. A contributor who does not know which is
 which commits the wrong one, so `DEV.md` carries the table --- and a table
@@ -235,13 +235,14 @@ def test_the_uncommitted_rows_are_the_ones_git_cannot_carry() -> None:
 
 
 @pytest.mark.structural
-def test_the_two_pdfs_are_the_paths_the_gates_name() -> None:
-    """Only the PDFs need a rule, and both gates that enforce it name both.
+def test_the_pdfs_are_the_paths_the_gates_name() -> None:
+    """Only the PDFs need a rule, and both gates that enforce it name each one.
 
     A byproduct cannot be committed and a re-rendered figure should be. The PDFs
     are the only outputs that are rewritten every run *and* tracked, which is
-    why `infra/review_gates.sh` and the `documents` job check them by name; a
-    third document would need adding to both.
+    why `infra/review_gates.sh` and the `documents` job check them by name. The
+    list is read from the script, so a document added there fails here until
+    both gates name it -- which is how `docs/api_map.pdf` reached them (#576).
     """
     pdfs = {f"docs/{document}.pdf" for document in documents()}
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()

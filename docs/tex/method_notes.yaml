@@ -159,6 +159,16 @@
     uncoded closed form at every declared point and at K = 1,024 the curve
     turns between 0.4 and 1.2 dB.
 
+"Polar code, BEC-constructed at rate 1/2":
+  optimizers: >-
+    Successive cancellation is a schedule and not an approximation: each input
+    is decided from an exact pass given the decisions before it, and it cannot
+    revisit one. That is what makes it weaker than the code --- at N = 16 over
+    200 shared draws it loses 98 blocks against enumeration's 62 --- and a
+    list of 4 recovers 34 of the 36, at 4 times the work. The list is
+    maximum likelihood at $2^{k}$ paths by construction, so the family's
+    ceiling at this instance is known rather than estimated.
+
 "Hidden Markov model, six emission families":
   samplers: >-
     The block sweep draws a whole path from its conditional in one pass, where

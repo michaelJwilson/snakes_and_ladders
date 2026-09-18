@@ -15,6 +15,7 @@ parenthesis the only way a ticket is cited.
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 - Support the different lattice types (#231)
+- CRC-aided list decoding of the polar code, and the SC/SCL/CA-SCL figure against the enumerated maximum-likelihood floor --- the fourth step of #593, which needs the elementary codes' CRC (#594)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code (#340)
 - Correlated `X` and `Z` errors on the CSS code, whose one sector landed: a
@@ -84,7 +85,6 @@ parenthesis the only way a ticket is cited.
 - MAP decoding of an LDPC code as energy minimization: sum-product against
   the Gibbs sampler, the annealer and single-site descent at matched
   evaluations on enumerable codes, the ML codeword as referee (#340)
-- Iterated conditional modes over HMM state paths (#176)
 - A learning environment over a per-edge coupling, so a policy can be run on
   the instance no baseline solves. `planted_glass/ci` landed under #406 —
   single-site descent reaches its enumerated ground state from 0.079 of

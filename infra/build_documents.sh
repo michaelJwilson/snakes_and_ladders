@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the project's documents: regenerates the QA figures and captions they
-# cite, then builds docs/paper.pdf and docs/textbook.pdf. Build tooling, not
+# cite, then builds docs/paper.pdf, docs/textbook.pdf and docs/api_map.pdf.
+# Build tooling, not
 # science -- it orchestrates snakes_and_ladders.qa and latexmk, and knows nothing about
 # topologies, models, or which fixture renders which figure (see this
 # directory's CLAUDE.md, and snakes_and_ladders.qa.manifest for the figures themselves).
@@ -89,17 +90,29 @@ fi
 # file and the test tree.
 uv run --no-sync python infra/problems_tables.py --write
 
+# `docs/tex/api_map.tex` \inputs docs/tex/generated/api_map.tex, written from
+# the package's own sources by `ast` and likewise not committed (issue #576).
+# The map is the one document nobody edits: its entries are the docstrings, so
+# a stale copy would state a surface the tree does not have.
+uv run --no-sync python infra/api_map.py --write
+
 # Citation integrity, before latexmk rather than after it: a cited figure
 # exists, a cited label is defined in the document that cites it, a \cite has
 # a bibliography entry. latexmk reports the same three in its log and the
-# `documents` job greps for it, but only once both documents are typeset, and
+# `documents` job greps for it, but only once the documents are typeset, and
 # a log line does not say which document defined the label it could not find
 # -- a cross-document reference reads as clean in each log alone (issue #249).
-# Text and existence, no render: 55 ms over both documents against the build's
+# Text and existence, no render: 55 ms over the documents against the build's
 # 15.8 s, so it runs here and fails before the build rather than beside it.
 uv run --no-sync python infra/check_citations.py
 
-for document in paper textbook; do
+# The mind map's tree, written from the package rather than drawn (issue #664).
+# Regenerated here for the same reason the tables are: what the document
+# typesets is what the tree says today, not what it said when someone last ran
+# the script by hand.
+uv run --no-sync python infra/mind_map.py
+
+for document in paper textbook api_map mind_map; do
   (
     cd docs/tex
     latexmk -pdf -interaction=nonstopmode -halt-on-error \
@@ -107,4 +120,4 @@ for document in paper textbook; do
   )
 done
 
-echo "Built docs/paper.pdf and docs/textbook.pdf"
+echo "Built docs/paper.pdf, docs/textbook.pdf, docs/api_map.pdf and docs/mind_map.pdf"
