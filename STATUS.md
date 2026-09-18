@@ -103,7 +103,7 @@ importing the package with no test at all; recut to the tests carrying
 exempt, which `infra/coverage_recut.py` now holds on the push to `main` and at
 the release gate, `search` at its own **86.18%**. The contexts cost the tier
 33 s of 934 s. `structural` and `edge_case` are retired into `infra` and
-`smoke`, the `qa` self-checks carry `exempt`, `simulated_truth` is `end2end`, `mathematical` is `analytic`, and
+`smoke`, `simulated_truth` is `end2end`, `mathematical` is `analytic`, and
 `patch`, `backend`, `bug`, `warning` and `snapshot` are registered as the
 finding axis, none of which counts; root `CLAUDE.md` states the rule and the
 audit the ticket plans raises the judged figure directory by directory,

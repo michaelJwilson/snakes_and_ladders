@@ -41,7 +41,7 @@ def test_the_layout_joins_every_nonzero_and_nothing_else() -> None:
     np.testing.assert_array_equal(drawn, code.dense())
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_node_coordinates_are_a_function_of_the_code_alone() -> None:
     # The failure this prevents: a randomized graph layout, which renders
     # differently on each run, so the committed figure disagrees with CI's
@@ -93,7 +93,7 @@ def test_the_heavy_band_is_the_one_covering_consecutive_bits() -> None:
         np.testing.assert_array_equal(covered, np.arange(PARAMS.n_bits))
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_a_row_weight_that_forms_no_bands_is_refused() -> None:
     code = PARAMS.code()
 
@@ -101,7 +101,7 @@ def test_a_row_weight_that_forms_no_bands_is_refused() -> None:
         tanner_layout(code, 5)
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_caption_names_the_instance_that_was_drawn(tmp_path: Path) -> None:
     _, caption = build_figure(PARAMS)
 

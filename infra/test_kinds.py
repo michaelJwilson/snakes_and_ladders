@@ -25,7 +25,6 @@ KINDS = (
     "end2end",
     "analytic",
     "smoke",
-    "exempt",
     "infra",
 )
 

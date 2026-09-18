@@ -142,7 +142,7 @@ def test_a_balanced_topology_costs_strictly_less_than_the_caterpillar() -> None:
     assert balanced_peak < caterpillar_peak
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_declared_maximum_sits_inside_the_memory_requirement() -> None:
     """The bound `ROADMAP.md` §1.2 states, at the corner it states it for.
 
@@ -156,7 +156,7 @@ def test_the_declared_maximum_sits_inside_the_memory_requirement() -> None:
     assert total < MEMORY_BUDGET_BYTES / 10
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_check_would_fail_on_a_model_missing_a_term() -> None:
     """The tolerance rejects the error it exists to reject.
 

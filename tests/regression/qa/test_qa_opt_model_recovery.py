@@ -28,7 +28,7 @@ from tests._fixtures import EIGHT_TAXA, fixture_path, load_fixture
 FIXTURE = EIGHT_TAXA
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_truth_vector_pins_the_last_exchangeability() -> None:
     vector = truth_vector(TRUE_EXCHANGEABILITIES, TRUE_PI)
     # Five free exchangeabilities, then four frequencies.
@@ -63,7 +63,7 @@ def test_fitting_jc_data_does_not_invent_structure() -> None:
     assert float((np.abs(fitted - truth) / spread).max()) < 4.0
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_caption_reports_the_coverage_it_measured() -> None:
     params = load_fixture(FIXTURE)
     general = fit_model(
@@ -82,7 +82,7 @@ def test_the_caption_reports_the_coverage_it_measured() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = main(
         ["--params", str(fixture_path(FIXTURE)), "--output-dir", str(tmp_path)]

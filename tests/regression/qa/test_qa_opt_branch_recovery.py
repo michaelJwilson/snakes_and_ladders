@@ -23,7 +23,7 @@ from snakes_and_ladders.qa.opt_branch_recovery import (
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, fixture_path, load_fixture
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_recovery_returns_one_entry_per_estimable_parameter() -> None:
     # The rooted fixture has 14 branches but 13 estimable parameters.
     truth, fitted, spread, hits = recovery(load_fixture(EIGHT_TAXA))
@@ -58,7 +58,7 @@ def test_the_control_peaks_at_the_generating_split() -> None:
     assert curved[-1] < curved[-2]
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_an_exactly_flat_profile_is_not_called_noise() -> None:
     # "at most 0.0e+00 -- floating-point noise" says two contradictory
     # things. An exact zero gets its own wording.
@@ -77,7 +77,7 @@ def test_an_exactly_flat_profile_is_not_called_noise() -> None:
     assert "0.0e+00" not in caption
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_caption_reports_what_it_measured() -> None:
     unrooted_params = load_fixture(SMALL_SITES)
     rooted_params = load_fixture(EIGHT_TAXA)
@@ -102,7 +102,7 @@ def test_the_caption_reports_what_it_measured() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = main(
         [

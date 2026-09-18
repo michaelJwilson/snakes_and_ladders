@@ -29,7 +29,7 @@ POTTS_FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_potts_recovery_returns_one_entry_per_parameter() -> None:
     params = load_potts_params(POTTS_FIXTURE)
     truth, fitted, spread, hits = potts_recovery(params)
@@ -95,7 +95,7 @@ def test_hmm_recovery_aligns_the_state_permutation() -> None:
         assert own < min(others)
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_caption_reports_the_coverage_it_measured() -> None:
     potts_params = load_potts_params(POTTS_FIXTURE)
     hmm_params = load_hmm_params(HMM_FIXTURE)
@@ -112,7 +112,7 @@ def test_the_caption_reports_the_coverage_it_measured() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = main(
         [

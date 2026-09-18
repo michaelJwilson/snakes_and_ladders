@@ -35,7 +35,7 @@ PARAMS = FIXTURE.params
 SIDE = PARAMS.graph.shape[0]
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_coordinates_are_the_lattice_and_nothing_random() -> None:
     # The failure this prevents: node positions from a randomized layout,
     # redrawn differently on every render.
@@ -50,7 +50,7 @@ def test_the_coordinates_are_the_lattice_and_nothing_random() -> None:
     assert len({tuple(point) for point in coords}) == SIDE * SIDE
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_planting_is_the_one_the_suite_plants() -> None:
     # The figure draws the instance the solvers are measured on, so it plants
     # what they are measured against rather than a planting of its own.
@@ -117,7 +117,7 @@ def test_the_recovered_labelling_agrees_with_the_planted_one() -> None:
     np.testing.assert_array_equal(again.labels, recovery.labels)
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_a_lattice_the_figure_cannot_draw_is_refused() -> None:
     chain = lattice_graph((4,), BoundaryCondition.OPEN, 1.0)
     with pytest.raises(ValueError, match="2-D lattice"):
@@ -128,7 +128,7 @@ def test_a_lattice_the_figure_cannot_draw_is_refused() -> None:
         planted_labelling(oblong)
 
 
-@pytest.mark.exempt
+@pytest.mark.smoke
 def test_the_caption_names_the_instance_the_seeds_and_the_agreement(
     tmp_path: Path,
 ) -> None:
