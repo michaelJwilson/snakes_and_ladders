@@ -44,13 +44,13 @@ SLIMMING_BASELINE = {
     "annealers": 4,
     "ground-state run_ wrappers": 10,
     "backend enums": 1,
-    "Python paths above a compiled kernel": 7,
+    "Python paths above a compiled kernel": 6,
     "surrogate modules": 4,
     "modules without a docstring": 0,
     "root exports": 7,
     "test modules pinning a twin to its oracle beyond the first": 12,
-    "flat modules": 149,
-    "API-map entries": 1575,
+    "flat modules": 148,
+    "API-map entries": 1574,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.

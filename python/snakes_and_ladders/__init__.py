@@ -20,13 +20,13 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from snakes_and_ladders import parallel as parallel
-    from snakes_and_ladders.backend import Backend as Backend
-    from snakes_and_ladders.learn.environment import Environment as Environment
-    from snakes_and_ladders.opt.objective import Objective as Objective
-    from snakes_and_ladders.sim.factor_graph import FactorGraph as FactorGraph
-    from snakes_and_ladders.sim.fixtures import fixture as fixture
-    from snakes_and_ladders.sim.graph import PottsGraph as PottsGraph
+    from snakes_and_ladders import parallel
+    from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.learn.environment import Environment
+    from snakes_and_ladders.opt.objective import Objective
+    from snakes_and_ladders.sim.factor_graph import FactorGraph
+    from snakes_and_ladders.sim.fixtures import fixture
+    from snakes_and_ladders.sim.graph import PottsGraph
 
 __all__ = [
     "Backend",

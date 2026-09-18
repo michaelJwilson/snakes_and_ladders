@@ -29,12 +29,34 @@ import pytest
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.search import potts_mcmc
-from snakes_and_ladders.search.potts_mcmc import _GUARD, PottsMove
+from snakes_and_ladders.search.potts_mcmc import _GUARD, PottsChain, PottsMove
 from snakes_and_ladders.search.potts_mcmc import sample_potts as oracle_sample_potts
-from snakes_and_ladders.search.potts_mcmc_rust import sample_potts
 from snakes_and_ladders.search.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import site_field
+
+
+def sample_potts(
+    graph: PottsGraph,
+    field: np.ndarray,
+    rng: np.random.Generator,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+) -> PottsChain:
+    # The name issue #246 published, as one call: the single-site move on
+    # the extension, which is `sample_potts`'s default backend.
+    return oracle_sample_potts(
+        graph,
+        field,
+        PottsMove.SINGLE_SITE,
+        rng,
+        n_sweeps,
+        burn_in,
+        thin,
+        backend=Backend.RUST,
+    )
+
 
 SIGNIFICANCE = 0.001
 SWEEPS = 10_000
