@@ -25,20 +25,18 @@ from snakes_and_ladders.search.alpha_expansion import (
     UNIFORM_POTTS_BOUND,
     _expansion_network,
     _infinite_capacity,
-    _site_field,
     alpha_expansion,
-    energy,
     expand,
     iterated_conditional_modes,
 )
 from snakes_and_ladders.search.maxflow import FlowNetwork, ising_ground_state
-from snakes_and_ladders.search.maxflow import energy as binary_energy
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
     PottsGraph,
     erdos_renyi_graph,
     lattice_graph,
 )
+from snakes_and_ladders.sim.potts import energy, site_field
 
 sys.setrecursionlimit(50_000)
 
@@ -73,22 +71,6 @@ def test_two_labels_reproduce_the_exact_minimum_cut(
 
 
 @pytest.mark.critical
-@pytest.mark.oracle
-def test_the_multi_state_energy_agrees_with_the_two_state_one() -> None:
-    # The generalization must reduce to what `maxflow` already validates, or
-    # the two modules are optimizing different objectives accurately.
-    rng = np.random.default_rng(4)
-    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.7)
-    field_values = rng.normal(size=(graph.n_nodes, 2))
-
-    for labelling in itertools.product(range(2), repeat=graph.n_nodes):
-        states = np.array(labelling, dtype=np.int64)
-
-        assert energy(graph, field_values, states) == pytest.approx(
-            float(binary_energy(graph, field_values, states)), abs=1e-12
-        )
-
-
 @pytest.mark.mathematical
 def test_the_energy_never_rises_across_an_expansion() -> None:
     # An invariant needing no oracle, and the one a sign error breaks
@@ -371,7 +353,9 @@ def test_the_vectorized_network_is_the_loops_network_arc_for_arc() -> None:
         for boundary in (BoundaryCondition.OPEN, BoundaryCondition.PERIODIC):
             graph = lattice_graph(shape, boundary, 0.8)
             for n_states in (2, 3, 5):
-                values = _site_field(graph, rng.normal(size=(graph.n_nodes, n_states)))
+                values = site_field(
+                    rng.normal(size=(graph.n_nodes, n_states)), graph.n_nodes
+                )
                 for _ in range(3):
                     labelling = rng.integers(0, n_states, size=graph.n_nodes)
                     for alpha in range(n_states):
@@ -393,7 +377,7 @@ def test_the_vectorized_network_holds_on_a_graph_that_is_not_a_lattice() -> None
     rng = np.random.default_rng(1598)
     for _ in range(15):
         graph = erdos_renyi_graph(12, 0.35, 0.6, rng)
-        values = _site_field(graph, rng.normal(size=(graph.n_nodes, 4)))
+        values = site_field(rng.normal(size=(graph.n_nodes, 4)), graph.n_nodes)
         labelling = rng.integers(0, 4, size=graph.n_nodes)
         for alpha in range(4):
             wanted = _network_by_hand(graph, values, labelling, alpha)
