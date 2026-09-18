@@ -142,6 +142,7 @@ def probe_failure(
     rng: np.random.Generator,
     size: int,
     tolerance: float = DEFAULT_TOLERANCE,
+    relative: float | None = None,
     seconds: float | None = None,
 ) -> FailureProbe:
     """Run ``method`` from ``starts`` seeded starts and count what reached ``target``.
@@ -171,6 +172,15 @@ def probe_failure(
         caller's family knows what size means.
     tolerance : float
         Absolute, against ``target``.
+    relative : float | None
+        A fractional allowance on ``abs(target)``, used instead of
+        ``tolerance`` where the objective is continuous. An exact optimum is
+        hit or missed and ``tolerance`` is the right instrument; an energy a
+        method *approaches* is not, and on the Potts lattice the two
+        instruments disagree completely --- every local method reads 0.00 by
+        exact hit at 144 sites and lands within 0.04% of the target
+        (issue #596). Which one a curve used belongs beside its numbers, so
+        this is a parameter and not a default.
     seconds : float | None
         Wall-clock ceiling for this probe. ``None`` runs every start.
 
@@ -194,6 +204,17 @@ def probe_failure(
     if seconds is not None and seconds <= 0.0:
         msg = f"a wall-clock ceiling is positive, got {seconds}"
         raise ValueError(msg)
+    if relative is not None and relative < 0.0:
+        msg = f"a relative allowance is non-negative, got {relative}"
+        raise ValueError(msg)
+
+    # One-sided, and that is a correction rather than a convenience: a target
+    # may be the best value *known* at this size rather than an optimum, and a
+    # start that beats it has not failed. Against an exact optimum the two
+    # readings agree, since nothing goes below it by more than a reduction's
+    # ordering.
+    def allowance(value: float) -> float:
+        return tolerance if relative is None else relative * abs(value)
 
     began = time.perf_counter()
     reached = 0
@@ -209,7 +230,7 @@ def probe_failure(
             raise OverspendError(msg)
         run += 1
         best = min(best, outcome.value)
-        reached += int(abs(outcome.value - target) <= tolerance)
+        reached += int(outcome.value <= target + allowance(target))
         if seconds is not None and time.perf_counter() - began >= seconds:
             break
 
@@ -234,6 +255,7 @@ def failure_curve(
     rng: np.random.Generator,
     threshold: float = DEFAULT_THRESHOLD,
     tolerance: float = DEFAULT_TOLERANCE,
+    relative: float | None = None,
     seconds: float | None = None,
     stop_at_failure: bool = True,
 ) -> FailureCurve[InstanceT]:
@@ -297,6 +319,7 @@ def failure_curve(
             rng=rng,
             size=size,
             tolerance=tolerance,
+            relative=relative,
             seconds=seconds,
         )
         probes.append(probe)
