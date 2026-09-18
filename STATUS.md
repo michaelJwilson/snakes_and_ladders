@@ -95,7 +95,7 @@ release-gated suite is excluded per pull request — 138 s over 540 tests agains
 ([#159](https://github.com/michaelJwilson/snakes_and_ladders/pull/159)).
 
 **Coverage counts a test only when it judged something** (issue #729, PR
-@@PR@@). One run of the regression tier on that branch with a context per test
+[#731](https://github.com/michaelJwilson/snakes_and_ladders/pull/731)). One run of the regression tier on that branch with a context per test
 read **94.05%** of 16,780 statements under `--cov-fail-under`, **34.28%** of
 them reached by importing the package with no test at all; recut to the tests
 that judge something --- `oracle`, `end2end`, `mathematical`, `edge_case`,
