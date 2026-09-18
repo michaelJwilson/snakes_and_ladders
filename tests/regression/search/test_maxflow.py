@@ -324,3 +324,49 @@ def test_from_arcs_refuses_what_add_edge_refuses() -> None:
         FlowNetwork.from_arcs(2, np.array([0]), np.array([1]), ones, -ones)
     with pytest.raises(ValueError, match="agree in shape"):
         FlowNetwork.from_arcs(2, np.array([0, 1]), np.array([1]), ones, ones)
+
+
+# --- the batch entry point (issue #715) ---------------------------------------
+
+
+@pytest.mark.oracle
+def test_the_batch_entry_point_returns_each_instance_s_own_ground_state() -> None:
+    # One call over a batch of fields is the per-instance call repeated,
+    # element for element, on the pool and off it.
+    graph = lattice_graph((6, 6), BoundaryCondition.OPEN, 0.6)
+    fields = np.random.default_rng(715).normal(size=(5, graph.n_nodes, 2))
+
+    expected = np.stack(
+        [maxflow_rust.ising_ground_state(graph, field)[0] for field in fields]
+    )
+
+    for threads in (None, 1, 3):
+        realized = maxflow_rust.ising_ground_states(graph, fields, threads)
+        assert realized.shape == (5, graph.n_nodes)
+        assert np.array_equal(realized, expected)
+
+
+@pytest.mark.edge_case
+def test_a_batch_of_the_wrong_shape_is_refused() -> None:
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.6)
+    with pytest.raises(ValueError, match="fields must be"):
+        maxflow_rust.ising_ground_states(graph, np.zeros((2, graph.n_nodes, 3)))
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("extent", [4, 8, 16])
+def test_the_kernel_returns_the_python_configuration_as_well_as_its_energy(
+    extent: int,
+) -> None:
+    # The configuration is read off the minimal minimum cut, which every
+    # maximum flow shares, so a kernel that returned a different one would
+    # have returned a different cut and not a tie (issue #715).
+    rng = np.random.default_rng(extent)
+    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
+    field_values = rng.normal(size=(graph.n_nodes, 2))
+
+    expected_state, expected = ising_ground_state(graph, field_values)
+    realized_state, realized = maxflow_rust.ising_ground_state(graph, field_values)
+
+    assert realized == expected
+    assert np.array_equal(realized_state, expected_state)

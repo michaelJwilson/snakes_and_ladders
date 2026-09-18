@@ -18,11 +18,14 @@ borrow at the boundary. Their difference is the wrapper's own work; issue
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.sandbox import maxflow_declined
+from snakes_and_ladders.sandbox.maxflow_declined import DeclinedKernel
 from snakes_and_ladders.search import maxflow_rust
 from snakes_and_ladders.search.maxflow import ising_ground_state, site_field
 from snakes_and_ladders.sim import fixtures
@@ -87,3 +90,91 @@ def test_rust_kernel_ising_ground_state_benchmark(
     )
 
     assert states.shape == (graph.n_nodes,)
+
+
+# --- the kernels issue #715 measured, and the batch entry point ------------
+
+#: The sizes the kernels were decided at. 128 and 256 are the stress sizes a
+#: speedup is claimed at (root `CLAUDE.md`), over the per-pull-request cap, so
+#: they run at the release gate; 16 to 64 keep the ratio measured per pull
+#: request.
+KERNEL_EXTENTS = [
+    16,
+    32,
+    64,
+    pytest.param(128, marks=pytest.mark.release),
+    pytest.param(256, marks=pytest.mark.release),
+]
+
+#: The package kernel beside the three declined ones, so one table holds all
+#: four; the declined rows skip unless the extension carries the `sandbox`
+#: feature.
+KERNELS = ["boykov-kolmogorov", *(str(kernel) for kernel in DeclinedKernel)]
+
+
+def _ground_state(
+    kernel: str,
+) -> Callable[[PottsGraph, np.ndarray], tuple[np.ndarray, float]]:
+    if kernel == "boykov-kolmogorov":
+        return maxflow_rust.ising_ground_state
+    if not maxflow_declined.AVAILABLE:
+        pytest.skip("the extension was built without the sandbox feature")
+    declined = DeclinedKernel(kernel)
+
+    def solve(graph: PottsGraph, field_values: np.ndarray) -> tuple[np.ndarray, float]:
+        return maxflow_declined.ising_ground_state(graph, field_values, declined)
+
+    return solve
+
+
+@pytest.mark.parametrize("kernel", KERNELS)
+@pytest.mark.parametrize("extent", KERNEL_EXTENTS)
+def test_kernel_ising_ground_state_benchmark(
+    benchmark: BenchmarkFixture, extent: int, kernel: str
+) -> None:
+    # Every kernel on the same instance: the table that decided which stays
+    # in the package, the lowest wall clock at 128 and 256.
+    graph, field_values = _problem(extent)
+
+    _, energy = benchmark(_ground_state(kernel), graph, field_values)
+
+    assert np.isfinite(energy)
+
+
+@pytest.mark.parametrize("threads", [1, 2, 4])
+@pytest.mark.parametrize("extent", [64, pytest.param(256, marks=pytest.mark.release)])
+def test_parallel_kernel_threads_benchmark(
+    benchmark: BenchmarkFixture, extent: int, threads: int
+) -> None:
+    # The one kernel rayon reaches inside a cut, at one, two and four
+    # threads on one pool: what a round's barrier costs against what the
+    # parallel pushes buy. Measured: nothing, below 65,536 nodes.
+    if not maxflow_declined.AVAILABLE:
+        pytest.skip("the extension was built without the sandbox feature")
+    graph, field_values = _problem(extent)
+
+    _, energy = benchmark(
+        maxflow_declined.ising_ground_state,
+        graph,
+        field_values,
+        DeclinedKernel.PARALLEL_PUSH_RELABEL,
+        threads,
+    )
+
+    assert np.isfinite(energy)
+
+
+@pytest.mark.parametrize("threads", [1, 4])
+@pytest.mark.parametrize("extent", [64, pytest.param(256, marks=pytest.mark.release)])
+def test_batch_ground_states_benchmark(
+    benchmark: BenchmarkFixture, extent: int, threads: int
+) -> None:
+    # The batch entry point: eight independent cuts on the pool, the axis
+    # rayon takes. Four threads over one is the throughput a sweep of
+    # instances or starts pays for.
+    graph, _ = _problem(extent)
+    fields = np.random.default_rng(extent).normal(size=(8, graph.n_nodes, 2))
+
+    states = benchmark(maxflow_rust.ising_ground_states, graph, fields, threads)
+
+    assert states.shape == (8, graph.n_nodes)
