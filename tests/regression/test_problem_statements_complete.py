@@ -56,8 +56,8 @@ SHARED_KEYS: dict[str, str] = {
 #: each at the sizes declared there.
 STATED_IN_SIZES = frozenset({"sec:phylo", "sec:potts", "sec:ldpc", "sec:frustrated"})
 
-#: The ten problem statements, by the stem their labels and figure file use.
-#: An eleventh problem class adds a row here and to ``PROBLEMS.md`` together.
+#: The problem statements, by the stem their labels and figure file use. A
+#: further problem class adds a row here and to ``PROBLEMS.md`` together.
 PROBLEMS = (
     "phylo",
     "potts",

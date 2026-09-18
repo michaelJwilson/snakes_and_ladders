@@ -81,7 +81,7 @@ def sample_rows(
     return selected
 
 
-def logsumexp(values: np.ndarray, axis: int) -> np.ndarray:
+def logsumexp(values: np.ndarray, axis: int | tuple[int, ...]) -> np.ndarray:
     """``log(sum(exp(values)))`` along ``axis``, shifted by the maximum.
 
     The shift is the whole point: a Potts coupling of ``J = 2`` on a 4x4
@@ -94,8 +94,12 @@ def logsumexp(values: np.ndarray, axis: int) -> np.ndarray:
     ----------
     values : np.ndarray
         Log-domain values.
-    axis : int
-        Axis to reduce. It is removed from the result, as ``np.max`` without
+    axis : int | tuple[int, ...]
+        Axis or axes to reduce. Several at once is one reduction and not a
+        loop of them: marginalizing a region belief onto a child region sums
+        out every variable the child does not carry, and doing that one axis
+        at a time re-shifts by a new maximum each pass for the same answer at
+        more cost (issue #689). Removed from the result, as ``np.max`` without
         ``keepdims`` would remove it. A one-dimensional vector of scores ---
         a log normalizer over an enumeration, which is most of the callers
         --- reduces with ``axis=0`` and returns a zero-dimensional array that
@@ -113,6 +117,8 @@ def logsumexp(values: np.ndarray, axis: int) -> np.ndarray:
     >>> import numpy as np
     >>> float(logsumexp(np.array([0.0, 0.0]), axis=0))
     0.6931471805599453
+    >>> float(logsumexp(np.zeros((2, 3)), axis=(0, 1)))
+    1.791759469228055
     """
     peak = values.max(axis=axis, keepdims=True)
     shifted = np.log(np.exp(values - peak).sum(axis=axis, keepdims=True))
