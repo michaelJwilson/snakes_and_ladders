@@ -2795,7 +2795,7 @@ is checkable against.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface. `learn.canonical`: canonical control problems, with an exact optimum written a second way (#597). `learn.tabular`: tabular Q-learning and SARSA, which differ in one expression (#597). `opt.failure`: where a classical baseline first fails, which is where a gate can be argued (#597).
+**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface. `learn.canonical`: canonical control problems, with an exact optimum written a second way (#597). `opt.failure`: where a classical baseline first fails, which is where a gate can be argued (#597). `learn.tabular`: tabular Q-learning and SARSA, which differ in one expression (#597).
 
 **The estimator is pinned to a closed form, not to a training curve**
 ([#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135)). With a finite
