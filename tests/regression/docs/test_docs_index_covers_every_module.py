@@ -45,7 +45,7 @@ def _present() -> set[str]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_module_has_an_entry() -> None:
     missing = sorted(_present() - _listed())
 
@@ -58,7 +58,7 @@ def test_every_module_has_an_entry() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_entry_names_a_module_that_exists() -> None:
     # The other direction, which `sphinx-build -W` *does* catch -- but it
     # catches it in a job that takes a minute, and this takes milliseconds.

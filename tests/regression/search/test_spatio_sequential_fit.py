@@ -171,7 +171,7 @@ def test_the_labelled_joint_never_decreases_across_blocks(solver: LabelSolver) -
     np.testing.assert_allclose(fit.params.initial.sum(axis=1), 1.0)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_label_step_recovers_planted_labels_when_the_parameters_are_known() -> None:
     # The label problem alone is easy: with theta at the truth, the field
     # separates the classes on 98 to 99 percent of nodes over six draws.
@@ -194,7 +194,7 @@ def test_the_label_step_recovers_planted_labels_when_the_parameters_are_known() 
     assert float(np.mean(accuracies)) >= 0.95, accuracies
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_annealed_start_beats_every_cold_solver_at_equal_blocks() -> None:
     # The study the ticket asked for, and it does not say what the ticket
     # expected. From a uniform start and the true parameters as the starting
@@ -262,7 +262,7 @@ def test_emission_mixture_plus_plus_is_kmeans_plus_plus_under_a_squared_distance
     np.testing.assert_array_equal(seeded, general)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_seeding_replaces_every_categorical_row_with_a_seeded_one() -> None:
     params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(1))

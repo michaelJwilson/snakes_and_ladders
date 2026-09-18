@@ -174,7 +174,7 @@ def test_the_interleaver_is_a_permutation_and_its_inverse_undoes_it(
     np.testing.assert_array_equal(inverse[order], identity)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_two_interleavers_from_one_generator_differ_and_seeds_agree() -> None:
     # `sim/CLAUDE.md`: a generator, never a seed. The permutation is the
     # whole of the randomness in the construction, so drawing it inside the
@@ -195,7 +195,7 @@ def test_an_array_that_repeats_an_index_is_refused_as_a_permutation() -> None:
         inverse_permutation(np.array([0, 1, 1, 3]))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_declared_instances_draw_the_interleaver_their_seed_names() -> None:
     # The fixture declares a seed and not a permutation, so two loads of one
     # file must give one code; a fixture that drew a fresh interleaver would

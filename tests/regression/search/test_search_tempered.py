@@ -182,7 +182,7 @@ def test_the_tempered_weight_of_a_labelling_is_the_enumerated_one(
     _held_to(estimates, exact, supports)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_seed_reproduces_the_run_and_every_recorded_density_is_its_structure_s_score() -> (
     None
 ):

@@ -172,7 +172,7 @@ def test_a_single_observation_is_decoded_by_the_prior_and_the_emission() -> None
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_ambiguous_fixture_is_within_the_cap() -> None:
     # The fixture the module exists for must be enumerable in the fast suite,
     # or the distinction it draws is untestable per pull request.

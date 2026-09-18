@@ -31,7 +31,7 @@ POTTS_FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_potts_coverage_counts_every_parameter_of_every_replicate() -> None:
     params = load_potts_params(POTTS_FIXTURE)
     covered, total = potts_coverage(params, n_chains=100, replicates=3)
@@ -39,7 +39,7 @@ def test_potts_coverage_counts_every_parameter_of_every_replicate() -> None:
     assert 0 <= covered <= total
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_hmm_coverage_counts_every_parameter_of_every_replicate() -> None:
     params = load_hmm_params(HMM_FIXTURE)
     covered, total, boundary = hmm_coverage(params, n_sequences=600, replicates=2)
@@ -67,7 +67,7 @@ def test_a_boundary_fit_is_counted_and_contributes_no_intervals() -> None:
     assert 0 <= covered <= total
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_sizes_the_figure_sweeps_are_increasing() -> None:
     # The figure's whole argument is a trend, so a mis-ordered sweep would
     # make it unreadable rather than merely ugly.
@@ -76,7 +76,7 @@ def test_the_sizes_the_figure_sweeps_are_increasing() -> None:
     assert NOMINAL == 0.95
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_reports_the_numbers_it_was_given() -> None:
     potts = [(100, 158, 160), (400, 155, 160), (1600, 96, 100)]
     hmm = [(150, 168, 192, 0), (600, 139, 144, 0), (2400, 91, 96, 0)]
@@ -92,7 +92,7 @@ def test_the_caption_reports_the_numbers_it_was_given() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_declares_any_fit_that_had_no_interval() -> None:
     potts = [(100, 158, 160), (400, 155, 160), (1600, 96, 100)]
     hmm = [(150, 120, 144, 2), (600, 139, 144, 0), (2400, 91, 96, 0)]
@@ -104,7 +104,7 @@ def test_the_caption_declares_any_fit_that_had_no_interval() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_main_writes_a_figure_and_caption(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

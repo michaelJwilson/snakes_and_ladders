@@ -52,7 +52,7 @@ def _neutral(observations: torch.Tensor) -> torch.Tensor:
     return neutral
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_the_neutral_covariate_reproduces_the_uncovaried_score_bitwise() -> None:
     """The referee for admitting the shape: neutral changes nothing at all.
@@ -68,7 +68,7 @@ def test_the_neutral_covariate_reproduces_the_uncovaried_score_bitwise() -> None
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_the_neutral_covariate_is_not_ones_on_both_channels() -> None:
     """The asymmetry a caller has to know, asserted rather than documented only.
@@ -136,7 +136,7 @@ def test_a_covariate_without_the_channel_axis_is_refused() -> None:
         )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_a_draw_under_an_exposure_scales_with_it() -> None:
     """`sample` conditions too, which is what item 4 needs to plant an instance.
 

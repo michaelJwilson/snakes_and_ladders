@@ -32,7 +32,7 @@ def generated() -> str:
     return problems_tables.render()
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_generated_file_names_no_code(generated: str) -> None:
     # The textbook inputs this file, and `docs/CLAUDE.md` forbids a module
     # path, a filename or a function call in the textbook.
@@ -51,7 +51,7 @@ def test_the_generated_file_names_no_code(generated: str) -> None:
 WITHOUT_AN_ORACLE = ("Count-pair coupled spatio-sequential model",)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_catalogue_row_reaches_an_algorithm_and_names_its_oracle_gap(
     generated: str,
 ) -> None:
@@ -80,7 +80,7 @@ def test_every_catalogue_row_reaches_an_algorithm_and_names_its_oracle_gap(
     assert tuple(without) == WITHOUT_AN_ORACLE
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_problem_and_family_pairing_appears_once_per_family_table() -> None:
     # A pairing dropped rather than marked is the failure this table exists to
     # prevent: the reader cannot tell an untested pairing from one nobody
@@ -93,7 +93,7 @@ def test_every_problem_and_family_pairing_appears_once_per_family_table() -> Non
         assert [problem for problem, family, *_ in cells if family == name] == problems
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_pairing_the_suite_does_not_pin_is_marked_untested(generated: str) -> None:
     # The catalogue carries a general time-reversible start that no test of
     # either significant kind names -- the standing example since #420 gave
@@ -110,7 +110,7 @@ def test_a_pairing_the_suite_does_not_pin_is_marked_untested(generated: str) -> 
     assert text.count("untested") >= len(marked)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_pairing_with_a_method_carries_a_note() -> None:
     # The note is the one hand-written cell; a pairing that exists and says
     # nothing about when it wins is the table half-written.
@@ -119,7 +119,7 @@ def test_a_pairing_with_a_method_carries_a_note() -> None:
             assert note, f"{problem} / {family}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_untested_pairing_states_why_it_is_untested() -> None:
     # "Every compatible method is applied to every supported problem" is a
     # claim, and this is where it is checked rather than reviewed: a fixture
@@ -135,7 +135,7 @@ def test_every_untested_pairing_states_why_it_is_untested() -> None:
     assert all(reason.strip() for reason in stated.values())
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_fixture_is_read_from_a_call_or_from_a_path() -> None:
     # The reading behind the table above: a test names its instance either
     # through the registry or by path, and both count, or a pairing would
@@ -151,7 +151,7 @@ def test_a_fixture_is_read_from_a_call_or_from_a_path() -> None:
     }
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_marked_test_keeps_its_tier_and_an_unmarked_one_takes_the_fixtures() -> None:
     # The tier column: the scheduling marker decides where there is one,
     # because that is what the selection obeys, and the fixtures the test
@@ -161,7 +161,7 @@ def test_a_marked_test_keeps_its_tier_and_an_unmarked_one_takes_the_fixtures() -
     assert problems_tables.tier_of(set(), set()) == "ci"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_experiment_a_note_cites_exists() -> None:
     # A renumbered or retracted experiment must break the generation rather
     # than leave the textbook pointing at a file that is not there.
@@ -228,7 +228,7 @@ def test_a_row_reads_its_key_and_its_defining_code(tmp_path: Path) -> None:
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_declared_instance_has_a_row() -> None:
     # The table cannot be narrower than the registry (issue #622, step 6). A
     # fixture added with no row would be an instance the document does not
@@ -253,7 +253,7 @@ def test_every_declared_instance_has_a_row() -> None:
     assert len(rows) == len(declared), "two fixtures collapsed into one row"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_declared_shape_never_collapses_to_one_number() -> None:
     # The column is a shape and not a size, which is the one thing it must not
     # become: the tiers of one problem differ in extent *and* state count, in
@@ -262,7 +262,7 @@ def test_a_declared_shape_never_collapses_to_one_number() -> None:
         assert shape.count(";") >= 1, f"{title} / {tier} names one field: {shape}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_declared_shapes_name_no_code() -> None:
     # `docs/CLAUDE.md`: the document names no code. The field names are the
     # fixture file's own words, so a module that moves does not stale the

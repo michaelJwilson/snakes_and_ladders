@@ -82,7 +82,7 @@ def test_the_fit_satisfies_the_first_order_condition(build) -> None:  # type: ig
     assert result.gradient_norm <= _RTOL_STATIONARY
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("build", [_potts_objective, _hmm_objective])
 def test_the_fit_beats_the_truth_on_its_own_sample(build) -> None:  # type: ignore[no-untyped-def]
     # The defining property of a maximum-likelihood estimate, and not "the
@@ -102,7 +102,7 @@ def test_a_short_budget_reports_itself_as_unconverged() -> None:
     assert result.iterations == 1
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_supplied_starting_point_is_used() -> None:
     objective, truth = _potts_objective()
     # With no budget the fit must hand back exactly what it was given, which
@@ -128,7 +128,7 @@ def test_the_potts_optimum_does_not_depend_on_the_starting_point() -> None:
 # --- recovery: the acceptance test ---------------------------------------
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_potts_intervals_cover_the_truth_at_the_nominal_rate() -> None:
     # 60 independent datasets from the same truth, one fit each, every
     # parameter's 95% Wald interval checked. Deterministic: the seeds are
@@ -165,7 +165,7 @@ def test_potts_intervals_cover_the_truth_at_the_nominal_rate() -> None:
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_potts_point_estimates_land_near_the_truth() -> None:
     base = load_potts_params(POTTS_FIXTURE)
     objective, _ = _potts_objective()
@@ -180,7 +180,7 @@ def test_potts_point_estimates_land_near_the_truth() -> None:
     assert bool((deviation < 3.0 * error["field"]).all())
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_hmm_interval_coverage_approaches_nominal_with_sample_size() -> None:
     # Release-gated: 15 fits at four times the fixture size is ~30 s.
@@ -337,7 +337,7 @@ def test_the_observed_information_is_the_hessian_of_the_objective() -> None:
     assert_allclose(information.numpy(), [[2.0, 0.0], [0.0, 0.0]], atol=1e-12)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_covers_is_elementwise_and_two_sided() -> None:
     estimate = torch.tensor([0.0, 0.0, 0.0])
     error = torch.tensor([1.0, 1.0, 1.0])
@@ -345,7 +345,7 @@ def test_covers_is_elementwise_and_two_sided() -> None:
     assert covers(estimate, error, truth).tolist() == [True, False, False]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_standard_errors_are_shaped_like_their_parameters() -> None:
     # At the fitted optimum, not at the truth: the observed information is a
     # statement about curvature *at a maximum*, and away from one the
@@ -382,14 +382,14 @@ def test_the_information_grows_with_the_data() -> None:
     assert_allclose(ratio, 4.0, rtol=0.25)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_potts_fit_is_reproducible() -> None:
     first, _ = _potts_objective()
     second, _ = _potts_objective()
     assert_allclose(fit(first).theta.numpy(), fit(second).theta.numpy(), rtol=1e-12)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_default_start_is_the_objective_s_own_initial_point() -> None:
     objective = PottsObjective(np.zeros((4, 6), dtype=np.int64), n_states=2)
     assert torch.equal(fit(objective, max_iterations=0).theta, objective.initial())

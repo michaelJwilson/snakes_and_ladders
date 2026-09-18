@@ -208,7 +208,7 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum() -> None:
     assert_allclose(estimate["scale"].numpy(), parameters["scale"].numpy(), atol=1e-5)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_alignment_recovers_a_known_permutation_of_the_states() -> None:
     # Label switching is unidentifiable, so a recovery comparison is stated up
     # to a permutation and the aligner must find it. For a Gaussian family the
@@ -242,7 +242,7 @@ def test_the_start_places_the_means_on_the_data_and_breaks_the_symmetry() -> Non
     assert_allclose(torch.exp(start["log_initial"]).numpy(), [0.5, 0.5], rtol=1e-14)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> None:
     truth = _truth()
     observations = simulate_sequences(_params(truth, seed=24)).observations
@@ -284,7 +284,7 @@ def test_a_collapsing_fit_is_refused_rather_than_returned() -> None:
         )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_coverage_reaches_nominal_only_where_the_states_are_separated() -> None:
     # The identifiable regime, measured rather than assumed. At half a standard
     # deviation of separation the two states are nearly one: most replicates
@@ -301,7 +301,7 @@ def test_coverage_reaches_nominal_only_where_the_states_are_separated() -> None:
     assert far_total > close_total
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_coverage_against_the_separation_of_the_emitting_states() -> None:
     # The full sweep behind the table in `STATUS.md`. Marked release: 24

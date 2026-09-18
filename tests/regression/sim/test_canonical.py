@@ -162,7 +162,7 @@ def test_single_site_sampling_still_runs_on_the_frustrated_instance() -> None:
     assert chain.states.shape == (20, graph.n_nodes)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_residual_entropy_is_reported_and_not_asserted() -> None:
     # Wannier (1950) gives 0.3231 per site for the *infinite* lattice. The
     # finite-size values are not close to it and, measured here, are not even
@@ -192,7 +192,7 @@ def test_the_residual_entropy_is_reported_and_not_asserted() -> None:
     assert max(entropies) > WANNIER_RESIDUAL_ENTROPY
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_an_open_boundary_is_frustrated_but_has_no_closed_form() -> None:
     # The counting argument needs every triangle complete, which an open
     # boundary breaks. The instance is still frustrated -- 4 agreeing edges of
@@ -290,7 +290,7 @@ def test_the_planted_energy_matches_the_energy_of_the_planted_state() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_couplings_carry_both_signs_at_positive_frustration() -> None:
     # Otherwise it is not a spin glass. `+/- J` means the magnitude is fixed
     # and only the sign varies, which is also checked.
@@ -328,7 +328,7 @@ def test_an_out_of_range_parameter_is_refused(
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.release
 def test_past_enumeration_the_planted_state_is_a_reference_not_a_hard_case() -> None:
     # The claim this fixture was proposed to support, and the measurement
@@ -461,7 +461,7 @@ def test_the_posterior_path_is_a_poor_path_and_that_is_the_point() -> None:
     assert rank == 4
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_fixture_declares_the_length_its_observations_have() -> None:
     # A mismatch would leave the simulated dataset something other than the
     # sequence the decodings are pinned on.

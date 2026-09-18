@@ -92,7 +92,7 @@ def test_successive_cancellation_is_the_reference_implementation_bitwise() -> No
             )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_list_at_one_path_is_plain_successive_cancellation() -> None:
     # True by construction -- `decode_sc` calls `decode_scl` -- and asserted
     # because the construction is what a later optimization would break.
@@ -150,7 +150,7 @@ def test_the_gap_to_maximum_likelihood_is_what_the_list_closes() -> None:
     assert failures["scl4"] - failures["ml"] <= 5
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_a_longer_list_never_decodes_worse_on_shared_seeds() -> None:
     # What a list is for, measured rather than assumed: the metric must order
     # candidates so that a larger list explores a superset. Block errors are

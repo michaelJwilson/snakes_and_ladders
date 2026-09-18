@@ -68,7 +68,7 @@ def _alignment() -> tuple[dict[str, np.ndarray], int]:
 # --- the starting topology ----------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("n_taxa", [3, 4, 5, 6])
 def test_random_topology_is_a_valid_unrooted_topology(n_taxa: int) -> None:
     names = [f"t{index}" for index in range(n_taxa)]
@@ -90,7 +90,7 @@ def test_random_topology_reaches_every_topology_and_only_those() -> None:
     assert len(found) == count_topologies(len(names) - 1) == 15
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_random_topology_is_reproducible_from_its_seed() -> None:
     names = list("ABCDEF")
     first = random_topology(names, np.random.default_rng(3))
@@ -99,7 +99,7 @@ def test_random_topology_is_reproducible_from_its_seed() -> None:
     assert leaf_bipartitions(first) == leaf_bipartitions(second)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_random_topology_carries_no_branch_lengths() -> None:
     # Lengths belong to the objective that fits them. A starting topology
     # carrying them would silently seed the fit.
@@ -188,7 +188,7 @@ def test_the_search_converges_and_ends_on_its_best_score(moves: MoveSet) -> None
     assert result.log_likelihood == max(result.trace)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_no_topology_is_scored_twice() -> None:
     # The deduplication claim, checked against the closed-form count: at 4
     # taxa there are 3 unrooted topologies, so a converged search can never
@@ -202,7 +202,7 @@ def test_no_topology_is_scored_twice() -> None:
     assert result.evaluations <= count_topologies(len(alignment) - 1) == 3
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_budget_is_respected_and_reported_unconverged() -> None:
     alignment, k = _alignment()
 
@@ -212,7 +212,7 @@ def test_the_budget_is_respected_and_reported_unconverged() -> None:
     assert not result.converged
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_search_is_reproducible_from_its_seed() -> None:
     alignment, k = _alignment()
 
@@ -223,7 +223,7 @@ def test_a_search_is_reproducible_from_its_seed() -> None:
     assert_allclose(first.log_likelihood, second.log_likelihood, rtol=1e-12)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_different_seeds_can_start_from_different_topologies() -> None:
     # Otherwise the seed is decorative and every run measures one start.
     alignment, k = _alignment()
@@ -235,7 +235,7 @@ def test_different_seeds_can_start_from_different_topologies() -> None:
     assert len(starts) > 1
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_general_model_is_searchable_too() -> None:
     alignment, k = _alignment()
 
@@ -274,7 +274,7 @@ def _eight_taxa() -> tuple[dict[str, np.ndarray], int]:
     return dict(dataset.alignment), params.k
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_branch_splits_are_aligned_with_the_branch_order() -> None:
     # The split below each branch, in the order a `branch_lengths` tensor
     # follows: a fitted length can then be carried by what it separates.
@@ -348,7 +348,7 @@ def test_the_partial_cache_returns_what_the_recursion_computes() -> None:
     assert shared.hits > 0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_lazy_ranking_places_the_fitted_best_first_for_nni() -> None:
     # One unfitted evaluation at the parent's lengths ranks the NNI
     # neighbourhood correctly at eight taxa: the fitted best is the lazy best
@@ -435,7 +435,7 @@ def test_a_non_positive_lazy_top_is_refused() -> None:
 # --- the bounded regraft and the partial refit (issue #408) ---------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_radius_at_the_leaf_count_reproduces_the_unbounded_search() -> None:
     # The equivalence at the level a caller sees: not the same tree alone but
     # the same trajectory at the same cost, so a radius that reordered the
@@ -481,7 +481,7 @@ def test_partial_reoptimization_without_warm_start_is_refused() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_partial_fit_moves_only_the_branches_the_move_created() -> None:
     # What `_Restricted` claims: every coordinate outside the disturbed set
     # comes back at the value it went in with, exactly. A scatter that
@@ -508,7 +508,7 @@ def test_a_partial_fit_moves_only_the_branches_the_move_created() -> None:
         assert fitted.lengths_by_split[split] == parent.lengths_by_split[split]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_partial_reoptimization_reports_a_full_fit() -> None:
     # A partial fit is a lower bound, so the accepted move is refitted over
     # every branch before it is reported. Dropping that refit would leave
@@ -532,7 +532,7 @@ def test_partial_reoptimization_reports_a_full_fit() -> None:
 # --- parallel candidate fits (issue #405) --------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_parallel_candidate_fits_reproduce_the_serial_search_exactly() -> None:
     # The claim that makes the fan-out safe: a neighbourhood's candidates are
     # independent and their results are combined in input order, so the pool

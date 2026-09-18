@@ -124,7 +124,7 @@ def test_at_fixture_runs_one_case_per_declared_tier() -> None:
     ]
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @at_fixture("instance", "tree_search")
 def test_at_fixture_hands_the_body_a_loaded_instance(instance: Fixture) -> None:
     # Exercised end to end: the CI case runs on every pull request, and the
@@ -167,7 +167,7 @@ def test_a_key_test_over_its_own_cap_is_named() -> None:
     assert over_cap([("t::key", 130.0, frozenset({"key"}))], 10.0) == []
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_budget_script_states_both_budgets() -> None:
     # The numbers `DEV.md` documents and the numbers the script measures
     # against have to be the same two, or the report is against a budget
@@ -181,7 +181,7 @@ def test_the_budget_script_states_both_budgets() -> None:
     assert "**10 minutes**" in dev
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_pytest_is_importable_here() -> None:
     # `pytest` is imported for the marker types above; this keeps the import
     # used rather than removed by a linter, and costs nothing.

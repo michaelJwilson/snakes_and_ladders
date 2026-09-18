@@ -89,7 +89,7 @@ def _found(
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_logsumexp_has_one_implementation() -> None:
     # Four copies in two spellings, in `sim.potts`, `opt.potts`,
     # `likelihood.potts` and `likelihood.belief_propagation`. They agreed, so
@@ -99,7 +99,7 @@ def test_logsumexp_has_one_implementation() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_module_walks_edges_and_couplings_by_hand() -> None:
     # Twelve sites across eight modules zipped the two tuples together. The
     # pairing is an invariant of `PottsGraph`, so it belongs to the class:
@@ -109,7 +109,7 @@ def test_no_module_walks_edges_and_couplings_by_hand() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_adjacency_is_built_in_one_place() -> None:
     # Seven builders of one object: `potts_mcmc._adjacency`,
     # `potts_mcmc_rust.flatten_adjacency`, open-coded copies in
@@ -125,7 +125,7 @@ def test_the_adjacency_is_built_in_one_place() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_enumeration_cap_is_defined_once() -> None:
     # Four thresholds in three units before this: 200_000 configurations,
     # 200_000 paths, 20 nodes, and a docstring-only `n <= 6` that nothing
@@ -135,7 +135,7 @@ def test_the_enumeration_cap_is_defined_once() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_square_lattice_transition_is_computed_in_one_place() -> None:
     # `J_c = ln(1 + sqrt(q))` was a literal in
     # `tests/regression/search/test_potts_mcmc.py` and again in a
@@ -150,7 +150,7 @@ def test_the_square_lattice_transition_is_computed_in_one_place() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_retired_environment_name_returns() -> None:
     # Three names for the same seam in two years: `PottsLandscape` and
     # `StatePathLandscape` went in #644, `TopologyEnvironment` in #705. The
@@ -169,7 +169,7 @@ def test_no_retired_environment_name_returns() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard

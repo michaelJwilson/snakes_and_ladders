@@ -123,7 +123,7 @@ def test_the_decoder_reaches_the_general_fixed_point_on_the_bicycle_graph() -> N
 
 
 @pytest.mark.stress
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_bicycle_code_fails_more_blocks_than_a_gallager_draw_at_96_bits() -> None:
     """At 96 bits, column weight 3 and row weight 6 in both, the bicycle code
     loses at all six settings: 2 and 12 blocks of 20 against 1 and 5 on the
@@ -151,7 +151,7 @@ def test_the_bicycle_code_fails_more_blocks_than_a_gallager_draw_at_96_bits() ->
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_bicycle_waterfall_sits_above_a_gallager_draws_at_996_bits() -> None:
     """At 996 bits and matched degrees the bicycle code fails at least as many
     blocks of 20 as the Gallager draw at every one of twelve settings, and more

@@ -199,7 +199,7 @@ def test_a_registered_learner_is_bitwise_the_direct_call(name: str) -> None:
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_greedy_row_is_the_greedy_rollout_and_not_a_policy() -> None:
     """The row runs `greedy_rollout`, which stops where a policy walks on.
 
@@ -341,7 +341,7 @@ def test_the_table_names_its_rows_and_refuses_one_it_does_not_carry() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_an_untrained_row_spends_no_training_decisions() -> None:
     """A row states what it spent, and greedy spent none."""
     environment = _environment()
@@ -366,7 +366,7 @@ def test_an_untrained_row_spends_no_training_decisions() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_chains_five_rows_come_back_at_the_published_fractions() -> None:
     """80.2 / 88.9 / 88.9 / 96.3 / 97.5% of 81 starts, from one call (#313).
 

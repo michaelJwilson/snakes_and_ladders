@@ -58,7 +58,7 @@ def _enumerate_paths(
     return paths, probabilities
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     params = load_hmm_params(FIXTURE)
     dataset = simulate_sequences(params)
@@ -68,7 +68,7 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     assert set(np.unique(dataset.states)) <= set(range(params.n_states))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_simulation_is_reproducible_from_the_seed() -> None:
     params = load_hmm_params(FIXTURE)
     first = simulate_sequences(params)
@@ -78,7 +78,7 @@ def test_simulation_is_reproducible_from_the_seed() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_simulated_symbol_frequencies_match_the_analytic_marginal() -> None:
     # The stationary-free marginal is exact: average the emission rows over
     # the hidden-state distribution at each step, which is the initial
@@ -103,7 +103,7 @@ def test_simulated_symbol_frequencies_match_the_analytic_marginal() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_realized_state_occupancy_matches_the_stationary_distribution() -> None:
     # The exact per-position marginals below do not pin this: at the
     # fixture's own sequence_length = 15, the chain has not mixed away from

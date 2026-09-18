@@ -87,7 +87,7 @@ def test_belief_propagation_is_exact_on_every_acyclic_draw() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_ensemble_reaches_structures_no_committed_fixture_does() -> None:
     # The reason to draw rather than to hand-build. Each of these is a real
     # code path -- the isolated vertex in particular sits on the boundary
@@ -111,7 +111,7 @@ def test_the_ensemble_reaches_structures_no_committed_fixture_does() -> None:
     assert saw_cycle
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_deviation_on_a_cyclic_draw_is_reported_not_asserted() -> None:
     # On a loop BP is approximate, so the deviation is a measurement -- the
     # same disposition #172 takes for the lattice.
@@ -171,7 +171,7 @@ def test_zero_and_one_give_the_empty_and_complete_graphs_exactly() -> None:
     assert len(erdos_renyi_graph(6, 1.0, 1.0, rng).edges) == 6 * 5 // 2
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_drawn_graph_has_no_self_loops_and_no_repeated_pairs() -> None:
     # `PottsGraph` deliberately permits a repeated pair, because a periodic
     # lattice of extent 2 produces one legitimately. A random graph must not,
@@ -183,7 +183,7 @@ def test_a_drawn_graph_has_no_self_loops_and_no_repeated_pairs() -> None:
     assert len(set(graph.edges)) == len(graph.edges)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_drawn_graph_is_not_mistaken_for_a_lattice() -> None:
     # `is_open_chain` gates the exact 1-D sampler. A random graph carrying a
     # `shape` would be sampled by a recursion that assumes a chain.
@@ -195,7 +195,7 @@ def test_a_drawn_graph_is_not_mistaken_for_a_lattice() -> None:
     assert not graph.is_open_chain()
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_independent_draws_come_from_one_generator() -> None:
     # The generator is passed in rather than seeded inside, so an ensemble is
     # independent. Seeding per call is the mistake that silently makes every

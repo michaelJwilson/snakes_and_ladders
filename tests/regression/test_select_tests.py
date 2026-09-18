@@ -49,7 +49,7 @@ def _modules_of(chosen: dict[str, list[str]]) -> set[str]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_documentation_only_change_selects_the_guards_and_measures_nothing() -> None:
     # The suite would run the same code over the same tests as the last run on
     # main, so coverage cannot have moved and no module's tests run. What runs
@@ -69,7 +69,7 @@ def test_a_documentation_only_change_selects_the_guards_and_measures_nothing() -
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_changelog_fragment_alone_selects_nothing() -> None:
     # `towncrier check` in the lint job is its guard; the suite has none.
     chosen = select(["changelog.d/372.changed.md"])
@@ -79,7 +79,7 @@ def test_a_changelog_fragment_alone_selects_nothing() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("path", "guard"),
     [
@@ -113,7 +113,7 @@ def test_each_class_of_prose_selects_its_guard(path: str, guard: str) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_guard_the_selection_names_exists() -> None:
     # A guard renamed on one side only would select a path pytest cannot
     # collect, which fails the run for the wrong reason.
@@ -123,7 +123,7 @@ def test_every_guard_the_selection_names_exists() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_code_change_beside_prose_runs_both() -> None:
     # The guards join the module's tests rather than replacing them.
     chosen = select(
@@ -135,7 +135,7 @@ def test_a_code_change_beside_prose_runs_both() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_change_selects_the_modules_that_import_it() -> None:
     # `snakes_and_ladders.search` imports `snakes_and_ladders.likelihood`, so a likelihood change that
     # ran only likelihood's tests would let a break in search through.
@@ -147,7 +147,7 @@ def test_a_change_selects_the_modules_that_import_it() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_leaf_module_selects_only_itself() -> None:
     # A module nothing imports needs nothing else run. The leaf is derived
     # rather than named: `snakes_and_ladders.learn` was one until
@@ -162,7 +162,7 @@ def test_a_leaf_module_selects_only_itself() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_dependency_expansion_is_transitive() -> None:
     # opt <- likelihood <- search: a change to opt must reach search even
     # though search does not import opt directly through that path alone.
@@ -170,14 +170,14 @@ def test_the_dependency_expansion_is_transitive() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_changing_a_test_selects_its_module() -> None:
     # A test file is as capable of lowering coverage as a source file.
     assert _modules_of(select(["tests/regression/opt/test_opt_fit.py"])) >= {"opt"}
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_likelihood_change_still_runs_the_conserved_gradient_tape() -> None:
     # Issue #516 moved `test_pruning_burn.py` out of `tests/regression/
     # likelihood/` and into the sandbox's own directory. What it referees is a
@@ -193,7 +193,7 @@ def test_a_likelihood_change_still_runs_the_conserved_gradient_tape() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_sandbox_import_guard_runs_on_every_package_it_guards() -> None:
     # `test_sandbox.py` asserts an absence -- that none of the five hot-path
     # packages imports the oracle home -- and an absence is not an import the
@@ -206,7 +206,7 @@ def test_the_sandbox_import_guard_runs_on_every_package_it_guards() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "path",
     [
@@ -230,7 +230,7 @@ def test_a_change_it_cannot_attribute_selects_everything(path: str) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_an_unrecognised_code_path_selects_everything() -> None:
     # Not documentation, not attributable to a module: the unsafe answer is
     # the one that looks like a saving.
@@ -240,7 +240,7 @@ def test_an_unrecognised_code_path_selects_everything() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_coverage_targets_match_the_selected_modules() -> None:
     # Step 3's claim is that a touched module is covered by its own tests, so
     # what is measured must be exactly what was selected -- no more, since a
@@ -269,7 +269,7 @@ def _benchmarks_of(chosen: dict[str, list[str]]) -> set[str]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_benchmarks_run_only_for_the_modules_they_measure() -> None:
     # `qa` renders figures from what the others compute and is not timed, so
     # a qa change should time nothing.
@@ -277,7 +277,7 @@ def test_benchmarks_run_only_for_the_modules_they_measure() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
     # The pairing DEV.md requires, used as the selector: a change runs the
     # benchmarks of the modules that import it and no other. A learn change
@@ -294,7 +294,7 @@ def test_a_benchmark_is_selected_with_the_module_it_pairs_with() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_widely_imported_module_selects_its_dependents_benchmarks() -> None:
     # `opt` reaches likelihood, search and learn by import, so their
     # benchmarks are selected too -- the cost of being depended on.
@@ -306,7 +306,7 @@ def test_a_widely_imported_module_selects_its_dependents_benchmarks() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_always_run_modules_are_always_run() -> None:
     # They cover what belongs to no module.
     for changed in (
@@ -319,7 +319,7 @@ def test_the_always_run_modules_are_always_run() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_module_has_a_test_directory() -> None:
     # A module absent from the tree would be selected and then run nothing,
     # which reads as a pass.
@@ -330,12 +330,12 @@ def test_every_module_has_a_test_directory() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_benchmarked_modules_are_a_subset_of_the_modules() -> None:
     assert set(BENCHMARKED) < set(MODULES)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_always_run_path_names_a_file_that_exists() -> None:
     # The failure this catches has no other symptom worth trusting: an entry
     # renamed on one side only leaves `ALWAYS` naming a path that is gone, and
@@ -348,7 +348,7 @@ def test_every_always_run_path_names_a_file_that_exists() -> None:
     assert missing == []
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
     # `EVERYTHING` decides when the saving is abandoned and the whole suite
     # runs. An entry that matches nothing is a trigger that never fires, so
@@ -368,7 +368,7 @@ def test_every_whole_suite_trigger_names_something_in_the_tree() -> None:
     assert unmatched == []
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_key_tier_runs_only_for_what_could_move_it() -> None:
     # A key test is two minutes, so it is deselected by default and selected
     # by the change that could fail it: the coupled model, the emissions, the
@@ -385,7 +385,7 @@ def test_the_key_tier_runs_only_for_what_could_move_it() -> None:
         assert "key" not in select([trigger])["deselect"], trigger
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_key_trigger_names_something_in_the_tree() -> None:
     # `EVERYTHING`'s check, for the second trigger list: an entry renamed on
     # one side only stops selecting the key tier and fails nothing.
@@ -395,7 +395,7 @@ def test_every_key_trigger_names_something_in_the_tree() -> None:
     assert missing == []
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_release_and_stress_tiers_are_never_selected_locally() -> None:
     # The two tiers `infra/validate.sh` has always deselected stay deselected
     # whatever the change: they are the release gate's and the developer's,

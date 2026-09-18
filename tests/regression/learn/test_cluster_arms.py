@@ -138,7 +138,7 @@ def _component(labels: np.ndarray, graph: PottsGraph, root: int) -> set[int]:
 # --- the seam ------------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_both_moves_satisfy_the_seam_the_environment_takes() -> None:
     """The protocol is what joins two packages that may not import each other."""
     graph, field, _ = _lattice(4, 3)
@@ -146,7 +146,7 @@ def test_both_moves_satisfy_the_seam_the_environment_takes() -> None:
         assert isinstance(move, KeyedMove)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_cluster_kind_without_its_move_is_refused_at_construction() -> None:
     """An arm that cannot take half its actions is a misconfigured experiment.
 
@@ -166,7 +166,7 @@ def test_a_cluster_kind_without_its_move_is_refused_at_construction() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_move_built_on_another_lattice_is_refused() -> None:
     """Two callers scoring one problem is the property this ticket exists for.
 
@@ -456,7 +456,7 @@ def test_a_swendsen_wang_pass_costs_one_sweep_and_a_wolff_step_its_cluster() -> 
         assert charge == len(_component(labels, graph, root)) * per_member
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("kind", CLUSTER_KINDS)
 def test_visits_is_the_charge_the_move_itself_reports(kind: MoveKind) -> None:
     """The realized charge, not an average of it.
@@ -522,7 +522,7 @@ def test_the_vectorized_gain_is_the_scalar_one_bitwise() -> None:
 # --- keying, on the moves that needed it ---------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("kind", CLUSTER_KINDS)
 def test_a_cluster_move_replays_and_another_key_does_not(kind: MoveKind) -> None:
     """``step`` is a pure function, and not by being constant.
@@ -568,7 +568,7 @@ def test_a_cluster_move_replays_and_another_key_does_not(kind: MoveKind) -> None
 # --- the feature map is the arm's ----------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("kinds", "expected"),
     [
@@ -641,7 +641,7 @@ def test_an_arm_with_nothing_to_prefer_is_refused() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_mixed_arm_offers_every_kind_it_admits() -> None:
     """Step 6b's arm exists as a configuration before it is measured as one."""
     environment, _, _ = _arm(6, 3, tuple(MoveKind))

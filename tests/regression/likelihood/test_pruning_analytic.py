@@ -222,7 +222,7 @@ def test_branch_lengths_of_the_wrong_length_are_refused() -> None:
         pruning_analytic.log_likelihood(tau, k, pi, alignment, lengths[:-1])
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_graph_is_one_node_whatever_the_tree() -> None:
     """The count issue #443 attacks: the taped graph tracks the tree, this does not.
 

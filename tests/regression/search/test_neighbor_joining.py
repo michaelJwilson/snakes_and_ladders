@@ -108,7 +108,7 @@ def test_attesons_radius_is_half_the_shortest_branch() -> None:
     assert atteson_radius(load_fixture(EIGHT_TAXA).tau) == pytest.approx(0.025)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_recovery_rises_with_sites_and_is_certain_inside_attesons_radius() -> None:
     """The six-taxon fixture over 50 seeds at 100, 300, 1,500 and 10,000 sites.
 

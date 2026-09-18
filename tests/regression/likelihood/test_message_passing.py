@@ -361,7 +361,7 @@ def test_message_passing_on_the_forney_form_gives_the_same_marginals() -> None:
             )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_graph_with_no_variable_above_degree_two_is_its_own_forney_form() -> None:
     # A chain of pairwise factors alone. With emissions each interior state
     # would sit on three factors and need an equality node.

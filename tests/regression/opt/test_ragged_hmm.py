@@ -117,7 +117,7 @@ def test_a_boundary_is_not_a_transition() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_planted_rates_are_recovered_from_ragged_segments() -> None:
     """Unequal lengths, one far longer than the rest, and the truth comes back."""
     lengths = (30, 200, 45, 15)
@@ -140,7 +140,7 @@ def test_a_segment_of_one_position_never_reaches_the_fit() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_declared_ragged_instance_recovers_its_transition() -> None:
     """The fixture, loaded, simulated at its own segmentation, and fitted.
 

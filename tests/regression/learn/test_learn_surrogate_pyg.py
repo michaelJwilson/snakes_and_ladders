@@ -132,7 +132,7 @@ def test_pyg_s_gin_reproduces_the_graph_surrogate_on_tied_weights(seed: int) -> 
     torch.testing.assert_close(theirs, mine, rtol=0.0, atol=1e-12)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_on_general_weights_gin_is_a_different_architecture() -> None:
     # What differs: GIN sums the node and its neighbours *before* its
     # network, so one weight serves both; ours concatenates them, so two

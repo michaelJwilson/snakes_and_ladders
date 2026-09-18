@@ -108,7 +108,7 @@ def test_the_energy_never_rises_across_an_expansion() -> None:
             previous = current
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_cycle_terminates_well_inside_its_cap() -> None:
     # Termination follows from monotonicity over a finite state space, so
     # reaching the cap would be a defect rather than a budget. Measured: two
@@ -154,7 +154,7 @@ def test_the_realized_energy_is_inside_the_proved_bound(coupling: float) -> None
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_expansion_beats_single_site_descent_past_enumeration() -> None:
     # Where the move set earns its complexity. At the sizes enumeration reaches
     # the two are indistinguishable -- 3x3 with three labels, both finding the

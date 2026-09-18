@@ -209,7 +209,7 @@ def test_a_negative_relative_allowance_is_refused() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_beating_the_target_counts_as_reaching_it() -> None:
     """A start better than the target has not failed, and the reading is one-sided.
 

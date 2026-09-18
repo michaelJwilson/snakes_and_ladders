@@ -133,7 +133,7 @@ def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
     assert all(rate > 0.18 for rate in outcomes.values()), outcomes
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_epsilon_greedy_log_probabilities_are_a_distribution_over_the_neighbourhood(
     environment: TreeEnvironment,
 ) -> None:

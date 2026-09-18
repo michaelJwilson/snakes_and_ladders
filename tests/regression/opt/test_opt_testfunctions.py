@@ -175,7 +175,7 @@ def test_the_value_at_the_stated_minimizer_is_zero(objective: object) -> None:
     [Rosenbrock(dimension=3), Rastrigin(dimension=4), Himmelblau()],
     ids=["Rosenbrock", "Rastrigin", "Himmelblau"],
 )
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_test_functions_invert_their_own_constraint_map(
     objective: Objective,
 ) -> None:

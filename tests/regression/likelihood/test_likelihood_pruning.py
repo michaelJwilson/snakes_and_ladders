@@ -178,7 +178,7 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
         )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_generating_topology_outscores_random_wrong_topologies() -> None:
     params = load_simulation_params(FIXTURES_DIR / "tree_jc/release.yaml")
     dataset = simulate_alignment(

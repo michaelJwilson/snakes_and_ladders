@@ -74,7 +74,7 @@ def layout() -> tuple[np.ndarray, ...]:
 
 
 @pytest.mark.release
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_vectorized_sum_is_the_slower_one(layout: tuple[np.ndarray, ...]) -> None:
     # The finding, asserted rather than left in a pull request body. If this
     # ever fails, gathering has become cheaper than fusing and #651's second

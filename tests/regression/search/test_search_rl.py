@@ -129,7 +129,7 @@ def _mirrored(topology: Topology) -> Topology:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_environment_satisfies_the_protocol() -> None:
     environment, _, _ = _environment()
     assert isinstance(environment, Environment)
@@ -138,7 +138,7 @@ def test_the_environment_satisfies_the_protocol() -> None:
 # --- uniform branch lengths ----------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_uniform_branch_lengths_relabel_every_edge_but_the_root() -> None:
     params = _params()
     labelled = with_uniform_branch_lengths(params.tau, 0.25)
@@ -228,7 +228,7 @@ def test_an_episode_return_telescopes_to_its_total_improvement() -> None:
 # --- what the policy sees --------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
     # One feature, so the policy is a Boltzmann distribution over moves whose
     # single weight is an inverse temperature --- the claim that makes the
@@ -271,7 +271,7 @@ def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
 # --- caching --------------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_topology_is_scored_once_however_it_is_spelled() -> None:
     # `leaf_bipartitions` is rooting- and child-order-independent, so a tree
     # reached by two move sequences costs one evaluation. Without it the cheap
@@ -286,7 +286,7 @@ def test_a_topology_is_scored_once_however_it_is_spelled() -> None:
     assert environment.evaluations == 1
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_neighbourhood_excludes_the_state_and_repeats() -> None:
     environment, _, alignment = _environment()
     state = next(iter(enumerate_topologies(sorted(alignment))))
@@ -303,7 +303,7 @@ def test_the_neighbourhood_excludes_the_state_and_repeats() -> None:
 # --- terminal states and the baseline ------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_terminal_state_is_one_no_move_improves() -> None:
     environment, _, alignment = _environment()
     for topology in enumerate_topologies(sorted(alignment)):
@@ -329,7 +329,7 @@ def test_greedy_search_reaches_the_enumerated_optimum() -> None:
         assert episode.terminated
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_known_optimum_is_the_generating_topology_here() -> None:
     environment, params, alignment = _environment()
     scored = {
@@ -343,7 +343,7 @@ def test_the_known_optimum_is_the_generating_topology_here() -> None:
 # --- boundaries -----------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_reset_is_reproducible_from_its_seed() -> None:
     environment, _, _ = _environment()
     first = environment.reset(np.random.default_rng(3))
@@ -478,7 +478,7 @@ def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
 # --- the full feature set --------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_full_set_is_seven_standardized_columns() -> None:
     environment, _, alignment = _environment(features=FeatureSet.FULL)
     assert environment.feature_set is FeatureSet.FULL

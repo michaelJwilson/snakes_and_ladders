@@ -285,7 +285,7 @@ def _error_rates(
     return bit_errors / (len(seeds) * code.n_bits), block_errors / len(seeds)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_996_bit_code_corrects_the_bsc_below_its_threshold_and_not_above() -> None:
     """Over 20 shared seeds the 996-bit (3,6) code has zero bit errors at
     `p = 0.05` and a bit error rate above 0.02 at `p = 0.09`, either side of
@@ -302,7 +302,7 @@ def test_the_996_bit_code_corrects_the_bsc_below_its_threshold_and_not_above() -
     assert above_blocks > 0.3
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_996_bit_code_on_the_erasure_channel_either_side_of_the_threshold() -> None:
     """Over 20 seeds no erasure survives at `epsilon = 0.35` and more than
     half of them survive at `epsilon = 0.5`; realized 0 and 0.433 of 0.5."""
@@ -355,7 +355,7 @@ def test_density_evolution_is_monotone_and_fixed_at_zero() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_20000_bit_code_brackets_the_erasure_threshold() -> None:
     """At `n = 19,998` (the multiple of six nearest the ticket's 20,000) the
     flooding decoder resolves every erasure at `epsilon = 0.42` and leaves

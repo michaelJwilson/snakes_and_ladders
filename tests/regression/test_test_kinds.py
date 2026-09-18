@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._problems import fixtures_named_in
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # The names live in `infra/test_kinds.py`, which the merge gate also reads:
@@ -32,6 +34,7 @@ sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 from test_kinds import (  # noqa: E402
     EXCLUDED_DIRECTORY,
+    FINDINGS,
     KINDS,
     SCHEDULING,
     SUBJECTS,
@@ -72,7 +75,7 @@ def _marked_test_files() -> list[Path]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_test_says_what_it_is_checked_against() -> None:
     """The rule itself: at least one kind, never exactly one.
 
@@ -96,7 +99,7 @@ def test_every_test_says_what_it_is_checked_against() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_guard_fails_on_an_unmarked_test(tmp_path: Path) -> None:
     """The guard rejects what it exists to reject.
 
@@ -108,16 +111,16 @@ def test_the_guard_fails_on_an_unmarked_test(tmp_path: Path) -> None:
     unmarked.write_text("def test_nothing() -> None:\n    assert True\n")
     marked = tmp_path / "test_marked.py"
     marked.write_text(
-        "import pytest\n\n\n@pytest.mark.structural\n"
+        "import pytest\n\n\n@pytest.mark.smoke\n"
         "def test_something() -> None:\n    assert True\n"
     )
 
     assert not _markers(_test_functions(unmarked)[0]) & set(KINDS)
-    assert _markers(_test_functions(marked)[0]) & set(KINDS) == {"structural"}
+    assert _markers(_test_functions(marked)[0]) & set(KINDS) == {"smoke"}
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_registered_markers_are_these() -> None:
     """`pyproject.toml` and `KINDS` cannot drift apart.
 
@@ -129,12 +132,12 @@ def test_the_registered_markers_are_these() -> None:
     pytest_config = config["tool"]["pytest"]["ini_options"]
     registered = {entry.split(":", 1)[0] for entry in pytest_config["markers"]}
 
-    assert set(KINDS) | set(SCHEDULING) | set(SUBJECTS) == registered
+    assert set(KINDS) | set(SCHEDULING) | set(SUBJECTS) | set(FINDINGS) == registered
     assert "--strict-markers" in pytest_config["addopts"]
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_critical_is_a_second_axis_and_not_a_kind() -> None:
     """Every critical test also says what it is checked against.
 
@@ -158,7 +161,7 @@ def test_critical_is_a_second_axis_and_not_a_kind() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("kind", KINDS)
 def test_every_kind_is_used(kind: str) -> None:
     """A category nothing carries is a category that has stopped being applied.
@@ -173,3 +176,48 @@ def test_every_kind_is_used(kind: str) -> None:
         if kind in _markers(node)
     )
     assert carriers > 0, f"no test carries {kind!r}"
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_a_written_infra_sits_in_a_module_naming_no_problem() -> None:
+    """`infra` is a claim about the module, and a test may write it only there.
+
+    Issue #729 made `infra` a kind an author writes on a test of the
+    repository's own machinery. The collection hook adds the same marker where
+    the problem scan finds nothing, and `test_problem_markers.py` holds that
+    such a module imports no defining code; a written `infra` in a module that
+    names a problem would count a test of the science as a test of the tree.
+    """
+    misplaced = [
+        f"{path.relative_to(REPO_ROOT)}::{node.name}"
+        for path in _marked_test_files()
+        if fixtures_named_in(path)
+        for node in _test_functions(path)
+        if "infra" in _markers(node)
+    ]
+
+    assert misplaced == [], (
+        f"{len(misplaced)} tests write `infra` in a module that names a problem: "
+        f"{misplaced[:10]}. Such a test is `smoke`, or the kind its referee makes it."
+    )
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_a_finding_is_carried_beside_a_kind() -> None:
+    """The second axis is never instead of the first.
+
+    A test marked `bug` says what is wrong and not what decided that: the
+    oracle, the planted truth or the contract is the kind beside it. Every
+    finding marker is registered so `--strict-markers` accepts it; the audit
+    issue #729 plans applies them, and this holds each carrier to a kind.
+    """
+    without_a_kind = [
+        f"{path.relative_to(REPO_ROOT)}::{node.name}"
+        for path in _marked_test_files()
+        for node in _test_functions(path)
+        if _markers(node) & set(FINDINGS) and not _markers(node) & set(KINDS)
+    ]
+
+    assert without_a_kind == []

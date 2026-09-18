@@ -321,7 +321,7 @@ def test_belief_propagation_is_measured_against_the_degenerate_floor() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_two_decoding_failures_are_counted_apart() -> None:
     """Converging to a logical coset and reaching the cap are different defects.
 
@@ -341,7 +341,7 @@ def test_the_two_decoding_failures_are_counted_apart() -> None:
     assert measured.rate == measured.failures / measured.trials
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_decode_that_did_not_converge_returns_no_usable_correction() -> None:
     """An unconverged residual satisfies no syndrome, so it is a failure by the test.
 
@@ -379,7 +379,7 @@ def test_a_run_of_no_trials_is_refused() -> None:
 
 
 @pytest.mark.stress
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_decoder_runs_at_the_stress_length_with_no_oracle_behind_it() -> None:
     """At 96 qubits `2 ** n` does not enumerate, so the rate is reported alone.
 

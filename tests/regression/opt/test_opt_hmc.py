@@ -296,7 +296,7 @@ def test_the_prior_leaves_the_coordinates_it_is_stated_in_alone() -> None:
     assert torch.equal(wrapped.theta_from(wrapped.constrain(point)), point)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_chain_is_reproducible_from_generators_seeded_alike() -> None:
     first = sample(
         GAUSSIAN,
@@ -414,7 +414,7 @@ def test_the_energy_error_is_fourth_order_in_the_step_size() -> None:
     assert errors[-1] > 1e-12
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("integrator", [leapfrog, yoshida])
 @pytest.mark.parametrize("n_steps", [1, 3, 20])
 def test_force_evaluations_counts_what_a_trajectory_actually_costs(
@@ -472,7 +472,7 @@ def test_leapfrog_reaches_the_acceptance_target_more_cheaply_than_yoshida() -> N
     assert cheapest["yoshida"] >= 60
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_default_integrator_is_the_one_every_committed_result_used() -> None:
     # A default changed here silently redraws every chain in the repository.
     chain = sample(
@@ -499,7 +499,7 @@ def test_the_default_integrator_is_the_one_every_committed_result_used() -> None
 # --- temperature ------------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_tempering_a_gaussian_scales_the_chain_by_the_square_root_of_t() -> None:
     # Where the approximation is exact. For a Gaussian target the dynamics are
     # linear, so a chain at temperature T *is* the chain at 1 with its
@@ -577,7 +577,7 @@ def test_a_constant_schedule_at_one_is_the_sampler_draw_for_draw() -> None:
     assert annealed.force_evaluations == 200 * leapfrog.force_evaluations(10)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_annealing_reports_the_best_point_visited_not_the_last() -> None:
     # The final proposals run cold but not at zero, so the chain can leave
     # the best point it found; what is returned is the best, and its value is
@@ -636,7 +636,7 @@ def test_each_tempering_replica_samples_the_gaussian_at_its_own_temperature() ->
     assert run.value == pytest.approx(float(GAUSSIAN(run.theta)), rel=EXACT)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_tempering_costs_what_its_accounting_says_and_is_reproducible() -> None:
     # One value at the start; then per replica per round one Hamiltonian at
     # the current point, the trajectory's gradients, one at the proposal and

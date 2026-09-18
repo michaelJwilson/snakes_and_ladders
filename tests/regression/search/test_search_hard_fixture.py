@@ -113,7 +113,7 @@ def test_the_generating_topology_is_the_enumerated_maximum(
     assert environment.score(params.tau) == _enumerated_maximum(environment, alignment)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     alignment: dict[str, np.ndarray],
 ) -> None:
@@ -122,7 +122,7 @@ def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     assert len(list(enumerate_topologies(sorted(alignment)))) == 945
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
     params: SimulationParams, alignment: dict[str, np.ndarray]
 ) -> None:

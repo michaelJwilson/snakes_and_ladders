@@ -83,7 +83,7 @@ def _second_walk() -> dict[str, int]:
     return tally
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_map_counts_what_a_second_walk_finds() -> None:
     # The claim the document makes about itself, checked against a walk that
     # shares no line with the generator's. A module dropped for any reason --
@@ -93,7 +93,7 @@ def test_the_map_counts_what_a_second_walk_finds() -> None:
     assert generator.counts(generator.modules()) == _second_walk()
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_module_reaches_the_rendered_map() -> None:
     # Counting is not placement: a module could be found and still not
     # rendered. Each one's label is asserted in the output, so a module the
@@ -108,7 +108,7 @@ def test_every_module_reaches_the_rendered_map() -> None:
         assert label in rendered, module.path
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_public_function_would_be_typeset_as_a_blank() -> None:
     # The guard the ticket asks for, in the direction that matters: the tree
     # has none today, and `--write` refuses one rather than printing an empty
@@ -131,7 +131,7 @@ def test_the_refusal_fires_on_a_function_without_a_summary(tmp_path: Path) -> No
     assert generator.without_summary(found) == ["blank/public"]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_generated_map_is_not_committed() -> None:
     # `infra/build_documents.sh` writes it and the PDF is what the tree
     # carries, the arrangement `problems_tables.py` already uses (issue #425).

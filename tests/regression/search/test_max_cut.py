@@ -123,7 +123,7 @@ def test_the_certificate_holds_where_the_optimum_is_unknown(
     assert result.ratio >= GOEMANS_WILLIAMSON_RATIO
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_relaxation_is_solved_approximately_and_says_so() -> None:
     # The honest limit of the certificate, asserted rather than left in prose.
     # An exactly solved relaxation upper bounds the true optimum, so the ratio

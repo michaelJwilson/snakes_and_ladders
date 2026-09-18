@@ -83,7 +83,7 @@ def test_the_offsets_layout_is_the_dense_matrix() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_two_draws_from_one_generator_differ_and_seeds_agree() -> None:
     # `sim/CLAUDE.md`: a generator, never a seed. The ensemble is drawn from
     # the generator, so two draws differ and two generators alike agree.
@@ -151,7 +151,7 @@ def test_the_binary_symmetric_ratio_is_the_closed_form() -> None:
     assert 0 < flipped.sum() < codeword.size
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize(("p", "seed"), [(0.05, 11), (0.2, 12), (0.45, 13)])
 def test_the_flip_count_matches_the_flip_probability(p: float, seed: int) -> None:
     """Flips on 20,000 bits fall within four binomial standard deviations of `n p`."""
@@ -166,7 +166,7 @@ def test_the_flip_count_matches_the_flip_probability(p: float, seed: int) -> Non
 
 
 @pytest.mark.mathematical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_erasure_channel_is_zero_or_certain() -> None:
     """An erased bit is exactly zero; a delivered one is `+-LLR_CAP` with the bit's sign,
     and the erasure count sits inside four standard deviations of `n epsilon`."""
@@ -186,7 +186,7 @@ def test_the_erasure_channel_is_zero_or_certain() -> None:
 
 
 @pytest.mark.mathematical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_gaussian_ratio_has_the_closed_form_moments() -> None:
     """`L = 2 y / sigma^2` on the zero word has mean `2 / sigma^2` and variance `4 / sigma^2`."""
     sigma = 0.8

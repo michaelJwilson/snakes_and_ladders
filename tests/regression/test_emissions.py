@@ -41,13 +41,13 @@ def _gaussian() -> GaussianEmission:
     return GaussianEmission(MEAN, SCALE, FLOOR)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_both_families_satisfy_the_emission_protocol() -> None:
     assert isinstance(CategoricalEmission(MATRIX), EmissionFamily)
     assert isinstance(_gaussian(), EmissionFamily)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_categorical_family_scores_a_symbol_as_its_matrix_entry() -> None:
     observations = torch.tensor([[0, 3, 1], [2, 2, 0]])
 
@@ -80,7 +80,7 @@ def test_the_gaussian_density_matches_the_closed_form() -> None:
     assert_allclose(scored, expected, rtol=1e-13)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_categorical_score_is_a_probability_and_a_gaussian_one_is_a_density() -> None:
     # The place the discrete assumption was load-bearing. A categorical score
     # is bounded above by zero; a Gaussian one is not. Exhibited rather than
@@ -176,7 +176,7 @@ def test_the_gaussian_likelihood_grows_without_bound_as_a_state_collapses() -> N
     assert_allclose(steps, np.full(steps.shape, math.log(10.0)), rtol=1e-12)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_variance_floor_is_derived_from_the_data_and_scales_with_it() -> None:
     # `s**2 / n**2`: the spacing a state occupying a neighbourhood of the data
     # cannot fall below. Both scalings are asserted, since a floor that
@@ -192,7 +192,7 @@ def test_the_variance_floor_is_derived_from_the_data_and_scales_with_it() -> Non
     assert pooled_variance_floor(doubled) < floor / 3.0
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_floor_cannot_be_derived_without_a_scale_to_derive_it_from() -> None:
     with pytest.raises(ValueError, match="at least 2 observations"):
         pooled_variance_floor(np.array([1.0]))
@@ -213,7 +213,7 @@ def test_each_family_refuses_an_observation_outside_its_support() -> None:
         gaussian.validate(np.array([0.0, np.inf]))
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_each_family_says_what_distinguishes_its_states() -> None:
     # Aligning a Gaussian fit by anything but the mean would let two states
     # with different means look identical; a categorical one by a single
@@ -284,7 +284,7 @@ def _negative_binomial() -> NegativeBinomialEmission:
     return NegativeBinomialEmission(NB_DISPERSION, NB_MEAN)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_count_family_satisfies_the_emission_protocol() -> None:
     assert isinstance(_negative_binomial(), EmissionFamily)
 
@@ -305,7 +305,7 @@ def test_a_dispersion_of_one_is_the_geometric_distribution_exactly() -> None:
         assert float((scored - geometric).abs().max()) == 0.0
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_poisson_limit_is_approached_at_the_rate_the_expansion_predicts() -> None:
     # The tolerance is *derived* from the truncation rather than chosen. The
     # deviation from the Poisson log-pmf is O(1 / r), so the order is what is
@@ -339,7 +339,7 @@ def test_the_poisson_limit_is_approached_at_the_rate_the_expansion_predicts() ->
     assert_allclose(halvings, np.full(len(halvings), 2.0), rtol=0.02)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_drawn_moments_match_the_mean_variance_relation() -> None:
     # `Var = mu + mu**2 / r` is what makes this a count model rather than a
     # Poisson with a free parameter, so it is checked against the relation
@@ -363,7 +363,7 @@ def test_the_drawn_moments_match_the_mean_variance_relation() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_count_m_step_returns_a_stationary_point_of_the_weighted_likelihood() -> (
     None
 ):
@@ -439,7 +439,7 @@ def test_data_that_is_not_overdispersed_reaches_the_bound_and_says_so() -> None:
         )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_overdispersed_data_recovers_its_dispersion_and_does_not_flag() -> None:
     # The paired half of the check above: a guard flagging everything would
     # pass that test and mean nothing.
@@ -473,7 +473,7 @@ def test_the_dispersion_bound_is_derived_from_the_counts_and_the_sample() -> Non
         identifiable_dispersion_bound(0.0, 4000.0)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_count_family_distinguishes_its_states_by_two_moments() -> None:
     # Mean *and* variance, unlike the Gaussian family's mean alone: two states
     # sharing a mean and differing in dispersion are different states. Both
@@ -525,7 +525,7 @@ TRIALS = np.array([12, 12])
 POISSON_MEAN = np.array([4.0, 9.0])
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_four_count_families_bracket_equidispersion() -> None:
     # One assertion, and it is the reason the other three families exist.
     binomial = BinomialEmission(TRIALS, [0.3, 0.6])
@@ -542,7 +542,7 @@ def test_the_four_count_families_bracket_equidispersion() -> None:
     assert bool((beta_binomial.variance > beta_binomial.mean).all())
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_binomial_over_one_trial_is_bernoulli() -> None:
     # An equality up to the arithmetic: at n = 1 the three lgamma terms are
     # lgamma(2), lgamma(y + 1) and lgamma(2 - y), which cancel to zero for
@@ -572,7 +572,7 @@ def test_a_beta_binomial_at_unit_parameters_is_the_discrete_uniform() -> None:
     assert_allclose(float(torch.exp(scored).sum()), 1.0, rtol=1e-14)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_beta_binomial_approaches_the_binomial_as_it_concentrates() -> None:
     # The second approached limit, its tolerance derived as the Poisson one
     # is: the deviation is O(1 / (a + b)), so the order is asserted --
@@ -653,7 +653,7 @@ def test_the_closed_form_count_m_steps_are_the_weighted_mean() -> None:
         assert (step.converged, step.at_boundary, step.iterations) == (True, False, 0)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_beta_binomial_m_step_settles_and_is_a_stationary_point() -> None:
     # Validated as an optimization. Minka's fixed point was rejected on
     # measurement: monotone but linearly convergent, it was still moving in

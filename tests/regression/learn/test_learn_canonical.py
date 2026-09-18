@@ -200,7 +200,7 @@ def test_the_cliff_walk_optimum_leaves_the_bottom_row() -> None:
     assert reward == cliff.step_cost + cliff.cliff_cost
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_reinforce_reaches_the_optimum_on_the_plain_case() -> None:
     # The learner against a known optimum rather than against greedy: on the
     # gridworld the optimal return from every start is the closed form above,
@@ -224,7 +224,7 @@ def test_reinforce_reaches_the_optimum_on_the_plain_case() -> None:
     assert all(reached), f"{sum(reached)} of {len(reached)} starts optimal"
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_ppo_reaches_the_optimum_on_the_plain_case() -> None:
     # The same claim for the second learner, on the same fixture and the same
     # oracle, so the two are readable side by side. A learner that failed here

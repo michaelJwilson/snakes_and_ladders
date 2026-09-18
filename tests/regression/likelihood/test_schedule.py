@@ -89,7 +89,7 @@ def _lattice(extent: int = 3, cardinality: int = 2) -> FactorGraph:
     return from_potts(graph, rng.normal(size=(graph.n_nodes, cardinality)))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_registered_name_resolves_to_its_class() -> None:
     assert set(SCHEDULES) == {str(member) for member in MessageScheduleName}
     for kind in (
@@ -143,7 +143,7 @@ def test_the_upward_pass_alone_recovers_the_log_partition(graph: FactorGraph) ->
     assert half.guarantee is Guarantee.PARTIAL
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_upward_pass_defines_the_root_marginal_and_no_other() -> None:
     graph = _star(6)
 
@@ -156,7 +156,7 @@ def test_the_upward_pass_defines_the_root_marginal_and_no_other() -> None:
         half.variable["v0"]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_downward_pass_reports_no_log_partition_rather_than_a_wrong_one() -> None:
     # It has seen no evidence from below, so neither route to `log Z` is open.
     # A number here would be a number for something it did not compute.
@@ -206,7 +206,7 @@ def test_a_tree_schedule_is_refused_on_a_loopy_graph(schedule: str) -> None:
         sum_product(_lattice(), schedule=schedule)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("schedule", TREE_SCHEDULES + LOOPY_SCHEDULES)
 def test_every_schedule_runs_on_a_tree_adapted_from_another_problem(
     schedule: str,

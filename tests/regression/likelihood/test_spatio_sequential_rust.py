@@ -127,7 +127,7 @@ def test_the_rust_e_step_matches_the_oracle_on_a_slice_of_the_5k_instance() -> N
     _agree(instance, observations, labels)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_tables_are_the_families_own_log_density() -> None:
     # The kernel does no arithmetic of its own on a count: it reads what the
     # families wrote. A table that had drifted from them would be a second

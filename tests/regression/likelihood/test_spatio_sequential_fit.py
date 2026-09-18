@@ -182,7 +182,7 @@ def test_the_m_step_identity_holds_through_autograd() -> None:
         assert float(a.abs().max()) > 0.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_backward_sampler_draws_paths_from_the_posterior() -> None:
     params = _hmm(2, 2, 3, 7)
     observations = np.array([0, 1, 1])

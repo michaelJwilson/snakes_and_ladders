@@ -135,7 +135,7 @@ def test_theta_round_trips_through_the_constraint_map() -> None:
     assert_allclose(constrained["field"].numpy(), params.field, rtol=1e-14)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_initial_point_is_a_uniform_field_and_no_coupling() -> None:
     objective = PottsObjective(np.zeros((2, 4), dtype=np.int64), n_states=3)
     constrained = objective.constrain(objective.initial())
@@ -145,13 +145,13 @@ def test_the_initial_point_is_a_uniform_field_and_no_coupling() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_loader_canonicalizes_the_field_gauge() -> None:
     params = load_potts_params(FIXTURE)
     assert_allclose(float(np.exp(params.field).sum()), 1.0, rtol=1e-14)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_simulated_chains_have_the_declared_shape_and_alphabet() -> None:
     params = load_potts_params(FIXTURE)
     chains = simulate_chains(params)
@@ -159,13 +159,13 @@ def test_simulated_chains_have_the_declared_shape_and_alphabet() -> None:
     assert set(np.unique(chains)) <= set(range(params.n_states))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_simulation_is_reproducible_from_the_seed() -> None:
     params = load_potts_params(FIXTURE)
     assert np.array_equal(simulate_chains(params), simulate_chains(params))
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_coupling_raises_the_frequency_of_adjacent_agreement() -> None:
     # A generative check with an unambiguous direction: positive coupling
     # rewards agreeing neighbours, so simulated chains must agree more often
@@ -217,7 +217,7 @@ def test_an_unusable_size_is_refused(
         load_potts_params(path)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_constraint_map_is_the_one_the_objective_uses() -> None:
     # Ties the instance to the shared vocabulary rather than to a private
     # copy of it: a divergence here is what would make `opt/CLAUDE.md`'s

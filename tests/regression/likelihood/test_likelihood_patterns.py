@@ -218,7 +218,7 @@ def test_a_malformed_weight_or_alignment_is_refused() -> None:
         compress(ragged)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_pattern_table_is_a_site_patterns() -> None:
     # The dataclass is the contract every backend reads; the alignment view
     # it exposes must be the rows of its own column block.

@@ -276,7 +276,7 @@ def test_sankoff_refuses_what_fitch_refuses() -> None:
         sankoff_score(tau, alignment, unit)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
     # The theorem, as a prediction. More data does not help: the systematic
@@ -290,7 +290,7 @@ def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
     assert many_parsimony == 0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
     # The other half of the same claim, and why the zone is the canonical
@@ -303,7 +303,7 @@ def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
     assert many_likelihood >= few_likelihood
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_parsimony_is_correct_and_fast_in_the_farris_zone() -> None:
     # The control. Without it, "parsimony got the Felsenstein zone wrong" is
     # indistinguishable from "this parsimony implementation is broken".

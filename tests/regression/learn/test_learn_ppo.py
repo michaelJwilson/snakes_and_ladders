@@ -219,7 +219,7 @@ def test_ppo_raises_the_enumerated_expected_return_and_beats_reinforce_at_a_matc
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_an_mlp_policy_trained_by_ppo_reaches_the_optimum() -> None:
     # Measured 97.5% of the 81 starts with mean exact return 2.55, against
     # the linear policy's 96.3% and 2.28: the deeper scorer can represent the

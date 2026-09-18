@@ -82,7 +82,7 @@ def _rates(params: SpatioSequentialParams) -> list[np.ndarray]:
     return rates
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_a_fit_told_the_exposure_recovers_the_planted_rates() -> None:
     params, observations = _planted()
     fit = fit_spatio_sequential(
@@ -93,7 +93,7 @@ def test_a_fit_told_the_exposure_recovers_the_planted_rates() -> None:
         assert np.all(np.abs(fitted - planted) < planted * 0.05)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_same_fit_not_told_the_exposure_inflates_the_rates_by_its_mean() -> None:
     # The other half of the referee: the covariate must change the answer, and
     # change it by about the amount the model says. Without it the fit explains
@@ -120,7 +120,7 @@ def test_the_same_fit_not_told_the_exposure_inflates_the_rates_by_its_mean() -> 
         assert np.all(np.abs(factor - 1.0) > 0.5)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_m_step_slices_the_covariate_the_likelihood_module_does() -> None:
     # The slice is `covariate_block`'s and not this module's, which is the
     # whole of the fix: two expressions for one pairing is how a fit comes to

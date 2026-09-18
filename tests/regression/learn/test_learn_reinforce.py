@@ -201,7 +201,7 @@ def test_training_raises_the_enumerated_expected_return() -> None:
     assert len(training.mean_returns) == 60
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
     # Milestone 8's criterion, at a size where the answer is enumerable.
     #
@@ -255,7 +255,7 @@ def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
     assert learned <= optimum(environment)[1]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_training_is_reproducible_from_its_seed() -> None:
     environment = _environment()
     runs = [
@@ -273,7 +273,7 @@ def test_training_is_reproducible_from_its_seed() -> None:
     assert runs[0].mean_returns == runs[1].mean_returns
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
     # Guards the guard: a check that cannot fail reads as evidence while
     # supplying none. The planted bias is myopia -- weighting each step by its

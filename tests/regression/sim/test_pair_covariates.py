@@ -130,7 +130,7 @@ def test_the_successes_covariate_replaces_the_declared_trial_count(
             assert abs(drawn - expected) < expected * 0.05
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_two_simulators_agree_under_a_varying_covariate() -> None:
     # The existing NumPy-against-Rust comparison, made with a covariate that
     # varies per vertex and per position rather than a constant: the two
@@ -206,7 +206,7 @@ def _pair_model(covariate: np.ndarray | None) -> SpatioSequentialParams:
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_coupled_simulator_draws_a_pair_family() -> None:
     # The draw it refused outright (issue #672). The observation carries the
     # family's channel axis, and the truth it is held to is the family's own
@@ -227,7 +227,7 @@ def test_the_coupled_simulator_draws_a_pair_family() -> None:
             assert abs(got - expected) < expected * 0.06
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_coupled_simulator_draws_a_pair_under_a_per_channel_covariate() -> None:
     # `_drawing_covariate` appended a singleton to a covariate that already
     # carried the channel axis, so `split_covariate` refused it; the draw is
@@ -251,7 +251,7 @@ def test_the_coupled_simulator_draws_a_pair_under_a_per_channel_covariate() -> N
             assert abs(got - expected) < expected * 0.06
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_scalar_family_still_draws_the_array_it_always_did() -> None:
     # The general simulator now reads the family's trailing axes; a family
     # with none must be unchanged, bitwise, or every committed coupled number

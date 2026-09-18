@@ -67,7 +67,7 @@ def _bullets(path: Path) -> list[str]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_three_documents_name_the_same_milestones() -> None:
     """A milestone tracked in one document and absent from another is drift.
 
@@ -93,7 +93,7 @@ def test_the_three_documents_name_the_same_milestones() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_filed_ticket_is_written_the_one_way_the_header_promises() -> None:
     """`TICKETS.md`'s header says a parenthesized number means a filed issue.
 
@@ -109,7 +109,7 @@ def test_a_filed_ticket_is_written_the_one_way_the_header_promises() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_header_still_describes_the_file() -> None:
     """The promise the two tests above enforce is actually made.
 
@@ -121,7 +121,7 @@ def test_the_header_still_describes_the_file() -> None:
     assert "A parenthesized number is an issue already filed" in header
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_milestone_check_would_catch_a_document_that_drifted() -> None:
     """The comparison rejects the shape it exists to reject.
 

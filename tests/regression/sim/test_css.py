@@ -257,7 +257,7 @@ def test_the_four_cycle_count_is_the_pairs_of_bits_two_checks_share() -> None:
 # --- the error the sector draws ---------------------------------------------------
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_drawn_error_has_the_rate_the_channel_declares() -> None:
     """The flip rate over 400 draws recovers `p`, and the ratios match the error.
 

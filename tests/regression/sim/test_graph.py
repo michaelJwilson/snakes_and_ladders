@@ -67,7 +67,7 @@ def test_every_node_appears_in_the_expected_number_of_edges() -> None:
     assert degree[0] == 2, "a corner of a 3x3 grid has 2 neighbours"
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_1d_open_chain_is_recognized_and_a_ring_is_not() -> None:
     assert lattice_graph(
         (5,), boundary=BoundaryCondition.OPEN, coupling=0.5
@@ -143,7 +143,7 @@ def test_a_graph_with_no_edges_still_has_two_columns() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_consumer_cannot_write_through_the_cached_arrays() -> None:
     """The cache is handed out, so it is handed out unwritable.
 
@@ -161,7 +161,7 @@ def test_a_consumer_cannot_write_through_the_cached_arrays() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_arrays_are_derived_once_and_handed_back() -> None:
     """The same object, not an equal one: that is the whole optimization.
 

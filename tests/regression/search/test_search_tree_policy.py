@@ -111,7 +111,7 @@ def _rate(
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_episode_ends_where_no_move_improves(
     environment: TreeEnvironment, starts: list[Topology]
 ) -> None:
@@ -141,7 +141,7 @@ def test_every_episode_ends_where_no_move_improves(
     assert all(environment.is_terminal(state) for state in learned_ends)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.release
 def test_an_untrained_policy_is_far_worse_than_greedy(
     environment: TreeEnvironment, starts: list[Topology], maximum: float
@@ -165,7 +165,7 @@ def test_an_untrained_policy_is_far_worse_than_greedy(
     assert abs(rate - _UNTRAINED) < 0.02
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_trained_policy_is_no_worse_than_hill_climbing(
     environment: TreeEnvironment, starts: list[Topology], maximum: float
 ) -> None:

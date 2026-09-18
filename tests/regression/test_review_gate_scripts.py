@@ -76,7 +76,7 @@ def _commit(root: Path, files: dict[str, str]) -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_kind_gate_names_the_test_the_branch_added_without_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -103,7 +103,7 @@ def test_the_kind_gate_names_the_test_the_branch_added_without_one(
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_kind_gate_passes_a_branch_whose_tests_all_say_what_checks_them(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -114,7 +114,7 @@ def test_the_kind_gate_passes_a_branch_whose_tests_all_say_what_checks_them(
     assert gate_changed_tests.unmarked("main") == []
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_seam_gate_sees_only_the_protocols_the_branch_adds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -143,7 +143,7 @@ def _declared(docstring: str) -> str:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_seam_gate_counts_the_modules_that_name_the_protocol(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -170,7 +170,7 @@ def test_the_seam_gate_counts_the_modules_that_name_the_protocol(
     assert gate_new_seams.verdicts("main") == []
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_seam_gate_takes_the_reason_from_the_declaration_itself(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -197,7 +197,7 @@ def test_the_seam_gate_takes_the_reason_from_the_declaration_itself(
     assert "states no" in gate_new_seams.verdicts("main")[0]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_derived_ledgers_are_not_in_the_index() -> None:
     # The index, not the working tree: `infra/ledgers.sh` writes all three
     # into the tree on every document build and every review, so their

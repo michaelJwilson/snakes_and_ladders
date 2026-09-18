@@ -213,7 +213,7 @@ def _fit_alpha(params: SpatioOnlyParams, configurations: np.ndarray) -> np.ndarr
     return np.asarray(estimate - estimate.mean())
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_covariate_coefficients_are_recovered_at_the_ci_instance() -> None:
     # What makes the sizes part of the model: alpha is identified from a draw,
     # and the flat class's interval covers zero. The interval is the
@@ -281,7 +281,7 @@ def test_the_sampler_matches_the_exact_normalizer_past_enumeration() -> None:
 # --- the release instance: the tilt at 5,041 vertices -----------------------
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_the_covariate_still_tilts_the_labels_at_five_thousand_vertices() -> None:
     # Nothing is exact at 5,041 vertices, so what is asserted is the property

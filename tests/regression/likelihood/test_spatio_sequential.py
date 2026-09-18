@@ -102,7 +102,7 @@ def test_the_conditional_posterior_at_the_only_labelling_is_the_marginal_one() -
     np.testing.assert_allclose(exact.state_posterior, conditional, rtol=1e-12)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_label_posterior_recovers_planted_labels_on_most_nodes() -> None:
     # 42 of 48 when measured; asserted at three quarters. The misses are the
     # nodes whose six observations happen to fit the other class.

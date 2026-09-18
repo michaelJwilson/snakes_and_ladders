@@ -157,7 +157,7 @@ def test_the_joint_posterior_is_the_enumerated_one_where_the_two_chains_agree() 
 # --- the structure of one decoding ----------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_per_iteration_run_is_the_capped_run_at_every_cap() -> None:
     # One run reports every iteration count, which is what makes the release
     # waterfall cost the deepest iteration rather than the sum. The two paths

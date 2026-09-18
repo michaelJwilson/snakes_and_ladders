@@ -94,7 +94,7 @@ def test_descent_reaches_the_planted_energy_where_nothing_is_frustrated() -> Non
     assert scan.planted.shape == scan.descended.shape == (len(FRUSTRATIONS),)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_counts_matches_and_undercuts(tmp_path: Path) -> None:
     graph = PARAMS.lattice()
     labelling, agreeing = ground_state(graph)

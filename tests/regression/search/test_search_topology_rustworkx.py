@@ -112,7 +112,7 @@ def test_every_nni_neighbour_differs_from_its_parent_and_is_not_isomorphic() -> 
         assert not _isomorphic(parent, neighbour)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_unlabelled_comparison_would_call_every_topology_the_same() -> None:
     # The guard for the docstring's reason for matching on names: without the
     # matcher, rustworkx calls two different topologies on six taxa

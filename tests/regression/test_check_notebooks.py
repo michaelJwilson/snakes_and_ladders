@@ -62,7 +62,7 @@ def _result(value: str) -> dict[str, Any]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_printed_number_is_compared() -> None:
     committed = [_cell(_stream("log-likelihood -11678.1596\n"))]
     executed = [_cell(_stream("log-likelihood -11679.1596\n"))]
@@ -75,7 +75,7 @@ def test_a_printed_number_is_compared() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_unchanged_notebook_reports_nothing() -> None:
     cells = [_cell(_stream("stable\n"), _figure()), _cell(_result("42"))]
 
@@ -83,7 +83,7 @@ def test_an_unchanged_notebook_reports_nothing() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_figures_own_repr_is_not_compared() -> None:
     # The false positive that made every figure cell fail: a kernel reports
     # the artist's size, and resizing a figure is not a changed result.
@@ -105,7 +105,7 @@ def test_a_figures_own_repr_is_not_compared() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_cell_that_lost_its_figure_is_reported() -> None:
     # The other side of the same rule. Excluding the repr must not make the
     # check blind to a figure that stopped being drawn.
@@ -119,7 +119,7 @@ def test_a_cell_that_lost_its_figure_is_reported() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_markdown_cells_do_not_shift_the_cell_numbering() -> None:
     # Cells are numbered by code-cell position, so a diff points at the cell
     # a reader counts rather than at an index including prose.
@@ -134,7 +134,7 @@ def test_markdown_cells_do_not_shift_the_cell_numbering() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_text_outputs_reads_streams_and_results_but_not_images() -> None:
     cell = _cell(_stream("printed\n"), _figure(), _result("returned"))
 
@@ -167,7 +167,7 @@ def test_a_notebook_of_a_different_length_is_refused() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_comparison_imports_without_the_jupyter_stack() -> None:
     # The `python-tests` job syncs `--extra test`, not `--extra notebooks`, so
     # `nbformat` and `nbclient` are absent there. They were imported at module
@@ -199,7 +199,7 @@ def test_the_comparison_imports_without_the_jupyter_stack() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_notebook_given_is_executed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -242,7 +242,7 @@ WELL_FORMED = _markdown(
 )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_well_formed_further_work_section_passes() -> None:
     assert structure_problems("n.ipynb", [_cell(_stream("1\n")), WELL_FORMED]) == []
 
@@ -278,7 +278,7 @@ def test_a_further_work_bullet_without_a_ticket_is_reported() -> None:
     assert "Re-execution in CI" in problem
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_heading_is_matched_case_insensitively_on_the_second_word() -> None:
     # Root `CLAUDE.md` writes "Further Work" and the notebooks "Further work".
     assert (
@@ -286,7 +286,7 @@ def test_the_heading_is_matched_case_insensitively_on_the_second_word() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_committed_notebook_passes_the_structural_check() -> None:
     # On the real notebooks, read as JSON so the Jupyter stack is not needed.
     import json

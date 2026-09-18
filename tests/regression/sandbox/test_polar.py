@@ -143,7 +143,7 @@ def test_the_declared_instance_is_the_code_the_ticket_states() -> None:
     assert code.frozen.tolist() == [0, 1, 2, 4, 6, 8, 10, 12]
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_gaussian_approximation_orders_the_channels_as_a_decoder_does() -> None:
     # The approximation is approximate, so the *ordering* is what is
     # refereed: the frozen set depends on nothing else. The independent

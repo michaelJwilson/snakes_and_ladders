@@ -177,7 +177,7 @@ def test_no_ensemble_threshold_reaches_the_limit_it_is_bounded_by() -> None:
     assert (limit - threshold) / limit == pytest.approx(0.141, abs=5e-3)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_channel_with_no_declared_capacity_is_refused() -> None:
     # The `Channel` protocol exposes log-likelihood ratios alone, so a fourth
     # channel has no capacity to derive. Returning one anyway would attribute
@@ -195,7 +195,7 @@ def test_a_channel_with_no_declared_capacity_is_refused() -> None:
         noise_at_capacity(0.5, Lossless)  # type: ignore[arg-type]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("rate", [0.0, 1.0, -0.1, 1.5])
 def test_a_rate_outside_the_open_unit_interval_is_refused(rate: float) -> None:
     # At 0 and 1 the limit is an interval end rather than a crossing, and the
@@ -204,7 +204,7 @@ def test_a_rate_outside_the_open_unit_interval_is_refused(rate: float) -> None:
         noise_at_capacity(rate, BinaryErasureChannel)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_arguments_each_function_cannot_answer_for_are_refused() -> None:
     with pytest.raises(ValueError, match="probability lies in"):
         binary_entropy(1.2)
@@ -249,7 +249,7 @@ def test_the_limit_in_decibels_rises_with_the_rate() -> None:
     assert limits[1] == pytest.approx(-0.508, abs=1e-3)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_decibel_map_refuses_what_it_cannot_answer_for() -> None:
     with pytest.raises(ValueError, match="noise scale is positive"):
         eb_n0_decibels(0.0, 0.5)

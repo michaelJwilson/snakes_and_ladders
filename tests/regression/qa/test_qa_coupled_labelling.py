@@ -35,7 +35,7 @@ PARAMS = FIXTURE.params
 SIDE = PARAMS.graph.shape[0]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_coordinates_are_the_lattice_and_nothing_random() -> None:
     # The failure this prevents: node positions from a randomized layout,
     # redrawn differently on every render.
@@ -50,7 +50,7 @@ def test_the_coordinates_are_the_lattice_and_nothing_random() -> None:
     assert len({tuple(point) for point in coords}) == SIDE * SIDE
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_planting_is_the_one_the_suite_plants() -> None:
     # The figure draws the instance the solvers are measured on, so it plants
     # what they are measured against rather than a planting of its own.
@@ -85,7 +85,7 @@ def test_the_permutation_the_panels_are_drawn_under_is_the_accuracy_one(
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_recovered_labelling_agrees_with_the_planted_one() -> None:
     # The claim the figure makes: on this replicate the annealed start
     # recovers the planting. The suite measures a mean of 0.97 over six
@@ -128,7 +128,7 @@ def test_a_lattice_the_figure_cannot_draw_is_refused() -> None:
         planted_labelling(oblong)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_names_the_instance_the_seeds_and_the_agreement(
     tmp_path: Path,
 ) -> None:

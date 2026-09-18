@@ -54,7 +54,7 @@ def _graphs() -> list[PottsGraph]:
 # --- the round trip -------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "graph", _graphs(), ids=["2x2-periodic", "4x5", "3x3x2", "triangular", "glass"]
 )
@@ -72,7 +72,7 @@ def test_a_graph_survives_the_round_trip_with_its_edge_order(graph: PottsGraph) 
     assert back.boundary is None
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_converted_graph_carries_the_coupling_as_edge_data() -> None:
     graph = PottsGraph(
         n_nodes=3, edges=((0, 1), (1, 2), (0, 1)), coupling=(0.5, 0.7, 0.9)
@@ -187,7 +187,7 @@ def test_the_random_graph_draws_the_edge_count_rustworkx_s_generator_draws() -> 
 # --- the cut, refereed by networkx where rustworkx has no s-t flow -------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_rustworkx_offers_no_s_t_flow_which_is_why_networkx_referees_it() -> None:
     # The guard for the docstring's claim: the day rustworkx grows a maximum
     # flow, this fails and the oracle below should move to it (#242).

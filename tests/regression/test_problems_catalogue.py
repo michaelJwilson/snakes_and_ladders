@@ -70,7 +70,7 @@ def _resolves(symbol: str) -> bool:
         return False
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_defining_name_in_the_catalogue_resolves() -> None:
     # Read from the `Defines` column rather than from every backtick in the
     # file (issue #640): the minimal table backticks a fixture key, a LaTeX
@@ -82,7 +82,7 @@ def test_every_defining_name_in_the_catalogue_resolves() -> None:
     assert missing == [], f"PROBLEMS.md names code that does not exist: {missing}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_key_in_the_catalogue_declares_a_fixture() -> None:
     # A key is the fixture directory and the marker, which are one name. A key
     # naming no directory is a marker no test can carry.
@@ -92,7 +92,7 @@ def test_every_key_in_the_catalogue_declares_a_fixture() -> None:
     assert missing == [], f"PROBLEMS.md keys name no fixture: {missing}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_significant_test_appears_in_the_ledger_once() -> None:
     # Read from what the generator writes rather than from a file: the ledger
     # is not committed (issue #425), and the property is a property of the
@@ -107,7 +107,7 @@ def test_every_significant_test_appears_in_the_ledger_once() -> None:
     assert entries, "no oracle or simulated-truth test found"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_ledger_guard_fails_on_a_stale_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

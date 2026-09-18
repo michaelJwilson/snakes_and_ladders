@@ -109,7 +109,7 @@ def test_the_field_and_the_posterior_agree_about_the_model() -> None:
     assert moved > 1.0, f"the field moved {moved:.3e}; it was 0.000e+00 before #658"
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_neutral_covariate_leaves_every_seam_where_it_was() -> None:
     """The other half: what the covariate does nothing to, it does nothing to.
 

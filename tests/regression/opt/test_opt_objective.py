@@ -42,7 +42,7 @@ def _imported_modules(source: Path) -> set[str]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_opt_imports_nothing_from_the_application_modules() -> None:
     # `opt/CLAUDE.md` says nothing phylogenetic belongs here. That rule is
     # only worth stating if something checks it: a single `from snakes_and_ladders.sim
@@ -62,7 +62,7 @@ def test_opt_imports_nothing_from_the_application_modules() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_check_would_catch_an_application_import(tmp_path: Path) -> None:
     # Guards the guard: a structural test that cannot fail is worse than no
     # test, because it reads as evidence.
@@ -122,7 +122,7 @@ def test_the_pinned_gauge_leaves_no_flat_direction() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_both_reference_instances_satisfy_the_protocol() -> None:
     chains = torch.zeros((2, 3), dtype=torch.long).numpy()
     assert isinstance(PottsObjective(chains, n_states=2), Objective)

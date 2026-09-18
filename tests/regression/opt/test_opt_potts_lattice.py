@@ -151,7 +151,7 @@ def test_the_fitted_optimum_beats_a_brute_force_scan() -> None:
             assert float(objective(probe)) >= best - 1e-9
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_couplings_and_fields_are_recovered_within_their_intervals() -> None:
     # One dataset, so this is a draw and not a rate; the rate is the next test.
     truth, fitted, spread = _fitted(400, SEED)
@@ -163,7 +163,7 @@ def test_the_couplings_and_fields_are_recovered_within_their_intervals() -> None
     assert fitted[0] == pytest.approx(COUPLING, abs=4 * spread[0])
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_interval_coverage_approaches_the_nominal_rate() -> None:
     # The claim `STATUS.md`'s ledger row rests on. Release-gated because it

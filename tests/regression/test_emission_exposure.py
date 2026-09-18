@@ -87,7 +87,7 @@ def test_unit_exposure_changes_nothing_in_scoring_or_the_m_step(
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_a_varying_exposure_recovers_the_planted_rate_and_dispersion() -> None:
     # The regime the conserved family cannot express, so it is refereed by the
     # parameters that generated the data rather than by an oracle. The exposure
@@ -114,7 +114,7 @@ def test_a_varying_exposure_recovers_the_planted_rate_and_dispersion() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_per_state_rate_is_what_the_moments_are_stated_at() -> None:
     # `mu_k` is the per-state association the fit targets; the emission's mean
     # is `e_i mu_k`. So `mean` and `variance` keep a value under a varying

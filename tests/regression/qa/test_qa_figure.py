@@ -25,7 +25,7 @@ from snakes_and_ladders.qa.figure import (
 mpl.use("Agg")
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_write_qa_figure_does_not_embed_type3_fonts(tmp_path: Path) -> None:
     fig, ax = plt.subplots()
     ax.plot([0, 1], [0, 1])
@@ -38,7 +38,7 @@ def test_write_qa_figure_does_not_embed_type3_fonts(tmp_path: Path) -> None:
     assert b"/Subtype /Type3" not in pdf_bytes
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_write_qa_figure_does_not_mutate_global_font_rc(tmp_path: Path) -> None:
     fig, ax = plt.subplots()
     ax.plot([0, 1], [0, 1])
@@ -50,7 +50,7 @@ def test_write_qa_figure_does_not_mutate_global_font_rc(tmp_path: Path) -> None:
     assert before == after
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
@@ -69,7 +69,7 @@ def test_latex_integer_separates_only_where_it_helps(value: int, expected: str) 
     assert latex_integer(value) == expected
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_latex_safe_accepts_a_separated_integer() -> None:
     check_latex_safe(f"simulated over {latex_integer(200_000)} sites")
 
@@ -98,7 +98,7 @@ def test_write_qa_figure_refuses_an_unsafe_caption(tmp_path: Path) -> None:
         write_qa_figure(tmp_path, "unsafe", figure, "caption_with_underscore")
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_write_qa_table_writes_a_tex_fragment_and_its_caption(tmp_path: Path) -> None:
     body = r"\begin{tabular}{l}" + "\n" + r"  a \\" + "\n" + r"\end{tabular}"
 

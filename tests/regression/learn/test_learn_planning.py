@@ -102,7 +102,7 @@ def test_the_visit_distribution_improves_on_the_prior_at_depth_three() -> None:
     assert improved >= 12, improved
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_expert_iteration_makes_the_planner_reach_the_optimum_at_a_fraction_of_greedys_evaluations() -> (
     None
 ):

@@ -142,7 +142,7 @@ def test_a_duplicate_is_caught_when_the_two_are_not_adjacent() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_parity_check_s_two_orientations_are_the_structure_s() -> None:
     # What `ParityCheck.from_edges` derived by `lexsort` and `searchsorted`
     # before it held the structure, asserted field for field.
@@ -160,7 +160,7 @@ def test_the_parity_check_s_two_orientations_are_the_structure_s() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_potts_adjacency_is_derived_once_and_is_read_only() -> None:
     # The fix the survey's finding asked for: every caller gets the same
     # arrays, so a caller that wrote into them would be editing the graph.

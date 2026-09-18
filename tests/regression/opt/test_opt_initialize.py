@@ -35,7 +35,7 @@ from snakes_and_ladders.opt.testfunctions import (
 TOLERANCE = 0.1
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_default_initializer_is_the_objective_s_own_start() -> None:
     """`FromObjective` is today's behaviour exactly, not an approximation.
 
@@ -51,7 +51,7 @@ def test_the_default_initializer_is_the_objective_s_own_start() -> None:
     assert torch.equal(starts[0], objective.initial())
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_single_start_makes_the_multi_start_fit_the_ordinary_one() -> None:
     """One start is the degenerate case of many, and the code agrees.
 
@@ -101,7 +101,7 @@ def test_the_perturbed_start_leaves_the_stationary_point_the_uniform_hmm_sits_on
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one() -> None:
     """The case multi-start is for, measured against four analytic minima.
 
@@ -129,7 +129,7 @@ def test_restarts_reach_every_himmelblau_basin_and_one_start_reaches_one() -> No
     assert from_many == set(range(len(HIMMELBLAU_MINIMA)))
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
     """The negative result, kept because it is the more useful one.
 
@@ -186,7 +186,7 @@ def test_restarts_barely_help_on_rastrigin_and_the_number_says_so() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_spread_reports_that_the_starts_disagreed() -> None:
     """A multi-start fit that returned only the best would hide the multimodality.
 
@@ -208,7 +208,7 @@ def test_the_spread_reports_that_the_starts_disagreed() -> None:
     assert rugged.best.value == min(f.value for f in rugged.all_fits)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_two_generators_seeded_alike_give_the_same_restarts() -> None:
     """A declared seed still determines the run.
 
@@ -224,7 +224,7 @@ def test_two_generators_seeded_alike_give_the_same_restarts() -> None:
     assert all(torch.equal(a, b) for a, b in zip(first, second, strict=True))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_independent_restart_sets_come_from_one_generator() -> None:
     """The property `sim/CLAUDE.md`'s rule exists for, on this module.
 
@@ -270,7 +270,7 @@ def test_a_non_positive_perturbation_is_refused() -> None:
         Perturbed(magnitude=0.0)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_four_workers_fit_the_starts_one_worker_fits() -> None:
     """A multi-start fit on a process pool is the serial one, bitwise (issue #344).
 

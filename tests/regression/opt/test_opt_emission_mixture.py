@@ -155,7 +155,7 @@ def test_the_enumeration_oracle_refuses_a_dataset_it_cannot_enumerate() -> None:
         )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_fit_recovers_the_planted_mixture_at_the_ci_size(
     ci_instance: tuple[EmissionMixtureParams, np.ndarray, EmissionMixtureFit],
 ) -> None:
@@ -243,7 +243,7 @@ RESOLVED_COMPONENTS = 7
 # test --- and the stress tier is the ten-minute local budget. The claim has
 # its fast sibling at the CI size above.
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_fit_recovers_most_of_the_planted_mixture_at_ten_components() -> None:
     """How much of a ten-component mixture one seeded run resolves, and how much not."""
     # **The finding this test records.** At three components a single
@@ -287,7 +287,7 @@ def test_the_fit_recovers_most_of_the_planted_mixture_at_ten_components() -> Non
 
 # `release` for the same reason: twelve fits at about four seconds each.
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_seeded_start_is_measured_against_the_uniform_one() -> None:
     """``Emission_Mixture++`` against a uniform start, on shared seeds."""
     params = fixture("emission_mixture", "ci").params

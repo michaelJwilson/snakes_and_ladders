@@ -61,7 +61,7 @@ def test_the_deviation_does_not_grow_with_the_sum() -> None:
     assert SITE_COUNTS[-1] // SITE_COUNTS[0] >= 10
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_reports_the_worst_deviation_it_measured(
     measured: dict[str, list[tuple[int, float]]],
 ) -> None:
@@ -76,7 +76,7 @@ def test_the_caption_reports_the_worst_deviation_it_measured(
         figure.clear()
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = backend_agreement.main(
         ["--params", str(FIXTURE), "--output-dir", str(tmp_path)]
@@ -86,7 +86,7 @@ def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     assert written.caption == written.caption_path.read_text()
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_float64_epsilon_is_below_the_measured_deviation(
     measured: dict[str, list[tuple[int, float]]],
 ) -> None:

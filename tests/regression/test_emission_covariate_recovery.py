@@ -34,7 +34,7 @@ SEED = 20260916
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_exposure_does_not_hide_the_rate_or_the_dispersion() -> None:
     # 2,000 draws, exposure over 0.5 to 4.0 -- an eightfold spread, so no single
     # rescaling of `mu` explains the data.
@@ -57,7 +57,7 @@ def test_the_exposure_does_not_hide_the_rate_or_the_dispersion() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_trial_count_does_not_hide_the_beta_parameters() -> None:
     # 4,000 draws, trial counts over 5 to 80 -- a sixteenfold spread. The
     # declared per-state count is deliberately 20, which none of the draws use,
@@ -82,7 +82,7 @@ def test_the_trial_count_does_not_hide_the_beta_parameters() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_ignoring_a_varying_covariate_does_not_recover_the_truth() -> None:
     # What makes the two above a test of the covariate and not of the fit. The
     # same draws, refitted with the covariate withheld, must miss -- otherwise

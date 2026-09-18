@@ -49,7 +49,7 @@ COVERAGE_JSON = Path(__file__).resolve().parents[2] / "coverage-critical.json"
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_floor_is_stated_once_and_is_a_percentage() -> None:
     """The constant is the contract, so it is checked before it is used.
 
@@ -59,7 +59,7 @@ def test_the_floor_is_stated_once_and_is_a_percentage() -> None:
     assert 0.0 < CRITICAL_COVERAGE_FLOOR <= 100.0
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_critical_tier_covers_at_least_the_floor() -> None:
     """The tier's coverage, against the floor #635 measured.
 
@@ -84,7 +84,7 @@ def test_the_critical_tier_covers_at_least_the_floor() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_dev_md_names_the_file_that_holds_the_floor() -> None:
     """`DEV.md` describes the guard and points here for the number.
 

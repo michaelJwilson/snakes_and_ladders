@@ -88,7 +88,7 @@ def test_a_known_optimum_is_the_reference_when_given() -> None:
     assert all(gap > 0 for gap in result.mean_gap().values())
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_table_names_the_unit_the_hits_and_the_spend() -> None:
     result = compare(
         {"single": _draw}, [0.0], Budget("sweeps", 5), seeds=(3,), workers=1
@@ -204,7 +204,7 @@ def test_a_relative_tolerance_scales_with_the_reference_and_the_paired_p_reads_t
     assert result.paired_p("first", "second") == 1.0
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_four_workers_report_the_comparison_one_worker_reports() -> None:
     """The cells of a comparison are independent by construction (issue #344).
 

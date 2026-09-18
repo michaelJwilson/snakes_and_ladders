@@ -64,7 +64,7 @@ def _wrong_links(text: str) -> list[str]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_link_names_this_repository() -> None:
     """No tracked file points at another repository under this owner.
 
@@ -84,7 +84,7 @@ def test_every_link_names_this_repository() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_guard_fails_on_a_link_to_the_old_name() -> None:
     """The guard rejects exactly what it exists to reject.
 

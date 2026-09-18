@@ -77,7 +77,7 @@ def test_a_step_outside_the_schedule_is_refused_not_clamped(
         schedule(-1)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_constant_schedule_is_constant_and_the_default_is_temperature_one() -> None:
     schedule = ConstantTempSchedule(1.0, 25)
 
@@ -94,7 +94,7 @@ def test_a_constant_schedule_is_constant_and_the_default_is_temperature_one() ->
         CosineTempSchedule(1.0, 0.5, 3),
     ],
 )
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_schedule_satisfies_the_protocol(schedule: object) -> None:
     assert isinstance(schedule, TempSchedule)
 
@@ -120,7 +120,7 @@ def test_an_empty_schedule_is_refused() -> None:
         CosineTempSchedule(1.0, 0.5, 0)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_one_step_schedule_must_have_one_temperature() -> None:
     # `t = 0 / 0` otherwise; and a schedule that starts at 2 and ends at 1 in
     # a single step has no step at which either could be true.
@@ -130,7 +130,7 @@ def test_a_one_step_schedule_must_have_one_temperature() -> None:
     assert LinearTempSchedule(2.0, 2.0, 1)(0) == 2.0
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_exponential_schedule_has_a_constant_ratio() -> None:
     # The characterization independent of the formula: geometric means the
     # ratio of successive temperatures never changes, and its value is the
@@ -165,7 +165,7 @@ def _torch_schedule(
     return rates
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_linear_mirrors_torch_linear_lr() -> None:
     # `LinearLR` scales a base rate from `start_factor` to `end_factor` over
     # `total_iters` steps; with the base rate as `start` and the factors
@@ -185,7 +185,7 @@ def test_linear_mirrors_torch_linear_lr() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_exponential_mirrors_torch_exponential_lr() -> None:
     start, end, n_steps = 4.0, 0.05, 50
     expected = _torch_schedule(
@@ -200,7 +200,7 @@ def test_exponential_mirrors_torch_exponential_lr() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_cosine_mirrors_torch_cosine_annealing_lr() -> None:
     # torch computes the cosine schedule recursively, accumulating rounding
     # over the run, so the agreement is to 1e-10 rather than 1e-12 -- and

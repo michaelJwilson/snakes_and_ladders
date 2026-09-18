@@ -87,7 +87,7 @@ _SEED = 11
 _START = np.array([1.0, 6.0])
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_baum_welch_told_the_exposure_recovers_the_planted_rates() -> None:
     """The claim the threading is for: the fit reaches the rate that generated it.
 
@@ -101,7 +101,7 @@ def test_baum_welch_told_the_exposure_recovers_the_planted_rates() -> None:
     np.testing.assert_allclose(fitted, _RATE, rtol=0.1)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_same_fit_without_the_exposure_misses_them() -> None:
     """And the claim that it is worth something: withheld, the same fit misses.
 
@@ -119,7 +119,7 @@ def test_the_same_fit_without_the_exposure_misses_them() -> None:
     assert np.abs(untold / _RATE - 1.0).max() > 0.25
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_constant_exposure_of_one_scores_bitwise() -> None:
     """#631's referee at the seam this threads to: ones change no score at all.
 
@@ -143,7 +143,7 @@ def test_a_constant_exposure_of_one_scores_bitwise() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_constant_exposure_of_one_fits_inside_the_declared_tolerance() -> None:
     """The same claim through 200 EM iterations, which is not bitwise.
 
@@ -180,7 +180,7 @@ def test_a_constant_exposure_of_one_fits_inside_the_declared_tolerance() -> None
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_spatial_seams_run_and_the_covariate_field_is_validated() -> None:
     """What this actually checks: both seams run uncovaried, and the field validates.
 

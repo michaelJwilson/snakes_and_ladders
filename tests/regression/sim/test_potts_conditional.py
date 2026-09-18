@@ -175,7 +175,7 @@ def test_tempering_scales_the_whole_conditional() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_vectorized_simulator_draws_what_it_drew_before_the_extraction() -> None:
     realized = simulate_potts(
         LATTICE, FIELD, np.random.default_rng(8), 12, burn_in=7
@@ -184,7 +184,7 @@ def test_the_vectorized_simulator_draws_what_it_drew_before_the_extraction() -> 
     assert np.array_equal(realized[:4], GIBBS_DRAWS)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_sequential_sampler_draws_what_it_drew_before_the_extraction() -> None:
     rows = site_field(FIELD, LATTICE.n_nodes)
 

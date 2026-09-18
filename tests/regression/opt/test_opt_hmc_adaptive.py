@@ -164,7 +164,7 @@ def test_a_diagonal_mass_matrix_is_a_change_of_coordinates() -> None:
     assert kinetic_scaled == pytest.approx(kinetic_original, rel=EXACT)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_scaled_objective_inverts_its_own_map() -> None:
     scale = torch.tensor([2.5, 0.4], dtype=torch.float64)
     scaled = _Scaled(GAUSSIAN, scale)
@@ -265,7 +265,7 @@ def test_a_warm_up_whose_chain_did_not_move_is_refused() -> None:
 # --- the fixed-parameter path ------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_chain_without_adaptation_reports_no_warm_up_and_counts_its_gradients() -> (
     None
 ):
@@ -306,7 +306,7 @@ def _pooled_acceptance(objective: Objective, seeds: range, n_samples: int) -> fl
     return float(np.mean([chain.acceptance_rate for chain in chains]))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_adapted_acceptance_lands_at_its_target_on_the_gaussian() -> None:
     # The contract: a 300-proposal warm-up from a step of 0.05, and the
     # drawn chain accepts at the target. Pooled over 20 seeds, since one
@@ -319,7 +319,7 @@ def test_the_adapted_acceptance_lands_at_its_target_on_the_gaussian() -> None:
     assert abs(pooled - TARGET) < 0.05, pooled
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @at_scale("n_seeds", ci=3, stress=20)
 def test_the_adapted_acceptance_lands_at_its_target_on_the_four_taxon_posterior(
     n_seeds: int,

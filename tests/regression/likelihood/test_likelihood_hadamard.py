@@ -142,7 +142,7 @@ def test_the_closest_tree_of_the_exact_weights_is_the_tree(name: str) -> None:
         assert length == pytest.approx(lengths[split], abs=1e-12)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_split_weights_converge_with_the_site_count() -> None:
     """On simulated two-state data the weight error falls as ``1/sqrt(L)``.
 
@@ -173,7 +173,7 @@ def test_the_split_weights_converge_with_the_site_count() -> None:
     assert 2.5 < rms[1] / rms[2] < 4.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("name", [FOUR_TAXA, FIVE_TAXA, SIX_TAXA, EIGHT_TAXA])
 def test_the_closest_tree_of_the_fixture_alignment_is_the_generating_topology(
     name: str,

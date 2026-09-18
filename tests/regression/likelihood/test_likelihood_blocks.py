@@ -158,7 +158,7 @@ def test_the_site_extremes_bracket_every_column() -> None:
         assert float(upper) >= value - 1e-12
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_containment_check_has_teeth() -> None:
     # The soundness test rests on Interval.contains, so an interval excluding
     # the value must be rejected; otherwise that test passes on an unsound
@@ -401,7 +401,7 @@ def test_the_ranked_search_holds_over_starts_move_sets_and_taxa() -> None:
     assert len(rows) == 8
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_bound_is_a_surrogate_with_a_claim() -> None:
     params, alignment, _ = _instance("tree_search/ci.yaml", 200)
     pi = np.asarray(params.pi)

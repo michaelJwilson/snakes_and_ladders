@@ -22,7 +22,7 @@ from snakes_and_ladders.sim.spatio_sequential import (
 )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_schedule_is_what_the_matrix_form_takes_bitwise() -> None:
     """The referee: same chain, same numbers, no tolerance.
 

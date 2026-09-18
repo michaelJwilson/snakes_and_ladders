@@ -191,7 +191,7 @@ def test_the_bit_packing_round_trips_and_localises_a_flip() -> None:
         assert int(np.flatnonzero(differing)[0]) == position // m
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_packing_refuses_what_it_would_have_to_truncate() -> None:
     with pytest.raises(ValueError, match="symbols must lie in"):
         bits_from_symbols(np.array([8]), 3)

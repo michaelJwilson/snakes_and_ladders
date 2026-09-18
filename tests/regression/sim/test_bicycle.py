@@ -126,7 +126,7 @@ def test_deletion_raises_the_rate_and_keeps_the_row_weight() -> None:
         assert np.all(code.column_weights <= CIRCULANT_WEIGHT)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_deleting_the_heaviest_rows_beats_deleting_at_random() -> None:
     # The construction chooses which rows to delete rather than deleting any
     # twelve, and what it chooses them for is uniform column weights. The
@@ -164,7 +164,7 @@ def test_the_declared_instance_has_the_distance_enumeration_gives() -> None:
     assert len({tuple(column) for column in code.dense().T}) == code.n_bits
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_two_draws_from_one_generator_differ_and_seeds_agree() -> None:
     # `sim/CLAUDE.md`: a generator, never a seed. The circulant's first row is
     # drawn from the generator, so two draws differ and two alike agree.

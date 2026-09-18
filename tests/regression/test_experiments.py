@@ -52,7 +52,7 @@ One line, and its action, #458.
 """
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_experiment_file_is_valid() -> None:
     found = experiments.experiments()
     assert found, "the ledger has no experiments"
@@ -60,13 +60,13 @@ def test_every_experiment_file_is_valid() -> None:
         assert experiments.problems(experiment) == [], experiment.path.name
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_index_is_what_the_generator_writes() -> None:
     index = (experiments.EXPERIMENTS_DIR / experiments.INDEX).read_text()
     assert index == experiments.render_index(experiments.experiments())
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_template_names_every_section_and_field() -> None:
     template = experiments.load(experiments.EXPERIMENTS_DIR / experiments.TEMPLATE)
     assert set(experiments.SECTIONS) <= set(template.sections)

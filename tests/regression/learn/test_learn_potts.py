@@ -85,7 +85,7 @@ def test_the_neighbourhood_has_one_flip_per_site_and_alternative_state() -> None
     assert all(value != state[site] for site, value in actions)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_terminal_state_is_one_no_flip_improves() -> None:
     environment = _environment()
     for state in enumerate_configurations(3, 4):
@@ -140,7 +140,7 @@ def test_the_optimum_is_the_best_of_every_configuration() -> None:
     assert environment.is_terminal(state)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_environment_is_hard_enough_to_be_worth_searching() -> None:
     # Measured: greedy hill climbing stalls below the global optimum from 16
     # of the 81 starting configurations. A environment greedy always solved
@@ -186,7 +186,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
 # --- construction from the shared fixture ---------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_fixture_yaml_builds_the_same_environment() -> None:
     # One model, two roles: the yaml that supplies `snakes_and_ladders.opt`'s reference
     # objective read as a search problem instead of a fitting problem.
@@ -215,7 +215,7 @@ def test_an_unusable_environment_is_rejected(
         PottsEnvironment(coupling, field, chain_length)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_reset_draws_a_configuration_of_the_right_shape() -> None:
     environment = _environment(chain_length=6)
     state = environment.reset(np.random.default_rng(0))
@@ -224,7 +224,7 @@ def test_reset_draws_a_configuration_of_the_right_shape() -> None:
     assert state == environment.reset(np.random.default_rng(0))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_features_have_one_row_per_action() -> None:
     environment = _environment()
     state = (0, 1, 2, 0)

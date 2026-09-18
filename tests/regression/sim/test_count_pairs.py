@@ -91,7 +91,7 @@ def test_the_pair_density_is_a_distribution_over_its_support() -> None:
     np.testing.assert_allclose(mass.sum(dim=(0, 1)).numpy(), [1.0, 1.0], atol=1e-9)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_simulator_draws_from_the_declared_families() -> None:
     # Per (class, state), both channels' sample mean and variance against the
     # closed forms the families state. The tolerances are Monte Carlo bounds
@@ -158,7 +158,7 @@ def test_the_negative_binomial_channel_aggregates_exactly(factor: int) -> None:
         np.testing.assert_allclose(convolved, coarse[:, k], atol=1e-12)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_binned_counts_follow_the_aggregated_negative_binomial() -> None:
     # The claim above on the data rather than the family: over the bins whose
     # positions share a hidden state --- only within one state are the summands
@@ -235,7 +235,7 @@ def test_the_chain_is_the_circulant_walk_the_transition_states() -> None:
     np.testing.assert_allclose(empirical, transition, atol=0.03)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_planted_labels_are_contiguous_bands_of_rows() -> None:
     # The prior is ferromagnetic, so the planted labelling must be smooth or a
     # recovery test measures the prior fighting the truth. Bands are that, and
@@ -254,7 +254,7 @@ def test_the_planted_labels_are_contiguous_bands_of_rows() -> None:
     assert sizes.max() - sizes.min() <= 1
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_fine_draw_is_simulated_once_and_binned_from() -> None:
     # "Simulated once at load and held in memory" is the fixture's claim, and
     # the cache makes it true: a second reader gets the same array rather than
@@ -269,7 +269,7 @@ def test_the_fine_draw_is_simulated_once_and_binned_from() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_key_instance_is_the_one_the_5k_file_marks() -> None:
     # `fixture(problem, "key")` is not a fourth size: it resolves to whichever
     # file marks one of its own instances the key one, and the tier it reports

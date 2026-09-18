@@ -72,7 +72,7 @@ def _step_named(fragment: str) -> tuple[int, list[str]]:
     return found[0]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_the_gate_renders_every_figure_without_consulting_a_stamp() -> None:
     """`--all --check`: no digest, no skip, and no overwrite.
@@ -100,7 +100,7 @@ def test_the_gate_renders_every_figure_without_consulting_a_stamp() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_the_figures_are_compared_before_the_document_build_rewrites_them() -> None:
     """The comparison must read the committed bytes, not a fresh render.
@@ -119,7 +119,7 @@ def test_the_figures_are_compared_before_the_document_build_rewrites_them() -> N
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_the_gate_renders_each_figure_once() -> None:
     """The document build is told not to render what the step before it did.
@@ -138,7 +138,7 @@ def test_the_gate_renders_each_figure_once() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_build_script_renders_the_figures_unless_it_is_told_not_to() -> None:
     """`--no-figures` is one caller's flag, not the script's default.
 
@@ -193,7 +193,7 @@ def test_the_build_script_renders_the_figures_unless_it_is_told_not_to() -> None
         )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_the_gate_builds_the_documentation_in_full() -> None:
     """`-E -a -W`: every module re-read, every output written, warnings fatal.
@@ -216,7 +216,7 @@ def test_the_gate_builds_the_documentation_in_full() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_release_md_bounds_the_figure_pass_above_the_manifest_s_total() -> None:
     """`RELEASE.md`'s stated bound is not less than the manifest's sum.
 

@@ -220,7 +220,7 @@ def test_one_configuration_scores_what_the_model_defines() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_endpoint_arrays_are_the_graphs_own_edges_and_are_read_only() -> None:
     graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, 0.5)
     first, second, coupling = graph.endpoints

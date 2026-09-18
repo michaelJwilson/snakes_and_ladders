@@ -187,7 +187,7 @@ EVERY_OBJECTIVE = _every_objective()
 OBJECTIVE_IDS = [type(objective).__name__ for objective, _ in EVERY_OBJECTIVE]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize(("objective", "theta"), EVERY_OBJECTIVE, ids=OBJECTIVE_IDS)
 def test_every_objective_inverts_its_own_constraint_map(
     objective: Objective, theta: torch.Tensor
@@ -291,7 +291,7 @@ def test_a_collapsing_component_is_refused_through_the_new_door_too() -> None:
         standard_errors_at(objective, collapsed)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_multi_start_interval_belongs_beside_the_spread_that_qualifies_it() -> None:
     # An interval at the best of several starts is conditional on *that mode*,
     # and the spread across starts says whether that matters, so the two are
@@ -319,7 +319,7 @@ def test_a_multi_start_interval_belongs_beside_the_spread_that_qualifies_it() ->
         assert torch.equal(result.best.standard_errors[name], value)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_fit_asked_for_its_interval_gets_the_one_the_door_gives() -> None:
     # `include_intervals` is a convenience over `constrained_standard_errors`,
     # not a second implementation: bitwise the same numbers at the same
@@ -392,7 +392,7 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
     assert_allclose(chain.theta.std(0).numpy(), exact.numpy(), rtol=0.05)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
     # The comparison `hmc.py`'s docstring promises, where the approximation is
     # allowed to be one. A raw Hessian in *unconstrained* coordinates against
@@ -437,7 +437,7 @@ def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
     assert bool((ratio > 1.0).all())
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate() -> None:
     # An interval that exists and does not cover is worse than no interval, so
@@ -490,7 +490,7 @@ def test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate() -> None:
     assert boundary <= 3
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_categorical_family_is_still_what_the_fixture_declares() -> None:
     # Every case above assumes the committed HMM fixture is categorical, and a
     # fixture that changed family would make eight round-trip checks silently

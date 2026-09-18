@@ -72,7 +72,7 @@ def test_a_figure_is_closed_even_when_writing_it_fails(tmp_path: Path) -> None:
     assert not plt.fignum_exists(leaked[0].number)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_repeated_parameters_reach_the_builder_in_the_order_given(
     tmp_path: Path,
 ) -> None:
@@ -105,7 +105,7 @@ def test_repeated_parameters_reach_the_builder_in_the_order_given(
     assert written.table_path.read_text().strip() == "beta alpha alpha"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_parameters_reach_the_builder_in_declaration_order_not_argv_order(
     tmp_path: Path,
 ) -> None:
@@ -140,7 +140,7 @@ def test_parameters_reach_the_builder_in_declaration_order_not_argv_order(
     assert written.table_path.read_text().strip() == "left-value|right-value"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_absent_option_reaches_the_builder_as_its_default(
     tmp_path: Path,
 ) -> None:
@@ -164,7 +164,7 @@ def test_an_absent_option_reaches_the_builder_as_its_default(
     assert written.table_path.read_text().strip() == "10"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_option_given_on_the_command_line_overrides_its_default(
     tmp_path: Path,
 ) -> None:

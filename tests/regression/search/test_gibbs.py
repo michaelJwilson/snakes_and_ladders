@@ -94,7 +94,7 @@ def _potts_pair() -> tuple[PottsGraph, FactorGraph]:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_generic_sweep_samples_the_potts_boltzmann_distribution() -> None:
     graph, factor_graph = _potts_pair()
     configurations = np.array(list(product(range(2), repeat=4)))
@@ -186,7 +186,7 @@ def test_the_log_density_has_no_rust_backend() -> None:
         indexed.log_density(np.zeros(len(indexed.names), dtype=np.int64), Backend.RUST)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_site_the_kernel_declines_is_decided_by_numpy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -240,7 +240,7 @@ def _chain() -> tuple[FactorGraph, list[tuple[int, ...]], np.ndarray]:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_generic_sweep_samples_the_hidden_path_posterior() -> None:
     graph, paths, posterior = _chain()
 
@@ -378,7 +378,7 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_generic_sweep_samples_the_coupled_model_s_label_posterior() -> None:
     params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(1))

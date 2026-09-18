@@ -154,7 +154,7 @@ def _computed_call(path: Path) -> bool:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("problem", PROBLEMS)
 def test_every_module_the_call_spelling_names_is_selected(problem: str) -> None:
     """`grep`'s answer is contained in the scan's, problem by problem.
@@ -174,7 +174,7 @@ def test_every_module_the_call_spelling_names_is_selected(problem: str) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_quoted_call_is_data_and_is_not_read_as_one() -> None:
     """The single place `grep` and the scan differ, and why the parse wins.
 
@@ -196,7 +196,7 @@ def test_a_quoted_call_is_data_and_is_not_read_as_one() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_module_is_selected_without_evidence_it_exercises_the_problem() -> None:
     """The upper bound: a selection must point at something written down.
 
@@ -234,7 +234,7 @@ def test_no_module_is_selected_without_evidence_it_exercises_the_problem() -> No
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_two_modules_the_axis_was_opened_about_are_selected() -> None:
     """The check #614 states as its motivation, and #619 shipped without.
 
@@ -261,7 +261,7 @@ def test_the_two_modules_the_axis_was_opened_about_are_selected() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_module_selected_for_every_problem_really_has_a_computed_name() -> None:
     """Selecting every problem is the unresolvable answer, not a scan giving up.
 
@@ -281,7 +281,7 @@ def test_a_module_selected_for_every_problem_really_has_a_computed_name() -> Non
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_problem_crosses_module_directories() -> None:
     """The case the substring and the directory both miss.
 
@@ -298,7 +298,7 @@ def test_the_problem_crosses_module_directories() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_collected_items_carry_what_their_module_names(
     request: pytest.FixtureRequest,
 ) -> None:
@@ -320,7 +320,7 @@ def test_the_collected_items_carry_what_their_module_names(
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_cache_is_reread_when_the_file_changes(tmp_path: Path) -> None:
     """What makes the cross-session cache safe, rather than fast and wrong.
 
@@ -358,7 +358,6 @@ def test_the_cache_is_reread_when_the_file_changes(tmp_path: Path) -> None:
     assert fixtures_named_in(module) == {"mixture"}
 
 
-@pytest.mark.structural
 @pytest.mark.edge_case
 def test_a_damaged_cache_is_ignored_rather_than_raised_on() -> None:
     """A cache decides when work is redone, never whether a check runs.
@@ -457,7 +456,7 @@ def _collected(suite: Path, expression: str, *files: str) -> tuple[int, set[str]
     return run.returncode, collected
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_computed_name_is_selected_by_every_problem(mini_suite: Path) -> None:
     """Step 3 of the plan, run rather than reasoned about.
 
@@ -478,7 +477,7 @@ def test_a_computed_name_is_selected_by_every_problem(mini_suite: Path) -> None:
     assert hmm == {"test_computed.py::test_computed"}
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_problem_marker_intersects_the_tier(mini_suite: Path) -> None:
     """A third axis is worth nothing if it does not compose with the other two.
 
@@ -495,7 +494,6 @@ def test_the_problem_marker_intersects_the_tier(mini_suite: Path) -> None:
     assert tier == {"test_literal.py::test_gating"}
 
 
-@pytest.mark.structural
 @pytest.mark.edge_case
 def test_a_misspelled_problem_marker_fails_collection(mini_suite: Path) -> None:
     """Registration is what keeps `--strict-markers` able to refuse a typo.
@@ -508,7 +506,7 @@ def test_a_misspelled_problem_marker_fails_collection(mini_suite: Path) -> None:
     assert status != 0, "an unregistered problem marker was accepted"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_module_naming_no_problem_is_selected_by_infra(mini_suite: Path) -> None:
     """ "Unmarked" is not a state a module can be in (issue #622).
 
@@ -529,7 +527,7 @@ def test_a_module_naming_no_problem_is_selected_by_infra(mini_suite: Path) -> No
     }
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_infra_module_imports_no_code_that_defines_a_problem() -> None:
     """The `infra` marker is a claim about the module, and this is the claim.
 

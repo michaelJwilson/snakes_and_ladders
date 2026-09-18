@@ -398,7 +398,16 @@ jobs:
           # tests/conftest.py, never here (DEV.md, No CI Profiling).
           uv run pytest -n 3 -m "not release" $correctness \
             --ignore=tests/benchmarks --durations=10 \
-            $cov --cov-report=term-missing --cov-fail-under=90
+            $cov --cov-report=term-missing --cov-fail-under=90 \
+            --cov-context=test
+          # The judged floor (issue #729): the same run, recut to the tests
+          # that judged something -- an oracle, a planted truth, a stated
+          # property, a boundary, a guard, a pinned defect, a backend
+          # reproduced -- with `qa` exempt and `search` held higher. The
+          # floors live in infra/gates.py beside the markers that count.
+          # `--cov-context=test` above is what makes the recut possible and
+          # is what it costs; DEV.md states the measurement.
+          uv run python infra/coverage_recut.py --fail-under
           if [ -n "$benchmarks" ]; then
             # Serial, and no `-n`: this is the run that measures.
             uv run pytest -m "not release" $benchmarks --durations=10

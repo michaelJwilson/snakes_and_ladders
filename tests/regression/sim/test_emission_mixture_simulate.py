@@ -46,7 +46,7 @@ def _params(n_samples: int = DRAWS, seed: int = 20260906) -> EmissionMixturePara
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_component_labels_appear_at_their_declared_weights() -> None:
     # Standard error of a proportion at 200,000 draws is at most 0.0011, so
     # 0.005 is over four of them.
@@ -79,7 +79,7 @@ def test_each_channel_matches_its_own_law_of_total_variance() -> None:
     assert_allclose(observed.var(axis=0), expected_variance, rtol=0.02)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_seeded_instance_reproduces_its_draw_and_keeps_its_labels() -> None:
     # The generator rule (`sim/CLAUDE.md`): a fixture that names a seed and
     # passes no generator draws the same data every time, and the label that
@@ -96,7 +96,7 @@ def test_a_seeded_instance_reproduces_its_draw_and_keeps_its_labels() -> None:
     assert set(np.unique(first.labels)) <= {0, 1}
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_declared_instance_loads_and_draws_what_it_declares() -> None:
     # The registry's copy, not a restatement of it: the fixture file is the
     # instance, and this is the check that it reaches the simulator intact.

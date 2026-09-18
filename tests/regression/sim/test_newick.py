@@ -86,7 +86,7 @@ def test_count_topologies_rejects_non_positive_n_taxa() -> None:
         count_topologies(0)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
     params = load_simulation_params(BINARY_FIXTURE)
     dataset = simulate_alignment(
@@ -158,12 +158,12 @@ def test_validate_newick_accepts_a_single_leaf() -> None:
     assert validate_newick("A;")
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_validate_newick_accepts_branch_lengths_and_internal_labels() -> None:
     assert validate_newick("(A:0.1,(B:0.2,C:0.3)anc:0.05)root;")
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_validate_unrooted_newick_accepts_a_trifurcating_root() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
@@ -204,6 +204,6 @@ def test_validate_unrooted_newick_rejects_malformed_strings(malformed: str) -> N
     assert not validate_unrooted_newick(malformed)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_validate_unrooted_newick_accepts_binary_subtrees_under_the_root() -> None:
     assert validate_unrooted_newick("(A,B,(C,D)anc:0.1)root;")

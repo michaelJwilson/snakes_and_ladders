@@ -17,7 +17,7 @@ from tests._durations import outside_the_tier, over_cap
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_slow_unmarked_test_is_named_and_a_gated_one_is_not() -> None:
     durations = [
         ("tests/a.py::test_fast", 0.5, frozenset({"oracle"})),
@@ -44,7 +44,7 @@ def test_a_test_exactly_at_the_cap_is_inside_it() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_scale_marked_critical_test_is_named_and_the_other_three_are_not() -> None:
     """The conflict is `critical` *and* a scale marker, and nothing else.
 

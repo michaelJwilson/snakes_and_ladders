@@ -58,7 +58,7 @@ def test_headings_and_blank_lines_are_not_charged() -> None:
     assert check_pr_body.problem(_body(CAP, headings=12)) == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_committed_template_is_inside_the_cap() -> None:
     """A pull request that starts from the template has room left to write in.
 
@@ -70,20 +70,20 @@ def test_the_committed_template_is_inside_the_cap() -> None:
     assert check_pr_body.problem(template) == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_dev_md_states_the_cap_the_script_enforces() -> None:
     stated = {int(m) for m in _STATED.findall(DEV.read_text())}
     assert CAP in stated, f"DEV.md states {sorted(stated)}, not the cap {CAP}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("name", ["task.yml", "release.yml", "documents.yml"])
 def test_every_issue_template_states_the_cap(name: str) -> None:
     stated = {int(m) for m in _STATED.findall((TEMPLATES / name).read_text())}
     assert CAP in stated, f"{name} states {sorted(stated)}, not the cap {CAP}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_workflow_runs_the_check_on_the_pull_request_body() -> None:
     """The cap is enforced where the payload is, not only stated in prose."""
     text = WORKFLOW.read_text()

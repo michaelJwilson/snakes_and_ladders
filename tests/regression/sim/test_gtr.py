@@ -137,7 +137,7 @@ def test_transition_probabilities_compose_along_a_branch() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_free_exchangeabilities_are_completed_with_a_pinned_one() -> None:
     free = np.array([1.6, 0.4, 0.9, 0.7, 2.1])
     assert_allclose(exchangeabilities_from_free(free, 4), TRUE_EXCHANGEABILITIES)
@@ -175,7 +175,7 @@ def test_malformed_input_is_refused(call: object, message: str) -> None:
 # --- the simulator's new path --------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_default_simulator_path_is_unchanged() -> None:
     # Root CLAUDE.md forbids silent behaviour changes, and a substitution
     # model is the last thing worth changing silently. Omitting rate_matrix
@@ -233,7 +233,7 @@ def test_simulating_under_a_jc_equivalent_gtr_matches_the_jc_path() -> None:
         assert differing / states.size < 1e-3, f"{name}: {differing} sites differ"
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_simulated_frequencies_match_the_generating_stationary_distribution() -> None:
     # The generative check for the new path: over a tree whose branches are
     # long relative to the rate, leaf frequencies approach pi. Compared

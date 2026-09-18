@@ -77,7 +77,7 @@ def _module_claude_files() -> list[Path]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_named_module_directory_has_a_claude_md() -> None:
     # Root `CLAUDE.md` names these nine; a missing file would mean the rules
     # reach a module through nothing at all.
@@ -91,7 +91,7 @@ def test_every_named_module_directory_has_a_claude_md() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_module_claude_md_points_at_the_writing_style() -> None:
     # The ticket's substance: reading one module file must tell you the
     # writing style governs what you are about to write.
@@ -105,7 +105,7 @@ def test_every_module_claude_md_points_at_the_writing_style() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_module_claude_md_restates_the_writing_style() -> None:
     # Why the pointer is a pointer: root `CLAUDE.md`'s Writing Style section
     # changed three times on the day this was written, and nine copies would
@@ -120,7 +120,7 @@ def test_no_module_claude_md_restates_the_writing_style() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_module_directory_added_without_a_pointer_is_caught(
     tmp_path: Path,
 ) -> None:
@@ -137,7 +137,7 @@ def test_a_module_directory_added_without_a_pointer_is_caught(
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_root_file_states_that_the_rules_reach_the_module_files() -> None:
     # The pointers are only true because root says so. If that sentence goes,
     # eight files start referring to a scope nothing declares. The sentence is
@@ -159,7 +159,7 @@ def test_the_root_file_states_that_the_rules_reach_the_module_files() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_expected_reader_contract_lives_only_in_docs() -> None:
     # A contract about the documents, so the seven other module files have no
     # business restating it, and only `docs/` may refer to it.
@@ -173,7 +173,7 @@ def test_the_expected_reader_contract_lives_only_in_docs() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_module_claude_md_carries_a_measurement() -> None:
     # Rule 6, made checkable. A measurement in one of these files is a second
     # copy of a number `STATUS.md`, a docstring or a test already owns, and the
@@ -196,7 +196,7 @@ def test_no_module_claude_md_carries_a_measurement() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_measurement_check_catches_each_shape_it_claims_to() -> None:
     # The check exercised per shape rather than in aggregate: a guard never
     # seen to fail is not known to work, and a regex silently matches nothing.
@@ -212,7 +212,7 @@ def test_the_measurement_check_catches_each_shape_it_claims_to() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_module_claude_md_exceeds_the_line_budget() -> None:
     # The other half of rule 6. A file can carry no measurement and still be a
     # technical brief, and length is what that looks like from outside.
@@ -229,7 +229,7 @@ def test_no_module_claude_md_exceeds_the_line_budget() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_line_budget_check_is_not_vacuous(tmp_path: Path) -> None:
     # As above: pin that a file over the budget is detected, since the
     # assertion passes on an empty set for either reason.

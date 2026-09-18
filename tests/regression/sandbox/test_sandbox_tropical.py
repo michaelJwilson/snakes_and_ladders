@@ -509,7 +509,7 @@ def test_the_hadamard_metric_resolves_every_quartet_as_the_tree_does(
 
 
 @pytest.mark.oracle
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_two_state_recoding_resolves_every_quartet_as_the_tree_does(
     five_taxon: Instance,
 ) -> None:
@@ -607,7 +607,7 @@ def test_the_schedule_refuses_an_unusable_range(
         anneal(start, end, steps, 0)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_pairing_order_is_the_four_point_condition_s() -> None:
     # `four_point_violation` forms its three sums in one order and this
     # module indexes PAIRINGS in the same one; a silent disagreement would

@@ -264,7 +264,7 @@ def test_the_chain_optimum_ties_so_a_greedy_route_may_dither() -> None:
     assert learned.greedy_actions(1) != []
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_two_learners_share_their_loop() -> None:
     """With no exploration and one deterministic route, the two agree exactly.
 

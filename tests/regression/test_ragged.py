@@ -11,7 +11,7 @@ from snakes_and_ladders.ragged import MINIMUM_LENGTH, Ragged
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_segments_tile_the_array_and_are_views() -> None:
     """Every row belongs to exactly one segment, and none is copied."""
     values = np.arange(9.0)
@@ -52,7 +52,7 @@ def test_lengths_that_do_not_tile_are_refused() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_rectangular_batch_is_a_ragged_one_with_equal_lengths() -> None:
     """The conversion every existing caller goes through, with its trailing axes."""
     array = np.arange(24.0).reshape(2, 3, 4)

@@ -40,7 +40,7 @@ def _family(*, joint: bool) -> CountPairEmission:
     return CountPairEmission(DISPERSION, MEAN, ALPHA, BETA, trials, joint=joint)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_count_pair_family_satisfies_both_protocols() -> None:
     # `CountEmissionFamily` as well as `EmissionFamily`, which lets the coupled
     # model and the mixture take it where they take a negative binomial; the
@@ -103,7 +103,7 @@ def test_the_closed_form_moments_are_the_drawn_ones_in_both_forms() -> None:
             )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_m_step_recovers_the_planted_parameters_in_both_forms() -> None:
     # 4,000 pairs split between the two states by a planted label, scored with
     # that label as the posterior, so what is measured is the M step and not a
@@ -208,7 +208,7 @@ def _preference(observations: torch.Tensor) -> float:
     return 2.0 * (joint - independent)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_likelihood_ratio_prefers_the_form_the_data_came_from() -> None:
     # On joint data the depth carries information about the allele count and
     # the independent form throws it away; on independent data it carries none

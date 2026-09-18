@@ -49,7 +49,7 @@ def _imported_modules(source: Path) -> set[str]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_learn_imports_nothing_from_the_application_modules() -> None:
     # The structural claim this package exists to make. An agent that has
     # seen a tree is an agent shaped by trees, and neither ruff nor mypy
@@ -67,7 +67,7 @@ def test_learn_imports_nothing_from_the_application_modules() -> None:
     assert offenders == {}
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_reference_environment_satisfies_the_protocol() -> None:
     assert isinstance(_environment(), Environment)
 
@@ -114,7 +114,7 @@ def test_an_empty_episode_has_zero_return() -> None:
 # --- rollout semantics ---------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_rollout_respects_its_budget_and_reports_truncation() -> None:
     environment = _environment(chain_length=8)
     policy = LinearPolicy(2)
@@ -126,7 +126,7 @@ def test_a_rollout_respects_its_budget_and_reports_truncation() -> None:
     assert not episode.terminated
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_rollout_stops_on_reaching_a_local_maximum() -> None:
     environment = _environment()
     policy = LinearPolicy(2)
@@ -140,7 +140,6 @@ def test_a_rollout_stops_on_reaching_a_local_maximum() -> None:
 
 
 @pytest.mark.edge_case
-@pytest.mark.structural
 def test_a_rollout_started_at_a_local_maximum_takes_no_action() -> None:
     environment = _environment()
     optimum_state = (0, 0, 0, 0)
@@ -152,7 +151,7 @@ def test_a_rollout_started_at_a_local_maximum_takes_no_action() -> None:
     assert episode.terminated
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_rollout_is_reproducible_from_its_seed() -> None:
     environment = _environment()
     policy = LinearPolicy(2)

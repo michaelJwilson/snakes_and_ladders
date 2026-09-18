@@ -25,7 +25,7 @@ def found() -> list[appraise_kernels.Kernel]:
     return appraise_kernels.kernels()
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_pool_is_read_from_the_source_and_not_from_a_list(
     found: list[appraise_kernels.Kernel],
 ) -> None:
@@ -39,7 +39,7 @@ def test_the_pool_is_read_from_the_source_and_not_from_a_list(
     assert {"count_pairs", "ragged"} & pool == set()
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_kernel_is_pinned_against_a_referee_its_tests_import(
     found: list[appraise_kernels.Kernel],
 ) -> None:
@@ -58,7 +58,7 @@ def test_every_kernel_is_pinned_against_a_referee_its_tests_import(
     assert unpinned == set()
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_oracle_inside_the_adapter_is_a_referee(
     found: list[appraise_kernels.Kernel],
 ) -> None:
@@ -73,7 +73,7 @@ def test_an_oracle_inside_the_adapter_is_a_referee(
     assert ragged.referees == ("likelihood.ragged_rust.posteriors_oracle",)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_probe_is_excluded_with_its_reason(
     found: list[appraise_kernels.Kernel],
 ) -> None:
@@ -87,7 +87,7 @@ def test_the_probe_is_excluded_with_its_reason(
     assert "extension-loads probe" in appraise_kernels.PROBES["lib"]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_boundary_names_the_adapter_each_kernel_is_called_through(
     found: list[appraise_kernels.Kernel],
 ) -> None:
@@ -101,7 +101,7 @@ def test_the_boundary_names_the_adapter_each_kernel_is_called_through(
     assert adapters["coupled"] == ("likelihood.spatio_sequential_rust",)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_use_of_rayon_without_a_parallel_iterator_is_not_parallel(
     found: list[appraise_kernels.Kernel],
 ) -> None:

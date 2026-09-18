@@ -75,7 +75,7 @@ def test_jc_detailed_balance_under_uniform_stationary_distribution() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("fixture_name", SITE_AND_TAXA_FIXTURES)
 def test_simulated_substitution_frequencies_match_analytic_jc(
     fixture_name: str,
@@ -110,7 +110,7 @@ def test_simulated_substitution_frequencies_match_analytic_jc(
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_simulation_is_reproducible_given_seed() -> None:
     params = load_simulation_params(FIXTURE)
     first = simulate_alignment(
@@ -132,7 +132,7 @@ def test_simulation_is_reproducible_given_seed() -> None:
         assert_allclose(states, second.node_states[name])
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_alignment_holds_exactly_the_leaf_states() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
@@ -148,7 +148,7 @@ def test_alignment_holds_exactly_the_leaf_states() -> None:
         assert_allclose(states, dataset.node_states[name])
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_newick_carries_every_leaf_and_terminates() -> None:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(

@@ -232,7 +232,7 @@ def _spent_table(comparison: Comparison, unit: str) -> str:
 # --- the protocol ----------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("initializer", [FromDistances(), FromHadamard()])
 def test_the_start_is_one_point_in_the_objective_s_coordinates(
     initializer: Initializer,
@@ -267,7 +267,7 @@ def test_the_start_is_one_point_in_the_objective_s_coordinates(
     assert float(objective(starts[0])) < float(objective(objective.initial()))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_general_model_start_carries_the_log_det_lengths_and_jukes_cantor_rates() -> (
     None
 ):
@@ -291,7 +291,7 @@ def test_the_general_model_start_carries_the_log_det_lengths_and_jukes_cantor_ra
     assert float(objective(start)) < float(objective(objective.initial()))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_rooted_binary_topology_places_the_root_pair_as_its_sum() -> None:
     """The eight-taxon fixture roots at degree 2: the estimable sum carries the split's length."""
     params = load_fixture(EIGHT_TAXA)
@@ -330,7 +330,7 @@ def test_a_non_positive_floor_is_refused() -> None:
 # --- the measurement -------------------------------------------------------
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_every_start_reaches_the_fit_optimum_and_none_reaches_it_cheaper() -> None:
     """Five-taxon fixture, three datasets: all five starts converge to one optimum at one cost.
 
@@ -354,7 +354,7 @@ def test_every_start_reaches_the_fit_optimum_and_none_reaches_it_cheaper() -> No
     assert means.max() / means.min() < 1.25, means
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_the_estimator_starts_reach_the_enumerated_optimum_at_five_taxa() -> None:
     """Five-taxon fixture, three datasets: the climb from either estimator reaches the enumerated optimum.
@@ -379,7 +379,7 @@ def test_the_estimator_starts_reach_the_enumerated_optimum_at_five_taxa() -> Non
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize(
     ("name", "n_seeds"),
     [

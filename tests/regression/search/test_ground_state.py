@@ -140,7 +140,7 @@ def test_the_swap_never_raises_the_energy_from_any_start() -> None:
         assert run.energy <= energy(rung.graph, rung.field, start) + _EXACT
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_enumerated_ground_state_recovers_the_generating_structure() -> None:
     # The second referee, at the size where the labelling it scores is exact.
     # The null class carries no field at any site, so its occupancy cannot
@@ -174,7 +174,7 @@ def test_the_bracket_contains_the_known_optimum() -> None:
 # --- the guards against a quiet failure --------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_the_field_accept_step_rejects(move: PottsMove) -> None:
     # A cluster move silently running without its accept step would look like
@@ -230,7 +230,7 @@ def test_no_entry_spends_more_than_its_budget() -> None:
         assert run.spent <= budget.size, name
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_gibbs_at_zero_temperature_is_the_descent_update() -> None:
     # Reported on one axis for this reason: at T -> 0 the heat bath is the
     # argmin over each site's conditional, which is the descent's update. A
@@ -325,7 +325,7 @@ def test_the_exact_ground_state_at_five_thousand_sites() -> None:
     assert np.array_equal(python_state, rust_state)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None:
     # Both arms of issue #551's Step 1 gate. The greedy agreement is the
@@ -346,7 +346,7 @@ def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None
     assert 0.0 < recovered.tilt < 0.4935
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_comparison_records_the_labelling_each_entry_returned() -> None:
     # `opt.budget.compare` returns an energy and a spend; the structural
     # referee needs the labelling, and running every method twice to get it

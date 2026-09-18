@@ -67,7 +67,7 @@ def test_a_row_summing_below_one_cannot_yield_an_index_past_the_end() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_row_is_selectable() -> None:
     distributions = np.eye(4)
     rows = np.arange(4)
@@ -76,7 +76,7 @@ def test_every_row_is_selectable() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_one_draw_is_consumed_per_entry() -> None:
     # The stream cost must not depend on the outcome, or two callers seeded
     # alike would diverge on data rather than on their seeds.

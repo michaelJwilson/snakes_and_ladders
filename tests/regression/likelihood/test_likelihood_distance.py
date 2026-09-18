@@ -124,7 +124,7 @@ def test_the_delta_variance_reduces_to_the_binomial_one() -> None:
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("kind", list(DistanceKind))
 def test_the_distance_converges_on_the_path_length_with_the_site_count(
     kind: DistanceKind,
@@ -157,7 +157,7 @@ def test_the_distance_converges_on_the_path_length_with_the_site_count(
     assert 2.5 < rms[1] / rms[2] < 4.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("kind", list(DistanceKind))
 def test_the_stated_variance_covers_the_truth_at_the_nominal_rate(
     kind: DistanceKind,

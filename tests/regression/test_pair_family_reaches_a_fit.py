@@ -74,7 +74,7 @@ def _fit(observations: np.ndarray, covariate: np.ndarray | None) -> np.ndarray:
     return np.sort(family.total.mean.detach().numpy())
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_a_family_with_its_own_axes_fits_at_all() -> None:
     """The shape claim, on its own: the unpacking no longer refuses the family.
@@ -89,7 +89,7 @@ def test_a_family_with_its_own_axes_fits_at_all() -> None:
     assert np.isfinite(_fit(observations, None)).all()
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_told_the_exposure_the_fit_recovers_the_planted_rate() -> None:
     """Over an exposure spanning a factor of 9, the fit reaches what drew it."""
     observations, covariate = _draw(spread=3.0, seed=2)
@@ -97,7 +97,7 @@ def test_told_the_exposure_the_fit_recovers_the_planted_rate() -> None:
     np.testing.assert_allclose(_fit(observations, covariate), _RATE, rtol=0.15)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_not_told_it_the_same_fit_misses() -> None:
     """And it is worth telling: withheld, the same fit on the same data misses.
 

@@ -199,7 +199,7 @@ def test_rust_rejects_non_root_node_without_branch_length() -> None:
         pruning_rust.log_likelihood(tau, 4, np.full(4, 0.25), alignment)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.release
 def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     """The tolerance holds at 200,000 sites, where an absolute one would not.

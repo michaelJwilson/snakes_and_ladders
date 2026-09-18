@@ -85,7 +85,7 @@ def _seam(tier: str) -> CountPairAt:
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("name", list(SEEDINGS))
 def test_the_fit_improves_on_every_seeding_and_beats_chance(name: str) -> None:
     # The referee is the draw's own truth. Two claims that do not depend on
@@ -107,7 +107,7 @@ def test_the_fit_improves_on_every_seeding_and_beats_chance(name: str) -> None:
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_sampled_seedings_recover_the_generating_means_at_the_ci_size() -> None:
     # What the notebook's table states: the three candidates that sample a
     # surface reach the truth inside the budget where the heuristics do not,
@@ -147,7 +147,7 @@ def test_the_projected_likelihood_does_not_decrease_under_the_fit(name: str) -> 
     assert fitted.iterations <= CI_BUDGET.size
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_seeding_charges_what_its_rule_spends() -> None:
     # The cost rule is what makes an unequal seeding budget reportable rather
     # than hidden, so the charge is asserted against the rule that incurs it:
@@ -172,7 +172,7 @@ def test_a_seeding_charges_what_its_rule_spends() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_chain_candidates_report_a_diagnostic() -> None:
     # A seed drawn from a chain that has not mixed is a random restart with a
     # longer bill, so a chain-based candidate that reported nothing would hide
@@ -220,7 +220,7 @@ def test_euclidean_seeding_is_one_dimensional_kmeans_plus_plus_on_a_flat_channel
     assert np.allclose(np.sort(seeded.components.total.mean.numpy()), np.sort(expected))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_chain_starts_satisfy_the_initializer_seam() -> None:
     # The ticket's condition on a new initializer: the existing seam, not a
     # second shape.
@@ -265,7 +265,7 @@ KEY_CONTROL = "prior"
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_likelihood_and_the_truth_order_the_seedings_oppositely() -> None:
     """The key model's finding, and the reason no default moves.
 

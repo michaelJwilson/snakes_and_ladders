@@ -287,7 +287,7 @@ def test_spr_neighbours_are_the_definition_in_the_definition_order(n_taxa: int) 
 # --- the bounded regraft (issue #408) -------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("n_taxa", [5, 6, 7, 8, 9])
 def test_spr_radius_at_the_leaf_count_is_the_unbounded_neighbourhood(
     n_taxa: int,

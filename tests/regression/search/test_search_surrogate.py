@@ -94,7 +94,7 @@ def _recorded_target(problem: str, tier: str) -> TreeTarget:
     return target
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_learned_surrogates_rank_held_out_neighbourhoods() -> None:
     # Six alignments, every topology of each fitted (90 fits at 200 sites),
@@ -136,7 +136,7 @@ def test_learned_surrogates_rank_held_out_neighbourhoods() -> None:
     assert float(bound(topology, alignment)) < float(surrogate(topology, alignment))
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_learned_surrogates_rank_a_held_out_alignment_from_the_recorded_fits() -> None:
     # The per-pull-request sibling of the six-alignment run above (issue
     # #401). Three alignments, one each to train, validate and hold out, and

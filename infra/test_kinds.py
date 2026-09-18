@@ -15,14 +15,23 @@ registration agree, so this file cannot drift from what `pytest` accepts.
 
 from __future__ import annotations
 
-#: What a test is checked against.
+#: What a test is checked against. `structural` was retired and
+#: `simulated_truth` renamed `end2end` by issue #729; `infra` is a kind an
+#: author writes on a test of the repository's own machinery, and the subject
+#: the collection hook adds where a module names no problem.
 KINDS = (
     "oracle",
-    "simulated_truth",
+    "end2end",
     "mathematical",
     "edge_case",
-    "structural",
+    "smoke",
+    "infra",
 )
+
+#: What a finding is: the second axis issue #729 added, carried beside a kind
+#: and never instead of one. Registered and enforced here; applied by the audit
+#: that issue plans, directory by directory.
+FINDINGS = ("bug", "warning", "backend", "baseline")
 
 #: The second axis. Not a kind: it says when a test runs, not what it checks.
 #: `stress` (#232) is the same axis as `release`: a size, not a claim, and so

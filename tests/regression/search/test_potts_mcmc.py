@@ -142,7 +142,7 @@ def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
     assert _goodness_of_fit(move, WITH_FIELD) > SIGNIFICANCE
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_dropping_the_field_accept_step_is_caught(
     move: PottsMove, monkeypatch: pytest.MonkeyPatch
@@ -348,7 +348,7 @@ def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     assert np.abs(scaled - expected).max() == 0.0
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("move", list(PottsMove))
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
@@ -469,7 +469,7 @@ def _replica_p_values(
     return p_values
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
 def test_every_replica_is_drawn_from_its_own_tempered_distribution(
     backend: Backend,
@@ -569,7 +569,7 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
         parallel_tempering(graph, NO_FIELD, (1.0, 0.0), np.random.default_rng(SEED), 10)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
     # The instance where restarts can lose: the planted Viana-Bray spin
     # glass, 60 sites at mean degree 4 and frustration 0.2, whose planted
@@ -666,7 +666,7 @@ PROBE_SWEEPS = 50
 HAND_LADDER = (2.0, 1.2, 0.7, 0.4)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @at_scale("n_seeds", ci=10, stress=20)
 def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
     n_seeds: int,
@@ -712,7 +712,7 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
         assert bool((fresh.swap_acceptance < 0.9).all()), fresh.swap_acceptance
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @at_scale("n_seeds", ci=10, stress=20)
 def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
     n_seeds: int,

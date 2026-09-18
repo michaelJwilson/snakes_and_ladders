@@ -37,7 +37,7 @@ def _draws(n: int) -> list[SimulatedSpatioSequential]:
     return [simulate_spatio_sequential(params, rng, burn_in=BURN_IN) for _ in range(n)]
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_labels_are_drawn_from_the_potts_prior() -> None:
     params = fixture("spatio_sequential", "ci").params
     configurations = list(product(range(params.n_classes), repeat=4))
@@ -57,7 +57,7 @@ def test_the_labels_are_drawn_from_the_potts_prior() -> None:
     assert chi_square_p_value(observed, expected) > SIGNIFICANCE
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_chains_follow_the_circulant_transition_and_the_initial() -> None:
     params = fixture("spatio_sequential", "ci").params
     draws = _draws(N_DRAWS)
@@ -77,7 +77,7 @@ def test_the_chains_follow_the_circulant_transition_and_the_initial() -> None:
         ), m
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain() -> (
     None
 ):
@@ -109,7 +109,7 @@ def test_the_circulant_transition_is_row_stochastic_with_the_declared_diagonal()
     np.testing.assert_allclose(off, off[0])
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_planted_labels_are_kept_and_the_generator_reproduces_the_draw() -> None:
     params = fixture("spatio_sequential", "ci").params
     planted = np.array([0, 1, 1, 0])

@@ -106,7 +106,7 @@ def test_the_gradient_fit_and_expectation_maximization_reach_the_same_optimum() 
     assert_allclose(estimate["scale"].numpy(), em.components.scale.numpy(), atol=1e-5)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_fit_recovers_the_generating_mixture_up_to_the_label_permutation() -> None:
     observations = _dataset()
     objective = GaussianMixtureObjective(observations, 2)
@@ -149,7 +149,7 @@ def test_the_component_m_step_is_the_emission_family_s_own() -> None:
     assert_allclose(one_step.weights.numpy(), posterior.mean(dim=0).numpy(), rtol=1e-15)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_responsibilities_are_a_distribution_over_components() -> None:
     values = torch.as_tensor(_dataset(n_samples=100), dtype=torch.float64)
     components = GaussianEmission(MEAN, SCALE, 1e-12)
@@ -219,7 +219,7 @@ def test_the_optimal_clustering_is_exact_where_it_can_be_checked_by_hand() -> No
         optimal_clustering_cost(values, 7)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_kmeans_plus_plus_stays_inside_its_published_guarantee() -> None:
     # Arthur & Vassilvitskii (2007), theorem 1.1: the *expected* seeding cost
     # is within `8 (ln k + 2)` of optimal, so the mean over replicates is what
@@ -246,7 +246,7 @@ def test_kmeans_plus_plus_stays_inside_its_published_guarantee() -> None:
     assert ratios.mean() <= 4.0
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_kmeans_plus_plus_beats_uniform_seeding_on_the_cost_it_optimizes() -> None:
     # The paired control, kept beside the strategy: a comparison whose baseline
     # lives only in the test that wins it is not a comparison. Realized: mean
@@ -275,7 +275,7 @@ def test_kmeans_plus_plus_beats_uniform_seeding_on_the_cost_it_optimizes() -> No
     assert ratios["uniform"].max() > seeding_guarantee(3)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
     # **The negative result.** k-means++ is 3.8x better on the cost it
     # optimizes, and on this mixture that buys
@@ -334,7 +334,7 @@ def test_the_seeding_advantage_does_not_reach_the_mixture_likelihood() -> None:
     assert reached["uniform"] >= 18, reached
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_initializer_satisfies_the_protocol_and_seeds_the_objective() -> None:
     observations = _dataset(
         mean=SEPARATED_MEAN,
@@ -384,7 +384,7 @@ def test_an_initializer_that_reads_the_data_refuses_an_objective_it_cannot_read(
         KMeansPlusPlus(1, np.random.default_rng(0)).starts(unrelated)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_mixture_needs_at_least_two_components() -> None:
     with pytest.raises(ValueError, match="n_components must be >= 2"):
         GaussianMixtureObjective(_dataset(n_samples=20), 1)
@@ -392,7 +392,7 @@ def test_a_mixture_needs_at_least_two_components() -> None:
         kmeans_plus_plus(np.arange(5.0), 6, np.random.default_rng(0))
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_a_known_truth_round_trips_through_the_unconstrained_coordinates() -> None:
     objective = GaussianMixtureObjective(_dataset(n_samples=100), 2)
 

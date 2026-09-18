@@ -140,7 +140,7 @@ def test_the_forward_recursion_matches_enumeration_over_every_path(name: str) ->
     assert_allclose(recursed, enumerated.log_likelihood, rtol=1e-11)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("name", FAMILIES)
 def test_the_evidence_of_a_count_model_is_a_probability(name: str) -> None:
     # The bound the Gaussian case had to give up, restored and asserted where
@@ -195,7 +195,7 @@ def test_the_gradient_fit_and_baum_welch_reach_the_same_optimum(name: str) -> No
         assert_allclose(estimate[parameter].numpy(), value.numpy(), rtol=1e-3)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("name", FAMILIES)
 def test_a_known_truth_round_trips_through_the_unconstrained_coordinates(
     name: str,
@@ -337,7 +337,7 @@ def _dispersion_coverage(dispersion: float, replicates: int) -> tuple[int, int, 
     return covered, total, boundary
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_an_interval_stops_existing_at_both_ends_of_the_dispersion_range() -> None:
     # The cheap two-point form of the release sweep below, and the finding it
     # carries: what degrades with the dispersion is not the coverage of the
@@ -355,7 +355,7 @@ def test_an_interval_stops_existing_at_both_ends_of_the_dispersion_range() -> No
     assert middle[0] / middle[1] >= 0.85
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_coverage_against_the_true_dispersion() -> None:
     # The full sweep behind the table in `STATUS.md`. Marked release: 16

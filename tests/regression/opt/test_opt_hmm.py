@@ -162,7 +162,7 @@ def test_theta_round_trips_through_the_constraint_map() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_theta_has_one_entry_per_free_probability() -> None:
     # 2 free initial + 3 rows x 2 free transition + 3 rows x 3 free emission.
     objective = HmmObjective(np.zeros((2, 5), dtype=np.int64), n_states=3, n_symbols=4)
@@ -170,7 +170,7 @@ def test_theta_has_one_entry_per_free_probability() -> None:
     assert objective.initial().shape == (17,)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_initial_point_is_uninformative_but_not_symmetric() -> None:
     # Initial and transition start uniform; the emission rows are tilted
     # apart. See the stationary-point test below for why the tilt has to be
@@ -257,7 +257,7 @@ def test_align_states_recovers_a_known_permutation() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_baum_welch_stops_once_the_likelihood_stops_moving() -> None:
     # The convergence test is relative to the log-likelihood's magnitude, as
     # everywhere else. A loose tolerance must stop the iteration early, which
