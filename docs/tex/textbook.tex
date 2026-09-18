@@ -648,6 +648,30 @@ recursions, exact at every length since the chain is a tree; the release tier
 fits sequences past the enumerable length, refereed by recovery of the
 simulated parameters alone, up to the permutation of hidden states.
 
+\paragraph{Chains of unequal length.}
+\label{par:hmm:ragged}
+A batch need not be rectangular. Writing $y^{(r)}_{1:T_r}$ for the $r$th
+sequence, the likelihood of $R$ sequences of lengths $T_1, \dots, T_R$ is the
+product
+\begin{equation}
+  p(\data \mid \params)
+    = \prod_{r=1}^{R} p\big(y^{(r)}_{1:T_r} \mid \params\big),
+  \label{eq:hmm-ragged}
+\end{equation}
+each factor the forward recursion of Equation~\ref{eq:forward} run to its own
+length $T_r$. Nothing in the model couples the sequences, so this is a statement
+about the data and not a second model: the parameters are shared and the
+lengths are not.
+
+\emph{Padding is an implementation of Equation~\ref{eq:hmm-ragged} and never
+a model.} A batch padded to its longest member and masked computes the same
+product, and what it costs is the padding: the work grows as
+$R \cdot \max_r T_r$ where the sum $\sum_r T_r$ is what the likelihood needs.
+The two agree to floating point and the gap between them is the padding
+fraction, which is a property of the batch rather than of either route. An
+unmasked padded position is a different likelihood, so every consumer masks
+--- in the expectation step and in the emission re-estimation alike.
+
 \subsection{As a factor graph}
 The variables are the hidden states, $x_t \equiv z_t$. The factors are
 $\psi_1(z_1) = \pi_{z_1}\, \emission_{z_1}(y_1)$ at the first position and,
@@ -1408,6 +1432,49 @@ past it. There the reference implementation of the posterior is the oracle, an
 accelerated one pinned to it, and the planted labels referee the fit above
 that.
 
+\paragraph{The count-pair instance, and what a covariate conditions on.}
+\label{par:coupled:pairs}
+Under the paired count emission a spot's observation at a position is two
+counts, a total and a successes, and each channel may carry a
+\emph{covariate}: a per-observation quantity the model conditions on rather
+than fits. The two channels take different ones, and the difference is the
+whole of the contract:
+\begin{itemize}
+  \item an \emph{exposure} $c_{s,n} > 0$ on the total channel multiplies the
+    rate the count is drawn at, so a negative-binomial total at mean $\mu$
+    becomes one at mean $c_{s,n}\mu$. The identity that makes this a
+    conditioning and not a reparameterization is
+    $c\,\Gamma(r, \mu/r) = \Gamma(r, c\mu/r)$: the shape is untouched, so the
+    dispersion the fit estimates is the same parameter it would estimate at
+    unit exposure;
+  \item a \emph{trial count} $m_{s,n}$ on the successes channel
+    \emph{replaces} the declared number of trials, so the beta-binomial is
+    scored out of what was actually observed rather than out of a constant.
+\end{itemize}
+A covariate that varies and is not conditioned on is not neutral: the fit then
+estimates the rate averaged over the exposures. On the fixture below, planted
+rates of $24$ and $72$ with exposures spanning a factor of sixteen are
+recovered as $23.3$ and $71.3$ when the fit is told them, and as $47.9$ and
+$151.7$ when it is not --- factors of $1.99$ and $2.11$ against the
+$\mathbb{E}[U(0.25, 4)] = 2.125$ the exposures average to.
+
+Two instances are declared. The per-pull-request one is an $8 \times 8$
+lattice at $M = K = 2$ over $1{,}000$ positions; past it a triangular
+$71 \times 71$ at $M = K = 10$ over $20{,}000$ positions, which is
+$1.008 \times 10^{8}$ count pairs and past every oracle in this document ---
+there the reference implementation is the referee for the accelerated one, and
+the planted labels for the fit.
+
+\paragraph{Chains of unequal length.}
+\label{par:coupled:ragged}
+The chains of Equation~\ref{eq:joint} need not share a length. Class $m$
+carries $S_m$ states and the joint is the same product with $S$ replaced by
+$S_m$ per class, exactly as Equation~\ref{eq:hmm-ragged} states for a batch of
+sequences: the classes are coupled through the labels, not through their
+lengths. Padding to the longest chain and masking computes the same joint and
+is an implementation of it, never the model --- and what it costs is the
+padding fraction of the batch, not a property of either route.
+
 \subsection{As a factor graph}
 The variables are the $N$ labels and the $S M$ chain states. The factors are
 the pairwise Potts factors of Section~\ref{sec:potts} on the labels, the chain
@@ -1624,6 +1691,93 @@ Equation~\ref{eq:tanh-rule} --- structure paid for in cycles, and the reason
 the construction is carried for what Equation~\ref{eq:bicycle-css} opens
 rather than for its classical performance.
 
+\subsection{The algebraic codes, and a decoder that does not iterate}
+\label{sec:ldpc:algebraic}
+Every code above is decoded by running Equation~\ref{eq:tanh-rule} to a fixed
+point, and refereed by enumerating its $2^{k}$ words, which stops where the
+exponent does. The codes here are decoded in closed form at every length, so
+each is a referee whose cost does not grow with the block
+\citep{blahut2003, mackay2003}.
+
+A code of minimum distance $d$ corrects $t = \lfloor (d-1)/2 \rfloor$ errors,
+since the Hamming spheres of that radius around its words are disjoint. A
+\emph{perfect} code is one whose spheres also cover, leaving nothing over:
+\begin{equation}
+  2^{k} \sum_{i=0}^{t} \binom{n}{i} = 2^{n},
+  \label{eq:sphere-packing}
+\end{equation}
+an equality over integers rather than a bound, and the sharpest structural
+invariant available here --- a dropped row or a permuted column fails it at
+once. The binary perfect codes are the odd repetition codes, the Hamming
+codes $(2^{m}-1, 2^{m}-1-m)$ and the Golay code $(23, 12)$; the extended
+Golay $(24, 12)$ is not perfect, and buys $d = 8$, which corrects three
+errors and detects a fourth.
+
+Reed--Solomon takes the other route. Over $\mathrm{GF}(2^{m})$ with
+$n = 2^{m} - 1$, the generator polynomial's roots are
+$\alpha^{1}, \dots, \alpha^{n-k}$, and the code meets the Singleton bound
+\begin{equation}
+  d \leq n - k + 1
+  \label{eq:singleton}
+\end{equation}
+with equality, which no code above does: it is the first maximum-distance
+separable code here. Its decoder is algebraic --- Berlekamp--Massey for the
+error locator, a Chien search for the locator's roots, Forney for the
+magnitudes \citep{blahut2003} --- and is \emph{bounded distance}: it returns
+a word within $t$ symbols of what arrived, or refuses.
+
+\paragraph{A bounded-distance decoder's error rate is an equality, not a
+bound.} Past $t$ the transmitted word is farther than $t$ from what arrived,
+so a decoder that only returns words within $t$ cannot return it. The block
+error probability is therefore exactly the binomial tail
+\begin{equation}
+  P_{\mathrm{block}} = 1 - \sum_{i=0}^{t} \binom{n}{i} q^{i} (1-q)^{n-i},
+  \label{eq:bounded-distance}
+\end{equation}
+where $q$ is the probability that one symbol is wrong: the crossover $p$ for
+a binary code, and $1 - (1-p)^{m}$ for a code over $\mathrm{GF}(2^{m})$ whose
+symbols are sent as $m$ bits. Equation~\ref{eq:bounded-distance} is also the
+\emph{maximum-likelihood} rate for a perfect code, where every received word
+has a unique nearest codeword. That is what makes these codes oracles rather
+than examples, and it is what the implementations here are pinned against.
+
+\subsection{Capacity, which is nobody's decoder}
+\label{sec:ldpc:capacity}
+Every rate above is what one decoder achieves. Capacity is what no decoder of
+that rate achieves: a converse, not a construction \citep{cover2006}. For the
+three channels of Section~\ref{sec:ldpc:model}, in bits per channel use,
+\begin{align}
+  C_{\mathrm{BEC}}(\epsilon) &= 1 - \epsilon, \label{eq:capacity-bec} \\
+  C_{\mathrm{BSC}}(p) &= 1 - \mathrm{H}_{2}(p), \label{eq:capacity-bsc} \\
+  C_{\mathrm{BIAWGN}}(\sigma) &= 1 - \mathbb{E}
+    \log_{2}\!\left(1 + e^{-2y/\sigma^{2}}\right),
+    \quad y \sim \mathcal{N}(1, \sigma^{2}),
+  \label{eq:capacity-biawgn}
+\end{align}
+with $\mathrm{H}_{2}$ the binary entropy in bits. The first two are closed
+forms; the third is an integral, taken by Gauss--Hermite quadrature, and
+carries the published rate-$1/2$ limit $\sigma^{\star} = 0.9787$
+\citep{richardson2008} as its pin --- 0.49999606 against one half, and
+unmoved to $3 \times 10^{-10}$ by halving or doubling the node count.
+Inverting each of the three for the noise at which capacity equals a rate is
+a bisection, on the same monotonicity argument as
+Appendix~\ref{app:density-evolution}'s threshold.
+
+\paragraph{What the gap says, and what it does not.} A threshold and a
+capacity are the same kind of statement --- both are about infinite length ---
+and their ratio is the ensemble's. The $(3,6)$ ensemble's erasure threshold
+$\epsilon^{\star} = 0.4294$ sits below $C_{\mathrm{BEC}}^{-1}(1/2) = 0.5$,
+leaving $14.1\%$ of that channel unused; on the symmetric channel its
+threshold $0.084$ against $p^{\star} = 0.1100$ is a factor of $1.31$. A
+finite-length code's crossing of a chosen error rate is \emph{not} the same
+kind of statement, and the distance from it to the boundary is part length
+and part decoding: at a block error rate of $10^{-2}$, the repetition,
+Reed--Solomon, Golay and Hamming pairs of
+Section~\ref{sec:ldpc:algebraic} give up factors of $3.0$, $5.6$, $2.7$ and
+$3.9$ against Equation~\ref{eq:capacity-bsc}, on blocks of 3 to 23 bits.
+Lowering the rate does not buy the gap back: repetition has the mildest limit
+of the four, $p^{\star} = 0.174$, and still gives up $3.0$.
+
 \subsection{The quantum code those matrices define}
 \label{sec:ldpc:css}
 Equation~\ref{eq:bicycle-css} is the condition a Calderbank--Shor--Steane code
@@ -1749,6 +1903,22 @@ passing is exact.
     ensemble on one channel; it establishes nothing at finite length on the
     other two, which is the cell Section~\ref{sec:applicability} marks and the
     extension past the erasure channel would fill.
+  \item \emph{Equation~\ref{eq:sphere-packing}} referees the algebraic
+    constructions as an equality over integers, and
+    Equation~\ref{eq:bounded-distance} referees their decoders as a closed
+    form no length outruns: the implementations are held to it by Monte
+    Carlo at a stated draw count, agreeing within 1.7 standard errors on
+    every pair measured. It establishes that each code is the one named and
+    that its decoder achieves what bounded distance guarantees; it
+    establishes nothing about what a better decoder would achieve on the
+    same code, which for a perfect code is the same number and for
+    Reed--Solomon is not.
+  \item \emph{Capacity} referees every threshold and operating point from
+    above, and is the only referee here that does so without running
+    anything: Equation~\ref{eq:capacity-bsc} and its two siblings forbid a
+    rate at a noise level, so a threshold that passed one would be a mistake
+    in the threshold or in the capacity. It establishes that the numbers
+    reported are not impossible, and nothing about any of them being right.
   \item \emph{The algebra of Equation~\ref{eq:bicycle}} referees the second
     construction, exactly and with no tolerance: the degrees against $w$, the
     halves against a circulant built by rolling its own first row,
