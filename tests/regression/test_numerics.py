@@ -8,10 +8,12 @@ That is what these tests pin.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.numerics import sample_rows
+from snakes_and_ladders.numerics import logsumexp, sample_rows
 
 
 @pytest.mark.critical
@@ -93,3 +95,31 @@ def test_one_draw_is_consumed_per_entry() -> None:
 def test_a_one_dimensional_distribution_is_rejected() -> None:
     with pytest.raises(ValueError, match="expected distributions of shape"):
         sample_rows(np.random.default_rng(0), np.array([0.5, 0.5]), np.zeros(2, int))
+
+
+@pytest.mark.mathematical
+def test_reducing_several_axes_at_once_is_one_reduction() -> None:
+    # `logsumexp` takes a tuple of axes because a region belief marginalized
+    # onto a child sums out every variable the child does not carry (issue
+    # #689). The referee is the identity it has to satisfy: one reduction over
+    # two axes is the same number as two reductions over one, up to the
+    # floating-point reordering the shift makes irrelevant here.
+    rng = np.random.default_rng(20260916)
+    values = rng.normal(scale=3.0, size=(4, 5, 6))
+
+    together = logsumexp(values, axis=(0, 2))
+    apart = logsumexp(logsumexp(values, axis=2), axis=0)
+
+    assert together.shape == (5,)
+    np.testing.assert_allclose(together, apart, rtol=0, atol=1e-13)
+
+
+@pytest.mark.mathematical
+def test_the_shift_survives_an_exponent_the_linear_domain_would_lose() -> None:
+    # What the shift is for, over several axes as over one: 800 in an exponent
+    # overflows a float64 and the shifted form returns it exactly.
+    values = np.full((2, 2), 800.0)
+
+    assert float(logsumexp(values, axis=(0, 1))) == pytest.approx(
+        800.0 + math.log(4.0), rel=1e-15
+    )

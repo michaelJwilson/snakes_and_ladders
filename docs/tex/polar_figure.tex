@@ -1,0 +1,54 @@
+% The butterfly of Section~\ref{sec:polar} at $N = 4$, drawn by hand. Input by
+% textbook.tex; a sketch and not a rendered figure, so it is outside the figure
+% cache and the render cap, which govern generated output only.
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    scale=1.0,
+    source/.style={fgvariable, minimum size=0.5cm, font=\scriptsize},
+    kernel/.style={fgdata, minimum size=0.42cm, inner sep=1pt,
+                   font=\scriptsize},
+    frozen/.style={fgvariable, fill=black!12, minimum size=0.5cm,
+                   font=\scriptsize}
+]
+  % the source vector: two frozen, two carrying the message
+  \node[frozen] (u0) at (0, 2.4) {$u_0$};
+  \node[frozen] (u1) at (0, 1.6) {$u_1$};
+  \node[source] (u2) at (0, 0.8) {$u_2$};
+  \node[source] (u3) at (0, 0.0) {$u_3$};
+
+  % two stages of the kernel, one column each
+  \foreach \i/\y in {0/2.4, 1/1.6, 2/0.8, 3/0.0} {
+    \node[kernel] (a\i) at (1.7, \y) {$\oplus$};
+    \node[kernel] (b\i) at (3.4, \y) {$\oplus$};
+    \draw[fglink] (u\i) -- (a\i);
+    \draw[fglink] (a\i) -- (b\i);
+  }
+  % the kernel pairs each column: stage one within halves, stage two across
+  \draw[fglink] (u0) -- (a1);
+  \draw[fglink] (u2) -- (a3);
+  \draw[fglink] (a0) -- (b2);
+  \draw[fglink] (a1) -- (b3);
+
+  % the transmitted bits and their channel scores
+  \foreach \i/\y in {0/2.4, 1/1.6, 2/0.8, 3/0.0} {
+    \node[source] (c\i) at (5.1, \y) {$c_{\i}$};
+    \node[fgdata, minimum size=0.42cm, font=\scriptsize] (l\i) at (6.4, \y)
+      {$L_{\i}$};
+    \draw[fglink] (b\i) -- (c\i);
+    \draw[fglink] (c\i) -- (l\i);
+  }
+
+  \node[fgnote] at (0, -0.7) {source};
+  \node[fgnote] at (2.55, -0.7) {$n = 2$ stages of $\oplus$};
+  \node[fgnote] at (5.75, -0.7) {channel};
+\end{tikzpicture}
+\caption{The transform of Equation~\ref{eq:polar-transform} at $N = 4$ as a
+factor graph. Each $\oplus$ is one application of the kernel: a parity factor
+over the pair it joins. Shaded source variables are frozen to zero and carry
+no message, and which they are is what Equation~\ref{eq:polar-bec} chooses.
+Successive cancellation is a schedule on this graph and not a separate
+algorithm --- it decides $u_0$, then $u_1$ given that decision, and so on,
+each pass exact given the ones before it.}
+\label{fig:polar:sketch}
+\end{figure}
