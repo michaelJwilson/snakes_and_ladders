@@ -113,7 +113,7 @@ def test_fitch_matches_a_score_worked_out_by_hand() -> None:
     assert fitch_score(tau, alignment, 4) == 1 + 0 + 3
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_constant_alignment_needs_no_changes() -> None:
     tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
     alignment = {name: np.zeros(20, dtype=np.int64) for name in FOUR_TAXA_LEAVES}
@@ -121,7 +121,7 @@ def test_a_constant_alignment_needs_no_changes() -> None:
     assert fitch_score(tau, alignment, 4) == 0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_missing_leaf_is_refused() -> None:
     # Silently scoring the subtree it can reach returns a smaller number for
     # the wrong reason, and smaller is better under this criterion.
@@ -132,7 +132,7 @@ def test_a_missing_leaf_is_refused() -> None:
         fitch_score(tau, alignment, 4)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_sequences_of_different_lengths_are_refused() -> None:
     tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
     alignment = {name: np.zeros(5, dtype=np.int64) for name in FOUR_TAXA_LEAVES}
@@ -142,7 +142,7 @@ def test_sequences_of_different_lengths_are_refused() -> None:
         fitch_score(tau, alignment, 4)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("k", [1, 64])
 def test_a_state_count_a_bitmask_cannot_hold_is_refused(k: int) -> None:
     tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
@@ -230,7 +230,7 @@ def test_sankoff_matches_a_weighted_score_worked_out_by_hand() -> None:
     assert fitch_score(tau, alignment, 4) == 1 + 0 + 3
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("step_matrix", "message"),
     [
@@ -250,7 +250,7 @@ def test_an_unusable_step_matrix_is_refused(
         sankoff_score(tau, alignment, step_matrix)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_state_the_step_matrix_does_not_cover_is_refused() -> None:
     # Indexing past the matrix would raise an IndexError from inside the
     # recursion, naming nothing; a state of 4 under a 4-state matrix is an
@@ -263,7 +263,7 @@ def test_a_state_the_step_matrix_does_not_cover_is_refused() -> None:
         sankoff_score(tau, alignment, unit_step_matrix(4))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_sankoff_refuses_what_fitch_refuses() -> None:
     tau = balanced_four_taxa(0.1, 0.1, 0.1, 0.1)
     unit = unit_step_matrix(4)
@@ -276,7 +276,7 @@ def test_sankoff_refuses_what_fitch_refuses() -> None:
         sankoff_score(tau, alignment, unit)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
     # The theorem, as a prediction. More data does not help: the systematic
@@ -290,7 +290,7 @@ def test_parsimony_is_inconsistent_in_the_felsenstein_zone() -> None:
     assert many_parsimony == 0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
     # The other half of the same claim, and why the zone is the canonical
@@ -303,7 +303,7 @@ def test_likelihood_is_consistent_in_the_felsenstein_zone() -> None:
     assert many_likelihood >= few_likelihood
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_parsimony_is_correct_and_fast_in_the_farris_zone() -> None:
     # The control. Without it, "parsimony got the Felsenstein zone wrong" is
     # indistinguishable from "this parsimony implementation is broken".
@@ -315,8 +315,7 @@ def test_parsimony_is_correct_and_fast_in_the_farris_zone() -> None:
     assert parsimony == 6
 
 
-@pytest.mark.edge_case
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_zero_length_internal_branch_leaves_the_three_topologies_tied() -> None:
     # An analytic corner: with no internal branch there is no split to detect,
     # so a strict preference would be reading noise as signal.

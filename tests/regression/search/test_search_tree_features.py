@@ -289,7 +289,7 @@ def _constant_columns(built: TreeEnvironment, states: list[Topology]) -> set[int
     return constant or set()
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_full_set_column_varies_within_some_neighbourhood(
     full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
@@ -307,7 +307,7 @@ def test_every_full_set_column_varies_within_some_neighbourhood(
             assert float(rows[:, column].std()) > 0.0, (state, column)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_planted_constant_column_is_refused(
     full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
@@ -332,7 +332,7 @@ def test_a_planted_constant_column_is_refused(
     assert _constant_columns(Planted, starts) == {7}  # type: ignore[arg-type]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_shifting_a_column_by_a_constant_leaves_the_policy_unchanged(
     full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
 ) -> None:
@@ -383,7 +383,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher(
 # --- the measurement -----------------------------------------------------
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget(
     full: tuple[TreeEnvironment, list[str]], starts: list[Topology]
@@ -419,7 +419,7 @@ def test_the_full_set_is_ahead_of_the_single_feature_at_the_ci_budget(
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_full_set_against_the_single_feature_over_sixteen_seeds() -> None:
     # Issue #178's comparison at its budget, single feature against the full
     # set. The bounds are around the realized means at 0.05 and the sign
@@ -455,7 +455,7 @@ SIBLING_SEED = 0
 _SIBLING_RATE = 1.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_both_feature_sets_train_away_from_the_recorded_untrained_rate() -> None:
     # The fast sibling of the two release-tier measurements above. The control
     # and the baseline are the fixture's committed record -- the untrained

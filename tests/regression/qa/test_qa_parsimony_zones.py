@@ -66,7 +66,7 @@ def test_the_zone_gap_is_the_brute_force_gap_on_a_small_alignment() -> None:
     assert isinstance(wrong - right, int)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_zones_separate_in_sign() -> None:
     # The theorem the figure illustrates: the wrong tree is cheaper in the
     # Felsenstein zone and dearer in the Farris zone, on average, at every
@@ -88,7 +88,7 @@ def test_the_ranking_is_sorted_and_the_climb_lands_on_an_enumerated_score() -> N
     assert ranked.found >= ranked.scores[0]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_reports_the_numbers_it_was_handed() -> None:
     params = load_simulation_params(PARAMS_PATH)
     gaps = {
@@ -112,7 +112,7 @@ def test_the_caption_reports_the_numbers_it_was_handed() -> None:
     assert str(params.seed) in caption
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     qa_figure = main(["--params", str(PARAMS_PATH), "--output-dir", str(tmp_path)])
 

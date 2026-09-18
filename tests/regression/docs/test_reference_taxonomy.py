@@ -149,7 +149,7 @@ def matching_entries(
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_key_a_document_cites_is_in_the_bibliography() -> None:
     missing = sorted(document_keys() - set(bibliography()))
 
@@ -157,7 +157,7 @@ def test_every_key_a_document_cites_is_in_the_bibliography() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_table_item_names_a_bibliography_entry_a_document_cites() -> None:
     entries = bibliography()
     items = table_items()
@@ -174,7 +174,7 @@ def test_every_table_item_names_a_bibliography_entry_a_document_cites() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_documents_cite_what_the_table_routes_to() -> None:
     # Not an equality: the table routes a concern to what to read and the
     # documents cite what they use. What is asserted is that the two overlap
@@ -193,7 +193,7 @@ def test_the_documents_cite_what_the_table_routes_to() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_parsers_read_the_shapes_they_claim_to() -> None:
     # The guard exercised on the shapes it has to read, so a table row it
     # silently skipped would fail here rather than pass the checks above.

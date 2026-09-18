@@ -61,7 +61,7 @@ def host(tmp_path: Path) -> tuple[Path, Path]:
     return clone, tmp_path
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_published_branch_keeps_its_worktree(host: tuple[Path, Path]) -> None:
     clone, root = host
 
@@ -69,7 +69,7 @@ def test_a_published_branch_keeps_its_worktree(host: tuple[Path, Path]) -> None:
     assert reap_worktrees.holds_work(root / "merged") == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_tracked_change_keeps_a_worktree_whose_branch_is_gone(
     host: tuple[Path, Path],
 ) -> None:
@@ -80,7 +80,7 @@ def test_a_tracked_change_keeps_a_worktree_whose_branch_is_gone(
     assert reap_worktrees.holds_work(root / "merged") == "1 tracked change(s)"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_unrecognised_untracked_file_keeps_a_worktree(
     host: tuple[Path, Path],
 ) -> None:
@@ -91,7 +91,7 @@ def test_an_unrecognised_untracked_file_keeps_a_worktree(
     assert reap_worktrees.holds_work(root / "merged").startswith("untracked: notes.md")
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_build_artifact_does_not_keep_a_worktree(host: tuple[Path, Path]) -> None:
     """Otherwise every tree is kept forever: each carries a `.so` and caches."""
     _, root = host
@@ -102,7 +102,7 @@ def test_a_build_artifact_does_not_keep_a_worktree(host: tuple[Path, Path]) -> N
     assert reap_worktrees.holds_work(root / "merged") == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_stash_does_not_keep_a_worktree(host: tuple[Path, Path]) -> None:
     """A stash lives in the common `.git`, so it belongs to no single tree.
 
@@ -124,7 +124,7 @@ def test_a_stash_does_not_keep_a_worktree(host: tuple[Path, Path]) -> None:
     assert _git(clone, "stash", "list") != "", "the stash did not survive the reap"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_dry_run_removes_nothing(host: tuple[Path, Path]) -> None:
     clone, root = host
 

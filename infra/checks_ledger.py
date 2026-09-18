@@ -4,7 +4,7 @@
 place for the checks themselves, and a hand-kept list of tests drifts the
 moment one is renamed (issue #291). The checks significant to the roadmap are
 exactly the tests marked `oracle` -- pinned to an independent exact answer --
-and `simulated_truth` -- pinned to the parameters that generated the data --
+and `end2end` -- pinned to the parameters that generated the data --
 under issue #237's scheme, so this reads them from the tree and writes the
 ledger. The file is not committed (issue #425); `infra/ledgers.sh` writes it
 at the release gate and in CI, where regenerating it must change no tracked
@@ -28,13 +28,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TESTS = REPO_ROOT / "tests" / "regression"
 LEDGER = REPO_ROOT / "CHECKS.md"
-SIGNIFICANT = ("oracle", "simulated_truth")
+SIGNIFICANT = ("oracle", "end2end")
 
 PREAMBLE = """# Checks
 
 The checks the roadmap's claims rest on, read from the regression suite by
 `infra/checks_ledger.py`: a test marked `oracle` is pinned to an independent
-exact answer, one marked `simulated_truth` to the parameters that generated
+exact answer, one marked `end2end` to the parameters that generated
 its data (`DEV.md`, issue #237). `STATUS.md` says what each milestone claims;
 this is what pins it. Generated and not committed (issue #425) -- write it
 with `infra/ledgers.sh`, and do not edit it by hand.

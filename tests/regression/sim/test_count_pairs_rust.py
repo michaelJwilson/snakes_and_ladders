@@ -95,7 +95,7 @@ def test_the_rust_simulator_draws_what_the_numpy_one_draws() -> None:
         )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_rust_draw_has_the_families_own_moments() -> None:
     # The comparison above is against a second sample; this one is against the
     # closed forms the families state, which is what `sim/CLAUDE.md` requires
@@ -117,7 +117,7 @@ def test_the_rust_draw_has_the_families_own_moments() -> None:
             )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_draw_is_a_function_of_the_seed_and_the_vertex_alone() -> None:
     # The contract that lets a fixture be a file rather than a committed
     # array: the same declaration draws the same counts, in this process and
@@ -132,7 +132,7 @@ def test_the_draw_is_a_function_of_the_seed_and_the_vertex_alone() -> None:
     assert counts_digest(first) == counts_digest(second)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_declared_digest_is_the_draw_the_file_names() -> None:
     # The fixture records what its counts hash to, so a changed simulator is
     # a red test at the fixture rather than a drift in whatever was measured
@@ -143,7 +143,7 @@ def test_the_declared_digest_is_the_draw_the_file_names() -> None:
     assert counts_digest(fine_instance(entry.path)) == entry.params.counts_digest
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_draw_that_disagrees_with_the_recorded_digest_is_refused(
     tmp_path: Path,
 ) -> None:
@@ -158,7 +158,7 @@ def test_a_draw_that_disagrees_with_the_recorded_digest_is_refused(
         fine_instance(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_family_that_is_not_a_count_pair_is_refused() -> None:
     # The kernel draws two channels from five parameter tables. A declaration
     # it cannot fill is refused by name rather than by a shape error inside.

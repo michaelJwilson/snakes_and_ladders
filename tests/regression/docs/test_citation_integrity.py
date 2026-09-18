@@ -84,7 +84,7 @@ def check(tex_dir: Path) -> list[str]:
     return check_citations.unresolved(documents, tex_dir=tex_dir)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_a_tree_that_resolves_reports_nothing(tmp_path: Path) -> None:
     # The half of the referee that keeps the check from being noise: the
@@ -92,7 +92,7 @@ def test_a_tree_that_resolves_reports_nothing(tmp_path: Path) -> None:
     assert check(tex_tree(tmp_path)) == []
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_a_cited_figure_with_no_file_is_reported(tmp_path: Path) -> None:
     tex_dir = tex_tree(tmp_path)
@@ -106,7 +106,7 @@ def test_a_cited_figure_with_no_file_is_reported(tmp_path: Path) -> None:
     assert len(out) == 1, out
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_a_label_the_other_document_defines_does_not_resolve(tmp_path: Path) -> None:
     # `fig:turbo-waterfall`'s shape: the label exists, in the other document,
@@ -124,7 +124,7 @@ def test_a_label_the_other_document_defines_does_not_resolve(tmp_path: Path) -> 
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_a_cite_with_no_bibliography_entry_is_reported(tmp_path: Path) -> None:
     tex_dir = tex_tree(tmp_path)
@@ -138,7 +138,7 @@ def test_a_cite_with_no_bibliography_entry_is_reported(tmp_path: Path) -> None:
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_a_bibliography_entry_that_does_not_close_is_named(tmp_path: Path) -> None:
     # The entry runs into the one after it, so it stops resolving while the
@@ -154,7 +154,7 @@ def test_a_bibliography_entry_that_does_not_close_is_named(tmp_path: Path) -> No
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_a_commented_out_citation_is_not_read_as_one(tmp_path: Path) -> None:
     # A check that read comments would fail on a citation the document does

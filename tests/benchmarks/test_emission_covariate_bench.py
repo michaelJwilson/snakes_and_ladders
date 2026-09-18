@@ -41,7 +41,7 @@ def solve_inputs() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
 
 @pytest.mark.release
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_hoisted_rate_is_not_what_the_dispersion_solve_costs(
     solve_inputs: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
 ) -> None:

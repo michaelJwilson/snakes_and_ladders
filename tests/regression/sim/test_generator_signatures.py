@@ -155,7 +155,7 @@ def _draws_from_one_stream(
     return [TORCH_DRAWS[name](generator) for _ in range(count)]
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("name", sorted({**NUMPY_DRAWS, **TORCH_DRAWS}))
 def test_two_draws_from_one_generator_differ(name: str) -> None:
     """The property the rule exists for, per converted function.
@@ -169,7 +169,7 @@ def test_two_draws_from_one_generator_differ(name: str) -> None:
     assert len(drawn) > 1, f"{name} returns the same draw from one generator"
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("name", sorted({**NUMPY_DRAWS, **TORCH_DRAWS}))
 def test_generators_seeded_alike_agree(name: str) -> None:
     """Reproducibility survives the conversion.
@@ -200,7 +200,7 @@ def _seed_parameters(path: Path) -> list[str]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_no_public_signature_takes_a_seed() -> None:
     """The rule, enforced where it can be, over both streams.
 
@@ -222,7 +222,7 @@ def test_no_public_signature_takes_a_seed() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_guard_fails_on_a_signature_that_takes_a_seed(tmp_path: Path) -> None:
     """The guard rejects what it exists to reject, and spares what it should.
 

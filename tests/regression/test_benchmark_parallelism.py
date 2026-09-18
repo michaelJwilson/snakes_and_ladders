@@ -59,7 +59,7 @@ def _distributed_pytest(
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_a_benchmark_under_xdist_fails_instead_of_measuring_nothing() -> None:
     """The guard fires, and says why, rather than passing 212 empty timings."""
@@ -70,7 +70,7 @@ def test_a_benchmark_under_xdist_fails_instead_of_measuring_nothing() -> None:
     assert DISTRIBUTED_BENCHMARK in result.stdout.decode()
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_capped_run_under_xdist_fails_instead_of_passing_every_cap() -> None:
     """The cap is read where the durations are not, so a capped run refuses `-n`."""
     result = _distributed_pytest(
@@ -81,7 +81,7 @@ def test_a_capped_run_under_xdist_fails_instead_of_passing_every_cap() -> None:
     assert DISTRIBUTED_CAP in result.stdout.decode()
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_ci_distributes_the_correctness_tier_and_leaves_the_benchmarks_serial() -> None:
     """The workflow's two invocations, and which of them may carry `-n`.
@@ -106,7 +106,7 @@ def test_ci_distributes_the_correctness_tier_and_leaves_the_benchmarks_serial() 
     assert "$benchmarks" in benchmarks, benchmarks
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_test_extra_carries_the_distribution_plugin() -> None:
     """`pytest-xdist` is a test dependency, not something a runner happens to have."""
     with (REPO_ROOT / "pyproject.toml").open("rb") as handle:

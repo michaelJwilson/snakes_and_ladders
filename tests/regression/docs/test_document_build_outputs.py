@@ -186,7 +186,7 @@ def _byproducts() -> set[str]:
     }
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_dev_md_names_every_regenerated_path_that_is_committed() -> None:
     """The table's committed rows and the build's own sources name one set.
 
@@ -208,7 +208,7 @@ def test_dev_md_names_every_regenerated_path_that_is_committed() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_uncommitted_rows_are_the_ones_git_cannot_carry() -> None:
     """A row marked "no" is ignored; a row marked "yes" is tracked.
 
@@ -234,7 +234,7 @@ def test_the_uncommitted_rows_are_the_ones_git_cannot_carry() -> None:
                     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_pdfs_are_the_paths_the_gates_name() -> None:
     """Only the PDFs need a rule, and both gates that enforce it name each one.
 
@@ -252,7 +252,7 @@ def test_the_pdfs_are_the_paths_the_gates_name() -> None:
         assert pdf in gates, f"infra/review_gates.sh does not name {pdf}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_tracked_figure_file_belongs_to_a_manifest_stem() -> None:
     """`docs/tex/figures/` holds two files per manifest entry and nothing else.
 

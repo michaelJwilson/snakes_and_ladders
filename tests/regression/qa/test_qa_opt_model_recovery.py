@@ -28,7 +28,7 @@ from tests._fixtures import EIGHT_TAXA, fixture_path, load_fixture
 FIXTURE = EIGHT_TAXA
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_truth_vector_pins_the_last_exchangeability() -> None:
     vector = truth_vector(TRUE_EXCHANGEABILITIES, TRUE_PI)
     # Five free exchangeabilities, then four frequencies.
@@ -39,7 +39,7 @@ def test_the_truth_vector_pins_the_last_exchangeability() -> None:
     assert_allclose(vector[5:], TRUE_PI)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_fitting_gtr_data_recovers_the_generating_model() -> None:
     params = load_fixture(FIXTURE)
     fitted, spread = fit_model(
@@ -53,7 +53,7 @@ def test_fitting_gtr_data_recovers_the_generating_model() -> None:
     assert float((np.abs(fitted - truth) / spread).max()) < 4.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_fitting_jc_data_does_not_invent_structure() -> None:
     params = load_fixture(FIXTURE)
     uniform = np.full(params.k, 1.0 / params.k)
@@ -63,7 +63,7 @@ def test_fitting_jc_data_does_not_invent_structure() -> None:
     assert float((np.abs(fitted - truth) / spread).max()) < 4.0
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_reports_the_coverage_it_measured() -> None:
     params = load_fixture(FIXTURE)
     general = fit_model(
@@ -82,7 +82,7 @@ def test_the_caption_reports_the_coverage_it_measured() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = main(
         ["--params", str(fixture_path(FIXTURE)), "--output-dir", str(tmp_path)]

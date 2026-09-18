@@ -17,7 +17,7 @@ from snakes_and_ladders.numerics import logsumexp, sample_rows
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_degenerate_row_always_yields_its_certain_category() -> None:
     # The one case with an answer that owes nothing to the sampling scheme.
     distributions = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])
@@ -27,7 +27,7 @@ def test_a_degenerate_row_always_yields_its_certain_category() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_empirical_frequencies_match_the_distribution() -> None:
     # Against the probabilities themselves, at a sample size where the
     # Monte Carlo error is an order of magnitude below the tolerance:
@@ -42,7 +42,7 @@ def test_the_empirical_frequencies_match_the_distribution() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_row_summing_below_one_cannot_yield_an_index_past_the_end() -> None:
     # The guard, and the reason this module exists. A normalized row can sum
     # to 1 - 4e-16 after rounding, leaving a sliver of the unit interval above
@@ -67,7 +67,7 @@ def test_a_row_summing_below_one_cannot_yield_an_index_past_the_end() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_row_is_selectable() -> None:
     distributions = np.eye(4)
     rows = np.arange(4)
@@ -76,7 +76,7 @@ def test_every_row_is_selectable() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_one_draw_is_consumed_per_entry() -> None:
     # The stream cost must not depend on the outcome, or two callers seeded
     # alike would diverge on data rather than on their seeds.
@@ -91,13 +91,13 @@ def test_one_draw_is_consumed_per_entry() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_one_dimensional_distribution_is_rejected() -> None:
     with pytest.raises(ValueError, match="expected distributions of shape"):
         sample_rows(np.random.default_rng(0), np.array([0.5, 0.5]), np.zeros(2, int))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_reducing_several_axes_at_once_is_one_reduction() -> None:
     # `logsumexp` takes a tuple of axes because a region belief marginalized
     # onto a child sums out every variable the child does not carry (issue
@@ -114,7 +114,7 @@ def test_reducing_several_axes_at_once_is_one_reduction() -> None:
     np.testing.assert_allclose(together, apart, rtol=0, atol=1e-13)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_shift_survives_an_exponent_the_linear_domain_would_lose() -> None:
     # What the shift is for, over several axes as over one: 800 in an exponent
     # overflows a float64 and the shifted form returns it exactly.

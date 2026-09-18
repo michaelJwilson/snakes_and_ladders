@@ -204,7 +204,7 @@ def test_spr_escapes_the_local_minima_nni_stops_in_at_eight_taxa() -> None:
 # --- the loop --------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
 def test_every_accepted_move_strictly_improves(moves: MoveSet) -> None:
     alignment, k = _alignment(SIX_TAXA)
@@ -239,7 +239,7 @@ def test_the_unit_step_matrix_walks_the_same_path_as_fitch() -> None:
         assert leaf_bipartitions(unit.topology) == leaf_bipartitions(fitch.topology)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_no_topology_is_scored_twice() -> None:
     # At five taxa there are 15 topologies, so a converged SPR search --
     # whose neighbourhood at this size is every other topology -- can never
@@ -254,7 +254,7 @@ def test_no_topology_is_scored_twice() -> None:
     assert result.evaluations <= count_topologies(len(alignment) - 1) - 1 == 14
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_budget_is_respected_and_reported_unconverged() -> None:
     alignment, k = _alignment(SIX_TAXA)
 
@@ -266,7 +266,7 @@ def test_the_budget_is_respected_and_reported_unconverged() -> None:
     assert not result.converged
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_zero_budget_scores_the_start_and_nothing_else() -> None:
     alignment, k = _alignment(SIX_TAXA)
     params = load_fixture(SIX_TAXA)
@@ -278,7 +278,7 @@ def test_a_zero_budget_scores_the_start_and_nothing_else() -> None:
     assert result.trace == (float(fitch_score(params.tau, alignment, k)),)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_search_is_reproducible_from_its_seed() -> None:
     alignment, k = _alignment(SIX_TAXA)
 
@@ -289,7 +289,7 @@ def test_a_search_is_reproducible_from_its_seed() -> None:
     assert leaf_bipartitions(first.topology) == leaf_bipartitions(second.topology)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("step_matrix", "message"),
     [
@@ -324,7 +324,7 @@ def test_a_step_matrix_without_a_root_free_score_is_refused(
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_too_few_taxa_and_a_missing_rng_are_refused() -> None:
     with pytest.raises(ValueError, match="at least 4 taxa"):
         parsimony_search({name: np.zeros(5, dtype=np.int64) for name in "ABC"}, 4)
@@ -336,7 +336,7 @@ def test_too_few_taxa_and_a_missing_rng_are_refused() -> None:
 # --- the Felsenstein zone ---------------------------------------------------
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
 def test_large_parsimony_returns_the_wrong_tree_in_the_felsenstein_zone(
     moves: MoveSet,

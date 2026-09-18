@@ -106,7 +106,7 @@ def test_both_optimizers_reach_rosenbrock_s_analytic_minimizer(
     np.testing.assert_allclose(_scipy_minimizer(objective), expected, atol=1e-5)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_two_land_in_the_same_himmelblau_basin_from_each_start() -> None:
     # Himmelblau has four minima of equal value, so agreeing on the *value*
     # says nothing; this is the assertion that they agree on which one.

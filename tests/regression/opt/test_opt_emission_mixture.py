@@ -139,7 +139,7 @@ def test_the_responsibilities_are_the_enumerated_posterior(
     assert_allclose(posterior.numpy(), enumerated.numpy(), rtol=1e-12)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_enumeration_oracle_refuses_a_dataset_it_cannot_enumerate() -> None:
     # The oracle is exponential in the observations; the refusal keeps a
     # caller from discovering that by exhausting the host.
@@ -155,7 +155,7 @@ def test_the_enumeration_oracle_refuses_a_dataset_it_cannot_enumerate() -> None:
         )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_fit_recovers_the_planted_mixture_at_the_ci_size(
     ci_instance: tuple[EmissionMixtureParams, np.ndarray, EmissionMixtureFit],
 ) -> None:
@@ -198,7 +198,7 @@ def test_the_fit_recovers_the_planted_mixture_at_the_ci_size(
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_observation_is_explained_by_exactly_one_unit_of_responsibility(
     ci_instance: tuple[EmissionMixtureParams, np.ndarray, EmissionMixtureFit],
 ) -> None:
@@ -243,7 +243,7 @@ RESOLVED_COMPONENTS = 7
 # test --- and the stress tier is the ten-minute local budget. The claim has
 # its fast sibling at the CI size above.
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_fit_recovers_most_of_the_planted_mixture_at_ten_components() -> None:
     """How much of a ten-component mixture one seeded run resolves, and how much not."""
     # **The finding this test records.** At three components a single
@@ -287,7 +287,7 @@ def test_the_fit_recovers_most_of_the_planted_mixture_at_ten_components() -> Non
 
 # `release` for the same reason: twelve fits at about four seconds each.
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_seeded_start_is_measured_against_the_uniform_one() -> None:
     """``Emission_Mixture++`` against a uniform start, on shared seeds."""
     params = fixture("emission_mixture", "ci").params
@@ -315,7 +315,7 @@ def test_the_seeded_start_is_measured_against_the_uniform_one() -> None:
     assert np.isfinite(difference).all()
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_seeding_places_a_component_on_a_pair_and_refuses_a_form_it_cannot() -> None:
     # The one place a component's parameters are read off a single
     # observation, and what it reads is a location and not a shape: the depth

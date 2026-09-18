@@ -110,7 +110,7 @@ def _carried_source() -> str:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_conserved_definitions_are_unchanged() -> None:
     # The whole of this module's worth. A referee edited toward its subject
     # stops refereeing, and the edit is exactly the kind nobody reviews.
@@ -118,7 +118,7 @@ def test_the_conserved_definitions_are_unchanged() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_definition_the_families_reach_is_carried() -> None:
     # A copy that imported a helper would track the edit it exists to referee:
     # `_solve_dispersion` takes a Python float here and a tensor in the live

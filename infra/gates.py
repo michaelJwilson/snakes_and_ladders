@@ -157,20 +157,61 @@ CAPS: tuple[Cap, ...] = (DURATION_CAP, KEY_DURATION_CAP)
 
 #: What a test is checked against, with the text `pyproject.toml` registers.
 #: `infra/test_kinds.py` holds the names alone, because the guard and the merge
-#: gate need them without needing this.
+#: gate need them without needing this. Issue #729 retired `structural` -- an
+#: invariant the repository chose, which is `infra` where the test is of the
+#: repository's own machinery and `smoke` where it is of the science -- and
+#: renamed `simulated_truth` to `end2end`, for the path such a test drives.
 KIND_MARKERS: Mapping[str, str] = {
     "oracle": (
         "checked against an independent exact answer -- enumeration, brute "
         "force, a closed form, or a published value"
     ),
-    "simulated_truth": "checked against the parameters that generated the data",
-    "mathematical": (
-        "checked against a property the model must satisfy regardless of implementation"
+    "end2end": (
+        "drives a real path -- simulate, fit, decode -- and checks a scientific "
+        "output against the truth that generated the data, to a stated tolerance"
     ),
-    "edge_case": "checked at a boundary, or that an unusable input is refused",
-    "structural": (
-        "checked against an invariant this repository chose -- the import "
-        "graph, a protocol, a documented contract, or a guard's own trigger"
+    "analytic": (
+        "judges against a mathematical property the model must satisfy whatever "
+        "the implementation does -- conservation, a limit, a symmetry, a "
+        "monotonicity, a calibration"
+    ),
+    "smoke": (
+        "checked against itself -- reachability, a shape, the absence of an "
+        "exception, a boundary, a refusal, an invariant the implementation chose"
+    ),
+    "infra": (
+        "exercises no single problem -- shared machinery, a document guard, "
+        "or the build; written on a test of that machinery, added at collection "
+        "where the problem scan finds none, and checked against what the module "
+        "imports (issues #622, #729)"
+    ),
+}
+
+#: What a finding is: the second axis issue #729 added, beside the kind and
+#: never instead of one. None of these counts toward the judged coverage:
+#: only `end2end` and `oracle` do, since only they judge the science against
+#: something outside the implementation.
+FINDING_MARKERS: Mapping[str, str] = {
+    "patch": (
+        "a change reproduces the sal call it replaces, bitwise or to a stated tolerance"
+    ),
+    "backend": (
+        "the same algorithm, or the same oracle, on another backend -- Rust, "
+        "Numba, Torch, a vectorized path -- reproduced bitwise or to a stated "
+        "tolerance"
+    ),
+    "bug": (
+        "pins a defect against the paper, an oracle or the code's own contract, "
+        "and is written to fail when the defect is fixed"
+    ),
+    "warning": (
+        "pins behaviour that is defensible but suspicious -- a shipped constant "
+        "that asserts more than the data carries, a silent limit; nobody is "
+        "wrong and somebody should know"
+    ),
+    "snapshot": (
+        "pins current behaviour with no judgement attached, to be conserved -- "
+        "a number STATUS.md records, a seed-for-seed pin"
     ),
 }
 
@@ -209,18 +250,13 @@ SCHEDULING_MARKERS: Mapping[str, str] = {
     ),
 }
 
-#: What a test's subject is, where it is not one of the declared problems. A
-#: third axis: a module is `infra` *and* an oracle test, as it is `critical`
-#: *and* an oracle test. Added at collection by `tests/conftest.py` where the
-#: problem scan finds nothing, so that "unmarked" stops being a state a module
-#: can be in for two different reasons (issue #622).
-SUBJECT_MARKERS: Mapping[str, str] = {
-    "infra": (
-        "exercises no single problem -- shared machinery, a document guard, "
-        "or the build; added at collection where the problem scan finds none, "
-        "and checked against what the module imports (issue #622)"
-    ),
-}
+#: What a test's subject is, where it is not one of the declared problems: the
+#: same `infra` marker, on a second axis. Added at collection by
+#: `tests/conftest.py` where the problem scan finds nothing, so that "unmarked"
+#: stops being a state a module can be in for two different reasons (issue
+#: #622); since issue #729 also written by an author, as the kind a test of the
+#: repository's own machinery has. One registration serves both.
+SUBJECT_MARKERS: Mapping[str, str] = {"infra": KIND_MARKERS["infra"]}
 
 #: Benchmarks measure rather than assert, so they carry no kind. The exclusion
 #: is a property of the directory, not of any test in it.
@@ -233,11 +269,48 @@ KIND_EXEMPT_DIRECTORY = "benchmarks"
 #: run's diff unreadable.
 MARKER_REGISTRATION_ORDER: tuple[str, ...] = (
     "release",
-    *KIND_MARKERS,
+    *(name for name in KIND_MARKERS if name not in SUBJECT_MARKERS),
     "critical",
     "stress",
     "key",
     *SUBJECT_MARKERS,
+    *FINDING_MARKERS,
+)
+
+
+@dataclass(frozen=True)
+class JudgedCoverage:
+    """The coverage guard issue #729 added: what counts, what is exempt, the floors.
+
+    `--cov-fail-under` counts a statement whichever test reached it, and 34.3
+    points of the 94.3 it read on 2026-09-18 were reached by importing the
+    package with no test at all. This counts a statement when an `end2end`
+    or an `oracle` test reached it -- a real path judged against the truth
+    that generated the data, or an exact independent answer -- and nothing
+    else does: `analytic`, `patch`, `backend`, `bug`, `warning`, `snapshot`
+    and `smoke` say what a test is, and `infra` is used sparingly.
+    `infra/coverage_recut.py` reads the run's per-test contexts and applies it.
+    """
+
+    #: The markers whose tests count. A test carrying any of them counts.
+    counting: tuple[str, ...]
+    #: Packages under `snakes_and_ladders` outside the guard: a renderer has
+    #: no oracle, and `qa` is held by `snapshot` pins and stated beside the
+    #: figure, never inside it.
+    exempt_packages: tuple[str, ...]
+    #: The floor over every package not exempt, as `--cov-fail-under` states
+    #: one. Recut to the measurement and rounded down, never lowered.
+    floor: float
+    #: Floors a package carries above the whole: `search` is the package's
+    #: product and is held higher.
+    package_floors: Mapping[str, float]
+
+
+JUDGED_COVERAGE = JudgedCoverage(
+    counting=("end2end", "oracle"),
+    exempt_packages=("qa",),
+    floor=82.6,
+    package_floors={"search": 86.1},
 )
 
 
@@ -330,7 +403,12 @@ TIERS: tuple[Tier, ...] = (
 
 def marker_registrations() -> str:
     """`pyproject.toml`'s `markers` list, in the order that file registers them."""
-    described = {**KIND_MARKERS, **SCHEDULING_MARKERS, **SUBJECT_MARKERS}
+    described = {
+        **KIND_MARKERS,
+        **SCHEDULING_MARKERS,
+        **SUBJECT_MARKERS,
+        **FINDING_MARKERS,
+    }
     unplaced = [name for name in described if name not in MARKER_REGISTRATION_ORDER]
     if unplaced:
         message = f"markers with no place in the registration order: {unplaced}"

@@ -39,7 +39,7 @@ def _graphs() -> list[PottsGraph]:
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "graph", _graphs(), ids=["2x2-periodic", "4x5", "3x3x2", "glass"]
 )
@@ -58,7 +58,7 @@ def test_the_compressed_rows_are_the_list_adjacency_in_order(graph: PottsGraph) 
         assert [float(c) for c in couplings[start:stop]] == [c for _, c in row]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_compressed_rows_are_contiguous_native_arrays() -> None:
     # What the kernels require: no marshalling per node, no copy at the FFI
     # boundary (root CLAUDE.md's layout and boundary rules).

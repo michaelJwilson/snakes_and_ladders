@@ -31,7 +31,7 @@ from mind_map import (  # noqa: E402
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_module_is_walked_exactly_once() -> None:
     """The map's modules are the tree's modules, both ways."""
     walked = {
@@ -45,7 +45,7 @@ def test_every_module_is_walked_exactly_once() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_page_stays_under_its_node_cap() -> None:
     """Over the cap the guard fails rather than the page printing unreadably."""
     count = node_count()
@@ -56,7 +56,7 @@ def test_the_page_stays_under_its_node_cap() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_concern_split_is_the_rule_root_claude_md_states() -> None:
     """A module under an application package is an application, and no other."""
     for one in modules():
@@ -65,7 +65,7 @@ def test_the_concern_split_is_the_rule_root_claude_md_states() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_application_module_is_claimed_by_a_milestone() -> None:
     """`STATUS.md` records what every application module is for.
 
@@ -88,7 +88,7 @@ def test_every_application_module_is_claimed_by_a_milestone() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_claimed_milestone_is_one_the_roadmap_declares() -> None:
     """A label cites a milestone that exists, so the two documents cannot drift."""
     declared = set(roadmap_milestones())
@@ -99,7 +99,7 @@ def test_every_claimed_milestone_is_one_the_roadmap_declares() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_layout_is_a_tree_and_is_deterministic() -> None:
     """One centre, every other node parented, and two runs agree.
 
@@ -116,7 +116,7 @@ def test_the_layout_is_a_tree_and_is_deterministic() -> None:
     assert tree() == tree(), "two renderings disagree"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_drawn_leaf_carries_its_docstring_as_a_tooltip() -> None:
     """The hover text is the module's own summary, escaped for both readers.
 

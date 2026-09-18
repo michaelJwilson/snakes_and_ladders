@@ -120,7 +120,7 @@ def test_the_labelled_joint_is_the_enumeration_s_per_labelling_term() -> None:
     assert abs(realized - exact.log_prior_normalizer - expected) < 1e-10 * abs(expected)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_field_is_minus_the_posterior_expected_emission_score() -> None:
     params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(3))
@@ -182,7 +182,7 @@ def test_the_m_step_identity_holds_through_autograd() -> None:
         assert float(a.abs().max()) > 0.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_backward_sampler_draws_paths_from_the_posterior() -> None:
     params = _hmm(2, 2, 3, 7)
     observations = np.array([0, 1, 1])
@@ -216,7 +216,7 @@ def test_the_backward_sampler_draws_paths_from_the_posterior() -> None:
     assert chi_square_p_value(counts, n_draws * expected) > 0.001
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_map_labelling_has_the_largest_labelled_joint() -> None:
     params = fixture("spatio_sequential", "ci").params
     data = simulate_spatio_sequential(params, np.random.default_rng(5))
@@ -229,7 +229,7 @@ def test_the_map_labelling_has_the_largest_labelled_joint() -> None:
         assert other <= value + 1e-9
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_forward_backward_refuses_an_empty_chain_and_mismatched_shapes() -> None:
     with pytest.raises(ValueError, match="T >= 1"):
         forward_backward(np.zeros((0, 2)), np.zeros(2), np.zeros((2, 2)))

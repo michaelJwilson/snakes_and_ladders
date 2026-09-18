@@ -15,7 +15,7 @@ from snakes_and_ladders.sim.spatio_sequential import simulate_spatio_sequential
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_ragged_hmm_fixture_declares_segments_that_differ() -> None:
     """A fixture that declared equal lengths would measure the other instance."""
     params = fixtures.fixture("ragged_hmm", "ci").params
@@ -30,7 +30,7 @@ def test_the_ragged_hmm_fixture_declares_segments_that_differ() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_batch_took_one_transition_fewer_per_boundary() -> None:
     """`T - S` transitions, not `T - 1`: each boundary is a restart."""
     lengths = fixtures.fixture("ragged_hmm", "ci").params.segment_lengths
@@ -38,7 +38,7 @@ def test_the_batch_took_one_transition_fewer_per_boundary() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_coupled_simulator_restarts_at_every_boundary() -> None:
     """The draw is a different draw, and the seed is not what changed.
 
@@ -61,7 +61,7 @@ def test_the_coupled_simulator_restarts_at_every_boundary() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_simulator_draws_the_declared_segments() -> None:
     """A ragged instance simulates, and the batch it returns is its segments.
 
@@ -81,7 +81,7 @@ def test_the_simulator_draws_the_declared_segments() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_ragged_instance_has_no_single_sequence_length() -> None:
     """Asking for *the* length of unequal chains is a question with no answer.
 

@@ -119,7 +119,7 @@ def test_the_two_return_the_same_tree_on_an_ultrametric_matrix() -> None:
     assert _splits(theirs, ULTRAMETRIC_NAMES) == ULTRAMETRIC_SPLITS
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_upgma_returns_the_wrong_tree_where_the_matrix_is_not_ultrametric() -> None:
     # Two long branches that are not a cherry: the true tree is
     # ((t1,t2),(t3,t4)) with t1 and t3 long, so the two shortest branches are

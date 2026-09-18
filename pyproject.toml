@@ -270,14 +270,18 @@ addopts = '--strict-markers -m "not release"'
 markers = [
     "release: long-running scientific validity test, run on release rather than per PR (DEV.md CI & Performance Budget)",
     "oracle: checked against an independent exact answer -- enumeration, brute force, a closed form, or a published value",
-    "simulated_truth: checked against the parameters that generated the data",
-    "mathematical: checked against a property the model must satisfy regardless of implementation",
-    "edge_case: checked at a boundary, or that an unusable input is refused",
-    "structural: checked against an invariant this repository chose -- the import graph, a protocol, a documented contract, or a guard's own trigger",
+    "end2end: drives a real path -- simulate, fit, decode -- and checks a scientific output against the truth that generated the data, to a stated tolerance",
+    "analytic: judges against a mathematical property the model must satisfy whatever the implementation does -- conservation, a limit, a symmetry, a monotonicity, a calibration",
+    "smoke: checked against itself -- reachability, a shape, the absence of an exception, a boundary, a refusal, an invariant the implementation chose",
     "critical: gates early; fast, and its failure means the rest is not worth running -- structurally, or because the science it rests on is wrong",
     "stress: same claim at a size the 5-minute CI budget cannot hold; run with `-m stress` inside the 10-minute developer budget (DEV.md CI & Performance Budget)",
     "key: the key fixture's full test -- the largest declared instance whose simulate-fit-assert run fits SAL_KEY_DURATION_CAP, 120 s; run in CI's full tier and selected locally only when its inputs change (DEV.md CI & Performance Budget)",
-    "infra: exercises no single problem -- shared machinery, a document guard, or the build; added at collection where the problem scan finds none, and checked against what the module imports (issue #622)",
+    "infra: exercises no single problem -- shared machinery, a document guard, or the build; written on a test of that machinery, added at collection where the problem scan finds none, and checked against what the module imports (issues #622, #729)",
+    "patch: a change reproduces the sal call it replaces, bitwise or to a stated tolerance",
+    "backend: the same algorithm, or the same oracle, on another backend -- Rust, Numba, Torch, a vectorized path -- reproduced bitwise or to a stated tolerance",
+    "bug: pins a defect against the paper, an oracle or the code's own contract, and is written to fail when the defect is fixed",
+    "warning: pins behaviour that is defensible but suspicious -- a shipped constant that asserts more than the data carries, a silent limit; nobody is wrong and somebody should know",
+    "snapshot: pins current behaviour with no judgement attached, to be conserved -- a number STATUS.md records, a seed-for-seed pin",
 ]
 # END GENERATED markers
 

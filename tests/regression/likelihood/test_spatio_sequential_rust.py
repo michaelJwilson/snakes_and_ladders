@@ -127,7 +127,7 @@ def test_the_rust_e_step_matches_the_oracle_on_a_slice_of_the_5k_instance() -> N
     _agree(instance, observations, labels)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_tables_are_the_families_own_log_density() -> None:
     # The kernel does no arithmetic of its own on a count: it reads what the
     # families wrote. A table that had drifted from them would be a second
@@ -148,7 +148,7 @@ def test_the_tables_are_the_families_own_log_density() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_count_past_the_table_is_refused_rather_than_clamped() -> None:
     # The table is built from the counts it will be indexed by, so a count the
     # caller added afterwards has no entry. Reading whatever is at that offset
@@ -194,7 +194,7 @@ def test_a_count_past_the_table_is_refused_rather_than_clamped() -> None:
         oxi_snakes_and_ladders.class_posteriors(*arguments)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_family_that_is_not_a_count_pair_is_refused() -> None:
     # The kernel tabulates two channels by their integer counts. A categorical
     # family has no channels to tabulate, and the refusal names the class

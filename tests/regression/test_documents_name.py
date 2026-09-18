@@ -97,7 +97,7 @@ def _offending_lines(text: str) -> list[int]:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_live_file_names_a_single_technical_artifact() -> None:
     """Every live reference names the documents, the paper, or the textbook.
 
@@ -122,7 +122,7 @@ def test_no_live_file_names_a_single_technical_artifact() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_guard_rejects_the_retired_name_and_keeps_the_audits() -> None:
     """The guard rejects what it exists to reject, in each spelling.
 

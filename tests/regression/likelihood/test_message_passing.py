@@ -137,7 +137,7 @@ def test_flooding_on_the_loopy_lattice_is_belief_propagation() -> None:
     np.testing.assert_allclose(single, reference.single_site, rtol=1e-8, atol=1e-10)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_tree_schedule_refuses_a_loopy_graph() -> None:
     graph = from_potts(LOOPY, FIELD)
     assert not graph.is_tree()
@@ -146,7 +146,7 @@ def test_the_tree_schedule_refuses_a_loopy_graph() -> None:
         sum_product(graph, schedule=MessageScheduleName.TREE)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_flooding_refuses_when_it_has_not_converged() -> None:
     with pytest.raises(ConvergenceError):
         sum_product(
@@ -156,7 +156,7 @@ def test_flooding_refuses_when_it_has_not_converged() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("damping", [-0.1, 1.0])
 def test_damping_outside_the_unit_interval_is_refused(damping: float) -> None:
     with pytest.raises(ValueError, match="damping"):
@@ -257,7 +257,7 @@ def test_sum_product_per_site_sums_to_pruning() -> None:
     assert math.isclose(total, reference, rel_tol=1e-13)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_leaf_marginals_on_the_tree_are_the_observed_indicators() -> None:
     # An observed leaf has a hard indicator factor, so its marginal is a delta
     # at the observation whatever the branch lengths say.
@@ -330,7 +330,7 @@ def test_the_coupled_log_density_is_the_joint_written_out() -> None:
 # --- the Forney form -------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_forney_form_has_every_variable_on_exactly_two_factors_or_fewer() -> None:
     forney = from_potts(TREE, FIELD).forney()
 
@@ -361,7 +361,7 @@ def test_message_passing_on_the_forney_form_gives_the_same_marginals() -> None:
             )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_graph_with_no_variable_above_degree_two_is_its_own_forney_form() -> None:
     # A chain of pairwise factors alone. With emissions each interior state
     # would sit on three factors and need an equality node.
@@ -382,19 +382,19 @@ def test_a_graph_with_no_variable_above_degree_two_is_its_own_forney_form() -> N
 # --- construction refusals ---------------------------------------------------------
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_factor_over_an_unknown_variable_is_refused() -> None:
     with pytest.raises(ValueError, match="unknown variable"):
         FactorGraph([Variable("a", 2)], [Factor("f", ("a", "b"), np.zeros((2, 2)))])
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_table_whose_shape_disagrees_with_the_domains_is_refused() -> None:
     with pytest.raises(ValueError, match="table shape"):
         FactorGraph([Variable("a", 3)], [Factor("f", ("a",), np.zeros(2))])
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_variable_in_no_factor_is_refused() -> None:
     with pytest.raises(ValueError, match="in no factor"):
         FactorGraph(
@@ -402,7 +402,7 @@ def test_a_variable_in_no_factor_is_refused() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_empty_domain_is_refused() -> None:
     with pytest.raises(ValueError, match="domain"):
         Variable("a", 0)

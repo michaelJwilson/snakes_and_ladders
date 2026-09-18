@@ -44,7 +44,7 @@ EXPECTED = (
 )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_environment_carries_every_package_the_repository_assumes() -> None:
     missing = [name for name in EXPECTED if importlib.util.find_spec(name) is None]
 
@@ -56,7 +56,7 @@ def test_the_environment_carries_every_package_the_repository_assumes() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_shared_environment_carries_every_declared_requirement() -> None:
     """Nothing declared is missing from an environment the worktrees share.
 
@@ -88,7 +88,7 @@ def test_a_shared_environment_carries_every_declared_requirement() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_package_under_test_is_this_worktrees_own() -> None:
     """The import resolves inside this tree, not a sibling's working copy.
 

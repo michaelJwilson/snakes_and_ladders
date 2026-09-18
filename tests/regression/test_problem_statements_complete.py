@@ -99,7 +99,7 @@ def problem_section(stem: str, text: str | None = None) -> str:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("stem", PROBLEMS)
 def test_each_problem_states_its_model_sizes_and_validation(stem: str) -> None:
     section = problem_section(stem)
@@ -109,7 +109,7 @@ def test_each_problem_states_its_model_sizes_and_validation(stem: str) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("stem", PROBLEMS)
 def test_each_problem_inputs_a_sketch_file_that_exists_and_labels_it(
     stem: str,
@@ -127,7 +127,7 @@ def test_each_problem_inputs_a_sketch_file_that_exists_and_labels_it(
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("stem", PROBLEMS)
 def test_each_problem_cites_an_algorithm(stem: str) -> None:
     # The algorithms are stated in the appendix and cited from the section, so
@@ -137,7 +137,7 @@ def test_each_problem_cites_an_algorithm(stem: str) -> None:
     assert _ALGORITHM_CITATION.search(section), f"{stem}: cites no \\ref{{alg:...}}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_algorithm_the_textbook_defines_is_cited() -> None:
     # An algorithm environment nothing cites is a float that lands somewhere
     # arbitrary and is read by no one, which is the appendix's failure mode.
@@ -149,7 +149,7 @@ def test_every_algorithm_the_textbook_defines_is_cited() -> None:
     assert defined <= cited, f"algorithms defined and never cited: {defined - cited}"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_guard_reads_one_section_and_not_the_next() -> None:
     # Guards the guard: a section span that ran past its own \section would
     # let a missing part be satisfied by its neighbour's, which is the one
@@ -165,7 +165,7 @@ def test_the_guard_reads_one_section_and_not_the_next() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize(("key", "part"), sorted(SHARED_KEYS.items()))
 def test_a_key_sharing_a_section_states_what_is_its_own(key: str, part: str) -> None:
     # The gap #681 names. `spatio_sequential_counts` and `sec:coupled`'s other
@@ -180,7 +180,7 @@ def test_a_key_sharing_a_section_states_what_is_its_own(key: str, part: str) -> 
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_shared_catalogue_key_is_covered() -> None:
     # The mapping above is a guard only if it covers what `PROBLEMS.md`
     # declares. Read from the catalogue rather than from a list, so a key added

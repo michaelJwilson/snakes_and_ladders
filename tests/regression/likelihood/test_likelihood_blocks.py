@@ -81,7 +81,7 @@ def _random_alignment(
     }
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.critical
 def test_the_interval_contains_the_exact_log_likelihood() -> None:
     # Containment on every fixture, over the whole grid of block sizes and
@@ -110,7 +110,7 @@ def test_the_interval_contains_the_exact_log_likelihood() -> None:
                     assert interval.contains(exact, tolerance=1e-9)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_cutoff_of_one_evaluates_the_alignment_exactly() -> None:
     # A cutoff of one bounds nothing, so the interval collapses onto the
     # exact value at every block size: the partition is a partition of the
@@ -134,7 +134,7 @@ def test_every_cutoff_of_one_evaluates_the_alignment_exactly() -> None:
             assert float(interval.lower) == pytest.approx(exact, rel=1e-11)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_site_extremes_bracket_every_column() -> None:
     # The tail bound rests on two numbers per tree, and they are checked
     # against every column a small alphabet admits: enumerate all k ** n
@@ -158,7 +158,7 @@ def test_the_site_extremes_bracket_every_column() -> None:
         assert float(upper) >= value - 1e-12
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_containment_check_has_teeth() -> None:
     # The soundness test rests on Interval.contains, so an interval excluding
     # the value must be rejected; otherwise that test passes on an unsound
@@ -188,7 +188,7 @@ def test_the_containment_check_has_teeth() -> None:
     assert not narrowed.contains(exact, tolerance=1e-6)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_width_is_the_bounded_sites_times_the_per_site_range() -> None:
     # The interval's shape, not a number: the exact half cancels, so the width
     # is what the tail costs, which makes the width table below a statement
@@ -214,7 +214,7 @@ def test_the_width_is_the_bounded_sites_times_the_per_site_range() -> None:
             )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_width_grows_with_the_cutoff_and_with_the_block_size() -> None:
     # Raising the cutoff moves blocks from the exact half to the tail and
     # never the other way, so the width is non-decreasing in it. The block
@@ -401,7 +401,7 @@ def test_the_ranked_search_holds_over_starts_move_sets_and_taxa() -> None:
     assert len(rows) == 8
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_bound_is_a_surrogate_with_a_claim() -> None:
     params, alignment, _ = _instance("tree_search/ci.yaml", 200)
     pi = np.asarray(params.pi)
@@ -416,7 +416,7 @@ def test_the_bound_is_a_surrogate_with_a_claim() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_malformed_partition_or_alignment_is_refused() -> None:
     params, alignment, lengths = _instance("tree_search/ci.yaml", 40)
     pi = np.asarray(params.pi)

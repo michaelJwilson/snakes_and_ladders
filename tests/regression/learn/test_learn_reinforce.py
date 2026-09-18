@@ -72,7 +72,7 @@ def _relative_difference(actual: torch.Tensor, expected: torch.Tensor) -> float:
 # --- the gradient ---------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.oracle
 def test_the_enumerated_gradient_matches_finite_differences() -> None:
     # Autodiff against numerical differentiation of the same closed form, which
@@ -86,7 +86,7 @@ def test_the_enumerated_gradient_matches_finite_differences() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient() -> None:
     # The claim REINFORCE rests on, checked rather than cited. A score-function
     # estimator with a sign error or a missing return-to-go would be wrong by
@@ -106,7 +106,7 @@ def test_the_sampled_estimator_is_unbiased_for_the_enumerated_gradient() -> None
     assert _relative_difference(policy.weights.grad, exact) < _ESTIMATOR_TOLERANCE
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_score_function_has_zero_expectation() -> None:
     # Why subtracting a constant baseline leaves the estimator unbiased: it
     # multiplies this, which is exactly zero because the probabilities sum to
@@ -124,7 +124,7 @@ def test_the_score_function_has_zero_expectation() -> None:
     assert_allclose(total.numpy(), [0.0, 0.0], atol=1e-14)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_baseline_reduces_the_estimator_variance() -> None:
     # sec:policy-gradient of docs/tex/textbook.tex gives variance, not bias, as
     # the reason for a baseline, so variance is what is measured. The reduction
@@ -201,7 +201,7 @@ def test_training_raises_the_enumerated_expected_return() -> None:
     assert len(training.mean_returns) == 60
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
     # Milestone 8's criterion, at a size where the answer is enumerable.
     #
@@ -255,7 +255,7 @@ def test_the_learned_policy_is_at_least_as_good_as_hill_climbing() -> None:
     assert learned <= optimum(environment)[1]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_training_is_reproducible_from_its_seed() -> None:
     environment = _environment()
     runs = [
@@ -273,7 +273,7 @@ def test_training_is_reproducible_from_its_seed() -> None:
     assert runs[0].mean_returns == runs[1].mean_returns
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
     # Guards the guard: a check that cannot fail reads as evidence while
     # supplying none. The planted bias is myopia -- weighting each step by its
@@ -317,7 +317,7 @@ def test_the_gradient_check_would_catch_a_biased_estimator() -> None:
 # --- validation -----------------------------------------------------------
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("iterations", "batch", "message"),
     [(0, 8, "iterations must be >= 1"), (5, 0, "batch must be >= 1")],
@@ -336,19 +336,19 @@ def test_a_degenerate_budget_is_rejected(
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_estimate_needs_at_least_one_episode() -> None:
     with pytest.raises(ValueError, match="at least one episode"):
         surrogate_loss(_environment(), LinearPolicy(2), [], 0.0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_negative_horizon_is_rejected_by_the_oracle() -> None:
     with pytest.raises(ValueError, match="horizon must be >= 0"):
         exact_expected_return(_environment(), LinearPolicy(2), (0, 1, 0, 1), -1)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_oracle_returns_zero_at_a_zero_horizon() -> None:
     value = exact_expected_return(_environment(), LinearPolicy(2), (0, 1, 2, 0), 0)
     assert float(value.detach()) == 0.0

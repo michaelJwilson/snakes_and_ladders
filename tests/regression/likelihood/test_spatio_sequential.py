@@ -70,7 +70,7 @@ def test_the_written_out_joint_is_the_factor_graph_log_density() -> None:
         assert abs(graph.log_density(assignment) - expected) < 1e-12 * abs(expected)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_posterior_is_a_distribution() -> None:
     params, data = _dataset(2)
 
@@ -83,7 +83,7 @@ def test_every_posterior_is_a_distribution() -> None:
     assert exact.log_evidence < 0.0  # discrete emissions: a probability
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_conditional_posterior_at_the_only_labelling_is_the_marginal_one() -> None:
     # With one class every node belongs to it, the labelling is unique, and
     # p(k | x) is Q(k | l, x): the two enumerations must agree exactly.
@@ -102,7 +102,7 @@ def test_the_conditional_posterior_at_the_only_labelling_is_the_marginal_one() -
     np.testing.assert_allclose(exact.state_posterior, conditional, rtol=1e-12)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_label_posterior_recovers_planted_labels_on_most_nodes() -> None:
     # 42 of 48 when measured; asserted at three quarters. The misses are the
     # nodes whose six observations happen to fit the other class.
@@ -120,7 +120,7 @@ def test_the_label_posterior_recovers_planted_labels_on_most_nodes() -> None:
     assert hits >= 0.75 * total, (hits, total)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_instance_past_the_enumeration_limit_is_refused() -> None:
     params = replace(fixture("spatio_sequential", "ci").params, n_positions=20)
     data = simulate_spatio_sequential(params, np.random.default_rng(0))

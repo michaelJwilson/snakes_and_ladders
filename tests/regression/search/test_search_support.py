@@ -87,7 +87,7 @@ def test_the_nni_neighbourhood_of_four_taxa_is_the_whole_space_so_the_two_suppor
     assert abs(neighbourhood.margin - enumerated.margin) < 1e-9 * abs(enumerated.margin)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.release
 def test_the_neighbourhood_weight_bounds_the_enumerated_one_and_the_best_tree_has_a_positive_margin() -> (
     None
@@ -112,7 +112,7 @@ def test_the_neighbourhood_weight_bounds_the_enumerated_one_and_the_best_tree_ha
     assert abs(sum(support.weight for support in enumerated) - 1.0) < 1e-9
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.release
 def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_splits() -> (
     None
@@ -145,7 +145,7 @@ def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_
     assert support == again
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_the_generating_splits_have_full_bootstrap_support_at_many_sites() -> None:
     params = load_simulation_params(fixture_path(FIVE_TAXA))
@@ -165,7 +165,7 @@ def test_the_generating_splits_have_full_bootstrap_support_at_many_sites() -> No
     assert all(value >= 0.8 for value in support.values()), support
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_the_enumerated_support_is_calibrated_on_simulated_data() -> None:
     # Bin the returned trees by the support they report; the fraction equal to
@@ -208,7 +208,7 @@ def _calibration_bins(
     return counts, hits[populated] / counts[populated]
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 @pytest.mark.parametrize(("fixture", "n_taxa"), [(SEVEN_TAXA, 7), (EIGHT_TAXA, 8)])
 def test_the_neighbourhood_and_bootstrap_supports_are_calibrated_at_seven_and_eight_taxa(
@@ -375,7 +375,7 @@ def test_the_enumerated_decoding_weight_is_the_path_posterior_and_pins_the_ambig
     assert near.margin >= viterbi.margin - 1e-12
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_labelling_outside_its_domain_or_past_the_cap_is_refused() -> None:
     graph = _two_site_chain(None)
     with pytest.raises(ValueError, match="inside its cardinality"):
@@ -386,7 +386,7 @@ def test_a_labelling_outside_its_domain_or_past_the_cap_is_refused() -> None:
         enumerated_labelling_support(graph, np.array([0, 0]), max_configurations=8)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_enumeration_past_the_limit_and_an_empty_bootstrap_are_refused() -> None:
     params = load_fixture(FOUR_TAXA)
     alignment = _alignment(params, 1, 50)
@@ -400,7 +400,7 @@ def test_an_enumeration_past_the_limit_and_an_empty_bootstrap_are_refused() -> N
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_topology_with_no_competitor_has_all_the_weight() -> None:
     # Three taxa have one unrooted topology, so the neighbourhood is empty.
     params = load_fixture(FOUR_TAXA)
@@ -477,7 +477,7 @@ def test_the_four_taxon_support_is_one_minus_the_frequency_of_the_two_conflictin
     assert 0.0 < expected < 1.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_returns_it_always() -> (
     None
 ):
@@ -500,7 +500,7 @@ def test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_re
         assert split_pattern_support(split, alignment, params.k) < winner
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None:
     params = load_simulation_params(fixture_path(FOUR_TAXA))
     alignment = _alignment(params, 12, 20)
@@ -512,7 +512,7 @@ def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None
     assert split_pattern_support(frozenset({"A"}), alignment, params.k) == 1.0
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.release
 def test_four_workers_report_the_bootstrap_one_worker_reports() -> None:
     """Replicate ``i`` draws the stream spawned for it, whichever worker runs it (issue #344).
@@ -535,7 +535,7 @@ def test_four_workers_report_the_bootstrap_one_worker_reports() -> None:
     assert pooled == serial
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_replicate_is_the_search_of_the_resample_its_spawned_generator_draws() -> (
     None
 ):

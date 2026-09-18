@@ -13,7 +13,7 @@ not committed (issue #425): ``infra/ledgers.sh`` writes it in the document
 build, at the release gate and in CI.
 
 What referees each method is read from the suite, never typed: the tests
-``CHECKS.md`` lists (kind ``oracle`` or ``simulated_truth``) that import a
+``CHECKS.md`` lists (kind ``oracle`` or ``end2end``) that import a
 catalogue symbol are the tests that pin it, and their ``stress`` and
 ``release`` markers are the size tier they run at. A method pinned by the
 simulated truth alone, or by neither kind, is marked, because there an oracle
@@ -591,7 +591,7 @@ def _mark(pins: Iterable[tuple[str, str]]) -> str:
     kinds = {kind for kind, _ in pins}
     if "oracle" in kinds:
         return ORACLE_MARK
-    if "simulated_truth" in kinds:
+    if "end2end" in kinds:
         return TRUTH_MARK
     return UNPINNED_MARK
 
@@ -600,7 +600,7 @@ def _referee_at(pins: Iterable[tuple[str, str]], tier: str) -> str:
     kinds = {kind for kind, at in pins if at == tier}
     if "oracle" in kinds:
         return "oracle"
-    if "simulated_truth" in kinds:
+    if "end2end" in kinds:
         return r"truth$^{\dagger}$"
     return "--"
 
@@ -1016,7 +1016,7 @@ def method_cells(
             tiers = [tier for tier in TIERS if any(at == tier for _, at in pairs)]
             if "oracle" in kinds:
                 referee = "oracle"
-            elif "simulated_truth" in kinds:
+            elif "end2end" in kinds:
                 referee = r"truth$^{\dagger}$"
             elif note:
                 # Claimed by the notes and reached by no significant test.

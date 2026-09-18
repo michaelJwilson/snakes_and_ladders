@@ -180,16 +180,17 @@ def _seconds(budget: str) -> int | None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_kind_module_names_the_same_markers() -> None:
     """Read from `infra/test_kinds.py`: the two axes, and the exempt directory."""
     assert tuple(gates.KIND_MARKERS) == test_kinds.KINDS
     assert set(gates.SCHEDULING_MARKERS) == set(test_kinds.SCHEDULING)
+    assert tuple(gates.FINDING_MARKERS) == test_kinds.FINDINGS
     assert gates.KIND_EXEMPT_DIRECTORY == test_kinds.EXCLUDED_DIRECTORY
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_workflow_runs_the_pull_request_and_main_gates() -> None:
     """Read from `.github/workflows/ci.yml`: the two gates and the job's cap.
 
@@ -221,7 +222,7 @@ def test_the_workflow_runs_the_pull_request_and_main_gates() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_release_gate_runs_every_tier() -> None:
     """Read from `infra/release.sh`: no marker filter, and the coverage floor."""
     (release,) = (gate for gate in gates.GATES if gate.name == "release")
@@ -234,7 +235,7 @@ def test_the_release_gate_runs_every_tier() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_shell_scripts_export_the_caps() -> None:
     """Read from `infra/validate.sh` and `infra/review_gates.sh`: the two caps.
 
@@ -252,7 +253,7 @@ def test_the_shell_scripts_export_the_caps() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_review_gate_script_runs_the_rows() -> None:
     """Read from `infra/review_gates.sh`: the rows, in the order it runs them."""
     assert _review_rows(REVIEW_GATES) == gates.REVIEW_GATE.rows
@@ -260,7 +261,7 @@ def test_the_review_gate_script_runs_the_rows() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_dev_md_counts_the_review_gate_rows() -> None:
     """Read from `DEV.md`: the review table's size, its budget, and the remainder.
 
@@ -286,7 +287,7 @@ def test_dev_md_counts_the_review_gate_rows() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_derived_blocks_are_current() -> None:
     """Regenerating the marker list and the tier table rewrites neither file.
 
@@ -305,7 +306,7 @@ def test_the_derived_blocks_are_current() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_writer_restores_a_block_that_drifted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -320,8 +321,8 @@ def test_the_writer_restores_a_block_that_drifted(
     """
     edits = {
         "pyproject.toml": (
-            "edge_case: checked at a boundary",
-            "edge_case: checked somewhere",
+            "smoke: checked against itself",
+            "smoke: checked somewhere",
         ),
         "DEV.md": ("**120 s per test**", "**121 s per test**"),
     }
@@ -342,6 +343,7 @@ def test_the_writer_restores_a_block_that_drifted(
         **gates.KIND_MARKERS,
         **gates.SCHEDULING_MARKERS,
         **gates.SUBJECT_MARKERS,
+        **gates.FINDING_MARKERS,
     }
     budgets = _tier_budgets(tmp_path / "DEV.md")
     assert _seconds(budgets["key"]) == gates.KEY_DURATION_CAP.seconds
@@ -353,7 +355,7 @@ def test_the_writer_restores_a_block_that_drifted(
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_guard_fails_on_a_copy_that_drifted(tmp_path: Path) -> None:
     """The guard rejects what it exists to reject.
 
@@ -371,7 +373,7 @@ def test_the_guard_fails_on_a_copy_that_drifted(tmp_path: Path) -> None:
     reworded = tmp_path / "pyproject.toml"
     reworded.write_text(
         PYPROJECT.read_text().replace(
-            "edge_case: checked at a boundary", "edge_case: checked somewhere"
+            "smoke: checked against itself", "smoke: checked somewhere"
         )
     )
 
@@ -379,10 +381,10 @@ def test_the_guard_fails_on_a_copy_that_drifted(tmp_path: Path) -> None:
     assert "head carries the base" not in rows
     assert len(rows) == len(gates.REVIEW_GATE.rows) - 1
     assert _exported_caps(without_a_row) == {"SAL_DURATION_CAP": 11}
-    assert _registered_markers(reworded)["edge_case"] != gates.KIND_MARKERS["edge_case"]
+    assert _registered_markers(reworded)["smoke"] != gates.KIND_MARKERS["smoke"]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_default_marker_filter_is_the_tier_the_main_gate_runs() -> None:
     """`addopts` deselects `release`, and says so with the main gate's words.
 

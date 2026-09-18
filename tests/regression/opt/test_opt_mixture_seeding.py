@@ -849,7 +849,7 @@ def test_the_divergence_ties_and_the_log_density_does_not() -> None:
     assert float(ratios["log-density"].max()) > 5.0 * float(ratios["euclidean"].max())
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_every_seeding_recovers_the_planted_components_on_the_refereed_rung() -> None:
     # Each candidate seeds one fit at the shared budget on the one-dimensional
     # refereed rung. A seeding that cannot recover the planted components at
@@ -868,7 +868,7 @@ def test_every_seeding_recovers_the_planted_components_on_the_refereed_rung() ->
         assert fitted.recovery > 0.75 * ceiling, (name, fitted.recovery, ceiling)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.key
 def test_the_key_rung_recovers_its_planted_components() -> None:
     # The two-channel instance sized to what #541 projects, at the largest bin
@@ -904,7 +904,7 @@ KEY_STARTS = 8
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_ordering_on_the_refereed_rung() -> None:
     # One of the two orderings `docs/experiments/010` reports: every candidate
     # on the rung where `optimal_clustering_cost` referees a seeding and forty
@@ -950,7 +950,7 @@ def test_the_ordering_on_the_refereed_rung() -> None:
 
 
 @pytest.mark.release
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_ordering_on_the_key_rung() -> None:
     # The other ordering: every candidate on the two-channel instance sized to
     # what #541 projects, with each seeding's own cost beside the fit budget.

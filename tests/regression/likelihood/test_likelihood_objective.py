@@ -73,7 +73,7 @@ def _objective(
 # --- the identifiability finding, and what follows from it ---------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
     # The pulley principle, measured. Under a reversible model the
     # likelihood does not depend on where the root sits along the branch it
@@ -111,7 +111,7 @@ def test_the_two_branches_below_a_rooted_root_are_confounded() -> None:
         assert_allclose(score(fraction), reference, rtol=1e-12)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_two_non_root_siblings_are_not_confounded() -> None:
     # The control. Without it the test above would also pass on a likelihood
     # that ignored branch lengths entirely.
@@ -176,7 +176,7 @@ class _Unmerged:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
     # The consequence of the confounding: a flat direction makes the
     # observed information singular, and `snakes_and_ladders.opt.fit` refuses to invert
@@ -198,7 +198,7 @@ def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
         parameter_covariance(naive, result.theta)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_merged_parameterization_does_have_intervals() -> None:
     objective = _objective(EIGHT_TAXA)
     errors = constrained_standard_errors(objective, fit(objective).theta)
@@ -209,7 +209,7 @@ def test_the_merged_parameterization_does_have_intervals() -> None:
 # --- the parameterization ------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_rooted_tree_loses_exactly_one_parameter() -> None:
     objective = _objective(EIGHT_TAXA)
     assert objective.n_parameters == 13
@@ -219,7 +219,7 @@ def test_a_rooted_tree_loses_exactly_one_parameter() -> None:
     assert "right" not in objective.parameter_names
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_an_unrooted_tree_keeps_every_branch() -> None:
     params = load_fixture(SMALL_SITES)
     assert len(params.tau.children) == 3, "this fixture must be trifurcating"
@@ -242,14 +242,14 @@ def test_expansion_reproduces_the_tree_s_own_branch_lengths() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_root_with_one_child_is_refused() -> None:
     stunted = Node(name="root", branch_length=None, children=(Node("A", 0.1),))
     with pytest.raises(ValueError, match="at least 2"):
         BranchLengthObjective(stunted, 4, np.full(4, 0.25), {"A": np.zeros(3)})
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_initial_point_is_uninformative() -> None:
     objective = _objective(SMALL_SITES)
     lengths = objective.constrain(objective.initial())["branch_lengths"]
@@ -259,7 +259,7 @@ def test_the_initial_point_is_uninformative() -> None:
 # --- the fit -------------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("fixture", [SMALL_SITES, EIGHT_TAXA])
 def test_gradient_matches_central_finite_differences(fixture: str) -> None:
     objective = _objective(fixture, sites=500)
@@ -272,7 +272,7 @@ def test_gradient_matches_central_finite_differences(fixture: str) -> None:
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("fixture", [SMALL_SITES, EIGHT_TAXA])
 def test_the_fit_beats_the_generating_branch_lengths(fixture: str) -> None:
     # The optimizer never sees the truth, so an early stop fails this while
@@ -284,7 +284,7 @@ def test_the_fit_beats_the_generating_branch_lengths(fixture: str) -> None:
     assert result.value < float(objective(objective.theta_from_truth(params.tau)))
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize("fixture", [SMALL_SITES, FOUR_TAXA, EIGHT_TAXA])
 def test_every_branch_length_is_recovered_to_within_four_standard_errors(
     fixture: str,
@@ -311,7 +311,7 @@ def test_every_branch_length_is_recovered_to_within_four_standard_errors(
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_branch_length_intervals_cover_at_the_nominal_rate() -> None:
     # Release-gated: 40 independent alignments, each fitted and inverted.
@@ -393,7 +393,7 @@ def test_the_torch_rate_matrix_matches_the_numpy_one() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_starting_point_is_exactly_jukes_cantor() -> None:
     # Not approximately: the fit begins at the model the rest of this suite
     # validates, so any departure it reaches is something the data asked for.
@@ -421,7 +421,7 @@ def test_the_substitution_model_theta_round_trips() -> None:
     assert float(constrained["exchangeabilities"][-1]) == pytest.approx(1.0)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_substitution_model_has_one_parameter_per_free_quantity() -> None:
     objective, _ = _gtr_objective(sites=200)
     # 5 branches + 5 free exchangeabilities (of 6) + 3 free pi entries (of 4).
@@ -429,7 +429,7 @@ def test_the_substitution_model_has_one_parameter_per_free_quantity() -> None:
     assert objective.parameter_names[-4:] == ["s4", "pi1", "pi2", "pi3"]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_substitution_model_gradient_matches_finite_differences() -> None:
     objective, truth = _gtr_objective(sites=500)
     assert_gradient_matches_finite_differences(
@@ -437,7 +437,7 @@ def test_the_substitution_model_gradient_matches_finite_differences() -> None:
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_substitution_model_fit_beats_the_generating_parameters() -> None:
     objective, truth = _gtr_objective()
     result = fit(objective)
@@ -445,7 +445,7 @@ def test_the_substitution_model_fit_beats_the_generating_parameters() -> None:
     assert result.value < float(objective(truth))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_three_gauges_leave_a_well_conditioned_problem() -> None:
     # The direct test that the rate normalization, the pinned
     # exchangeability and the simplex gauge between them remove every flat
@@ -457,7 +457,7 @@ def test_the_three_gauges_leave_a_well_conditioned_problem() -> None:
     assert float(eigenvalues.min() / eigenvalues.max()) > 1e-4
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_substitution_model_is_recovered_to_within_four_standard_errors() -> None:
     objective, _ = _gtr_objective()
     result = fit(objective)
@@ -480,7 +480,7 @@ def test_the_substitution_model_is_recovered_to_within_four_standard_errors() ->
         )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_fitting_jc_simulated_data_recovers_a_jc_like_model() -> None:
     # A consistency check the other direction: given data generated under
     # Jukes-Cantor, the general model must not invent structure. Stated in
@@ -509,7 +509,7 @@ def test_fitting_jc_simulated_data_recovers_a_jc_like_model() -> None:
     assert float(pi_deviation.max()) < 4.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_substitution_model_intervals_cover_at_the_nominal_rate() -> None:
     reference = torch.as_tensor(_TRUE_EXCHANGEABILITIES / _TRUE_EXCHANGEABILITIES[-1])[
@@ -544,7 +544,7 @@ def test_substitution_model_intervals_cover_at_the_nominal_rate() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_fitted_tree_carries_the_fitted_lengths_back_onto_the_topology() -> None:
     # The inverse of theta_from_truth, and the form anything that draws or
     # serializes a fitted tree needs: pruning_torch keeps lengths out of the
@@ -567,7 +567,7 @@ def test_fitted_tree_carries_the_fitted_lengths_back_onto_the_topology() -> None
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_fitted_tree_halves_the_merged_root_pair() -> None:
     # The estimable quantity is the pair's sum; halving it is a drawing
     # convention and the docstring says so. Pinned because a reader of the
@@ -589,7 +589,7 @@ def test_fitted_tree_halves_the_merged_root_pair() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("which", ["branch_lengths", "substitution_model"])
 def test_the_phylogenetic_objectives_invert_their_own_constraint_map(
     which: str,
@@ -652,7 +652,7 @@ def test_the_analytic_route_fits_to_the_same_optimum() -> None:
     assert_allclose(analytic.theta.numpy(), taped.theta.numpy(), rtol=1e-5, atol=1e-7)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unknown_gradient_route_is_refused() -> None:
     params = load_fixture(FOUR_TAXA)
     with pytest.raises(ValueError, match="gradient is one of"):

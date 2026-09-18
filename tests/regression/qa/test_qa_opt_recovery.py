@@ -29,7 +29,7 @@ POTTS_FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
 HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_potts_recovery_returns_one_entry_per_parameter() -> None:
     params = load_potts_params(POTTS_FIXTURE)
     truth, fitted, spread, hits = potts_recovery(params)
@@ -40,7 +40,7 @@ def test_potts_recovery_returns_one_entry_per_parameter() -> None:
     assert truth[0] == params.coupling
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_potts_recovery_covers_every_parameter_at_the_fixture() -> None:
     # Deterministic: fixed seed, so this is a pinned outcome rather than a
     # sample. A single dataset is a draw, not a rate -- the nominal rate is
@@ -50,7 +50,7 @@ def test_potts_recovery_covers_every_parameter_at_the_fixture() -> None:
     assert bool((spread > 0.0).all())
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_hmm_recovery_reports_probabilities_that_normalize() -> None:
     params = load_hmm_params(HMM_FIXTURE)
     truth, fitted, spread, hits = hmm_recovery(params)
@@ -95,7 +95,7 @@ def test_hmm_recovery_aligns_the_state_permutation() -> None:
         assert own < min(others)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_reports_the_coverage_it_measured() -> None:
     potts_params = load_potts_params(POTTS_FIXTURE)
     hmm_params = load_hmm_params(HMM_FIXTURE)
@@ -112,7 +112,7 @@ def test_the_caption_reports_the_coverage_it_measured() -> None:
     assert not set(caption) & set("_%\\&#")
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_main_writes_a_figure_and_caption(tmp_path: Path) -> None:
     written = main(
         [

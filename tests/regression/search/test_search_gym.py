@@ -99,7 +99,7 @@ def _candidates_scored[S, A](environment: Environment[S, A], states: list[S]) ->
 # --- Farama's checker ----------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_potts_adapter_passes_gymnasium_s_environment_checker() -> None:
     environment, n_max = _potts()
     with warnings.catch_warnings():
@@ -109,7 +109,7 @@ def test_the_potts_adapter_passes_gymnasium_s_environment_checker() -> None:
         check_env(GymnasiumEnvironment(environment, n_max=n_max, max_steps=8))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_tree_adapter_passes_gymnasium_s_environment_checker() -> None:
     environment, n_max = _tree()
     with warnings.catch_warnings():
@@ -120,7 +120,7 @@ def test_the_tree_adapter_passes_gymnasium_s_environment_checker() -> None:
 # --- the round trip -------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("seed", [0, 1, 7])
 def test_an_episode_on_the_potts_chain_is_the_same_through_both_interfaces(
     seed: int,
@@ -139,7 +139,7 @@ def test_an_episode_on_the_potts_chain_is_the_same_through_both_interfaces(
     assert evaluations == _candidates_scored(environment, list(episode.states))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("seed", [0, 3])
 def test_an_episode_on_the_tree_is_the_same_through_both_interfaces(
     seed: int,
@@ -159,7 +159,7 @@ def test_an_episode_on_the_tree_is_the_same_through_both_interfaces(
     assert evaluations == _candidates_scored(environment, list(episode.states))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_observation_is_the_neighbourhood_s_features_padded_with_zeros() -> None:
     environment, n_max = _potts()
     adapter = GymnasiumEnvironment(environment, n_max=n_max + 3, max_steps=5)
@@ -179,7 +179,7 @@ def test_the_observation_is_the_neighbourhood_s_features_padded_with_zeros() -> 
 # --- termination, truncation, refusal ------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_episode_truncates_at_the_decision_budget() -> None:
     # Weights that make downhill moves likely, so the episode does not
     # terminate before the budget bites -- the rollout test's construction.
@@ -197,7 +197,7 @@ def test_the_episode_truncates_at_the_decision_budget() -> None:
     assert states == list(episode.states)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_episode_terminates_at_a_local_optimum() -> None:
     environment, n_max = _potts()
     policy = LinearPolicy(2)
@@ -224,7 +224,7 @@ def test_the_episode_terminates_at_a_local_optimum() -> None:
     assert steps == len(episode.actions)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_start_at_a_local_optimum_is_terminal_before_any_decision() -> None:
     environment, n_max = _potts()
     optimum = (0, 0, 0, 0)
@@ -240,7 +240,7 @@ def test_a_start_at_a_local_optimum_is_terminal_before_any_decision() -> None:
     assert terminated == environment.is_terminal(adapter.state)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unknown_reset_option_is_refused() -> None:
     environment, n_max = _potts()
     adapter = GymnasiumEnvironment(environment, n_max=n_max, max_steps=5)
@@ -248,7 +248,7 @@ def test_an_unknown_reset_option_is_refused() -> None:
         adapter.reset(seed=0, options={"seed": 3})
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_masked_action_is_refused_without_moving() -> None:
     environment, n_max = _potts()
     adapter = GymnasiumEnvironment(environment, n_max=n_max + 2, max_steps=4)
@@ -266,7 +266,7 @@ def test_a_masked_action_is_refused_without_moving() -> None:
     assert truncated
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_neighbourhood_wider_than_n_max_is_refused() -> None:
     environment, n_max = _potts()
     adapter = GymnasiumEnvironment(environment, n_max=n_max - 1, max_steps=4)
@@ -274,7 +274,7 @@ def test_a_neighbourhood_wider_than_n_max_is_refused() -> None:
         adapter.reset(seed=0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_width_or_budget_is_refused() -> None:
     environment, n_max = _potts()
     with pytest.raises(ValueError, match="n_max must be >= 1"):
@@ -283,14 +283,14 @@ def test_a_non_positive_width_or_budget_is_refused() -> None:
         GymnasiumEnvironment(environment, n_max=n_max, max_steps=0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_state_is_unavailable_before_the_first_reset() -> None:
     environment, n_max = _potts()
     with pytest.raises(RuntimeError, match="call reset"):
         _ = GymnasiumEnvironment(environment, n_max=n_max, max_steps=4).state
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_tree_state_is_a_topology() -> None:
     environment, n_max = _tree()
     adapter = GymnasiumEnvironment(environment, n_max=n_max, max_steps=2)

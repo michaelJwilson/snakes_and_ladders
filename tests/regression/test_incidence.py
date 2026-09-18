@@ -83,7 +83,7 @@ def test_gather_carries_a_per_entry_value_into_the_layout() -> None:
         assert value == values[source]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_transpose_is_the_relation_read_the_other_way() -> None:
     rows, columns = _pairs(19, 15, 11, 90)
     incidence = SparseIncidence.from_pairs(15, 11, rows, columns)
@@ -113,7 +113,7 @@ def test_dense_counts_a_repeated_entry_twice() -> None:
     assert incidence.degrees.tolist() == [2, 1]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("kwargs", "rows", "columns", "message"),
     [
@@ -131,7 +131,7 @@ def test_a_relation_that_is_not_one_is_refused(
         SparseIncidence.from_pairs(2, 2, np.array(rows), np.array(columns), **kwargs)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_duplicate_is_caught_when_the_two_are_not_adjacent() -> None:
     # Without `ascending` the entries keep the caller's order, so two equal
     # pairs need not end up side by side; an adjacency test would pass the
@@ -142,7 +142,7 @@ def test_a_duplicate_is_caught_when_the_two_are_not_adjacent() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_parity_check_s_two_orientations_are_the_structure_s() -> None:
     # What `ParityCheck.from_edges` derived by `lexsort` and `searchsorted`
     # before it held the structure, asserted field for field.
@@ -160,7 +160,7 @@ def test_the_parity_check_s_two_orientations_are_the_structure_s() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_potts_adjacency_is_derived_once_and_is_read_only() -> None:
     # The fix the survey's finding asked for: every caller gets the same
     # arrays, so a caller that wrote into them would be editing the graph.
@@ -215,7 +215,7 @@ def test_the_factor_graph_s_degrees_are_the_scan_s() -> None:
         assert graph.degree(variable.name) == len(scanned)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unknown_variable_has_no_degree() -> None:
     graph = FactorGraph(
         [Variable("a", 2), Variable("b", 2)],

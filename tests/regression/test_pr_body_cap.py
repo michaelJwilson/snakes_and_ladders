@@ -39,7 +39,7 @@ def _body(content: int, headings: int = 0) -> str:
     return "\n\n".join(parts) + "\n"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_body_one_line_over_the_cap_is_refused_with_its_count() -> None:
     found = check_pr_body.problem(_body(CAP + 1))
     assert found, f"a body of {CAP + 1} content lines was accepted"
@@ -47,18 +47,18 @@ def test_a_body_one_line_over_the_cap_is_refused_with_its_count() -> None:
     assert str(CAP) in found, f"the message does not name the cap: {found}"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_body_at_the_cap_passes() -> None:
     assert check_pr_body.problem(_body(CAP)) == ""
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_headings_and_blank_lines_are_not_charged() -> None:
     """The cap charges content, so structure cannot push a body over it."""
     assert check_pr_body.problem(_body(CAP, headings=12)) == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_committed_template_is_inside_the_cap() -> None:
     """A pull request that starts from the template has room left to write in.
 
@@ -70,20 +70,20 @@ def test_the_committed_template_is_inside_the_cap() -> None:
     assert check_pr_body.problem(template) == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_dev_md_states_the_cap_the_script_enforces() -> None:
     stated = {int(m) for m in _STATED.findall(DEV.read_text())}
     assert CAP in stated, f"DEV.md states {sorted(stated)}, not the cap {CAP}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("name", ["task.yml", "release.yml", "documents.yml"])
 def test_every_issue_template_states_the_cap(name: str) -> None:
     stated = {int(m) for m in _STATED.findall((TEMPLATES / name).read_text())}
     assert CAP in stated, f"{name} states {sorted(stated)}, not the cap {CAP}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_workflow_runs_the_check_on_the_pull_request_body() -> None:
     """The cap is enforced where the payload is, not only stated in prose."""
     text = WORKFLOW.read_text()

@@ -69,7 +69,7 @@ def _marginals(configurations: np.ndarray, n_states: int) -> np.ndarray:
 # --- the widened shape ------------------------------------------------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_field_repeated_at_every_site_is_the_shared_field() -> None:
     # A per-site field whose rows are equal is the same model as the shared
     # field it was built from. A broadcast applied along the state axis rather
@@ -120,7 +120,7 @@ def test_the_exact_open_chain_sampler_carries_the_field_of_each_site() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_field_of_neither_shape_is_refused() -> None:
     # A field with one row per *state* on a graph whose node count differs is
     # the mistake the two accepted shapes allow; refused rather than broadcast
@@ -129,7 +129,7 @@ def test_a_field_of_neither_shape_is_refused() -> None:
         site_field(np.zeros((4, 3)), 9)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_size_that_is_not_positive_is_refused() -> None:
     # `log(size)` is the whole construction, so a size of zero is refused
     # where it is declared rather than becoming a field of -inf.
@@ -162,7 +162,7 @@ def test_gibbs_matches_enumeration_at_the_declared_spatio_only_instance() -> Non
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_declared_sizes_move_the_marginals() -> None:
     # Replacing the per-site field by its site average must change the exact
     # marginals by more than the tolerance the sampler is checked within, or
@@ -213,7 +213,7 @@ def _fit_alpha(params: SpatioOnlyParams, configurations: np.ndarray) -> np.ndarr
     return np.asarray(estimate - estimate.mean())
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_covariate_coefficients_are_recovered_at_the_ci_instance() -> None:
     # What makes the sizes part of the model: alpha is identified from a draw,
     # and the flat class's interval covers zero. The interval is the
@@ -281,7 +281,7 @@ def test_the_sampler_matches_the_exact_normalizer_past_enumeration() -> None:
 # --- the release instance: the tilt at 5,041 vertices -----------------------
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.release
 def test_the_covariate_still_tilts_the_labels_at_five_thousand_vertices() -> None:
     # Nothing is exact at 5,041 vertices, so what is asserted is the property

@@ -49,7 +49,7 @@ def _imports_sandbox(source: str) -> bool:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_no_hot_path_package_imports_the_sandbox() -> None:
     offenders = sorted(
         str(path.relative_to(PACKAGE))
@@ -61,14 +61,14 @@ def test_no_hot_path_package_imports_the_sandbox() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_package_root_does_not_re_export_the_sandbox() -> None:
     # Root `CLAUDE.md`'s Package Surface rule, applied to the one package
     # whose contents are oracles rather than an API.
     assert not _imports_sandbox((PACKAGE / "__init__.py").read_text())
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_guard_has_a_subject_and_it_still_imports() -> None:
     # The walk above passes vacuously over an empty sandbox, so what it is
     # asserted against is named here and imported. An import that stopped
@@ -84,7 +84,7 @@ def test_the_guard_has_a_subject_and_it_still_imports() -> None:
         importlib.import_module(f"{SANDBOX}.{name}")
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_sandbox_states_its_rules_where_the_root_says_they_live() -> None:
     # The docstring names the file that carries the rules; the file must exist
     # and carry the two rules the other tests here assert, or the pointer
@@ -99,7 +99,7 @@ def test_the_sandbox_states_its_rules_where_the_root_says_they_live() -> None:
     assert "test_sandbox.py" in snakes_and_ladders.sandbox.__doc__
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_guard_catches_every_spelling_of_the_import() -> None:
     # The guard's own trigger: a lazy import inside a function is the spelling
     # a reviewer misses, and the AST walk sees it.

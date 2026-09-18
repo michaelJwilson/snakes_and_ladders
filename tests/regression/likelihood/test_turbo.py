@@ -157,7 +157,7 @@ def test_the_joint_posterior_is_the_enumerated_one_where_the_two_chains_agree() 
 # --- the structure of one decoding ----------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_per_iteration_run_is_the_capped_run_at_every_cap() -> None:
     # One run reports every iteration count, which is what makes the release
     # waterfall cost the deepest iteration rather than the sum. The two paths
@@ -177,7 +177,7 @@ def test_the_per_iteration_run_is_the_capped_run_at_every_cap() -> None:
         assert result.estimate is MapEstimate.BITWISE
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_second_decoder_reads_the_first_decoders_systematic_stream() -> None:
     """No message bit crosses the channel twice: the streams partition the word.
 
@@ -213,7 +213,7 @@ def test_the_second_decoder_reads_the_first_decoders_systematic_stream() -> None
     assert turbo_errors <= single_errors
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_word_of_the_wrong_length_or_a_zero_iteration_cap_is_refused() -> None:
     params = fixture("turbo", "ci").params
     code = params.code()
@@ -229,7 +229,7 @@ def test_a_word_of_the_wrong_length_or_a_zero_iteration_cap_is_refused() -> None
 # --- the all-zero shortcut every measurement past the encoder rests on ------------
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_error_pattern_under_a_codeword_is_the_pattern_under_zero() -> None:
     """Per realization, on a real codeword, for the recursive encoder.
 

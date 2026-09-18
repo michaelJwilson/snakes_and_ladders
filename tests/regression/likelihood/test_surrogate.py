@@ -124,7 +124,7 @@ def test_parsimony_bound_is_above_every_fitted_likelihood(scored: Scored) -> Non
     assert int(np.argmax(values)) == int(np.argmax(exact))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_parsimony_bound_is_the_maximum_over_the_vertices() -> None:
     # The site likelihood is multilinear in one variable per branch under
     # Jukes--Cantor, so its maximum over lengths is at a vertex where each
@@ -177,7 +177,7 @@ def test_site_fitch_scores_sum_to_the_fitch_score() -> None:
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_least_squares_lengths_are_feasible_and_fit_the_distances() -> None:
     # Non-negative, which is what makes the plug-in value a feasible point of
     # the fit and hence a bound, and no worse a fit than a uniform length.
@@ -192,7 +192,7 @@ def test_least_squares_lengths_are_feasible_and_fit_the_distances() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_tree_features_are_invariant_to_child_order() -> None:
     # Every feature is a function of the unrooted tree, so the same tree with
     # its children swapped at every node is the same feature vector, and the
@@ -241,7 +241,7 @@ def test_mean_field_and_spanning_tree_bounds_sandwich_log_z(
         assert (upper - exact) / graph.n_nodes < 0.1
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_spanning_tree_bound_is_exact_on_a_tree_and_mean_field_without_couplings() -> (
     None
 ):
@@ -259,7 +259,7 @@ def test_spanning_tree_bound_is_exact_on_a_tree_and_mean_field_without_couplings
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_lattice_bounds_differentiate_like_finite_differences() -> None:
     graph = lattice_graph((2, 3), BoundaryCondition.PERIODIC, 0.5)
     for bound in (mean_field_log_partition, spanning_tree_log_partition):
@@ -309,7 +309,7 @@ class _WrongSide:
         return torch.tensor(_identity(structure, data) + 1.0)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_certify_refuses_a_bound_on_the_wrong_side() -> None:
     with pytest.raises(BoundViolation, match="lower bound violated on 3 of 3"):
         certify(_WrongSide(), _identity, [1.0, 2.0, 3.0], None)
@@ -317,7 +317,7 @@ def test_certify_refuses_a_bound_on_the_wrong_side() -> None:
         certify(_WrongSide(), _identity, [], None)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_certify_allows_the_stated_violation_rate() -> None:
     # A calibrated bound claims a rate: one violation in four is inside 0.3.
     class _Mostly:
@@ -339,7 +339,7 @@ def test_certify_allows_the_stated_violation_rate() -> None:
         certify(_Mostly(), _identity, [1.0, 2.0, 3.0, 4.0], None)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_tree_and_lattice_surrogates_refuse_the_wrong_structure() -> None:
     with pytest.raises(TypeError, match="topology and an alignment"):
         PlugInLikelihood(4, np.full(4, 0.25))(object(), {})

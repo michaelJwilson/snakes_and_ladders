@@ -46,7 +46,7 @@ IDS = [type(family).__name__ for family in _families()]
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("family", _families(), ids=IDS)
 def test_a_covariate_is_refused_and_names_the_families_that_will_take_one(
     family: EmissionFamily,
@@ -71,7 +71,7 @@ def test_a_covariate_is_refused_and_names_the_families_that_will_take_one(
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("family", _families(), ids=IDS)
 def test_passing_none_scores_what_passing_nothing_scores(
     family: EmissionFamily,
@@ -86,7 +86,7 @@ def test_passing_none_scores_what_passing_nothing_scores(
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_pair_family_refuses_one_too() -> None:
     # `CountPairEmission` takes a tuple observation, so it is built and scored
     # apart from the six above rather than left out of the assertion.

@@ -62,7 +62,7 @@ def _states(environment: PottsEnvironment) -> list[tuple[int, ...]]:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_action_values_satisfy_bellmans_equation() -> None:
     # V^pi(s) = sum_a pi(a | s) Q^pi(s, a), the two sides computed by different
     # recursions; and the optimal value dominates every policy's value.
@@ -139,7 +139,7 @@ def test_a_fitted_critic_explains_the_enumerated_state_values(
     assert features.shape[1] == n_state_features(environment)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.release
 def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient() -> (
     None
@@ -168,7 +168,7 @@ def test_the_estimator_with_the_exact_critic_is_unbiased_for_the_exact_gradient(
     assert_allclose(-gradient.numpy(), exact.numpy(), atol=3e-2)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_targets_and_advantages_line_up_with_the_decisions() -> None:
     environment, policy = _environment(), _policy([0.3, -0.6])
     rng = np.random.default_rng(1)
@@ -198,7 +198,7 @@ def test_targets_and_advantages_line_up_with_the_decisions() -> None:
         advantage_surrogate_loss(environment, policy, [], [])
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy() -> None:
     # 60 iterations of 32 episodes, the budget #135 trained REINFORCE on:
     # the actor-critic reaches the enumerated optimum from 88.9% of the 81
@@ -237,7 +237,7 @@ def test_actor_critic_reaches_the_optimum_at_least_as_often_as_greedy() -> None:
     assert reached >= 65 / 81, reached
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_mlp_policy_is_a_softmax_over_the_available_actions() -> None:
     environment = _environment()
     policy = MLPPolicy(2, hidden=8, generator=torch.Generator().manual_seed(0))

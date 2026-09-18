@@ -101,7 +101,7 @@ def test_no_covariate_is_the_conserved_family(
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_observation_above_its_own_trial_count_scores_negative_infinity() -> None:
     # On the joint form's precedent: the support is a property of the pair, so
     # a sequence carrying one impossible site is scored, not refused.
@@ -116,7 +116,7 @@ def test_an_observation_above_its_own_trial_count_scores_negative_infinity() -> 
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_trial_count_materialised_per_state_is_refused() -> None:
     # The layout is the whole cost: shaped `(..., 1)` three of the nine lgamma
     # terms are `n_obs * K`, which is what the per-state count costs today;
@@ -128,7 +128,7 @@ def test_a_trial_count_materialised_per_state_is_refused() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_state_count_is_read_off_alpha_not_the_trial_count() -> None:
     # A trial count supplied per observation says nothing about how many states
     # there are, so reading `n_states` off it would be wrong the moment one is.

@@ -51,7 +51,7 @@ def grouped(
     return appraise_structures.clusters(found)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_walk_recovers_every_contract_the_hand_list_names(
     found: list[appraise_structures.Structure],
 ) -> None:
@@ -66,7 +66,7 @@ def test_the_walk_recovers_every_contract_the_hand_list_names(
     assert named <= derived, f"the walk missed {sorted(named - derived)}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_incidence_cluster_holds_the_three_representations(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
@@ -82,7 +82,7 @@ def test_the_incidence_cluster_holds_the_three_representations(
     assert incidence.layouts["sim.factor_graph.FactorGraph"] == "object-graph"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_one_structure_the_three_now_hold_is_in_the_cluster(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
@@ -97,7 +97,7 @@ def test_the_one_structure_the_three_now_hold_is_in_the_cluster(
     assert incidence.layouts["incidence.SparseIncidence"] == "csr"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_per_call_derivation_finding_is_gone_for_the_graph_that_fixed_it(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
@@ -147,7 +147,7 @@ def _findings(source: str) -> tuple[str, ...]:
     return appraise_structures._notes("example.Example", node, ("degrees",))
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_per_call_derivation_is_still_reported(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
@@ -175,7 +175,7 @@ def test_a_per_call_derivation_is_still_reported(
     assert "derives a compressed layout per call" not in live
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_list_of_lists_finding_carries_its_measurement(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
@@ -190,7 +190,7 @@ def test_the_list_of_lists_finding_carries_its_measurement(
     assert "25.63 ms as a NumPy slice" in findings
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize(
     "qualified",
     [
@@ -212,7 +212,7 @@ def test_a_name_that_merely_reads_like_a_layout_is_not_one(
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_survey_reports_a_near_duplicate_it_has_never_seen(
     tmp_path: Path,
 ) -> None:
@@ -241,7 +241,7 @@ def test_the_survey_reports_a_near_duplicate_it_has_never_seen(
     assert any(c.key == "role:incidence" and len(c.members) == 3 for c in clusters)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_shape_below_the_rule_is_not_a_cluster(tmp_path: Path) -> None:
     # Two classes sharing a shape are a pair, not a pattern. The rule is three,
     # the same count root `CLAUDE.md` puts on a seam, and a survey that
@@ -261,7 +261,7 @@ def test_a_shape_below_the_rule_is_not_a_cluster(tmp_path: Path) -> None:
     assert appraise_structures.clusters(appraise_structures.structures(package)) == []
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_implicit_offsets_store_is_in_the_incidence_cluster(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
@@ -277,7 +277,7 @@ def test_the_implicit_offsets_store_is_in_the_incidence_cluster(
     assert incidence.layouts["sim.hmm.SimulatedHmmDataset"] == "csr"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_declaration_of_lengths_is_not_a_layout(
     found: list[appraise_structures.Structure],
 ) -> None:
@@ -291,7 +291,7 @@ def test_a_declaration_of_lengths_is_not_a_layout(
     assert params.layout == "none"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize(
     "qualified",
     [
@@ -312,7 +312,7 @@ def test_sizes_is_not_a_segmentation(
     assert structure.layout == "none"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_reading_the_offsets_is_not_deriving_them(
     found: list[appraise_structures.Structure],
 ) -> None:
@@ -325,7 +325,7 @@ def test_reading_the_offsets_is_not_deriving_them(
     assert any("39.3 us" in note for note in ragged.notes)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_offsets_finding_carries_its_measurement(
     grouped: list[appraise_structures.Cluster],
 ) -> None:
@@ -340,7 +340,7 @@ def test_the_offsets_finding_carries_its_measurement(
     assert "0.012%" in findings
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_finding_on_an_unclustered_class_is_reported(
     found: list[appraise_structures.Structure],
     grouped: list[appraise_structures.Cluster],
@@ -358,7 +358,7 @@ def test_a_finding_on_an_unclustered_class_is_reported(
     assert all(finding in rendered for finding in loose)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_planted_segmented_store_is_reported_without_a_partner_being_guessed(
     tmp_path: Path,
 ) -> None:
@@ -389,7 +389,7 @@ def test_a_planted_segmented_store_is_reported_without_a_partner_being_guessed(
     assert planted["Declared"].layout == "none"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_class_added_since_the_survey_was_written_is_in_it() -> None:
     # #677's own acceptance test, and it reads `git log` rather than memory:
     # these eight classes are every `class` added under the package since #586

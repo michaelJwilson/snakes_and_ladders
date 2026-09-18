@@ -93,7 +93,7 @@ def _catalogue_fixtures() -> dict[str, list[str]]:
     return found
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_catalogue_row_names_a_ci_fixture_that_loads() -> None:
     # The claim the column makes: this problem has an instance, at the size
     # the per-pull-request suite runs.
@@ -109,7 +109,7 @@ def test_every_catalogue_row_names_a_ci_fixture_that_loads() -> None:
             )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_fixture_is_named_by_the_catalogue() -> None:
     # The other direction: an instance the catalogue does not claim is one
     # no row is answerable for.
@@ -118,7 +118,7 @@ def test_every_fixture_is_named_by_the_catalogue() -> None:
     assert set(problems()) == named
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_fixture_loads_and_states_an_oracle_the_tables_know() -> None:
     loaded = [
         fixture(problem, tier) for problem in problems() for tier in tiers(problem)
@@ -133,7 +133,7 @@ def test_every_fixture_loads_and_states_an_oracle_the_tables_know() -> None:
         assert column is None or column in problems_tables.ORACLE_COLUMNS
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_problem_declares_the_ci_tier() -> None:
     # `fixtures("ci")` is what a test parametrizing over the class of
     # problems iterates; a problem missing from it is silently untested
@@ -189,7 +189,7 @@ def test_the_frustrated_fixture_builds_the_lattice_with_the_known_ground_state()
 CHEAPEST = "potts_chain/ci"
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
     # The round trip the readers depend on: what `infra/baselines.py --write`
     # wrote is what `baseline()` returns, computed against the libraries
@@ -209,7 +209,7 @@ def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
         assert read_baseline(record.path).libraries == record.libraries
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
     tmp_path: Path,
 ) -> None:
@@ -240,7 +240,7 @@ def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
     assert any("enumerated_optimum" in line for line in found), found
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_edited_budget_is_a_disagreement_the_recomputation_reports(
     tmp_path: Path,
 ) -> None:
@@ -257,7 +257,7 @@ def test_an_edited_budget_is_a_disagreement_the_recomputation_reports(
     assert any("budget" in line for line in found), found
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_record_computed_against_another_library_is_refused(tmp_path: Path) -> None:
     # The one input to a number that a recomputation elsewhere cannot check,
     # because it is a fact about this machine and not about the tree. It is
@@ -275,7 +275,7 @@ def test_a_record_computed_against_another_library_is_refused(tmp_path: Path) ->
         baseline("tree_search", Scale.RELEASE, copied)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
     # The selection that replaced the digest, and why it is safe to recompute
     # less than everything: a record's numbers are a function of its fixture
@@ -305,7 +305,7 @@ def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
     assert reached("infra/baselines.py") == every
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_same_baseline_computed_twice_is_the_same_record() -> None:
     # A reference algorithm whose answer moved between two runs of the same
     # tree would make every committed record a snapshot rather than a fact.
@@ -390,8 +390,7 @@ def _moved(record: Baseline, name: str, **fields: Any) -> Baseline:
     return replace(record, measurements=held)
 
 
-@pytest.mark.structural
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_fit_is_compared_within_its_declared_tolerance_and_not_bitwise() -> None:
     # The comparison issue #527 is about, against the observation that raised
     # it. A recorded maximum-likelihood fit is an iterative optimiser over a
@@ -425,8 +424,7 @@ def test_a_fit_is_compared_within_its_declared_tolerance_and_not_bitwise() -> No
     assert "index 0" in found[0], found[0]
 
 
-@pytest.mark.structural
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_value_that_declares_no_tolerance_is_still_compared_exactly() -> None:
     # The other half of the rule: an enumerated optimum, a ground-state
     # energy and a rate over seeded rollouts are counted or enumerated, not
@@ -443,7 +441,7 @@ def test_a_value_that_declares_no_tolerance_is_still_compared_exactly() -> None:
     assert any("enumerated_optimum" in line for line in found), found
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_record_cannot_loosen_the_tolerance_it_is_checked_at() -> None:
     # A tolerance is a declaration, and the record is not what gets to relax
     # the check it is caught by --- the failure #527 names is a record edited
@@ -464,7 +462,7 @@ def test_a_record_cannot_loosen_the_tolerance_it_is_checked_at() -> None:
     assert any("rtol 0.001" in line for line in found), found
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_writer_refuses_a_record_it_does_not_know() -> None:
     with pytest.raises(ValueError, match="no baseline spec"):
         baseline_script.selected(["tree_search/nonexistent"])
@@ -526,7 +524,7 @@ def _notebook_code(path: Path) -> str:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_no_qa_script_builds_its_own_instance() -> None:
     # A figure whose instance is typed into the module has inputs the stamp
     # cannot see, and the catalogue cannot claim it.
@@ -542,7 +540,7 @@ def test_no_qa_script_builds_its_own_instance() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_no_notebook_builds_its_own_instance() -> None:
     offenders = {
         path.name: sorted(_constructions(_notebook_code(path)))
@@ -556,7 +554,7 @@ def test_no_notebook_builds_its_own_instance() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_guard_catches_a_constructed_instance() -> None:
     # Guards the guard, per the repository's pattern: an import or an
     # annotation is not a construction, and a call is.

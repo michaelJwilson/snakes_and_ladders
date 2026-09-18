@@ -34,7 +34,7 @@ import document_orphans  # noqa: E402
 TEXTBOOK_SOURCES = ("textbook.tex", "notation.tex", "preamble.tex")
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_rendered_figure_no_document_cites_is_seen() -> None:
     # A figure the manifest renders, paid for at the release gate, and read
     # by nobody. Not asserted empty -- whether each should exist is issue #492's -- but
@@ -47,7 +47,7 @@ def test_a_rendered_figure_no_document_cites_is_seen() -> None:
     assert set(uncited).isdisjoint(document_orphans.cited_figures())
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_statement_the_release_checklist_has_no_box_for_is_seen() -> None:
     # The second orphan shape. Reported and not gated: adding the boxes is the
     # release follow-up's. What is asserted is that the checklist was read at
@@ -60,7 +60,7 @@ def test_a_statement_the_release_checklist_has_no_box_for_is_seen() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_key_travels_one_way_and_the_textbook_names_no_code() -> None:
     # The constraint the whole design rests on (root `CLAUDE.md`, issue #249):
     # the catalogue may name the document, and the document may name no code.

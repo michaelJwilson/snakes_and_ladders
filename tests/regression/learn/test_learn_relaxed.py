@@ -150,7 +150,7 @@ def test_the_expected_discrete_score_equals_the_score_at_the_marginals(
         assert enumerated == pytest.approx(closed_form, rel=1e-11)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_term_over_three_distinct_sites_does_not_break_the_identity() -> None:
     # The boundary is easy to state wrongly, and "the terms must be pairwise"
     # is one of the wrong statements. Three distinct sites is still one factor
@@ -174,7 +174,7 @@ def test_a_term_over_three_distinct_sites_does_not_break_the_identity() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_term_using_one_site_twice_does_break_the_identity() -> None:
     # What actually breaks it: `E[X**2]` is `E[X]` for an indicator and not
     # `E[X]**2`. Not hypothetical -- `PottsGraph` permits a doubled bond,
@@ -201,7 +201,7 @@ def test_a_term_using_one_site_twice_does_break_the_identity() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> None:
     # A multilinear function on a product of simplices attains its maximum at
     # a vertex, so the relaxed optimum cannot exceed the discrete one: what a
@@ -221,7 +221,7 @@ def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> No
         assert value <= best + 1e-12
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_two_objectives_satisfy_the_protocol() -> None:
     # Estimators, exact gradient and optimizer are written against
     # `RelaxedObjective`, never against a Potts chain or an HMM.
@@ -232,7 +232,7 @@ def test_the_two_objectives_satisfy_the_protocol() -> None:
 # --- 3. The estimators, against the exact gradient ------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("mode", list(RelaxationMode))
 def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     mode: RelaxationMode,
@@ -282,7 +282,7 @@ def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     assert min(biases) > 0.05
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_more_samples_cut_the_variance_and_leave_the_bias() -> None:
     # The distinction the two are reported separately for: averaging is a
     # variance reduction and not a bias reduction, so a method that fails
@@ -339,7 +339,7 @@ def test_the_exact_gradient_matches_a_finite_difference() -> None:
 # --- 4. Against the baseline, at matched restarts -------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     # The comparison that decides whether this is worth having, on shared
     # seeds with the exact optimum as the target. Measured over 40 restarts:
@@ -400,7 +400,7 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     assert p_value < 0.01
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
     # Reported as a tie because it is one, the precedent #193 set for the tree
     # policy.
@@ -438,7 +438,7 @@ def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
         assert p_value > 0.05
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_hmm_path_is_recovered_from_every_restart() -> None:
     # The HMM half validates correctness, not difficulty: Viterbi is exact in
     # `O(T k**2)`. Recovering it from 20 of 20 restarts checks that the
@@ -464,7 +464,7 @@ def test_the_hmm_path_is_recovered_from_every_restart() -> None:
 # --- 5. The pieces --------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("mode", list(RelaxationMode))
 def test_a_gumbel_softmax_sample_is_row_stochastic(mode: RelaxationMode) -> None:
     generator = torch.Generator().manual_seed(2)
@@ -477,7 +477,7 @@ def test_a_gumbel_softmax_sample_is_row_stochastic(mode: RelaxationMode) -> None
     assert float(sample.min()) >= 0.0
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_straight_through_is_one_hot_forward_and_soft_backward() -> None:
     # The identity the mode is built on, checked on both halves: the value is
     # a corner, and the gradient is not the corner's (which would be zero
@@ -495,7 +495,7 @@ def test_straight_through_is_one_hot_forward_and_soft_backward() -> None:
     assert float(np.abs(logits.grad.numpy()).max()) > 0.0
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_gumbel_draws_are_independent_across_calls() -> None:
     # The generator is passed in rather than seeded inside, so a batch is
     # independent. Seeding per call silently makes every draw identical.
@@ -510,7 +510,7 @@ def test_the_gumbel_draws_are_independent_across_calls() -> None:
     assert len(drawn) > 1
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_temperature_below_the_floor_is_refused() -> None:
     with pytest.raises(ValueError, match="temperature must be >="):
         gumbel_softmax(
@@ -528,7 +528,7 @@ def test_a_temperature_below_the_floor_is_refused() -> None:
         (1.0, 0.1, 0, "steps must be at least 1"),
     ],
 )
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_invalid_annealing_is_refused(
     temperature: float, final_temperature: float, steps: int, message: str
 ) -> None:
@@ -544,7 +544,7 @@ def test_an_invalid_annealing_is_refused(
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_annealing_reaches_the_final_temperature_during_optimization() -> None:
     # Both schedules are supported because the fixed-`tau` sweep is the
     # measurement and annealing the practice. Checked here: the annealed run

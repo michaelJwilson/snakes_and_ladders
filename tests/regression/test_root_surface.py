@@ -21,7 +21,7 @@ from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import PottsGraph
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.critical
 def test_every_exported_name_is_the_object_its_module_declares() -> None:
     declared = {
@@ -39,7 +39,7 @@ def test_every_exported_name_is_the_object_its_module_declares() -> None:
         assert getattr(snakes_and_ladders, name) is expected
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_bare_import_loads_no_submodule() -> None:
     # Resolved on first use: the root names `learn.environment`, and `learn`
     # imports `torch`, so the check is on the bare import in a fresh process.
@@ -54,13 +54,13 @@ def test_the_bare_import_loads_no_submodule() -> None:
     assert result.stdout.strip() == "[]"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_name_outside_the_surface_is_refused() -> None:
     with pytest.raises(AttributeError, match="no attribute 'double'"):
         _ = snakes_and_ladders.double
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_submodule_resolves_on_first_use_and_loads_nothing_beside_it() -> None:
     """``sal.sim.tree`` reads as written, and costs ``sim.tree`` alone.
 
@@ -86,7 +86,7 @@ def test_a_submodule_resolves_on_first_use_and_loads_nothing_beside_it() -> None
     assert run.stdout.strip() == "[]"
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_name_that_is_no_submodule_is_refused() -> None:
     """A misspelling raises ``AttributeError``, as an attribute would."""
     with pytest.raises(AttributeError, match="no attribute 'nope'"):

@@ -59,7 +59,6 @@ def test_the_rust_sampler_is_bit_identical_to_the_oracle(
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
 @pytest.mark.oracle
 def test_both_agree_on_a_row_that_does_not_quite_sum_to_one() -> None:
     # The case `snakes_and_ladders.numerics`' docstring calls out as ordinary float64
@@ -79,7 +78,7 @@ def test_both_agree_on_a_row_that_does_not_quite_sum_to_one() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_degenerate_distribution_selects_its_only_supported_category() -> None:
     # Point masses make the answer known without reference to either
     # implementation, so this catches a row-indexing error the randomized
@@ -110,7 +109,6 @@ def test_the_generator_is_consumed_identically_by_both() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
 @pytest.mark.oracle
 def test_a_non_contiguous_input_gives_the_same_answer() -> None:
     # Borrowing rather than copying makes stride a real concern where it was
@@ -130,7 +128,7 @@ def test_a_non_contiguous_input_gives_the_same_answer() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_one_dimensional_distribution_is_refused() -> None:
     # Matching the oracle's own refusal: a 1-D distribution has no row to
     # select, and broadcasting past it would sample from the wrong thing.
@@ -139,7 +137,7 @@ def test_a_one_dimensional_distribution_is_refused() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_row_index_past_the_distributions_is_refused() -> None:
     with pytest.raises(ValueError, match=r"outside \[0, 2\)"):
         accelerated(

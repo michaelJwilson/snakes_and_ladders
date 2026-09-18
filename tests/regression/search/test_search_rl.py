@@ -129,7 +129,7 @@ def _mirrored(topology: Topology) -> Topology:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_environment_satisfies_the_protocol() -> None:
     environment, _, _ = _environment()
     assert isinstance(environment, Environment)
@@ -138,7 +138,7 @@ def test_the_environment_satisfies_the_protocol() -> None:
 # --- uniform branch lengths ----------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_uniform_branch_lengths_relabel_every_edge_but_the_root() -> None:
     params = _params()
     labelled = with_uniform_branch_lengths(params.tau, 0.25)
@@ -149,7 +149,7 @@ def test_uniform_branch_lengths_relabel_every_edge_but_the_root() -> None:
     assert leaf_bipartitions(labelled) == leaf_bipartitions(params.tau)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("branch_length", [0.0, -0.1])
 def test_a_non_positive_branch_length_is_rejected(branch_length: float) -> None:
     # A zero-length branch identifies two nodes, and a likelihood evaluated
@@ -187,7 +187,7 @@ def test_the_fitted_score_is_the_maximized_likelihood() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_fitted_score_is_never_below_the_known_one() -> None:
     # The known surface fixes the branch lengths the fitted one optimizes, so it
     # can only do worse, topology by topology: the cheap reward is a different
@@ -201,7 +201,7 @@ def test_the_fitted_score_is_never_below_the_known_one() -> None:
         assert fitted.score(topology) >= known.score(topology) - 1e-9
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_reward_is_the_improvement_it_reports() -> None:
     environment, _, alignment = _environment()
     state = next(iter(enumerate_topologies(sorted(alignment))))
@@ -213,7 +213,7 @@ def test_a_reward_is_the_improvement_it_reports() -> None:
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_an_episode_return_telescopes_to_its_total_improvement() -> None:
     environment, _, alignment = _environment()
     start = next(iter(enumerate_topologies(sorted(alignment))))
@@ -228,7 +228,7 @@ def test_an_episode_return_telescopes_to_its_total_improvement() -> None:
 # --- what the policy sees --------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
     # One feature, so the policy is a Boltzmann distribution over moves whose
     # single weight is an inverse temperature --- the claim that makes the
@@ -247,7 +247,7 @@ def test_the_only_feature_is_the_reward_the_move_would_buy() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
     # The path `snakes_and_ladders.learn.rollout.rollout` takes through the
     # environment. At a large positive weight the policy is effectively greedy,
@@ -271,7 +271,7 @@ def test_a_policy_rollout_telescopes_like_the_greedy_one() -> None:
 # --- caching --------------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_topology_is_scored_once_however_it_is_spelled() -> None:
     # `leaf_bipartitions` is rooting- and child-order-independent, so a tree
     # reached by two move sequences costs one evaluation. Without it the cheap
@@ -286,7 +286,7 @@ def test_a_topology_is_scored_once_however_it_is_spelled() -> None:
     assert environment.evaluations == 1
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_neighbourhood_excludes_the_state_and_repeats() -> None:
     environment, _, alignment = _environment()
     state = next(iter(enumerate_topologies(sorted(alignment))))
@@ -303,7 +303,7 @@ def test_the_neighbourhood_excludes_the_state_and_repeats() -> None:
 # --- terminal states and the baseline ------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_terminal_state_is_one_no_move_improves() -> None:
     environment, _, alignment = _environment()
     for topology in enumerate_topologies(sorted(alignment)):
@@ -329,7 +329,7 @@ def test_greedy_search_reaches_the_enumerated_optimum() -> None:
         assert episode.terminated
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_known_optimum_is_the_generating_topology_here() -> None:
     environment, params, alignment = _environment()
     scored = {
@@ -343,7 +343,7 @@ def test_the_known_optimum_is_the_generating_topology_here() -> None:
 # --- boundaries -----------------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_reset_is_reproducible_from_its_seed() -> None:
     environment, _, _ = _environment()
     first = environment.reset(np.random.default_rng(3))
@@ -351,7 +351,7 @@ def test_reset_is_reproducible_from_its_seed() -> None:
     assert leaf_bipartitions(first) == leaf_bipartitions(second)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_known_reward_under_a_general_model_needs_its_rate_matrix() -> None:
     # A general model at known parameters is a Q and a pi, not a branch length
     # alone. Refused rather than silently scored as Jukes-Cantor, which is what
@@ -444,7 +444,7 @@ def test_the_general_q_path_reduces_to_jukes_cantor_at_its_rate_matrix() -> None
         assert_allclose(general.score(topology), environment.score(topology), rtol=1e-9)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @stress_only(
     "a GTR fit optimizes lengths, exchangeabilities and pi per topology, "
     "and the same inequality is pinned under Jukes-Cantor in the CI tier"
@@ -478,7 +478,7 @@ def test_the_fitted_gtr_score_is_never_below_the_known_one() -> None:
 # --- the full feature set --------------------------------------------------
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_full_set_is_seven_standardized_columns() -> None:
     environment, _, alignment = _environment(features=FeatureSet.FULL)
     assert environment.feature_set is FeatureSet.FULL
@@ -571,7 +571,7 @@ def test_the_subtree_columns_are_the_sizes_of_the_exchanged_subtrees() -> None:
             assert raw[row, 6] == abs(len(detached) - len(attached))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_standardizing_one_row_or_a_constant_column_gives_zeros() -> None:
     # One action, or a column every action shares: no spread to divide by,
     # and zero is what a constant is worth to a softmax.
@@ -586,7 +586,7 @@ def test_standardizing_one_row_or_a_constant_column_gives_zeros() -> None:
     assert exchanged_subtrees(same, same) == (frozenset(), frozenset())
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_too_few_taxa_is_rejected() -> None:
     params = _params()
     alignment = _alignment(params)

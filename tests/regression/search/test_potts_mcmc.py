@@ -142,7 +142,7 @@ def test_the_chain_is_still_exact_in_an_external_field(move: PottsMove) -> None:
     assert _goodness_of_fit(move, WITH_FIELD) > SIGNIFICANCE
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_dropping_the_field_accept_step_is_caught(
     move: PottsMove, monkeypatch: pytest.MonkeyPatch
@@ -168,7 +168,7 @@ def test_dropping_the_field_accept_step_is_caught(
     assert _goodness_of_fit(move, WITH_FIELD) < SIGNIFICANCE
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("move", [PottsMove.SWENDSEN_WANG, PottsMove.WOLFF])
 def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
     # `1 - exp(-J)` is above 1 for J < 0, so it is not a probability, and an
@@ -179,7 +179,7 @@ def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
         sample_potts(graph, NO_FIELD, move, np.random.default_rng(SEED), 10)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_single_site_still_runs_on_a_negative_coupling() -> None:
     # The refusal is a property of the cluster construction, not of the model.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
@@ -232,7 +232,7 @@ def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> floa
     return tau * chain.mean_cluster_size / graph.n_nodes
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
     # The ordering is the claim; the seeded values are pinned beside it
     # because the sibling test below is worth nothing unless both halves of
@@ -254,7 +254,7 @@ def test_cluster_updates_decorrelate_faster_at_the_transition() -> None:
     assert wolff < single
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
     # The other half of the claim above, and why the comparison runs at the
     # transition. The registry's lattice is 9 sites at J = 0.6, well below
@@ -284,7 +284,7 @@ def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_wolff_cluster_is_smaller_than_the_lattice_but_larger_than_a_site() -> None:
     # What makes the normalization above necessary, pinned so a change that
     # made every cluster a single site -- which would silently turn Wolff into
@@ -348,7 +348,7 @@ def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     assert np.abs(scaled - expected).max() == 0.0
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("move", list(PottsMove))
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
@@ -378,7 +378,7 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     assert chi_square_p_value(observed, probability * SWEEPS) > SIGNIFICANCE
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_non_positive_temperature_is_refused() -> None:
     # At zero the heat bath is an argmin and the chain is a descent that
     # samples nothing; a negative temperature inverts the model.
@@ -469,7 +469,7 @@ def _replica_p_values(
     return p_values
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
 def test_every_replica_is_drawn_from_its_own_tempered_distribution(
     backend: Backend,
@@ -499,7 +499,7 @@ def test_every_replica_is_drawn_from_its_own_tempered_distribution(
     assert min(_replica_p_values(run, graph, WITH_FIELD)) > SIGNIFICANCE
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -> None:
     # The negative case, paired with the positive one above. An exchange that
     # ignores (beta_i - beta_j)(E_i - E_j) still runs and still mixes -- every
@@ -525,7 +525,7 @@ def test_omitting_the_exchange_term_is_caught(monkeypatch: pytest.MonkeyPatch) -
     assert max(_replica_p_values(run, graph, WITH_FIELD)) < SIGNIFICANCE
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_replicas_draw_from_separate_streams_and_one_seed_reproduces_them() -> None:
     # Two replicas at the *same* temperature with no field would be identical
     # chains if they shared a stream, while every diagnostic looked healthy.
@@ -559,7 +559,7 @@ def test_the_best_configuration_is_the_lowest_energy_any_replica_visited() -> No
     assert run.best_energy <= visited.min() + 1e-12
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
@@ -569,7 +569,7 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
         parallel_tempering(graph, NO_FIELD, (1.0, 0.0), np.random.default_rng(SEED), 10)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
     # The instance where restarts can lose: the planted Viana-Bray spin
     # glass, 60 sites at mean degree 4 and frustration 0.2, whose planted
@@ -638,7 +638,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
     assert hits["tempering"] >= 10, hits
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_sweep_has_no_numba_backend() -> None:
     # The descent has one and the sampler does not: a sampler's pin is
     # distributional, and root CLAUDE.md admits one compiled path per
@@ -666,7 +666,7 @@ PROBE_SWEEPS = 50
 HAND_LADDER = (2.0, 1.2, 0.7, 0.4)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @at_scale("n_seeds", ci=10, stress=20)
 def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
     n_seeds: int,
@@ -712,7 +712,7 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
         assert bool((fresh.swap_acceptance < 0.9).all()), fresh.swap_acceptance
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @at_scale("n_seeds", ci=10, stress=20)
 def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
     n_seeds: int,
@@ -823,7 +823,7 @@ def test_the_backends_agree_bitwise_at_every_temperature(
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
     # PyO3 reports a dimensionality mismatch as "'ndarray' object is not an
     # instance of 'ndarray'", which names neither shape (issue #571).
@@ -862,7 +862,7 @@ def test_the_kernel_names_the_shape_it_wanted_and_the_shape_it_got() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_field_of_the_wrong_dimensionality_names_its_shape() -> None:
     # PyO3 would reject a 1-D field before the kernel body, as "'ndarray'
     # object is not an instance of 'ndarray'" (issue #571). The field is taken

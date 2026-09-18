@@ -92,7 +92,7 @@ def test_the_score_is_the_negated_energy_bitwise(side: int, n_states: int) -> No
         assert environment.score(state) == theirs
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_step_is_the_score_difference() -> None:
     """Every action's reward equals the change in `score` it caused.
 
@@ -115,7 +115,7 @@ def test_a_step_is_the_score_difference() -> None:
             )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_keyed_move_replays_and_is_not_degenerate() -> None:
     """The same state and action give the same successor; a different state does not.
 
@@ -137,7 +137,7 @@ def test_a_keyed_move_replays_and_is_not_degenerate() -> None:
     assert len(others) > 1
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_key_is_stable_across_processes() -> None:
     """The key is a digest of the bytes, not `hash`, so it survives a restart.
 
@@ -193,7 +193,7 @@ def test_the_sweep_at_zero_is_one_icm_sweep(side: int) -> None:
     assert environment.score(state) == pytest.approx(-value, abs=1e-9)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_steepest_ascent_is_a_different_baseline() -> None:
     """The best flip anywhere is not ICM, and it converges to its own optimum.
 
@@ -279,7 +279,7 @@ def test_nine_sites_enumerate_to_the_same_optimum() -> None:
     assert best == exact
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_sweep_costs_what_the_suite_charges() -> None:
     """A sweep is `n_nodes + 2 n_edges` visits, and a flip its own degree plus one.
 
@@ -309,7 +309,7 @@ def test_a_sweep_costs_what_the_suite_charges() -> None:
     assert all(2 <= environment.visits(state, a) <= 5 for a in flips)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_scored_subset_belongs_to_the_state() -> None:
     """The same state offers the same candidates every time it is reached.
 
@@ -332,7 +332,7 @@ def test_the_scored_subset_belongs_to_the_state() -> None:
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_features_carry_no_constant_column() -> None:
     """None of the three columns is constant across a state's actions.
 
@@ -350,7 +350,7 @@ def test_the_features_carry_no_constant_column() -> None:
     assert (features.std(axis=0) > 0.0).all()
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
@@ -383,7 +383,7 @@ def test_an_unusable_construction_is_refused(
         PottsNDEnvironment(**{**base, **kwargs})  # type: ignore[arg-type]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_uniform_field_is_refused_by_shape() -> None:
     """A `(n_states,)` field is the old environment's, and this one refuses it.
 

@@ -36,7 +36,7 @@ from snakes_and_ladders.qa.style import (
 )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_blend_with_white_interpolates_between_white_and_the_colour() -> None:
     assert blend_with_white("#0072B2", 0.0) == (1.0, 1.0, 1.0, 1.0)
     r, g, b, a = blend_with_white("#0072B2", 1.0)
@@ -47,7 +47,7 @@ def test_blend_with_white_interpolates_between_white_and_the_colour() -> None:
         blend_with_white("#000000", 1.5)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_with_opacity_keeps_the_colour_and_clips_the_alpha() -> None:
     rgba = with_opacity(["#000000", "#FFFFFF", "#0072B2"], [-0.5, 0.25, 7.0])
     np.testing.assert_allclose(rgba[:, 3], [0.0, 0.25, 1.0])
@@ -57,7 +57,7 @@ def test_with_opacity_keeps_the_colour_and_clips_the_alpha() -> None:
         with_opacity(["#000000"], [0.1, 0.2])
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_state_palette_is_eight_distinct_colours_apart_from_the_series_palette() -> (
     None
 ):
@@ -72,7 +72,7 @@ def test_state_palette_is_eight_distinct_colours_apart_from_the_series_palette()
         discrete_palette(2, highlight=5)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_notebook_style_lowers_the_dpi_and_keeps_the_letter_face() -> None:
     with letter_style():
         letter_dpi = mpl.rcParams["figure.dpi"]
@@ -82,7 +82,7 @@ def test_notebook_style_lowers_the_dpi_and_keeps_the_letter_face() -> None:
     assert letter_dpi == 200
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_marker_size_shrinks_with_density_inside_its_clamps() -> None:
     assert marker_size(1) == 25.0
     assert marker_size(1_200) == pytest.approx(10.0)
@@ -91,7 +91,7 @@ def test_marker_size_shrinks_with_density_inside_its_clamps() -> None:
         marker_size(0)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_spatial_grid_gives_one_panel_per_feature_and_switches_the_rest_off() -> None:
     coords = np.array([[x, y] for x in range(3) for y in range(3)], dtype=float)
     features = {
@@ -116,7 +116,7 @@ def test_spatial_grid_gives_one_panel_per_feature_and_switches_the_rest_off() ->
         spatial_grid(coords, {})
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_grouped_tracks_stacks_groups_with_a_gap_between_them() -> None:
     fig, axes = grouped_tracks(3, 2, title="tracks")
     try:
@@ -139,7 +139,7 @@ def test_grouped_tracks_stacks_groups_with_a_gap_between_them() -> None:
         grouped_tracks(0, 2)
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_joint_distribution_has_a_joint_panel_two_marginals_and_a_handle_per_group() -> (
     None
 ):
@@ -167,7 +167,7 @@ def test_joint_distribution_has_a_joint_panel_two_marginals_and_a_handle_per_gro
         joint_distribution(np.full(3, np.nan), np.zeros(3), np.zeros(3), {})
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_discrete_legend_names_every_category_by_its_colour() -> None:
     fig, ax = plt.subplots()
     try:

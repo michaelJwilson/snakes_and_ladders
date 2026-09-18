@@ -55,7 +55,7 @@ def _dataset(instance: Fixture) -> tuple[Node, dict[str, np.ndarray], int]:
     return params.tau, dict(dataset.alignment), params.k
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @at_fixture("instance", "tree_scale")
 def test_neighbour_joining_recovers_the_declared_topology(instance: Fixture) -> None:
     # The step 1 result, pinned rather than remembered: this is the
@@ -69,7 +69,7 @@ def test_neighbour_joining_recovers_the_declared_topology(instance: Fixture) -> 
     assert float(normalized_robinson_foulds(recovered, truth)) == 0.0
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @at_fixture("instance", "tree_scale")
 def test_a_budgeted_search_reaches_its_own_maximum_at_this_size(
     instance: Fixture,
@@ -95,7 +95,7 @@ def test_a_budgeted_search_reaches_its_own_maximum_at_this_size(
     assert result.evaluations <= _BUDGET
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_declared_height_bounds_every_root_to_tip_path() -> None:
     # Why the ladder is expressible at all: holding the *edge* length fixed
     # grows the diameter with the leaf count, and by 20 leaves distant pairs
@@ -108,7 +108,7 @@ def test_the_declared_height_bounds_every_root_to_tip_path() -> None:
         assert max(_root_to_tip(tree)) == pytest.approx(0.25)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("n_taxa", "height", "match"),
     [

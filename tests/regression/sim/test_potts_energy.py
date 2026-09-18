@@ -89,7 +89,7 @@ def test_one_labelling_is_the_block_of_one(name: str) -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_configuration_of_the_wrong_width_is_refused() -> None:
     # Broadcast rather than refused, this returns energies for a different
     # model -- the failure `log_weights` refuses the same way.

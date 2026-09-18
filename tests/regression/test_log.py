@@ -21,7 +21,7 @@ def _logger(name: str, stream: io.StringIO, ticks: list[float]) -> RunLogger:
     return get_logger(name, start_time=0.0, stream=stream, clock=lambda: next(times))
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_line_carries_the_elapsed_minutes_the_phase_and_the_call_site() -> None:
     stream = io.StringIO()
     logger = _logger("sal.test.format", stream, [90.0, 150.0])
@@ -39,7 +39,7 @@ def test_every_line_carries_the_elapsed_minutes_the_phase_and_the_call_site() ->
     assert second.endswith(" - inside one")
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_phase_is_shared_across_loggers_and_restored_on_exit() -> None:
     first_stream, second_stream = io.StringIO(), io.StringIO()
     first = _logger("sal.test.shared.a", first_stream, [0.0] * 4)
@@ -56,7 +56,7 @@ def test_the_phase_is_shared_across_loggers_and_restored_on_exit() -> None:
     assert first.runtime_phase is None
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_once_only_messages_are_emitted_once_per_message() -> None:
     stream = io.StringIO()
     logger = _logger("sal.test.once", stream, [0.0] * 10)
@@ -71,7 +71,7 @@ def test_once_only_messages_are_emitted_once_per_message() -> None:
     assert " - INFO - " in lines[2]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_reconfiguring_leaves_one_handler_and_nothing_propagates() -> None:
     root_stream = io.StringIO()
     root_handler = logging.StreamHandler(root_stream)
@@ -89,7 +89,7 @@ def test_reconfiguring_leaves_one_handler_and_nothing_propagates() -> None:
         logging.getLogger().removeHandler(root_handler)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_pre_existing_plain_logger_is_refused() -> None:
     logging.setLoggerClass(logging.Logger)
     logging.getLogger("sal.test.plain")

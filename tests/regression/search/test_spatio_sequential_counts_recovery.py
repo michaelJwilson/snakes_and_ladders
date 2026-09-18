@@ -103,7 +103,7 @@ def _fitted(instance: CountPairInstance) -> np.ndarray:
     ).labels
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @at_bin("factor", PROBLEM)
 def test_the_planted_labelling_is_recovered_at_every_bin_factor(factor: int) -> None:
     # The full test of one declared instance: simulate, bin, fit, assert. The
@@ -122,7 +122,7 @@ def test_the_planted_labelling_is_recovered_at_every_bin_factor(factor: int) -> 
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @stress_only("the 5K instance's 1.0e8 draws are simulated before anything is scored")
 def test_the_field_alone_names_every_vertex_class() -> None:
     # The same recovery without the spatial prior or the label solver: the
@@ -143,7 +143,7 @@ def test_the_field_alone_names_every_vertex_class() -> None:
     np.testing.assert_array_equal(np.argmin(field, axis=1), instance.labels)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @stress_only("the 5K instance's 1.0e8 draws are simulated before anything is summed")
 def test_the_negative_binomial_channel_aggregates_on_the_declared_instance() -> None:
     # The exactness `aggregate` claims, on the 5K instance's own counts rather

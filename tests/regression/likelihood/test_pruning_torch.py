@@ -158,7 +158,7 @@ def test_torch_matches_brute_force() -> None:
     assert_allclose(float(torch_ll), brute, rtol=_RTOL_ORACLE)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_rescaled_and_unrescaled_torch_paths_agree() -> None:
     tau = _small_tree_n6()
     k = 4
@@ -199,7 +199,7 @@ def test_matrix_exp_rate_matrix_path_matches_closed_form() -> None:
     assert_allclose(float(general), float(closed_form), rtol=_RTOL_ORACLE)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.oracle
 def test_gradient_matches_finite_differences_of_numpy_oracle() -> None:
     tau = _small_tree_n4()

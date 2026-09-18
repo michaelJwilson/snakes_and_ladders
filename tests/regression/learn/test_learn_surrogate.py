@@ -65,7 +65,7 @@ def _synthetic(
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_split_by_group_keeps_groups_whole_and_covers_everything() -> None:
     groups = np.repeat(np.arange(10), 4)
     split = split_by_group(groups)
@@ -80,7 +80,7 @@ def test_split_by_group_keeps_groups_whole_and_covers_everything() -> None:
         split_by_group(groups, (0.5, 0.5, 0.5))
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_linear_surrogate_recovers_a_linear_target_on_held_out_groups() -> None:
     # Without the token term the target is affine in the features; the
     # standardization and the offset are undone on the way out, so the
@@ -109,7 +109,7 @@ def test_linear_surrogate_recovers_a_linear_target_on_held_out_groups() -> None:
     assert fitted.kind is Bound.POINT
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 @pytest.mark.parametrize(
     "make",
     [
@@ -141,7 +141,7 @@ def test_models_explain_the_target_on_held_out_groups(make: object) -> None:
     assert fitted.epochs <= 200
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize(
     "make",
     [
@@ -181,7 +181,7 @@ def test_token_models_are_invariant_to_token_order(make: object) -> None:
     torch.testing.assert_close(fitted.predict(permuted), before, rtol=0.0, atol=1e-10)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_calibrated_bound_holds_at_its_coverage_on_fresh_groups() -> None:
     # Calibrated at 0.9 on 8 groups, the lower bound is above the truth on
     # no more than a fifth of 400 fresh examples: the nominal 10% plus the
@@ -213,7 +213,7 @@ def test_calibrated_bound_holds_at_its_coverage_on_fresh_groups() -> None:
         calibrate(fitted, test, Bound.LOWER, 1.0)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_argmax_agreement_and_r_squared_score_what_they_say() -> None:
     target = torch.tensor([1.0, 3.0, 2.0, 5.0, 4.0, 6.0])
     groups = np.array([0, 0, 0, 1, 1, 1])
@@ -223,7 +223,7 @@ def test_argmax_agreement_and_r_squared_score_what_they_say() -> None:
     assert r_squared(torch.full_like(target, float(target.mean())), target) == 0.0
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_curriculum_carries_weights_and_standardization_forward() -> None:
     rng = np.random.default_rng(8)
     first, second = _synthetic(rng, 4, 10, 0.1), _synthetic(rng, 4, 10, 0.1)
@@ -241,7 +241,7 @@ def test_curriculum_carries_weights_and_standardization_forward() -> None:
     assert len(np.unique(joined.groups)) == 8
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_augment_keeps_the_original_and_adds_the_copies() -> None:
     rng = np.random.default_rng(10)
     augmented = augment([1, 2], lambda x, r: x + int(r.integers(10, 20)), rng, 2)
@@ -250,7 +250,7 @@ def test_augment_keeps_the_original_and_adds_the_copies() -> None:
     assert len(augmented) == 6
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_examples_refuse_mismatched_lengths() -> None:
     with pytest.raises(ValueError, match="need 2 targets"):
         Examples(torch.zeros((2, 3)), torch.zeros(3), np.zeros(2, dtype=np.int64))

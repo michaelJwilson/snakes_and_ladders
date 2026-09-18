@@ -56,13 +56,13 @@ def test_the_chi_square_tail_matches_published_critical_values(
     assert realized == pytest.approx(tail, abs=5e-4)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_mismatched_shapes_are_refused() -> None:
     with pytest.raises(ValueError, match="disagree"):
         chi_square_p_value(np.ones(3), np.ones(4))
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_zero_expected_count_is_refused() -> None:
     # The statistic is infinite for any observation against a category the
     # model cannot produce, so the caller has chosen the wrong categories.
@@ -70,7 +70,7 @@ def test_a_zero_expected_count_is_refused() -> None:
         chi_square_p_value(np.ones(2), np.array([1.0, 0.0]))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_independent_draws_have_the_autocorrelation_time_of_independence() -> None:
     # 0.5 is the value for a series with no correlation, in the convention
     # `tau = 0.5 + sum_t rho(t)`.
@@ -98,14 +98,14 @@ def test_an_ar1_process_matches_its_closed_form() -> None:
     assert realized == pytest.approx(0.5 + correlation / (1.0 - correlation), rel=0.02)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_series_that_never_moved_reports_the_floor() -> None:
     # A constant chain has no correlation to measure, and is a sampler that
     # never moved rather than a fast one; the caller's own test sees it.
     assert integrated_autocorrelation_time(np.ones(1_000)) == 0.5
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_series_too_short_to_have_an_autocorrelation_is_refused() -> None:
     with pytest.raises(ValueError, match="at least two sweeps"):
         integrated_autocorrelation_time(np.array([1.0]))
@@ -135,7 +135,7 @@ def test_the_sign_test_matches_the_binomial_tail_sums(
     assert sign_test_p_value(-differences) == expected
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_ties_carry_no_sign_and_all_ties_is_nothing_to_test() -> None:
     assert sign_test_p_value(np.zeros(6)) == 1.0
     assert sign_test_p_value(np.array([0.0, 0.0, 2.0, 0.5])) == 0.5

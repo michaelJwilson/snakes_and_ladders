@@ -92,7 +92,7 @@ def test_successive_cancellation_is_the_reference_implementation_bitwise() -> No
             )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_list_at_one_path_is_plain_successive_cancellation() -> None:
     # True by construction -- `decode_sc` calls `decode_scl` -- and asserted
     # because the construction is what a later optimization would break.
@@ -150,7 +150,7 @@ def test_the_gap_to_maximum_likelihood_is_what_the_list_closes() -> None:
     assert failures["scl4"] - failures["ml"] <= 5
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_a_longer_list_never_decodes_worse_on_shared_seeds() -> None:
     # What a list is for, measured rather than assumed: the metric must order
     # candidates so that a larger list explores a superset. Block errors are
@@ -171,7 +171,7 @@ def test_a_longer_list_never_decodes_worse_on_shared_seeds() -> None:
     assert failures[-1] < failures[0]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_every_decoded_word_lies_in_the_code() -> None:
     # A decoder that returned something outside the code would be wrong in a
     # way no error rate reveals: the frozen source positions must be zero,
@@ -189,7 +189,7 @@ def test_every_decoded_word_lies_in_the_code() -> None:
             )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_a_noiseless_channel_returns_the_message_that_was_sent() -> None:
     # The end-to-end identity, at every list size: encode, hand the decoder
     # certain ratios, and the message comes back. It is the one case where the
@@ -204,7 +204,7 @@ def test_a_noiseless_channel_returns_the_message_that_was_sent() -> None:
             assert np.array_equal(decode_scl(code, certain, size).message, message)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_decoder_refuses_what_it_cannot_answer_for() -> None:
     code, _ = _instance()
     with pytest.raises(ValueError, match="ratios"):

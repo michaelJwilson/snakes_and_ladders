@@ -88,7 +88,7 @@ def test_both_reach_the_grid_optimum_from_every_start(learner: TabularLearner) -
         assert episode.total_reward == optimal.values[cell]
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_q_learning_matches_the_optimal_values_and_sarsa_does_not() -> None:
     """``max_a Q`` is ``V*`` for one method and is not for the other.
 
@@ -121,7 +121,7 @@ def test_q_learning_matches_the_optimal_values_and_sarsa_does_not() -> None:
     assert on_policy.largest_deviation(optimal) > 1.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_cliff_walk_separates_the_two_methods() -> None:
     """Q-learning hugs the cliff, SARSA keeps a row clear, and the returns order.
 
@@ -198,7 +198,7 @@ def test_the_cliff_walk_separates_the_two_methods() -> None:
     assert behaviour_on > behaviour_off
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("learner", [q_learning, sarsa])
 def test_the_chain_is_a_trap_without_optimistic_initialisation(
     learner: TabularLearner,
@@ -233,7 +233,7 @@ def test_the_chain_is_a_trap_without_optimistic_initialisation(
     assert optimistic.values[0][1] == pytest.approx(chain.prize, abs=0.1)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_chain_optimum_ties_so_a_greedy_route_may_dither() -> None:
     """The oracle itself ties at every interior state, and the learner may too.
 
@@ -264,7 +264,7 @@ def test_the_chain_optimum_ties_so_a_greedy_route_may_dither() -> None:
     assert learned.greedy_actions(1) != []
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_two_learners_share_their_loop() -> None:
     """With no exploration and one deterministic route, the two agree exactly.
 
@@ -285,7 +285,7 @@ def test_the_two_learners_share_their_loop() -> None:
     assert off_policy.updates == on_policy.updates
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
@@ -308,7 +308,7 @@ def test_an_unusable_setting_is_refused(kwargs: dict[str, float], message: str) 
         q_learning(GridWorld(), np.random.default_rng(0), start=(0, 0), **kwargs)  # type: ignore[arg-type]
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_terminal_start_costs_nothing_and_teaches_nothing() -> None:
     """Starting on the goal is a legal no-op, not a division by zero.
 

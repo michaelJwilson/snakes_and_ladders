@@ -59,7 +59,10 @@ run_check "cargo test --features sandbox" cargo test --locked --features sandbox
 # this is the one place that has to say otherwise. The expression is a
 # tautology written out rather than an empty `-m ""`, so that what it selects
 # is legible and a later reader does not delete it as a stray flag.
-run_check "pytest (full suite)" uv run pytest -m "release or not release" --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90
+run_check "pytest (full suite)" uv run pytest -m "release or not release" --cov=snakes_and_ladders --cov-report=term-missing --cov-fail-under=90 --cov-context=test
+# The judged floor (issue #729), recut from the run above; the floors live in
+# infra/gates.py beside the markers that count.
+run_check "judged coverage floor" uv run python infra/coverage_recut.py --fail-under
 # The full documentation build, not an incremental one (issue #485). `-E`
 # discards any saved environment and `-a` writes every output, so the verdict
 # is a function of the tree and not of whatever `docs/_build/` holds from an

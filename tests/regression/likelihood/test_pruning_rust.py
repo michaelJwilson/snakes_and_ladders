@@ -131,7 +131,7 @@ def test_rust_matches_brute_force() -> None:
     assert_allclose(rust_ll, brute, rtol=_RTOL_ORACLE)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_rescaled_and_unrescaled_rust_paths_agree() -> None:
     tau = _small_tree_n6()
     k = 4
@@ -148,7 +148,7 @@ def test_rescaled_and_unrescaled_rust_paths_agree() -> None:
     assert_allclose(rescaled, unrescaled, rtol=1e-10)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_rust_rejects_mismatched_pi_shape() -> None:
     tau = Node(
         name="root",
@@ -166,7 +166,7 @@ def test_rust_rejects_mismatched_pi_shape() -> None:
         pruning_rust.log_likelihood(tau, 4, np.full(3, 1.0 / 3), alignment)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_rust_rejects_alignment_missing_a_leaf() -> None:
     tau = Node(
         name="root",
@@ -181,7 +181,7 @@ def test_rust_rejects_alignment_missing_a_leaf() -> None:
         pruning_rust.log_likelihood(tau, 4, np.full(4, 0.25), alignment)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_rust_rejects_non_root_node_without_branch_length() -> None:
     tau = Node(
         name="root",
@@ -199,7 +199,7 @@ def test_rust_rejects_non_root_node_without_branch_length() -> None:
         pruning_rust.log_likelihood(tau, 4, np.full(4, 0.25), alignment)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.release
 def test_relative_tolerance_transfers_to_fixture_scale() -> None:
     """The tolerance holds at 200,000 sites, where an absolute one would not.

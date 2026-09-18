@@ -109,7 +109,7 @@ def test_the_covaried_rust_field_matches_the_numpy_oracle() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_without_a_covariate_the_rows_are_the_counts() -> None:
     """The uncovaried path is unchanged, not merely equivalent.
@@ -132,7 +132,7 @@ def test_without_a_covariate_the_rows_are_the_counts() -> None:
     assert success_table.shape[0] == int(observations[..., 1].max()) + 1
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_covaried_tabulation_stays_a_table() -> None:
     """The reason this is a table and not a per-observation score array.
 
@@ -158,7 +158,7 @@ def test_the_covaried_tabulation_stays_a_table() -> None:
     assert success_table.shape[0] < n_observations
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_covariate_changes_the_answer() -> None:
     """A backend that quietly dropped one would pass every test above."""
     instance = _instance()

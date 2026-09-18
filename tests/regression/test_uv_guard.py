@@ -86,7 +86,7 @@ def _ci_sync_commands() -> list[list[str]]:
     return [command.split() for command in found]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_narrowing_sync_is_refused_where_the_environment_is_shared(
     tmp_path: Path,
 ) -> None:
@@ -101,7 +101,7 @@ def test_a_narrowing_sync_is_refused_where_the_environment_is_shared(
     assert "repair_environment.py" in result.stderr
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_same_sync_is_permitted_where_the_environment_is_its_own(
     tmp_path: Path,
 ) -> None:
@@ -114,7 +114,7 @@ def test_the_same_sync_is_permitted_where_the_environment_is_its_own(
     assert result.stdout.strip() == "STUB sync --locked --extra test"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_every_ci_sync_line_passes_through_a_real_environment(
     tmp_path: Path,
 ) -> None:
@@ -135,7 +135,7 @@ def test_every_ci_sync_line_passes_through_a_real_environment(
         assert result.stdout.strip() == f"STUB {' '.join(command[1:])}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_syncing_run_is_refused_and_a_non_syncing_one_is_not(
     tmp_path: Path,
 ) -> None:
@@ -156,7 +156,7 @@ def test_a_syncing_run_is_refused_and_a_non_syncing_one_is_not(
     assert permitted.stdout.strip() == "STUB run python -c 0"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize(
     "arguments",
     [["--version"], ["pip", "list"], ["lock", "--check"], ["pip", "install", "sync"]],
@@ -175,7 +175,7 @@ def test_a_command_that_does_not_write_the_environment_passes_through(
     assert result.stdout.strip() == f"STUB {' '.join(arguments)}"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_explicit_private_environment_is_permitted_from_a_shared_worktree(
     tmp_path: Path,
 ) -> None:
@@ -190,7 +190,7 @@ def test_an_explicit_private_environment_is_permitted_from_a_shared_worktree(
     assert result.stdout.strip() == "STUB sync"
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_new_worktree_emits_the_path_that_installs_the_guard() -> None:
     """The guard reaches only shells that export it, so the script that makes
     a worktree is the one place that must not stop saying so (issue #404)."""

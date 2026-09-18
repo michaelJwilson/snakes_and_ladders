@@ -36,7 +36,7 @@ def age(path: Path, seconds: float) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_extension_older_than_its_rust_is_refused(tmp_path: Path) -> None:
     """The case that cost a 36-minute suite run and 67 false failures.
 
@@ -65,7 +65,7 @@ def test_an_extension_older_than_its_rust_is_refused(tmp_path: Path) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_an_extension_newer_than_its_rust_is_silent(tmp_path: Path) -> None:
     """The common case, which must cost nothing and say nothing.
 
@@ -79,7 +79,7 @@ def test_an_extension_newer_than_its_rust_is_silent(tmp_path: Path) -> None:
     assert stale_extension(tmp_path) == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_lockfile_bump_alone_outdates_the_extension(tmp_path: Path) -> None:
     """`Cargo.lock` counts: a dependency bump changes the binary and no `.rs`.
 
@@ -101,7 +101,7 @@ def test_a_lockfile_bump_alone_outdates_the_extension(tmp_path: Path) -> None:
     assert "Cargo.lock" in refusal
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_tree_with_no_extension_is_not_stale(tmp_path: Path) -> None:
     """A checkout that never built one: the import error says it far better.
 
@@ -114,7 +114,7 @@ def test_a_tree_with_no_extension_is_not_stale(tmp_path: Path) -> None:
     assert stale_extension(tmp_path) == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_tree_with_no_rust_is_not_stale(tmp_path: Path) -> None:
     """Nothing to be behind: the check is about `src/`, not about age."""
     built = tmp_path / "python" / "snakes_and_ladders"
@@ -126,7 +126,7 @@ def test_a_tree_with_no_rust_is_not_stale(tmp_path: Path) -> None:
     assert stale_extension(tmp_path) == ""
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_this_worktree_passes_its_own_guard() -> None:
     """The guard holds for the tree it ships in, which `conftest` already ran.
 

@@ -89,7 +89,7 @@ def _lattice(extent: int = 3, cardinality: int = 2) -> FactorGraph:
     return from_potts(graph, rng.normal(size=(graph.n_nodes, cardinality)))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_every_registered_name_resolves_to_its_class() -> None:
     assert set(SCHEDULES) == {str(member) for member in MessageScheduleName}
     for kind in (
@@ -103,7 +103,7 @@ def test_every_registered_name_resolves_to_its_class() -> None:
         assert resolve(kind()) is not None
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_schedule_named_by_a_plain_string_is_the_one_asked_for() -> None:
     # Before the seam, `sum_product` compared the argument with `is` against a
     # `StrEnum` member, so a plain string --- which compares *equal* to one but
@@ -119,7 +119,7 @@ def test_a_schedule_named_by_a_plain_string_is_the_one_asked_for() -> None:
     assert named.guarantee is Guarantee.EXACT
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unregistered_schedule_is_refused_by_name() -> None:
     with pytest.raises(ValueError, match="unknown schedule 'gibbs'"):
         sum_product(_chain(4), schedule="gibbs")
@@ -143,7 +143,7 @@ def test_the_upward_pass_alone_recovers_the_log_partition(graph: FactorGraph) ->
     assert half.guarantee is Guarantee.PARTIAL
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_upward_pass_defines_the_root_marginal_and_no_other() -> None:
     graph = _star(6)
 
@@ -156,7 +156,7 @@ def test_the_upward_pass_defines_the_root_marginal_and_no_other() -> None:
         half.variable["v0"]
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_downward_pass_reports_no_log_partition_rather_than_a_wrong_one() -> None:
     # It has seen no evidence from below, so neither route to `log Z` is open.
     # A number here would be a number for something it did not compute.
@@ -167,7 +167,7 @@ def test_the_downward_pass_reports_no_log_partition_rather_than_a_wrong_one() ->
     assert set(half.variable) == {f"v{i}" for i in range(5)}
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.parametrize("schedule", LOOPY_SCHEDULES)
 def test_an_iterative_schedule_reaches_the_exact_answer_on_a_tree(
     schedule: str,
@@ -182,7 +182,7 @@ def test_an_iterative_schedule_reaches_the_exact_answer_on_a_tree(
         np.testing.assert_allclose(settled.variable[name], row, atol=1e-8)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_two_iterative_schedules_find_the_same_fixed_point_on_a_loopy_graph() -> (
     None
 ):
@@ -199,14 +199,14 @@ def test_the_two_iterative_schedules_find_the_same_fixed_point_on_a_loopy_graph(
         np.testing.assert_allclose(seidel.variable[name], row, atol=1e-5)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("schedule", TREE_SCHEDULES)
 def test_a_tree_schedule_is_refused_on_a_loopy_graph(schedule: str) -> None:
     with pytest.raises(ValueError, match="exact only on a tree"):
         sum_product(_lattice(), schedule=schedule)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.parametrize("schedule", TREE_SCHEDULES + LOOPY_SCHEDULES)
 def test_every_schedule_runs_on_a_tree_adapted_from_another_problem(
     schedule: str,

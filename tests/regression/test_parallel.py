@@ -38,7 +38,7 @@ def _thread_count(_item: int) -> int:
     return torch.get_num_threads()
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("backend", list(BACKENDS))
 def test_results_come_back_in_input_order_under_every_backend(backend: Backend) -> None:
     # Input order, not completion order: the items are unequal enough in
@@ -53,7 +53,7 @@ def test_results_come_back_in_input_order_under_every_backend(backend: Backend) 
     assert results == [_square(item) for item in items]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("backend", ["threads", "processes"])
 def test_four_workers_draw_the_streams_one_worker_draws(backend: Backend) -> None:
     # The ticket's first rule: a parallel run is bitwise the serial run. Each
@@ -85,7 +85,7 @@ def test_four_workers_draw_the_streams_one_worker_draws(backend: Backend) -> Non
     ]
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_second_call_on_the_same_generator_draws_fresh_children() -> None:
     # `Generator.spawn` advances the spawn counter, not the stream: two calls
     # on one generator are two replicate sets, and a fresh generator with the
@@ -112,7 +112,7 @@ def test_a_second_call_on_the_same_generator_draws_fresh_children() -> None:
     assert again == first
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize("backend", list(BACKENDS))
 def test_a_task_that_raises_propagates_with_the_item_that_raised(
     backend: Backend,
@@ -131,7 +131,7 @@ def test_a_task_that_raises_propagates_with_the_item_that_raised(
     assert "task 2 of 4 raised on item 3" in "".join(excinfo.value.__notes__)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_unusable_worker_count_or_backend_is_refused() -> None:
     with pytest.raises(ValueError, match="at least one"):
         map_tasks(_square, [1], workers=0, backend="serial", intra_op_threads=None)
@@ -141,14 +141,14 @@ def test_an_unusable_worker_count_or_backend_is_refused() -> None:
         map_tasks(_square, [1], workers=2, backend="serial", intra_op_threads=None)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_no_items_is_an_empty_result_and_spawns_nothing() -> None:
     assert (
         map_tasks(_square, [], workers=4, backend="processes", intra_op_threads=1) == []
     )
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 @pytest.mark.parametrize("backend", ["serial", "threads"])
 def test_the_intra_op_thread_count_is_applied_inside_and_restored_after(
     backend: Backend,
@@ -166,7 +166,7 @@ def test_the_intra_op_thread_count_is_applied_inside_and_restored_after(
     assert torch.get_num_threads() == before
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_spawned_process_runs_at_the_thread_count_it_was_given() -> None:
     inside = map_tasks(
         _thread_count, [0, 1], workers=2, backend="processes", intra_op_threads=1

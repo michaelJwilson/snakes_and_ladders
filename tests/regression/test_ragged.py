@@ -11,7 +11,7 @@ from snakes_and_ladders.ragged import MINIMUM_LENGTH, Ragged
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_segments_tile_the_array_and_are_views() -> None:
     """Every row belongs to exactly one segment, and none is copied."""
     values = np.arange(9.0)
@@ -28,7 +28,7 @@ def test_the_segments_tile_the_array_and_are_views() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_one_position_segment_is_refused() -> None:
     """All initial distribution and no transition, so the shape is refused.
 
@@ -42,7 +42,7 @@ def test_a_one_position_segment_is_refused() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_lengths_that_do_not_tile_are_refused() -> None:
     """A batch whose lengths do not sum to its rows is not a batch."""
     with pytest.raises(ValueError, match="tile the array exactly"):
@@ -52,7 +52,7 @@ def test_lengths_that_do_not_tile_are_refused() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_rectangular_batch_is_a_ragged_one_with_equal_lengths() -> None:
     """The conversion every existing caller goes through, with its trailing axes."""
     array = np.arange(24.0).reshape(2, 3, 4)
@@ -63,7 +63,7 @@ def test_a_rectangular_batch_is_a_ragged_one_with_equal_lengths() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_padding_is_recoverable_and_the_mask_says_where() -> None:
     """The padded form loses nothing: the mask selects exactly the real rows.
 

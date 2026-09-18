@@ -74,7 +74,7 @@ def _eigen_transitions(rate_matrix: torch.Tensor, t: torch.Tensor) -> torch.Tens
     return transitions
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_inference_mode_returns_the_value_no_grad_returns() -> None:
     """Item 1: the two evaluation modes differ in bookkeeping, not in arithmetic.
 
@@ -89,7 +89,7 @@ def test_inference_mode_returns_the_value_no_grad_returns() -> None:
     assert inferred == taped_off
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_vmap_over_theta_reproduces_the_sequential_objective() -> None:
     """Item 2: batching over starting points changes no value.
 
@@ -123,7 +123,7 @@ def test_eigendecomposition_reproduces_matrix_exp() -> None:
     assert_allclose(actual.numpy(), expected.numpy(), rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_eigendecomposition_gives_a_transition_matrix() -> None:
     """Rows sum to 1 and no entry is negative, whichever route built them.
 
@@ -144,7 +144,7 @@ def test_eigendecomposition_gives_a_transition_matrix() -> None:
     assert float(transitions.min()) >= 0.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_transposed_operand_is_the_contiguous_one() -> None:
     """Item 5: ``transitions[i].T`` is a view, and BLAS reads it as one.
 

@@ -16,25 +16,25 @@ from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_jc_transition_probabilities_rejects_k_below_two() -> None:
     with pytest.raises(ValueError, match="k must be >= 2"):
         jc_transition_probabilities(0.1, k=1)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_jc_transition_probabilities_rejects_negative_branch_length() -> None:
     with pytest.raises(ValueError, match="t must be non-negative"):
         jc_transition_probabilities(-0.1, k=4)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_jc_rate_matrix_rejects_k_below_two() -> None:
     with pytest.raises(ValueError, match="k must be >= 2"):
         jc_rate_matrix(k=1)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_simulate_alignment_rejects_mismatched_pi_shape() -> None:
     tau = Node(
         name="root", branch_length=None, children=(Node(name="A", branch_length=0.1),)
@@ -49,7 +49,7 @@ def test_simulate_alignment_rejects_mismatched_pi_shape() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_simulate_alignment_rejects_non_root_node_without_branch_length() -> None:
     tau = Node(
         name="root", branch_length=None, children=(Node(name="A", branch_length=None),)
@@ -60,7 +60,7 @@ def test_simulate_alignment_rejects_non_root_node_without_branch_length() -> Non
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_load_simulation_params_rejects_missing_field(tmp_path: Path) -> None:
     incomplete = tmp_path / "incomplete.yaml"
     incomplete.write_text("seed: 0\nn_sites: 10\nk: 4\n")
@@ -68,7 +68,7 @@ def test_load_simulation_params_rejects_missing_field(tmp_path: Path) -> None:
         load_simulation_params(incomplete)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_load_simulation_params_rejects_mismatched_pi_shape(tmp_path: Path) -> None:
     bad_pi = tmp_path / "bad_pi.yaml"
     bad_pi.write_text(
@@ -87,7 +87,7 @@ def test_load_simulation_params_rejects_mismatched_pi_shape(tmp_path: Path) -> N
         load_simulation_params(bad_pi)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_load_simulation_params_rejects_pi_not_summing_to_one(tmp_path: Path) -> None:
     bad_pi = tmp_path / "bad_pi_sum.yaml"
     bad_pi.write_text(

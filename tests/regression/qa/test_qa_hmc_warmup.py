@@ -64,7 +64,7 @@ def test_the_target_is_the_gaussian_the_samplers_tests_use() -> None:
         torch.testing.assert_close(figure_target(point), oracle(point))
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_targets_constraint_map_inverts_itself() -> None:
     figure_target = target()
     theta = torch.tensor([1.5, -0.25], dtype=torch.float64)
@@ -74,7 +74,7 @@ def test_the_targets_constraint_map_inverts_itself() -> None:
     torch.testing.assert_close(figure_target.theta_from(named), theta)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_both_chains_are_correct_samplers_and_not_one_stuck_one() -> None:
     # The failure this prevents, and the one the first draft of this figure
     # had: a fixed step above the stability limit, so the comparison is
@@ -103,7 +103,7 @@ def test_both_chains_recover_the_exact_mean_within_monte_carlo_error() -> None:
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_warm_up_repays_its_discarded_draws() -> None:
     # The caption's claim, asserted: the adapted chain buys more effective
     # draws per gradient than the fixed one *after* being charged for the
@@ -113,7 +113,7 @@ def test_the_warm_up_repays_its_discarded_draws() -> None:
     assert _ess_per_gradient(ADAPTED) > _ess_per_gradient(FIXED)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_adapted_chain_settles_first() -> None:
     gaussian = target()
     exact_mean = float(gaussian.mean[TRACKED])
@@ -127,7 +127,7 @@ def test_the_adapted_chain_settles_first() -> None:
     assert adapted_draw < fixed_draw
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_settling_takes_the_last_excursion_and_not_the_first_entry() -> None:
     # A running mean that enters the band, leaves it, and returns is credited
     # with the return: the statistic is where it stays, not where it arrived.
@@ -140,7 +140,7 @@ def test_settling_takes_the_last_excursion_and_not_the_first_entry() -> None:
     assert settling_draw(np.array([SETTLED]), 0.0, 1.0) == 1
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_running_mean_is_a_running_mean() -> None:
     trace = running_mean(ADAPTED, TRACKED)
     draws = ADAPTED.theta[:, TRACKED].detach().numpy()
@@ -150,7 +150,7 @@ def test_the_running_mean_is_a_running_mean() -> None:
     assert trace[-1] == pytest.approx(draws.mean())
 
 
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_caption_reports_the_constants_the_figure_was_drawn_from(
     tmp_path: Path,
 ) -> None:

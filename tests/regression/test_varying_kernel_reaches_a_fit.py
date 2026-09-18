@@ -55,7 +55,7 @@ def _fit(
     return result.log_transition, result.log_likelihood
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_a_repeated_kernel_fits_what_the_single_matrix_fits() -> None:
     """The constant case is unchanged where the kernel is also fitted.
@@ -74,7 +74,7 @@ def test_a_repeated_kernel_fits_what_the_single_matrix_fits() -> None:
     assert single >= repeated - 1e-9
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_a_per_step_kernel_is_held_and_a_single_matrix_is_fitted() -> None:
     """The rule, asserted both ways so neither half can quietly change.
@@ -94,7 +94,7 @@ def test_a_per_step_kernel_is_held_and_a_single_matrix_is_fitted() -> None:
     assert not torch.allclose(fitted, start)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_a_held_kernel_comes_back_bitwise_and_unnormalized() -> None:
     """ "Held" means the caller's values, not a copy that agrees to a tolerance.
@@ -133,7 +133,7 @@ def test_a_held_kernel_comes_back_bitwise_and_unnormalized() -> None:
     )
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_held_kernel_explains_the_data_better_than_a_constant_one() -> None:
     """And it is worth holding: the varying truth beats the best single matrix.
 
@@ -154,7 +154,7 @@ def test_the_held_kernel_explains_the_data_better_than_a_constant_one() -> None:
     assert told > fitted + 1.0
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_kernel_of_the_wrong_length_is_refused_by_the_fit() -> None:
     """The refusal `forward_backward` makes, made where a fit can hit it."""
     observations = _chain(np.full(9, 0.9), 10, seed=1)
@@ -163,7 +163,7 @@ def test_a_kernel_of_the_wrong_length_is_refused_by_the_fit() -> None:
         _fit(observations, _kernels(np.full(4, 0.9)))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_spatial_params_take_a_matrix_for_the_chain_or_one_per_transition() -> None:
     """`(K, K)` and `(S - 1, K, K)` are the forms; the scalar rate stays the default.
 
@@ -204,7 +204,7 @@ def test_the_spatial_params_take_a_matrix_for_the_chain_or_one_per_transition() 
     np.testing.assert_array_equal(many.transition, stack)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_transition_that_is_not_row_stochastic_is_refused() -> None:
     """Either matrix form is a kernel, so its rows are distributions."""
     from dataclasses import replace

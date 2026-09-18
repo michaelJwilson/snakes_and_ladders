@@ -45,7 +45,7 @@ def test_no_seeding_beats_the_exact_optimal_cost_and_kmeanspp_meets_its_bound() 
     assert ratios.kmeans_plus_plus.mean() <= seeding_guarantee(TRUTH.n_components)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_generating_density_integrates_to_one() -> None:
     truth = TRUTH
     grid = np.linspace(-15.0, 15.0, 30001)
@@ -54,7 +54,7 @@ def test_the_generating_density_integrates_to_one() -> None:
     assert np.isclose(np.trapezoid(values, grid), 1.0, atol=1e-9)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_the_fit_lands_within_the_generating_density_scale() -> None:
     # A density fitted to 500 draws of this mixture cannot be held to the
     # truth to a tolerance nothing derives; what is held is that every fitted
@@ -70,7 +70,7 @@ def test_the_fit_lands_within_the_generating_density_scale() -> None:
     assert (fit.components.scale.numpy() < 3.0).all()
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_caption_reports_the_numbers_it_was_handed(tmp_path: Path) -> None:
     truth = TRUTH
     observations = simulate_mixture(truth).observations

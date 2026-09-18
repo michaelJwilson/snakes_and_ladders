@@ -183,7 +183,7 @@ def test_the_open_chain_path_reproduces_the_transfer_matrix_log_z() -> None:
     assert_allclose(observed, expected_single.mean(axis=0), atol=0.03)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     # A shape/alphabet check needs no equilibration, so it runs at a tiny
     # burn-in and sample count rather than the fixture's full,
@@ -203,7 +203,7 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     assert set(np.unique(dataset.configurations)) <= set(range(params.n_states))
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_simulation_is_reproducible_from_the_seed() -> None:
     params = load_potts_lattice_params(FIXTURE)
     graph = lattice_graph(
@@ -226,7 +226,7 @@ def test_simulation_is_reproducible_from_the_seed() -> None:
     assert np.array_equal(first.configurations, second.configurations)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("replace", "with_", "message"),
     [
@@ -246,7 +246,7 @@ def test_a_malformed_fixture_is_refused(
         load_potts_lattice_params(path)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_missing_field_is_refused(tmp_path: Path) -> None:
     text = "\n".join(
         line

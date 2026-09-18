@@ -154,7 +154,7 @@ def test_four_bounds_bracket_the_enumerated_log_partition() -> None:
     assert saturated - decoupled == pytest.approx(10.9007, abs=5e-4)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_decoupled_energy_bound_lies_below_every_configuration() -> None:
     # The bound is the sum of each term's own optimum, so no configuration
     # can beat it; a labelling attaining all of them at once need not exist,
@@ -268,7 +268,7 @@ def test_a_ci_fit_collapses_at_the_transfer_matrix_rung_and_recovers_on_transfer
         assert np.all(transferred.numpy() <= upper[held_out])
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.release
 def test_the_surrogates_predict_the_ground_state_energy_at_five_thousand_sites() -> (
     None

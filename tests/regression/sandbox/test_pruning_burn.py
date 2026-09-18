@@ -120,7 +120,7 @@ def test_gradient_matches_central_differences() -> None:
     assert_allclose(gradient, quotient, rtol=CENTRAL_DIFFERENCE_RTOL)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_gradcheck_in_float64() -> None:
     """``torch.autograd.gradcheck`` over the Rust tape's ``backward``."""
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 200)
@@ -133,7 +133,7 @@ def test_gradcheck_in_float64() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_gradient_is_float64_throughout() -> None:
     """The axis the dependency was adopted on: a narrowed tape cannot pass this.
 
@@ -147,7 +147,7 @@ def test_the_gradient_is_float64_throughout() -> None:
     assert_allclose(actual, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_weighted_patterns_give_the_uncompressed_gradient() -> None:
     """The compressed alignment with its weights is the full alignment's gradient."""
     tau, k, pi, alignment, lengths = _case(EIGHT_TAXA, 2000)
@@ -162,7 +162,7 @@ def test_weighted_patterns_give_the_uncompressed_gradient() -> None:
     assert_allclose(weighted, full, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_general_rate_matrix_is_refused() -> None:
     """`burn` has no matrix exponential, and the route says so rather than ignoring."""
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 100)
@@ -177,14 +177,14 @@ def test_a_general_rate_matrix_is_refused() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_branch_lengths_of_the_wrong_length_are_refused() -> None:
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 100)
     with pytest.raises(ValueError, match="branch_order"):
         pruning_burn.log_likelihood(tau, k, pi, alignment, lengths[:-1])
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_ragged_alignment_is_refused() -> None:
     tau, k, pi, alignment, lengths = _case(SMALL_SITES, 100)
     ragged = dict(alignment)

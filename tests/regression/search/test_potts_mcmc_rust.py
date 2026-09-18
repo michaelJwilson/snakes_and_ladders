@@ -122,7 +122,7 @@ def test_the_rust_chain_is_still_exact_in_an_external_field() -> None:
     assert _goodness_of_fit(WITH_FIELD) > SIGNIFICANCE
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_test_would_catch_a_sampler_that_ignored_the_field() -> None:
     """Evidence the two tests above have the power they claim.
 
@@ -151,7 +151,7 @@ def test_the_test_would_catch_a_sampler_that_ignored_the_field() -> None:
     assert chi_square_p_value(observed, with_field_truth * SWEEPS) < SIGNIFICANCE
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_kernel_reads_the_graph_s_own_adjacency() -> None:
     """Both backends read the same neighbour structure, because there is one.
 
@@ -184,7 +184,7 @@ def test_the_kernel_reads_the_graph_s_own_adjacency() -> None:
             assert float(coupling) in graph.coupling
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_chain_is_reproducible_from_its_generator() -> None:
     """A declared seed still determines the run.
 
@@ -200,7 +200,7 @@ def test_a_chain_is_reproducible_from_its_generator() -> None:
     assert np.array_equal(first.states, second.states)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_state_outside_the_alphabet_is_refused() -> None:
     """The kernel's own precondition, surfaced as a Python error.
 
@@ -272,7 +272,7 @@ def test_the_rust_chain_is_the_oracle_s_chain_state_for_state(
     np.testing.assert_array_equal(python.states, rust.states)
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_guard_wide_enough_hands_every_site_back() -> None:
     """The hand-back path itself, which no realistic draw reaches.
 
@@ -325,7 +325,7 @@ def test_a_guard_wide_enough_hands_every_site_back() -> None:
     np.testing.assert_array_equal(state, expected.states[-1])
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_the_kernel_refuses_a_negative_guard() -> None:
     """A guard is a width, and a negative one would decide every site."""
     from snakes_and_ladders import oxi_snakes_and_ladders
@@ -345,7 +345,7 @@ def test_the_kernel_refuses_a_negative_guard() -> None:
         )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_default_guard_hands_nothing_back_on_a_realistic_chain() -> None:
     """The rate the port is worth measuring at, pinned as an absence.
 

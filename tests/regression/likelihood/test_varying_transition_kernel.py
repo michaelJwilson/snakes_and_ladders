@@ -66,7 +66,7 @@ def _enumerate(
     return evidence, posterior, pairwise
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 @pytest.mark.parametrize(("n_states", "length", "seed"), [(2, 9, 1), (4, 12, 2)])
 def test_a_repeated_kernel_reproduces_the_single_matrix_bitwise(
@@ -94,7 +94,7 @@ def test_a_repeated_kernel_reproduces_the_single_matrix_bitwise(
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_the_torch_recursion_reproduces_its_matrix_form_bitwise() -> None:
     """The same claim for the differentiable path, which batches over sequences."""
@@ -117,7 +117,7 @@ def test_the_torch_recursion_reproduces_its_matrix_form_bitwise() -> None:
     assert one.item() == many.item()
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_constant_form_is_a_view_and_not_a_copy() -> None:
     """The ``T``-fold memory is paid by the caller who asks for it, by nobody else.
 
@@ -160,7 +160,7 @@ def test_a_varying_kernel_is_the_path_enumeration(
     np.testing.assert_allclose(run.pairwise, pairwise, rtol=1e-11, atol=1e-13)
 
 
-@pytest.mark.simulated_truth
+@pytest.mark.end2end
 def test_a_planted_two_regime_kernel_is_recovered_per_regime() -> None:
     """Recover a kernel that changes halfway, which no single matrix expresses.
 
@@ -214,7 +214,7 @@ def test_a_planted_two_regime_kernel_is_recovered_per_regime() -> None:
     assert np.abs(pooled - mixing).max() > 0.2
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_kernel_of_the_wrong_length_is_refused() -> None:
     """A step axis that is not ``T - 1`` is a model error, not a broadcast."""
     log_density, log_initial, log_transition = _chain(3, 7, 9)

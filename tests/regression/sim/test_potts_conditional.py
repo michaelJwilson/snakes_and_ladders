@@ -134,7 +134,7 @@ def test_the_block_form_is_the_single_chain_form_on_every_row() -> None:
         )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_an_isolated_site_carries_its_field_alone() -> None:
     # Degree zero is the boundary an empty row `offsets[i] == offsets[i + 1]`
     # reaches on a graph with an isolated node, and an empty sum must leave
@@ -151,7 +151,7 @@ def test_an_isolated_site_carries_its_field_alone() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_tempering_scales_the_whole_conditional() -> None:
     # Temperature is model scaling (`potts_mcmc.tempered`): beta multiplies
     # the field and the couplings together, so the conditional at beta is
@@ -175,7 +175,7 @@ def test_tempering_scales_the_whole_conditional() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_vectorized_simulator_draws_what_it_drew_before_the_extraction() -> None:
     realized = simulate_potts(
         LATTICE, FIELD, np.random.default_rng(8), 12, burn_in=7
@@ -184,7 +184,7 @@ def test_the_vectorized_simulator_draws_what_it_drew_before_the_extraction() -> 
     assert np.array_equal(realized[:4], GIBBS_DRAWS)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_the_sequential_sampler_draws_what_it_drew_before_the_extraction() -> None:
     rows = site_field(FIELD, LATTICE.n_nodes)
 

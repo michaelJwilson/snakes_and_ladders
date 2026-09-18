@@ -9,7 +9,7 @@ from snakes_and_ladders.oxi_snakes_and_ladders import double
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_double() -> None:
     assert double(21) == 42
     assert double(0) == 0

@@ -25,7 +25,7 @@ from snakes_and_ladders.inputs import _imported_names, module_closure
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_the_closure_follows_imports_transitively(tmp_path: Path) -> None:
     # `first` reaches `sim.tree` only through `shared` and then the package's
     # `__init__`; a closure one level deep would miss a module the recorded
@@ -61,7 +61,7 @@ def test_the_closure_follows_imports_transitively(tmp_path: Path) -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_relative_and_from_imports_resolve_to_absolute_names() -> None:
     names = _imported_names(
         "from . import tree\nfrom .params import load\nimport snakes_and_ladders.opt.fit\n",
@@ -78,7 +78,7 @@ def test_relative_and_from_imports_resolve_to_absolute_names() -> None:
 
 
 @pytest.mark.critical
-@pytest.mark.structural
+@pytest.mark.infra
 def test_a_module_reaching_the_extension_carries_the_rust_sources(
     tmp_path: Path,
 ) -> None:

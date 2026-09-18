@@ -29,7 +29,7 @@ def _network(n_edges: int = 400, n_nodes: int = 64, seed: int = 3) -> FlowNetwor
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_the_kept_form_is_the_derived_form_bitwise() -> None:
     """Keeping is a shortcut to a value the lists would have produced, not a new one."""
@@ -41,7 +41,7 @@ def test_the_kept_form_is_the_derived_form_bitwise() -> None:
         assert np.array_equal(left, right)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 @pytest.mark.critical
 def test_every_writer_drops_the_kept_form() -> None:
     """A cache that outlives its store is the defect this would be trading for.
@@ -69,7 +69,7 @@ def test_every_writer_drops_the_kept_form() -> None:
     )
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_network_built_by_add_edge_derives_its_form() -> None:
     """The other construction path keeps nothing, and must still be correct."""
     built = FlowNetwork(n_nodes=3)

@@ -56,7 +56,7 @@ def _alignment(
     return params, dict(dataset.alignment)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.critical
 def test_a_patterns_weight_is_its_column_count() -> None:
     # Against a Counter over the columns, which knows nothing of compress:
@@ -78,7 +78,7 @@ def test_a_patterns_weight_is_its_column_count() -> None:
         assert patterns.n_patterns == len(counted)
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 @pytest.mark.critical
 def test_the_compressed_log_likelihood_equals_the_uncompressed() -> None:
     # The identity of eq:site-independence, on every tree fixture and every
@@ -116,7 +116,7 @@ def test_the_compressed_log_likelihood_equals_the_uncompressed() -> None:
     assert min(ratios.values()) > 1.0
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_the_compression_ratio_at_each_fixtures_declared_size() -> None:
     # The ratio is a property of the data, so it is reported rather than
     # pinned; what is asserted is the bound it cannot exceed. A column is
@@ -145,7 +145,7 @@ def test_the_compression_ratio_at_each_fixtures_declared_size() -> None:
         )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_weights_carry_through_the_gradient() -> None:
     # The weighted backend must differentiate the weighted sum, not the
     # unweighted one: the gradient through the compressed alignment is the
@@ -173,7 +173,7 @@ def test_weights_carry_through_the_gradient() -> None:
     )
 
 
-@pytest.mark.mathematical
+@pytest.mark.analytic
 def test_an_uncompressible_alignment_compresses_to_itself() -> None:
     # The identity at the other end: every column distinct means every
     # weight is one, the ratio is one, and the weighted call is the
@@ -201,7 +201,7 @@ def test_an_uncompressible_alignment_compresses_to_itself() -> None:
     )
 
 
-@pytest.mark.edge_case
+@pytest.mark.smoke
 def test_a_malformed_weight_or_alignment_is_refused() -> None:
     params, alignment = _alignment("tree_search/ci.yaml", 50)
     pi = np.asarray(params.pi)
@@ -218,7 +218,7 @@ def test_a_malformed_weight_or_alignment_is_refused() -> None:
         compress(ragged)
 
 
-@pytest.mark.structural
+@pytest.mark.smoke
 def test_a_pattern_table_is_a_site_patterns() -> None:
     # The dataclass is the contract every backend reads; the alignment view
     # it exposes must be the rows of its own column block.
