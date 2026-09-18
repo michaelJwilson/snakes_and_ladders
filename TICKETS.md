@@ -260,8 +260,6 @@ parenthesis the only way a ticket is cited.
 - Merge the eight annealing entry points onto one driver, and the eight
   enumerators onto one weighted enumeration, each against the oracle #375
   recorded for it
-- Replace `search.maxflow`'s Dinic solver with `scipy.sparse.csgraph`'s
-  maximum flow on the ground-state hot path, measured first
 - Replace `search.potts_mcmc`'s union-find cluster labelling with
   `rustworkx.connected_components` on the bond graph, measured first
 - Replace `learn.surrogate.GraphSurrogate` with PyTorch Geometric's
