@@ -42,6 +42,7 @@ and this release. A milestone not named here did not move.
 
 | Roadmap item | What moved | Pull request |
 | --- | --- | --- |
+| §0 Development loop | A typeset map of the package's Python surface, generated from the docstrings by `ast` and edited by no one: `docs/api_map.pdf`, 1,528 entries over 64 pages --- 151 modules, 251 classes, 587 functions, 539 methods. The entry count is checked against a second walk of the tree, and a public function without a summary line is refused rather than typeset as a blank | [#578](https://github.com/michaelJwilson/snakes_and_ladders/pull/578) (#576) |
 | §0 Development loop | The two documents are named the paper and the textbook, `infra/build_documents.sh` replaces the script named after the retired artifact, and a guard fails any live file naming it | [#379](https://github.com/michaelJwilson/snakes_and_ladders/pull/379) (#377) |
 | §0 Development loop | Validation is one command under five minutes: an inputs stamp beside every committed figure and notebook (the stamps were measured wrong on 476 of 476 decisions and removed by #490); guard-only selection; a per-test duration cap; one BLAS thread per process | [#380](https://github.com/michaelJwilson/snakes_and_ladders/pull/380) (#372) |
 | §0 Development loop | A generator rather than a seed for the relaxed benchmark, and full history for the committed-PDF rule, which every pull request had been failing on a shallow checkout | [#378](https://github.com/michaelJwilson/snakes_and_ladders/pull/378) |
