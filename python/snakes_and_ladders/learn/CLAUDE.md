@@ -15,7 +15,8 @@ available action. `policy.py` holds the softmax-over-scored-actions policy the
 paper specifies. `rollout.py` generates episodes under a policy and under the
 greedy searcher through one loop, since a comparison between them is only
 meaningful if the loop is shared; `reinforce.py` is the score-function
-estimator and `exact.py` its oracle, by enumerating trajectories.
+estimator and `exact.py` its oracle, by enumerating trajectories; `arena.py`
+is the table every learner is read in.
 
 The environments here are **reference instances** over the models `sal.opt` fits.
 

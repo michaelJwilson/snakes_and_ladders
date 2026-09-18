@@ -22,7 +22,7 @@ from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 from snakes_and_ladders.opt.schedule import LinearTempSchedule
 from snakes_and_ladders.qa.rl_tree_policy import BATCH, HORIZON, ITERATIONS, STARTS
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -33,7 +33,7 @@ ROLLOUTS_PER_START = 4
 
 
 @pytest.fixture(scope="module")
-def environment() -> TopologyEnvironment:
+def environment() -> TreeEnvironment:
     params = load_simulation_params(FIXTURE)
     dataset = simulate_alignment(
         tau=params.tau,
@@ -45,7 +45,7 @@ def environment() -> TopologyEnvironment:
     lengths = [
         child.branch_length for _, child in edges(params.tau) if child.branch_length
     ]
-    return TopologyEnvironment(
+    return TreeEnvironment(
         dict(dataset.alignment),
         params.k,
         params.pi,
@@ -56,22 +56,20 @@ def environment() -> TopologyEnvironment:
 
 
 @pytest.fixture(scope="module")
-def maximum(environment: TopologyEnvironment) -> float:
+def maximum(environment: TreeEnvironment) -> float:
     params = load_simulation_params(FIXTURE)
     leaves = sorted(node.name for _, node in edges(params.tau) if node.is_leaf)
     return max(environment.score(t) for t in enumerate_topologies(leaves))
 
 
-def _rate(
-    environment: TopologyEnvironment, finals: list[Topology], best: float
-) -> float:
+def _rate(environment: TreeEnvironment, finals: list[Topology], best: float) -> float:
     return float(np.mean([abs(environment.score(t) - best) < 1e-9 for t in finals]))
 
 
 @pytest.mark.release
 @pytest.mark.oracle
 def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
-    environment: TopologyEnvironment, maximum: float
+    environment: TreeEnvironment, maximum: float
 ) -> None:
     # Same 640 episodes, same starts, same horizon as test_search_tree_policy.
     # Measured (recorded in STATUS.md): the rates at which greedy, REINFORCE
@@ -137,7 +135,7 @@ def test_ppo_on_the_hard_fixture_is_no_worse_than_reinforce_at_the_same_budget(
 
 @pytest.mark.structural
 def test_epsilon_greedy_log_probabilities_are_a_distribution_over_the_neighbourhood(
-    environment: TopologyEnvironment,
+    environment: TreeEnvironment,
 ) -> None:
     policy = LinearPolicy(environment.n_features())
     policy.set_weights(torch.tensor([5.0], dtype=torch.float64))

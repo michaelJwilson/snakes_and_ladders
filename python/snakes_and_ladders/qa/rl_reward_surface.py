@@ -42,7 +42,7 @@ from snakes_and_ladders.qa.style import (
     letter_style,
     series_style,
 )
-from snakes_and_ladders.search.rl import RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -99,7 +99,7 @@ def reward_surfaces(
     default = mean_branch_length(params)
 
     def surface(reward: RewardModel, branch_length: float) -> np.ndarray:
-        environment = TopologyEnvironment(
+        environment = TreeEnvironment(
             alignment, params.k, params.pi, branch_length, reward=reward
         )
         return np.array([environment.score(t) for t in topologies])

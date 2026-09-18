@@ -68,7 +68,7 @@ from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.log import get_logger, phase
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import FeatureSet, RewardModel, TopologyEnvironment
+from snakes_and_ladders.search.rl import FeatureSet, RewardModel, TreeEnvironment
 from snakes_and_ladders.search.surrogate import maximized_target
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.fixtures import (
@@ -151,7 +151,7 @@ GLASS_CHUNK = 1 << 16
 
 def _tree_environment(
     params: SimulationParams, features: FeatureSet, moves: MoveSet = MoveSet.NNI
-) -> tuple[TopologyEnvironment, list[str]]:
+) -> tuple[TreeEnvironment, list[str]]:
     """The reward surface an agent sees on a tree fixture, and its taxa."""
     dataset = simulate_alignment(
         tau=params.tau,
@@ -161,7 +161,7 @@ def _tree_environment(
         n_sites=params.n_sites,
     )
     alignment = dict(dataset.alignment)
-    built = TopologyEnvironment(
+    built = TreeEnvironment(
         alignment,
         params.k,
         np.asarray(params.pi),
@@ -175,15 +175,13 @@ def _tree_environment(
     return built, sorted(alignment)
 
 
-def _starts(built: TopologyEnvironment, seed: int) -> list[Topology]:
+def _starts(built: TreeEnvironment, seed: int) -> list[Topology]:
     """`STARTS` starting topologies, drawn as every tree measurement draws them."""
     generator = np.random.default_rng(seed + START_SEED_OFFSET)
     return [built.reset(generator) for _ in range(STARTS)]
 
 
-def _rate(
-    built: TopologyEnvironment, endpoints: Sequence[Topology], best: float
-) -> float:
+def _rate(built: TreeEnvironment, endpoints: Sequence[Topology], best: float) -> float:
     """The fraction of ``endpoints`` scoring the enumerated maximum."""
     return float(
         np.mean([abs(built.score(state) - best) < 1e-9 for state in endpoints])

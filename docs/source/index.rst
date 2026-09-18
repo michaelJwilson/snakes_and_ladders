@@ -285,6 +285,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.learn.exact
    :members:
 
+.. automodule:: snakes_and_ladders.learn.arena
+   :members:
+
 .. automodule:: snakes_and_ladders.learn.canonical
    :members:
 
@@ -328,6 +331,8 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.projection
+   :members:
+
 .. automodule:: snakes_and_ladders.search.ground_state
    :members:
 
