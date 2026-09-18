@@ -1,18 +1,25 @@
-//! Dinic's maximum-flow algorithm, and the Ising ground-state reduction.
+//! Boykov--Kolmogorov maximum flow, and the Ising ground-state reduction.
 //!
-//! The Python implementation in `snakes_and_ladders.search.maxflow` stays as the oracle
-//! this is pinned against, per root `CLAUDE.md`. What Rust buys is what root
-//! `CLAUDE.md` reserves it for: this is control flow and irregular memory
-//! access over an adjacency structure, with no array arithmetic a vectorized
-//! NumPy version could exploit. Measured on a 100x100 lattice with a per-node
-//! field, the Python reference takes 744 ms.
+//! The Python implementation in `snakes_and_ladders.search.maxflow` --- Dinic,
+//! kept readable --- stays as the oracle this is pinned against, per root
+//! `CLAUDE.md`. What Rust buys is what root `CLAUDE.md` reserves it for:
+//! control flow and irregular memory access over an adjacency structure, with
+//! no array arithmetic a vectorized NumPy version could exploit.
 //!
-//! Two differences from the reference, both deliberate.
+//! **Why this kernel.** Issue #715 built four behind one seam --- Dinic,
+//! highest-label push-relabel, Boykov--Kolmogorov and a synchronous parallel
+//! push-relabel --- pinned each to the Python Dinic arc for arc, and timed
+//! them on square lattices with a random per-node field and as the inner
+//! solver of alpha expansion. Boykov--Kolmogorov won both tables: 61 ms
+//! against Dinic's 234 on the 256x256 cut and 352 ms against 637 on the
+//! 64x64 x 10-label expansion. The other three are conserved in
+//! `src/maxflow_declined.rs` behind the `sandbox` feature, so the comparison
+//! stays re-runnable.
 //!
-//! The blocking flow is **iterative**, not recursive. The Python version
-//! recurses to the depth of the level graph and needs `setrecursionlimit`
-//! raised past a few thousand nodes; a lattice deep enough is a stack
-//! overflow rather than a slow answer. An explicit stack has no such bound.
+//! The origin check is cached by timestamp and distance as the authors'
+//! implementation does, and the source side of the cut is read by one
+//! breadth-first search over the residual graph on termination, which is the
+//! minimal minimum cut every maximum flow shares.
 //!
 //! Capacities are `f64` and the termination test is `> 0.0` rather than a
 //! tolerance, matching the reference exactly so the two cannot disagree on
@@ -22,9 +29,14 @@
 //! the `#[pyfunction]` is a thin wrapper, so `cargo test` exercises the
 //! algorithm without touching `PyResult`.
 
+use std::collections::VecDeque;
+
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
+
+const NONE: usize = usize::MAX;
 
 /// A flow network as paired residual arcs.
 ///
@@ -33,10 +45,10 @@ use pyo3::prelude::*;
 /// subtracts from one and adds to the other, which keeps the residual graph
 /// implicit rather than a second structure to hold in step.
 pub struct FlowNetwork {
-    n_nodes: usize,
-    target: Vec<usize>,
-    capacity: Vec<f64>,
-    outgoing: Vec<Vec<usize>>,
+    pub(crate) n_nodes: usize,
+    pub(crate) target: Vec<usize>,
+    pub(crate) capacity: Vec<f64>,
+    pub(crate) outgoing: Vec<Vec<usize>>,
 }
 
 impl FlowNetwork {
@@ -79,10 +91,10 @@ impl FlowNetwork {
     }
 
     /// Breadth-first distances in the residual graph; `usize::MAX` if unreached.
-    fn levels(&self, source: usize) -> Vec<usize> {
+    pub(crate) fn levels(&self, source: usize) -> Vec<usize> {
         let mut level = vec![usize::MAX; self.n_nodes];
         level[source] = 0;
-        let mut queue = std::collections::VecDeque::new();
+        let mut queue = VecDeque::new();
         queue.push_back(source);
         while let Some(node) = queue.pop_front() {
             for &arc in &self.outgoing[node] {
@@ -95,73 +107,16 @@ impl FlowNetwork {
         }
         level
     }
-
-    /// One level-respecting augmenting path, found with an explicit stack.
-    ///
-    /// `progress` is what keeps the blocking flow linear: an arc that cannot
-    /// carry more in this phase is never revisited, so each is examined once
-    /// per level graph.
-    fn augment(
-        &mut self,
-        source: usize,
-        sink: usize,
-        level: &[usize],
-        progress: &mut [usize],
-    ) -> f64 {
-        let mut path: Vec<usize> = Vec::new();
-        let mut node = source;
-        loop {
-            if node == sink {
-                // The bottleneck is the smallest residual capacity on the path.
-                let bottleneck = path
-                    .iter()
-                    .map(|&arc| self.capacity[arc])
-                    .fold(f64::INFINITY, f64::min);
-                for &arc in &path {
-                    self.capacity[arc] -= bottleneck;
-                    self.capacity[arc ^ 1] += bottleneck;
-                }
-                return bottleneck;
-            }
-
-            let mut advanced = false;
-            while progress[node] < self.outgoing[node].len() {
-                let arc = self.outgoing[node][progress[node]];
-                let neighbour = self.target[arc];
-                if self.capacity[arc] > 0.0
-                    && level[neighbour] != usize::MAX
-                    && level[neighbour] == level[node] + 1
-                {
-                    path.push(arc);
-                    node = neighbour;
-                    advanced = true;
-                    break;
-                }
-                progress[node] += 1;
-            }
-            if advanced {
-                continue;
-            }
-
-            // Dead end: retreat, and mark the arc that led here exhausted so
-            // this phase never tries it again.
-            match path.pop() {
-                None => return 0.0,
-                Some(arc) => {
-                    node = self.target[arc ^ 1];
-                    progress[node] += 1;
-                }
-            }
-        }
-    }
 }
 
 /// Maximum flow, and the source side of the minimum cut it certifies.
 ///
 /// Returns `(value, source_side)`, where `source_side[i]` is whether node `i`
 /// is reachable from the source in the residual graph on termination. That
-/// set *is* a minimum cut, by the max-flow min-cut theorem, so nothing here
-/// searches for one separately.
+/// set is the *minimal* minimum cut, which every maximum flow shares, so a
+/// configuration read off it does not depend on the kernel that produced
+/// the flow --- which is what let issue #715 pin four kernels against one
+/// another element for element before keeping this one.
 pub fn max_flow_impl(
     network: &mut FlowNetwork,
     source: usize,
@@ -176,26 +131,256 @@ pub fn max_flow_impl(
             network.n_nodes
         ));
     }
+    let total = boykov_kolmogorov(network, source, sink);
+    let level = network.levels(source);
+    Ok((total, level.iter().map(|&d| d != usize::MAX).collect()))
+}
 
-    let mut total = 0.0;
-    loop {
-        let level = network.levels(source);
-        if level[sink] == usize::MAX {
-            break;
-        }
-        let mut progress = vec![0usize; network.n_nodes];
-        loop {
-            let pushed = network.augment(source, sink, &level, &mut progress);
-            if pushed <= 0.0 {
-                break;
-            }
-            total += pushed;
+// ---------------------------------------------------------------------------
+// Boykov--Kolmogorov.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tree {
+    Free,
+    Source,
+    Sink,
+}
+
+struct BoykovKolmogorov<'a> {
+    network: &'a mut FlowNetwork,
+    source: usize,
+    sink: usize,
+    tree: Vec<Tree>,
+    /// The arc that joins a node to its parent, oriented toward the flow:
+    /// `parent -> node` in the source tree and `node -> parent` in the sink
+    /// tree, so its capacity is the residual the path may carry.
+    parent: Vec<usize>,
+    active: VecDeque<usize>,
+    orphans: Vec<usize>,
+    /// Origin cache: a node stamped with the current time is known to reach
+    /// its terminal, at `distance` hops.
+    stamp: Vec<usize>,
+    distance: Vec<usize>,
+    time: usize,
+}
+
+impl BoykovKolmogorov<'_> {
+    fn parent_node(&self, node: usize) -> usize {
+        // The other end of the parent arc, whichever way it is oriented.
+        let arc = self.parent[node];
+        match self.tree[node] {
+            Tree::Source => self.network.target[arc ^ 1],
+            Tree::Sink => self.network.target[arc],
+            Tree::Free => NONE,
         }
     }
 
-    let level = network.levels(source);
-    let side = level.iter().map(|&d| d != usize::MAX).collect();
-    Ok((total, side))
+    /// Grow both trees until a crossing arc is found; returns it as the arc
+    /// from the source-tree node to the sink-tree node.
+    fn grow(&mut self) -> Option<usize> {
+        while let Some(node) = self.active.front().copied() {
+            if self.tree[node] == Tree::Free {
+                self.active.pop_front();
+                continue;
+            }
+            let tree = self.tree[node];
+            for position in 0..self.network.outgoing[node].len() {
+                let arc = self.network.outgoing[node][position];
+                // Residual in the tree's direction of travel.
+                let travel = if tree == Tree::Source { arc } else { arc ^ 1 };
+                if self.network.capacity[travel] <= 0.0 {
+                    continue;
+                }
+                let neighbour = self.network.target[arc];
+                match self.tree[neighbour] {
+                    Tree::Free => {
+                        self.tree[neighbour] = tree;
+                        self.parent[neighbour] = travel;
+                        self.stamp[neighbour] = self.stamp[node];
+                        self.distance[neighbour] = self.distance[node] + 1;
+                        self.active.push_back(neighbour);
+                    }
+                    other if other != tree => {
+                        return Some(if tree == Tree::Source { arc } else { arc ^ 1 });
+                    }
+                    _ => {}
+                }
+            }
+            self.active.pop_front();
+        }
+        None
+    }
+
+    /// Push the bottleneck along the path through `crossing`; saturated
+    /// tree arcs orphan their child.
+    fn augment(&mut self, crossing: usize) -> f64 {
+        let mut bottleneck = self.network.capacity[crossing];
+        let mut node = self.network.target[crossing ^ 1];
+        while node != self.source {
+            bottleneck = bottleneck.min(self.network.capacity[self.parent[node]]);
+            node = self.parent_node(node);
+        }
+        node = self.network.target[crossing];
+        while node != self.sink {
+            bottleneck = bottleneck.min(self.network.capacity[self.parent[node]]);
+            node = self.parent_node(node);
+        }
+
+        let push = |network: &mut FlowNetwork, arc: usize| {
+            network.capacity[arc] -= bottleneck;
+            network.capacity[arc ^ 1] += bottleneck;
+            network.capacity[arc] <= 0.0
+        };
+        push(self.network, crossing);
+        node = self.network.target[crossing ^ 1];
+        while node != self.source {
+            let arc = self.parent[node];
+            let next = self.parent_node(node);
+            if push(self.network, arc) {
+                self.parent[node] = NONE;
+                self.orphans.push(node);
+            }
+            node = next;
+        }
+        node = self.network.target[crossing];
+        while node != self.sink {
+            let arc = self.parent[node];
+            let next = self.parent_node(node);
+            if push(self.network, arc) {
+                self.parent[node] = NONE;
+                self.orphans.push(node);
+            }
+            node = next;
+        }
+        bottleneck
+    }
+
+    /// Whether `node` reaches its terminal through parents, caching the
+    /// answer along the way; `Some(distance)` when it does.
+    fn origin(&mut self, node: usize) -> Option<usize> {
+        let terminal = if self.tree[node] == Tree::Source {
+            self.source
+        } else {
+            self.sink
+        };
+        let mut walk = node;
+        let mut hops = 0usize;
+        let found = loop {
+            if walk == terminal {
+                break Some(0usize);
+            }
+            if self.stamp[walk] == self.time {
+                break Some(self.distance[walk]);
+            }
+            if self.parent[walk] == NONE {
+                break None;
+            }
+            walk = self.parent_node(walk);
+            hops += 1;
+        };
+        let base = found?;
+        // Stamp the path so the next check from any of its nodes is O(1).
+        let mut walk = node;
+        let mut remaining = hops;
+        while remaining > 0 {
+            self.stamp[walk] = self.time;
+            self.distance[walk] = base + remaining;
+            walk = self.parent_node(walk);
+            remaining -= 1;
+        }
+        Some(base + hops)
+    }
+
+    fn adopt(&mut self) {
+        while let Some(orphan) = self.orphans.pop() {
+            let tree = self.tree[orphan];
+            let mut best_arc = NONE;
+            let mut best_distance = NONE;
+            for position in 0..self.network.outgoing[orphan].len() {
+                let arc = self.network.outgoing[orphan][position];
+                let neighbour = self.network.target[arc];
+                if self.tree[neighbour] != tree {
+                    continue;
+                }
+                // A parent must carry residual toward the orphan in the
+                // source tree, and away from it in the sink tree.
+                let travel = if tree == Tree::Source { arc ^ 1 } else { arc };
+                if self.network.capacity[travel] <= 0.0 {
+                    continue;
+                }
+                if let Some(distance) = self.origin(neighbour) {
+                    if distance + 1 < best_distance {
+                        best_distance = distance + 1;
+                        best_arc = travel;
+                    }
+                }
+            }
+            if best_arc != NONE {
+                self.parent[orphan] = best_arc;
+                self.stamp[orphan] = self.time;
+                self.distance[orphan] = best_distance;
+                continue;
+            }
+            // No parent: the orphan leaves the tree, its children become
+            // orphans, and every same-tree neighbour with residual toward it
+            // is reactivated.
+            for position in 0..self.network.outgoing[orphan].len() {
+                let arc = self.network.outgoing[orphan][position];
+                let neighbour = self.network.target[arc];
+                if self.tree[neighbour] != tree {
+                    continue;
+                }
+                let travel = if tree == Tree::Source { arc ^ 1 } else { arc };
+                if self.network.capacity[travel] > 0.0 {
+                    self.active.push_back(neighbour);
+                }
+                if self.parent[neighbour] != NONE && self.parent_node(neighbour) == orphan {
+                    self.parent[neighbour] = NONE;
+                    self.orphans.push(neighbour);
+                }
+            }
+            self.tree[orphan] = Tree::Free;
+            self.parent[orphan] = NONE;
+        }
+    }
+
+    fn run(&mut self) -> f64 {
+        self.tree[self.source] = Tree::Source;
+        self.tree[self.sink] = Tree::Sink;
+        self.stamp[self.source] = 1;
+        self.stamp[self.sink] = 1;
+        self.time = 1;
+        self.active.push_back(self.source);
+        self.active.push_back(self.sink);
+        let mut total = 0.0;
+        while let Some(crossing) = self.grow() {
+            total += self.augment(crossing);
+            self.time += 1;
+            self.stamp[self.source] = self.time;
+            self.stamp[self.sink] = self.time;
+            self.adopt();
+        }
+        total
+    }
+}
+
+/// Boykov--Kolmogorov maximum flow; returns the flow value.
+fn boykov_kolmogorov(network: &mut FlowNetwork, source: usize, sink: usize) -> f64 {
+    let n = network.n_nodes;
+    let mut state = BoykovKolmogorov {
+        network,
+        source,
+        sink,
+        tree: vec![Tree::Free; n],
+        parent: vec![NONE; n],
+        active: VecDeque::new(),
+        orphans: Vec::new(),
+        stamp: vec![0; n],
+        distance: vec![0; n],
+        time: 0,
+    };
+    state.run()
 }
 
 /// Build the network for a two-state ferromagnetic Ising ground state.
@@ -205,7 +390,7 @@ pub fn max_flow_impl(
 /// construction is the one `snakes_and_ladders.search.maxflow.ising_ground_state`
 /// documents; it is duplicated here rather than shared because the two
 /// implementations must be independent for one to be the other's oracle.
-fn ising_network(
+pub(crate) fn ising_network(
     n_nodes: usize,
     field: &[f64],
     edges: &[usize],
@@ -270,7 +455,7 @@ pub fn ising_ground_state_impl(
 /// by default and what `potts.rs` and `sampling.rs` already take; the kernel
 /// indexes with `usize`, so the conversion is one checked pass in Rust rather
 /// than one Python integer per entry.
-fn node_indices(indices: &[i64]) -> PyResult<Vec<usize>> {
+pub(crate) fn node_indices(indices: &[i64]) -> PyResult<Vec<usize>> {
     indices
         .iter()
         .map(|&index| {
@@ -375,6 +560,60 @@ pub fn ising_ground_state<'py>(
         .detach(|| ising_ground_state_impl(n_nodes, field, &edges, coupling))
         .map_err(PyValueError::new_err)?;
     Ok(PyArray1::from_vec(py, states))
+}
+
+/// The ground states of a batch of fields on one graph, one cut per field.
+///
+/// `fields` is `batch * 2 * n_nodes`, row-major, and the result
+/// `batch * n_nodes`. The cuts are independent, so the batch is the axis
+/// rayon takes (root `CLAUDE.md`, parallel over independent tasks): a
+/// `par_iter` over the fields, each building and solving its own network,
+/// with the GIL released for the whole call. `threads` sizes the pool,
+/// `None` for the global one. Measured on the 4-core host (issue #715):
+/// eight 256x256 cuts in 2.16 s on one thread and 0.90 s on four.
+#[pyfunction]
+#[pyo3(signature = (n_nodes, fields, edges, coupling, threads=None))]
+pub fn ising_ground_states<'py>(
+    py: Python<'py>,
+    n_nodes: usize,
+    fields: PyReadonlyArray1<'py, f64>,
+    edges: PyReadonlyArray1<'py, i64>,
+    coupling: PyReadonlyArray1<'py, f64>,
+    threads: Option<usize>,
+) -> PyResult<Bound<'py, PyArray1<i64>>> {
+    let edges = node_indices(edges.as_slice()?)?;
+    let fields = fields.as_slice()?;
+    let coupling = coupling.as_slice()?;
+    let width = 2 * n_nodes;
+    if width == 0 || fields.len() % width != 0 {
+        return Err(PyValueError::new_err(format!(
+            "fields has {} entries, not a multiple of 2 * {n_nodes}",
+            fields.len()
+        )));
+    }
+    let states = py
+        .detach(|| {
+            on_pool(threads, || {
+                fields
+                    .par_chunks(width)
+                    .map(|field| ising_ground_state_impl(n_nodes, field, &edges, coupling))
+                    .collect::<Result<Vec<Vec<i64>>, String>>()
+            })
+        })
+        .map_err(PyValueError::new_err)?;
+    Ok(PyArray1::from_vec(py, states.concat()))
+}
+
+/// Run `body` on a pool of `threads`, or on the global pool for `None`.
+pub(crate) fn on_pool<T: Send>(threads: Option<usize>, body: impl FnOnce() -> T + Send) -> T {
+    match threads {
+        None => body(),
+        Some(count) => rayon::ThreadPoolBuilder::new()
+            .num_threads(count.max(1))
+            .build()
+            .expect("a rayon pool")
+            .install(body),
+    }
 }
 
 #[cfg(test)]

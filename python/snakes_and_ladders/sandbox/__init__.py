@@ -27,5 +27,8 @@ Bethe on the 3x3 lattice for 3.7x the wall clock, and no fixed point on the
 ``polar``, ``polar_decoding`` and ``polar_reference`` are here as ``tropical``
 is, declined: the polar construction with successive-cancellation and list
 decoding (issue #593), refereed by enumeration at the declared length and
-taken no further.
+taken no further. ``maxflow_declined`` is here as ``pruning_burn`` is, its
+Rust half behind the ``sandbox`` feature: the three max-flow kernels issue
+#715 measured against Boykov--Kolmogorov and did not keep, each still a
+referee of the kept one arc for arc.
 """
