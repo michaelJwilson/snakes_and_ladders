@@ -96,12 +96,12 @@ release-gated suite is excluded per pull request — 138 s over 540 tests agains
 
 **Coverage counts a test only when it judges the science** (issue #729, PR
 [#731](https://github.com/michaelJwilson/snakes_and_ladders/pull/731)). One run of
-the regression tier on that branch with a context per test read **94.37%** of
-16,797 statements under `--cov-fail-under`, **34.37%** of them reached by
+the regression tier on that branch with a context per test read **94.33%** of
+16,840 statements under `--cov-fail-under`, **34.48%** of them reached by
 importing the package with no test at all; recut to the tests carrying
-`end2end` or `oracle` the figure is **77.92%**, and **82.69%** with `qa`
+`end2end` or `oracle` the figure is **77.93%**, and **82.68%** with `qa`
 exempt, which `infra/coverage_recut.py` now holds on the push to `main` and at
-the release gate, `search` at its own **86.14%**. The contexts cost the tier
+the release gate, `search` at its own **86.18%**. The contexts cost the tier
 33 s of 934 s. `structural` and `edge_case` are retired into `infra` and
 `smoke`, `simulated_truth` is `end2end`, `mathematical` is `analytic`, and
 `patch`, `backend`, `bug`, `warning` and `snapshot` are registered as the
