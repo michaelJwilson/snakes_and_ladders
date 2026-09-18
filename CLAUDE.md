@@ -39,7 +39,7 @@ This file is authoritative. Each of the remainder has a defined task:
 | `DEV.md` | Layout, the CI jobs, repository settings, the CI budget, how a change is reviewed |
 | `RELEASE.md` | Cutting a release: what it is cut against, the preconditions, the steps, who runs each, and what it costs |
 | `REFERENCES.md` | The texts and papers each part of the work is cited against |
-| `docs/tex/` | The academic paper reporting results, the textbook of problem statements, algorithms, and properties that define them, and the API map --- the package's own surface, generated from its docstrings and edited by no one |
+| `docs/tex/` | The academic paper reporting results, the textbook of problem statements, algorithms, and properties that define them, the API map --- the package's own surface, generated from its docstrings and edited by no one --- and the mind map of the package, which is the one document that names code |
 | `docs/nb/` | One worked notebook per problem, from the fixture (of given size) to likelihood, optimization and learned policy |
 | `docs/reviews/` | Dated reviews of the whole between releases: what is established, where the documents and the code disagree, what is missing, and what is worth doing next; each fixes what is stale and tickets the rest |
 

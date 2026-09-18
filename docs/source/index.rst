@@ -384,6 +384,18 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sandbox.circulant_schedule
    :members:
 
+.. automodule:: snakes_and_ladders.sandbox.region_graph
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar_decoding
+   :members:
+
+.. automodule:: snakes_and_ladders.sandbox.polar_reference
+   :members:
+
 .. automodule:: snakes_and_ladders.qa
    :members:
 

@@ -2187,6 +2187,168 @@ recursion of Equation~\ref{eq:bcjr} on each constituent trellis, which is
 Equation~\ref{eq:forward} in the log domain, and the extrinsic exchange between
 them, Algorithm~\ref{alg:turbo-decode}.
 
+\section{Polar Codes}
+\label{sec:polar}
+
+\subsection{The model}
+\label{sec:polar:model}
+A polar code is the image of one fixed matrix under a choice of which inputs
+carry information \citep{arikan2009}. With
+$F = \begin{bmatrix} 1 & 0 \\ 1 & 1\end{bmatrix}$ and $N = 2^{n}$,
+\begin{equation}
+  G_N = F^{\otimes n}, \qquad c = u G_N \pmod 2,
+  \label{eq:polar-transform}
+\end{equation}
+where $u$ carries the $k$ message bits on an \emph{information set}
+$\mathcal{I}$ and zeros on its complement, the \emph{frozen set}. $F$ is its
+own inverse over $\mathrm{GF}(2)$ and so is every Kronecker power of it, which
+is how a decoder recovers $u$ from $c$ --- by applying $G_N$ a second time
+rather than inverting it.
+
+\paragraph{Which inputs carry information is the whole construction.}
+Under a decoder that decides $u_i$ in order, knowing $u_0, \dots, u_{i-1}$,
+input $i$ sees a \emph{synthetic} channel $W_i$: the same physical channel,
+$N$ uses of it, and a different effective quality per input. The transform
+moves quality between inputs and creates none,
+\begin{equation}
+  \sum_{i=0}^{N-1} I(W_i) = N \, I(W),
+  \label{eq:polar-capacity}
+\end{equation}
+so a rule that freezes the worst $N - k$ inputs spends the channel where it is
+worth spending. On the erasure channel the Bhattacharyya parameter obeys
+Ar\i kan's exact recursion, one kernel application at a time,
+\begin{equation}
+  Z(W^{-}) = 2 Z(W) - Z(W)^{2}, \qquad Z(W^{+}) = Z(W)^{2},
+  \label{eq:polar-bec}
+\end{equation}
+with $I = 1 - Z$ there exactly, which makes Equation~\ref{eq:polar-capacity}
+checkable rather than cited. Off the erasure channel no closed recursion
+exists and the standard Gaussian approximation is used instead: one mean per
+input, $Z = e^{-m/4}$. It is an approximation, and only the \emph{order} it
+induces matters, since the frozen set depends on nothing else.
+
+\paragraph{Reed--Muller is the same transform under a different rule.}
+$\mathrm{RM}(r, n)$ freezes by row weight --- keep the rows of $G_N$ of weight
+at least $2^{n-r}$ --- where a polar code freezes by reliability. At
+$N = 8$, $k = 4$ the two rules pick the same information set, $\{3,5,6,7\}$,
+which is the extended Hamming $(8,4)$ code ---
+the same object Section~\ref{sec:ldpc}'s algebraic constructions reach by a
+different route; at $N = 16$ they part. One transform, two
+rules, and no second implementation of either.
+
+\paragraph{Successive cancellation is not maximum likelihood, and that is the
+point.} It decides each input in order and cannot revisit one, so a single
+early mistake propagates. The synthetic channels of
+Equation~\ref{eq:polar-capacity} are \emph{defined} by that decoder, which is
+what makes the construction coherent and also what caps it: the decoder is
+weaker than the code. A list decoder carries $L$ candidate prefixes and prunes
+by an exact path metric \citep{talvardy2015}, and at $L = 2^{k}$ it prunes
+nothing and is therefore maximum likelihood.
+
+\paragraph{Supported sizes.}
+\label{par:polar:sizes}
+Block lengths $N = 16$, $256$ and $2{,}048$ at rate $1/2$ carry the refereed
+claims. Three ceilings separate what is refereed by what.
+Equation~\ref{eq:polar-bec} is closed form at \emph{every} length, so the
+construction is exact at all three. Enumerating the $2^{k}$ codewords is
+refused past 200,000 configurations, so the maximum-likelihood referee ---
+Section~\ref{sec:ldpc}'s enumeration, reached by taking the dual of
+Equation~\ref{eq:polar-transform}'s information rows --- covers $N = 16$ at
+rate $1/2$ and no more, and the exhaustive list $L = 2^{k}$ with it. A dense
+$G_N$ is refused past $N = 4{,}096$; the decoders need none, being recursive
+over $\log_2 N$ stages. $N = 8$ was the first candidate for the enumerable
+size and is too small to measure the gap this section is about: at $k = 4$ it
+is the extended Hamming code, where successive cancellation already agrees
+with enumeration on most draws.
+
+\subsection{As a factor graph}
+The graph is Equation~\ref{eq:polar-transform} written out: $N(n+1)$ binary
+variables in $n+1$ columns, and one parity factor per butterfly joining a pair
+in one column to a pair in the next (Figure~\ref{fig:polar:sketch}). It is
+loopy for $n \ge 2$, so Equation~\ref{eq:sum-product} on it is the Bethe
+approximation and not exact --- and successive cancellation is not that
+approximation either. It is a \emph{schedule}: decide $u_0$ from a
+leaf-to-root pass, hold it fixed, decide $u_1$, and so on, each pass exact
+given the decisions before it. The two operations the pass needs are the
+check-node rule of Equation~\ref{eq:tanh-rule} on a pair, and a sign
+correction by the decision already made,
+\begin{equation}
+  f(a, b) = 2 \operatorname{artanh}\!\big(\tanh(a/2)\tanh(b/2)\big),
+  \qquad g(a, b, \hat u) = b + (1 - 2\hat u)\, a.
+  \label{eq:polar-fg}
+\end{equation}
+
+\input{polar_figure}
+
+\subsection{Validation}
+\label{sec:polar:validation}
+\begin{itemize}
+  \item \emph{Equation~\ref{eq:polar-capacity}} referees the construction at
+    every length, as an equality to $10^{-12}$ at $n = 3, 5, 8, 11$: the
+    recursion is closed form, so there is nothing to sample. It establishes
+    that the transform conserves what it redistributes and nothing about any
+    decoder.
+  \item \emph{Enumeration of the $2^{k}$ codewords} referees both decoders at
+    $N = 16$: the maximum-likelihood codeword is what successive cancellation
+    is measured against, and the gap is \emph{reported} rather than asserted
+    away --- at $\sigma = 1$ over 200 shared draws, 98 block errors for
+    successive cancellation, 64 for a list of 4, and 62 for maximum
+    likelihood. It establishes the size of what the decoder gives up, and it
+    reaches no further than $k \le 17$.
+  \item \emph{A naive recursive reference} referees the list implementation's
+    layout: same arithmetic, same order, one Python call per node and no path
+    axis, pinned \emph{bitwise} over 900 draws across the three channels. It
+    establishes that the path-array form computes the same decisions; a
+    tolerance there would hide the one bug it exists to catch, a gather that
+    reorders the traversal.
+  \item \emph{The two ends of the list} referee the fork-and-prune machinery:
+    $L = 1$ must reproduce plain successive cancellation bit for bit, and
+    $L = 2^{k}$ prunes nothing and must therefore equal the enumerated
+    maximum-likelihood answer. Each establishes one end and neither the
+    middle, which is what the monotonicity below covers.
+  \item \emph{Monotonicity in $L$ over shared seeds} referees the metric's
+    ordering: a larger list explores a superset only if the metric ranks
+    candidates consistently, which is a property of this implementation and
+    not of the theory. It establishes an ordering and no rate.
+  \item \emph{A measured ordering of the synthetic channels} referees the
+    Gaussian approximation, which has no closed form to be held to: per-input
+    error rates of successive cancellation on the rate-one code agree with it
+    at Spearman $0.897$, against $0.903$ for the exact erasure recursion
+    measured the same way, and the best and worst inputs agree exactly. It
+    establishes that the approximation orders the inputs as a decoder does; it
+    is not the genie-aided ordering the synthetic channels are defined by, so
+    the agreement is high rather than perfect and is reported as such.
+\end{itemize}
+
+\subsection{Extensions, and what is not attempted}
+\label{sec:polar:extensions}
+\paragraph{What it would take to go further.}
+A cyclic redundancy check appended to the message and carried through the list
+turns the metric's best survivor into the best \emph{passing} survivor, which
+is what makes list decoding competitive in practice; the check is polynomial
+division over $\mathrm{GF}(2)$, which the elementary codes carry, and the
+combination is the next step here.
+Beyond it: a systematic encoder, so the message is readable off the codeword
+without inverting anything; puncturing and shortening, which is how a length
+that is not a power of two is reached; and the Gaussian approximation against
+Monte Carlo at $N \ge 256$, where a disagreement would change the frozen set
+and the fixture would have to carry the measured one --- a decision, since it
+doubles the construction cost, and not a default.
+
+\paragraph{What is deliberately not attempted.}
+The polarisation theorem, which is asymptotic: what is reported instead is the
+fraction of inputs that are neither good nor bad at each length, falling from
+$0.75$ at $N = 8$ to $0.063$ at $N = 16{,}384$, and the trend is asserted
+monotone rather than the limit claimed. And a min-sum $f$: the hardware
+approximation of Equation~\ref{eq:polar-fg}, which would need the exact form
+kept beside it as its oracle, and nothing here asks for it yet.
+
+\subsection{The algorithms}
+Section~\ref{sec:polar:algorithms} states them: the recursive pass of
+Equation~\ref{eq:polar-fg} per input, Algorithm~\ref{alg:successive-cancellation},
+and the list that carries $L$ prefixes through it,
+Algorithm~\ref{alg:polar-list}.
+
 \section{The Problems, and What Applies to Each}
 \label{sec:applicability}
 
@@ -3731,6 +3893,25 @@ states why, and Appendix~\ref{app:sum-product} places the tree case. A fixed
 point the iteration never reached estimates nothing, so non-convergence is a
 refusal rather than a number.
 
+\paragraph{What a region sees that an edge cannot.}
+Equation~\ref{eq:bethe} is exact when the graph factorizes over its edges, and
+a lattice's shortest cycle has four of them: no edge term can hold the
+correlation that runs around a unit cell. Taking the cell itself as the unit of
+the approximation is the Kikuchi free energy, Appendix~\ref{app:kikuchi}, whose
+stationary points parent-to-child message passing finds
+(Appendix~\ref{app:gbp}). It reduces to Equation~\ref{eq:bethe} when the
+regions are the edges and the sites, so it is one expression and not a second
+approximation, and on the $3 \times 3$ lattice it is three to four orders of
+magnitude nearer the enumerated $\log Z$ for $3.4\times$ the wall clock. Two
+statements bound what that buys. The advantage \emph{decays with coupling} ---
+$23{,}378\times$ at $J = 0.3$ against $130\times$ at $J = 1.2$ --- since deep
+in the ordered phase both approximations concentrate on the same configuration;
+and at the $6 \times 4$ strip the plaquette messages settle at $J = 0.25$ and
+\emph{do not settle at all} at $J = 0.5$, at any damping measured, so the
+binding constraint at size is convergence rather than accuracy. Neither is a
+bound: like Bethe, the region-based free energy is a stationary point of a
+non-convex functional and may fall either side of $\log Z$.
+
 \paragraph{Regime.}
 Exact on a tree, in two passes. On a loopy graph the flooding schedule is
 iterated with damping to a tolerance and returns the Bethe approximation; the
@@ -4435,6 +4616,18 @@ referees the encoder: the $2^K$ words the shift register produces are the
 $2^K$ words Section~\ref{sec:ldpc}'s enumeration finds in the null space of
 a matrix built without it. And \emph{the uncoded closed form} $Q(\sqrt{2
 E_b/N_0})$ referees the waterfall at the lengths no enumeration reaches.
+
+\subsection{Successive cancellation, and the list}
+\label{sec:polar:algorithms}
+Equation~\ref{eq:polar-transform}'s butterfly is decoded one input at a time.
+The recursion halves the block at each step: the left half sees the soft
+combination $f$ of the two halves' ratios, and the right half sees the second
+half corrected by what the left half decided, $g$
+(Equation~\ref{eq:polar-fg}). A frozen input is not decided --- it is known ---
+but its evidence still enters the path metric, which is what keeps an unlikely
+prefix from ranking beside a likely one. Algorithm~\ref{alg:successive-cancellation}
+is one candidate and Algorithm~\ref{alg:polar-list} is $L$ of them
+\citep{arikan2009, talvardy2015}.
 
 \subsection{Choosing among these at the supported sizes}
 \label{sec:turbo:discussion}
@@ -5519,6 +5712,43 @@ answer of the two passes; on a loopy graph the factorization fails and the
 fixed point is the approximation
 \citep{yedidia2005, mezard2009}.
 
+\subsection{The region-based free energy}
+\label{app:kikuchi}
+Equation~\ref{eq:bethe-factor} approximates the entropy by one term per factor
+and a correction per variable. A \emph{region graph} replaces the factor by any
+set of regions $R$ --- a region being a set of variables together with the
+factors whose arguments it contains --- ordered by inclusion and closed under
+intersection. Each carries a counting number fixed by requiring that every
+variable and every factor be counted exactly once,
+\begin{equation}
+  c_R = 1 - \sum_{A \supsetneq R} c_A,
+  \qquad \sum_{R \ni v} c_R = 1 \ \text{for every variable } v,
+  \label{eq:counting-number}
+\end{equation}
+the first being M\"obius inversion over the partial order and the second the
+condition it enforces. The region-based free energy is then
+\begin{equation}
+  F_{K} = \sum_R c_R \sum_{x_R} b_R
+          \big(\log b_R - \log \psi_R\big),
+  \label{eq:kikuchi}
+\end{equation}
+with $\psi_R$ the product of the factors the region owns
+\citep{yedidia2005, mezard2009}. Two cases place it. With one region per
+factor and one per variable, Equation~\ref{eq:counting-number} gives
+$c_i = 1 - d_i$ at a variable of degree $d_i$ and
+Equation~\ref{eq:kikuchi} \emph{is} Equation~\ref{eq:bethe-factor} --- the
+same expression, not an approximation of it, which is what makes the
+reduction a test rather than a remark. With the unit cells of a square
+lattice as the largest regions, their pairwise intersections are the edges
+and the sites sit below those, and the counting numbers come out
+$+1$ on a cell, $-1$ on a shared edge and $+1$ at the centre site of a
+$3 \times 3$ --- read off Equation~\ref{eq:counting-number} rather than
+written down.
+
+A region graph that counts a variable twice returns a number that looks like a
+free energy and is not one, so the condition is checked on construction and a
+violation is refused rather than run.
+
 \subsection{The evidence gradient is a posterior expectation}
 \label{app:logz}
 Equation~\ref{eq:logz-gradient} is what makes one message pass serve both the
@@ -5575,6 +5805,31 @@ each $b_a$ is a function of the variables its factor touches, so it holds
 for factors of any degree, with Equation~\ref{eq:bethe-factor} in place of
 Equation~\ref{eq:bethe} and $d_i - 1$ counting the factors on $i$ beyond
 the first (Appendix~\ref{app:sum-product}).
+
+\subsection{The region-based free energy is stationary at a parent-to-child
+fixed point}
+\label{app:gbp}
+Constrain the region beliefs of Equation~\ref{eq:kikuchi} to be normalized and
+consistent wherever regions overlap: a parent's belief marginalized onto a
+child must be the child's. Introducing a multiplier for each parent-child
+constraint and setting the derivative of Equation~\ref{eq:kikuchi} to zero
+gives $b_R \propto \psi_R \prod$ (the multipliers of the constraints $R$ takes
+part in), and identifying each multiplier with a message from the parent to the
+child turns the consistency constraint into the update the messages are
+iterated under --- the same argument as Appendix~\ref{app:bethe}, with a
+region in place of a factor. So a fixed point of parent-to-child message
+passing is a stationary point of the region-based free energy and conversely
+\citep{yedidia2005}.
+
+Three consequences are used in the body. At the Bethe region graph the fixed
+point is belief propagation's, which is how the implementation is refereed ---
+two routes to one fixed point, agreeing to $1.7 \times 10^{-10}$ on a
+$3 \times 3$. Stationarity is not optimality: the functional is not convex, so
+$-F_K$ may sit either side of $\log Z$ and no claim here is a bound. And
+nothing guarantees a fixed point is \emph{reached}: the map has none of belief
+propagation's contraction properties, damping slows the approach rather than
+creating one, and a run that does not settle is refused --- a free energy read
+off messages that never settled estimates nothing.
 
 \subsection{Detailed balance for a cluster move in a field}
 \label{app:detailed-balance}
@@ -5980,6 +6235,50 @@ Equation~\ref{eq:extrinsic}}
 \State \Return $\hat u_i = \indicator[(\Pi^{-1}\tilde L^{2})_i < 0]$, and
        whether the two agreed --- which is a stopping rule and not a
        certificate, since the graph has cycles
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Successive cancellation on the butterfly,
+Equation~\ref{eq:polar-fg}}
+\label{alg:successive-cancellation}
+\begin{algorithmic}[1]
+\Function{Decode}{$L$, $\mathcal{F}$}
+  \Comment{$L$: the ratios this subtree sees; $\mathcal{F}$: its frozen mask}
+  \If{$|L| = 1$}
+    \State \Return $0$ if $\mathcal{F}_0$, else $\indicator[L_0 < 0]$
+  \EndIf
+  \State $a, b \gets$ the first and second halves of $L$
+  \State $\hat u^{\ell} \gets$ \Call{Decode}{$f(a, b)$, first half of
+         $\mathcal{F}$}
+  \State $\hat u^{r} \gets$ \Call{Decode}{$g(a, b, \hat c^{\ell})$, second half
+         of $\mathcal{F}$}
+  \State \Return $(\hat u^{\ell}, \hat u^{r})$ and the codeword bits
+         $(\hat c^{\ell} \oplus \hat c^{r}, \hat c^{r})$
+\EndFunction
+\State \Return the message bits of $\hat u$ on $\mathcal{I}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Successive-cancellation list decoding, $L$ prefixes
+\citep{talvardy2015}}
+\label{alg:polar-list}
+\begin{algorithmic}[1]
+\State one path, metric $0$
+\For{each input $i$ in order, through the recursion of
+     Algorithm~\ref{alg:successive-cancellation}}
+  \If{$i$ is frozen}
+    \State every path takes $\hat u_i = 0$ and pays
+           $\log(1 + e^{-(1 - 2\hat u_i) L_i})$
+  \Else
+    \State every path forks into $\hat u_i \in \{0, 1\}$, each paying the same
+           penalty
+    \State keep the $L$ paths of smallest metric, and reorder the arrays of
+           every surviving path to match
+  \EndIf
+\EndFor
+\State \Return the message of the surviving path of smallest metric
 \end{algorithmic}
 \end{algorithm}
 
