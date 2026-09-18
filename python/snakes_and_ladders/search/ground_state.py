@@ -49,7 +49,9 @@ for the ordering coupling the rungs sit either side of.
 
 from __future__ import annotations
 
+import functools
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -501,21 +503,16 @@ def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
     )
 
 
-def run_anneal(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
-    """Simulated annealing by heat-bath sweeps: the fair annealed single-site entry."""
-    return _anneal(rung, budget, rng, PottsMove.SINGLE_SITE)
+Method = Callable[[Rung, Budget, np.random.Generator], MethodRun]
+"""One method of the comparison: a rung, a budget and a generator to a run."""
 
-
-def run_swendsen_wang(
-    rung: Rung, budget: Budget, rng: np.random.Generator
-) -> MethodRun:
-    """Annealed Swendsen-Wang: every cluster recoloured, each with its own accept step."""
-    return _anneal(rung, budget, rng, PottsMove.SWENDSEN_WANG)
-
-
-def run_wolff(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
-    """Annealed Wolff: one cluster per step, with the accept step on its field."""
-    return _anneal(rung, budget, rng, PottsMove.WOLFF)
+#: The three annealed entries are one run with a move set (issue #717):
+#: single-site is the fair annealed baseline, Swendsen-Wang recolours every
+#: cluster with its own accept step, Wolff one cluster per step with the
+#: accept step on its field.
+run_anneal = functools.partial(_anneal, move=PottsMove.SINGLE_SITE)
+run_swendsen_wang = functools.partial(_anneal, move=PottsMove.SWENDSEN_WANG)
+run_wolff = functools.partial(_anneal, move=PottsMove.WOLFF)
 
 
 def run_tempering(rung: Rung, budget: Budget, rng: np.random.Generator) -> MethodRun:
@@ -640,7 +637,7 @@ def run_max_product(rung: Rung, budget: Budget, rng: np.random.Generator) -> Met
 
 #: Every entry, in report order. ICM and Gibbs at T = 0 are two rows of one
 #: axis, named so the report cannot present them as independent methods.
-METHODS = {
+METHODS: dict[str, Method] = {
     "greedy": run_greedy,
     "icm": run_icm,
     "gibbs-T0": run_gibbs_zero,
