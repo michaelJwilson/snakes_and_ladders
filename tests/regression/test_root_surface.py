@@ -58,3 +58,38 @@ def test_the_bare_import_loads_no_submodule() -> None:
 def test_a_name_outside_the_surface_is_refused() -> None:
     with pytest.raises(AttributeError, match="no attribute 'double'"):
         _ = snakes_and_ladders.double
+
+
+@pytest.mark.structural
+def test_a_submodule_resolves_on_first_use_and_loads_nothing_beside_it() -> None:
+    """``sal.sim.tree`` reads as written, and costs ``sim.tree`` alone.
+
+    A fresh process, since the suite has imported everything: after the bare
+    import neither ``sim`` nor ``learn`` is loaded; reading ``sal.sim.tree``
+    loads ``sim.tree`` and leaves ``learn``, which imports ``torch``, alone.
+    """
+    code = (
+        "import sys\n"
+        "import snakes_and_ladders as sal\n"
+        "before = sorted(m for m in sys.modules if m.startswith('snakes_and_ladders.'))\n"
+        "tree = sal.sim.tree\n"
+        "assert tree is sys.modules['snakes_and_ladders.sim.tree'], tree\n"
+        "assert sal.sim.tree is tree\n"
+        "assert 'snakes_and_ladders.learn' not in sys.modules\n"
+        "print(before)\n"
+    )
+    run = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
+
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.strip() == "[]"
+
+
+@pytest.mark.edge_case
+def test_a_name_that_is_no_submodule_is_refused() -> None:
+    """A misspelling raises ``AttributeError``, as an attribute would."""
+    with pytest.raises(AttributeError, match="no attribute 'nope'"):
+        _ = snakes_and_ladders.sim.nope
+    with pytest.raises(AttributeError, match="no attribute '_private'"):
+        _ = snakes_and_ladders._private
