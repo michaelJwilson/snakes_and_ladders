@@ -312,7 +312,7 @@ JUDGED_COVERAGE = JudgedCoverage(
     name="judged",
     counting=("end2end", "oracle"),
     exempt_packages=("qa",),
-    floor=83.8,
+    floor=85.3,
     package_floors={"search": 89.9},
 )
 

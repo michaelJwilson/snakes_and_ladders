@@ -241,6 +241,62 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "locally balanced proposal",
+        "search.balanced.log_balanced_weights",
+        "enumeration",
+        T + "search/test_potts_mcmc.py"
+        "::test_the_locally_balanced_chain_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
+        "Gibbs with gradients",
+        "search.potts_mcmc.taylor_log_ratios",
+        "enumeration",
+        T + "search/test_potts_mcmc.py"
+        "::test_the_gibbs_with_gradients_chain_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
+        "Niedermayer cluster move",
+        "search.potts_keyed.NiedermayerMove",
+        "enumeration",
+        T + "search/test_potts_mcmc.py"
+        "::test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
+        "Houdayer pair move",
+        "search.potts_mcmc.sample_potts_pair",
+        "enumeration",
+        T + "search/test_potts_mcmc.py"
+        "::test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
+        "annealed importance sampling",
+        "search.annealed.annealed_importance_sampling",
+        "transfer matrix",
+        T + "search/test_search_annealed.py"
+        "::test_the_importance_sampled_log_partition_is_the_transfer_matrix",
+    ),
+    Rung(
+        "potts",
+        "population annealing",
+        "search.annealed.population_annealing",
+        "transfer matrix",
+        T + "search/test_search_annealed.py"
+        "::test_the_population_annealed_log_partition_is_the_transfer_matrix",
+    ),
+    Rung(
+        "potts",
+        "simulated tempering",
+        "search.annealed.simulated_tempering",
+        "enumeration",
+        T + "search/test_search_annealed.py"
+        "::test_the_simulated_tempering_walker_is_the_enumerated_law_at_every_rung",
+    ),
+    Rung(
+        "potts",
         "cluster moves as RL arms",
         "search.potts_keyed.cluster_moves",
         "Potts MCMC, Wolff, Swendsen--Wang",

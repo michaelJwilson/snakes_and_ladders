@@ -327,7 +327,7 @@ def test_the_996_bit_code_on_the_erasure_channel_either_side_of_the_threshold() 
 # --- density evolution, and the code at size ------------------------------------
 
 
-@pytest.mark.analytic
+@pytest.mark.oracle
 @pytest.mark.parametrize(("degrees", "published"), sorted(PUBLISHED_THRESHOLD.items()))
 def test_the_erasure_threshold_matches_its_published_value(
     degrees: tuple[int, int], published: float
@@ -352,6 +352,57 @@ def test_density_evolution_is_monotone_and_fixed_at_zero() -> None:
     assert above[-1] > 0.4
     assert abs(above[-1] - above[-2]) < 1e-12
     assert erasure_density_evolution(0.0, 3, 6, 3)[-1] == 0.0
+
+
+@pytest.mark.oracle
+def test_density_evolution_is_its_scalar_recursion_and_its_variational_threshold() -> (
+    None
+):
+    """Two referees neither function shares code with: the recursion of
+    `eq:density-evolution` written out here as a scalar loop, bitwise over 60
+    iterations at four `(epsilon, j, k)`; and the closed form
+    `epsilon* = min_{x in (0,1]} x / (1 - (1 - x)^(k-1))^(j-1)`, which the
+    bisection matches to 2.70e-05 and the published values to 4.66e-05.
+
+    The bisection reads the threshold off the *trajectory*; the minimum reads
+    it off the fixed-point condition, so a recursion transcribed wrongly moves
+    one and not the other. Tolerances: exact equality on the trajectory, 1e-04
+    on the threshold either way, which is the bisection's own `precision`.
+    """
+
+    def recursion(epsilon: float, column: int, row: int, steps: int) -> list[float]:
+        # `x_l = epsilon (1 - (1 - x_{l-1})^(k-1))^(j-1)`, in Python floats.
+        trajectory = [epsilon]
+        for _ in range(steps):
+            trajectory.append(
+                epsilon * (1.0 - (1.0 - trajectory[-1]) ** (row - 1)) ** (column - 1)
+            )
+        return trajectory
+
+    def variational(column: int, row: int) -> float:
+        # `epsilon f(x) = x` has a root in (0,1] exactly where epsilon is at
+        # least the minimum of `x / f(x)`, so the minimum is the threshold.
+        x = np.linspace(0.0, 1.0, 2_000_001)[1:]
+        return float(np.min(x / (1.0 - (1.0 - x) ** (row - 1)) ** (column - 1)))
+
+    for epsilon, column, row in (
+        (0.42, 3, 6),
+        (0.45, 3, 6),
+        (0.30, 4, 8),
+        (0.52, 3, 5),
+    ):
+        np.testing.assert_array_equal(
+            erasure_density_evolution(epsilon, column, row, 60),
+            np.asarray(recursion(epsilon, column, row, 60)),
+        )
+
+    for degrees, published in sorted(PUBLISHED_THRESHOLD.items()):
+        minimum = variational(*degrees)
+        assert abs(minimum - published) < 1e-4
+        assert (
+            abs(minimum - erasure_threshold(*degrees, iterations=2000, precision=1e-4))
+            < 1e-4
+        )
 
 
 @pytest.mark.release
