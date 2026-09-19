@@ -2601,7 +2601,7 @@ the one-coordinate mixture posterior, where ten steps retrace a line already
 crossed. A gradient is a forward evaluation and a backward pass, so slice
 sampling's column is not HMC's column and the ranking is settled on the wall
 instead, where it is the same. Recorded as
-`docs/experiments/024-what-a-draw-costs-in-gradients.md`.
+`docs/experiments/026-what-a-draw-costs-in-gradients.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
