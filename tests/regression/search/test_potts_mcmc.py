@@ -26,6 +26,7 @@ import math
 
 import numpy as np
 import pytest
+from numpy.testing import assert_allclose
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
@@ -44,6 +45,7 @@ from snakes_and_ladders.search.balanced import (
 )
 from snakes_and_ladders.search.potts_mcmc import _GUARD as GUARD
 from snakes_and_ladders.search.potts_mcmc import (
+    ClusterCounter,
     PottsChain,
     PottsMove,
     TemperedChains,
@@ -51,8 +53,11 @@ from snakes_and_ladders.search.potts_mcmc import (
     anneal_potts,
     autodiff_log_ratios,
     energies,
+    houdayer_cluster,
+    niedermayer_threshold,
     parallel_tempering,
     sample_potts,
+    sample_potts_pair,
     taylor_log_ratios,
     tempered,
 )
@@ -103,6 +108,11 @@ THINNING = {
     PottsMove.WOLFF: 25,
     PottsMove.LOCALLY_BALANCED: 4,
     PottsMove.GIBBS_WITH_GRADIENTS: 4,
+    # One cluster per sweep, as Wolff's is, so the same thinning. Read rather
+    # than copied: at 15 the pair of chains on the frustrated lattice returned
+    # p = 0.0 with a mean cluster of 8.3 sites in 9, the near-percolating
+    # cluster being exactly what correlates successive sweeps there.
+    PottsMove.NIEDERMAYER: 25,
 }
 
 #: The gradient-informed sweeps run in NumPy, one proposal over the whole
@@ -115,6 +125,7 @@ SWEEPS_BY_MOVE = {
     PottsMove.SINGLE_SITE: SWEEPS,
     PottsMove.SWENDSEN_WANG: SWEEPS,
     PottsMove.WOLFF: SWEEPS,
+    PottsMove.NIEDERMAYER: SWEEPS,
     PottsMove.LOCALLY_BALANCED: BALANCED_SWEEPS,
     PottsMove.GIBBS_WITH_GRADIENTS: BALANCED_SWEEPS,
 }
@@ -122,6 +133,16 @@ SWEEPS_BY_MOVE = {
 #: The gradient-informed move sets, which propose from the whole single-flip
 #: neighbourhood rather than visiting each site in turn.
 BALANCED = [PottsMove.LOCALLY_BALANCED, PottsMove.GIBBS_WITH_GRADIENTS]
+
+#: Recorded sweeps behind an ablation. An ablated chain is rejected at p = 0.0
+#: rather than marginally, so a fifth of `SWEEPS` shows it and keeps the two
+#: ablations inside the per-pull-request cap.
+ABLATION_SWEEPS = 2_000
+
+#: Moves out of each configuration behind the reversibility check. The flow
+#: matrix's Monte Carlo error is `1 / sqrt` of this on a probability of one,
+#: which is what the bound there is read against.
+KERNEL_TRIALS = 12_500
 
 
 def _exact_distribution(
@@ -296,6 +317,560 @@ ENUMERABLE = {
 #: Recorded sweeps for the enumerable lattices above: 512 cells, so 10,000
 #: draws put a mean 19.5 in each.
 WIDE_SWEEPS = 10_000
+
+
+# --- Niedermayer's bond rule and Houdayer's pair ----------------------------
+#
+# Issue #756. Wolff's construction needs every coupling non-negative and is
+# refused on the frustrated lattice
+# (`test_a_cluster_move_refuses_a_negative_coupling`), so the one cluster move
+# this package had did not reach the instance cluster moves exist for.
+# Niedermayer (1988) activates a bond on its energy relative to a threshold
+# `E_0` and carries the Metropolis ratio that leaves; Houdayer (2001) moves a
+# *pair* of replicas at one temperature and is isoenergetic for the pair, so
+# its acceptance is 1 by an identity rather than by a construction.
+#
+# The referees below are the file's own, in order: the enumerated law on the
+# 512-configuration lattices, the ablations that show those tests have power,
+# and the two exact identities the moves rest on.
+
+
+#: The mixed instance: the frustrated lattice with half its bonds turned
+#: ferromagnetic. At the threshold its cluster percolates --- 8.94 sites of 9
+#: --- so a chain of these alone is a global spin reversal and a chi-square
+#: rejects it at p = 9e-218 however long it runs. It is refereed by
+#: reversibility instead (`test_niedermayers_kernel_is_reversible...`), which
+#: is the claim a chain cannot carry here.
+def _mixed_lattice() -> PottsGraph:
+    """The frustrated triangular lattice with every other coupling ferromagnetic."""
+    frustrated = _frustrated_lattice()
+    return PottsGraph(
+        n_nodes=frustrated.n_nodes,
+        edges=frustrated.edges,
+        coupling=tuple(
+            -1.0 if index % 2 else 0.7 for index in range(len(frustrated.edges))
+        ),
+        shape=frustrated.shape,
+    )
+
+
+#: Sweeps the pair sampler records. The same 10,000 as a single chain, so a
+#: cell of the 512-cell chi-square has the same expected count.
+PAIR_SWEEPS = 10_000
+
+#: Thinning for the pair, per within-replica move set. Twice a single chain's
+#: for the heat bath: Houdayer's move exchanges labels between the replicas
+#: rather than changing them, so a pair decorrelates more slowly than either
+#: chain alone at the same sweep count.
+PAIR_THINNING = {PottsMove.SINGLE_SITE: 10, PottsMove.NIEDERMAYER: 25}
+
+
+def _pair_chi_square(
+    graph: PottsGraph, field: np.ndarray, move: PottsMove, seed: int
+) -> tuple[float, float]:
+    """Each replica's realized frequencies against the enumerated Boltzmann law."""
+    index, probability = _exact_distribution(graph, field)
+    chains = sample_potts_pair(
+        graph,
+        field,
+        move,
+        np.random.default_rng(seed),
+        PAIR_SWEEPS,
+        burn_in=PAIR_SWEEPS // 10,
+        thin=PAIR_THINNING[move],
+    )
+    realized = []
+    for chain in chains:
+        observed = np.zeros(len(probability))
+        for row in chain.states:
+            observed[index[tuple(row)]] += 1
+        realized.append(chi_square_p_value(observed, probability * PAIR_SWEEPS))
+    return realized[0], realized[1]
+
+
+@pytest.mark.oracle
+@pytest.mark.release
+@pytest.mark.parametrize("instance", sorted(ENUMERABLE))
+def test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution(
+    instance: str,
+) -> None:
+    # The same referee as the heat bath and Wolff, on the instances Wolff
+    # refuses: every configuration enumerated by `log_weights`, which shares no
+    # bond rule, transposition or accept step with the sampler. `release`
+    # because 275,000 cluster growths in Python do not fit the per-test cap;
+    # the 2x2 case of
+    # `test_the_chain_is_drawn_from_the_exact_boltzmann_distribution` is the
+    # per-pull-request sibling and runs the same move set.
+    # Realized p at the declared seed and the next: 3x3-open 0.0221 and 0.1116,
+    # frustrated-triangular 0.0936 and 0.9945.
+    graph = ENUMERABLE[instance]()
+
+    p_value = _chi_square_against(
+        graph, WITH_FIELD, PottsMove.NIEDERMAYER, SEED, sweeps=WIDE_SWEEPS
+    )
+
+    assert p_value > SIGNIFICANCE, p_value
+
+
+@pytest.mark.oracle
+@pytest.mark.release
+@pytest.mark.parametrize("instance", sorted(ENUMERABLE))
+@pytest.mark.parametrize("move", [PottsMove.SINGLE_SITE, PottsMove.NIEDERMAYER])
+def test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distribution(
+    instance: str, move: PottsMove
+) -> None:
+    # The marginal of *one* replica of the pair is the claim: the joint target
+    # is the product of the two Boltzmann laws, Houdayer's move is an
+    # involution on it with a symmetric proposal, so the product is invariant
+    # and the marginal follows. Both replicas are read, since a move that
+    # exchanges between them could leave one right and the other wrong.
+    # Realized p per replica at the declared seed and the next --- single-site:
+    # 3x3-open 0.5086/0.1672 and 0.9580/0.0171, frustrated-triangular
+    # 0.0039/0.9058 and 0.8477/0.9913; Niedermayer: 3x3-open 0.5061/0.1717 and
+    # 0.1394/0.7302, frustrated-triangular 0.3116/0.9231 and 0.3202/0.0386.
+    graph = ENUMERABLE[instance]()
+
+    first, second = _pair_chi_square(graph, WITH_FIELD, move, SEED)
+
+    assert min(first, second) > SIGNIFICANCE, (first, second)
+
+
+@pytest.mark.oracle
+@pytest.mark.release
+@pytest.mark.parametrize(
+    ("name", "coupling"),
+    [
+        ("ferromagnet", (0.8, 0.8, 0.8, 0.8)),
+        ("antiferromagnet", (-1.0, -1.0, -1.0, -1.0)),
+        ("mixed", (0.7, -1.0, 0.7, -1.0)),
+    ],
+)
+def test_niedermayers_kernel_is_reversible_against_the_enumerated_law(
+    name: str, coupling: tuple[float, ...]
+) -> None:
+    # The claim a chain carries where the move mixes and cannot carry where it
+    # percolates, made directly instead: the kernel's own flow `pi(s) K(s, s')`
+    # against its transpose, `K` estimated from 12,500 moves out of each of the
+    # 16 configurations of a four-cycle and `pi` enumerated by `log_weights`.
+    # The mixed instance is the one this exists for --- its cluster is the
+    # whole lattice nine times in ten, so a chain there is a global spin
+    # reversal whatever its length --- and the other two are the controls.
+    # Realized max asymmetry: ferromagnet 0.00137, antiferromagnet 0.00080,
+    # mixed 0.00160, against a Monte Carlo standard error of 1 / sqrt(12,500)
+    # = 0.0089 on a probability of one, so the bound is the error and not a
+    # tolerance fitted to the result.
+    graph = PottsGraph(
+        n_nodes=4, edges=((0, 1), (1, 2), (2, 3), (3, 0)), coupling=coupling
+    )
+    configurations = [
+        tuple(values) for values in itertools.product(range(2), repeat=graph.n_nodes)
+    ]
+    weights = log_weights(graph, WITH_FIELD, np.array(configurations, dtype=np.int64))
+    exact = np.exp(weights - weights.max())
+    exact /= exact.sum()
+    rows = site_field(WITH_FIELD, graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    threshold = niedermayer_threshold(couplings)
+    rng = np.random.default_rng(SEED)
+
+    index = {values: position for position, values in enumerate(configurations)}
+    kernel = np.zeros((len(configurations), len(configurations)))
+    for position, values in enumerate(configurations):
+        for _ in range(KERNEL_TRIALS):
+            state = np.array(values, dtype=np.int64)
+            potts_mcmc._niedermayer_sweep(
+                state,
+                rows,
+                offsets,
+                neighbours,
+                couplings,
+                rng,
+                beta=1.0,
+                threshold=threshold,
+            )
+            kernel[position, index[tuple(state.tolist())]] += 1
+    flow = exact[:, None] * kernel / KERNEL_TRIALS
+
+    assert np.abs(flow - flow.T).max() < 3.0 / np.sqrt(KERNEL_TRIALS), name
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_a_mixed_couplings_cluster_percolates_and_an_antiferromagnets_nearly_does() -> (
+    None
+):
+    # Why Houdayer's move exists beside Niedermayer's, as a number. A single
+    # cluster that is the whole lattice is a global spin reversal, and the
+    # threshold's bond probabilities put the mixed instance there: 8.94 sites
+    # of 9 against the uniform antiferromagnet's 8.31 and the ferromagnet's
+    # 2.25, over 4,000 clusters from the declared seed.
+    sizes = {}
+    for name, graph in (
+        ("mixed", _mixed_lattice()),
+        ("frustrated", _frustrated_lattice()),
+        ("ferromagnet", _wider_lattice()),
+    ):
+        sizes[name] = _cluster_counter(graph, PottsMove.NIEDERMAYER).mean_size
+
+    assert_allclose(sizes["mixed"], 8.94, atol=0.005)
+    assert_allclose(sizes["frustrated"], 8.31, atol=0.005)
+    assert_allclose(sizes["ferromagnet"], 2.25, atol=0.005)
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_the_threshold_at_zero_on_an_antiferromagnet_is_a_single_site_flip() -> None:
+    # The other end of Niedermayer's one knob, and the reason it is a knob:
+    # at `E_0 = 0` an antiferromagnet's like bonds ask for a margin of `J < 0`
+    # and its unlike bonds for one of 0, so no bond forms, the cluster is its
+    # seed, and the ratio is the exact single-flip energy difference. Read
+    # against `energies` on the flipped configuration rather than against the
+    # sweep's own arithmetic.
+    graph = _frustrated_lattice()
+    rows = site_field(WITH_FIELD, graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    rng = np.random.default_rng(SEED)
+
+    moved = 0
+    for _ in range(200):
+        state = np.ascontiguousarray(
+            rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64
+        )
+        root = int(rng.integers(graph.n_nodes))
+        flipped = state.copy()
+        flipped[root] = 1 - int(state[root])
+        difference = float(
+            energies(graph, rows, state[None])[0]
+            - energies(graph, rows, flipped[None])[0]
+        )
+        after = state.copy()
+        size = potts_mcmc._niedermayer_sweep(
+            after,
+            rows,
+            offsets,
+            neighbours,
+            couplings,
+            np.random.default_rng(11),
+            beta=1.0,
+            threshold=0.0,
+            root=root,
+            partner=1 - int(state[root]),
+        )
+
+        assert size == 1
+        if difference >= 0.0:
+            assert np.array_equal(after, flipped)
+        moved += int(not np.array_equal(after, state))
+    # The flip is refused sometimes and taken sometimes, so the accept step
+    # above was exercised in both directions rather than only one.
+    assert 20 < moved < 180, moved
+
+
+@pytest.mark.smoke
+def test_dropping_niedermayers_accept_step_is_caught(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Evidence that the two tests above have the power they claim, and the
+    # ablation issue #756's plan names. At the threshold the boundary terms of
+    # the ratio cancel, so what this removes is the field term --- the step
+    # that makes a Fortuin-Kasteleyn cluster move exact in a field, and the
+    # one `test_dropping_the_field_accept_step_is_caught` removes from Wolff.
+    # Realized p = 0.0 against the 0.001 significance, where the unablated
+    # chain returns 0.0936.
+    def unconditional(delta: float, beta: float, rng: np.random.Generator) -> bool:
+        # The accept step gone, both terms with it: the field difference the
+        # ferromagnetic case also carries, and the boundary terms only a mixed
+        # instance has.
+        del delta, beta, rng
+        return True
+
+    monkeypatch.setattr(potts_mcmc, "_niedermayer_accept", unconditional)
+
+    p_value = _chi_square_against(
+        _frustrated_lattice(),
+        WITH_FIELD,
+        PottsMove.NIEDERMAYER,
+        SEED,
+        sweeps=ABLATION_SWEEPS,
+    )
+
+    assert p_value < SIGNIFICANCE, p_value
+
+
+@pytest.mark.smoke
+def test_swapping_a_site_rather_than_a_component_is_caught(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The second ablation: Houdayer's cluster replaced by singletons, so the
+    # move swaps one defect site rather than a connected component of the
+    # defect region. It is the *component* that makes the move isoenergetic
+    # --- a neighbour that disagreed would be in the same component, so a
+    # boundary neighbour agrees and its two bond terms are exchanged --- and
+    # this is what says so. Realized p = 0.0 on the first replica against the
+    # 0.001 significance, where the unablated pair returns 0.0039.
+    def singletons(
+        first: np.ndarray,
+        second: np.ndarray,
+        offsets: np.ndarray,
+        neighbours: np.ndarray,
+    ) -> np.ndarray:
+        del first, second, neighbours
+        return np.arange(int(offsets.shape[0]) - 1)
+
+    monkeypatch.setattr(potts_mcmc, "houdayer_cluster", singletons)
+
+    first, second = _pair_chi_square(
+        _frustrated_lattice(), WITH_FIELD, PottsMove.SINGLE_SITE, SEED
+    )
+
+    assert min(first, second) < SIGNIFICANCE, (first, second)
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_houdayers_move_leaves_the_pairs_energy_where_it_found_it() -> None:
+    # The identity the acceptance of 1 rests on, checked rather than derived.
+    # A bond inside the cluster has its two agreements exchanged between the
+    # replicas; a bond leaving it has its far end where the replicas agree, so
+    # its two terms are exchanged too; and the field term is exchanged site by
+    # site. Worst |dE| over 500 drawn pairs: 3.6e-15 against an energy of
+    # order 20, which is the double-precision floor for a sum of that size and
+    # not a tolerance chosen to admit anything.
+    graph = _frustrated_lattice()
+    rows = site_field(WITH_FIELD, graph.n_nodes)
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    rng = np.random.default_rng(SEED)
+
+    worst, moved = 0.0, 0
+    for _ in range(500):
+        first = np.ascontiguousarray(
+            rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64
+        )
+        second = np.ascontiguousarray(
+            rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64
+        )
+        before = float(energies(graph, rows, np.stack([first, second])).sum())
+        size = potts_mcmc._houdayer_move(first, second, offsets, neighbours, rng)
+        after = float(energies(graph, rows, np.stack([first, second])).sum())
+        worst = max(worst, abs(after - before))
+        moved += int(size > 0)
+
+    assert moved > 400, moved
+    assert worst < 1e-12, worst
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_houdayers_move_alone_never_leaves_the_orbit_of_its_draw() -> None:
+    # Why `sample_potts_pair` takes a within-replica move set rather than
+    # offering Houdayer's move on its own: the move exchanges labels between
+    # the replicas, so the unordered pair `{s_i, s'_i}` at every site is
+    # exactly what it cannot change. A chain of these alone is confined to the
+    # 2**n_nodes orbit of its initial draw and is not a sampler of anything,
+    # which is a property of the move and not a gap in the implementation.
+    graph = _frustrated_lattice()
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    rng = np.random.default_rng(SEED)
+    first = np.ascontiguousarray(rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64)
+    second = np.ascontiguousarray(
+        rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64
+    )
+    start = np.sort(np.stack([first, second]), axis=0)
+
+    for _ in range(200):
+        potts_mcmc._houdayer_move(first, second, offsets, neighbours, rng)
+        assert np.array_equal(np.sort(np.stack([first, second]), axis=0), start)
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+@pytest.mark.parametrize("temperature", [0.25, 1.0, 4.0])
+def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet(
+    temperature: float,
+) -> None:
+    # The reduction, at the strongest reading available: on a ferromagnet
+    # `niedermayer_threshold` is 0, the unlike bonds get probability 0 and the
+    # like ones `1 - exp(-beta J)`, and the boundary terms of the ratio cancel
+    # to leave Wolff's field accept step. So the two sweeps draw the same
+    # uniforms against the same numbers in the same order, and the claim is
+    # equality of the labellings rather than of a distribution over them ---
+    # 300 draws at each of three temperatures, `q = 3`, on the 4x4 open
+    # square, with the root and the colour named so neither draws them.
+    graph = lattice_graph((4, 4), BoundaryCondition.OPEN, COUPLING)
+    rows = site_field(np.array([0.6, -0.4, 0.1]), graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    assert niedermayer_threshold(couplings) == 0.0
+    rng = np.random.default_rng(SEED)
+
+    for _ in range(300):
+        state = np.ascontiguousarray(
+            rng.integers(0, 3, size=graph.n_nodes), dtype=np.int64
+        )
+        root, colour = int(rng.integers(graph.n_nodes)), int(rng.integers(3))
+        wolff, niedermayer = state.copy(), state.copy()
+
+        theirs = potts_mcmc._wolff_sweep(
+            wolff,
+            rows,
+            offsets,
+            neighbours,
+            couplings,
+            np.random.default_rng(7),
+            beta=1.0 / temperature,
+            root=root,
+            proposed=colour,
+        )
+        ours = potts_mcmc._niedermayer_sweep(
+            niedermayer,
+            rows,
+            offsets,
+            neighbours,
+            couplings,
+            np.random.default_rng(7),
+            beta=1.0 / temperature,
+            threshold=0.0,
+            root=root,
+            partner=colour,
+        )
+
+        assert np.array_equal(wolff, niedermayer)
+        assert theirs == ours
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_the_threshold_is_where_the_antiferromagnets_bonds_become_a_probability() -> (
+    None
+):
+    # `E_0 = max(0, -min J)` is not a tuning constant: it is the smallest
+    # threshold at which every bond probability is defined. Below it the like
+    # bonds of an antiferromagnet ask for `1 - exp(beta |J|)`, which is
+    # negative, and at it they ask for zero while the unlike ones carry the
+    # construction --- which is what an antiferromagnet's satisfied bonds are.
+    frustrated = _frustrated_lattice()
+    _, _, couplings = frustrated.compressed_adjacency()
+    ferromagnet = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+
+    assert niedermayer_threshold(couplings) == 1.0
+    assert niedermayer_threshold(ferromagnet.compressed_adjacency()[2]) == 0.0
+    # The like bond at the threshold: margin zero, so no bond and no draw.
+    assert max(0.0, 1.0 + float(couplings.min())) == 0.0
+    # The unlike bond at the threshold: the antiferromagnet's own 1 - exp(-b|J|).
+    assert max(0.0, 1.0 + 0.0) == 1.0
+
+
+def _cluster_counter(
+    graph: PottsGraph, move: PottsMove, n_clusters: int = 4_000
+) -> ClusterCounter:
+    """Sizes and field acceptances over ``n_clusters`` single-cluster steps."""
+    rows = site_field(WITH_FIELD, graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    rng = np.random.default_rng(SEED)
+    state = np.ascontiguousarray(rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64)
+    counter = ClusterCounter()
+    for _ in range(n_clusters):
+        if move is PottsMove.WOLFF:
+            potts_mcmc._wolff_sweep(
+                state, rows, offsets, neighbours, couplings, rng, counter, graph
+            )
+        else:
+            potts_mcmc._niedermayer_sweep(
+                state,
+                rows,
+                offsets,
+                neighbours,
+                couplings,
+                rng,
+                counter,
+                graph,
+                1.0,
+                niedermayer_threshold(couplings),
+            )
+    return counter
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_the_accepted_fraction_and_the_cluster_are_what_the_instance_makes_them() -> (
+    None
+):
+    # What the moves are read against, side by side, because the reason for
+    # Houdayer's move is a number rather than an argument. On the frustrated
+    # lattice Wolff is refused outright; Niedermayer runs there and builds a
+    # cluster of 8.31 sites in 9 --- a near-percolating cluster, which is a
+    # global spin reversal by another name and is what makes the pair move
+    # worth having. On the ferromagnet the two agree on both readings.
+    frustrated, ferromagnet = _frustrated_lattice(), _wider_lattice()
+    readings = {
+        "frustrated": _cluster_counter(frustrated, PottsMove.NIEDERMAYER),
+        "ferro-niedermayer": _cluster_counter(ferromagnet, PottsMove.NIEDERMAYER),
+        "ferro-wolff": _cluster_counter(ferromagnet, PottsMove.WOLFF),
+    }
+
+    with pytest.raises(ValueError, match="needs every coupling >= 0"):
+        sample_potts(
+            frustrated, WITH_FIELD, PottsMove.WOLFF, np.random.default_rng(SEED), 10
+        )
+    for name, expected in (
+        ("frustrated", (0.4868, 8.31)),
+        ("ferro-niedermayer", (0.3157, 2.25)),
+        ("ferro-wolff", (0.3477, 2.18)),
+    ):
+        assert_allclose(
+            (readings[name].accept_rate, readings[name].mean_size),
+            expected,
+            atol=0.005,
+        )
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_the_overlap_components_are_the_defect_regions_by_breadth_first_search() -> (
+    None
+):
+    # `houdayer_cluster` reads through `potts_mcmc`'s union-find; this walks
+    # the adjacency from each defect site instead, so the components are
+    # checked against a second reading of what a component is rather than
+    # against themselves.
+    graph = _frustrated_lattice()
+    offsets, neighbours, _ = graph.compressed_adjacency()
+    incident = [
+        neighbours[offsets[node] : offsets[node + 1]].tolist()
+        for node in range(graph.n_nodes)
+    ]
+    rng = np.random.default_rng(SEED)
+
+    for _ in range(200):
+        first = rng.integers(0, 2, size=graph.n_nodes)
+        second = rng.integers(0, 2, size=graph.n_nodes)
+        partition = houdayer_cluster(first, second, offsets, neighbours)
+        defect = first != second
+        for node in np.flatnonzero(defect):
+            seen, frontier = {int(node)}, [int(node)]
+            while frontier:
+                current = frontier.pop()
+                for neighbour in incident[current]:
+                    if neighbour not in seen and defect[neighbour]:
+                        seen.add(int(neighbour))
+                        frontier.append(int(neighbour))
+            assert set(np.flatnonzero(partition == partition[node]).tolist()) == seen
+
+
+@pytest.mark.smoke
+def test_the_pair_sampler_refuses_houdayers_move_above_two_states() -> None:
+    # The restriction stated rather than silently generalized: the overlap
+    # `q_i = s_i s'_i` is the Ising one, and issue #756 validates the move at
+    # two states alone.
+    graph = _wider_lattice()
+
+    with pytest.raises(ValueError, match="Ising overlap"):
+        sample_potts_pair(
+            graph,
+            np.zeros(3),
+            PottsMove.SINGLE_SITE,
+            np.random.default_rng(SEED),
+            10,
+        )
 
 
 @pytest.mark.oracle

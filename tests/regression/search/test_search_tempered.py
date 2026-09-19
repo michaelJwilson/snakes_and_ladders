@@ -12,11 +12,21 @@ beside it (issue #331).
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Callable
+from typing import cast
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.hmm_paths import emission_log_density
+from snakes_and_ladders.likelihood.potts import log_weights
+from snakes_and_ladders.search.potts_mcmc import (
+    PottsMove,
+    _houdayer_move,
+    _sweep_for,
+)
+from snakes_and_ladders.search.statistics import chi_square_p_value, sign_test_p_value
 from snakes_and_ladders.search.support import (
     SupportKind,
     TemperedSupport,
@@ -27,13 +37,20 @@ from snakes_and_ladders.search.support import (
 )
 from snakes_and_ladders.search.tempered import (
     TemperedEnsemble,
+    round_trips,
     tempered_factor_graph,
+    tempered_potts_pair,
     tempered_topologies,
 )
 from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
-from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
+from snakes_and_ladders.sim.canonical import (
+    AMBIGUOUS_OBSERVATIONS,
+    ambiguous_hmm,
+    frustrated_triangular_lattice,
+)
 from snakes_and_ladders.sim.factor_graph import FactorGraph, from_hmm, from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import site_field
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FOUR_TAXA, load_fixture
@@ -237,3 +254,208 @@ def test_an_unusable_ladder_and_a_ladder_without_temperature_one_are_refused() -
         tempered_labelling_support(graph, np.zeros(4, dtype=np.int64), hot)
     with pytest.raises(ValueError, match="inside its cardinality"):
         tempered_labelling_support(graph, np.array([0, 0, 0, 2]), hot)
+
+
+# --- the pair ensemble and its round trips ----------------------------------
+#
+# Issue #756. Houdayer's move acts on two replicas at one temperature, so the
+# state the ladder carries is the pair and the exchange ratio takes the pair's
+# summed energy. What that buys is read as a *round trip* --- a walker from the
+# cold rung to the hot one and back --- because an exchange acceptance is a
+# per-pair number a ladder can look healthy in while nothing crosses it.
+
+#: The ladder the round-trip readings run on: ten rungs, ratio 1.32, from 0.2
+#: to 2.43. Denser than `LADDER` above because the pair's energy is the sum of
+#: two, so its variance is twice a single replica's and the acceptance falls
+#: with it; realized 0.18 to 0.82 across the rungs of both instances.
+PAIR_LADDER = tuple(round(0.2 * 1.32**rung, 4) for rung in range(10))
+
+#: The 2x2 open antiferromagnet the pair ensemble's marginal is enumerated
+#: against: 16 configurations, and a negative coupling, which is the case
+#: `sample_potts` refuses both Fortuin-Kasteleyn cluster moves on.
+PAIR_COUPLING = -0.5
+PAIR_SWEEPS = 4_000
+PAIR_THIN = 5
+PAIR_SIGNIFICANCE = 0.001
+
+#: Seeds behind the round-trip comparison, and the recorded sweeps each runs.
+#: Eight is the smallest paired sample whose exact sign test can reject at
+#: `SEPARATION`: seven of eight one way is `p = 0.0703` and eight is
+#: `p = 0.0078`, so a real direction is refutable here and a null result is
+#: not merely a shortage of seeds.
+ROUND_TRIP_SEEDS = 8
+ROUND_TRIP_SWEEPS = 2_000
+
+#: Where the paired sign test is read. A failure to reject is what is wanted,
+#: so the number is stated rather than the usual 0.05 being assumed.
+SEPARATION = 0.05
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_a_round_trip_is_the_cold_rung_reached_through_the_hot_one() -> None:
+    """The definition, on traces whose answer is counted by hand.
+
+    A walker rattling at the cold end scores nothing however often it returns
+    to rung 0, and one that reaches the top and comes back scores one each
+    time --- which is the whole reason the statistic is preferred to an
+    exchange acceptance.
+    """
+    trace = np.array(
+        [
+            # rattles at the cold end; reaches the top once and returns twice
+            # over; ends at the top having not come back.
+            [0, 0, 0],
+            [1, 1, 2],
+            [0, 2, 1],
+            [1, 1, 2],
+            [0, 0, 1],
+            [1, 2, 2],
+            [0, 0, 2],
+        ]
+    )
+
+    assert round_trips(trace).tolist() == [0, 2, 0]
+
+
+@pytest.mark.oracle
+@pytest.mark.release
+def test_each_replica_of_the_cold_rungs_pair_is_the_enumerated_boltzmann_law() -> None:
+    """The ensemble's marginal at temperature one, against enumeration.
+
+    The pair sampler is pinned on one temperature in
+    `tests/regression/search/test_potts_mcmc.py`; this pins the *tempered*
+    path --- the exchange on the pair's summed energy, the move applied at
+    every rung --- by reading the cold rung's two replicas against
+    `log_weights` over all 16 configurations. Realized p per replica at the
+    declared seed and the next: 0.4404 / 0.1214 and 0.8203 / 0.3536.
+    """
+    graph = lattice_graph((2, 2), BoundaryCondition.OPEN, PAIR_COUPLING)
+    field = np.array([0.6, -0.4])
+    configurations = [
+        tuple(values) for values in itertools.product(range(2), repeat=graph.n_nodes)
+    ]
+    weights = log_weights(graph, field, np.array(configurations, dtype=np.int64))
+    exact = np.exp(weights - weights.max())
+    exact /= exact.sum()
+    index = {values: position for position, values in enumerate(configurations)}
+
+    ensemble = tempered_potts_pair(
+        graph,
+        field,
+        (1.0, 2.0, 4.0),
+        np.random.default_rng(1),
+        PAIR_SWEEPS,
+        burn_in=PAIR_SWEEPS // 10,
+        thin=PAIR_THIN,
+    )
+
+    cold = ensemble.replica_at(1.0)
+    for half in (slice(0, graph.n_nodes), slice(graph.n_nodes, None)):
+        observed = np.zeros(len(configurations))
+        for key in ensemble.keys[cold]:
+            # The pair's key is both replicas' labels concatenated, so a half
+            # of it is one replica's own configuration.
+            pair = cast(tuple[int, ...], key)
+            observed[index[pair[half]]] += 1
+        p_value = chi_square_p_value(observed, exact * observed.sum())
+        assert p_value > PAIR_SIGNIFICANCE, p_value
+
+
+@pytest.mark.analytic
+@pytest.mark.release
+def test_the_round_trip_does_not_separate_with_houdayers_move() -> None:
+    """The measurement issue #756's plan asks for, and it does not separate.
+
+    Round-trip time in recorded sweeps on the 12x12 periodic triangular
+    antiferromagnet, `ROUND_TRIP_SEEDS` seeds paired by seed and read by
+    `search.statistics.sign_test_p_value`: 1,115.5 sweeps without the move
+    against 1,090.7 with it, five seeds of eight shorter with the move and
+    two longer, `p = 0.6875`. So the direction is not established in either
+    sense, at 3.96x the wall --- 17.0 s against 67.3 s.
+
+    Asserted as a failure to separate rather than as a win or a loss, which is
+    what eight paired seeds can carry; the mechanism is
+    `test_the_overlap_defect_percolates_on_the_frustrated_lattice` and the
+    numbers are in
+    `docs/experiments/022-cluster-moves-for-frustrated-lattices.md`.
+    """
+    graph = frustrated_triangular_lattice((12, 12), BoundaryCondition.PERIODIC, -1.0)
+    times = {}
+    for houdayer in (False, True):
+        readings = []
+        for seed in range(ROUND_TRIP_SEEDS):
+            ensemble = tempered_potts_pair(
+                graph,
+                np.zeros(2),
+                PAIR_LADDER,
+                np.random.default_rng(seed),
+                ROUND_TRIP_SWEEPS,
+                burn_in=ROUND_TRIP_SWEEPS // 10,
+                houdayer=houdayer,
+            )
+            assert round_trips(ensemble.walkers).sum() > 0
+            readings.append(ensemble.round_trip_time)
+        times[houdayer] = np.array(readings)
+
+    difference = times[True] - times[False]
+
+    assert sign_test_p_value(difference) > SEPARATION, difference
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_the_overlap_defect_percolates_on_the_frustrated_lattice() -> None:
+    """Why the round trip does not move: the cluster is most of the defect.
+
+    Houdayer's move swaps one connected component of the region where the two
+    replicas disagree. On this instance that region is 65 to 72 sites of 144
+    and its largest component 43 to 59 of that --- over half the defect at
+    every temperature read --- so the move is a near-global exchange of the
+    two replicas, and an exchange of two replicas that differ everywhere
+    carries the pair nowhere new.
+    """
+    graph = frustrated_triangular_lattice((12, 12), BoundaryCondition.PERIODIC, -1.0)
+    rows = site_field(np.zeros(2), graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    sweep = _sweep_for(
+        PottsMove.SINGLE_SITE, graph, rows, offsets, neighbours, couplings, Backend.RUST
+    )
+
+    for temperature in (0.2, 0.46, 1.06):
+        rng = np.random.default_rng(7)
+        pair = [
+            np.ascontiguousarray(rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64)
+            for _ in range(2)
+        ]
+        defects, clusters = [], []
+        for step in range(300):
+            for replica in pair:
+                sweep(replica, rng, 1.0 / temperature)
+            defect = int((pair[0] != pair[1]).sum())
+            size = _houdayer_move(pair[0], pair[1], offsets, neighbours, rng)
+            if step >= 100:
+                defects.append(defect)
+                clusters.append(size)
+
+        assert 60 < float(np.mean(defects)) < 80, (temperature, np.mean(defects))
+        assert float(np.mean(clusters)) > 0.6 * float(np.mean(defects)), (
+            temperature,
+            np.mean(clusters),
+        )
+
+
+@pytest.mark.smoke
+def test_the_pair_ensemble_refuses_houdayers_move_above_two_states() -> None:
+    """The restriction stated where the ensemble is configured.
+
+    Houdayer's overlap `q_i = s_i s'_i` is the Ising one, and issue #756
+    validates the move at two states alone; a three-state model is refused
+    here rather than at the first move.
+    """
+    graph = lattice_graph((2, 2), BoundaryCondition.OPEN, PAIR_COUPLING)
+
+    with pytest.raises(ValueError, match="Ising overlap"):
+        tempered_potts_pair(
+            graph, np.zeros(3), (1.0, 2.0), np.random.default_rng(0), 10
+        )

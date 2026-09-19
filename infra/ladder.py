@@ -249,6 +249,22 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "Niedermayer cluster move",
+        "search.potts_keyed.NiedermayerMove",
+        "enumeration",
+        T + "search/test_potts_mcmc.py"
+        "::test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
+        "Houdayer pair move",
+        "search.potts_mcmc.sample_potts_pair",
+        "enumeration",
+        T + "search/test_potts_mcmc.py"
+        "::test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
         "cluster moves as RL arms",
         "search.potts_keyed.cluster_moves",
         "Potts MCMC, Wolff, Swendsen--Wang",
