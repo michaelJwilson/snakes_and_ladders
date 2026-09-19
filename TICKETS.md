@@ -144,11 +144,6 @@ parenthesis the only way a ticket is cited.
   long a chain must run before its marginals are usable is unmeasured, so
   every budget here is stated in sweeps rather than in mixing times
 
-- Reassociate the homogeneous transfer-matrix product by repeated squaring,
-  6 products for 64 positions: `torch.logsumexp` is 33.2% of `hmc.sample` at
-  1,000 draws over 512,000 calls, an algorithmic cut #341 named and nobody
-  took (#754)
-
 ## Milestone 2.0 — RL Definition
 
 - Nothing outstanding. The section is complete on its own terms; an algorithm
@@ -265,10 +260,10 @@ parenthesis the only way a ticket is cited.
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#405)
 - The targets the runtime-optimization audit left unmet: the tree schedule
-  within 2x of the forward recursion on a chain, the reassociated
-  transfer-matrix product in the Potts chain objective, and a compiled sweep
-  for the factor-graph Gibbs sampler (#405). Alpha expansion's inner solver
-  is done (#528)
+  within 2x of the forward recursion on a chain, and a compiled sweep for the
+  factor-graph Gibbs sampler (#405). Alpha expansion's inner solver is done
+  (#528), and the reassociated transfer-matrix product in the Potts chain
+  objective is done (#754)
 - Adopt `rustworkx` on a hot path where a measurement says so —
   `search.topology._component`, the spanning trees of the bound — moving the
   replaced implementation to `sandbox/`. `PottsGraph.compressed_adjacency`
