@@ -54,8 +54,9 @@ SLIMMING_BASELINE = {
     # lattice and the factor graph share, took them from 148 and 1,576
     # (#756). The second moves on a public name too, and #756's cluster moves
     # for a frustrated lattice added twelve without adding a module; #754's
-    # BCJR pass in Rust added one public name and no module.
-    "flat modules": 149,
+    # BCJR pass in Rust added one module, `likelihood/convolutional_rust.py`,
+    # and one public name.
+    "flat modules": 150,
     "API-map entries": 1603,
 }
 
