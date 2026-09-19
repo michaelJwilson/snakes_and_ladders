@@ -36,6 +36,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.enumeration import refuse_oversized
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.sim.convolutional import (
@@ -97,6 +98,7 @@ def bcjr(
     apriori_llr: np.ndarray | None = None,
     *,
     terminated: bool = True,
+    backend: Backend = Backend.RUST,
 ) -> TrellisDecoding:
     """Forward--backward over the trellis, with the observation on the edge.
 
@@ -123,6 +125,19 @@ def bcjr(
         backward recursion starts concentrated there rather than uniform.
         ``sim.convolutional.terminate`` makes it true; a decoder told
         otherwise computes a posterior for a different model.
+    backend : Backend
+        Which implementation runs the recursions.
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the NumPy
+        oracle below, which stays;
+        :data:`~snakes_and_ladders.backend.Backend.RUST` is
+        :func:`snakes_and_ladders.likelihood.convolutional_rust.bcjr` and
+        the default, because it is **34.8x / 35.0x** one pass at the
+        declared ``K = 256`` and **26.2x / 26.3x** an eight-iteration turbo
+        decode, which saves **35.6 ms** of that decode's 37.0
+        (``docs/experiments/024``). It is bitwise at ``memory`` 1 and 2 ---
+        every declared register --- and agrees to 2.3e-13 at 3 and 4. The
+        two backends validate the same arguments, so a refusal does not
+        depend on which one is asked.
 
     Returns
     -------
@@ -131,7 +146,8 @@ def bcjr(
     Raises
     ------
     ValueError
-        If the three arrays disagree in length or are not one-dimensional.
+        If the three arrays disagree in length or are not one-dimensional,
+        or ``backend`` names an implementation this function does not have.
     """
     systematic = np.asarray(systematic_llr, dtype=float)
     parity = np.asarray(parity_llr, dtype=float)
@@ -146,6 +162,18 @@ def bcjr(
             f"{apriori.shape} must be the same one-dimensional shape"
         )
         raise ValueError(msg)
+    if backend not in (Backend.PYTHON, Backend.RUST):
+        msg = f"bcjr runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
+        raise ValueError(msg)
+    if backend is Backend.RUST:
+        # Local, because the twin imports `TrellisDecoding` from here: a
+        # module-level import is the cycle. The seam itself is
+        # `pruning`/`pruning_rust`'s and `maxflow`/`maxflow_rust`'s.
+        from snakes_and_ladders.likelihood import convolutional_rust
+
+        return convolutional_rust.bcjr(
+            trellis, systematic, parity, apriori, terminated=terminated
+        )
     length = systematic.size
     n_states = trellis.n_states
     gamma = _branch_metrics(trellis, systematic, parity, apriori)
