@@ -4,8 +4,8 @@ Fits continuous parameters by autodiff/analytic gradient methods. The interface 
 model-agnostic by construction: the same machinery serves all supported problems.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file and all related work — and every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
 
 ## Assumed frameworks
 

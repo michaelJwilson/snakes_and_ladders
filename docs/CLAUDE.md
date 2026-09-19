@@ -9,10 +9,8 @@ between (`DEV.md`). An artifact held to the comparison must come out the same
 on another machine, which constrains what it may say.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file too — and every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local,
-and is principle: the numbers behind each rule live with the code that
-produces them or in `STATUS.md`.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
 
 ## What lives here
 
@@ -30,9 +28,10 @@ full. A partial rebuild *moves* a check and never removes one: the release gate
 regenerates and compares every figure, whatever a document cites. The document
 selects, never a stamp predicting which figure a change moved (issue #490).
 
-Root `CLAUDE.md`'s **Expected Reader** states the formatting contract — what
-belongs in the body, what belongs in the appendix, and the register to write
-in. It is not restated here either.
+What belongs in the body, what belongs in the appendix and the register to
+write in are the textbook's own conventions, stated in `docs/tex/textbook.tex`
+beside `tab:notation` rather than in a root section: root `CLAUDE.md` has no
+**Expected Reader**, and this file pointed at one until #803.
 
 ## Local rules
 

@@ -4,8 +4,8 @@ Reinforcement learning applied to discrete search problems. The interface is
 model-agnostic by construction, on exactly the terms `opt/CLAUDE.md` sets.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this module too, referenced here and never restated. What follows
-is local, and is principle: the numbers live with the code or in `STATUS.md`.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
 
 ## What lives here
 

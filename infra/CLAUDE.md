@@ -28,11 +28,12 @@ brief. A step a person repeats is a step a person skips, and each of the ones
 it replaces had already been skipped.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file too — and every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local,
-and is principle: `DEV.md` holds the CI budget, the repository settings and
-the CI jobs, including the size caps that keep an exact oracle available, and
-is not restated here.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
+
+`DEV.md` holds the CI budget, the repository settings and the CI jobs,
+including the size caps that keep an exact oracle available, and is not
+restated here.
 
 A run is read back from its log, so every line an entry point writes carries
 the elapsed time and the phase the run was in; libraries emit through the

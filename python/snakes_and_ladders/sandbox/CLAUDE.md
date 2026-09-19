@@ -5,9 +5,8 @@ Eg. A hand-rolled implementation that a framework has replaced on a hot path mov
 here, or the framework because it failed to be better.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file and all related work too — and every docstring, comment and
-commit message in this module. It is referenced here, never restated. What follows is local,
-and is principle.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
 
 ## Local rules
 

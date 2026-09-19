@@ -5,8 +5,8 @@ exact and approximate solvers, and samplers. The agents that choose among moves
 are `learn/`'s, and issue #779 moved the last of them out of here.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file and related work — e.g. every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
 
 ## Local rules
 
@@ -25,7 +25,13 @@ in this module. It is referenced here, never restated. What follows is local.
 - **Every move set states whether it is complete**, in which sense, and what
   it costs per step. A surrogate decides what is fitted, never what is reported.
 
-- **A budget is counted in evaluations and seconds.**
+- **A budget is counted in the work it spends, and the seconds are reported
+  beside it.** Evaluations for a search, decisions for a learner
+  (`learn/CLAUDE.md`), gradients for a sampler (`opt/CLAUDE.md`): the unit is
+  what the method spends, since two methods spending different things are not
+  ranked by either column alone. Wall-clock is reported and never the budget
+  --- it is a property of the host, and this rule read "evaluations and
+  seconds" until #803, which made it say the opposite of `learn/`'s.
 
 - **A structure is scored at most once per search**, keyed on a canonical form.
 
