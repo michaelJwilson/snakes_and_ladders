@@ -38,6 +38,13 @@ from snakes_and_ladders.opt.schedule import (
 )
 from snakes_and_ladders.search import potts_mcmc
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
+from snakes_and_ladders.search.balanced import (
+    BalancingFunction,
+    log_balanced_weights,
+    log_metropolis_ratio,
+    log_normalizer,
+    log_ratios,
+)
 from snakes_and_ladders.search.potts_mcmc import _GUARD as GUARD
 from snakes_and_ladders.search.potts_mcmc import (
     PottsChain,
@@ -45,9 +52,11 @@ from snakes_and_ladders.search.potts_mcmc import (
     TemperedChains,
     adapt_ladder_potts,
     anneal_potts,
+    autodiff_log_ratios,
     energies,
     parallel_tempering,
     sample_potts,
+    taylor_log_ratios,
     tempered,
 )
 from snakes_and_ladders.search.statistics import (
@@ -62,7 +71,14 @@ from snakes_and_ladders.sim.canonical import (
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import critical_coupling, energy, site_field
+from snakes_and_ladders.sim.potts import (
+    critical_coupling,
+    energy,
+    heat_bath_log_weights,
+    local_fields,
+    owner_rows,
+    site_field,
+)
 
 from tests._scale import at_scale
 
@@ -88,7 +104,27 @@ THINNING = {
     PottsMove.SINGLE_SITE: 5,
     PottsMove.SWENDSEN_WANG: 5,
     PottsMove.WOLFF: 25,
+    PottsMove.LOCALLY_BALANCED: 4,
+    PottsMove.GIBBS_WITH_GRADIENTS: 4,
 }
+
+#: The gradient-informed sweeps run in NumPy, one proposal over the whole
+#: neighbourhood at a time, so a chain of `SWEEPS` of them costs seconds where
+#: the others cost fractions of one. 4,000 recorded sweeps still puts an
+#: expected 250 in each of the sixteen cells, which is what the chi-square
+#: needs; the length is the test's budget and not part of its claim.
+BALANCED_SWEEPS = 4_000
+SWEEPS_BY_MOVE = {
+    PottsMove.SINGLE_SITE: SWEEPS,
+    PottsMove.SWENDSEN_WANG: SWEEPS,
+    PottsMove.WOLFF: SWEEPS,
+    PottsMove.LOCALLY_BALANCED: BALANCED_SWEEPS,
+    PottsMove.GIBBS_WITH_GRADIENTS: BALANCED_SWEEPS,
+}
+
+#: The gradient-informed move sets, which propose from the whole single-flip
+#: neighbourhood rather than visiting each site in turn.
+BALANCED = [PottsMove.LOCALLY_BALANCED, PottsMove.GIBBS_WITH_GRADIENTS]
 
 
 def _exact_distribution(
@@ -110,22 +146,34 @@ def _exact_distribution(
 
 def _goodness_of_fit(move: PottsMove, field: np.ndarray, seed: int = SEED) -> float:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
+    return _chi_square_against(graph, field, move, seed)
+
+
+def _chi_square_against(
+    graph: PottsGraph,
+    field: np.ndarray,
+    move: PottsMove,
+    seed: int,
+    sweeps: int | None = None,
+) -> float:
+    """One chain's realized frequencies against the enumerated Boltzmann law."""
     index, probability = _exact_distribution(graph, field)
+    sweeps = SWEEPS_BY_MOVE[move] if sweeps is None else sweeps
 
     chain = sample_potts(
         graph,
         field,
         move,
         np.random.default_rng(seed),
-        SWEEPS,
-        burn_in=SWEEPS // 10,
+        sweeps,
+        burn_in=sweeps // 10,
         thin=THINNING[move],
     )
 
     observed = np.zeros(len(probability))
     for row in chain.states:
         observed[index[tuple(row)]] += 1
-    return chi_square_p_value(observed, probability * SWEEPS)
+    return chi_square_p_value(observed, probability * sweeps)
 
 
 @pytest.mark.oracle
@@ -209,6 +257,213 @@ def test_single_site_is_still_exact_on_a_negative_coupling() -> None:
     assert chi_square_p_value(observed, probability * SWEEPS) > SIGNIFICANCE
 
 
+# --- the gradient-informed proposals ----------------------------------------
+#
+# Zanella (2020) and Grathwohl et al. (2021), which on this energy are one
+# kernel: the Taylor estimate the second proposes from *is* the difference the
+# first proposes from, because the relaxed log weight is affine in each site's
+# row. That is the claim of
+# `test_the_taylor_estimate_is_the_single_flip_energy_difference`, pinned three
+# ways --- against the heat bath's own conditional, against the tape, and
+# against the enumerated energy --- and it is why two move sets share one
+# sweep rather than one move set carrying two names.
+
+
+def _wider_lattice() -> PottsGraph:
+    """The 3x3 open square: 512 configurations, and an interior site of degree 4.
+
+    A weaker coupling than `COUPLING`, so the enumerated law is spread over
+    the 512 cells rather than concentrated on the two aligned configurations:
+    a chi-square over cells the model almost never visits measures rounding.
+    """
+    return lattice_graph((3, 3), BoundaryCondition.OPEN, 0.4)
+
+
+def _frustrated_lattice() -> PottsGraph:
+    """The 3x3 periodic triangular antiferromagnet: every coupling negative.
+
+    The instance both cluster moves refuse
+    (`test_a_cluster_move_refuses_a_negative_coupling`). The gradient-informed
+    moves are single-flip and run on it, which is the point of testing them
+    here: a frustrated law is the one a proposal that follows the energy is
+    likeliest to get wrong.
+    """
+    return frustrated_triangular_lattice((3, 3), BoundaryCondition.PERIODIC, -1.0)
+
+
+ENUMERABLE = {
+    "3x3-open": _wider_lattice,
+    "frustrated-triangular": _frustrated_lattice,
+}
+
+#: Recorded sweeps for the enumerable lattices above: 512 cells, so 10,000
+#: draws put a mean 19.5 in each.
+WIDE_SWEEPS = 10_000
+
+
+@pytest.mark.oracle
+@pytest.mark.release
+@pytest.mark.parametrize("instance", sorted(ENUMERABLE))
+def test_the_locally_balanced_chain_is_drawn_from_the_exact_boltzmann_distribution(
+    instance: str,
+) -> None:
+    # The same referee as the heat bath and Wolff: every configuration
+    # enumerated by `log_weights`, which shares no proposal, weight or accept
+    # step with the sampler. `release` because the sweep is NumPy over the
+    # whole neighbourhood per proposal and 360,000 proposals do not fit the
+    # per-test cap; the 2x2 case of
+    # `test_the_chain_is_drawn_from_the_exact_boltzmann_distribution` is the
+    # per-pull-request sibling.
+    # Realized p at the declared seed and the next: 3x3-open 0.0240 and
+    # 0.2629, frustrated-triangular 0.0758 and 0.9926.
+    graph = ENUMERABLE[instance]()
+
+    p_value = _chi_square_against(
+        graph, WITH_FIELD, PottsMove.LOCALLY_BALANCED, SEED, sweeps=WIDE_SWEEPS
+    )
+
+    assert p_value > SIGNIFICANCE, p_value
+
+
+@pytest.mark.oracle
+@pytest.mark.release
+@pytest.mark.parametrize("instance", sorted(ENUMERABLE))
+def test_the_gibbs_with_gradients_chain_is_drawn_from_the_exact_boltzmann_distribution(
+    instance: str,
+) -> None:
+    # As above, for the proposal that weights the neighbourhood by the Taylor
+    # estimate rather than by the difference. The two agree to 1e-12 on this
+    # energy, so what this adds over the test above is that the *route* --- a
+    # gradient rebuilt at each state, forward and reverse --- reaches the same
+    # law rather than being assumed to.
+    # Realized p at the declared seed and the next: 3x3-open 0.0240 and
+    # 0.2629, frustrated-triangular 0.0758 and 0.9926 --- the locally balanced
+    # chain's, to four figures, on every instance and seed. The two routes
+    # draw the same uniforms against the same weights here, so the chains do
+    # not merely share a law; they are the same chain.
+    graph = ENUMERABLE[instance]()
+
+    p_value = _chi_square_against(
+        graph, WITH_FIELD, PottsMove.GIBBS_WITH_GRADIENTS, SEED, sweeps=WIDE_SWEEPS
+    )
+
+    assert p_value > SIGNIFICANCE, p_value
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+@pytest.mark.parametrize("instance", sorted(ENUMERABLE))
+def test_the_taylor_estimate_is_the_single_flip_energy_difference(
+    instance: str,
+) -> None:
+    # The claim that makes Gibbs-with-gradients and the locally balanced
+    # proposal one kernel here, and it is refereed rather than derived: the
+    # heat bath's own per-site conditional, the tape's gradient at the one-hot
+    # state, and the enumerated energy of each flipped configuration. Nothing
+    # in the chain of equalities is the sampler's own arithmetic.
+    graph = ENUMERABLE[instance]()
+    rows = site_field(WITH_FIELD, graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    owner = owner_rows(offsets)
+    bounds = offsets.tolist()
+    incident, weights = neighbours.tolist(), couplings.tolist()
+    rng = np.random.default_rng(SEED)
+
+    for _ in range(8):
+        state = np.asarray(rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64)
+        conditional = np.array(
+            [
+                heat_bath_log_weights(
+                    rows[node],
+                    state,
+                    incident,
+                    weights,
+                    bounds[node],
+                    bounds[node + 1],
+                )
+                for node in range(graph.n_nodes)
+            ]
+        )
+        expected = log_ratios(conditional, state)
+        estimate = taylor_log_ratios(rows, state, neighbours, couplings, owner)
+
+        assert np.abs(estimate - expected).max() < 1e-12
+        assert np.abs(autodiff_log_ratios(graph, rows, state) - expected).max() < 1e-12
+
+        current = float(energies(graph, rows, state[None])[0])
+        for node in range(graph.n_nodes):
+            for colour in range(2):
+                moved = state.copy()
+                moved[node] = colour
+                difference = current - float(energies(graph, rows, moved[None])[0])
+                assert estimate[node, colour] == pytest.approx(difference, abs=1e-12)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("function", list(BalancingFunction))
+def test_the_accept_step_is_the_ratio_of_the_two_neighbourhood_normalizers(
+    function: BalancingFunction,
+) -> None:
+    # Zanella's collapse, for *both* balancing functions: a balanced weight
+    # satisfies `g(t) = t g(1 / t)`, so the target and the weights cancel and
+    # the Metropolis-Hastings ratio is `Z(s) / Z(s')` whichever `g` is used.
+    # The sweep computes it the general way --- the way Gibbs-with-gradients
+    # needs, since an estimate does not cancel --- and this is what says the
+    # general form is the collapsed one where the estimate is exact.
+    graph = _frustrated_lattice()
+    rows = site_field(WITH_FIELD, graph.n_nodes)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    owner = owner_rows(offsets)
+    rng = np.random.default_rng(SEED)
+
+    for _ in range(4):
+        state = np.asarray(rng.integers(0, 2, size=graph.n_nodes), dtype=np.int64)
+        here = log_ratios(
+            local_fields(rows, state, neighbours, couplings, owner), state
+        )
+        forward_weights = log_balanced_weights(here, state, function=function)
+        forward_total = log_normalizer(forward_weights)
+
+        for node in range(graph.n_nodes):
+            colour = 1 - int(state[node])
+            moved = state.copy()
+            moved[node] = colour
+            there = log_ratios(
+                local_fields(rows, moved, neighbours, couplings, owner), moved
+            )
+            reverse_weights = log_balanced_weights(there, moved, function=function)
+            reverse_total = log_normalizer(reverse_weights)
+
+            realized = log_metropolis_ratio(
+                float(here[node, colour]),
+                float(forward_weights[node, colour]),
+                forward_total,
+                float(reverse_weights[node, int(state[node])]),
+                reverse_total,
+            )
+
+            assert realized == pytest.approx(forward_total - reverse_total, abs=1e-12)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("move", BALANCED)
+def test_dropping_the_metropolis_correction_is_caught(
+    move: PottsMove, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Evidence that the chi-square tests above have the power they claim. A
+    # locally balanced proposal accepted unconditionally is stationary at
+    # `pi(s) Z(s)` rather than at `pi(s)`, and the normalizer varies over the
+    # 16 configurations of a 2x2 lattice in a field, so the enumeration
+    # rejects it.
+    def always_accept(*arguments: float) -> float:
+        del arguments
+        return 0.0
+
+    monkeypatch.setattr(potts_mcmc, "log_metropolis_ratio", always_accept)
+
+    assert _goodness_of_fit(move, WITH_FIELD) < SIGNIFICANCE
+
+
 # The instance at the transition, declared rather than built here (issue
 # #413). `potts_lattice/stress` is the 12x12 open square at the exact
 # 3-state transition in zero field, and section 9 of
@@ -287,7 +542,7 @@ def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
     sweeps = 4_000
 
     times: dict[PottsMove, float] = {}
-    for move in PottsMove:
+    for move in (PottsMove.SINGLE_SITE, PottsMove.SWENDSEN_WANG, PottsMove.WOLFF):
         chain = sample_potts(
             graph, field, move, np.random.default_rng(7), sweeps, burn_in=sweeps // 5
         )
@@ -381,14 +636,15 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     # 0.001 significance the untempered tests use.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
     index, probability = _tempered_exact_distribution(graph, WITH_FIELD, temperature)
+    sweeps = SWEEPS_BY_MOVE[move]
 
     chain = sample_potts(
         graph,
         WITH_FIELD,
         move,
         np.random.default_rng(SEED),
-        SWEEPS,
-        burn_in=SWEEPS // 10,
+        sweeps,
+        burn_in=sweeps // 10,
         thin=THINNING[move],
         temperature=temperature,
     )
@@ -396,7 +652,7 @@ def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     for row in chain.states:
         observed[index[tuple(row)]] += 1
 
-    assert chi_square_p_value(observed, probability * SWEEPS) > SIGNIFICANCE
+    assert chi_square_p_value(observed, probability * sweeps) > SIGNIFICANCE
 
 
 @pytest.mark.smoke
