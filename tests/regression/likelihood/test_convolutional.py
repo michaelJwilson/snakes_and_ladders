@@ -22,6 +22,7 @@ import math
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.convolutional import (
     bcjr,
     enumerate_messages,
@@ -68,13 +69,18 @@ def _received(
 
 
 @pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
 @pytest.mark.parametrize("message_length", [6, 10])
-def test_bcjr_posteriors_are_the_exact_bitwise_map(message_length: int) -> None:
+def test_bcjr_posteriors_are_the_exact_bitwise_map(
+    message_length: int, backend: Backend
+) -> None:
     """The forward-backward ratio equals the sum over all `2 ** K` messages.
 
     The whole claim of the decoder: no approximation is involved on a
     terminated trellis, since it is a chain and message passing is exact on
-    one, so equality may be asserted rather than a departure reported.
+    one, so equality may be asserted rather than a departure reported. Both
+    backends are held to it, so the enumeration referees the port rather
+    than the port's agreement with the oracle standing in for it.
     """
     trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
     rng = np.random.default_rng(233)
@@ -83,7 +89,7 @@ def test_bcjr_posteriors_are_the_exact_bitwise_map(message_length: int) -> None:
         message = rng.integers(0, 2, message_length).astype(np.uint8)
         systematic, parity = _received(trellis, message, 0.9, rng)
 
-        decoding = bcjr(trellis, systematic, parity)
+        decoding = bcjr(trellis, systematic, parity, backend=backend)
         exact = exact_bitwise_posterior(trellis, systematic, parity, message_length)
 
         np.testing.assert_allclose(
