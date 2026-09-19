@@ -15,6 +15,7 @@ Issue #596. Two kinds of check, because the harness makes two kinds of claim:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -323,3 +324,70 @@ def test_the_harness_reproduces_the_restart_baseline_on_the_seven_taxon_tree() -
     assert 0.35 <= single.fraction <= 0.62, single.fraction
     assert restarted.fraction == 1.0
     assert restarted.fraction > single.fraction
+
+
+def _binomial_interval(n: int, p: float, mass: float) -> tuple[int, int]:
+    """The shortest count interval holding ``mass`` of ``Binomial(n, p)``, enumerated.
+
+    Every one of the ``n + 1`` probabilities is written out with
+    :func:`math.comb` and the highest are taken until the mass is covered, so
+    the band is the distribution's own and not a normal approximation of it.
+    No `scipy` for the reason `test_learn_relaxed.py` gives for McNemar: root
+    `CLAUDE.md`'s dependency rule would not admit one for a binomial tail.
+    """
+    pmf = [math.comb(n, k) * p**k * (1.0 - p) ** (n - k) for k in range(n + 1)]
+    covered: set[int] = set()
+    total = 0.0
+    for k in sorted(range(n + 1), key=lambda index: -pmf[index]):
+        covered.add(k)
+        total += pmf[k]
+        if total >= mass:
+            break
+    return min(covered), max(covered)
+
+
+@pytest.mark.oracle
+def test_the_curve_is_the_binomial_the_family_declares() -> None:
+    """Every probe's reached count lands in the enumerated binomial band.
+
+    The family's basin fraction is `0.5 ** (size - 1)` by construction, so the
+    number of starts that reach the target at one size is
+    `Binomial(starts, 0.5 ** (size - 1))` exactly --- there is no estimate in
+    the referee, only `math.comb`. Over 400 starts at five sizes, the counts
+    and the 99.9% enumerated bands:
+
+        size     p     reached     band
+           1  1.000        400   400-400
+           2  0.500        201   167-232
+           3  0.250         99    73-129
+           4  0.125         49    30- 73
+           5  0.062         17    11- 42
+
+    The band is a property of the family and the seed decides where in it the
+    run lands, so this catches a probe that counted its starts or its reaches
+    wrongly and nothing else. `first_failure` is size 2 for any seed, a size-1
+    probe failing with probability zero and a size-2 probe with
+    `1 - 0.5 ** 400`.
+    """
+    curve = failure_curve(
+        _draw,
+        _family,
+        sizes=(1, 2, 3, 4, 5),
+        budget=Budget("decisions", 10),
+        starts=400,
+        rng=np.random.default_rng(729),
+        stop_at_failure=False,
+    )
+
+    assert [probe.size for probe in curve.probes] == [1, 2, 3, 4, 5]
+    for probe in curve.probes:
+        low, high = _binomial_interval(400, 0.5 ** (probe.size - 1), 0.999)
+        assert low <= probe.reached <= high, f"size {probe.size}"
+        assert probe.starts == probe.asked == 400
+        assert not probe.truncated
+        assert probe.fraction == probe.reached / 400
+
+    assert curve.probes[0].reached == 400, "a basin fraction of one cannot fail"
+    failed = curve.first_failure
+    assert failed is not None
+    assert failed.size == 2

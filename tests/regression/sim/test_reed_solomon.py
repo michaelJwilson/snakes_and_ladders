@@ -17,6 +17,7 @@ Issue #594. Three kinds of claim, kept apart:
 from __future__ import annotations
 
 import itertools
+import math
 
 import numpy as np
 import pytest
@@ -26,6 +27,7 @@ from snakes_and_ladders.sim.galois import (
     field,
     symbols_from_bits,
 )
+from snakes_and_ladders.sim.ldpc import BinarySymmetricChannel
 from snakes_and_ladders.sim.reed_solomon import (
     DecodingFailure,
     ReedSolomon,
@@ -290,3 +292,98 @@ def test_the_packing_refuses_what_it_would_have_to_truncate() -> None:
         bits_from_symbols(np.array([8]), 3)
     with pytest.raises(ValueError, match="do not divide into symbols"):
         symbols_from_bits(np.zeros(7, dtype=np.int64), 3)
+
+
+# --- end to end: a planted message over a binary channel ------------------------
+
+#: Draws of the end-to-end run. At 4,000 the three-sigma binomial interval on
+#: the rate below is 1.2e-2, and the run is 0.4 s.
+END2END_DRAWS = 4000
+
+#: The crossover of the binary channel the symbols are carried over. A symbol
+#: of `GF(8)` is three bits, so this is a symbol error rate of
+#: `1 - (1 - p) ** 3 = 0.1426` and `RS(7, 3)` sees more than its two
+#: correctable symbols often enough to measure at 4,000 draws.
+END2END_FLIP = 0.05
+
+#: One-sigma binomial intervals the realized block error rate may sit from the
+#: closed form. Three; realized 0.6.
+BINOMIAL_INTERVALS = 3.0
+
+
+@pytest.mark.critical
+@pytest.mark.end2end
+def test_the_planted_message_survives_every_channel_word_inside_the_guarantee() -> None:
+    """Realized block error rate 0.0673 against the bounded-distance closed
+    form 0.0650, 0.6 binomial intervals of 3.0 allowed; 3,731 draws inside the
+    guarantee all returned the planted message and none of the 269 past it was
+    right by chance.
+
+    The path is the package's, end to end: a message of three `GF(8)` symbols
+    from a seeded generator, :func:`encode` to a seven-symbol codeword,
+    `sim.galois.bits_from_symbols` to 21 bits, `sim.ldpc`'s binary symmetric
+    channel at `END2END_FLIP`, the hard decision back through
+    `symbols_from_bits`, and :func:`decode` --- syndromes, Berlekamp--Massey, a
+    Chien search and Forney. This is the first code here whose channel is
+    binary and whose alphabet is not: a symbol fails when any of its three
+    bits does, which is what makes Reed--Solomon a burst code and what the
+    rate below is computed from.
+
+    Three claims, and they are not the same claim:
+
+    * **Inside the guarantee it is a solver.** Every draw whose received word
+      differs from the sent one in two symbols or fewer decodes to the planted
+      message. Anything short of all 3,731 is a defect, not a rate.
+    * **Past the guarantee it is not lucky.** Of the 269 draws with three or
+      more symbol errors, none returned the planted message: the decoder
+      refused 226 of them and returned another codeword on 43. So the realized
+      block error rate
+      *equals* the realized share of draws past `t`, which is asserted as an
+      equality and is what lets the closed form referee it.
+    * **The rate is the bounded-distance one.** `1 - P(at most t symbol
+      errors)` under `eq:bounded-distance`, an equality rather than a bound
+      because Reed--Solomon meets Singleton with equality and its spheres of
+      radius `t` are therefore disjoint.
+    """
+    code = reed_solomon(3, 3)
+    channel = BinarySymmetricChannel(END2END_FLIP)
+    rng = np.random.default_rng(729)
+    inside = past = lucky = lost_inside = failures = 0
+
+    for _ in range(END2END_DRAWS):
+        message = rng.integers(0, code.field.order, size=code.n_message)
+        word = encode(code, message)
+        ratios = channel.log_likelihood_ratios(
+            bits_from_symbols(word, code.m).astype(np.uint8), rng
+        )
+        received = symbols_from_bits((ratios < 0.0).astype(np.uint8), code.m)
+        corrupted = int((received != word).sum())
+        try:
+            recovered = decode(code, received)[: code.n_message]
+        except (DecodingFailure, RuntimeError):
+            failures += 1
+            past += 1
+            continue
+        if corrupted <= code.correctable:
+            inside += 1
+            lost_inside += int(not np.array_equal(recovered, message))
+        else:
+            past += 1
+            lucky += int(np.array_equal(recovered, message))
+
+    assert lost_inside == 0
+    assert lucky == 0
+    assert (inside, past, failures) == (3731, 269, 226)
+
+    symbol_flip = 1.0 - (1.0 - END2END_FLIP) ** code.m
+    expected = 1.0 - sum(
+        math.comb(code.n_symbols, errors)
+        * symbol_flip**errors
+        * (1.0 - symbol_flip) ** (code.n_symbols - errors)
+        for errors in range(code.correctable + 1)
+    )
+    realized = past / END2END_DRAWS
+    assert realized == 0.06725
+    assert abs(realized - expected) < BINOMIAL_INTERVALS * math.sqrt(
+        expected * (1.0 - expected) / END2END_DRAWS
+    )

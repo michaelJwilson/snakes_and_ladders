@@ -56,6 +56,14 @@ parenthesis the only way a ticket is cited.
   in one variable per branch (#329)
 - Put `stubtest` in CI — the type stub has already drifted (#37)
 
+- Port `likelihood.convolutional.bcjr` to Rust: the trellis is 95.8% of one
+  pass at K = 1,024 and 95.5% of an eight-iteration turbo decode, the highest
+  fraction the stress profile ranks and the only top term in a family that is
+  a Python loop rather than a library call (#754)
+- Port the `message_passing` tree schedule's per-level dispatch, which #341
+  left at 4.7x the forward recursion and the stress profile ranks at 29.8% of
+  a 200-step chain (#754)
+
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 - Fit HMM transition and emission matrices to nominal interval coverage
@@ -120,6 +128,13 @@ parenthesis the only way a ticket is cited.
   audit names
 - Transcribe the seven- and eight-taxon calibration table of #331 from a
   release-gate run into `STATUS.md`, where #350 left a placeholder
+- Make the Rust single-site sweep the default on its exact pin (#599) — the
+  stress profile ranks `_site_update` at 29.1% of the Python sweep at 32x32,
+  against a route already measured at 123-134x (#754)
+- Port the Swendsen-Wang cluster pass: `_recolour` is 26.2% of a 42.2 ms
+  `propose` at 64x64 over 2,437 clusters a sweep, and the per-sweep edge
+  rebuild that `PottsGraph.edge_index` already stores — 0.9 ms, 1.9% — goes
+  with it rather than as a cut of its own (#754)
 
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 
@@ -127,6 +142,11 @@ parenthesis the only way a ticket is cited.
   against enumeration and the cold replica is shown uncontaminated, but how
   long a chain must run before its marginals are usable is unmeasured, so
   every budget here is stated in sweeps rather than in mixing times
+
+- Reassociate the homogeneous transfer-matrix product by repeated squaring,
+  6 products for 64 positions: `torch.logsumexp` is 33.2% of `hmc.sample` at
+  1,000 draws over 512,000 calls, an algorithmic cut #341 named and nobody
+  took (#754)
 
 ## Milestone 2.0 — RL Definition
 

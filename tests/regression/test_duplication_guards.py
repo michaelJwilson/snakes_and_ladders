@@ -51,10 +51,15 @@ SLIMMING_BASELINE = {
     "modules without a docstring": 0,
     "root exports": 7,
     "test modules pinning a twin to its oracle beyond the first": 13,
-    "flat modules": 148,
-    # Re-pinned 2026-09-19: issue #755's seam is one public callable, so the
-    # row rises by one. A row that rises states why here or it is a duplicate.
-    "API-map entries": 1577,
+    # Both rows count the tree rather than a duplicate, so they move when a
+    # module lands: `search.balanced`, the one proposal kernel the Potts
+    # lattice and the factor graph share, took them from 148 and 1,576
+    # (#756). The second moves on a public name too, and #756's cluster moves
+    # for a frustrated lattice added twelve without adding a module; issue
+    # #755's seam is one public callable, so the row rises by one more. A row
+    # that rises states why here or it is a duplicate.
+    "flat modules": 149,
+    "API-map entries": 1603,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
