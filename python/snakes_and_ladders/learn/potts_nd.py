@@ -90,16 +90,22 @@ class MoveKind(StrEnum):
     SWEEP = "sweep"
     WOLFF = "wolff"
     SWENDSEN_WANG = "swendsen-wang"
+    NIEDERMAYER = "niedermayer"
 
 
 #: Kinds whose move is supplied through
 #: :class:`~snakes_and_ladders.learn.keyed.KeyedMove` rather than implemented
 #: here, since a cluster growth needs the graph this package will not import.
-CLUSTER_KINDS = (MoveKind.WOLFF, MoveKind.SWENDSEN_WANG)
+CLUSTER_KINDS = (MoveKind.WOLFF, MoveKind.SWENDSEN_WANG, MoveKind.NIEDERMAYER)
 
 #: Kinds whose action names a site and a target label. The rest name a
 #: temperature and nothing else, and visit every site.
-PARAMETRIC_KINDS = (MoveKind.FLIP, MoveKind.WOLFF)
+PARAMETRIC_KINDS = (MoveKind.FLIP, MoveKind.WOLFF, MoveKind.NIEDERMAYER)
+
+#: Kinds whose charge is the cluster they build and so is known only by
+#: building it. :meth:`PottsNDEnvironment.visits` runs the move for these;
+#: for the rest the charge is read in constant time.
+GROWN_KINDS = (MoveKind.WOLFF, MoveKind.NIEDERMAYER)
 
 
 class FeatureColumn(StrEnum):
@@ -130,9 +136,10 @@ class PottsAction(NamedTuple):
     Parameters
     ----------
     kind : MoveKind
-        ``FLIP`` and ``WOLFF`` name a site and a label --- the flipped site, or
-        the cluster's root and the colour it is recoloured to. ``SWEEP`` and
-        ``SWENDSEN_WANG`` name neither and visit every site.
+        ``FLIP``, ``WOLFF`` and ``NIEDERMAYER`` name a site and a label --- the
+        flipped site, or the cluster's root and the colour it is recoloured to
+        or transposed with. ``SWEEP`` and ``SWENDSEN_WANG`` name neither and
+        visit every site.
     site, label : int
         The site and target label, or ``-1`` each where the kind names
         neither.
@@ -465,7 +472,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         this one: no single number makes them commensurable *and* prices the
         policy's own scoring.
 
-        **A Wolff step's charge is its cluster's size**, which is not known
+        **A grown cluster's charge is its size**, which is not known
         until the cluster is grown, so this runs the move to find out. It is
         exact rather than an average because the growth is keyed on
         ``(state, action)``: the cluster counted here is the cluster
@@ -474,8 +481,8 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         charge below and not by this --- 128 candidates would otherwise cost
         128 growths, or some thirty sweeps of work per decision.
         """
-        if action.kind is MoveKind.WOLFF:
-            _, spent = self._moves[MoveKind.WOLFF].propose(
+        if action.kind in GROWN_KINDS:
+            _, spent = self._moves[action.kind].propose(
                 np.asarray(state, dtype=np.int64),
                 temperature=self._ladder[action.rung],
                 site=action.site,

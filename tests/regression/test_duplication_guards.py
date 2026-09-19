@@ -49,8 +49,14 @@ SLIMMING_BASELINE = {
     "modules without a docstring": 0,
     "root exports": 7,
     "test modules pinning a twin to its oracle beyond the first": 13,
+    # Both rows count the tree rather than a duplicate, so they move when a
+    # module lands: `search.balanced`, the one proposal kernel the Potts
+    # lattice and the factor graph share, took them from 148 and 1,576
+    # (#756). The second moves on a public name too, and #756's cluster moves
+    # for a frustrated lattice added twelve without adding a module; #754's
+    # BCJR pass in Rust added one public name and no module.
     "flat modules": 149,
-    "API-map entries": 1577,
+    "API-map entries": 1603,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
