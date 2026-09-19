@@ -52,9 +52,10 @@ SLIMMING_BASELINE = {
     # Both rows count the tree rather than a duplicate, so they move when a
     # module lands: `search.balanced`, the one proposal kernel the Potts
     # lattice and the factor graph share, took them from 148 and 1,576
-    # (#756).
+    # (#756). The second moves on a public name too, and #756's cluster moves
+    # for a frustrated lattice added twelve without adding a module.
     "flat modules": 149,
-    "API-map entries": 1590,
+    "API-map entries": 1602,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
