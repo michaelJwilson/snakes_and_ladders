@@ -28,6 +28,13 @@ FORBIDDEN_PREFIXES = (
     "snakes_and_ladders.sim",
     "snakes_and_ladders.likelihood",
     "snakes_and_ladders.search",
+    # `sample/` holds both kinds, so the rule names the application-shaped
+    # half rather than the package: a temperature schedule is a number per
+    # step and shapes no agent, which is why `ppo` and `relaxed` may import
+    # `sample.schedule`, while `sample.potts_mcmc` and `sample.potts_keyed`
+    # are the lattice's own move sets. Issue #777 moved those out of
+    # `search/`, where this rule already reached them.
+    "snakes_and_ladders.sample.potts",
 )
 
 #: The modules issue #779 exempted, each named with what it imports and why.
