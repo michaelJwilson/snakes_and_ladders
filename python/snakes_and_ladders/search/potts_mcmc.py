@@ -57,6 +57,7 @@ from snakes_and_ladders.sim.potts import energies, heat_bath_log_weights, site_f
 __all__ = [
     "AnnealedPotts",
     "ClusterCounter",
+    "MoveKind",
     "PottsChain",
     "PottsMove",
     "Recolour",
@@ -92,6 +93,23 @@ class PottsMove(StrEnum):
     SINGLE_SITE = "single-site"
     SWENDSEN_WANG = "swendsen-wang"
     WOLFF = "wolff"
+
+
+class MoveKind(StrEnum):
+    """Which move a learned action applies, over the move set :class:`PottsMove` names.
+
+    Issue #779 moved it here from ``snakes_and_ladders.learn.potts_nd``, which
+    spelled it out rather than importing it. It sits beside the moves it names
+    so one vocabulary is defined once: ``SWEEP`` is a pass of
+    :data:`PottsMove.SINGLE_SITE`, ``FLIP`` is one site of that pass, and
+    ``WOLFF`` and ``SWENDSEN_WANG`` are the two cluster moves under their own
+    names.
+    """
+
+    FLIP = "flip"
+    SWEEP = "sweep"
+    WOLFF = "wolff"
+    SWENDSEN_WANG = "swendsen-wang"
 
 
 @dataclass(frozen=True)

@@ -32,8 +32,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from snakes_and_ladders.learn.potts_nd import MoveKind
 from snakes_and_ladders.search.potts_mcmc import (
+    MoveKind,
     _find,
     _swendsen_wang_sweep,
     _union,

@@ -33,12 +33,14 @@ FORBIDDEN_PREFIXES = (
 #: The modules issue #779 exempted, each named with what it imports and why.
 #: `tree.py` and `ranking.py` moved here from `search/`: each is an instance of
 #: a `learn/` interface over one application's objects --- a topology, a
-#: lattice --- so each imports that application. The interface, the policy and
-#: the estimators import none, which is the claim this guard makes and the
+#: lattice --- so each imports that application. `potts_nd.py` imports one
+#: enum, `search.potts_mcmc.MoveKind`, which #779 moved down to sit beside the
+#: moves it names rather than be spelled out twice. The interface, the policy
+#: and the estimators import none, which is the claim this guard makes and the
 #: reason an agent is not shaped by one problem. Listed rather than
-#: pattern-matched, so a third is a failure a reader decides on rather than a
+#: pattern-matched, so a fourth is a failure a reader decides on rather than a
 #: name that slips through.
-APPLICATION_INSTANCES = ("ranking.py", "tree.py")
+APPLICATION_INSTANCES = ("potts_nd.py", "ranking.py", "tree.py")
 
 FIELD = np.array([0.4, -0.1, -0.3])
 

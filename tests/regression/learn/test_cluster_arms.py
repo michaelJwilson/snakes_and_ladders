@@ -38,7 +38,6 @@ from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
 from snakes_and_ladders.learn.potts_nd import (
     CLUSTER_KINDS,
     FeatureColumn,
-    MoveKind,
     PottsAction,
     PottsNDEnvironment,
 )
@@ -56,7 +55,11 @@ from snakes_and_ladders.search.potts_keyed import (
     WolffMove,
     cluster_moves,
 )
-from snakes_and_ladders.search.potts_mcmc import _swendsen_wang_sweep, _wolff_sweep
+from snakes_and_ladders.search.potts_mcmc import (
+    MoveKind,
+    _swendsen_wang_sweep,
+    _wolff_sweep,
+)
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, energies, spatio_only_field
 
