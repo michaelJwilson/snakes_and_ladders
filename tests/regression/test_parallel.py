@@ -10,6 +10,8 @@ No CI Profiling rule.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 import torch
@@ -53,7 +55,8 @@ def test_results_come_back_in_input_order_under_every_backend(backend: Backend) 
     assert results == [_square(item) for item in items]
 
 
-@pytest.mark.infra
+@pytest.mark.oracle
+@pytest.mark.backend
 @pytest.mark.parametrize("backend", ["threads", "processes"])
 def test_four_workers_draw_the_streams_one_worker_draws(backend: Backend) -> None:
     # The ticket's first rule: a parallel run is bitwise the serial run. Each
@@ -173,3 +176,57 @@ def test_a_spawned_process_runs_at_the_thread_count_it_was_given() -> None:
     )
 
     assert inside == [1, 1]
+
+
+def _square_and_draw(item: int, rng: np.random.Generator) -> tuple[float, float]:
+    """``i * i`` in float64, and the item's own stream, from one pool pass."""
+    return float(item) * float(item), item + float(rng.random())
+
+
+@pytest.mark.oracle
+@pytest.mark.backend
+@pytest.mark.parametrize("backend", ["threads", "processes"])
+def test_each_backend_maps_the_seeded_tasks_onto_the_serial_map_bitwise(
+    backend: Backend,
+) -> None:
+    """The three backends are one map, refereed from outside it (issue #729).
+
+    Two referees, neither of them `map_tasks`. The deterministic half is
+    checked against ``sum_{i<n} i^2 = n (n - 1) (2n - 1) / 6``, **22,140** at
+    ``n = 41``, which a reordered, repeated or dropped task breaks; the
+    seeded half against the children :meth:`numpy.random.Generator.spawn`
+    yields for the same seed, reconstructed here. Both are compared with
+    ``==``: the pooled map and the serial map differ by **0.0** on every one
+    of the 41 entries under either backend, the tolerance declared for this
+    comparison being bitwise equality. ``intra_op_threads=1`` is passed so
+    the pool and the serial run execute the same kernels in the same
+    reduction order, which is the condition that makes bitwise the right
+    tolerance to declare.
+    """
+    items = list(range(41))
+    closed_form = len(items) * (len(items) - 1) * (2 * len(items) - 1) / 6
+
+    serial = map_tasks(
+        _square_and_draw,
+        items,
+        workers=1,
+        backend="serial",
+        intra_op_threads=1,
+        generator=np.random.default_rng(11),
+    )
+    pooled = map_tasks(
+        _square_and_draw,
+        items,
+        workers=4,
+        backend=backend,
+        intra_op_threads=1,
+        generator=np.random.default_rng(11),
+    )
+
+    assert math.fsum(square for square, _ in pooled) == closed_form == 22140.0
+    assert pooled == serial
+    children = np.random.default_rng(11).spawn(len(items))
+    assert pooled == [
+        _square_and_draw(item, child)
+        for item, child in zip(items, children, strict=True)
+    ]
