@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        A review reads `ROADMAP.md`, `STATUS.md` and `TICKETS.md` against
+        A review reads `ROADMAP.md` and `STATUS.md` against
         each other and against the tree, fixes what is stale in its own pull
         request and tickets the rest; it lands as `docs/reviews/<date>.md`
         in the shape the last one has. Every count is re-measured on a named

@@ -35,7 +35,7 @@ body:
         - label: "`docs/paper.pdf`"
         - label: "`docs/textbook.pdf`"
         - label: "`docs/api_map.pdf` or `docs/mind_map.pdf`"
-        - label: "`README.md`, `DEV.md`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md`, `TICKETS.md` or `CHECKS.md`"
+        - label: "`README.md`, `DEV.md`, `INSTALL.md`, `ROADMAP.md`, `STATUS.md` or `CHECKS.md`"
         - label: "A notebook under `docs/nb/`"
         - label: "A module `CLAUDE.md`"
   - type: textarea

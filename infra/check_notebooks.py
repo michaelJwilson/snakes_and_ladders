@@ -20,9 +20,8 @@ an issue number, what the notebook could not demonstrate. All three carried a
 sentence that had been false since this tool landed ("no job re-runs it") and
 nothing noticed, because re-execution compares outputs and a markdown cell has
 none (issue #278). So the last cell must be markdown headed
-``## Further work``, and every bullet under it must name an issue (``#N``) or a
-``TICKETS.md`` section. Whether the issue is still open is the release gate's
-question.
+``## Further work``, and every bullet under it must name an issue (``#N``).
+Whether that issue is still open is the release gate's question.
 
 Exits 0 when every notebook agrees, 1 on the first that does not, printing a
 unified diff of the cell's output.
@@ -129,8 +128,10 @@ def image_count(cell: dict[str, Any]) -> int:
 #: work", and either is the section.
 FURTHER_WORK = re.compile(r"^## Further work\s*$", re.IGNORECASE | re.MULTILINE)
 
-#: What a Further Work bullet must name: an issue, or a `TICKETS.md` section.
-NAMES_A_TICKET = re.compile(r"#\d+|TICKETS\.md")
+#: What a Further Work bullet must name: an issue. `TICKETS.md` was the second
+#: form until #804 deleted it, since a section heading names nothing that can be
+#: assigned, closed or found from a pull request.
+NAMES_A_TICKET = re.compile(r"#\d+")
 
 
 def structure_problems(name: str, cells: Sequence[dict[str, Any]]) -> list[str]:
@@ -165,8 +166,7 @@ def structure_problems(name: str, cells: Sequence[dict[str, Any]]) -> list[str]:
         if not NAMES_A_TICKET.search(bullet):
             first_line = bullet.strip().splitlines()[0] if bullet.strip() else ""
             problems.append(
-                f"{name}: Further work bullet names no issue or TICKETS.md section: "
-                f"{first_line!r}"
+                f"{name}: Further work bullet names no issue: {first_line!r}"
             )
     return problems
 

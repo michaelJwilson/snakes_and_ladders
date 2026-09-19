@@ -36,8 +36,7 @@ baseline's value changing — and both classes have since gone: issue #490 delet
 every figure stamp and issue #460 the baseline digest. Where a file is a list
 rather than a generated artefact — a package `__init__`, a module `CLAUDE.md`,
 `STATUS.md` — both sides are kept in the file's existing order, and where both
-sides *deleted* a line, as `TICKETS.md`'s branches do, the union is of the
-deletions. Two hazards a merge carries that the tree does not show: a textual
+sides *deleted* a line, the union is of the deletions. Two hazards a merge carries that the tree does not show: a textual
 merge of two branches' bibliography entries can leave an entry's closing brace
 missing, which `infra/check_citations.py` walks for (issue #503); and concurrent
 branches write colliding experiment numbers that `git` cannot see, three
@@ -82,8 +81,8 @@ opposite failure to a retired name, which blocks everything.
 
 ### 0. Read the ledgers
 
-Every `TICKETS.md` bullet names the issue that carries it, and every notebook's
-**Further Work** line names one. A bullet or line whose issue has closed either
+Every notebook's **Further Work** line names the issue that carries it. A line
+whose issue has closed either
 describes work that landed, and goes, or work that remains with nothing behind
 it, and is re-pointed at a ticket filed then. Twelve such bullets and nine such
 lines were found at the 0.5.0 audit (issue #400). This is a reading, not a

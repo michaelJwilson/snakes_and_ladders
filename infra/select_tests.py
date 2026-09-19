@@ -136,7 +136,7 @@ GUARDS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         ),
     ),
     (
-        ("ROADMAP.md", "STATUS.md", "TICKETS.md"),
+        ("ROADMAP.md", "STATUS.md"),
         (
             "tests/regression/test_planning_documents_agree.py",
             "tests/regression/test_repository_links.py",

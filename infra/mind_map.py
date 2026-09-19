@@ -10,7 +10,7 @@ docstring.** `STATUS.md` records what has landed against each milestone, so the
 label comes from the join: the milestone whose section names the module. The
 docstring supplies the wording where a reader needs more than a name, never the
 attribution. `tests/regression/test_planning_documents_agree.py` already holds
-`ROADMAP.md`, `STATUS.md` and `TICKETS.md` to the same milestone headings, so
+`ROADMAP.md` and `STATUS.md` to the same milestone headings, so
 that join has a guard rather than a convention.
 
 **A module no `STATUS.md` section names is the interesting output**, not an

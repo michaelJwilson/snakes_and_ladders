@@ -8,7 +8,7 @@ release template's tag precondition is recorded here as not met; `Cargo.toml`
 reads `0.3.0`, the version the last built `CHANGELOG.md` section carries.
 
 This file is a ledger against the roadmap, not a project board. Open work lives
-in GitHub issues, its titles collected in `TICKETS.md`. A milestone is recorded
+in GitHub issues, which is where it is read from (#804). A milestone is recorded
 **landed** only where an independent oracle pins the claim; a capability that
 runs but is checked against nothing is recorded **not started**, on the terms
 §0.4 sets.
@@ -231,7 +231,7 @@ milestone moved.
 **Between `0.2.0` and `0.3.0`, six pull requests refined the loop and its
 record; no roadmap milestone moved.** `ROADMAP.md` was restructured around the
 development loop and the three problem classes, and `STATUS.md` and
-`TICKETS.md` were introduced as the ledger and backlog
+`TICKETS.md` (deleted by #804) were introduced as the ledger and backlog
 ([#152](https://github.com/michaelJwilson/snakes_and_ladders/pull/152),
 [#153](https://github.com/michaelJwilson/snakes_and_ladders/pull/153)); the thirteen QA
 scripts were routed through one `snakes_and_ladders.qa.runner`
@@ -278,7 +278,7 @@ extent 8, 50.9 and 196.9 µs at 16, 747.2 µs and 3.78 ms at 64, against
 `rx.connected_components` at 4.6, 15.7 and 212.3 µs and the Python
 `ising_ground_state` at 1.40, 5.85 and 186.5 ms. The conversion is below the
 cost of the cheapest call it would front at every size, and no hot path moves
-until a measured adoption says so; `TICKETS.md` carries the three candidates.
+until a measured adoption says so; #388, #389 and #390 carry the three candidates.
 
 **CPU parallelism has one seam and, at the mid-size tier on a 4-core host,
 three negative results
@@ -369,7 +369,7 @@ wall clock in the inventory includes the setup the loop does not carry. The
 sites the plan lists after these — the candidate fits of `search.infer`,
 `learn.rollout` batches, tempering replicas, `qa.build`, `check_notebooks` and
 `pytest-xdist` — are measured on the same matrix before any is switched on
-(`TICKETS.md`).
+(#525).
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
@@ -1065,7 +1065,7 @@ the planted state is no longer near-optimal. Raising connectivity does not open
 a window: at mean degree 12 and frustration 0.05 descent matches the planted
 energy exactly on every instance. The fixture supplies a **known-energy
 reference past the size enumeration reaches**. The search for an instance no
-baseline solves stays open (`TICKETS.md`).
+baseline solves stays open (#406).
 
 **A problem no baseline solves, and the bar it is read against**
 ([#406](https://github.com/michaelJwilson/snakes_and_ladders/issues/406)). A
@@ -2193,7 +2193,7 @@ instance and not a default that moves. The two studies agree on the chains as we
 directions: #541 measured acceptance 1.00 at 4,000 observations with hmc and
 anneal returning the same seeding, and this one measured acceptance 0.000 at
 504,100, all three returning their starting points. One fixed step size does
-not serve two sample sizes, which is the `TICKETS.md` bullet.
+not serve two sample sizes, which #756 carries.
 
 **An interval at a fit, whatever produced the fit.** The observed information
 is a property of an objective *at a point*, not of the route that reached it,
@@ -3016,56 +3016,7 @@ or above 0.999 on 15-topology neighbourhoods of the five-taxon fixture
 (16 alignments, split 10/3/3 by alignment) and 0.98 on the two held-out SPR
 neighbourhoods at eight taxa, ranking the fitted best first on every held-out
 neighbourhood; the three token models return the same value for a tree with
-its children shuffled, to 1e-13. The curriculum 5 → 6 taxa measures what
-ROADMAP §2.2 predicts: zero-shot at six taxa the set model falls to R^2 0.68
-and recovers to 0.94 after transfer; the MLP holds 0.92 zero-shot and 0.95
-transferred. On lattices the models predict the gap above the mean-field
-bound with R^2 0.996–0.999 held out (2×2 to 2×4), transfer zero-shot to
-3×4 and 4×6 at 0.99, and the ground-state energy is learned exactly because
-alpha expansion, one of the features, reaches it on every small lattice.
-A calibrated bound is a rate claim: at nominal coverage 0.9 the lower bound
-held on 100% of 45 held-out examples and the upper on 80%, so the claim
-transfers on one side and not the other with three calibration alignments,
-and `certify` at the stated rate is what says which.
-
-**Learned surrogates across the three `spatio_only` rungs**
-([#365](https://github.com/michaelJwilson/snakes_and_ladders/issues/365)). The
-declared instances span 9 sites at 3 classes to 5,041 at 10, and the referee
-changes with the size: enumeration at `ci`, the column transfer matrix at
-`stress`, and at `release` --- `oracle: none` --- the energy alpha expansion
-reaches, which the discrete solvers do compute at 5,041 sites. Every fit
-predicts a gap above an analytic offset and is bracketed before it is scored.
-The spanning-tree upper bound does not reach the release lattice, being one
-exact tree pass per edge over 14,840 edges, so a second bracket was proved for
-it: the decoupled energy bound below and the per-site data optimum above, each
-one pass over the sites and one over the edges, 1.03 per site wide against the
-spanning-tree bracket's 0.081 per node at `ci`.
-
-At `ci`, over 24 held-out instances of 96 split whole by draw, the models
-explain the gap above the mean-field bound --- 0.29 to 0.49 nats over 9 sites
---- at `R^2` 0.975 for attention, 0.961 for the set model, 0.949 for the MLP,
-0.906 for the graph model and 0.836 for the linear one. The bound alone
-explains none of that gap and yet already ranks every held-out group's best
-first, so the ranking there measures the instance and not the model; at
-`stress` it ranks 0.667 of them and at `release` 0.333. From scratch at
-`stress` over 48 instances, attention reaches 0.958 and the graph model 0.091.
-Transfer from 9 to 72 sites collapses zero-shot and recovers: the graph model
--338.6 to 0.722 and attention -360.8 to 0.522, against the 0.99 zero-shot
-recorded on `potts_lattice` at a shared field (#317), so the per-site field is
-what the earlier number did not have to carry.
-
-At `release`, the first fits run at this size, the deep MLP explains 0.515 of
-the 2,066-to-2,200-nat gap and the linear model 0.332 over 12 held-out
-instances of 48. **Both token models fail there, and the cause of each is
-measured.** `GraphSurrogate` diverges --- `R^2` -47.5 over 150 epochs and
--976.7 over 30 --- because `_Batch.pool` sums over nodes, so the vector its
-decoder reads is three orders of magnitude larger at 5,041 sites than at the 9
-the architecture was fitted on. `AttentionSurrogate` does not run at all: one
-attention matrix is 5,041^2 `float64` = 203.3 MB, 24 training examples over two
-heads is 9.76 GB, and the kernel killed the process at 9.96 GB resident, twice.
-What survives both is the offset --- every prediction, the diverged fit
-included, stays inside the bracket, which is what predicting a gap above a
-bound buys. Both failures are ticketed rather than worked around.
+its children shuffled, to 1e-13.
 
 **Four max-flow kernels measured, one kept** ([#715](https://github.com/michaelJwilson/snakes_and_ladders/issues/715)). Boykov-Kolmogorov replaces Dinic as the package kernel behind `search.maxflow_rust`, and Dinic, highest-label push-relabel and a synchronous parallel push-relabel move to `sandbox.maxflow_declined` behind the `sandbox` Cargo feature, each still pinned to the package kernel's cut: every kernel certifies the source-reachable set of the residual graph, the minimal minimum cut every maximum flow shares, so 40 seeded networks agree arc for arc and the expansion gives the same labelling, cycle count and bitwise energy under each. Measured 2026-09-18 on the 4-core host, min of 5 rounds, ms, a random per-node field on an open lattice:
 
@@ -3193,7 +3144,7 @@ states, so every run — 50 of 50 greedy, 800 of 800 learned — ends at one: th
 agent selects which local optimum to enter, and cannot leave one. And the
 policy ranks moves by a single feature, the improvement a move buys, which
 places hill climbing inside the policy class as a temperature. A richer feature
-set (`TICKETS.md` §2.1) and accepted-worsening steps (Stage 3) would change the
+set (#806) and accepted-worsening steps (Stage 3) would change the
 answer.
 
 **Escape is now built, and it moved the comparison's baseline rather than its
@@ -3292,6 +3243,65 @@ search, reaches 30.9%: the visit distributions at 20 simulations are flat
 targets, and what expert iteration taught here is the critic. The
 factor-graph environment and the surrogate reward model wait on #296 and #308.
 
+## Milestone 2.2 — Curriculum Learning
+
+**The regimen is measured rather than assumed, and it is the surrogates
+that carry it: a policy does not transfer yet.** The evidence below sat
+under Milestone 1.4, whose subject is discrete move sets, while
+`ROADMAP.md` §2.2 pointed at a 2.2 row that did not exist (#683); it is
+moved here unchanged.
+
+The curriculum 5 → 6 taxa measures what
+ROADMAP §2.2 predicts: zero-shot at six taxa the set model falls to R^2 0.68
+and recovers to 0.94 after transfer; the MLP holds 0.92 zero-shot and 0.95
+transferred. On lattices the models predict the gap above the mean-field
+bound with R^2 0.996–0.999 held out (2×2 to 2×4), transfer zero-shot to
+3×4 and 4×6 at 0.99, and the ground-state energy is learned exactly because
+alpha expansion, one of the features, reaches it on every small lattice.
+A calibrated bound is a rate claim: at nominal coverage 0.9 the lower bound
+held on 100% of 45 held-out examples and the upper on 80%, so the claim
+transfers on one side and not the other with three calibration alignments,
+and `certify` at the stated rate is what says which.
+
+**Learned surrogates across the three `spatio_only` rungs**
+([#365](https://github.com/michaelJwilson/snakes_and_ladders/issues/365)). The
+declared instances span 9 sites at 3 classes to 5,041 at 10, and the referee
+changes with the size: enumeration at `ci`, the column transfer matrix at
+`stress`, and at `release` --- `oracle: none` --- the energy alpha expansion
+reaches, which the discrete solvers do compute at 5,041 sites. Every fit
+predicts a gap above an analytic offset and is bracketed before it is scored.
+The spanning-tree upper bound does not reach the release lattice, being one
+exact tree pass per edge over 14,840 edges, so a second bracket was proved for
+it: the decoupled energy bound below and the per-site data optimum above, each
+one pass over the sites and one over the edges, 1.03 per site wide against the
+spanning-tree bracket's 0.081 per node at `ci`.
+
+At `ci`, over 24 held-out instances of 96 split whole by draw, the models
+explain the gap above the mean-field bound --- 0.29 to 0.49 nats over 9 sites
+--- at `R^2` 0.975 for attention, 0.961 for the set model, 0.949 for the MLP,
+0.906 for the graph model and 0.836 for the linear one. The bound alone
+explains none of that gap and yet already ranks every held-out group's best
+first, so the ranking there measures the instance and not the model; at
+`stress` it ranks 0.667 of them and at `release` 0.333. From scratch at
+`stress` over 48 instances, attention reaches 0.958 and the graph model 0.091.
+Transfer from 9 to 72 sites collapses zero-shot and recovers: the graph model
+-338.6 to 0.722 and attention -360.8 to 0.522, against the 0.99 zero-shot
+recorded on `potts_lattice` at a shared field (#317), so the per-site field is
+what the earlier number did not have to carry.
+
+At `release`, the first fits run at this size, the deep MLP explains 0.515 of
+the 2,066-to-2,200-nat gap and the linear model 0.332 over 12 held-out
+instances of 48. **Both token models fail there, and the cause of each is
+measured.** `GraphSurrogate` diverges --- `R^2` -47.5 over 150 epochs and
+-976.7 over 30 --- because `_Batch.pool` sums over nodes, so the vector its
+decoder reads is three orders of magnitude larger at 5,041 sites than at the 9
+the architecture was fitted on. `AttentionSurrogate` does not run at all: one
+attention matrix is 5,041^2 `float64` = 203.3 MB, 24 training examples over two
+heads is 9.76 GB, and the kernel killed the process at 9.96 GB resident, twice.
+What survives both is the offset --- every prediction, the diverged fit
+included, stays inside the bracket, which is what predicting a gap above a
+bound buys. Both failures are ticketed rather than worked around.
+
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 
 **Modules.** The surrogates and the bounds they claim: `likelihood.surrogate`, `learn.surrogate` and `learn.ranking`, the examples and targets joining the two halves (`search.surrogate` until #779).
@@ -3309,7 +3319,7 @@ and the proofs are Appendix B.
 **What remains is the number the roadmap asked for.** The filter's cost ratio
 at large `n` is unmeasured: the surrogate's speed against the exact evaluation's
 is the claim "10,000x" was a target for, and this file cannot repeat it because
-nothing here has measured it. `TICKETS.md` carries it under this milestone.
+nothing here has measured it. #800's release audit is where it is next read for.
 
 ## Milestone 4.1 — Experiment Tracking, Ablations & Leaderboard
 
@@ -3779,7 +3789,7 @@ numerics — it is blocked on being no faster.
 ### What variant B would stale, which is the number that decides it
 
 **221 recorded timings**, all taken at one BLAS thread: `DEV.md` 84,
-`STATUS.md` 132, `INSTALL.md` 4, `TICKETS.md` 1, counting only numeric-workload
+`STATUS.md` 132, `INSTALL.md` 4, `TICKETS.md` 1 (deleted by #804), counting only numeric-workload
 timings and excluding the compile, LaTeX and I/O readings that thread width
 cannot touch. Plus the **59 committed baseline floats** above. The 23 declared
 render times in `snakes_and_ladders.qa.manifest` are *not* among them:
@@ -3825,7 +3835,7 @@ merged.
   where six exist, and five budget-matched comparisons where six do; the
   Milestone 1.3 row named neither the tree's data-driven starts nor
   [#373](https://github.com/michaelJwilson/snakes_and_ladders/pull/373), which landed them for #364 between the two audits.
-  `TICKETS.md` still listed that work as open.
+  `TICKETS.md`, deleted by #804, still listed that work as open.
 - **`DEV.md`'s restated counts.** `tests/benchmarks/` was said to hold 36 flat
   modules and holds 39; the frameworks bullet named four test modules that
   `importorskip` a package and there are six, beside three more that
@@ -3879,7 +3889,7 @@ exist.
 
 **The applicability table after the tier move.** Moving the nineteen tests over the per-PR cap to the `release` tier changed three cells of the generated applicability table: the Potts chain, the Potts lattice and the frustrated lattices now read `oracle` rather than simulated truth at the release tier, the oracle-refereed tests that moved there being the tier's referee. The table is regenerated here, and the textbook inputs it.
 
-**Incompleteness at 0.5.0 (issue #400).** `TICKETS.md` carried twelve bullets naming a closed issue. Five described work that had landed and are removed: the textbook's pruning, forward-backward and sum-product derivations (#326, 45 citations in the textbook), the refusal of an unidentifiable fit (#122), the required checks on every pull request (#273), the references and blue-sky directions (#360), and the 0.5.0 audit with the `scipy` question it left standing (#376). Five name work that remains with the carrier closed and are re-pointed: the profiling at the declared sizes, the efficiency assessment, the audit's four unmet targets and the parallelism sites beyond the first three go to #405; the discrete fixture no baseline solves goes to #406. Two keep a closed number for a reason the bullet states. Two reductions were measured and declined: the six emission families share 270 lines over six methods, every line the family's own distribution rather than scaffolding, and the QA renderers' argument handling is already `qa.runner`'s, leaving one line each. The notebooks' Further Work sections cited nine closed issues, three of them features that have since landed and are corrected here: the hidden Markov notebook said Viterbi and the forward-backward posteriors were not built and the coupled notebook that no path is decoded, when both landed with #175 and #173, so the gap is coverage and #407 carries the sections; the Potts notebook's four bullets cited #278, which closed without the lattice pass, and now cite #404. The corrections are prose, so no notebook re-executed.
+**Incompleteness at 0.5.0 (issue #400).** `TICKETS.md`, since deleted by #804, carried twelve bullets naming a closed issue. Five described work that had landed and are removed: the textbook's pruning, forward-backward and sum-product derivations (#326, 45 citations in the textbook), the refusal of an unidentifiable fit (#122), the required checks on every pull request (#273), the references and blue-sky directions (#360), and the 0.5.0 audit with the `scipy` question it left standing (#376). Five name work that remains with the carrier closed and are re-pointed: the profiling at the declared sizes, the efficiency assessment, the audit's four unmet targets and the parallelism sites beyond the first three go to #405; the discrete fixture no baseline solves goes to #406. Two keep a closed number for a reason the bullet states. Two reductions were measured and declined: the six emission families share 270 lines over six methods, every line the family's own distribution rather than scaffolding, and the QA renderers' argument handling is already `qa.runner`'s, leaving one line each. The notebooks' Further Work sections cited nine closed issues, three of them features that have since landed and are corrected here: the hidden Markov notebook said Viterbi and the forward-backward posteriors were not built and the coupled notebook that no path is decoded, when both landed with #175 and #173, so the gap is coverage and #407 carries the sections; the Potts notebook's four bullets cited #278, which closed without the lattice pass, and now cite #404. The corrections are prose, so no notebook re-executed.
 
 **Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
@@ -4213,7 +4223,7 @@ code, and fixed in the same pull request:
   built, while max-product over the chain returns the enumerated Viterbi path
   since #296 and forward–backward the posteriors since #307. Corrected in all
   three places.
-- `TICKETS.md` listed landed work as open — forward–backward as an evaluator
+- `TICKETS.md`, deleted by #804, listed landed work as open — forward–backward as an evaluator
   (#173), the Rust Gibbs sweep (#246), Viterbi and posterior decoding (#175),
   schedules and tempering (#267), discrete support (#270, #331), the
   initializers (#251), the emission families (#228, #229), the fixture API
@@ -4824,7 +4834,7 @@ independent and identically distributed as the oracle's own, so the chain is
 of the same law and is not the same chain. `Backend.PYTHON` therefore stays
 the default on `_swendsen_wang_sweep`, `SwendsenWangMove` and
 `sample_potts`'s new `cluster_backend`, and flipping it is its own decision
-against the recorded numbers (`TICKETS.md`).
+against the recorded numbers (#754).
 
 **Given the same draws it is the oracle bitwise, by construction rather than
 by luck.** The bond probability `1 - exp(-beta J)` and the scaled field cross

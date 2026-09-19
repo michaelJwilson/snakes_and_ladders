@@ -523,7 +523,7 @@ def learn_sections(mid: bool) -> list[Section]:
             max_epochs=20,
         )
 
-    # PPO and PUCT are not built (TICKETS.md, Milestone 2.1), so nothing is
+    # PPO and PUCT are not built (ROADMAP.md, Milestone 2.1), so nothing is
     # profiled for them; STATUS.md records the gap.
     return [
         (

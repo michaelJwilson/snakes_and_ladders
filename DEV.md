@@ -391,7 +391,7 @@ go through it, each taking `workers=` explicitly — `opt.fit.fit_from` (starts)
   and left serial — all three sites are, on the 4-core host. Time only on an
   uncontended machine: a shared host at load above its core count reports the
   contention, not the code.
-* **Not yet through the seam** (`TICKETS.md`, #344): the candidate fits of
+* **Not yet through the seam** (#344): the candidate fits of
   `search.infer`, `learn.rollout` batches, tempering replicas, `qa.build` and
   `infra/check_notebooks.py`. `pytest-xdist` was on this list and is adopted (issue #405): the CI & Performance Budget above states how the suite is run under it.
 

@@ -203,8 +203,8 @@ tie, with the feature set that bounds it ticketed), any comparison against
 IQ-TREE 2 or RAxML-NG, GPU dispatch, or rate variation across sites.
 
 [STATUS.md](STATUS.md) records what has landed against each milestone, the
-oracle that established it, and the pull request that carries it;
-[TICKETS.md](TICKETS.md) records, as titles, what has not.
+oracle that established it, and the pull request that carries it; what has not
+is in the issue tracker, where it can be assigned, argued and closed.
 
 ## Reading the science
 
@@ -212,7 +212,6 @@ oracle that established it, and the pull request that carries it;
 | --- | --- |
 | [ROADMAP.md](ROADMAP.md) | The development loop, the scientific goal, the requirements, and the milestones |
 | [STATUS.md](STATUS.md) | What has landed against each milestone, with its evidence and pull request |
-| [TICKETS.md](TICKETS.md) | The titles of the tickets remaining to complete the roadmap |
 | [PROBLEMS.md](PROBLEMS.md) | The problems supported, and the code behind each |
 | `CHECKS.md` | The checks the claims rest on, read from the tests' own markers. Generated and not committed (issue #425): write it with `infra/ledgers.sh`, or read it from a CI run's summary. The protocols are not listed anywhere: each is declared in the package and discoverable at import, which issue #586 made the record in place of `SEAMS.md` |
 | [`docs/tex/paper.tex`](docs/tex/paper.tex) | The paper: abstract, the MDP formulation, results, conclusions |

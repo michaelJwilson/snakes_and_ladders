@@ -238,7 +238,7 @@ def _markdown(text: str) -> dict[str, Any]:
 
 WELL_FORMED = _markdown(
     "## Further work\n\n- **Viterbi (#175).** Not built.\n"
-    "- **Lattice fits (`TICKETS.md` §1.3).** Not shown.\n"
+    "- **Lattice fits (#344).** Not shown.\n"
 )
 
 

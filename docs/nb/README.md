@@ -19,7 +19,7 @@ Each ends with a **Further Work** section naming what it could not demonstrate
 and the issue that carries it: a notebook that quietly skipped the unbuilt half
 would misreport the state of the repository. `infra/check_notebooks.py` checks
 the shape — the last cell is that section, and every line in it names an issue
-or a `TICKETS.md` section — because re-execution compares outputs and a markdown
+— because re-execution compares outputs and a markdown
 cell has none; all three notebooks said "no job re-runs it" for months after one
 did (issue #278).
 
