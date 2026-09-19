@@ -12,6 +12,8 @@ validated in ``test_search_exhaustive.py``.
 
 from __future__ import annotations
 
+from functools import cache
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -63,6 +65,17 @@ def _alignment() -> tuple[dict[str, np.ndarray], int]:
         n_sites=_SITES,
     )
     return dict(dataset.alignment), params.k
+
+
+@cache
+def _searched(moves: MoveSet) -> Inference:
+    """The seed-1 search over the fixture alignment, run once per move set.
+
+    Three tests below read the trace, the endpoint and the evaluation count
+    of the same search; it is one run and they share it.
+    """
+    alignment, k = _alignment()
+    return infer(alignment, k, rng=np.random.default_rng(1), moves=moves)
 
 
 # --- the starting topology ----------------------------------------------
@@ -168,9 +181,7 @@ def test_score_topology_agrees_with_a_zero_budget_search() -> None:
 def test_every_accepted_move_strictly_improves(moves: MoveSet) -> None:
     # A loop that accepted a non-improving move would still terminate and
     # still look plausible.
-    alignment, k = _alignment()
-
-    result = infer(alignment, k, rng=np.random.default_rng(1), moves=moves)
+    result = _searched(moves)
 
     assert list(result.trace) == sorted(result.trace)
     assert len(set(result.trace)) == len(result.trace)
@@ -179,9 +190,7 @@ def test_every_accepted_move_strictly_improves(moves: MoveSet) -> None:
 @pytest.mark.analytic
 @pytest.mark.parametrize("moves", [MoveSet.NNI, MoveSet.SPR])
 def test_the_search_converges_and_ends_on_its_best_score(moves: MoveSet) -> None:
-    alignment, k = _alignment()
-
-    result = infer(alignment, k, rng=np.random.default_rng(1), moves=moves)
+    result = _searched(moves)
 
     assert result.converged
     assert result.log_likelihood == result.trace[-1]
@@ -194,9 +203,9 @@ def test_no_topology_is_scored_twice() -> None:
     # taxa there are 3 unrooted topologies, so a converged search can never
     # have spent more than 3 fits however many times a neighbourhood
     # proposes the same tree.
-    alignment, k = _alignment()
+    alignment, _ = _alignment()
 
-    result = infer(alignment, k, rng=np.random.default_rng(1), moves=MoveSet.SPR)
+    result = _searched(MoveSet.SPR)
 
     assert result.converged
     assert result.evaluations <= count_topologies(len(alignment) - 1) == 3

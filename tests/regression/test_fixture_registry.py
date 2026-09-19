@@ -189,6 +189,18 @@ def test_the_frustrated_fixture_builds_the_lattice_with_the_known_ground_state()
 CHEAPEST = "potts_chain/ci"
 
 
+@pytest.fixture(scope="module")
+def recomputed_cheapest() -> tuple[baseline_script.BaselineSpec, Baseline]:
+    """The CHEAPEST spec and one recomputation of it, run once for the module.
+
+    Two tests below recompute the same record from the same tree, so the
+    recomputation is shared and each pays for what it adds: a second run, or
+    a run against a mutated fixture.
+    """
+    (spec,) = baseline_script.selected([CHEAPEST])
+    return spec, baseline_script.compute(spec)
+
+
 @pytest.mark.smoke
 def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
     # The round trip the readers depend on: what `infra/baselines.py --write`
@@ -212,22 +224,20 @@ def test_every_committed_baseline_reads_back_against_the_current_tree() -> None:
 @pytest.mark.smoke
 def test_a_mutated_fixture_makes_its_baseline_fail_recomputation(
     tmp_path: Path,
+    recomputed_cheapest: tuple[baseline_script.BaselineSpec, Baseline],
 ) -> None:
     # The property that makes a cached number safe: a record whose instance
-    # moved under it does not survive being recomputed. Against a *copy* of
-    # the fixture directory, so the committed instance is untouched. The
-    # removed digest said the tree had moved; this says the number did, and
-    # names both values (issue #460).
+    # moved under it does not survive being recomputed. The mutation is made
+    # in a *copy* of the fixture directory, so the committed instance is
+    # untouched. The removed digest said the tree had moved; this says the
+    # number did, and names both values (issue #460).
     root = tmp_path / "tree"
     (root / "tests" / "regression").mkdir(parents=True)
     shutil.copytree(FIXTURES_DIR, root / "tests" / "regression" / "fixtures")
 
-    (spec,) = baseline_script.selected([CHEAPEST])
+    spec, unmutated = recomputed_cheapest
     committed = read_baseline(baseline_path(spec.problem, spec.tier))
-    assert (
-        baseline_script.differences(baseline_script.compute(spec, root), committed)
-        == []
-    )
+    assert baseline_script.differences(unmutated, committed) == []
 
     fixture_file = (
         root / "tests" / "regression" / "fixtures" / "potts_chain" / "ci.yaml"
@@ -306,12 +316,14 @@ def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
 
 
 @pytest.mark.smoke
-def test_the_same_baseline_computed_twice_is_the_same_record() -> None:
+def test_the_same_baseline_computed_twice_is_the_same_record(
+    recomputed_cheapest: tuple[baseline_script.BaselineSpec, Baseline],
+) -> None:
     # A reference algorithm whose answer moved between two runs of the same
     # tree would make every committed record a snapshot rather than a fact.
     # Checked on the cheapest record; the rest run at the release gate.
-    (spec,) = baseline_script.selected([CHEAPEST])
-    first, second = baseline_script.compute(spec), baseline_script.compute(spec)
+    spec, first = recomputed_cheapest
+    second = baseline_script.compute(spec)
 
     assert baseline_script.differences(first, second) == []
     assert baseline_script.differences(first, read_baseline(first.path)) == []
