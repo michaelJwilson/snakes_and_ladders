@@ -110,10 +110,15 @@ SLIMMING_BASELINE = {
     # while writing these rows disagreed by exactly the comment that
     # explained them. #813's PR 2 moved all three: one test module for the
     # seam survey, and nine package lines stating why `MessageSchedule`
-    # stands at one named consumer.
+    # stands at one named consumer. Its test-lines figure was 57,035, read
+    # on a branch that had left `main` before #810, #811 and #812 landed
+    # there; the row is 53 higher here because it is read on the merged
+    # tree, one of those lines being the raise this pull request splits in
+    # two for `ruff`. A pin read off a stale branch is a pin for a tree
+    # nobody has.
     "package lines": 51525,
     "test modules": 252,
-    "test lines": 57035,
+    "test lines": 57088,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
