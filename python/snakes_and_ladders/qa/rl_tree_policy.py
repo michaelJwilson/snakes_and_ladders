@@ -33,6 +33,7 @@ from matplotlib.figure import Figure
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.qa.figure import QAFigure, latex_integer
 from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
@@ -42,7 +43,6 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment

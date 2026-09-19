@@ -32,6 +32,14 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.learn.ranking import (
+    enumerated_log_partition_target,
+    ground_state_offset,
+    ground_state_target,
+    lattice_examples,
+    lattice_instances,
+    strip_log_partition_target,
+)
 from snakes_and_ladders.learn.surrogate import (
     AttentionSurrogate,
     Examples,
@@ -52,14 +60,6 @@ from snakes_and_ladders.likelihood.surrogate import (
     mean_field_log_partition,
     saturated_log_partition,
     spanning_tree_log_partition,
-)
-from snakes_and_ladders.search.surrogate import (
-    enumerated_log_partition_target,
-    ground_state_offset,
-    ground_state_target,
-    lattice_examples,
-    lattice_instances,
-    strip_log_partition_target,
 )
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import PottsGraph

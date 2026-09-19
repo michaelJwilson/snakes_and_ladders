@@ -45,6 +45,7 @@ from profile_harness import format_table, self_time_table
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
+from snakes_and_ladders.learn.ranking import fixed_length_target, tree_examples
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
 from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
@@ -66,7 +67,6 @@ from snakes_and_ladders.search.gibbs import sample_factor_graph
 from snakes_and_ladders.search.infer import MoveSet, infer
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
-from snakes_and_ladders.search.surrogate import fixed_length_target, tree_examples
 from snakes_and_ladders.search.topology import (
     Topology,
     enumerate_topologies,

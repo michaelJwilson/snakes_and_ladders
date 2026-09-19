@@ -339,10 +339,10 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.tempered
    :members:
 
-.. automodule:: snakes_and_ladders.search.rl
+.. automodule:: snakes_and_ladders.learn.tree
    :members:
 
-.. automodule:: snakes_and_ladders.search.gym
+.. automodule:: snakes_and_ladders.learn.gym
    :members:
 
 .. automodule:: snakes_and_ladders.backend
@@ -378,7 +378,13 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.statistics
    :members:
 
+.. automodule:: snakes_and_ladders.search.rl
+
+.. automodule:: snakes_and_ladders.search.gym
+
 .. automodule:: snakes_and_ladders.search.surrogate
+
+.. automodule:: snakes_and_ladders.learn.ranking
    :members:
 
 .. automodule:: snakes_and_ladders.sandbox

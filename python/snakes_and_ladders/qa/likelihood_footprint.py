@@ -33,10 +33,10 @@ import tracemalloc
 
 import numpy as np
 
+from snakes_and_ladders.learn.tree import with_uniform_branch_lengths
 from snakes_and_ladders.likelihood import pruning
 from snakes_and_ladders.qa.figure import QATable, latex_integer
 from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, table_main
-from snakes_and_ladders.search.rl import with_uniform_branch_lengths
 from snakes_and_ladders.search.topology import Topology
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment

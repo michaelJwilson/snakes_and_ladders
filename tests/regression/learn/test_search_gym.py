@@ -24,8 +24,8 @@ from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import leaf_bipartitions
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -34,7 +34,7 @@ from tests._fixtures import FIXTURES_DIR
 
 gymnasium = pytest.importorskip("gymnasium")
 from gymnasium.utils.env_checker import check_env  # noqa: E402
-from snakes_and_ladders.search.gym import GymnasiumEnvironment  # noqa: E402
+from snakes_and_ladders.learn.gym import GymnasiumEnvironment  # noqa: E402
 
 FIELD = np.array([0.4, -0.1, -0.3])
 FIXTURE = FIXTURES_DIR / "tree_search/ci.yaml"

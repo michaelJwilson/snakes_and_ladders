@@ -63,13 +63,13 @@ from snakes_and_ladders.learn.potts import (
     enumerate_configurations,
     optimum,
 )
+from snakes_and_ladders.learn.ranking import maximized_target
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.learn.tree import FeatureSet, RewardModel, TreeEnvironment
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.log import get_logger, phase
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import FeatureSet, RewardModel, TreeEnvironment
-from snakes_and_ladders.search.surrogate import maximized_target
 from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.fixtures import (
     BASELINE_LIBRARIES,
@@ -511,7 +511,7 @@ class BaselineSpec:
 _TREE_POLICY_MODULES = (
     "snakes_and_ladders.learn.policy",
     "snakes_and_ladders.learn.rollout",
-    "snakes_and_ladders.search.rl",
+    "snakes_and_ladders.learn.tree",
     "snakes_and_ladders.search.topology",
     "snakes_and_ladders.sim.simulate",
 )
@@ -533,7 +533,7 @@ SPECS: tuple[BaselineSpec, ...] = (
         problem="tree_search",
         tier=Scale.CI,
         modules=(
-            "snakes_and_ladders.search.surrogate",
+            "snakes_and_ladders.learn.ranking",
             "snakes_and_ladders.sim.simulate",
         ),
         compute=tree_surrogate_baseline,

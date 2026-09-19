@@ -26,9 +26,9 @@ from snakes_and_ladders.learn.failure import (
     probe_failure,
 )
 from snakes_and_ladders.learn.rollout import greedy_rollout
+from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.opt.budget import Budget, Outcome, OverspendError, restarts
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment

@@ -25,15 +25,15 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
-from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.surrogate import (
+from snakes_and_ladders.learn.ranking import (
     ground_state_offset,
     ground_state_target,
     lattice_instances,
     shuffle_children,
     strip_log_partition_target,
 )
+from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
+from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.topology import leaf_bipartitions, random_topology
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph

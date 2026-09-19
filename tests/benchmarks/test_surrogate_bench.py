@@ -17,6 +17,11 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.learn.ranking import (
+    LearnedTreeSurrogate,
+    fixed_length_target,
+    tree_examples,
+)
 from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
 from snakes_and_ladders.likelihood.features import lattice_features, lattice_tokens
 from snakes_and_ladders.likelihood.potts import enumerate_potts
@@ -30,11 +35,6 @@ from snakes_and_ladders.likelihood.surrogate import (
     spanning_tree_log_partition,
 )
 from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.surrogate import (
-    LearnedTreeSurrogate,
-    fixed_length_target,
-    tree_examples,
-)
 from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.simulate import simulate_alignment

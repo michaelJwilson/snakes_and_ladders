@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.qa.figure import (
     QAFigure,
     latex_integer,
@@ -42,7 +43,6 @@ from snakes_and_ladders.qa.style import (
     letter_style,
     series_style,
 )
-from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
