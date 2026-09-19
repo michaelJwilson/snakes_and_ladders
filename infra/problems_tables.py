@@ -37,6 +37,7 @@ from functools import cache
 from pathlib import Path
 
 import checks_ledger
+import ladder
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -772,6 +773,88 @@ def _fixtures_table(body: list[tuple[str, str, str]]) -> list[str]:
     return lines
 
 
+#: The prefix every rung's test carries, dropped in the table: the column is
+#: read, and the node id to paste is in the ladder's own declaration.
+_TEST_ROOT = "tests/regression/"
+
+
+def _breakable(text: str) -> str:
+    """LaTeX text that may break inside a dotted path or a test name.
+
+    A callable and a test name are one long word each, and a column of them
+    set unbroken runs into the margin. The break points are the separators
+    the reader already reads at.
+    """
+    escaped = _tex_text(text)
+    for separator in (r"\_", "::", ".", "/"):
+        escaped = escaped.replace(separator, separator + r"\allowbreak{}")
+    return escaped
+
+
+def ladder_rows() -> list[tuple[str, str, str, str, str]]:
+    """``(problem, rung, callable, below, test)`` per rung, ladder order.
+
+    The last cell is the test that pins the rung to the one below, its path
+    relative to the regression suite and without its extension, or the ticket
+    carrying the rung nothing pins.
+    """
+    body = []
+    for rung in ladder.LADDER:
+        if rung.test is None:
+            pin = rf"ticket \#{rung.ticket}"
+        else:
+            node = rung.test.removeprefix(_TEST_ROOT).replace(".py::", ": ")
+            pin = _breakable(node)
+        body.append(
+            (
+                _tex_text(rung.problem),
+                _tex_text(rung.name),
+                _breakable(rung.callable),
+                _breakable(rung.below) if rung.below else "--",
+                pin,
+            )
+        )
+    return body
+
+
+def _ladder_table(body: list[tuple[str, str, str, str, str]]) -> list[str]:
+    """The oracle ladder: one row per rung, and the test pinning it below.
+
+    A ``longtable`` for the reason the declared instances are one: ninety
+    rows do not fit a float.
+    """
+    caption = (
+        "The oracle ladder per problem, generated from its one declaration: "
+        "each rung, the callable it names, the rung it is pinned against, and "
+        "the test pinning the pair. A rung with nothing under it is pinned to "
+        "an exact referee outside the ladder --- an enumeration at its foot, "
+        "a closed form, a second implementation --- which the test names. A "
+        r"rung reading \emph{ticket} is one no test pins yet; it is a gap "
+        "with an issue behind it and never a blank, and a rung appears once "
+        "per rung it is pinned against, so a method pinned at the exact end "
+        "and wanted against a cheaper rung is two rows."
+    )
+    lines = [
+        r"{\scriptsize",
+        r"\begin{longtable}{p{0.09\textwidth}p{0.16\textwidth}p{0.20\textwidth}"
+        r"p{0.14\textwidth}p{0.24\textwidth}}",
+        f"  \\caption{{{caption}}}\\label{{tab:ladder}}\\\\",
+        r"  \toprule",
+        r"  Problem & Rung & Callable & Pinned against & Pinned by \\",
+        r"  \midrule",
+        r"  \endfirsthead",
+        r"  \toprule",
+        r"  Problem & Rung & Callable & Pinned against & Pinned by \\",
+        r"  \midrule",
+        r"  \endhead",
+        r"  \bottomrule",
+        r"  \endlastfoot",
+    ]
+    lines += [f"  {' & '.join(row)} \\\\" for row in body]
+    lines += [r"\end{longtable}}"]
+    return lines
+
+
 def _table(
     columns: tuple[str, ...],
     body: list[tuple[str, list[str]]],
@@ -1179,6 +1262,8 @@ def render(catalogue: Path = CATALOGUE) -> str:
         *_method_table(method_cells(catalogue)),
         "",
         *_fixtures_table(fixture_rows()),
+        "",
+        *_ladder_table(ladder_rows()),
     ]
     return "\n".join(lines) + "\n"
 

@@ -112,6 +112,11 @@ judge --- is the third guard (issue #732, PR
 [#733](https://github.com/michaelJwilson/snakes_and_ladders/pull/733)): **89.25%** with `qa` exempt,
 `search` **88.66%**, floored at 89.2 and 88.6, and `--functions` lists the
 330 public callables no judging test enters, 157 of them entered by no test.
+The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
+416 in 141 when issue #734 surveyed it --- is declared once in
+`infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
+over the five problems, 67 pinned by a named `oracle` test and 22 carrying the
+ticket instead of one.
 
 Two releases have been cut under the procedure, each from a Release ticket
 gated on `infra/release.sh`: `0.1.0`
