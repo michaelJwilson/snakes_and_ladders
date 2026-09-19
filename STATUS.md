@@ -160,6 +160,20 @@ Gaussian marginals within 2.17 standard errors of a bound of 3.0 --- and
 `opt/budget.py` goes 64.35% to **76.52%** and `opt/schedule.py` 76.03% to
 **81.51%**. `opt/objective.py` stays at 78.95%, its four unreached statements
 a `Protocol`'s `...` bodies.
+`sim` is the sixth (step 4): judged **86.11%** with `qa` exempt against
+85.49% and the complement **89.27%** against 89.25%, so the judged floor
+rises to **86.1** and 89.2 stands, with `sim` **78.64% to 82.05%**, its
+judged deficit 400 to 311 statements and its public callables no judging
+test enters 35 to 23, 18 of them declarations whose bodies run at import.
+Fourteen referees and ten re-marks carry it --- the three families'
+published rate-1/2 limits and `brentq` on the entropy equation, the
+sphere-packing counts and the published CRC long division, the published
+GF(16) table and Fermat over 501 elements, `rustworkx`'s own grid, and the
+two trees the Newick documentation carries --- and `sim/capacity.py` goes
+23.29% to **73.97%**, `sim/galois.py` 71.13% to **87.63%**, `sim/graph.py`
+76.22% to **86.01%** and `sim/elementary_codes.py` 64.52% to **82.80%**.
+`sim/ldpc.py` stays at 82.43%, the published (7,4) parity check reaching
+what its oracles already reached.
 The ladder the `oracle` tests form --- 520 of them in 148 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs

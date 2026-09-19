@@ -136,6 +136,37 @@ def test_free_exchangeabilities_are_completed_with_a_pinned_one() -> None:
     assert_allclose(exchangeabilities_from_free(free, 4), TRUE_EXCHANGEABILITIES)
 
 
+@pytest.mark.oracle
+@pytest.mark.parametrize("k", [2, 3, 4, 5])
+def test_the_free_parameterisation_inverts_its_own_closed_form(k: int) -> None:
+    # The gauge map has a closed-form inverse -- divide every exchangeability
+    # by the last, drop that last one -- and this is the round trip through
+    # both directions. The referee is the *rate matrix*, which lives outside
+    # `exchangeabilities_from_free` and is invariant under the scaling the
+    # gauge removes, so a map that pinned the wrong entry or rescaled the
+    # wrong way would reach a different `Q` and fail here rather than agree
+    # with itself.
+    rng = np.random.default_rng(729)
+    full = rng.uniform(0.2, 3.0, size=n_exchangeabilities(k))
+    pi = rng.dirichlet(np.full(k, 4.0))
+
+    free = full[:-1] / full[-1]
+    completed = exchangeabilities_from_free(free, k)
+
+    # The closed form, stated rather than recomputed: the last entry is 1 and
+    # the others are the ratios.
+    assert completed[-1] == 1.0
+    assert_allclose(completed[:-1], full[:-1] / full[-1], rtol=0.0, atol=0.0)
+    # And the round trip the other way is the identity on the free vector.
+    assert_allclose(completed[:-1] / completed[-1], free, rtol=0.0, atol=0.0)
+    # Realized on the four sizes: the largest entry of `Q` moves by
+    # 2.22e-16, one ulp of the rate normalization's division, against the
+    # 1e-15 declared here.
+    assert_allclose(
+        gtr_rate_matrix(completed, pi), gtr_rate_matrix(full, pi), atol=1e-15
+    )
+
+
 @pytest.mark.smoke
 @pytest.mark.parametrize(
     ("call", "message"),

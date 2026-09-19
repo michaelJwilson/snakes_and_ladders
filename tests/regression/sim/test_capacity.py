@@ -23,6 +23,7 @@ from itertools import pairwise
 
 import numpy as np
 import pytest
+from scipy.optimize import brentq
 from snakes_and_ladders.likelihood.ldpc import erasure_threshold
 from snakes_and_ladders.likelihood.turbo import noise_scale
 from snakes_and_ladders.sim.capacity import (
@@ -72,6 +73,7 @@ def test_the_erasure_capacity_is_the_delivered_fraction() -> None:
     assert capacity(BinaryErasureChannel(0.4)) == 0.6
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_the_symmetric_capacity_matches_the_mutual_information_it_stands_for() -> None:
     # The independent route: `1 - H(p)` is the closed form, and this sums
@@ -94,6 +96,7 @@ def test_the_symmetric_capacity_matches_the_mutual_information_it_stands_for() -
         )
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_the_gaussian_capacity_recovers_the_published_rate_half_limit() -> None:
     # The pin: at the published sigma* the capacity is one half. The tolerance
@@ -102,6 +105,7 @@ def test_the_gaussian_capacity_recovers_the_published_rate_half_limit() -> None:
     assert gaussian_capacity(PUBLISHED_SIGMA_STAR) == pytest.approx(0.5, abs=1e-5)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_the_quadrature_agrees_with_monte_carlo_within_its_sampling_error() -> None:
     # Quadrature against sampling, which shares no node, weight or recursion
@@ -154,6 +158,7 @@ def test_the_shannon_limit_round_trips_through_capacity(
     assert capacity(family(noise)) == pytest.approx(rate, abs=1e-7)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 @pytest.mark.parametrize("rate", RATES)
 def test_the_erasure_limit_is_one_minus_the_rate(rate: float) -> None:
@@ -163,6 +168,7 @@ def test_the_erasure_limit_is_one_minus_the_rate(rate: float) -> None:
     )
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_no_ensemble_threshold_reaches_the_limit_it_is_bounded_by() -> None:
     # The converse, and the only place the suite compares the two: the (3,6)
@@ -230,6 +236,7 @@ def test_the_two_directions_of_the_decibel_map_are_inverses(
     )
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_the_rate_half_limit_is_the_published_decibel_figure() -> None:
     # +0.187 dB, the binary-input limit at rate 1/2 every coding text quotes
@@ -255,3 +262,50 @@ def test_the_decibel_map_refuses_what_it_cannot_answer_for() -> None:
         eb_n0_decibels(0.0, 0.5)
     with pytest.raises(ValueError, match="rate must be in"):
         eb_n0_decibels(1.0, 0.0)
+
+
+@pytest.mark.oracle
+def test_each_family_s_rate_half_limit_is_the_figure_its_text_quotes() -> None:
+    # The three published rate-1/2 limits, one per family, so every branch of
+    # `noise_at_capacity` is read against a number from outside this tree
+    # rather than against its own round trip. Richardson and Urbanke 2008,
+    # §4.1 and §4.10; the erasure limit is Shannon's `1 - eps` inverted.
+    #
+    # Realized, against a declared 1e-3 on the two quoted to four places:
+    # eps* = 0.4999999995, 4.66e-10 from 1/2, which is the bisection's own
+    # precision and not a quotation; p* = 0.11002786, 2.79e-5 from 0.11;
+    # sigma* = 0.97869412, 5.88e-6 from 0.9787.
+    erasure = noise_at_capacity(0.5, BinaryErasureChannel)
+    crossover = noise_at_capacity(0.5, BinarySymmetricChannel)
+    sigma = noise_at_capacity(0.5, BinaryInputGaussianChannel)
+
+    assert erasure == pytest.approx(0.5, abs=1e-9)
+    assert crossover == pytest.approx(0.11, abs=1e-3)
+    assert sigma == pytest.approx(PUBLISHED_SIGMA_STAR, abs=1e-3)
+
+    # And the forward direction at the quoted parameters: the BSC at p = 0.11
+    # carries one half a bit, 8.40e-5 above it at the quotation's four places.
+    assert symmetric_capacity(0.11) == pytest.approx(0.5, abs=1e-3)
+    assert erasure_capacity(0.5) == 0.5
+
+
+@pytest.mark.oracle
+def test_the_symmetric_limit_is_the_entropy_equation_solved_by_hand() -> None:
+    # The bisection's symmetric branch against the closed form it inverts,
+    # solved independently by `scipy.optimize.brentq` on `H(p) = 1 - R`.
+    # Brent's method shares no step, bracket or stopping rule with a
+    # bisection, so agreeing to 1e-9 is a statement about the root and not
+    # about the search. Realized: 4.21e-10 at the widest of the five rates,
+    # against the 1e-9 the bisection is asked to stop at.
+    worst = 0.0
+    for rate in RATES:
+        expected = float(
+            brentq(
+                lambda p, target=rate: binary_entropy(p) - (1.0 - target), 1e-12, 0.5
+            )
+        )
+        worst = max(
+            worst, abs(noise_at_capacity(rate, BinarySymmetricChannel) - expected)
+        )
+
+    assert worst < 1e-9

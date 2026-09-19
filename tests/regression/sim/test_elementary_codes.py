@@ -65,6 +65,7 @@ def test_the_single_parity_check_posterior_is_the_tanh_rule() -> None:
     assert worst < 1e-13
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 @pytest.mark.parametrize(("m", "n_bits", "dimension"), [(3, 7, 4), (4, 15, 11)])
 def test_a_hamming_code_is_perfect(m: int, n_bits: int, dimension: int) -> None:
@@ -77,6 +78,7 @@ def test_a_hamming_code_is_perfect(m: int, n_bits: int, dimension: int) -> None:
     assert is_perfect(n_bits, 2**dimension, 1)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_the_golay_code_is_perfect_and_its_extension_is_not() -> None:
     # `2^12 (1 + 23 + 253 + 1771) == 2^23` exactly. The extended code is *not*
@@ -92,6 +94,7 @@ def test_the_golay_code_is_perfect_and_its_extension_is_not() -> None:
     assert not is_perfect(24, 2**12, 3)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 @pytest.mark.parametrize(
     ("build", "expected"),
@@ -242,6 +245,7 @@ def test_syndrome_correction_is_the_nearest_codeword_enumeration_returns() -> No
     assert wrong == GOLAY_DRAWS
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_the_repetition_error_rate_is_its_closed_form() -> None:
     # An analytic curve, which no fixture in this tree had. The erasure case is
@@ -497,3 +501,80 @@ def test_the_four_codes_recover_the_planted_message_at_their_closed_form_rate() 
         0.0435,
         0.0925,
     )
+
+
+#: The sphere-packing counts the literature states for the three perfect
+#: binary codes, written out rather than summed by `math.comb`: the volume of
+#: a Hamming ball is what `is_perfect` computes, so a test that recomputed it
+#: the same way would check nothing. MacKay 2003 §13.2 (Hamming), and the
+#: Golay ball `1 + 23 + 253 + 1771 = 2048`.
+PUBLISHED_BALLS: tuple[tuple[int, int, int, int], ...] = (
+    # (n, 2^k, t, |ball of radius t|)
+    (7, 16, 1, 8),
+    (15, 2048, 1, 16),
+    (23, 4096, 3, 2048),
+    (5, 2, 2, 16),
+)
+
+
+@pytest.mark.oracle
+def test_the_perfect_codes_are_the_ones_the_hamming_bound_holds_with_equality() -> None:
+    # `is_perfect` against the sphere-packing bound taken from the
+    # literature's own ball sizes: 2^k |ball| == 2^n at equality for the
+    # Hamming (7,4) and (15,11), the Golay (23,12) and the odd repetition
+    # codes, and strictly under it everywhere else. Integers throughout, so
+    # the tolerance is exact equality and there is none to state.
+    for n_bits, n_messages, correctable, ball in PUBLISHED_BALLS:
+        assert n_messages * ball == 2**n_bits
+        assert is_perfect(n_bits, n_messages, correctable)
+
+    # Strict inequality where the spheres leave the space uncovered: the
+    # extended codes, which buy distance and stop tiling, and a dimension or
+    # a length moved by one.
+    for n_bits, n_messages, correctable in (
+        (8, 16, 1),  # extended Hamming, d = 4
+        (24, 4096, 3),  # extended Golay, d = 8
+        (7, 8, 1),  # the right radius at the wrong dimension
+        (6, 2, 2),  # the even repetition code
+    ):
+        volume = sum(math.comb(n_bits, radius) for radius in range(correctable + 1))
+        assert n_messages * volume < 2**n_bits
+        assert not is_perfect(n_bits, n_messages, correctable)
+
+    # And the other side of the bound, which is not a looser code but no code
+    # at all: 16 spheres of radius two in seven bits need 464 words of the
+    # 128 there are, so the (7, 4) code corrects one error and not two.
+    assert 16 * sum(math.comb(7, radius) for radius in range(3)) == 464
+    assert not is_perfect(7, 16, 2)
+
+
+@pytest.mark.oracle
+def test_the_crc_remainder_is_the_published_long_division() -> None:
+    # Polynomial long division over GF(2) against two divisions carried out
+    # away from this code: the worked example every description of CRC
+    # carries -- message 11010011101100, generator 1011 (x^3 + x + 1),
+    # remainder 100 -- and a four-bit message divided by the same generator
+    # by hand, 1101 shifted to 1101000 and reduced to 001 in four steps.
+    # Both are exact bit patterns, so there is no tolerance to declare.
+    generator = np.array([1, 0, 1, 1])
+    published = np.array([1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0])
+
+    assert crc_remainder(published, generator).tolist() == [1, 0, 0]
+    assert crc_remainder(np.array([1, 1, 0, 1]), generator).tolist() == [0, 0, 1]
+
+    # And against a second implementation of the division, over Python
+    # integers: a shift-and-xor from the top bit down, which shares no array,
+    # index or loop bound with the one under test. Exhaustive over every
+    # eight-bit message, 256 of them, at the CRC-8 generator
+    # x^8 + x^2 + x + 1.
+    crc8 = np.array([1, 0, 0, 0, 0, 0, 1, 1, 1])
+    divisor = 0b100000111
+    for value in range(256):
+        message = np.array([(value >> bit) & 1 for bit in range(7, -1, -1)])
+        register = value << 8
+        for shift in range(7, -1, -1):
+            if register >> (shift + 8) & 1:
+                register ^= divisor << shift
+        expected = [(register >> bit) & 1 for bit in range(7, -1, -1)]
+
+        assert crc_remainder(message, crc8).tolist() == expected
