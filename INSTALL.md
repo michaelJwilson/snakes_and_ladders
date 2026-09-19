@@ -53,20 +53,25 @@ states.
 
 The extras are `dev` (ruff, mypy, pre-commit, pip-audit), `test` (pytest and
 plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
-`docs/nb/`), and `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch
-Geometric: the external implementations the suite pins its own against).
-`--all-extras` installs all five; sync a single one with `uv sync --locked
---extra test`. Nothing in the core install needs `frameworks`: every test using
-one of its packages skips without it, and `snakes_and_ladders.learn.gym` is
-the only module that imports one at module level.
+`docs/nb/`), `frameworks` (Gymnasium, rustworkx, TorchRL and PyTorch
+Geometric: the external implementations the suite pins its own against), and
+`track` (Aim, the run store). `--all-extras` installs all six; sync a single
+one with `uv sync --locked --extra test`. Nothing in the core install needs
+`frameworks`: every test using one of its packages skips without it, and
+`snakes_and_ladders.learn.gym` is the only module that imports one at module
+level.
 
-`aim` is the exception to that list: it is the optional store behind
-`snakes_and_ladders.track.Run` (issue #778), declared in no extra while
-PYSEC-2026-1087 and PYSEC-2026-1088 stand unfixed against its current
-release, and installed by hand (`uv pip install aim`) by whoever wants it.
-Nothing in the package imports it: `Run` is a Protocol written with
-`aim.Run`'s own signatures, so an Aim run is passed in and nothing is
-adapted. The default run records nothing and needs nothing.
+`track` is the one extra with an advisory against it, and the one to sync
+deliberately. It installs `aim`, the optional store behind
+`snakes_and_ladders.track.Run` (issue #778). Nothing in the package imports
+it: `Run` is a Protocol written with `aim.Run`'s own signatures, so an Aim
+run is passed in and nothing is adapted, and the default run records nothing
+and needs nothing. PYSEC-2026-1087 and PYSEC-2026-1088 stand unfixed against
+3.29.1, its current release; both are in the server `aim up` runs. No CI job
+installs the extra --- the audit job syncs `dev` --- so `uv run pip-audit`
+is clean on this tree and reports those two after `uv sync --locked
+--extra track` or `--all-extras`, which is the trade a reader who wants the
+UI is making.
 
 `scipy` is a core dependency since the 0.5.0 audit (issue #376): three
 regression modules referee our neighbor joining, Hadamard transform and fit

@@ -3371,25 +3371,32 @@ the bound object is `NULL`, whose run is the shared `NULL_RUN`: `record`
 returns on its first line and no metric is computed, which
 `tests/regression/test_track.py` pins bitwise on `hmc.sample`, `anneal_potts`
 and `potts_mcmc.parallel_tempering`. **The cost is one returned call a sweep,
-and the walls cannot resolve it.** Timed directly on the null run, `record`
-costs **0.249 us** at the annealer's four arguments and **0.359 us** at the
-chain's six: **0.50 ms over 2,000 sweeps** and **0.36 ms over 1,000 draws**,
-against calls of **0.199 s** and **5.06 s**, so **0.25%** and **0.007%**. At
-the minimum of three repeats in each of three processes, run in pairs so the
-two variants share the machine, `hmc.sample` (Rosenbrock at dimension 10, 20
-leapfrog steps, 1,000 draws after 200 burn-in) reads **5.064 s** hooked
-against **5.090 s** with the hook lines stripped --- the hooked chain is the
-*faster* of the two --- over a **3.3%** spread between processes of one
-variant; `anneal_potts` (32x32 periodic, three states, the Rust sweep, 2,000
-sweeps) reads **0.2012 s** against **0.1991 s**, **1.011x**, over a **7.0%**
-spread. A ratio that changes sign between the two calls is what a difference
-below the spread looks like. Measured on the 4-core host at a 1-minute load
-of 1.00 to 1.11. **Aim is the store #75 asked
-for, and it is declared in no extra**: `pip-audit` reports PYSEC-2026-1087
-and PYSEC-2026-1088 against 3.29.1, its current release, with no fixed
-version, so nothing imports it at module scope --- `track.as_aim` imports it
-where it is called --- and whoever wants it installs it. Verified against
-3.29.1 installed by hand: two `release` tests assert that an `aim.Run`
+and at the stress instance the walls cannot resolve it.** Timed directly on
+the null run, `record` costs **0.246 us** at the annealer's four arguments
+and **0.352 us** at the chain's six (minimum of five runs of 200,000 calls):
+**0.50 ms over 2,000 sweeps** and **0.35 ms over 1,000 draws**. Both calls
+were then read against `main` at 121a1c7, the tree without the seam, three
+processes each and alternating so the two share the machine, at the minimum
+of three repeats per process. `hmc.sample` at the instance #754's stress
+ranking uses --- a Potts chain of length 64 over 200 chains, 1,000 draws,
+five leapfrog steps --- reads **6.418 s** hooked against **6.389 s**,
+**1.005x**, over spreads of 2.2% and 3.3% between processes of one variant.
+`anneal_potts` on the 64x64 open lattice at the critical coupling, three
+states and the Rust sweep over 2,000 sweeps, reads **0.7068 s** against
+**0.7066 s**, **1.0003x**, over spreads of 1.0% and 0.3%. Both are inside
+the ticket's 1% bar, and both differences are smaller than the spread of
+either variant, which is what the direct timing predicts: 0.35 ms is 0.006%
+of the chain and 0.50 ms is 0.07% of the anneal. Measured 2026-09-19 on the
+4-core host at a 1-minute load of 0.04 rising to 0.97. **Aim is the store #75 asked
+for, and it is the optional `track` extra**: nothing imports it at module
+scope --- `track.as_aim` imports it where it is called --- so no CI job
+installs it and the audit job, which syncs `dev`, stays clean. What the
+extra carries is stated where it is declared: `pip-audit` reports
+PYSEC-2026-1087 and PYSEC-2026-1088 against 3.29.1, its current release,
+with no fixed version, both in the server `aim up` runs. Verified both ways
+on 3.29.1: with the extra synced, `mypy --strict` is clean and 22 of
+`test_track.py` pass; without it, `mypy --strict` is clean, 20 pass and the
+two Aim tests skip, and `pip-audit` reports nothing. two `release` tests assert that an `aim.Run`
 satisfies `Run` and that a run written to a temporary repository reads back
 each sequence equal to the `MemoryRun` record of the same call; both
 `importorskip` the package, so they skip wherever Aim is absent.

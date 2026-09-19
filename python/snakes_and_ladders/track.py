@@ -193,9 +193,11 @@ def as_aim(fig: Figure) -> Any:
     Aim's ``aim.Figure`` takes a Plotly figure; ``aim.Image`` is the one that
     accepts a matplotlib ``Figure``, which is what :mod:`snakes_and_ladders.qa`
     renders. The import is here rather than at module scope because ``aim`` is
-    declared in no extra --- ``pyproject.toml`` states the two advisories
-    standing against its current release --- and this module is imported by
-    every sampler.
+    the optional ``track`` extra and this module is imported by every sampler.
+    It names the defining module rather than the package: ``aim`` binds
+    ``Image`` through a lazy ``__getattr__``, so ``aim.Image`` type-checks
+    where the package is absent and fails where it is installed, and the
+    package is absent from every job but the one a reader runs by hand.
 
     Parameters
     ----------
@@ -209,10 +211,10 @@ def as_aim(fig: Figure) -> Any:
         :class:`MemoryRun` keeps and :class:`NullRun` discards.
     """
     try:
-        import aim
+        from aim.sdk.objects.image import Image
     except ImportError:
         return fig
-    return aim.Image(fig)
+    return Image(fig)
 
 
 @runtime_checkable
