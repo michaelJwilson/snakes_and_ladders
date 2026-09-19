@@ -42,6 +42,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.ragged
    :members:
 
+.. automodule:: snakes_and_ladders.track
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.ragged_rust
    :members:
 

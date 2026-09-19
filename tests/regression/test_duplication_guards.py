@@ -60,9 +60,11 @@ SLIMMING_BASELINE = {
     # for a frustrated lattice added twelve without adding a module; its
     # `search.annealed` added both, a module and fourteen names, and its two
     # samplers --- `opt.langevin` and `opt.slice`, one module each, which is
-    # the package's shape for a sampler --- added two and eight.
-    "flat modules": 152,
-    "API-map entries": 1624,
+    # the package's shape for a sampler --- added two and eight. `track.py`,
+    # the run-tracking seam issue #778 put beside `log.py` and `parallel.py`,
+    # added one module and the 23 entries its classes and functions declare.
+    "flat modules": 153,
+    "API-map entries": 1647,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
