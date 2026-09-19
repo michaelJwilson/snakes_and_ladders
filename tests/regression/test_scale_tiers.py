@@ -81,10 +81,13 @@ def test_the_ci_tier_excludes_the_stress_and_key_tiers() -> None:
     # The selections must partition, or the CI tier silently carries the sizes
     # the budget exists to keep out of it. Three tiers now: `key` is not
     # `stress`, so a selection written before it existed would have run a
-    # two-minute test on every pull request.
+    # two-minute test on every pull request. The universe is `not release`:
+    # a `release` test with an `at_scale` case carries `stress` too (#756's
+    # sampler-efficiency test), and counting its stress case here against a
+    # total that excludes it was one off on every host from 2026-09-19.
     ci = _collected("not release and not stress and not key")
-    stress = _collected("stress and not key")
-    key = _collected("key")
+    stress = _collected("stress and not key and not release")
+    key = _collected("key and not release")
     all_three = _collected("not release")
 
     assert ci + stress + key == all_three
