@@ -201,7 +201,8 @@ def test_a_term_using_one_site_twice_does_break_the_identity() -> None:
     )
 
 
-@pytest.mark.smoke
+@pytest.mark.analytic
+@pytest.mark.oracle
 def test_the_relaxation_introduces_no_optimum_the_discrete_problem_lacks() -> None:
     # A multilinear function on a product of simplices attains its maximum at
     # a vertex, so the relaxed optimum cannot exceed the discrete one: what a
@@ -232,7 +233,8 @@ def test_the_two_objectives_satisfy_the_protocol() -> None:
 # --- 3. The estimators, against the exact gradient ------------------------
 
 
-@pytest.mark.smoke
+@pytest.mark.analytic
+@pytest.mark.oracle
 @pytest.mark.parametrize("mode", list(RelaxationMode))
 def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     mode: RelaxationMode,
@@ -282,7 +284,8 @@ def test_the_estimator_bias_falls_and_its_variance_rises_as_temperature_falls(
     assert min(biases) > 0.05
 
 
-@pytest.mark.smoke
+@pytest.mark.analytic
+@pytest.mark.oracle
 def test_more_samples_cut_the_variance_and_leave_the_bias() -> None:
     # The distinction the two are reported separately for: averaging is a
     # variance reduction and not a bias reduction, so a method that fails
@@ -313,6 +316,111 @@ def test_more_samples_cut_the_variance_and_leave_the_bias() -> None:
 
 
 @pytest.mark.oracle
+def test_the_relaxation_and_its_gradient_are_the_enumerated_ones_along_the_path() -> (
+    None
+):
+    """Every claim this module makes at a corner, re-read at four interior points.
+
+    The corner tests say the relaxation is an extension; they say nothing
+    about the simplex the ascent actually walks through. Here 40 Adam steps
+    are taken on the deterministic relaxation and the run is stopped at steps
+    0, 10, 20 and 30, each a genuinely interior point --- no row's largest
+    marginal exceeds 0.999 --- and three things are read against enumeration
+    over all 2,187 configurations of the chain:
+
+    * the relaxed score equals `exact_expected_score`, to 1e-12 absolute.
+      Realized: 2.2e-15 at worst over the four points, the multilinearity
+      identity holding away from the corners as it does at them;
+    * the gradient the ascent stepped on equals `exact_expected_gradient`, to
+      1e-10 absolute. Realized: 1.1e-15;
+    * `estimate_gradient` at `tau = 0.5` over 600 draws is *biased* against
+      that exact gradient at every point --- 0.193, 0.222, 0.172 and 0.564 of
+      the largest exact component, against a Monte Carlo standard error of
+      0.013 and below --- and still points along it, the cosine of the two
+      reading 0.9973, 0.9787, 0.9928 and 0.9867. The bias is what the
+      relaxation costs and the cosine is what it buys; the last point is the
+      largest ratio because the exact gradient has fallen to 0.0365 there,
+      which is the scale shrinking rather than the bias growing.
+    """
+    objective = RelaxedPotts(_environment())
+    torch.manual_seed(3)
+    logits = (
+        0.5 * torch.randn((objective.n_sites, objective.n_states), dtype=torch.float64)
+    ).requires_grad_(True)
+    optimizer = torch.optim.Adam([logits], lr=0.1)
+    generator = torch.Generator().manual_seed(729)
+
+    biases = []
+    for step in range(40):
+        optimizer.zero_grad()
+        loss = -objective.relaxed(torch.softmax(logits, dim=1))
+        loss.backward()  # type: ignore[no-untyped-call]
+        if step % 10 == 0:
+            frozen = logits.detach().clone()
+            marginals = torch.softmax(frozen, dim=1)
+            assert float(marginals.max()) < 0.999, "an interior point, not a corner"
+            assert float(objective.relaxed(marginals)) == pytest.approx(
+                exact_expected_score(objective, frozen), abs=1e-12
+            )
+            exact = exact_expected_gradient(objective, frozen)
+            assert logits.grad is not None
+            assert float(np.abs(-logits.grad.numpy() - exact).max()) < 1e-10
+            draws = np.array(
+                [
+                    estimate_gradient(objective, frozen, 0.5, generator)
+                    for _ in range(600)
+                ]
+            )
+            mean = draws.mean(axis=0)
+            biases.append(
+                (
+                    float(np.abs(mean - exact).max()) / float(np.abs(exact).max()),
+                    float(
+                        (mean * exact).sum()
+                        / (np.linalg.norm(mean) * np.linalg.norm(exact))
+                    ),
+                )
+            )
+        optimizer.step()
+
+    assert len(biases) == 4
+    assert min(bias for bias, _ in biases) > 0.02, "biased at every point, not only 0"
+    assert min(cosine for _, cosine in biases) > 0.95, "and pointing along the exact"
+
+
+@pytest.mark.oracle
+def test_an_annealed_sampled_run_cannot_pass_the_enumerated_optimum() -> None:
+    """The relaxation adds no optimum the discrete problem lacks, on the sampled path.
+
+    The corner argument gives this for the objective; the claim here is about
+    a whole annealed run of `optimize`, whose every step is a Gumbel draw
+    rather than a marginal. Its final relaxed score sits at or below the
+    enumerated maximum over all 2,187 configurations, and the configuration
+    it reads off is a real one scored at or below the same bound. Realized:
+    the enumerated maximum is 2.65 at `(0, 1, 0, 1, 0, 1, 0)`, and the run
+    returns that configuration with a relaxed score of 2.65 --- it reaches the
+    bound and does not pass it, which is what "no new optimum" means here.
+    """
+    objective = RelaxedPotts(_environment())
+    _, best = enumerate_optimum(objective)
+
+    found = optimize(
+        objective,
+        generator=torch.Generator().manual_seed(729),
+        temperature=1.0,
+        final_temperature=0.1,
+        steps=120,
+        stochastic=True,
+    )
+
+    assert found.relaxed_score <= best + 1e-9
+    assert found.score <= best + 1e-9
+    assert found.score == pytest.approx(objective.discrete(found.configuration))
+    assert found.configuration == enumerate_optimum(objective)[0]
+    assert found.steps == 120
+
+
+@pytest.mark.oracle
 def test_the_exact_gradient_matches_a_finite_difference() -> None:
     # The reference every estimator is measured against needs its own check,
     # or a bias measurement is only evidence that two wrong things differ.
@@ -339,7 +447,7 @@ def test_the_exact_gradient_matches_a_finite_difference() -> None:
 # --- 4. Against the baseline, at matched restarts -------------------------
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     # The comparison that decides whether this is worth having, on shared
     # seeds with the exact optimum as the target. Measured over 40 restarts:
@@ -400,7 +508,7 @@ def test_the_deterministic_relaxation_beats_single_flip_hill_climbing() -> None:
     assert p_value < 0.01
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 def test_the_sampled_estimators_only_tie_with_the_baseline() -> None:
     # Reported as a tie because it is one, the precedent #193 set for the tree
     # policy.
