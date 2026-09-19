@@ -37,8 +37,16 @@ def _draws(n: int) -> list[SimulatedSpatioSequential]:
     return [simulate_spatio_sequential(params, rng, burn_in=BURN_IN) for _ in range(n)]
 
 
+@pytest.fixture(scope="module")
+def draws() -> list[SimulatedSpatioSequential]:
+    """The `N_DRAWS` simulations the three goodness-of-fit tests read, drawn once."""
+    return _draws(N_DRAWS)
+
+
 @pytest.mark.end2end
-def test_the_labels_are_drawn_from_the_potts_prior() -> None:
+def test_the_labels_are_drawn_from_the_potts_prior(
+    draws: list[SimulatedSpatioSequential],
+) -> None:
     params = fixture("spatio_sequential", "ci").params
     configurations = list(product(range(params.n_classes), repeat=4))
     energies = np.zeros(len(configurations))
@@ -51,16 +59,17 @@ def test_the_labels_are_drawn_from_the_potts_prior() -> None:
     expected = N_DRAWS * expected / expected.sum()
 
     observed = np.zeros(len(configurations))
-    for draw in _draws(N_DRAWS):
+    for draw in draws:
         observed[configurations.index(tuple(int(v) for v in draw.labels))] += 1
 
     assert chi_square_p_value(observed, expected) > SIGNIFICANCE
 
 
 @pytest.mark.end2end
-def test_the_chains_follow_the_circulant_transition_and_the_initial() -> None:
+def test_the_chains_follow_the_circulant_transition_and_the_initial(
+    draws: list[SimulatedSpatioSequential],
+) -> None:
     params = fixture("spatio_sequential", "ci").params
-    draws = _draws(N_DRAWS)
     stays = sum(
         int((draw.states[:, 1:] == draw.states[:, :-1]).sum()) for draw in draws
     )
@@ -78,11 +87,10 @@ def test_the_chains_follow_the_circulant_transition_and_the_initial() -> None:
 
 
 @pytest.mark.end2end
-def test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain() -> (
-    None
-):
+def test_the_observations_come_from_the_class_of_the_node_at_the_state_of_its_chain(
+    draws: list[SimulatedSpatioSequential],
+) -> None:
     params = fixture("spatio_sequential", "ci").params
-    draws = _draws(N_DRAWS)
     n_symbols = 3
     for m, family in enumerate(params.emissions):
         assert isinstance(family, CategoricalEmission)

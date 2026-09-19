@@ -15,7 +15,7 @@ structure for the PyTorch backend:
   backends.
 
 Requires the compiled extension (``maturin develop`` / ``pip install .``),
-like ``tests/test_oxiphylo_bindings.py``.
+like ``tests/test_oxi_snakes_and_ladders_bindings.py``.
 """
 
 from __future__ import annotations
