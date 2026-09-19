@@ -16,14 +16,17 @@ things are asserted instead, and each names its referee.
   the departure reported in the docstring of the test that measures it.
 
 The tiers are set from the measured wall clock on the reference host: the
-CI-tier tests here cost 4.4 s together, the stress waterfall 12.1 s and the
-release waterfall 182 s.
+CI-tier tests here cost 4.4 s together, and the two waterfalls fell from
+12.1 s and 182 s to **0.46 s** and **6.0 s** with issue #754's Rust trellis.
+The stress waterfall runs both backends, so it is 11.8 s and the ratio is
+the port's, not the host's; the release one runs the default.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.convolutional import bcjr
 from snakes_and_ladders.likelihood.ldpc import MapEstimate
 from snakes_and_ladders.likelihood.turbo import (
@@ -170,7 +173,10 @@ CONSTITUENT_DRAWS = 25
 
 @pytest.mark.critical
 @pytest.mark.oracle
-def test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone() -> None:
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
+def test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone(
+    backend: Backend,
+) -> None:
     """With the second constituent carrying no evidence, the pair is one BCJR.
 
     The rung below (issue #734): `convolutional.bcjr`, one pass over one
@@ -187,6 +193,10 @@ def test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone() -> None:
     the other's *posterior* instead of its extrinsic would return the
     systematic ratios twice, so the identity holds only if `eq:extrinsic` is
     subtracted exactly once.
+
+    Both backends are held to it: the constituent pass is
+    `convolutional.bcjr`'s rung and the identity is a statement about the
+    exchange, not about which implementation ran it.
 
     Over the fixture's four points and 25 draws each, at `iterations = 8`: the
     posteriors agree to 1.8e-14 against the `BCJR_TOLERANCE` declared, the
@@ -206,7 +216,9 @@ def test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone() -> None:
 
     def departure(received: np.ndarray, reference: np.ndarray) -> float:
         """The largest gap, in nats, between the turbo posterior and BCJR's."""
-        decoding = decode_turbo(code, received, iterations=params.iterations)
+        decoding = decode_turbo(
+            code, received, iterations=params.iterations, backend=backend
+        )
         return float(np.abs(decoding.posterior_llr - reference).max())
 
     worst = stationary = parity_only = intact = 0.0
@@ -218,14 +230,21 @@ def test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone() -> None:
             message = rng.integers(0, 2, params.message_length).astype(np.uint8)
             llr = _transmit(code, message, eb_n0_db, rng)
             streams = split_streams(code, llr)
-            alone = bcjr(code.trellis, streams.systematic, streams.parity_first)
+            alone = bcjr(
+                code.trellis,
+                streams.systematic,
+                streams.parity_first,
+                backend=backend,
+            )
             reference = alone.posterior_llr[: code.message_length]
 
             erased = llr.copy()
             erased[where["parity_second"]] = 0.0
             erased[where["tail_second"]] = 0.0
-            decoding = decode_turbo(code, erased, iterations=params.iterations)
-            first = decode_turbo(code, erased, iterations=1)
+            decoding = decode_turbo(
+                code, erased, iterations=params.iterations, backend=backend
+            )
+            first = decode_turbo(code, erased, iterations=1, backend=backend)
 
             worst = max(worst, departure(erased, reference))
             stationary = max(
@@ -355,7 +374,7 @@ def test_the_error_pattern_under_a_codeword_is_the_pattern_under_zero() -> None:
 # --- the waterfall ---------------------------------------------------------------
 
 
-def _waterfall(instance: Fixture) -> list[ErrorRates]:
+def _waterfall(instance: Fixture, backend: Backend = Backend.RUST) -> list[ErrorRates]:
     """Every declared point of one instance, under that instance's own seed."""
     params = instance.params
     code = params.code()
@@ -366,6 +385,7 @@ def _waterfall(instance: Fixture) -> list[ErrorRates]:
             params.frames,
             np.random.default_rng(params.seed),
             iterations=params.iterations,
+            backend=backend,
         )
         for eb_n0_db in params.eb_n0_db
     ]
@@ -373,7 +393,8 @@ def _waterfall(instance: Fixture) -> list[ErrorRates]:
 
 @pytest.mark.stress
 @pytest.mark.oracle
-def test_the_waterfall_falls_below_the_uncoded_closed_form() -> None:
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
+def test_the_waterfall_falls_below_the_uncoded_closed_form(backend: Backend) -> None:
     """The coded curve is under `Q(sqrt(2 E_b / N_0))` at every declared point.
 
     It also falls with `E_b / N_0` and improves from the first iteration to
@@ -392,7 +413,7 @@ def test_the_waterfall_falls_below_the_uncoded_closed_form() -> None:
     # is the enumeration test above, at a size the budget holds.
     instance = fixture("turbo", "stress")
     params = instance.params
-    rates = _waterfall(instance)
+    rates = _waterfall(instance, backend)
     uncoded = uncoded_bit_error_rate(np.array(params.eb_n0_db))
     final = np.array([rate.bit_error_rate[-1] for rate in rates])
 

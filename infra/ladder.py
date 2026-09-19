@@ -607,6 +607,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "codes",
+        "BCJR, Rust",
+        "likelihood.convolutional_rust.bcjr",
+        "BCJR",
+        T + "likelihood/test_convolutional_rust.py"
+        "::test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers",
+    ),
+    Rung(
+        "codes",
         "Viterbi on the trellis",
         "likelihood.convolutional.viterbi",
         "brute-force ML",
