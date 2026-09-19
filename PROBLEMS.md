@@ -38,7 +38,7 @@ none of them defines one.
 
 | Problem | Key | Statement | Defines |
 | --- | --- | --- | --- |
-| Phylogenetic tree, Jukes–Cantor | `tree_search`, `tree_scale` | `sec:phylo` | `sim.jc`, `sim.simulate`, `likelihood.pruning`, `likelihood.pruning_rust`, `likelihood.hadamard`, `search.neighbor_joining`, `search.rl`, `sandbox.tropical` |
+| Phylogenetic tree, Jukes–Cantor | `tree_search`, `tree_scale` | `sec:phylo` | `sim.jc`, `sim.simulate`, `likelihood.pruning`, `likelihood.pruning_rust`, `likelihood.hadamard`, `search.neighbor_joining`, `learn.tree`, `sandbox.tropical` |
 | Phylogenetic tree, general time-reversible | `tree_jc` | `sec:phylo` | `sim.gtr` |
 | Phylogenetic tree, parsimony | `tree_jc` | `sec:parsimony` | `likelihood.parsimony` |
 | Potts chain in a field | `potts_chain` | `sec:potts` | `learn.potts`, `opt.potts` |

@@ -20,6 +20,7 @@ import tracemalloc
 
 import numpy as np
 import pytest
+from snakes_and_ladders.learn.tree import with_uniform_branch_lengths
 from snakes_and_ladders.likelihood import pruning
 from snakes_and_ladders.qa.likelihood_footprint import (
     DECLARED_MAXIMUM,
@@ -31,7 +32,6 @@ from snakes_and_ladders.qa.likelihood_footprint import (
     simulation_bytes,
     warm_up,
 )
-from snakes_and_ladders.search.rl import with_uniform_branch_lengths
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node

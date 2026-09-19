@@ -438,7 +438,7 @@ def infer(
         What ranks the neighbourhood when ``lazy_top`` is given: ``None``
         ranks by the one-evaluation lazy score, a surrogate ranks by its own
         value (issue #308), and a bound or a learned predictor from
-        ``likelihood.surrogate`` or ``search.surrogate`` fits here. Its
+        ``likelihood.surrogate`` or ``learn.ranking`` fits here. Its
         evaluations are not likelihood evaluations and are not counted as
         such; the fits it saves or costs are what ``fits`` reports.
     radius : int | None

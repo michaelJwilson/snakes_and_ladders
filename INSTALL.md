@@ -57,7 +57,7 @@ plugins, NumPy), `docs` (Sphinx), `notebooks` (a kernel, for re-executing
 Geometric: the external implementations the suite pins its own against).
 `--all-extras` installs all five; sync a single one with `uv sync --locked
 --extra test`. Nothing in the core install needs `frameworks`: every test using
-one of its packages skips without it, and `snakes_and_ladders.search.gym` is
+one of its packages skips without it, and `snakes_and_ladders.learn.gym` is
 the only module that imports one at module level.
 
 `scipy` is a core dependency since the 0.5.0 audit (issue #376): three

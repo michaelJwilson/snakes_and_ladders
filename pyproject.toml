@@ -212,7 +212,7 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # Where gymnasium is absent its `Env` is `Any`, and --strict refuses to
 # subclass `Any`; where it is present the class is checked in full.
-module = "snakes_and_ladders.search.gym"
+module = "snakes_and_ladders.learn.gym"
 disallow_subclassing_any = false
 
 [tool.towncrier]

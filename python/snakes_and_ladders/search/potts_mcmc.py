@@ -97,6 +97,7 @@ from snakes_and_ladders.sim.potts import (
 __all__ = [
     "AnnealedPotts",
     "ClusterCounter",
+    "MoveKind",
     "PottsChain",
     "PottsMove",
     "Recolour",
@@ -154,6 +155,24 @@ _CLUSTER_MOVES = frozenset({PottsMove.SWENDSEN_WANG, PottsMove.WOLFF})
 _BALANCED_MOVES = frozenset(
     {PottsMove.LOCALLY_BALANCED, PottsMove.GIBBS_WITH_GRADIENTS}
 )
+
+
+class MoveKind(StrEnum):
+    """Which move a learned action applies, over the move set :class:`PottsMove` names.
+
+    Issue #779 moved it here from ``snakes_and_ladders.learn.potts_nd``, which
+    spelled it out rather than importing it. It sits beside the moves it names
+    so one vocabulary is defined once: ``SWEEP`` is a pass of
+    :data:`PottsMove.SINGLE_SITE`, ``FLIP`` is one site of that pass, and
+    ``WOLFF`` and ``SWENDSEN_WANG`` are the two cluster moves under their own
+    names.
+    """
+
+    FLIP = "flip"
+    SWEEP = "sweep"
+    WOLFF = "wolff"
+    SWENDSEN_WANG = "swendsen-wang"
+    NIEDERMAYER = "niedermayer"
 
 
 def _refuse_negative_coupling(move: PottsMove, graph: PottsGraph) -> None:

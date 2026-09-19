@@ -59,6 +59,7 @@ import torch
 
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
+from snakes_and_ladders.search.potts_mcmc import MoveKind
 
 #: One label per site.
 Configuration = tuple[int, ...]
@@ -75,22 +76,6 @@ DEFAULT_CANDIDATES = 128
 #: single-site action an ICM update, and the classical control a point in this
 #: action space.
 DEFAULT_LADDER = (0.0, 0.25, 0.5, 1.0, 2.0, 4.0)
-
-
-class MoveKind(StrEnum):
-    """Which move an action applies.
-
-    Named here rather than imported from
-    ``snakes_and_ladders.search.potts_mcmc.PottsMove`` because ``learn``
-    imports nothing from ``search`` (`learn/CLAUDE.md`), and spelled the same
-    so a reader is not asked to hold two vocabularies.
-    """
-
-    FLIP = "flip"
-    SWEEP = "sweep"
-    WOLFF = "wolff"
-    SWENDSEN_WANG = "swendsen-wang"
-    NIEDERMAYER = "niedermayer"
 
 
 #: Kinds whose move is supplied through

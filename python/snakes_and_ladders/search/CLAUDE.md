@@ -1,7 +1,8 @@
 # search/
 
-Discrete optimization: move sets over discrete structures to be optimized, 
-exact and approximate solvers, samplers, and the agents that choose among moves.
+Discrete optimization: move sets over discrete structures to be optimized,
+exact and approximate solvers, and samplers. The agents that choose among moves
+are `learn/`'s, and issue #779 moved the last of them out of here.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file and related work — e.g. every docstring, comment and commit message
@@ -27,13 +28,6 @@ in this module. It is referenced here, never restated. What follows is local.
 - **A budget is counted in evaluations and seconds.**
 
 - **A structure is scored at most once per search**, keyed on a canonical form.
-
-- **Truth is a terminal penalty, never a training signal.** An agent that can
-  see the answer during training learns to look it up.
-
-- **A move's features are what it already computes without a fit, and none
-  may be constant across the neighbourhood.** The softmax cancels a constant
-  (`learn/CLAUDE.md`), so a distance from the state under NNI is excluded.
 
 - **A cheap objective is a different surface, not a noisy estimate.**
 

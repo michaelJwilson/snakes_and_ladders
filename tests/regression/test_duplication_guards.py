@@ -92,7 +92,10 @@ SLIMMING_BASELINE = {
     # one module each, which is the package's shape for a sampler --- added
     # two and eight. #754's tree schedule in Rust added one module,
     # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
-    "flat modules": 154,
+    # Issue #779's three deprecation shims are three modules while they
+    # stand, so the first row reads 157 until the release after 0.3.0
+    # removes them.
+    "flat modules": 157,
     "API-map entries": 1632,
 }
 
@@ -519,6 +522,8 @@ def test_no_schedule_is_written_outside_the_base() -> None:
     )
 
 
+@pytest.mark.critical
+@pytest.mark.infra
 def test_no_compressed_store_is_built_outside_the_incidence_seam() -> None:
     # One compressed layout, ten modules building through it (issue #755).
     # Three wrote the counting sort separately before #586 -- `ParityCheck`
@@ -572,16 +577,22 @@ def test_no_consumer_branches_on_a_schedules_name() -> None:
     assert _offenders(SCHEDULE_NAME_MATCH, SCHEDULE_OWNER) == []
 
 
+@pytest.mark.critical
+@pytest.mark.infra
 def test_no_module_builds_a_scipy_sparse_store() -> None:
     # `scipy` is carried for `linear_sum_assignment`. A `csr_matrix` beside
     # `SparseIncidence` would be a second compressed layout whose row order,
     # duplicate handling and transpose are somebody else's, and the compiled
     # consumers take `as_arrays`, which it does not have.
+    # The package and the notebooks, not the tests: a test may hold
+    # `scipy.sparse` as the independent referee of the one layout, which
+    # `tests/regression/test_incidence.py` does (#776), and a referee is not
+    # a second store.
     assert (
         _found(
             FOREIGN_SPARSE,
             "test_duplication_guards.py",
-            SEARCHED,
+            (PACKAGE, REPO_ROOT / "docs" / "nb"),
             ("*.py", "*.ipynb"),
         )
         == []

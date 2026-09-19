@@ -23,6 +23,13 @@ import pytest
 import torch
 from snakes_and_ladders.bound import Bound
 from snakes_and_ladders.fixtures import Scale
+from snakes_and_ladders.learn.ranking import (
+    LearnedTreeSurrogate,
+    TreeTarget,
+    maximized_target,
+    shuffle_children,
+    tree_examples,
+)
 from snakes_and_ladders.learn.surrogate import (
     LinearSurrogate,
     SetSurrogate,
@@ -37,13 +44,6 @@ from snakes_and_ladders.likelihood.surrogate import (
     PlugInLikelihood,
 )
 from snakes_and_ladders.search.infer import MoveSet, infer
-from snakes_and_ladders.search.surrogate import (
-    LearnedTreeSurrogate,
-    TreeTarget,
-    maximized_target,
-    shuffle_children,
-    tree_examples,
-)
 from snakes_and_ladders.search.topology import (
     Topology,
     enumerate_topologies,

@@ -18,8 +18,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.learn.ranking import fixed_length_target, tree_examples
 from snakes_and_ladders.learn.surrogate import Examples, GraphSurrogate, _Batch
-from snakes_and_ladders.search.surrogate import fixed_length_target, tree_examples
 from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.simulate import simulate_alignment
 

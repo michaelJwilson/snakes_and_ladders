@@ -290,7 +290,7 @@ class EpsilonGreedyPolicy(Policy):
         and reported an escape rate of 0.000 where the baseline it had to
         reproduce was 0.480. Wrap a trained policy, or set the weights to a
         vector whose argmax is the action you mean.
-        ``tests/regression/search/test_search_escape.py`` pins both halves.
+        ``tests/regression/learn/test_search_escape.py`` pins both halves.
     epsilon : float
         Probability of the uniform draw, in ``[0, 1]``. At ``0`` this is the
         wrapped policy's greedy action every step, which is *not* the same as

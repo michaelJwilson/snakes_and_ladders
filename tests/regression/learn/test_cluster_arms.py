@@ -42,7 +42,6 @@ from snakes_and_ladders.learn.potts_nd import (
     CLUSTER_KINDS,
     PARAMETRIC_KINDS,
     FeatureColumn,
-    MoveKind,
     PottsAction,
     PottsNDEnvironment,
 )
@@ -62,6 +61,7 @@ from snakes_and_ladders.search.potts_keyed import (
     cluster_moves,
 )
 from snakes_and_ladders.search.potts_mcmc import (
+    MoveKind,
     _niedermayer_sweep,
     _swendsen_wang_sweep,
     _wolff_sweep,

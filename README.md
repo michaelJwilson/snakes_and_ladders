@@ -76,7 +76,7 @@ overriding the root.
 | [`python/snakes_and_ladders/likelihood/CLAUDE.md`](python/snakes_and_ladders/likelihood/CLAUDE.md) | Pruning, the backends, and the cross-device tolerance they are held to |
 | [`python/snakes_and_ladders/opt/CLAUDE.md`](python/snakes_and_ladders/opt/CLAUDE.md) | Continuous fitting, and why no application may be imported here |
 | [`python/snakes_and_ladders/learn/CLAUDE.md`](python/snakes_and_ladders/learn/CLAUDE.md) | The RL interface, its oracles, and the rules a reward and a baseline obey |
-| [`python/snakes_and_ladders/search/CLAUDE.md`](python/snakes_and_ladders/search/CLAUDE.md) | Move sets, search budgets, and the phylogenetic environment |
+| [`python/snakes_and_ladders/search/CLAUDE.md`](python/snakes_and_ladders/search/CLAUDE.md) | Move sets, search budgets, and what a solver or sampler must state |
 | [`python/snakes_and_ladders/qa/CLAUDE.md`](python/snakes_and_ladders/qa/CLAUDE.md) | QA figures: rendering, never recomputing |
 | [`python/snakes_and_ladders/sandbox/CLAUDE.md`](python/snakes_and_ladders/sandbox/CLAUDE.md) | The oracle home: what a framework replaced, and what a measurement declined |
 | [`infra/CLAUDE.md`](infra/CLAUDE.md) | CI/CD, the agentic workflow, experiment tracking |
