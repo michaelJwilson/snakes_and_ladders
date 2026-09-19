@@ -562,6 +562,53 @@ def test_the_best_configuration_is_the_lowest_energy_any_replica_visited() -> No
     assert run.best_energy <= visited.min() + 1e-12
 
 
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_tempering_reaches_the_ground_energy_annealing_reaches() -> None:
+    # The rung below (issue #734), on the rung below's own instance: the
+    # periodic triangular antiferromagnet, whose ground energy is |J| * N at
+    # every size (`sim.canonical.minimum_frustrated_edges`). Annealing
+    # reaches it here from every seed, and the claim is that the coldest
+    # replica of a tempered run reaches the same energy at the same budget --
+    # 200 sweeps, spent as one annealed chain or as four replicas of 50.
+    #
+    # The coldest replica rather than `best_energy`: an exchange moves
+    # configurations between temperatures, so the run's best can be a state
+    # only a hot replica ever held, and what the cold end returns is the
+    # claim. Realized over six seeds: every annealed run and every coldest
+    # replica at 81.0 exactly, difference 0.0 against the 1e-12 declared.
+    # The cold pair exchanges at 0.26 to 0.38 of proposals, asserted so the
+    # ladder is known to be four coupled chains rather than four independent
+    # ones; the middle pair reaches 0.0 on one seed, which is why the
+    # acceptance is read at the cold end rather than over every pair.
+    graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
+    field = np.zeros(2)
+    ground = float(minimum_frustrated_edges(graph))  # |J| = 1
+    ladder = (2.0, 1.0, 0.5, 0.25)
+    coldest = int(np.argmin(ladder))
+
+    annealed = [
+        anneal_potts(
+            graph,
+            field,
+            ExponentialTempSchedule(2.0, 0.05, 200),
+            np.random.default_rng(seed),
+        )
+        for seed in range(6)
+    ]
+    tempered_runs = [
+        parallel_tempering(graph, field, ladder, np.random.default_rng(seed), 50)
+        for seed in range(6)
+    ]
+
+    for annealing, run in zip(annealed, tempered_runs, strict=True):
+        assert annealing.energy == pytest.approx(ground, abs=1e-12)
+        visited = energies(graph, field, run.states[:, coldest])
+        assert float(visited.min()) == pytest.approx(annealing.energy, abs=1e-12)
+        assert run.best_energy == pytest.approx(ground, abs=1e-12)
+        assert run.swap_acceptance[coldest - 1] > 0.2, run.swap_acceptance
+
+
 @pytest.mark.smoke
 def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)

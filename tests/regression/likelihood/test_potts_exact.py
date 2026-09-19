@@ -13,6 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.likelihood.message_passing import sum_product
 from snakes_and_ladders.likelihood.potts import (
     GATHER_BELOW,
     ExactPotts,
@@ -21,6 +22,7 @@ from snakes_and_ladders.likelihood.potts import (
     strip_log_partition,
 )
 from snakes_and_ladders.opt.potts import log_partition
+from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 # `likelihood/CLAUDE.md`'s float64 bound. Both sides here are float64, so this
@@ -69,6 +71,49 @@ def test_a_strip_of_width_one_reduces_to_the_chain_transfer_matrix(
     )
 
     assert _relative(realized, reference) < RELATIVE_TOLERANCE
+
+
+def _chain(length: int, coupling: float) -> PottsGraph:
+    """The graph a width-1 strip is: `length` sites in a line, `lattice_graph`'s order.
+
+    Built here rather than by `lattice_graph`, which refuses an extent of 1.
+    Node ``i`` is column ``i``, so the per-site field rows are the strip's.
+    """
+    return PottsGraph(
+        n_nodes=length,
+        edges=tuple((site, site + 1) for site in range(length - 1)),
+        coupling=(coupling,) * (length - 1),
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+@pytest.mark.parametrize("coupling", [0.7, -0.5])
+@pytest.mark.parametrize("length", [6, 10])
+def test_the_transfer_matrix_is_sum_product_on_the_strip_that_is_a_tree(
+    length: int, coupling: float
+) -> None:
+    # The rung below (issue #734): sum-product is exact where the factor graph
+    # is a tree, and the only strip that is one is width 1 -- a width of 2
+    # closes every square into a loop. The two routes then compute one number
+    # by different factorizations: a column transferred forward against
+    # messages passed over the tree. The drawn per-site field is the second
+    # half of the case: the shared field is one number at every site and so
+    # cannot catch a route reading the field rows in the wrong order.
+    # Realized relative difference over the eight comparisons, at most
+    # 4.8e-16, against the 1e-13 declared here.
+    graph = _chain(length, coupling)
+    assert from_potts(graph, FIELD).is_tree()
+    drawn = np.random.default_rng(7).normal(0.0, 0.8, size=(length, FIELD.shape[0]))
+
+    for field in (FIELD, drawn):
+        realized = strip_log_partition(
+            (length, 1), BoundaryCondition.OPEN, coupling, field
+        )
+        reference = sum_product(from_potts(graph, field))
+
+        assert reference.exact
+        assert _relative(realized, reference.log_partition) < 1e-13
 
 
 @pytest.mark.smoke

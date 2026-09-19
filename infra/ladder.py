@@ -100,6 +100,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "transfer matrix",
+        "likelihood.potts.strip_log_partition",
+        "sum-product / BP",
+        T + "likelihood/test_potts_exact.py"
+        "::test_the_transfer_matrix_is_sum_product_on_the_strip_that_is_a_tree",
+    ),
+    Rung(
+        "potts",
         "sum-product / BP",
         "likelihood.message_passing.sum_product",
         "enumeration",
@@ -132,6 +140,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "dual / LP bound",
+        "search.tightening.dual_bound",
+        "sum-product / BP",
+        T + "search/test_tightening.py"
+        "::test_the_dual_bound_is_the_zero_temperature_belief_propagation_energy",
+    ),
+    Rung(
+        "potts",
         "variational bounds",
         "likelihood.surrogate.mean_field_log_partition",
         "enumeration",
@@ -161,6 +177,14 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "search/test_max_cut.py"
         "::test_the_rounded_cut_reaches_the_enumerated_optimum_on_a_lattice",
+    ),
+    Rung(
+        "potts",
+        "max-cut (SDP)",
+        "search.max_cut.goemans_williamson",
+        "alpha-expansion",
+        T + "search/test_max_cut.py"
+        "::test_the_rounded_cut_is_the_gauged_alpha_expansion_optimum_at_two_labels",
     ),
     Rung(
         "potts",
@@ -220,6 +244,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "parallel tempering",
+        "search.potts_mcmc.parallel_tempering",
+        "annealing",
+        T + "search/test_potts_mcmc.py"
+        "::test_tempering_reaches_the_ground_energy_annealing_reaches",
+    ),
+    Rung(
+        "potts",
         "learned policy",
         "learn.potts_nd.PottsNDEnvironment",
         "exact cut / max-flow",
@@ -232,6 +264,14 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "search/test_search_lattice_surrogate.py"
         "::test_a_surrogate_learns_the_gap_above_the_mean_field_bound_at_nine_sites",
+    ),
+    Rung(
+        "potts",
+        "run_tempering, run_greedy, run_max_product",
+        "search.ground_state.run_tempering",
+        None,
+        T + "search/test_ground_state.py"
+        "::test_the_runners_record_the_energy_their_kernels_return",
     ),
     # --- trees / phylogenetics ---------------------------------------------
     Rung(
@@ -618,47 +658,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "opt/test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian",
     ),
-    # --- the 22 rungs no test pins, one per bullet of issue #734 -----------
-    Rung(
-        "potts",
-        "parallel tempering",
-        "search.potts_mcmc.parallel_tempering",
-        "annealing",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "potts",
-        "dual / LP bound",
-        "search.tightening.dual_bound",
-        "sum-product / BP",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "potts",
-        "transfer matrix",
-        "likelihood.potts.strip_log_partition",
-        "sum-product / BP",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "potts",
-        "max-cut (SDP)",
-        "search.max_cut.goemans_williamson",
-        "alpha-expansion",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "potts",
-        "run_tempering, run_greedy, run_max_product",
-        "search.ground_state.run_tempering",
-        None,
-        None,
-        LADDER_TICKET,
-    ),
+    # --- the 17 rungs no test pins, one per bullet of issue #734 -----------
     Rung("tree", "projection", "search.projection.project", None, None, LADDER_TICKET),
     Rung(
         "tree",

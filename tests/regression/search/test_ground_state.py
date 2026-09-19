@@ -26,6 +26,10 @@ import itertools
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.likelihood.message_passing import (
+    MessageScheduleName,
+    max_product,
+)
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search import ground_state
@@ -41,8 +45,10 @@ from snakes_and_ladders.search.maxflow_rust import (
 from snakes_and_ladders.search.potts_mcmc import (
     PottsMove,
     anneal_potts,
+    parallel_tempering,
     sample_potts,
 )
+from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import SpatioOnlyParams, energy
@@ -343,6 +349,71 @@ def test_the_exact_ground_state_at_five_thousand_sites_tilts_with_size() -> None
     assert agreement < 0.95
     assert recovered.tilt == pytest.approx(RELEASE_Q2_TILT, abs=1e-3)
     assert 0.0 < recovered.tilt < 0.4935
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_runners_record_the_energy_their_kernels_return() -> None:
+    # The rung below (issue #734): a runner is the comparison's adapter and
+    # nothing else, so on the same rung, seed and budget it must record the
+    # number its kernel returns and the labelling that number belongs to. A
+    # runner that recomputed the energy, spent a different budget, or drew
+    # from the generator before passing it on would put its own number in the
+    # method's row, and every ranking downstream would be of the adapter.
+    #
+    # Three of them, each against the kernel it wraps: `parallel_tempering`
+    # on the ladder `run_tempering` builds, the field-only argmax
+    # `run_greedy` is, and flooding `max_product` at the iteration count
+    # `run_max_product` derives. The energies reproduce bitwise -- realized
+    # difference 0.0 on all three, against a declared tolerance of exact
+    # equality -- because the kernel is called with the same generator state
+    # and the arithmetic is the same arithmetic.
+    rung = _rung(CI, 3)
+    budget = Budget("site-visits", 60 * rung.visits_per_sweep)
+    seed = 11
+
+    tempering = ground_state.run_tempering(rung, budget, np.random.default_rng(seed))
+    per_replica = max(
+        1, budget.size // (ground_state.N_REPLICAS * rung.visits_per_sweep)
+    )
+    ladder = tuple(
+        float(value)
+        for value in np.geomspace(
+            ground_state.ANNEAL_START, ground_state.ANNEAL_END, ground_state.N_REPLICAS
+        )
+    )
+    kernel = parallel_tempering(
+        rung.graph, rung.field, ladder, np.random.default_rng(seed), per_replica
+    )
+
+    assert tempering.energy == kernel.best_energy
+    assert np.array_equal(tempering.labelling, kernel.best)
+    assert (
+        tempering.spent == ground_state.N_REPLICAS * per_replica * rung.visits_per_sweep
+    )
+
+    greedy = ground_state.run_greedy(rung, budget, np.random.default_rng(seed))
+    field_only = rung.field.argmax(axis=1).astype(np.int64)
+
+    assert greedy.energy == energy(rung.graph, rung.field, field_only)
+    assert np.array_equal(greedy.labelling, field_only)
+    assert greedy.spent == rung.n_nodes
+
+    product = ground_state.run_max_product(rung, budget, np.random.default_rng(seed))
+    iterations = max(1, budget.size // rung.visits_per_sweep)
+    assignment, _ = max_product(
+        from_potts(rung.graph, rung.field),
+        schedule=MessageScheduleName.FLOODING,
+        max_iterations=iterations,
+    )
+    decoded = np.array(
+        [assignment[f"s{node}"] for node in range(rung.n_nodes)], dtype=np.int64
+    )
+
+    assert product.converged
+    assert product.energy == energy(rung.graph, rung.field, decoded)
+    assert np.array_equal(product.labelling, decoded)
+    assert product.spent == iterations * rung.visits_per_sweep
 
 
 @pytest.mark.smoke
