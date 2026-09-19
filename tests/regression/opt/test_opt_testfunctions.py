@@ -29,13 +29,30 @@ from snakes_and_ladders.opt.testfunctions import (
     Himmelblau,
     Rastrigin,
     Rosenbrock,
+    load_test_function_params,
 )
+from snakes_and_ladders.sim.fixtures import path_of
 
 # The published Himmelblau minima are quoted to six decimals, so no test
 # against them can be tighter than that. Rosenbrock's and Rastrigin's are
 # exact, and are held to `likelihood/CLAUDE.md`'s float64 bound instead.
 PUBLISHED_PRECISION = 1e-5
 EXACT = 1e-11
+
+#: The minimizers written out from the sources `testfunctions` names, so the
+#: fixture is refereed by the published values and not by the module constant
+#: it was copied from: Rosenbrock's ``(a, ..., a)`` at ``a = 1``, Rastrigin's
+#: origin, and Himmelblau (1972)'s four, quoted to six decimals.
+CLOSED_FORM_MINIMIZERS = {
+    "Rosenbrock": ((1.0, 1.0),),
+    "Rastrigin": ((0.0, 0.0),),
+    "Himmelblau": (
+        (3.0, 2.0),
+        (-2.805118, 3.131312),
+        (-3.779310, -3.283186),
+        (3.584428, -1.848126),
+    ),
+}
 
 
 @pytest.mark.oracle
@@ -168,6 +185,79 @@ def test_the_value_at_the_stated_minimizer_is_zero(objective: object) -> None:
 
     for point in points:
         assert float(objective(point)) == pytest.approx(0.0, abs=1e-10)  # type: ignore[operator]
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_fixtures_declared_instances_are_what_they_declare() -> None:
+    """Every minimizer the fixture declares, against the closed forms, and a
+    fit from each declared start against the minimizer it declares.
+
+    The fixture's ``minimizers`` are its oracle --- the multi-start study
+    scores against them and nothing recomputes them --- so a typo in the yaml
+    moves the answer every figure and every success rate is read against.
+    Three referees, none of them the loader and none of them
+    :data:`HIMMELBLAU_MINIMA`: the published values above, the function's own
+    value and closed-form gradient at the declared point, and the eigenvalues
+    of its Hessian there, which must be positive or the point is no minimum
+    (``sec:testfunctions``).
+
+    Rosenbrock's ``(1, 1)`` and Rastrigin's origin are exact and land bitwise:
+    value 0.0 and gradient norm 0.0. Himmelblau's first is exact and its other
+    three are published to six decimals, so the bound is that precision
+    squared through the function --- realized value at most **1.10e-11**
+    against 1e-09, gradient norm at most **4.19e-05** against 1e-03 --- and
+    every declared point equals the published one exactly. Smallest Hessian
+    eigenvalue over the six points: **0.40**, Rosenbrock's, whose valley floor
+    is nearly flat; Rastrigin's is 396.78.
+
+    The fit from each declared start is the pairing the catalogue makes and
+    this closes: one L-BFGS run per function, scored against the declared
+    minimizers at the fixture's own ``at_minimum`` of 1e-04. All three
+    converge and land on a declared minimizer at a distance of **0.0** ---
+    Rosenbrock from -1.2, Rastrigin from the origin it already sits in, and
+    Himmelblau from the origin, which is in no basin --- with value 0.0.
+    """
+    suite = load_test_function_params(path_of("test_functions", "ci"))
+    declared = suite.named()
+
+    assert set(declared) == set(CLOSED_FORM_MINIMIZERS)
+    assert suite.at_minimum > 0.0
+    print("\nvalue, gradient norm and smallest Hessian eigenvalue per minimizer:")
+    for name, expected in CLOSED_FORM_MINIMIZERS.items():
+        params = declared[name]
+        objective = params.objective()
+        assert params.minimizers == expected
+
+        for minimizer in params.minimizers:
+            point = torch.tensor(minimizer, dtype=torch.float64)
+            gradient = objective.gradient(point)
+            hessian = torch.autograd.functional.hessian(  # type: ignore[no-untyped-call]
+                objective.__call__, point
+            )
+            curvature = float(torch.linalg.eigvalsh(hessian).min())
+            print(
+                f"  {name} {minimizer}: {float(objective(point)):.2e} "
+                f"{float(torch.linalg.vector_norm(gradient)):.2e} {curvature:.2f}"
+            )
+
+            assert float(objective(point)) == pytest.approx(0.0, abs=1e-9)
+            assert float(torch.linalg.vector_norm(gradient)) < 1e-3
+            assert curvature > 0.0
+
+        result = fit(objective)
+        distance = min(
+            float(
+                torch.linalg.vector_norm(
+                    result.theta - torch.tensor(minimizer, dtype=torch.float64)
+                )
+            )
+            for minimizer in params.minimizers
+        )
+        print(f"  {name} from {params.start}: {distance:.2e} to a declared minimizer")
+
+        assert result.converged
+        assert distance < suite.at_minimum
 
 
 @pytest.mark.parametrize(
