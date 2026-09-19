@@ -200,6 +200,48 @@ class Himmelblau(Objective):
         return best, distances[best]
 
 
+@dataclass(frozen=True)
+class TestFunctionMetrics:
+    """What a point on a test function means: its value, and how far it is from a minimizer (issue #778).
+
+    A :class:`snakes_and_ladders.track.Metrics` over ``theta``, satisfied
+    structurally. These are the only three objectives in the package whose
+    minimizer is known in closed form, which is what makes the second metric
+    a fact rather than an estimate.
+
+    * ``value`` is the objective itself, ``objective(theta)``.
+    * ``distance_to_minimizer`` is the Euclidean distance
+      :meth:`Himmelblau.nearest_minimum` returns --- to the nearest of the
+      four minima for Himmelblau, and to the single minimizer
+      :meth:`Rosenbrock.minimizer` or :meth:`Rastrigin.minimizer` returns
+      otherwise. Zero exactly at a minimizer, which is what
+      ``TestFunctionSuite.at_minimum`` judges a fit against.
+
+    Parameters
+    ----------
+    objective : Rosenbrock | Rastrigin | Himmelblau
+        The function the point is on.
+    """
+
+    objective: Rosenbrock | Rastrigin | Himmelblau
+
+    names: tuple[str, ...] = ("value", "distance_to_minimizer")
+
+    def __call__(self, state: torch.Tensor) -> dict[str, float]:
+        """The value at ``state`` and its distance to the nearest known minimizer."""
+        with torch.no_grad():
+            if isinstance(self.objective, Himmelblau):
+                _, distance = Himmelblau.nearest_minimum(state)
+            else:
+                distance = float(
+                    torch.linalg.vector_norm(state - self.objective.minimizer())
+                )
+            return {
+                "value": float(self.objective(state)),
+                "distance_to_minimizer": distance,
+            }
+
+
 _REQUIRED_FIELDS = frozenset({"seed", "grid", "at_minimum", "functions"})
 _FUNCTION_FIELDS = frozenset(
     {"name", "dimension", "start", "restarts", "scale", "domain", "minimizers"}

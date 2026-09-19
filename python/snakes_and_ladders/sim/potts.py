@@ -173,6 +173,45 @@ def energy(graph: PottsGraph, field: np.ndarray, labelling: np.ndarray) -> float
     return float(energies(graph, values, np.asarray(labelling)[None])[0])
 
 
+@dataclass(frozen=True)
+class PottsMetrics:
+    """What a Potts labelling means: its energy, from :func:`energy` (issue #778).
+
+    A :class:`snakes_and_ladders.track.Metrics` over a labelling, satisfied
+    structurally --- nothing here imports the seam. It sits beside
+    :func:`energy` rather than in ``opt/potts.py``: ``opt/CLAUDE.md``'s "no
+    application imports" rule, enforced by
+    ``tests/regression/opt/test_opt_objective.py``, forbids ``opt`` from
+    importing this module, and the energy is not written a second time.
+
+    **One metric; the second the ticket listed is left out.** Neither a
+    magnetization nor an unsatisfied-edge fraction is computed anywhere in
+    this module, and a metrics set restates the science rather than defining
+    it.
+
+    The series is ``state_energy`` and not ``energy``:
+    :func:`snakes_and_ladders.search.potts_mcmc.anneal_potts` records the
+    *best* energy so far under ``energy``, and this is the energy of the
+    labelling it is handed.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The instance whose edges and couplings the energy is over.
+    field : np.ndarray
+        External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
+    """
+
+    graph: PottsGraph
+    field: np.ndarray
+
+    names: tuple[str, ...] = ("state_energy",)
+
+    def __call__(self, state: np.ndarray) -> dict[str, float]:
+        """``{"state_energy": energy(graph, field, state)}``."""
+        return {"state_energy": energy(self.graph, self.field, state)}
+
+
 def heat_bath_log_weights(
     field_row: np.ndarray,
     state: np.ndarray,

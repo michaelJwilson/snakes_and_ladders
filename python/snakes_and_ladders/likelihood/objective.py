@@ -26,12 +26,18 @@ topologies.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
 import torch
 
-from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
+from snakes_and_ladders.likelihood import (
+    parsimony,
+    pruning,
+    pruning_analytic,
+    pruning_torch,
+)
 from snakes_and_ladders.opt.constrain import (
     free_from_log_simplex,
     free_from_positive,
@@ -39,6 +45,7 @@ from snakes_and_ladders.opt.constrain import (
     positive,
 )
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.search.topology import robinson_foulds
 from snakes_and_ladders.sim.gtr import n_exchangeabilities
 from snakes_and_ladders.sim.tree import Node
 
@@ -581,3 +588,66 @@ class SubstitutionModelObjective(Objective):
                 ),
             ]
         )
+
+
+@dataclass(frozen=True)
+class TreeMetrics:
+    """What a topology means: its likelihood, its parsimony score, its distance to truth (issue #778).
+
+    A :class:`snakes_and_ladders.track.Metrics` over a topology --- the state
+    a topology search holds --- satisfied structurally. Each metric is a call
+    to a function the package already has:
+
+    * ``log_likelihood`` is
+      :func:`snakes_and_ladders.likelihood.pruning.log_likelihood`, the
+      Felsenstein pruning likelihood the branch-length objective above
+      negates to minimize;
+    * ``parsimony_score`` is
+      :func:`snakes_and_ladders.likelihood.parsimony.fitch_score`, the
+      criterion that ignores branch lengths, so the two disagree where the
+      model matters;
+    * ``split_distance`` is
+      :func:`snakes_and_ladders.search.topology.robinson_foulds` against the
+      truth, and is recorded only where a truth topology is given. It is zero
+      exactly on the true tree.
+
+    Parameters
+    ----------
+    k : int
+        Number of states.
+    pi : np.ndarray
+        Root state distribution, shape ``(k,)``.
+    alignment : Mapping[str, np.ndarray]
+        Leaf name to observed states, as ``sim.simulate`` produces.
+    truth : Node | None
+        The topology that generated the data, or ``None`` where there is
+        none: a simulated fixture carries one and a real alignment does not.
+    """
+
+    k: int
+    pi: np.ndarray
+    alignment: Mapping[str, np.ndarray]
+    truth: Node | None = None
+
+    names: tuple[str, ...] = field(
+        init=False, default=("log_likelihood", "parsimony_score")
+    )
+
+    def __post_init__(self) -> None:
+        """Add ``split_distance`` to :attr:`names` where a truth was given."""
+        if self.truth is not None:
+            object.__setattr__(self, "names", (*self.names, "split_distance"))
+
+    def __call__(self, state: Node) -> dict[str, float]:
+        """The metrics of the topology ``state``, in :attr:`names`' order."""
+        measured = {
+            "log_likelihood": pruning.log_likelihood(
+                state, self.k, self.pi, dict(self.alignment)
+            ),
+            "parsimony_score": float(
+                parsimony.fitch_score(state, self.alignment, self.k)
+            ),
+        }
+        if self.truth is not None:
+            measured["split_distance"] = float(robinson_foulds(self.truth, state))
+        return measured
