@@ -21,6 +21,7 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.search.potts_keyed import SwendsenWangMove
 from snakes_and_ladders.search.potts_mcmc import (
     _GUARD,
     PottsChain,
@@ -29,7 +30,7 @@ from snakes_and_ladders.search.potts_mcmc import (
     sample_potts,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.sim.potts import critical_coupling, site_field
 
 
 def _rust_sample_potts(
@@ -199,3 +200,71 @@ def test_rust_sweep_under_python_threads(
 
     for expected, actual in zip(serial, threaded, strict=True):
         np.testing.assert_array_equal(expected, actual)
+
+
+#: The instance the stress ranking put the cluster pass at: a 64x64 open
+#: lattice at three states and the exact Potts transition, where the bond
+#: pass makes a cluster for every 1.7 sites (`docs/experiments/025`). The
+#: fixture store's `potts_lattice/stress.yaml` is 12x12 because it declares
+#: an *autocorrelation* measurement over 1,500 sweeps; a per-pass ratio is
+#: read where the pass does its work, which is here (issue #754).
+CLUSTER_EXTENT = 64
+CLUSTER_STATES = 3
+
+
+def _cluster_instance() -> tuple[PottsGraph, np.ndarray, np.ndarray]:
+    graph = lattice_graph(
+        (CLUSTER_EXTENT, CLUSTER_EXTENT),
+        BoundaryCondition.OPEN,
+        critical_coupling(CLUSTER_STATES),
+    )
+    field = np.random.default_rng(1).normal(size=(graph.n_nodes, CLUSTER_STATES))
+    state = np.ascontiguousarray(
+        np.random.default_rng(4).integers(0, CLUSTER_STATES, size=graph.n_nodes),
+        dtype=np.int64,
+    )
+    return graph, field, state
+
+
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
+def test_swendsen_wang_propose(benchmark: BenchmarkFixture, backend: Backend) -> None:
+    """The ranking's Potts workload: one cluster pass through the keyed move.
+
+    The enclosing call the port is charged against. Shape and finiteness only:
+    the two routes draw the same uniforms in a different order, so they return
+    chains of one law and not one chain, and the equality belongs in
+    `tests/regression/search/test_potts_mcmc_cluster_rust.py`, which pins the
+    pass against the oracle on the same draws.
+    """
+    graph, field, state = _cluster_instance()
+    move = SwendsenWangMove(graph, field, backend)
+
+    labels, charge = benchmark(
+        move.propose,
+        state,
+        temperature=1.0,
+        site=-1,
+        label=-1,
+        rng=np.random.default_rng(7),
+    )
+
+    assert labels.shape == (graph.n_nodes,)
+    assert charge == graph.n_nodes + 2 * len(graph.edges)
+
+
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
+def test_swendsen_wang_chain(benchmark: BenchmarkFixture, backend: Backend) -> None:
+    """The same pass under `sample_potts`, ten sweeps of it."""
+    graph, field, _ = _cluster_instance()
+
+    chain = benchmark(
+        sample_potts,
+        graph,
+        field,
+        PottsMove.SWENDSEN_WANG,
+        np.random.default_rng(7),
+        10,
+        cluster_backend=backend,
+    )
+
+    assert chain.states.shape == (10, graph.n_nodes)
