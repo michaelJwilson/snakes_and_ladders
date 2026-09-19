@@ -84,7 +84,9 @@ CLUSTER_BASELINE = {
 
 #: State-carrying classes over the whole package, the number the clusters are
 #: drawn from.
-STRUCTURE_BASELINE = 245
+#: Re-pinned on the merge with `main` 5fe6ef2 (2026-09-19): the audit's 245
+#: read 247 there, main having added two state-carrying classes since.
+STRUCTURE_BASELINE = 247
 
 #: `enumeration.argmax` outside its own module. Issue #755 folded the three
 #: `learn` oracles that enumerated, scored and took the first maximizer onto
