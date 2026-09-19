@@ -87,10 +87,7 @@ def _non_blank(paths: list[Path]) -> int:
     through, not about statements a compiler would see.
     """
     return sum(
-        1
-        for path in paths
-        for line in path.read_text().splitlines()
-        if line.strip()
+        1 for path in paths for line in path.read_text().splitlines() if line.strip()
     )
 
 
