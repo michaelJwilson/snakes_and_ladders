@@ -23,8 +23,6 @@ from __future__ import annotations
 
 import itertools
 import math
-from copy import deepcopy
-from functools import cache
 
 import numpy as np
 import pytest
@@ -33,7 +31,6 @@ from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.opt.schedule import (
-    AdaptedLadder,
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )
@@ -1568,31 +1565,6 @@ PROBE_SWEEPS = 50
 HAND_LADDER = (2.0, 1.2, 0.7, 0.4)
 
 
-@cache
-def _adapted_ladder(seed: int) -> tuple[AdaptedLadder, np.random.Generator]:
-    """One warm-up on the frustrated lattice, run once per seed.
-
-    Both tests below warm up the same ladder from the same seed. The
-    generator the warm-up consumed is returned beside it, because the run
-    that follows continues that stream; a caller that draws from it copies
-    it first, so the shared state is never advanced.
-    """
-    graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
-    rng = np.random.default_rng(seed)
-    adapted = adapt_ladder_potts(
-        graph,
-        np.zeros(2),
-        (2.0, 0.4),
-        rng,
-        PROBE_SWEEPS,
-        BAND,
-        10,
-        12,
-        backend=Backend.RUST,
-    )
-    return adapted, rng
-
-
 @pytest.mark.smoke
 @at_scale("n_seeds", ci=10, stress=20)
 def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
@@ -1611,7 +1583,17 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
     field = np.zeros(2)
 
     for seed in range(n_seeds):
-        adapted, _ = _adapted_ladder(seed)
+        adapted = adapt_ladder_potts(
+            graph,
+            field,
+            (2.0, 0.4),
+            np.random.default_rng(seed),
+            PROBE_SWEEPS,
+            BAND,
+            10,
+            12,
+            backend=Backend.RUST,
+        )
         assert adapted.within_band, adapted
         assert adapted.temperatures[0] == 2.0
         assert adapted.temperatures[-1] == 0.4
@@ -1653,10 +1635,25 @@ def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
 
     adapted_hits = 0
     for seed in range(n_seeds):
-        adapted, stream = _adapted_ladder(seed)
-        # The run below draws from the warm-up's own stream, so it takes a
-        # copy and leaves the shared generator where the warm-up left it.
-        rng = deepcopy(stream)
+        # The warm-up is run here and not read from a helper the smoke test
+        # above shares: it is half of what this test judges -- the adapted
+        # ladder is charged for the sweeps it spends adapting -- and a
+        # cached run is recorded against whichever test asked for it first,
+        # so sharing it across the judged boundary moved the four statements
+        # of `adapt_ladder_potts` out of the judged set (issue #745, #729's
+        # floor was measured before #735 merged).
+        rng = np.random.default_rng(seed)
+        adapted = adapt_ladder_potts(
+            graph,
+            field,
+            (2.0, 0.4),
+            rng,
+            PROBE_SWEEPS,
+            BAND,
+            10,
+            12,
+            backend=Backend.RUST,
+        )
         remaining = budget - adapted.replicas_measured * PROBE_SWEEPS
         assert remaining > 0, adapted
         run = parallel_tempering(

@@ -127,6 +127,15 @@ each gain the planted run they lacked. `search` reads **89.86%** against its
 #744 to #749 deleted the `oracle` over the Rust max-flow kernel and `opt`'s
 four Himmelblau minima, which is `search` 89.99% to 89.86% and `opt` 86.42% to
 85.93% and is not this branch's.
+`learn` is the third (step 4): judged **84.93%** with `qa` exempt against
+83.89% and the complement **89.26%** against 89.28%, floored at **84.9** and
+89.2, with `learn` **79.61% to 86.62%** and its judged deficit 342 to 191
+statements. Six referees carry it --- a planted ground state recovered at both
+grains on `potts_nd`, a hand-computed table on `arena`, a forward expansion
+over 512 trajectories on `exact`, the enumerated score and gradient at four
+interior points of an ascent on `relaxed`, the `gamma = 1` telescoped return
+on `critic`, and the enumerated binomial on `failure` --- and `canonical.py`
+stays at 77.98%, no learner being run on the chain, the cliff or Hanoi.
 The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs

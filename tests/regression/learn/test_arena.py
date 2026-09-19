@@ -400,3 +400,91 @@ def test_the_chains_five_rows_come_back_at_the_published_fractions() -> None:
     rows = table(environment, starts, environment.energy, best, PUBLISHED, _streams)
     baseline = rows[0]
     assert [entry.against(baseline) for entry in rows[1:]] == [Outcome.BEAT] * 4
+
+
+# --- The hand-computed table (issue #729) ---------------------------------
+
+#: The three-site, two-state chain a table can be written out by hand on:
+#: eight starts, three actions at each, and one local maximum that is not the
+#: optimum. Its coupling and field are the chain's above, truncated.
+TINY = (0.75, np.array([0.4, -0.1]), 3)
+
+
+def _hill_climb(
+    environment: PottsEnvironment, start: tuple[int, ...], max_steps: int
+) -> tuple[list[tuple[int, ...]], int]:
+    """Hill climbing and its evaluation count, written out rather than called.
+
+    The referee for `arena`'s greedy row: the same rule --- take the
+    best-rewarded action, stop where none improves --- expressed here so the
+    row is compared with a second computation and not with itself.
+    """
+    state, visited, evaluated, decisions = start, [start], 0, 0
+    while not environment.is_terminal(state) and decisions < max_steps:
+        available = environment.actions(state)
+        evaluated += len(available)
+        scored = [environment.step(state, action) for action in available]
+        state = max(scored, key=lambda pair: pair[1])[0]
+        visited.append(state)
+        decisions += 1
+    return visited, evaluated
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_the_greedy_row_is_the_table_computed_by_hand() -> None:
+    """Every field of the greedy row, against a table small enough to write down.
+
+    The chain is three sites and two states, so the eight starts, what hill
+    climbing does from each and what it evaluates on the way are a table
+    rather than a measurement. The optimum is `(0, 0, 0)` at 2.70 and
+    `(1, 1, 1)` at 1.20 is the local maximum that is not it:
+
+        start      final      evaluations  reached
+        (0,0,0)    (0,0,0)              0  yes
+        (0,0,1)    (0,0,0)              3  yes
+        (0,1,0)    (0,0,0)              3  yes
+        (0,1,1)    (0,0,0)              6  yes
+        (1,0,0)    (0,0,0)              3  yes
+        (1,0,1)    (0,0,0)              6  yes
+        (1,1,0)    (0,0,0)              6  yes
+        (1,1,1)    (1,1,1)              0  no
+
+    So the row reads **7 of 8 at 3.375 evaluations**, and both numbers are
+    asserted exactly: the fraction is a ratio of integers and the mean is a
+    sum of integers over eight. The hand column is recomputed by
+    :func:`_hill_climb` as well as written out, so a change that moved the
+    table would fail on the numbers and not only on the row.
+    """
+    environment = PottsEnvironment(*TINY)
+    starts = list(
+        enumerate_configurations(environment.n_states, environment.chain_length)
+    )
+    _, best = optimum(environment)
+    budget = TrainingBudget(iterations=1, batch=1, max_steps=4)
+
+    by_hand = [_hill_climb(environment, start, budget.max_steps) for start in starts]
+    assert [count for _, count in by_hand] == [0, 3, 3, 6, 3, 6, 6, 0]
+    assert [visited[-1] for visited, _ in by_hand] == [(0, 0, 0)] * 7 + [(1, 1, 1)]
+
+    (greedy,) = table(
+        environment,
+        starts,
+        environment.energy,
+        best,
+        budget,
+        _streams,
+        names=["greedy"],
+    )
+
+    assert greedy.name == "greedy"
+    assert (greedy.reached, greedy.starts) == (7, 8)
+    assert greedy.fraction == 7 / 8
+    assert greedy.evaluations == 27 / 8
+    assert greedy.training_decisions == 0
+    assert budget.decisions == 4
+
+    worse = Row("worse", 6, 8, 3.375, 0, greedy.scoring)
+    assert greedy.against(worse) is Outcome.BEAT
+    assert worse.against(greedy) is Outcome.LOSE
+    assert greedy.against(Row("twin", 14, 16, 0.0, 0, greedy.scoring)) is Outcome.MATCH
