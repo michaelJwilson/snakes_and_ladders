@@ -3358,19 +3358,19 @@ returns on its first line and no metric is computed, which
 `tests/regression/test_track.py` pins bitwise on `hmc.sample`, `anneal_potts`
 and `potts_mcmc.parallel_tempering`. **The cost is one returned call a sweep,
 and the walls cannot resolve it.** Timed directly on the null run, `record`
-costs **0.249 us** at the annealer's four arguments and **0.361 us** at the
+costs **0.249 us** at the annealer's four arguments and **0.359 us** at the
 chain's six: **0.50 ms over 2,000 sweeps** and **0.36 ms over 1,000 draws**,
-against calls of **0.201 s** and **5.11 s**, so **0.25%** and **0.007%**. At
+against calls of **0.199 s** and **5.06 s**, so **0.25%** and **0.007%**. At
 the minimum of three repeats in each of three processes, run in pairs so the
 two variants share the machine, `hmc.sample` (Rosenbrock at dimension 10, 20
-leapfrog steps, 1,000 draws after 200 burn-in) reads **5.110 s** against
-**5.102 s** with this branch's hook lines stripped, **1.0015x**, over a
-**2.5%** spread between processes of one variant; `anneal_potts` (32x32
-periodic, three states, the Rust sweep, 2,000 sweeps) reads **0.2009 s**
-against **0.1997 s**, **1.006x**, over a **2.2%** spread. A second set of
-three pairs at a higher load put the stripped chain *slower* than the hooked
-one, which is what a difference below the spread looks like. Measured on the
-4-core host at a 1-minute load of 0.75 to 1.61. **Aim is the store #75 asked
+leapfrog steps, 1,000 draws after 200 burn-in) reads **5.064 s** hooked
+against **5.090 s** with the hook lines stripped --- the hooked chain is the
+*faster* of the two --- over a **3.3%** spread between processes of one
+variant; `anneal_potts` (32x32 periodic, three states, the Rust sweep, 2,000
+sweeps) reads **0.2012 s** against **0.1991 s**, **1.011x**, over a **7.0%**
+spread. A ratio that changes sign between the two calls is what a difference
+below the spread looks like. Measured on the 4-core host at a 1-minute load
+of 1.00 to 1.11. **Aim is the store #75 asked
 for, and it is declared in no extra**: `pip-audit` reports PYSEC-2026-1087
 and PYSEC-2026-1088 against 3.29.1, its current release, with no fixed
 version, so nothing imports it at module scope --- `track.as_aim` imports it
