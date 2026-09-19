@@ -26,8 +26,14 @@ SOURCES = ("python", "src", "tests")
 SUFFIXES = (".py", ".rs")
 
 #: A label as written in a citation: kind, colon, name. `fig:` and `app:`
-#: are included so a figure or appendix citation is held to the same rule.
-LABEL = re.compile(r"\b(?:eq|alg|sec|fig|app):[a-z0-9][a-z0-9-]*")
+#: are included so a figure or appendix citation is held to the same rule,
+#: and `par:` and `tab:` so a problem statement's parts and the tables are.
+#: The name takes further colon-separated segments, since the textbook writes
+#: `par:coupled:pairs`; stopping at the first segment cited a label no
+#: document defines.
+LABEL = re.compile(
+    r"\b(?:eq|alg|sec|fig|app|par|tab):(?:[a-z0-9-]+:)*[a-z0-9][a-z0-9-]*"
+)
 
 #: The two informal forms: `eq.` or `Sec.` followed by a parenthesized name
 #: or number, or `Sec.` followed by a quoted title. Built from parts so this

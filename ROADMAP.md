@@ -37,9 +37,10 @@ before it is published.
   a size chosen so the gate stays affordable is not a size a user works at.
 
   The gate is narrow by design and that is the reason for the rule: `-m
-  critical` collects **392** tests where the CI tier collects **3,062** and the
-  whole suite 3,159 over `tests/regression`, the directory CI runs --- 3,089 under `addopts -m "not release"` and 70 `release`; `tests/benchmarks` adds 399
-  (measured 2026-09-18 on `main` 266cb65 with `pytest --collect-only -q`). This
+  critical` collects **534** tests where the CI tier collects **3,402** and the
+  whole suite 3,527 over `tests/regression`, the directory CI runs --- 3,430
+  under `addopts -m "not release"` and 97 `release`; `tests/benchmarks` adds 396
+  (measured 2026-09-19 on `main` fd140a3 with `pytest --collect-only -q`). This
   session the full tier caught what `critical` could not on two pull requests
   --- twelve failures on #601, two stale references on #595 --- and #598's
   headline benchmark was gate-sized, withdrawn as unmeasured at a stress size

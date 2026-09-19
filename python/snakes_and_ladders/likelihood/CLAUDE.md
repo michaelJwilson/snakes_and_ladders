@@ -10,16 +10,11 @@ in this module. It is referenced here, never restated. What follows is local.
 
 ## Local rules
 
-- **The reference implementation is the oracle and it stays.** Every
-  accelerated backend is pinned against it. Deleting the slow path to "clean
-  up" removes the only thing that says the fast path is right.
+- **The oracle here is direct marginalization over the hidden states**, and
+  correctness comes from a ladder of validation starting there.
 
-- **Correctness comes from a ladder of validation, starting brute force.** Direct
-  marginalization over the hidden states is the test.
-
-- **Cross-device agreement is a relative tolerance keyed on the lowest
-  precision in the comparison.** A backend is accepted or rejected against it;
-  code may be improved to meet the tolerance, never to cheat it.
+- **A backend is accepted or rejected against the cross-device tolerance**
+  root `CLAUDE.md` sets; code is improved to meet it, never to cheat it.
 
 - **A boundary cost hides behind the fixture's size, never behind the
   algorithm's.** A cost paid per element crossing into a backend grows with
