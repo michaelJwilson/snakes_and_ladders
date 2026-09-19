@@ -14,6 +14,7 @@ undefined.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import cache
 
 import numpy as np
 import pytest
@@ -26,6 +27,7 @@ from snakes_and_ladders.likelihood.objective import (
     SubstitutionModelObjective,
 )
 from snakes_and_ladders.opt.fit import (
+    FitResult,
     constrained_standard_errors,
     covers,
     fit,
@@ -68,6 +70,17 @@ def _objective(
         dict(dataset.alignment),
         gradient=gradient,
     )
+
+
+@cache
+def _fitted(fixture: str) -> tuple[BranchLengthObjective, FitResult]:
+    """The `_SITES`-site objective and its fit, run once per fixture.
+
+    Three tests below fit the same objective and read different things off
+    the same optimum; the fit is the expensive half, so it is computed once.
+    """
+    objective = _objective(fixture)
+    return objective, fit(objective)
 
 
 # --- the identifiability finding, and what follows from it ---------------
@@ -200,8 +213,8 @@ def test_fitting_the_root_branches_separately_has_no_intervals() -> None:
 
 @pytest.mark.analytic
 def test_the_merged_parameterization_does_have_intervals() -> None:
-    objective = _objective(EIGHT_TAXA)
-    errors = constrained_standard_errors(objective, fit(objective).theta)
+    objective, result = _fitted(EIGHT_TAXA)
+    errors = constrained_standard_errors(objective, result.theta)
     assert bool((errors["branch_lengths"] > 0.0).all())
     assert bool(torch.isfinite(errors["branch_lengths"]).all())
 
@@ -278,8 +291,7 @@ def test_the_fit_beats_the_generating_branch_lengths(fixture: str) -> None:
     # The optimizer never sees the truth, so an early stop fails this while
     # its own loss still went down.
     params = load_fixture(fixture)
-    objective = _objective(fixture)
-    result = fit(objective)
+    objective, result = _fitted(fixture)
     assert result.converged
     assert result.value < float(objective(objective.theta_from_truth(params.tau)))
 
@@ -297,8 +309,7 @@ def test_every_branch_length_is_recovered_to_within_four_standard_errors(
     # fixtures: 2.45). The nominal *rate* is the release-gated test below,
     # which is where coverage belongs.
     params = load_fixture(fixture)
-    objective = _objective(fixture)
-    result = fit(objective)
+    objective, result = _fitted(fixture)
     estimate = objective.constrain(result.theta)["branch_lengths"]
     error = constrained_standard_errors(objective, result.theta)["branch_lengths"]
     truth = torch.exp(objective.theta_from_truth(params.tau))
@@ -379,6 +390,16 @@ def _gtr_objective(
     return objective, truth
 
 
+@cache
+def _fitted_gtr() -> tuple[SubstitutionModelObjective, torch.Tensor, FitResult]:
+    """The `_GTR_SITES`-site objective, its truth and its fit, run once.
+
+    Three tests below fit it and read different things off the same optimum.
+    """
+    objective, truth = _gtr_objective()
+    return objective, truth, fit(objective)
+
+
 @pytest.mark.oracle
 def test_the_torch_rate_matrix_matches_the_numpy_one() -> None:
     # Two implementations of the same construction -- the differentiable
@@ -439,8 +460,7 @@ def test_the_substitution_model_gradient_matches_finite_differences() -> None:
 
 @pytest.mark.end2end
 def test_the_substitution_model_fit_beats_the_generating_parameters() -> None:
-    objective, truth = _gtr_objective()
-    result = fit(objective)
+    objective, truth, result = _fitted_gtr()
     assert result.converged
     assert result.value < float(objective(truth))
 
@@ -451,16 +471,15 @@ def test_the_three_gauges_leave_a_well_conditioned_problem() -> None:
     # exchangeability and the simplex gauge between them remove every flat
     # direction. Drop any one and this ratio collapses toward zero and
     # `parameter_covariance` refuses the fit.
-    objective, _ = _gtr_objective()
-    information = observed_information(objective, fit(objective).theta)
+    objective, _, result = _fitted_gtr()
+    information = observed_information(objective, result.theta)
     eigenvalues = torch.linalg.eigvalsh(information)
     assert float(eigenvalues.min() / eigenvalues.max()) > 1e-4
 
 
 @pytest.mark.end2end
 def test_the_substitution_model_is_recovered_to_within_four_standard_errors() -> None:
-    objective, _ = _gtr_objective()
-    result = fit(objective)
+    objective, _, result = _fitted_gtr()
     estimate = objective.constrain(result.theta)
     error = constrained_standard_errors(objective, result.theta)
 

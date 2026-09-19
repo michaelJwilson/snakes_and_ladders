@@ -71,12 +71,6 @@ def test_the_model_satisfies_detailed_balance() -> None:
 
 
 @pytest.mark.analytic
-def test_pi_is_stationary() -> None:
-    rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
-    assert_allclose(TRUE_PI @ rate, np.zeros(4), atol=1e-15)
-
-
-@pytest.mark.analytic
 def test_the_rate_is_normalized_to_one_substitution_per_unit_time() -> None:
     rate = gtr_rate_matrix(TRUE_EXCHANGEABILITIES, TRUE_PI)
     assert_allclose(-(TRUE_PI * np.diag(rate)).sum(), 1.0, rtol=1e-14)

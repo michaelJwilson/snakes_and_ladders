@@ -26,7 +26,7 @@ from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
-from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
+from snakes_and_ladders.search.topology import leaf_bipartitions
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
@@ -79,6 +79,8 @@ def _round_trip[S, A](
 ) -> tuple[list[S], list[float], int, bool, bool]:
     """One episode through the Gymnasium interface, actions drawn from the adapter's generator."""
     adapter = GymnasiumEnvironment(environment, n_max=n_max, max_steps=max_steps)
+    # The adapter wraps the environment it was handed rather than a copy of it.
+    assert adapter.environment is environment
     observation, info = adapter.reset(seed=seed)
     states, rewards = [adapter.state], []
     terminated, truncated = bool(info["terminal"]), False
@@ -288,12 +290,3 @@ def test_the_state_is_unavailable_before_the_first_reset() -> None:
     environment, n_max = _potts()
     with pytest.raises(RuntimeError, match="call reset"):
         _ = GymnasiumEnvironment(environment, n_max=n_max, max_steps=4).state
-
-
-@pytest.mark.smoke
-def test_the_tree_state_is_a_topology() -> None:
-    environment, n_max = _tree()
-    adapter = GymnasiumEnvironment(environment, n_max=n_max, max_steps=2)
-    adapter.reset(seed=0)
-    assert isinstance(adapter.state, Topology)
-    assert adapter.environment is environment

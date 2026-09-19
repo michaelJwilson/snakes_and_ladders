@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.opt.fit import MultiStartResult
 from snakes_and_ladders.opt.testfunctions import HIMMELBLAU_MINIMA, Himmelblau
 from snakes_and_ladders.qa.optimizer_landscapes import (
     build_figure,
@@ -29,12 +30,16 @@ DECLARED = SUITE.named()
 RESTARTS = {name: function.restarts for name, function in DECLARED.items()}
 
 
-@pytest.mark.oracle
-def test_rosenbrock_is_reached_from_every_restart_and_himmelblau_lands_on_a_minimum() -> (
-    None
-):
-    results = endpoints(SUITE, np.random.default_rng(SUITE.seed))
+@pytest.fixture(scope="module")
+def results() -> dict[str, MultiStartResult]:
+    """The restarts of every declared function, from the suite's own seed, fitted once."""
+    return endpoints(SUITE, np.random.default_rng(SUITE.seed))
 
+
+@pytest.mark.oracle
+def test_rosenbrock_is_reached_from_every_restart_and_himmelblau_lands_on_a_minimum(
+    results: dict[str, MultiStartResult],
+) -> None:
     assert (
         reached(DECLARED["Rosenbrock"], results["Rosenbrock"], SUITE.at_minimum)
         == RESTARTS["Rosenbrock"]
@@ -49,10 +54,11 @@ def test_rosenbrock_is_reached_from_every_restart_and_himmelblau_lands_on_a_mini
 
 
 @pytest.mark.oracle
-def test_every_rastrigin_endpoint_is_a_stationary_point_of_the_closed_form() -> None:
+def test_every_rastrigin_endpoint_is_a_stationary_point_of_the_closed_form(
+    results: dict[str, MultiStartResult],
+) -> None:
     # A fit that reports convergence sits where the closed-form gradient
     # vanishes; whether that is the origin is what the caption counts.
-    results = endpoints(SUITE, np.random.default_rng(SUITE.seed))
     rastrigin = objectives(SUITE)["Rastrigin"]
 
     for fit in results["Rastrigin"].all_fits:
@@ -92,8 +98,9 @@ def test_known_minimizers_are_the_published_ones() -> None:
 
 
 @pytest.mark.smoke
-def test_the_caption_counts_the_endpoints_it_was_handed(tmp_path: Path) -> None:
-    results = endpoints(SUITE, np.random.default_rng(SUITE.seed))
+def test_the_caption_counts_the_endpoints_it_was_handed(
+    tmp_path: Path, results: dict[str, MultiStartResult]
+) -> None:
     _, caption = build_figure(SUITE, results)
     for name, function in DECLARED.items():
         hits = reached(function, results[name], SUITE.at_minimum)
