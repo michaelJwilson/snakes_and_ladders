@@ -91,7 +91,7 @@ name (issue #779).
   of where it is and what it is doing — `sim/count_pairs.py`'s contract,
   applied to a move (issue #706); a stream threaded through the caller would
   make the successor depend on visit order. What keying cannot express — a
-  stochastic *reward*, a slippery transition — goes to `TICKETS.md` rather
+  stochastic *reward*, a slippery transition — goes to the issue tracker rather
   than into a deterministic stand-in that tests nothing (issue #597).
 - **A learner is pinned on a canonical fixture before a research problem.**
   Every other environment here *is* a research problem, so a tie leaves two

@@ -1,6 +1,6 @@
 """`PottsGraph` against `rustworkx`: a round trip, and the generators as oracles (issue #322).
 
-`rustworkx` is the graph backend `TICKETS.md` scoped for the hot paths
+`rustworkx` is the graph backend #389 scopes for the hot paths
 (#242). What it can referee now is structure: its ``grid_graph`` and
 ``path_graph`` are independent constructions of the open lattices ours
 builds, and its `G(n, p)` generator draws the same distribution ours does

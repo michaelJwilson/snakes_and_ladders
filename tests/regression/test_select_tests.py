@@ -87,7 +87,6 @@ def test_a_changelog_fragment_alone_selects_nothing() -> None:
         ("docs/experiments/006-x.md", "tests/regression/test_experiments.py"),
         ("ROADMAP.md", "tests/regression/test_planning_documents_agree.py"),
         ("STATUS.md", "tests/regression/test_planning_documents_agree.py"),
-        ("TICKETS.md", "tests/regression/test_planning_documents_agree.py"),
         ("CLAUDE.md", "tests/regression/test_claude_md_pointers.py"),
         (
             "python/snakes_and_ladders/opt/CLAUDE.md",

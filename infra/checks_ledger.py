@@ -1,6 +1,6 @@
 """Write CHECKS.md: every check the roadmap's claims rest on, read from the tests.
 
-`STATUS.md` says what has landed and `TICKETS.md` what has not; neither is the
+`STATUS.md` says what has landed and the issue tracker what has not; neither is the
 place for the checks themselves, and a hand-kept list of tests drifts the
 moment one is renamed (issue #291). The checks significant to the roadmap are
 exactly the tests marked `oracle` -- pinned to an independent exact answer --

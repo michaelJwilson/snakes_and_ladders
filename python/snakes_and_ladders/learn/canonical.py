@@ -38,7 +38,7 @@ randomness *inside* a transition --- the ``k``-armed bandit, whose whole
 tension is a stochastic reward, and the slippery Frozen Lake --- therefore
 cannot be written against this protocol without widening it for every
 implementer and invalidating the enumeration oracle. They are left out and
-carried on `TICKETS.md` rather than approximated with a deterministic
+carried as an issue rather than approximated with a deterministic
 stand-in, which would be a fixture that looks like a bandit and tests nothing
 about exploration.
 
