@@ -72,6 +72,17 @@ Each: what is built, the oracle, the tier, and what the roadmap item it serves.
   evaluations. *Tier:* release. *Blocked:* on #126's dependency decision, which
   currently admits no external tool.
 
+- **Sequential Monte Carlo over topologies**, with #310's topology move as
+  the mutation kernel and the fitted likelihood as the weight. A particle set
+  carries topologies rather than a single state, so the estimate is a
+  distribution and the normalizing constant comes with it. *Oracle:* the
+  enumerated flat-prior weight at 5 to 8 taxa --- the same quantity the
+  subsplit-network candidate and #310's move are pinned against --- and the
+  marginal likelihood against that enumeration, which nothing in the tree
+  estimates for trees today. *Tier:* CI at 5 and 6 taxa; stress at 8.
+  *Serves:* #756's blue-sky line, and the support estimate #270 asks for,
+  from the particle weights rather than from a bootstrap.
+
 ### 2.2 Potts models and Markov random fields
 
 - **Tree-reweighted max-product** (Wainwright, Jaakkola & Willsky 2005) as a
@@ -148,6 +159,17 @@ Each: what is built, the oracle, the tier, and what the roadmap item it serves.
   configurations against random-restart greedy. *Oracle:* the same maximum
   and the enumerated optimum, at equal objective evaluations. *Tier:* CI,
   recorded under `docs/experiments/`.
+- **Neural transport for the continuous posterior** (Hoffman et al. 2019): a
+  normalizing flow fitted in warm-up, with HMC run in the transported space,
+  which is the answer to the correlated targets a diagonal metric handles
+  badly --- the case #756 reaches for a dense metric for. *Oracle:* the
+  analytic Gaussian `test_opt_hmc.py` already pins, and the enumerated
+  mixture posterior (#749); the flow may not move either. *Measured as:*
+  effective samples per gradient against HMC and against MALA and slice
+  sampling, the tuning-free baselines #756 landed, at equal gradients.
+  *Tier:* CI on the Gaussian and the mixture; stress on the tree posterior,
+  where the correlation is real. *Serves:* Milestone 1.5's efficiency half,
+  which the ladder pins for correctness and nothing pins for cost.
 - **Training across a distribution of fixtures** as the mechanism for §2.2's
   curriculum: a policy trained on seeds and sizes drawn from a declared
   distribution, evaluated on held-out fixtures at each size. *Oracle:* the
