@@ -56,10 +56,9 @@ parenthesis the only way a ticket is cited.
   in one variable per branch (#329)
 - Put `stubtest` in CI — the type stub has already drifted (#37)
 
-- Port `likelihood.convolutional.bcjr` to Rust: the trellis is 95.8% of one
-  pass at K = 1,024 and 95.5% of an eight-iteration turbo decode, the highest
-  fraction the stress profile ranks and the only top term in a family that is
-  a Python loop rather than a library call (#754)
+- Retier the turbo waterfalls after #754's Rust trellis: the release tier
+  fell from 182 s to 6.0 s and the stress one from 12.1 s to 0.46 s, so
+  `release` is no longer what the measurement says (#754)
 - Port the `message_passing` tree schedule's per-level dispatch, which #341
   left at 4.7x the forward recursion and the stress profile ranks at 29.8% of
   a 200-step chain (#754)

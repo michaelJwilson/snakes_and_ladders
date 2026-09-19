@@ -2,7 +2,8 @@
 
 Hand-written, so it can drift: keep the signatures here matching the
 `#[pyfunction]` definitions in src/lib.rs, src/pruning.rs, src/pruning_burn.rs,
-src/maxflow.rs, src/sampling.rs, src/coupled.rs and src/count_pairs.rs. Issue #37 tracks putting `stubtest` in CI so the drift
+src/maxflow.rs, src/sampling.rs, src/coupled.rs, src/count_pairs.rs and
+src/bcjr.rs. Issue #37 tracks putting `stubtest` in CI so the drift
 is caught by a check rather than by whoever notices; until then,
 `mypy --strict` catches only the direction where the stub is missing something
 a caller uses, which is how `sample_rows` was caught.
@@ -37,6 +38,14 @@ def pruning_gradient(
     weight: np.ndarray | None,
     rescale: bool,
 ) -> tuple[float, list[float]]: ...
+def bcjr_forward_backward(
+    next_state: np.ndarray,
+    parity: np.ndarray,
+    systematic_llr: np.ndarray,
+    parity_llr: np.ndarray,
+    apriori_llr: np.ndarray,
+    terminated: bool,
+) -> tuple[np.ndarray, np.ndarray, float]: ...
 def sample_rows(
     distributions: np.ndarray,
     n_categories: int,
