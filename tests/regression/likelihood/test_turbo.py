@@ -41,6 +41,7 @@ from snakes_and_ladders.likelihood.turbo import (
 )
 from snakes_and_ladders.sim.convolutional import TurboCode, turbo_encode
 from snakes_and_ladders.sim.fixtures import Fixture, fixture
+from snakes_and_ladders.sim.ldpc import BinaryInputGaussianChannel
 
 #: The exact bitwise MAP's bit error rate, times this, bounds the iteration's
 #: at the enumerable size. Measured at 1.26, 1.66, 1.74 and 3.20 over the
@@ -455,3 +456,66 @@ def test_the_release_waterfall_turns_where_the_ensemble_says() -> None:
     for rate in rates:
         assert rate.bit_error_rate[-1] < rate.bit_error_rate[0]
         assert _increase_within_noise(rate) <= NOISE_INTERVALS
+
+
+# --- end to end: the planted message against the rate STATUS.md records ---------
+
+#: The bit error rate `STATUS.md` records for the `ci` instance at 8
+#: iterations, at 0, 1, 2 and 3 dB, in that order: 100 frames and 1,200
+#: message bits per point.
+RECORDED_BIT_ERROR_RATE = (0.115, 0.061, 0.033, 0.013)
+
+#: Frames of 100, per point, that carried at least one wrong bit.
+RECORDED_FRAME_ERRORS = (46, 23, 11, 5)
+
+#: What a figure recorded to three decimals is recomputed to (`DEV.md`): half
+#: of its last digit. A rate over seeded draws reproduces exactly, so the
+#: recomputation is held to the precision the record has and no looser.
+RECORDED_PRECISION = 5e-4
+
+
+@pytest.mark.critical
+@pytest.mark.end2end
+def test_the_iteration_recovers_the_planted_message_at_the_recorded_rate() -> None:
+    """Realized 0.115000, 0.060833, 0.033333 and 0.013333 against the
+    0.115, 0.061, 0.033 and 0.013 `STATUS.md` records, inside the 5e-4 a
+    three-decimal record is recomputed to; 46, 23, 11 and 5 of 100 frames
+    carried a wrong bit.
+
+    The path is the package's, end to end and with no oracle in it: a message
+    drawn from the fixture's seeded generator, `sim.convolutional.turbo_encode`
+    through both terminated constituents and the seeded interleaver,
+    `sim.ldpc`'s Gaussian channel at the `sigma` `noise_scale` gives each
+    declared `E_b / N_0`, and `decode_turbo` at the fixture's 8 iterations.
+    What is judged is the planted message, bit for bit.
+
+    The rate is the claim rather than a bound on it. `STATUS.md` reports these
+    four numbers as the iteration's side of its comparison against the exact
+    bitwise MAP, and the comparison is only worth what the iteration's own
+    figure is: a decoder that drifted would move these and pass every
+    ordering test beside them, since an ordering survives both sides moving
+    together. The sibling above asks whether the iteration approaches the MAP;
+    this asks whether it still lands where the record says.
+    """
+    params = fixture("turbo", "ci").params
+    code = params.code()
+    realized = []
+    frames_lost = []
+
+    for eb_n0_db in params.eb_n0_db:
+        rng = np.random.default_rng(params.seed)
+        channel = BinaryInputGaussianChannel(noise_scale(eb_n0_db, code.rate))
+        wrong_bits = wrong_frames = 0
+        for _ in range(params.frames):
+            message = rng.integers(0, 2, params.message_length).astype(np.uint8)
+            llr = channel.log_likelihood_ratios(turbo_encode(code, message), rng)
+            decoded = decode_turbo(code, llr, iterations=params.iterations).bits
+            wrong_bits += int((decoded != message).sum())
+            wrong_frames += int(not np.array_equal(decoded, message))
+        realized.append(wrong_bits / (params.frames * params.message_length))
+        frames_lost.append(wrong_frames)
+
+    assert tuple(frames_lost) == RECORDED_FRAME_ERRORS
+    for rate, recorded in zip(realized, RECORDED_BIT_ERROR_RATE, strict=True):
+        assert abs(rate - recorded) < RECORDED_PRECISION, (realized, rate)
+    assert all(np.diff(realized) < 0.0)
