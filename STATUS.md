@@ -147,6 +147,19 @@ its scalar recursion and the closed-form threshold, and
 `prune_with_matrices` against direct marginalization --- and
 `belief_propagation.ConvergenceError` is left, its non-convergence asserted
 and refereed by nothing.
+`opt` is the fifth (step 4): judged **85.49%** with `qa` exempt against
+85.35% and the complement **89.25%**, unmoved, so the judged floor rises to
+**85.4** and 89.2 stands, with `opt` **85.93% to 87.28%**, its judged deficit
+176 to 154 statements and its public callables no judging test enters 20 to
+16, every one of the 16 a declaration whose body runs at import. Four
+referees and four re-marks carry it --- `mcnemar` against
+`scipy.stats.binomtest` over 168 contingency tables at 1.84e-16, the fixture's
+six declared minimizers against the published values and each function's own
+value, gradient and curvature, and a warm-up's 1,200 draws against the exact
+Gaussian marginals within 2.17 standard errors of a bound of 3.0 --- and
+`opt/budget.py` goes 64.35% to **76.52%** and `opt/schedule.py` 76.03% to
+**81.51%**. `opt/objective.py` stays at 78.95%, its four unreached statements
+a `Protocol`'s `...` bodies.
 The ladder the `oracle` tests form --- 520 of them in 148 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
