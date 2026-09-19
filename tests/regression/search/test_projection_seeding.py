@@ -18,17 +18,20 @@ here (issue #734). The Euclidean candidate has a reduction --- squared
 Euclidean distance over a pair whose second channel is constant is the
 one-dimensional k-means++ of `opt.mixture`, draw for draw --- asserted because
 it is what says that candidate is k-means++ as it stands and not a second
-algorithm.
+algorithm. The candidates that are not Euclidean are that rule with the
+distance substituted, and the divergence each declares is written out here
+from its two channels' definitions and pinned to their draws (issue #734).
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 import numpy as np
 import pytest
 import torch
+from scipy.optimize import minimize_scalar
 from snakes_and_ladders.opt.budget import Budget
 from snakes_and_ladders.opt.initialize import (
     FromAnnealing,
@@ -36,20 +39,28 @@ from snakes_and_ladders.opt.initialize import (
     FromTempering,
     Initializer,
 )
-from snakes_and_ladders.opt.mixture import kmeans_plus_plus
+from snakes_and_ladders.opt.mixture import kmeans_plus_plus, uniform_seeds
 from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.projection import (
     PASSES_PER_GRADIENT,
     SEEDINGS,
     CountPairAt,
     ProjectedCounts,
+    data_seeding,
+    emission_seeding,
     euclidean_seeding,
     fit_projection,
     flatten,
     project,
 )
 from snakes_and_ladders.search.statistics import chi_square_p_value
-from snakes_and_ladders.sim.count_pairs import binned_model, planted_labels
+from snakes_and_ladders.sim.count_pairs import (
+    SUCCESSES,
+    TOTAL,
+    IndependentCountPair,
+    binned_model,
+    planted_labels,
+)
 from snakes_and_ladders.sim.fixtures import KEY, fixture
 
 PROBLEM = "spatio_sequential_counts"
@@ -460,3 +471,236 @@ def test_the_likelihood_and_the_truth_order_the_seedings_oppositely() -> None:
             f"{KEY_SAMPLED} charged {sampled.seeding.passes:.0f} passes, which "
             f"is no longer the different proposition the finding turns on"
         )
+
+
+#: Observations the seeding instance carries. Small enough that the rule is
+#: written out over every pair in the test and large enough that the divergence
+#: separates them: the D-squared law below runs from 2.1e-07 to 0.033 against a
+#: uniform 0.0083, a total variation of 0.37 from uniform.
+SEEDING_SAMPLES = 120
+
+#: Generators each seeding is run from. Eight, because a rule that agrees on
+#: one stream agrees by luck.
+SEEDING_SEEDS = range(8)
+
+#: The tolerance the metric written out here is held to against the family's
+#: own `bregman_divergence`. The beta-binomial channel is a deviance whose
+#: saturated rate the package finds by 60 bisection steps and this finds by a
+#: bounded minimization, so the two agree to their solvers' precision on that
+#: rate and not bitwise: realized 7.8e-14 absolute, which is 4.7e-09 relative
+#: where the divergence itself is near zero.
+DIVERGENCE_RTOL = 1e-6
+DIVERGENCE_ATOL = 1e-12
+
+
+def _beta_binomial_deviance(
+    count: float, trials: float, concentration: float, rate: float
+) -> float:
+    """The log-density gap to the best rate at this concentration, written out.
+
+    The beta-binomial at fixed concentration is a compound distribution and
+    not an exponential family in its success count, so its divergence is the
+    unit deviance: the mass function of :func:`_beta_binomial`, maximized over
+    the rate by a bounded minimization here and by bisection in the package,
+    less its value at ``rate``. Zero at the two ends of the support, where the
+    best member puts all its mass on the observation.
+    """
+
+    def negative(candidate: float) -> float:
+        return -math.log(
+            _beta_binomial(
+                [int(count)],
+                trials,
+                concentration * candidate,
+                concentration * (1.0 - candidate),
+            )[0]
+        )
+
+    if count in (0.0, trials):
+        saturated = 0.0
+    else:
+        saturated = -float(
+            minimize_scalar(
+                negative,
+                bounds=(1e-12, 1.0 - 1e-12),
+                method="bounded",
+                options={"xatol": 1e-14},
+            ).fun
+        )
+    return max(saturated + negative(rate), 0.0)
+
+
+def _declared_divergence(
+    seed_row: np.ndarray, rows: np.ndarray, at: CountPairAt
+) -> np.ndarray:
+    """``D_phi`` of every pair against the component the seam places on ``seed_row``.
+
+    The metric the non-Euclidean route declares, written from the two
+    channels' definitions: the negative binomial's divergence in closed form
+    at the seam's dispersion, ``r log((r + mu) / (r + y)) + y log(y (r + mu) /
+    (mu (r + y)))``, and the beta-binomial's deviance at its concentration,
+    summed because the channels are independent given the component.
+    """
+    mean = max(float(seed_row[TOTAL]), 1.0)
+    rate = (float(seed_row[SUCCESSES]) + 0.5) / (at.trials + 1.0)
+    counts = rows[:, TOTAL]
+    negative_binomial = at.dispersion * np.log(
+        (at.dispersion + mean) / (at.dispersion + counts)
+    ) + np.where(
+        counts > 0.0,
+        counts
+        * np.log(
+            np.where(counts > 0.0, counts, 1.0)
+            * (at.dispersion + mean)
+            / (mean * (at.dispersion + counts))
+        ),
+        0.0,
+    )
+    beta_binomial = np.array(
+        [
+            _beta_binomial_deviance(float(count), at.trials, at.concentration, rate)
+            for count in rows[:, SUCCESSES]
+        ]
+    )
+    return np.asarray(negative_binomial + beta_binomial)
+
+
+def _d_squared_draws(
+    rows: np.ndarray,
+    n_centres: int,
+    rng: np.random.Generator,
+    score: Callable[[np.ndarray, np.ndarray], np.ndarray],
+) -> np.ndarray:
+    """The D-squared rule written out: uniform first, then proportional to ``score``.
+
+    Arthur & Vassilvitskii's scheme with the distance left open, which is the
+    only thing the candidates differ in. Returns the chosen row indices, in
+    the order chosen.
+    """
+    indices = np.arange(rows.shape[0], dtype=np.float64)
+    chosen = [rng.choice(indices)]
+    nearest = score(rows[int(chosen[0])], rows)
+    for _ in range(1, n_centres):
+        total = float(nearest.sum())
+        chosen.append(
+            rng.choice(indices)
+            if total <= 0.0
+            else rng.choice(indices, p=nearest / total)
+        )
+        nearest = np.minimum(nearest, score(rows[int(chosen[-1])], rows))
+    return np.array(chosen, dtype=np.int64)
+
+
+def _same_components(first: IndependentCountPair, second: IndependentCountPair) -> bool:
+    """Whether two seeded families carry the same components, bit for bit."""
+    return all(
+        np.array_equal(left.numpy(), right.numpy())
+        for left, right in (
+            (first.total.mean, second.total.mean),
+            (first.successes.alpha, second.successes.alpha),
+            (first.successes.beta, second.successes.beta),
+        )
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_non_euclidean_seedings_draw_the_law_of_the_metric_they_declare() -> None:
+    # The rung below (issue #734): `opt.mixture.kmeans_plus_plus`. The
+    # candidates that read the data are one rule with one thing substituted,
+    # and that is what is asserted here rather than described. The rule
+    # written out above, handed the squared Euclidean distance over the first
+    # channel alone, is `kmeans_plus_plus` draw for draw on all 8 generators;
+    # handed the pair's squared distance it is `euclidean_seeding`; handed the
+    # seam family's divergence it is `emission_seeding`. Every comparison is
+    # bitwise on the seeded components.
+    #
+    # The divergence itself is written from the two channels' definitions --
+    # the negative binomial's closed form, the beta-binomial's deviance at its
+    # own saturated rate -- and agrees with the family's own to 7.8e-14
+    # absolute, 4.7e-09 relative where the divergence is near zero, against
+    # 1e-6 declared: the two solvers' precision on the saturated rate.
+    #
+    # The substitution is not cosmetic: the divergence and the Euclidean
+    # distance choose different components on 8 of 8 generators, and the
+    # divergence's law is far from the uniform one -- from 2.1e-07 to 0.033
+    # against 0.0083, a total variation of 0.37.
+    #
+    # Where it stops: `data_seeding` declares no metric at all. It is
+    # `uniform_seeds` bitwise, which is the D-squared rule's *first* draw and
+    # nothing after it, so the ladder step for that candidate is the control's
+    # and not k-means++'s.
+    instance = _projection("ci", SEEDING_SAMPLES, 4)
+    at = _seam("ci")
+    rows = np.asarray(instance.observations, dtype=np.float64)
+
+    def divergence(seed_row: np.ndarray, candidates: np.ndarray) -> np.ndarray:
+        return _declared_divergence(seed_row, candidates, at)
+
+    def euclidean(seed_row: np.ndarray, candidates: np.ndarray) -> np.ndarray:
+        return np.asarray(((candidates - seed_row) ** 2).sum(axis=1))
+
+    worst = 0.0
+    for index in (5, 37, 96):
+        written = _declared_divergence(rows[index], rows, at)
+        shipped = (
+            at(rows[[index]])
+            .bregman_divergence(torch.as_tensor(rows, dtype=torch.float64))[:, 0]
+            .numpy()
+        )
+        worst = max(
+            worst,
+            float(
+                (np.abs(written - shipped) / np.maximum(np.abs(shipped), 1e-12)).max()
+            ),
+        )
+        np.testing.assert_allclose(
+            written, shipped, rtol=DIVERGENCE_RTOL, atol=DIVERGENCE_ATOL
+        )
+    assert worst < DIVERGENCE_RTOL, worst
+
+    parted = 0
+    flat = rows[:, TOTAL]
+    for seed in SEEDING_SEEDS:
+        drawn = _d_squared_draws(
+            rows, instance.n_components, np.random.default_rng(seed), divergence
+        )
+        seeded = emission_seeding(instance, at, np.random.default_rng(seed))
+        assert _same_components(seeded.components, at(rows[drawn])), seed
+
+        euclid = _d_squared_draws(
+            rows, instance.n_components, np.random.default_rng(seed), euclidean
+        )
+        assert _same_components(
+            euclidean_seeding(instance, at, np.random.default_rng(seed)).components,
+            at(rows[euclid]),
+        ), seed
+        np.testing.assert_array_equal(
+            kmeans_plus_plus(flat, instance.n_components, np.random.default_rng(seed)),
+            flat[
+                _d_squared_draws(
+                    flat.reshape(-1, 1),
+                    instance.n_components,
+                    np.random.default_rng(seed),
+                    euclidean,
+                )
+            ],
+        )
+        parted += int(not np.array_equal(drawn, euclid))
+
+        uniform = uniform_seeds(
+            np.arange(rows.shape[0], dtype=np.float64),
+            instance.n_components,
+            np.random.default_rng(seed),
+        ).astype(np.int64)
+        assert _same_components(
+            data_seeding(instance, at, np.random.default_rng(seed)).components,
+            at(rows[uniform]),
+        ), seed
+
+    assert parted == len(SEEDING_SEEDS), parted
+
+    law = _declared_divergence(rows[5], rows, at)
+    law = law / law.sum()
+    assert float(law.max()) > 3.0 / rows.shape[0], float(law.max())
+    assert 0.5 * float(np.abs(law - 1.0 / rows.shape[0]).sum()) > 0.3

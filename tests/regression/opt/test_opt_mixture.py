@@ -530,3 +530,145 @@ def test_the_seeded_start_lands_in_the_enumerated_maximum_posterior_assignment()
 
     assert seeded == 20, seeded
     assert uniform <= 15, uniform
+
+
+#: The instances the optimal cost is enumerated on: observations, clusters,
+#: and the seed the draw is made with. ``3 ** 10`` is 59,049 assignments and
+#: ``2 ** 12`` is 4,096, both inside
+#: :data:`snakes_and_ladders.enumeration.MAX_ENUMERABLE_CONFIGURATIONS`; the
+#: dynamic program is ``O(n ** 2 k)`` and does not care, which is the point.
+ENUMERATED_CLUSTERINGS = ((10, 3, 734), (12, 2, 11), (9, 3, 5))
+
+#: The weights the equal-weight assumption is tilted by, and the instance of
+#: :data:`ENUMERATED_CLUSTERINGS` whose maximum-posterior assignment moves
+#: under them.
+TILTED_WEIGHTS = ((0.05, 0.15, 0.8), (0.02, 0.49, 0.49))
+TILTED_INSTANCE = (9, 3, 5)
+
+#: The two-dimensional instance the contiguity argument is refuted on: eight
+#: points, two clusters, sorted by their first coordinate.
+NON_CONTIGUOUS_SEED = 1
+
+
+def _assignment_matrix(n_samples: int, n_centres: int) -> np.ndarray:
+    """Every assignment, as the digits of its index in base ``n_centres``."""
+    place = n_centres ** np.arange(n_samples - 1, -1, -1, dtype=np.int64)
+    return (
+        np.arange(n_centres**n_samples, dtype=np.int64)[:, None] // place
+    ) % n_centres
+
+
+def _within_cluster_cost(values: np.ndarray, assignments: np.ndarray) -> np.ndarray:
+    """Each assignment's sum of squares about its own clusters' means.
+
+    The definition, over whole assignments and with no ordering argument: an
+    empty cluster contributes nothing, so an assignment using fewer clusters
+    than it may is scored rather than excluded. ``values`` carries a channel
+    axis or does not, and the squared distance sums over it either way.
+    """
+    n_centres = int(assignments.max()) + 1
+    rows = values.reshape(values.shape[0], -1)
+    membership = assignments[:, :, None] == np.arange(n_centres)
+    counts = membership.sum(axis=1)
+    totals = np.einsum("mnk,nc->mkc", membership.astype(np.float64), rows)
+    squares = (membership * (rows**2).sum(axis=1)[None, :, None]).sum(axis=1)
+    spread = squares - np.where(
+        counts > 0, (totals**2).sum(axis=2) / np.maximum(counts, 1), 0.0
+    )
+    return np.asarray(spread.sum(axis=1))
+
+
+def _enumerated_optimum(
+    n_samples: int, n_centres: int, seed: int
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """One drawn instance, the assignment of least cost, and that cost."""
+    values = np.sort(np.random.default_rng(seed).normal(scale=2.0, size=n_samples))
+    assignments = _assignment_matrix(n_samples, n_centres)
+    costs = _within_cluster_cost(values, assignments)
+    return values, assignments[int(costs.argmin())], float(costs.min())
+
+
+def _is_contiguous(partition: np.ndarray) -> bool:
+    """Whether every cluster of ``partition`` is a run of consecutive indices."""
+    return all(
+        np.all(np.diff(np.flatnonzero(partition == cluster)) == 1)
+        for cluster in range(int(partition.max()) + 1)
+        if bool((partition == cluster).any())
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_optimal_clustering_cost_is_the_minimum_over_the_enumerated_assignments() -> (
+    None
+):
+    # The rung below (issue #734): assignment enumeration. The dynamic program
+    # searches ``k - 1`` cut positions in the sorted order and claims the
+    # minimum over *all* ``k ** n`` assignments; enumerating them uses no
+    # ordering argument at all, so agreement is evidence for that argument
+    # rather than a restatement of it. Realized over the three instances:
+    # 0.0, 2.8e-16 and 1.6e-16 relative, against 1e-12 declared.
+    #
+    # Two statements beside it. The enumerated minimizer is contiguous in the
+    # sorted order on all three -- the premise the dynamic program rests on,
+    # asserted rather than assumed. And that partition is the enumerated
+    # maximum-posterior assignment of a Gaussian mixture whose components sit
+    # at its own cluster means, at equal weights and a shared scale, which is
+    # where nearest-centre and maximum-posterior are one rule: the enumeration
+    # that referees the cost returns the partition too.
+    #
+    # Where the second statement stops is one assumption out. At weights
+    # (0.05, 0.15, 0.8) and at (0.02, 0.49, 0.49) the maximum-posterior
+    # assignment of the nine-observation instance is no longer the optimal
+    # partition -- the weight tilts the posterior and the cost does not see
+    # it -- so the equality is the equal-weight case and is asserted as one.
+    # The tilt moves nothing on the ten-observation instance, whose clusters
+    # are far enough apart to absorb a weight ratio of 16, and both outcomes
+    # are asserted rather than the convenient one.
+    for n_samples, n_centres, seed in ENUMERATED_CLUSTERINGS:
+        values, partition, cost = _enumerated_optimum(n_samples, n_centres, seed)
+
+        assert_allclose(optimal_clustering_cost(values, n_centres), cost, rtol=1e-12)
+        assert _is_contiguous(partition), partition
+
+        means = np.array(
+            [values[partition == cluster].mean() for cluster in range(n_centres)]
+        )
+        family = GaussianEmission(means, np.ones(n_centres), 1e-12)
+        enumerated = enumerate_mixture_assignments(
+            np.full(n_centres, 1.0 / n_centres), family, values
+        )
+        np.testing.assert_array_equal(enumerated.assignment, partition)
+
+        for weights in TILTED_WEIGHTS:
+            if n_centres != len(weights):
+                continue
+            tilted = enumerate_mixture_assignments(np.array(weights), family, values)
+            moved = not np.array_equal(tilted.assignment, partition)
+            assert moved == (n_samples == TILTED_INSTANCE[0]), (seed, weights)
+
+    # Where the cost statement itself stops, and why the docstring says "only
+    # in one dimension". The dynamic program searches contiguous runs of the
+    # sorted observations, and in two dimensions no ordering makes the optimum
+    # contiguous. Enumerated over the 256 assignments of eight points sorted
+    # by their first coordinate: the optimum is [0 0 0 0 1 0 0 0] at 10.883,
+    # which no run of that order can express, and the best contiguous
+    # partition costs 14.422, 32.5% above it. The callable flattens what it is
+    # given, so on this data it returns 5.328 -- the exact optimum of sixteen
+    # scalars, which is a different question.
+    points = np.random.default_rng(NON_CONTIGUOUS_SEED).normal(size=(8, 2)) * 2.0
+    points = points[np.argsort(points[:, 0])]
+    assignments = _assignment_matrix(8, 2)
+    costs = _within_cluster_cost(points, assignments)
+    contiguous = np.array(
+        [
+            cost
+            for cost, one in zip(costs, assignments, strict=True)
+            if _is_contiguous(one)
+        ]
+    )
+
+    assert not _is_contiguous(assignments[int(costs.argmin())])
+    assert_allclose(costs.min(), 10.883384005190335, rtol=1e-12)
+    assert_allclose(contiguous.min(), 14.421633014203367, rtol=1e-12)
+    assert_allclose(optimal_clustering_cost(points, 2), 5.327649356018618, rtol=1e-12)

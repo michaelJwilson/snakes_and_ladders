@@ -11,6 +11,8 @@ it is pinned against, and the regression test that pins the pair.
 `ticket`, so a gap is a row a reader can act on rather than an absence they
 have to notice. `tests/regression/test_oracle_ladder.py` holds every named
 test to exist and carry `oracle`, and every rung without one to its number.
+The rule stands whatever the count: today no row carries a ticket, issue
+#734 having pinned the last four --- the mixtures --- in its step 6.
 
 This is a ladder and not a census: where the survey (issue #734, first
 comment) lists several tests for one rung, the one recorded here is the one
@@ -21,8 +23,9 @@ conventions follow from that:
   exact end of a ladder, or a referee outside it: a closed form, a second
   implementation, a framework. The test's own name states which.
 * one rung appears once per rung it is pinned against, so a method pinned at
-  the exact end and wanted against a cheaper rung is two rows, one of them a
-  ticket.
+  the exact end and wanted against a cheaper rung is two rows. HMC is that
+  case: an analytic Gaussian under one row, the enumerated assignment
+  posterior under the other.
 
 Infrastructure, not science: the callables are strings this module never
 imports, read the way `infra/problems_tables.py` reads the fixture registry
@@ -39,7 +42,9 @@ from dataclasses import dataclass
 #: The five ladders, in the order the survey tables run.
 PROBLEMS = ("potts", "tree", "hmm", "codes", "mixture")
 
-#: The issue carrying the rungs no test pins, one bullet per rung.
+#: The issue a rung with no test carries, one bullet per rung. No row carries
+#: it today; the guard reads it to hold that a rung without a test names an
+#: issue, which is the rule and not the count.
 LADDER_TICKET = 734
 
 
@@ -78,8 +83,8 @@ class Rung:
 
 T = "tests/regression/"
 
-#: Every rung of every ladder: the pinned ones first, per problem, in the
-#: order the survey's table runs, then the rungs issue #734 carries.
+#: Every rung of every ladder, per problem, in the order the survey's table
+#: runs. Each is pinned by a named `oracle` test.
 LADDER: tuple[Rung, ...] = (
     # --- Potts / lattice ---------------------------------------------------
     Rung(
@@ -749,6 +754,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "mixture",
+        "optimal clustering cost",
+        "opt.mixture.optimal_clustering_cost",
+        "assignment enumeration",
+        T + "opt/test_opt_mixture.py"
+        "::test_the_optimal_clustering_cost_is_the_minimum_over_the_enumerated_assignments",
+    ),
+    Rung(
+        "mixture",
         "projection seeding",
         "search.projection.euclidean_seeding",
         "k-means++ seeding",
@@ -757,43 +770,34 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "mixture",
+        "non-Euclidean projection seedings",
+        "search.projection.data_seeding",
+        "k-means++ seeding",
+        T + "search/test_projection_seeding.py"
+        "::test_the_non_euclidean_seedings_draw_the_law_of_the_metric_they_declare",
+    ),
+    Rung(
+        "mixture",
         "HMC",
         "opt.hmc.sample",
         None,
         T + "opt/test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian",
     ),
-    # --- the 4 rungs no test pins, one per bullet of issue #734 ------------
     Rung(
         "mixture",
         "HMC",
         "opt.hmc.sample",
         "assignment enumeration",
-        None,
-        LADDER_TICKET,
+        T + "opt/test_opt_hmc.py"
+        "::test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture",
     ),
     Rung(
         "mixture",
         "FromChain, FromAnnealing, FromTempering",
         "opt.initialize.FromChain",
         None,
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "mixture",
-        "optimal clustering cost",
-        "opt.mixture.optimal_clustering_cost",
-        "assignment enumeration",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "mixture",
-        "non-Euclidean projection seedings",
-        "search.projection.data_seeding",
-        "k-means++ seeding",
-        None,
-        LADDER_TICKET,
+        T + "opt/test_opt_initialize.py"
+        "::test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descent_cannot",
     ),
 )
 
