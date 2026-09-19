@@ -12,6 +12,15 @@ coincidence of two literals rather than by construction (issue #413). A
 closed form computed in three places is the same defect as a function
 implemented in three places, so it is checked the same way.
 
+A *seam* rather than a duplication: no module builds a compressed-sparse
+store by hand (issue #755). `incidence.SparseIncidence` is the one compressed
+layout (#586) and `as_arrays()` the one way across the FFI boundary, so a
+second `csr` or `coo` written beside them carries no transpose, no stable
+order within a row and no oracle. The claim is structural --- an offsets array
+is a `cumsum` over degrees whatever the line is spelled like --- so it is read
+from the syntax tree, and only the imported `csr_matrix` spelling is read as a
+text.
+
 Each guard is paired with a test that the guard fails on a violating input.
 That pairing is the discipline `tests/regression/docs` established: a check
 that has never been seen to fail is not known to work, and a regex over
@@ -20,6 +29,7 @@ source files is exactly the kind that silently matches nothing.
 
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -82,6 +92,59 @@ RETIRED_ENVIRONMENTS = re.compile(
     r"\b(PottsLandscape|StatePathLandscape|TopologyEnvironment)\b"
 )
 
+#: The module owning the compressed layout, and the two calls that build a
+#: store through it: `SparseIncidence.from_pairs` and, for a Potts graph,
+#: `PottsGraph.compressed_adjacency`, which holds one.
+INCIDENCE_OWNER = "incidence.py"
+
+#: Package modules building a store through the seam, pinned at what this
+#: guard reads on `main` at 048a342: `sim/graph.py`,
+#: `sim/ldpc.py`, `sim/factor_graph.py`, `sim/potts.py`, `search/maxflow.py`,
+#: `search/potts_mcmc.py`, `search/potts_keyed.py`, `search/ground_state.py`,
+#: `search/alpha_expansion.py` and `search/spatio_sequential.py`. The pull
+#: request that adds a consumer raises the pin; one that removes the last
+#: caller of the seam lowers it to a number a reader can question.
+SEAM_CONSUMERS = 10
+
+#: Files this guard does not read, each against the reason, rather than an
+#: allow-list nobody can audit. The first two are measurements the
+#: 2026-09-19 review records and `infra/appraise_structures.py` prints in
+#: `MEASURED`; the third is what this guard found on `main`.
+EXCLUDED: dict[str, str] = {
+    "ragged.py": (
+        "offsets rebuilt per call kept: the Python scan is 39.3 us against "
+        "335.11 ms for one Baum-Welch iteration over the same batch, 0.012% "
+        "(#677)"
+    ),
+    "search/maxflow.py": (
+        "list of lists kept: a row is 1.95 ms as lists against 3.93 ms flat "
+        "with offsets over 16,384 rows of degree six, and the compiled "
+        "consumer takes `as_arrays` (#586); `from_arcs` builds through the "
+        "seam"
+    ),
+    "learn/surrogate.py": (
+        "found by this guard, to be folded or declined under #755: "
+        "`_Batch.__init__` lays the token blocks of a batch end to end and "
+        "computes their starts with `np.cumsum`"
+    ),
+}
+
+#: The object graphs are not excluded because nothing reads them: the rule
+#: says nothing about them. Eleven of the `role:incidence` cluster's fifteen
+#: members --- `sim.tree.Node`, `sim.factor_graph.Factor`,
+#: `sandbox.region_graph.Region` and eight more --- are graphs where the
+#: relation *is* the model, which the compressed layout serves rather than
+#: replaces (the 2026-09-19 review, `role:incidence`). They build no store, so
+#: they trip neither rule below and need no entry above.
+#:
+#: The one spelling a syntax tree cannot decide: `scipy.sparse` builds the
+#: store, and the name it is built under is whatever the import aliased. The
+#: package carries `scipy` for `linear_sum_assignment` and nothing else, and a
+#: `csr_matrix` here would be a second compressed layout with a second set of
+#: conventions. Searched over the suite and the notebooks too, because that is
+#: where a reader reaches for one.
+FOREIGN_SPARSE = re.compile(r"\b(?:csr|csc|coo)_(?:matrix|array)\s*\(")
+
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
 #: exists for were outside it.
@@ -111,6 +174,87 @@ def _found(
         for path in sorted(root.rglob(suffix))
         if not path.as_posix().endswith(owner) and pattern.search(path.read_text())
     ]
+
+
+def _names(node: ast.Assign | ast.AnnAssign) -> list[str]:
+    """Every name a binding writes to, `self._offsets` reading as `_offsets`."""
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+    return [
+        sub.id if isinstance(sub, ast.Name) else sub.attr
+        for target in targets
+        for sub in ast.walk(target)
+        if isinstance(sub, ast.Name | ast.Attribute)
+    ]
+
+
+def _called(node: ast.AST) -> str:
+    """The name a call calls, without its module: `np.cumsum` reads `cumsum`."""
+    if not isinstance(node, ast.Call):
+        return ""
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return node.func.id if isinstance(node.func, ast.Name) else ""
+
+
+#: The two arrays a compressed store is: the row starts, and the permutation
+#: that put the pairs in row-major order. Matched on the name a line binds
+#: rather than on the arithmetic, because the arithmetic is four lines and a
+#: reader writing a fifth spelling still calls the result `offsets`.
+ROW_STARTS = re.compile(r"offsets|indptr")
+ROW_INDEX = re.compile(r"\brows?\b|\brow_|_rows?\b")
+
+
+def _hand_built_stores(source: str) -> list[str]:
+    """The compressed-sparse stores one source builds by hand, with their lines.
+
+    Two rules, and each is what `incidence._row_major` does in one line, so the
+    owner's own source trips both --- which is the positive control the guard
+    asserts rather than a coincidence. A `cumsum` bound to an `offsets` or
+    `indptr` name is the row starts; a `lexsort` or `argsort` over a row index
+    bound to an `order` name is the COO pair sorted into row-major order.
+    """
+    found: set[tuple[int, str]] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and _called(node) == "cumsum":
+            out = [kw for kw in node.keywords if kw.arg == "out"]
+            if out and ROW_STARTS.search(ast.unparse(out[0].value)):
+                found.add((node.lineno, "row starts by cumsum"))
+        if not isinstance(node, ast.Assign | ast.AnnAssign) or node.value is None:
+            continue
+        names = _names(node)
+        for call in ast.walk(node.value):
+            called = _called(call)
+            if called == "cumsum" and any(ROW_STARTS.search(n) for n in names):
+                found.add((node.lineno, "row starts by cumsum"))
+            if (
+                called in ("lexsort", "argsort")
+                and any("order" in n for n in names)
+                and ROW_INDEX.search(ast.unparse(call))
+            ):
+                found.add((node.lineno, "pairs sorted into row-major order"))
+    return [f"{line}: {what}" for line, what in sorted(found)]
+
+
+def _builds_through_the_seam(source: str) -> bool:
+    """Whether one source calls `SparseIncidence.from_pairs` or the adjacency."""
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr == "compressed_adjacency":
+            return True
+        if node.func.attr == "from_pairs" and ast.unparse(node.func.value).endswith(
+            "SparseIncidence"
+        ):
+            return True
+    return False
+
+
+def _package_sources() -> dict[str, str]:
+    """Every package module, keyed by its path below the package root."""
+    return {
+        path.relative_to(PACKAGE).as_posix(): path.read_text()
+        for path in sorted(PACKAGE.rglob("*.py"))
+    }
 
 
 @pytest.mark.critical
@@ -195,6 +339,67 @@ def test_no_retired_environment_name_returns() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_no_compressed_store_is_built_outside_the_incidence_seam() -> None:
+    # One compressed layout, ten modules building through it (issue #755).
+    # Three wrote the counting sort separately before #586 -- `ParityCheck`
+    # by `lexsort` and `searchsorted`, `PottsGraph` per call, `FactorGraph`
+    # not at all -- and they agreed, so nothing failed; what a fourth costs
+    # is the contract `SparseIncidence` states and a copy does not: a stable
+    # order within a row, a transpose sharing one per-entry array, and the
+    # refusals `from_pairs` makes at the build.
+    sources = _package_sources()
+    by_hand = {
+        path: stores
+        for path, source in sources.items()
+        if path != INCIDENCE_OWNER and path not in EXCLUDED
+        for stores in [_hand_built_stores(source)]
+        if stores
+    }
+
+    assert by_hand == {}
+    # The reading is not vacuous: the owner builds the store this guard is
+    # about, and both rules find it there.
+    owner = [
+        store.split(": ", 1)[1]
+        for store in _hand_built_stores(sources[INCIDENCE_OWNER])
+    ]
+    assert owner == ["row starts by cumsum", "pairs sorted into row-major order"]
+    assert (
+        len(
+            [
+                path
+                for path, source in sources.items()
+                if path != INCIDENCE_OWNER and _builds_through_the_seam(source)
+            ]
+        )
+        == SEAM_CONSUMERS
+    )
+    # An exclusion is a file and a reason, and a file that has moved takes its
+    # reason with it rather than leaving a rule nothing applies to.
+    assert [path for path in EXCLUDED if not (PACKAGE / path).exists()] == []
+    assert [path for path, why in EXCLUDED.items() if not why] == []
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_no_module_builds_a_scipy_sparse_store() -> None:
+    # `scipy` is carried for `linear_sum_assignment`. A `csr_matrix` beside
+    # `SparseIncidence` would be a second compressed layout whose row order,
+    # duplicate handling and transpose are somebody else's, and the compiled
+    # consumers take `as_arrays`, which it does not have.
+    assert (
+        _found(
+            FOREIGN_SPARSE,
+            "test_duplication_guards.py",
+            SEARCHED,
+            ("*.py", "*.ipynb"),
+        )
+        == []
+    )
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -209,6 +414,8 @@ def test_each_guard_fails_on_violating_source() -> None:
         SQUARE_TRANSITION: "TRANSITION = math.log(1.0 + " + "math.sqrt(3.0))\n",
         # Split for the same reason as the line above.
         RETIRED_ENVIRONMENTS: "landscape = Potts" + "Landscape(graph, field)\n",
+        # Split for the same reason: this module is inside the search.
+        FOREIGN_SPARSE: "matrix = csr" + "_matrix((data, (rows, cols)))\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -219,10 +426,41 @@ def test_each_guard_fails_on_violating_source() -> None:
         ),
         SQUARE_TRANSITION: 'print(f"at J_c = ln(1 + sqrt(3)) = {coupling:.4f}")\n',
         RETIRED_ENVIRONMENTS: "environment = TreeEnvironment(alignment, k=4)\n",
+        FOREIGN_SPARSE: "from snakes_and_ladders.incidence import SparseIncidence\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
     assert [p for p, text in clean.items() if p.search(text)] == []
+
+    # The structural guard on the same discipline, since the claim is what a
+    # line computes and not how it is spelled: the row starts by `cumsum`
+    # under three names, the pairs sorted into row-major order, and the two
+    # clean forms -- a build through the seam, and a `cumsum` that addresses
+    # no relation, which is the `restarts`-for-`starts` failure the structure
+    # survey exists to avoid.
+    builds = (
+        "degrees = np.bincount(rows, minlength=n)\n"
+        "offsets = np.cumsum(degrees)\n"
+        "self._indptr = np.cumsum(counts)\n"
+        "np.cumsum(degrees, out=starts_offsets[1:])\n"
+        "order = np.lexsort((columns, rows))\n"
+    )
+    through = (
+        "offsets, neighbours, couplings = graph.compressed_adjacency()\n"
+        "grouped = SparseIncidence.from_pairs(n_rows, n_cols, rows, columns)\n"
+        "cumulative = np.cumsum(np.exp(local))\n"
+        "rank[np.lexsort((np.arange(n), mean_bit))] = np.arange(n)\n"
+    )
+
+    assert _hand_built_stores(builds) == [
+        "2: row starts by cumsum",
+        "3: row starts by cumsum",
+        "4: row starts by cumsum",
+        "5: pairs sorted into row-major order",
+    ]
+    assert _hand_built_stores(through) == []
+    assert _builds_through_the_seam(through) is True
+    assert _builds_through_the_seam(builds) is False
 
 
 @pytest.mark.critical
