@@ -66,7 +66,7 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import torch
 
-from snakes_and_ladders.enumeration import argmax, configurations
+from snakes_and_ladders.enumeration import enumerated_optimum
 from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment
 from snakes_and_ladders.opt.schedule import (
     ConstantTempSchedule,
@@ -303,15 +303,10 @@ def enumerate_optimum(objective: RelaxedObjective) -> tuple[Configuration, float
     The oracle. Exponential, and affordable only because these instances are
     deliberately small --- the same role
     :func:`snakes_and_ladders.learn.potts.optimum` plays for the chain and exhaustive
-    topology enumeration plays for tree search.
+    topology enumeration plays for tree search. The three share one body,
+    :func:`snakes_and_ladders.enumeration.enumerated_optimum` (issue #755).
     """
-    candidates = [
-        tuple(row.tolist())
-        for row in configurations(objective.n_states, objective.n_sites)
-    ]
-    scores = np.array([objective.discrete(candidate) for candidate in candidates])
-    best = argmax(scores)
-    return candidates[best], float(scores[best])
+    return enumerated_optimum(objective.n_states, objective.n_sites, objective.discrete)
 
 
 def exact_expected_score(objective: RelaxedObjective, logits: torch.Tensor) -> float:
