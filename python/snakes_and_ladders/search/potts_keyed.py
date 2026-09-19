@@ -35,8 +35,8 @@ import math
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.learn.potts_nd import MoveKind
 from snakes_and_ladders.search.potts_mcmc import (
+    MoveKind,
     _cluster_members,
     _find,
     _niedermayer_sweep,

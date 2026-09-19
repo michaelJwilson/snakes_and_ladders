@@ -92,11 +92,14 @@ SLIMMING_BASELINE = {
     # one module each, which is the package's shape for a sampler --- added
     # two and eight. #754's tree schedule in Rust added one module,
     # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
-    # `track.py`, the run seam issue #778 put beside `log.py`, is another
-    # module, and its classes and functions declare entries beside the six
-    # `Metrics` sets added to the modules owning each problem's objective or
-    # energy.
-    "flat modules": 155,
+    # Issue #779's three deprecation shims are three modules while they
+    # stand, so the first row falls by three at the release after 0.3.0 that
+    # removes them. `track.py`, the run seam issue #778 put beside `log.py`,
+    # is the one module this pull request adds, and 27 of the second row's
+    # entries are its public names and the six `Metrics` sets added to the
+    # modules owning each problem's objective or energy: 157 and 1,632 on
+    # `main` at 121a1c7.
+    "flat modules": 158,
     "API-map entries": 1659,
 }
 

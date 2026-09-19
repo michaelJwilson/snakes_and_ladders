@@ -4,7 +4,7 @@ One topology: a full fit, the plug-in bound, the parsimony bound, and a
 learned prediction. One lattice: enumeration, the four bounds, and the
 feature and token vectors a learned lattice surrogate reads (issue #365).
 Correctness is pinned in ``tests/regression/likelihood/test_surrogate.py``
-and ``tests/regression/search/test_search_lattice_surrogate.py``.
+and ``tests/regression/learn/test_search_lattice_surrogate.py``.
 
 The lattice bounds are timed against a **per-site** field, the shape the
 `spatio_only` fixtures declare, since that is the shape the feature vector
@@ -17,6 +17,11 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.learn.ranking import (
+    LearnedTreeSurrogate,
+    fixed_length_target,
+    tree_examples,
+)
 from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
 from snakes_and_ladders.likelihood.features import lattice_features, lattice_tokens
 from snakes_and_ladders.likelihood.potts import enumerate_potts
@@ -30,11 +35,6 @@ from snakes_and_ladders.likelihood.surrogate import (
     spanning_tree_log_partition,
 )
 from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.surrogate import (
-    LearnedTreeSurrogate,
-    fixed_length_target,
-    tree_examples,
-)
 from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.simulate import simulate_alignment

@@ -30,7 +30,7 @@ class BoundaryCondition(StrEnum):
     unrecognized boundary at the call site rather than the constructor
     raising at run time, and so the yaml loader has one place to parse it.
     The same choice ``snakes_and_ladders.search.infer.MoveSet`` and
-    ``snakes_and_ladders.search.rl.RewardModel`` make.
+    ``snakes_and_ladders.learn.tree.RewardModel`` make.
     """
 
     OPEN = "open"

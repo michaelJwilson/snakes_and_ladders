@@ -39,7 +39,6 @@ from snakes_and_ladders.learn.keyed import keyed_generator, state_key
 from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, LinearPolicy
 from snakes_and_ladders.learn.potts_nd import (
     DEFAULT_LADDER,
-    MoveKind,
     PottsAction,
     PottsNDEnvironment,
 )
@@ -47,6 +46,7 @@ from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.ground_state import Rung
 from snakes_and_ladders.search.maxflow import ising_ground_state
+from snakes_and_ladders.search.potts_mcmc import MoveKind
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, energies, spatio_only_field
 

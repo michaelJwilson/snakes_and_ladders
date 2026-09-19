@@ -21,9 +21,9 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.learn.tree import with_uniform_branch_lengths
 from snakes_and_ladders.likelihood import pruning, pruning_rust
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
-from snakes_and_ladders.search.rl import with_uniform_branch_lengths
 from snakes_and_ladders.search.topology import random_topology
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment

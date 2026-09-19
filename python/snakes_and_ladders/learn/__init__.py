@@ -1,9 +1,10 @@
 """Reinforcement learning over discrete search problems.
 
-Infrastructure, not application: nothing here knows what a tree is, and a
-test asserts it. The interface is :class:`~snakes_and_ladders.learn.environment.Environment`
+The interface is :class:`~snakes_and_ladders.learn.environment.Environment`
 and the reference instance is a Potts environment, exactly as ``snakes_and_ladders.opt``
 pairs :class:`~snakes_and_ladders.opt.objective.Objective` with a Potts chain and an HMM.
+The interface, the policy and the estimators import no application module, and
+``CLAUDE.md`` in this directory names the three that do.
 
 Root ``CLAUDE.md`` re-exports nothing from a package's top level, so import
 submodule contents explicitly.

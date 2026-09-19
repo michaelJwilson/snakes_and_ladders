@@ -38,13 +38,13 @@ from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
-from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.rl import (
+from snakes_and_ladders.learn.tree import (
     FEATURE_NAMES,
     FeatureSet,
     RewardModel,
     TreeEnvironment,
 )
+from snakes_and_ladders.search.infer import MoveSet
 from snakes_and_ladders.search.statistics import sign_test_p_value
 from snakes_and_ladders.search.topology import (
     Topology,

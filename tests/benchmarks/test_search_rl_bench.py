@@ -1,6 +1,6 @@
 """Benchmarks for the phylogenetic environment.
 
-See tests/regression/test_search_rl.py for correctness. The number that
+See tests/regression/learn/test_search_rl.py for correctness. The number that
 matters is the ratio between the two reward models, because that ratio is the
 entire argument for issue #131's simplification: one candidate scored at
 known parameters against the same candidate scored at maximized ones.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.search.rl import RewardModel, TreeEnvironment
+from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.search.topology import random_topology
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment

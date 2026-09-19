@@ -337,9 +337,9 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "learned lattice surrogate",
-        "search.surrogate.lattice_examples",
+        "learn.ranking.lattice_examples",
         "enumeration",
-        T + "search/test_search_lattice_surrogate.py"
+        T + "learn/test_search_lattice_surrogate.py"
         "::test_a_surrogate_learns_the_gap_above_the_mean_field_bound_at_nine_sites",
     ),
     Rung(
@@ -487,17 +487,17 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "tree",
         "surrogate-ranked search",
-        "search.surrogate.LearnedTreeSurrogate",
+        "learn.ranking.LearnedTreeSurrogate",
         "tree search (NNI/SPR)",
-        T + "search/test_search_surrogate.py"
+        T + "learn/test_search_surrogate.py"
         "::test_surrogate_ranked_search_reaches_what_the_full_search_reaches",
     ),
     Rung(
         "tree",
         "surrogate-ranked search",
-        "search.surrogate.LearnedTreeSurrogate",
+        "learn.ranking.LearnedTreeSurrogate",
         "analytic surrogates",
-        T + "search/test_search_surrogate.py"
+        T + "learn/test_search_surrogate.py"
         "::test_the_learned_surrogate_ranks_the_topologies_the_plug_in_bound_ranks",
     ),
     Rung(
@@ -511,10 +511,10 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "tree",
         "RL policy / PPO",
-        "search.rl.TreeEnvironment",
+        "learn.tree.TreeEnvironment",
         "topology enumeration",
         T
-        + "search/test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum",
+        + "learn/test_search_rl.py::test_greedy_search_reaches_the_enumerated_optimum",
     ),
     Rung(
         "tree",

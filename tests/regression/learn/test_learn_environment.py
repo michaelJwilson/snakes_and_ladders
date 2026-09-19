@@ -30,6 +30,18 @@ FORBIDDEN_PREFIXES = (
     "snakes_and_ladders.search",
 )
 
+#: The modules issue #779 exempted, each named with what it imports and why.
+#: `tree.py` and `ranking.py` moved here from `search/`: each is an instance of
+#: a `learn/` interface over one application's objects --- a topology, a
+#: lattice --- so each imports that application. `potts_nd.py` imports one
+#: enum, `search.potts_mcmc.MoveKind`, which #779 moved down to sit beside the
+#: moves it names rather than be spelled out twice. The interface, the policy
+#: and the estimators import none, which is the claim this guard makes and the
+#: reason an agent is not shaped by one problem. Listed rather than
+#: pattern-matched, so a fourth is a failure a reader decides on rather than a
+#: name that slips through.
+APPLICATION_INSTANCES = ("potts_nd.py", "ranking.py", "tree.py")
+
 FIELD = np.array([0.4, -0.1, -0.3])
 
 
@@ -57,6 +69,8 @@ def test_learn_imports_nothing_from_the_application_modules() -> None:
     package = Path(snakes_and_ladders.learn.__file__).parent
     offenders: dict[str, set[str]] = {}
     for source in sorted(package.glob("*.py")):
+        if source.name in APPLICATION_INSTANCES:
+            continue
         bad = {
             name
             for name in _imported_modules(source)
@@ -65,6 +79,20 @@ def test_learn_imports_nothing_from_the_application_modules() -> None:
         if bad:
             offenders[source.name] = bad
     assert offenders == {}
+
+
+@pytest.mark.critical
+@pytest.mark.smoke
+def test_every_named_application_instance_exists_and_imports_one() -> None:
+    # The exemption is two-sided: a name that no longer names a module would
+    # exempt nothing and read as though it did, and a module listed here that
+    # imports no application module does not need the exemption.
+    package = Path(snakes_and_ladders.learn.__file__).parent
+    for name in APPLICATION_INSTANCES:
+        source = package / name
+        assert source.exists(), name
+        imported = _imported_modules(source)
+        assert {n for n in imported if n.startswith(FORBIDDEN_PREFIXES)} != set(), name
 
 
 @pytest.mark.smoke

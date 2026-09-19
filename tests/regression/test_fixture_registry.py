@@ -300,9 +300,7 @@ def test_a_change_is_recomputed_against_the_records_it_reaches() -> None:
         }
 
     assert reached("README.md", "docs/tex/paper.tex") == set()
-    assert reached("python/snakes_and_ladders/search/surrogate.py") == {
-        "tree_search/ci"
-    }
+    assert reached("python/snakes_and_ladders/learn/ranking.py") == {"tree_search/ci"}
     assert reached("tests/regression/fixtures/potts_chain/ci.yaml") == {
         "potts_chain/ci"
     }
