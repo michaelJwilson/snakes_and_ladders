@@ -28,7 +28,7 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 import torch
 
-from snakes_and_ladders.enumeration import argmax, configurations
+from snakes_and_ladders.enumeration import configurations, enumerated_optimum
 from snakes_and_ladders.learn.environment import Environment
 
 # (position, new_state): change one position to a state it is not already in.
@@ -247,13 +247,16 @@ def enumerate_paths(n_states: int, length: int) -> Iterator[Path]:
 def optimum(environment: HmmEnvironment) -> tuple[Path, float]:
     """The maximum-a-posteriori path, by exhaustive enumeration.
 
+    The enumeration, the scoring and the argmax are
+    :func:`snakes_and_ladders.enumeration.enumerated_optimum`; what is local
+    here is which sizes and which score (issue #755).
+
     Returns
     -------
     tuple[Path, float]
         The maximizing path and its joint log-probability. Ties resolve to
         the lexicographically first, so the answer is deterministic.
     """
-    paths = list(enumerate_paths(environment.n_states, environment.length))
-    energies = np.array([environment.energy(path) for path in paths])
-    best = argmax(energies)
-    return paths[best], float(energies[best])
+    return enumerated_optimum(
+        environment.n_states, environment.length, environment.energy
+    )
