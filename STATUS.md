@@ -174,6 +174,30 @@ two trees the Newick documentation carries --- and `sim/capacity.py` goes
 76.22% to **86.01%** and `sim/elementary_codes.py` 64.52% to **82.80%**.
 `sim/ldpc.py` stays at 82.43%, the published (7,4) parity check reaching
 what its oracles already reached.
+The root modules are the last (step 4), and they close the ticket: judged
+**86.34%** with `qa` exempt against 86.11% and the complement **89.47%**
+against 89.27%, so the judged floor rises to **86.3** and 89.2 stands, with
+the root **75.58% to 78.23%** and its judged deficit 250 to 217 statements.
+Its 46 public callables stay 29 judged, 5 by a self-check and 12 by nothing,
+11 of the 12 declarations whose bodies run at import and the twelfth
+`inputs.module_closure`, which is infrastructure. Two modules move:
+`parallel.py` **51.95% to 80.52%**, 41 seeded tasks mapped on threads and on
+processes equal to the serial map bitwise beside the closed form
+`n (n - 1) (2n - 1) / 6 = 22,140`; and `emissions.py` **82.30% to 83.82%**,
+the four count families and issue #658's two covariate branches against
+`scipy.stats`, 1.07e-14 relative at the widest of a declared 1e-12.
+`numerics.py` stays at 84.00% and `incidence.py` at 77.03%, `scipy.special`
+and `scipy.sparse` reading what their oracles already read; `log.py` and
+`inputs.py` are the repository's own machinery and are `infra`, not judged.
+`qa` is exempt, so its three renderers no test reached gain `snapshot` pins
+beside the gate: the tropical relaxation's `0.0193186` temperature and
+`7.276e-12` residual, the turbo waterfall's 121, 87, 32 and 8 errors of
+1,200 at 8 iterations, and the tree policy's learned `0.486875` against
+greedy's `0.480000` --- `docs/experiments/005-tree-policy-features.md`
+records 0.487 against 0.480 --- which takes `qa`'s statements no test
+reaches 225 to 156. Over the ticket the judged figure goes **82.68% to
+86.34%** and its floor 83.7 to **86.3**, by referees added and never by a
+widening of the set that counts.
 The ladder the `oracle` tests form --- 520 of them in 148 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
