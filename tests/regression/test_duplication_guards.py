@@ -577,11 +577,15 @@ def test_no_module_builds_a_scipy_sparse_store() -> None:
     # `SparseIncidence` would be a second compressed layout whose row order,
     # duplicate handling and transpose are somebody else's, and the compiled
     # consumers take `as_arrays`, which it does not have.
+    # The package and the notebooks, not the tests: a test may hold
+    # `scipy.sparse` as the independent referee of the one layout, which
+    # `tests/regression/test_incidence.py` does (#776), and a referee is not
+    # a second store.
     assert (
         _found(
             FOREIGN_SPARSE,
             "test_duplication_guards.py",
-            SEARCHED,
+            (PACKAGE, REPO_ROOT / "docs" / "nb"),
             ("*.py", "*.ipynb"),
         )
         == []
