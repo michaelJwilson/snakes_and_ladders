@@ -40,7 +40,7 @@ from snakes_and_ladders.learn.potts import (
     enumerate_configurations,
     optimum,
 )
-from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 
 FIELD = np.array([0.4, -0.1, -0.3])
 HORIZON = 3
@@ -251,3 +251,129 @@ def test_mlp_policy_is_a_softmax_over_the_available_actions() -> None:
         policy.log_probabilities(torch.zeros((3, 5), dtype=torch.float64))
     with pytest.raises(ValueError, match="must be >= 1"):
         MLPPolicy(0, hidden=8, generator=torch.Generator().manual_seed(0))
+
+
+# --- The two oracles issue #729 added -------------------------------------
+
+
+def _trajectory_sum(
+    environment: PottsEnvironment,
+    policy: LinearPolicy,
+    state: tuple[int, ...],
+    horizon: int,
+) -> float:
+    """``sum over trajectories of P(trajectory) * G(trajectory)``, expanded forwards.
+
+    Brute force, and written here rather than imported: `exact.py` computes
+    the same number by a *backward* recursion over ``(state, remaining)``,
+    carrying one value per node. This carries a probability and a return per
+    trajectory and sums the products at the end, so the two share no algebra
+    and agreement between them is evidence rather than a tautology. Costs
+    ``|A| ** horizon`` trajectories, 512 at the settings below.
+    """
+    frontier = [(state, 1.0, 0.0)]
+    total = 0.0
+    for _ in range(horizon):
+        expanded = []
+        for current, probability, ret in frontier:
+            if environment.is_terminal(current):
+                total += probability * ret
+                continue
+            available = environment.actions(current)
+            draw = torch.exp(
+                policy.log_probabilities(environment.features(current, available))
+            ).detach()
+            for index, action in enumerate(available):
+                successor, reward = environment.step(current, action)
+                expanded.append(
+                    (successor, probability * float(draw[index]), ret + reward)
+                )
+        frontier = expanded
+    return total + sum(probability * ret for _, probability, ret in frontier)
+
+
+@pytest.mark.oracle
+def test_the_action_values_are_a_brute_force_over_trajectories() -> None:
+    """``Q^pi(s, a)`` equals the reward plus the enumerated return of the successor.
+
+    `exact_action_values` is what a planner's leaf and a critic's target are
+    read against, and until now it was checked only against
+    `exact_expected_return`, which is the same recursion one level up. Here
+    both are compared with :func:`_trajectory_sum`, a forward expansion over
+    all 512 trajectories of the 4-site chain at horizon 3.
+
+    Bitwise is not the target: the two routes sum the same terms in different
+    orders. Realized over seven states, the largest disagreement is 2.2e-16
+    absolute on values of order 1, against a declared 1e-12.
+    """
+    environment, policy = _environment(), _policy([0.3, -0.6])
+
+    for state in _states(environment)[::13]:
+        assert float(
+            exact_expected_return(environment, policy, state, HORIZON).detach()
+        ) == pytest.approx(
+            _trajectory_sum(environment, policy, state, HORIZON), abs=1e-12
+        )
+        values = exact_action_values(environment, policy, state, HORIZON)
+        if environment.is_terminal(state):
+            assert values.shape == (0,)
+            continue
+        for index, action in enumerate(environment.actions(state)):
+            successor, reward = environment.step(state, action)
+            assert float(values[index].detach()) == pytest.approx(
+                reward + _trajectory_sum(environment, policy, successor, HORIZON - 1),
+                abs=1e-12,
+            )
+
+
+@pytest.mark.oracle
+def test_the_bootstrapped_targets_telescope_to_the_closed_form_return() -> None:
+    """At ``gamma = 1`` the TD targets sum to the return the energies state.
+
+    The closed form is `learn/CLAUDE.md`'s own: an undiscounted reward
+    telescopes, so the return from any step is `energy(s_T) - energy(s_t)`,
+    a difference of two *levels* that no reward in the episode appears in.
+    Two readings of `temporal_difference_targets` against it, for an episode
+    that ends at a local maximum:
+
+    * the last target is ``r_{T-1}`` exactly, the successor being terminal and
+      contributing no bootstrap --- equality, not a tolerance, since the
+      branch either fired or it did not;
+    * summing ``r_t + V(s_{t+1})`` and subtracting ``V(s_t)`` over the episode
+      leaves ``V(s_T) - V(s_0)``, so the targets less the critic's own values
+      at the features, plus ``V(s_0)``, is the return. Realized over the six
+      starts below that take an action: 4.4e-16 absolute at worst against a
+      declared 1e-12, on returns of 2.65 to 3.65.
+
+    `monte_carlo_targets` is read against the same closed form, where the
+    agreement is term by term rather than in the sum.
+    """
+    environment = _environment()
+    critic = Critic(
+        n_state_features(environment),
+        hidden=None,
+        generator=torch.Generator().manual_seed(729),
+    )
+
+    for start in _states(environment)[::10]:
+        episode = greedy_rollout(environment, start, 12)
+        if not episode.actions:
+            continue
+        assert episode.terminated, "the closed form below needs a finished episode"
+        closed = environment.energy(episode.states[-1]) - environment.energy(start)
+        assert episode.total_reward == pytest.approx(closed, abs=1e-12)
+
+        features, targets = temporal_difference_targets(environment, [episode], critic)
+        assert float(targets[-1]) == episode.rewards[-1]
+        with torch.no_grad():
+            values = critic(features)
+        assert float(targets.sum() - values.sum() + values[0]) == pytest.approx(
+            closed, abs=1e-12
+        )
+
+        _, returns = monte_carlo_targets(environment, [episode])
+        for step, state in enumerate(episode.states[:-1]):
+            assert float(returns[step]) == pytest.approx(
+                environment.energy(episode.states[-1]) - environment.energy(state),
+                abs=1e-12,
+            )

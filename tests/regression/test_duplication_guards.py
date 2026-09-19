@@ -49,8 +49,15 @@ SLIMMING_BASELINE = {
     "modules without a docstring": 0,
     "root exports": 7,
     "test modules pinning a twin to its oracle beyond the first": 13,
-    "flat modules": 151,
-    "API-map entries": 1576,
+    # Both rows count the tree rather than a duplicate, so they move when a
+    # module lands: `search.balanced`, the one proposal kernel the Potts
+    # lattice and the factor graph share, took them from 148 and 1,576
+    # (#756). The second moves on a public name too, and #756's cluster moves
+    # for a frustrated lattice added twelve without adding a module. Issue
+    # #779's three deprecation shims are three modules while they stand, so
+    # the first row reads 152 until the release after 0.3.0 removes them.
+    "flat modules": 152,
+    "API-map entries": 1602,
 }
 
 # Issue #779 moved three modules from `search/` to `learn/` and left a

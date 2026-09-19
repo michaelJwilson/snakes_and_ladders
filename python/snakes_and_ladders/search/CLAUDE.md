@@ -60,6 +60,14 @@ in this module. It is referenced here, never restated. What follows is local.
   there is no second physics to keep in step (#706). Above zero the wrapper is
   pinned bitwise against the sweep it delegates to.
 
+- **A cluster move is judged by its cluster as well as by its law.** A
+  construction can be exact and still buy nothing: where the cluster is the
+  lattice the move is a global symmetry, and where the pair's overlap defect
+  percolates an exchange between replicas carries them nowhere new. So a
+  cluster move reports its mean cluster size beside its chi-square, and an
+  instance on which it percolates is reported as measured rather than left to
+  the reader to infer from a null result (#756).
+
 - **A structural statistic measured at finite temperature does not referee a
   ground state.** `spatio_only` records a size tilt and a per-class occupancy
   from thermal draws; a ferromagnet's ground state matches neither, and the

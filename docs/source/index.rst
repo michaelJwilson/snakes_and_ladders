@@ -336,6 +336,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.gibbs
    :members:
 
+.. automodule:: snakes_and_ladders.search.balanced
+   :members:
+
 .. automodule:: snakes_and_ladders.search.tempered
    :members:
 

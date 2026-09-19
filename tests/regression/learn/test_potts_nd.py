@@ -23,7 +23,9 @@ Issue #706, the single-site arm. Four kinds of claim:
   module is against its unit and not a second one.
 
 The oracles are the three #704 established: the closed form `-J|E|` in zero
-field, the exact graph cut at two labels, and enumeration at nine sites.
+field, the exact graph cut at two labels, and enumeration at nine sites. Issue
+#729 adds the fourth, which is a truth rather than a second computation: a
+field planted on one labelling, recovered by a run at both grains.
 """
 
 from __future__ import annotations
@@ -32,12 +34,15 @@ import itertools
 
 import numpy as np
 import pytest
+import torch
 from snakes_and_ladders.learn.keyed import keyed_generator, state_key
+from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, LinearPolicy
 from snakes_and_ladders.learn.potts_nd import (
     DEFAULT_LADDER,
     PottsAction,
     PottsNDEnvironment,
 )
+from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.ground_state import Rung
 from snakes_and_ladders.search.maxflow import ising_ground_state
@@ -401,3 +406,115 @@ def test_a_uniform_field_is_refused_by_shape() -> None:
             field=np.zeros(3),
             generator=np.random.default_rng(0),
         )
+
+
+# --- The planted ground state ---------------------------------------------
+
+
+def _planted(
+    side: int, n_states: int, *, seed: int = 729
+) -> tuple[PottsNDEnvironment, PottsGraph, np.ndarray, tuple[int, ...], float]:
+    """An instance whose ground state is the labelling its field was built from.
+
+    The field pays `margin` for the planted label at each site and nothing for
+    any other, with `margin = J |E| + 1`. That makes the plant the unique
+    maximum, with no search involved: a labelling differing from it at `k >= 1`
+    sites gives up `k margin` of field and can recover at most `J |E| < margin`
+    of coupling, so its score is strictly lower. The truth is therefore
+    declared by construction rather than measured, which is what an `end2end`
+    needs.
+    """
+    rng = np.random.default_rng(seed)
+    coupling = critical_coupling(n_states)
+    graph = lattice_graph((side, side), BoundaryCondition.OPEN, coupling)
+    n_nodes = side * side
+    planted = tuple(int(value) for value in rng.integers(n_states, size=n_nodes))
+    margin = coupling * len(graph.edges) + 1.0
+    field = np.zeros((n_nodes, n_states))
+    field[np.arange(n_nodes), planted] = margin
+    environment = PottsNDEnvironment(
+        edges=list(graph.edges),
+        n_nodes=n_nodes,
+        coupling=coupling,
+        field=field,
+        generator=np.random.default_rng(seed),
+    )
+    return environment, graph, field, planted, margin
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_the_planted_labelling_is_the_enumerated_maximum() -> None:
+    """At nine sites the plant is the best of 19,683, and the only one.
+
+    The referee for the construction the `end2end` below rests on, and read
+    through `sim.potts.energies` rather than through `score`, so the plant is
+    established by a scorer this module does not own. Realized: the planted
+    score is 119.5557792617 and no other labelling ties it, against a margin
+    of 13.0606304649 per site.
+    """
+    environment, graph, field, planted, margin = _planted(3, 3)
+
+    states = np.array(list(itertools.product(range(3), repeat=9)), dtype=np.int64)
+    scores = -energies(graph, field, states)
+    best = int(np.argmax(scores))
+
+    assert tuple(int(value) for value in states[best]) == planted
+    assert int((scores == scores[best]).sum()) == 1, "the plant is the only maximum"
+    assert environment.score(planted) == float(scores[best])
+    assert margin > environment.coupling * len(graph.edges)
+
+
+@pytest.mark.critical
+@pytest.mark.end2end
+@pytest.mark.parametrize("side", [3, 6])
+def test_both_grains_recover_the_planted_ground_state(side: int) -> None:
+    """A learned schedule and steepest ascent each return the planted labelling.
+
+    The truth is the labelling `_planted` built the field from, so this is
+    recovery of a planted parameter and not a comparison of two searches. Both
+    grains the arm carries are run from the same eight seeded starts:
+
+    * the **coarse** grain through a policy --- a `LinearPolicy` weighting gain
+      positively and temperature negatively, wrapped at `epsilon = 0`, whose
+      greedy action is the sweep at rung zero, which is ICM. One sweep suffices
+      at any size here, since `margin` exceeds what any site's neighbours can
+      offer, and the episode is scored on its best visited state;
+    * the **fine** grain through `steepest_action`, which moves one label per
+      decision and stalls when no flip gains.
+
+    Exact, not to a tolerance: the recovered labelling is compared label by
+    label. The first sweep does the whole of the coarse recovery and the other
+    two decisions collect nothing. Steepest ascent spends 5 to 9 decisions and
+    19 to 32 site visits at nine sites, and 21 to 29 decisions and 91 to 125
+    visits at thirty-six, against a sweep's 33 and 156.
+    """
+    environment, _, _, planted, _ = _planted(side, 3)
+    policy = LinearPolicy(environment.n_features())
+    policy.set_weights(torch.tensor([1.0, -1.0, 0.0], dtype=torch.float64))
+    schedule = EpsilonGreedyPolicy(policy, 0.0)
+
+    for start in range(8):
+        episode = rollout(
+            environment,
+            schedule,
+            np.random.default_rng(1000 + start),
+            max_steps=3,
+            stop_at_local_optimum=False,
+        )
+        assert [action.kind for action in episode.actions] == [MoveKind.SWEEP] * 3
+        assert episode.rewards[1:] == (0.0, 0.0), "the first sweep did all of it"
+        assert max(episode.states, key=environment.score) == planted
+
+        state = environment.reset(np.random.default_rng(2000 + start))
+        spent = 0
+        for _ in range(4 * environment.n_nodes):
+            action = environment.steepest_action(state)
+            spent += environment.visits(state, action)
+            state, gain = environment.step(state, action)
+            if gain == 0.0:
+                break
+        assert state == planted
+        assert spent >= environment.n_nodes
+
+    assert not environment.is_terminal(planted), "a sampler never stops itself"
