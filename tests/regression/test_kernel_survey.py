@@ -25,6 +25,7 @@ def found() -> list[appraise_kernels.Kernel]:
     return appraise_kernels.kernels()
 
 
+@pytest.mark.critical
 @pytest.mark.infra
 def test_the_pool_is_read_from_the_source_and_not_from_a_list(
     found: list[appraise_kernels.Kernel],
@@ -33,9 +34,17 @@ def test_the_pool_is_read_from_the_source_and_not_from_a_list(
     # thread pool and neither takes it. Read from each module's own parallel
     # iterators, so a port that lands makes this true without anyone editing a
     # list -- which is the failure #586 deleted the hand inventories over.
+    #
+    # Stated as containment in both directions and not as equality (issue
+    # #745). The equality was the set the day #678 was written, so #715's two
+    # max-flow kernels took the pool and turned the guard red on `main`
+    # without a defect: an inventory pinned inside an assertion is the hand
+    # list one level up, and every later port breaks it. What is asserted is
+    # what the guard exists for -- the three that take the pool still do, and
+    # the two that were found bare still are.
     pool = {kernel.module for kernel in found if kernel.parallel}
 
-    assert pool == {"coupled", "pruning", "sampling"}
+    assert {"coupled", "pruning", "sampling"} <= pool
     assert {"count_pairs", "ragged"} & pool == set()
 
 
