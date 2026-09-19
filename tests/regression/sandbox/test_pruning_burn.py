@@ -8,7 +8,7 @@ read from there rather than re-derived: the sweep behind them measured all
 three routes at once and found them equal to four significant figures.
 
 The `f64` question the route was adopted on is settled by
-``test_the_gradient_is_float64_throughout`` below and by the Rust unit tests
+``test_gradient_matches_the_taped_gradient`` below and by the Rust unit tests
 in ``src/pruning_burn.rs``: a tape that had narrowed to `f32` could not agree
 with the taped `float64` gradient to 1e-13.
 
@@ -131,20 +131,6 @@ def test_gradcheck_in_float64() -> None:
         atol=1e-7,
         rtol=1e-5,
     )
-
-
-@pytest.mark.analytic
-def test_the_gradient_is_float64_throughout() -> None:
-    """The axis the dependency was adopted on: a narrowed tape cannot pass this.
-
-    `float32` carries about 7 decimal digits, so a tape that narrowed anywhere
-    would disagree with the `float64` taped gradient at 1e-7 and not at the
-    1e-11 this asserts.
-    """
-    case = _case(EIGHT_TAXA, 20_000)
-    _, expected = _gradient(pruning_torch.log_likelihood, case)
-    _, actual = _gradient(pruning_burn.log_likelihood, case)
-    assert_allclose(actual, expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
 
 
 @pytest.mark.analytic

@@ -40,25 +40,15 @@ def measured() -> dict[str, list[tuple[int, float]]]:
 def test_every_backend_agrees_with_brute_force(
     measured: dict[str, list[tuple[int, float]]],
 ) -> None:
+    # The span is part of the claim. The deviation is reported relative, so
+    # one bound holding across a tenfold range of site counts is what says it
+    # does not grow with the sum.
+    assert SITE_COUNTS[-1] // SITE_COUNTS[0] >= 10
     assert set(measured) == set(BACKENDS)
     for name, points in measured.items():
         assert [size for size, _ in points] == list(SITE_COUNTS)
         worst = max(value for _, value in points)
         assert worst < _AGREEMENT, f"{name} deviates by {worst:.2e}"
-
-
-@pytest.mark.analytic
-def test_the_deviation_does_not_grow_with_the_sum() -> None:
-    # The reason the figure reports a relative deviation. An absolute one
-    # grows with the site count, since the log-likelihood is a sum; the
-    # relative one does not, and that is the property that makes a single
-    # bound transfer across problem sizes.
-    params = load_simulation_params(FIXTURE)
-    relative = agreement(params)["numpy"]
-    smallest = relative[0][1]
-    largest = relative[-1][1]
-    assert max(smallest, largest) < _AGREEMENT
-    assert SITE_COUNTS[-1] // SITE_COUNTS[0] >= 10
 
 
 @pytest.mark.smoke
