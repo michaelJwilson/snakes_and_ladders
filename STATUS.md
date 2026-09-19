@@ -3163,36 +3163,57 @@ the guard now fails an eleventh content line. The Aim run store (#75) is part 2,
 behind the dependency's approval; until then the numbers are typed from the
 measurement and the file names the command that produced them.
 
-**A run reports as it goes, and the untracked run is the run that was there**
+**A run reports as it goes through Aim's own interface, and the untracked run
+is the run that was there**
 ([#778](https://github.com/michaelJwilson/snakes_and_ladders/issues/778)).
-`snakes_and_ladders.track` binds a `Tracker` to a `contextvars.ContextVar` for
-a block, and `opt.fit.fit`, `opt.hmc`'s three drivers, `search.potts_mcmc`'s
-two, `search.tempered`'s two ensembles and `qa.figure.write_qa_figure` record
-once per iteration, sweep, round or figure. Every number recorded is one the
-result already returns --- the acceptance rate, the gradients spent, the best
-energy, the swap acceptance --- so a series ends at the field and no hook
-defines a metric; `peak_rss_bytes` and the state's bytes are recorded once at
-the end. Outside a block the tracker is `NullTracker`, every method a no-op,
-which `tests/regression/test_track.py` pins bitwise on `hmc.sample`,
-`anneal_potts` and `potts_mcmc.parallel_tempering`. **The cost is the no-op
-calls and nothing else, and the walls cannot resolve it.** Timed directly
-under the default tracker, the per-draw hooks cost **0.186 ms over 1,000
-draws** and the per-sweep hooks **0.131 ms over 2,000 sweeps**, against calls
-of **5.03 s** and **0.197 s**: **0.004%** and **0.07%**. At the minimum of
-three repeats in each of three processes, `hmc.sample` (Rosenbrock at
-dimension 10, 20 leapfrog steps, 1,000 draws after 200 burn-in) reads
-**5.031 s** on `main` against **5.128 s** here and **5.035 s** with this
-branch's own hook lines stripped, over a **2.4%** spread between processes of
-one variant; `anneal_potts` (32x32 periodic, three states, the Rust sweep,
-2,000 sweeps) reads **0.197 s** against **0.198 s**, **1.005x**. Measured on
-the 4-core host at a 1-minute load of 0.88 to 1.16. **Aim is the store #75
-asked for, and it is declared in no extra**: `pip-audit` reports
-PYSEC-2026-1087 and PYSEC-2026-1088 against 3.29.1, its current release, with
-no fixed version, so `AimTracker` imports it lazily and whoever wants it
-installs it. Verified against 3.29.1 installed by hand: a `release` test
-writes a run to a temporary repository, reads it back and compares each
-sequence against the `MemoryTracker` record of the same call; it
-`importorskip`s the package, so it skips wherever Aim is absent.
+`snakes_and_ladders.track.Run` is a `runtime_checkable` Protocol of the three
+members a hook uses --- `track`, `__setitem__`, `close` --- written with
+`aim.Run`'s signatures, so an Aim run is the store and there is no adapter to
+keep in step; a `release` test asserts the `isinstance`. `track(run,
+metrics=)` binds a `TrackedOptimization` to a `contextvars.ContextVar` for a
+block, and `opt.fit.fit`, `opt.hmc`'s three drivers, `search.potts_mcmc`'s
+two, `search.tempered`'s two ensembles and `qa.figure.write_qa_figure` call
+its one `record` per iteration, sweep, round or figure. Every counter
+recorded is one the result already returns --- the acceptance rate, the
+gradients spent, the best energy, the swap acceptance --- so a series ends at
+the field; `peak_rss_bytes` and the state's bytes are recorded once at the
+end. **What the state means is the other half, and it is not a hook's to
+define.** Six `Metrics` sets sit beside their problem's objective or energy
+--- `PottsMetrics` (`sim/potts.py`), `HmmMetrics` (`opt/hmm.py`),
+`TreeMetrics` (`likelihood/objective.py`), `MixtureMetrics`
+(`opt/mixture.py`), `CodeMetrics` (`likelihood/ldpc.py`) and
+`TestFunctionMetrics` (`opt/testfunctions.py`) --- and each metric is a call
+to a function the package already had, pinned against it and against an
+independent answer where the problem carries one: zero split distance on the
+topology that generated the alignment, zero bit errors on the word that was
+sent, zero distance at a known minimizer, and the likelihoods against
+`enumerate_hidden_paths` and `enumerate_mixture_assignments`. Outside a block
+the bound object is `NULL`, whose run is the shared `NULL_RUN`: `record`
+returns on its first line and no metric is computed, which
+`tests/regression/test_track.py` pins bitwise on `hmc.sample`, `anneal_potts`
+and `potts_mcmc.parallel_tempering`. **The cost is one returned call a sweep,
+and the walls cannot resolve it.** Timed directly on the null run, `record`
+costs **0.249 us** at the annealer's four arguments and **0.361 us** at the
+chain's six: **0.50 ms over 2,000 sweeps** and **0.36 ms over 1,000 draws**,
+against calls of **0.201 s** and **5.11 s**, so **0.25%** and **0.007%**. At
+the minimum of three repeats in each of three processes, run in pairs so the
+two variants share the machine, `hmc.sample` (Rosenbrock at dimension 10, 20
+leapfrog steps, 1,000 draws after 200 burn-in) reads **5.110 s** against
+**5.102 s** with this branch's hook lines stripped, **1.0015x**, over a
+**2.5%** spread between processes of one variant; `anneal_potts` (32x32
+periodic, three states, the Rust sweep, 2,000 sweeps) reads **0.2009 s**
+against **0.1997 s**, **1.006x**, over a **2.2%** spread. A second set of
+three pairs at a higher load put the stripped chain *slower* than the hooked
+one, which is what a difference below the spread looks like. Measured on the
+4-core host at a 1-minute load of 0.75 to 1.61. **Aim is the store #75 asked
+for, and it is declared in no extra**: `pip-audit` reports PYSEC-2026-1087
+and PYSEC-2026-1088 against 3.29.1, its current release, with no fixed
+version, so nothing imports it at module scope --- `track.as_aim` imports it
+where it is called --- and whoever wants it installs it. Verified against
+3.29.1 installed by hand: two `release` tests assert that an `aim.Run`
+satisfies `Run` and that a run written to a temporary repository reads back
+each sequence equal to the `MemoryRun` record of the same call; both
+`importorskip` the package, so they skip wherever Aim is absent.
 
 ## Stage 5 — Research Extensions
 

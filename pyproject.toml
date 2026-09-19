@@ -210,14 +210,16 @@ module = [
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# `aim` is the optional store behind `snakes_and_ladders.track.AimTracker`
-# (issue #778), and it is declared in no extra: `pip-audit` reports
-# PYSEC-2026-1087 and PYSEC-2026-1088 against 3.29.1, the current release,
-# with no fixed version, so declaring it would put a red audit on every
-# environment that installed it. The import is lazy, inside
-# `AimTracker.__init__`, so `track.py` imports without it and the tracker
-# works wherever a reader installs `aim` themselves. Narrowed to the one
-# distribution, as the entries above are.
+# `aim` is the optional store behind `snakes_and_ladders.track.Run` (issue
+# #778), and it is declared in no extra: `pip-audit` reports PYSEC-2026-1087
+# and PYSEC-2026-1088 against 3.29.1, the current release, with no fixed
+# version, so declaring it would put a red audit on every environment that
+# installed it. Nothing in the package imports it at module scope: `Run` is a
+# Protocol written with `aim.Run`'s own signatures, and `track.as_aim`, the
+# one function that touches the package, imports it where it is called. So
+# `track.py` imports without it and an Aim run works wherever a reader
+# installs `aim` themselves. Narrowed to the one distribution, as the entries
+# above are.
 module = "aim.*"
 ignore_missing_imports = true
 
