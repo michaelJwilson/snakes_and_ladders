@@ -3288,15 +3288,22 @@ series still ends at the field its result returns, pinned by `==`:
 `occupation` under `{"rung": k}` at `occupation[k]`, `log_z` at
 `LogPartition.log_z`, `evaluations_per_draw` at `SliceChain`'s. Round trips
 are declined, being read from the walker trace after the loop rather than
-computed in it. **The cost is the no-op calls.** At the minimum of three
-repeats in each of three processes, `simulated_tempering` (32x32 periodic,
-three states, nine rungs, the Rust sweep, 40,000 sweeps, ten records a
-sweep) reads **4.269 s** with the hooks against **4.158 s** with the hook
-lines stripped, **1.027x**, against a **1.9%** spread between processes of
-one variant; its 440,000 no-op calls timed directly are **44.3 ms**, 1.1% of
-that wall. `mala` (Rosenbrock at dimension 10, 5,000 draws after 500
-burn-in) reads **3.104 s** against **3.099 s**, **1.002x**, its 22,000 calls
-**1.3 ms**. Measured on the 4-core host at a 1-minute load of 0.80 to 1.14.
+computed in it. **A loop over rungs is guarded, and that is what the walls
+paid for.** A hook recording one number a sweep is one no-op call; a hook
+recording one *per rung* is a Python loop a sweep, the per-site call
+`CLAUDE.md` forbids, and unguarded it cost 440,000 no-op calls --- **44.3
+ms**, 1.1% --- and read **4.269 s** against **4.158 s** stripped,
+**1.027x**. So the inner loop runs under `tracker is not NULL_TRACKER`, read
+once at loop entry, and an untracked run pays that one identity test a
+sweep. At the minimum of three repeats in each of six processes,
+`simulated_tempering` (32x32 periodic, three states, nine rungs, the Rust
+sweep, 40,000 sweeps) now reads **4.159 s** against **4.155 s**,
+**1.001x**, inside a **2.0%** spread between processes of one variant; its
+remaining 40,000 calls time **2.4 ms**, 0.06% of that wall. `mala`
+(Rosenbrock at dimension 10, 5,000 draws after 500 burn-in) carries no
+per-rung loop and is unchanged: **3.123 s** against **3.073 s**, inside a
+**5.8%** spread, its 22,000 calls **1.3 ms**, 0.04%. Measured on the 4-core
+host at a 1-minute load of 0.02 to 0.99.
 
 ## Stage 5 — Research Extensions
 

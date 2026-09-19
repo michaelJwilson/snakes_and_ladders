@@ -55,7 +55,7 @@ from snakes_and_ladders.search.potts_mcmc import (
 )
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
-from snakes_and_ladders.track import Tracker, current
+from snakes_and_ladders.track import NULL_TRACKER, Tracker, current
 
 
 class Resampling(StrEnum):
@@ -631,8 +631,11 @@ def simulated_tempering(
     # `k`'s entry is its recorded visits over `n_sweeps`, the divisor the
     # result uses, so at the last recorded sweep it is `occupation[k]`. The
     # counts are kept here rather than recomputed from a `bincount` per
-    # sweep (issue #778).
+    # sweep (issue #778). The loop over rungs is a call per rung per sweep,
+    # so it runs only where something records: the identity test is read once
+    # here, and an untracked run pays it instead of 440,000 no-op calls.
     tracker: Tracker = current()
+    recording = tracker is not NULL_TRACKER
     visits = [0] * len(ladder)
     for step in range(-burn_in * thin, n_sweeps * thin):
         advance(state, child, ladder[rung])
@@ -652,10 +655,11 @@ def simulated_tempering(
             visits[rung] += 1
             sweep = step // thin
             tracker.scalar("acceptance", accepted / proposed, sweep)
-            for index, count in enumerate(visits):
-                tracker.scalar(
-                    "occupation", count / n_sweeps, sweep, context={"rung": index}
-                )
+            if recording:
+                for index, count in enumerate(visits):
+                    tracker.scalar(
+                        "occupation", count / n_sweeps, sweep, context={"rung": index}
+                    )
     occupation = np.bincount(recorded_rungs, minlength=len(ladder)) / n_sweeps
     return SimulatedTempered(
         betas=ladder,

@@ -17,6 +17,16 @@ per sweep; an entry point --- a notebook, a QA script, an experiment --- opens
 records nothing, allocates nothing and is bitwise the run before this module
 existed.
 
+**A hook with an inner loop reads the tracker's identity once and skips it.**
+A hook that records one number a sweep is one no-op call an untracked sweep
+pays. A hook that records one number *per rung* is a Python loop per sweep,
+which is the per-site call the root ``CLAUDE.md`` forbids: at nine rungs over
+40,000 sweeps it was 440,000 calls, 44.3 ms, 1.1% of the run. So a loop over
+rungs is guarded --- ``recording = tracker is not NULL_TRACKER`` once at loop
+entry, and the inner loop runs only under it --- and the untracked run pays
+the one identity test it already pays for the outer call. A single-call hook
+carries no guard: the branch would cost what the call costs.
+
 **A series is one quantity, and a context says which instance of it.** A
 loop over rungs, replicas or chains records one series per quantity and keys
 the instance with :meth:`Tracker.scalar`'s ``context`` --- Aim's own
@@ -272,10 +282,11 @@ class AimTracker:
 
 
 #: The tracker outside any :func:`track` block. One shared instance rather
-#: than one per lookup: it holds no state, so nothing distinguishes two.
-_NULL: Tracker = NullTracker()
+#: than one per lookup: it holds no state, so nothing distinguishes two, and
+#: being one instance is what lets a hook recognize it by identity.
+NULL_TRACKER: Tracker = NullTracker()
 
-_CURRENT: ContextVar[Tracker] = ContextVar("sal_tracker", default=_NULL)
+_CURRENT: ContextVar[Tracker] = ContextVar("sal_tracker", default=NULL_TRACKER)
 
 
 def current() -> Tracker:
@@ -345,6 +356,7 @@ def record_cost(tracker: Tracker, step: int, state_bytes: int) -> None:
 
 
 __all__ = [
+    "NULL_TRACKER",
     "AimTracker",
     "MemoryTracker",
     "NullTracker",

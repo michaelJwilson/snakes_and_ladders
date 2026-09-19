@@ -91,7 +91,7 @@ from snakes_and_ladders.sim.potts import (
 
 # `current` is aliased: `parallel_tempering` already binds that name to the
 # replicas' energies, and one of the two has to give.
-from snakes_and_ladders.track import Tracker, record_cost
+from snakes_and_ladders.track import NULL_TRACKER, Tracker, record_cost
 from snakes_and_ladders.track import current as current_tracker
 
 #: Declared so :func:`snakes_and_ladders.sim.potts.energies` re-exports from
@@ -752,8 +752,10 @@ def parallel_tempering(
     # pair by pair under a context, which is where a ladder shows *which*
     # rung it is broken at. Round trips are still not recorded: they are read
     # from the walker trace after the loop, not computed in it, and a hook
-    # does not define a metric (issue #778).
+    # does not define a metric (issue #778). The per-pair loop is a call per
+    # pair per sweep, so it runs only where something records.
     tracker: Tracker = current_tracker()
+    recording = tracker is not NULL_TRACKER
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(n_replicas):
             sweep(states[replica], children[replica], betas[replica])
@@ -778,13 +780,14 @@ def parallel_tempering(
         if step >= 0:
             fraction = accepted / proposed
             tracker.scalar("swap_acceptance", float(np.mean(fraction)), step)
-            for pair in range(n_replicas - 1):
-                tracker.scalar(
-                    "swap_acceptance",
-                    float(fraction[pair]),
-                    step,
-                    context={"rung": pair},
-                )
+            if recording:
+                for pair in range(n_replicas - 1):
+                    tracker.scalar(
+                        "swap_acceptance",
+                        float(fraction[pair]),
+                        step,
+                        context={"rung": pair},
+                    )
     record_cost(tracker, max(n_sweeps * thin - 1, 0), states.nbytes)
     return TemperedChains(
         states=recorded,

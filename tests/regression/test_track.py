@@ -47,7 +47,13 @@ from snakes_and_ladders.parallel import map_tasks
 from snakes_and_ladders.qa.figure import write_qa_figure
 from snakes_and_ladders.search import annealed, potts_mcmc
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
-from snakes_and_ladders.track import MemoryTracker, NullTracker, current, track
+from snakes_and_ladders.track import (
+    NULL_TRACKER,
+    MemoryTracker,
+    NullTracker,
+    current,
+    track,
+)
 
 from tests._objective_checks import AnalyticGaussian
 
@@ -504,6 +510,24 @@ def test_the_round_trip_warm_up_records_what_each_round_placed() -> None:
         assert len(tracker.series("temperature", context)) == placed.rounds
         assert tracker.last("temperature", context) == placed.temperatures[rung]
         assert tracker.last("up_fraction", context) == placed.up_fraction[rung]
+
+
+@pytest.mark.smoke
+def test_the_default_tracker_is_the_instance_a_guarded_hook_tests_for() -> None:
+    # A hook whose inner loop is one call per rung runs that loop only under
+    # `tracker is not NULL_TRACKER`, so the default has to be that one shared
+    # instance rather than an equal one, inside a block it must not be, and
+    # the block's tracker is what `current()` returns.
+    assert current() is NULL_TRACKER
+    with track("guarded") as tracker:
+        assert current() is tracker
+        assert current() is not NULL_TRACKER
+    assert current() is NULL_TRACKER
+    # A `NullTracker` the caller builds is a different object, so a guarded
+    # loop does run and its no-ops discard what it records: that run is still
+    # bitwise the untracked one, which the two `patch` tests above pin.
+    with track("its own null", tracker=NullTracker()):
+        assert current() is not NULL_TRACKER
 
 
 @pytest.mark.smoke

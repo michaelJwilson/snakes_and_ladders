@@ -56,7 +56,7 @@ from typing import Protocol, runtime_checkable
 
 # `current` is aliased: both warm-ups below bind that name to the ladder they
 # are revising, and one of the two has to give.
-from snakes_and_ladders.track import Tracker
+from snakes_and_ladders.track import NULL_TRACKER, Tracker
 from snakes_and_ladders.track import current as current_tracker
 
 
@@ -538,7 +538,9 @@ def adapt_ladder_by_round_trips(
     # the placement is what the last round returns -- so the two series end
     # at `up_fraction[k]` and `temperatures[k]`. `measure` runs a tempered
     # run of its own, which records through this same tracker (issue #778).
+    # The loop over rungs runs only where something records.
     tracker: Tracker = current_tracker()
+    recording = tracker is not NULL_TRACKER
     for round_index in range(1, max_rounds + 1):
         fraction = tuple(float(value) for value in measure(current))
         replicas_measured += len(current)
@@ -559,13 +561,16 @@ def adapt_ladder_by_round_trips(
             abs(new / old - 1.0) for new, old in zip(proposal, current, strict=True)
         )
         tracker.scalar("replicas_measured", float(replicas_measured), round_index)
-        for rung, (value, temperature) in enumerate(
-            zip(fraction, proposal, strict=True)
-        ):
-            tracker.scalar("up_fraction", value, round_index, context={"rung": rung})
-            tracker.scalar(
-                "temperature", temperature, round_index, context={"rung": rung}
-            )
+        if recording:
+            for rung, (value, temperature) in enumerate(
+                zip(fraction, proposal, strict=True)
+            ):
+                tracker.scalar(
+                    "up_fraction", value, round_index, context={"rung": rung}
+                )
+                tracker.scalar(
+                    "temperature", temperature, round_index, context={"rung": rung}
+                )
         if moved < tolerance or round_index == max_rounds:
             return FeedbackLadder(
                 proposal, fraction, moved < tolerance, round_index, replicas_measured

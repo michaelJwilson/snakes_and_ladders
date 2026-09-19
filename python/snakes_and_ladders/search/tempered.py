@@ -56,7 +56,7 @@ from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
-from snakes_and_ladders.track import Tracker, current
+from snakes_and_ladders.track import NULL_TRACKER, Tracker, current
 
 S = TypeVar("S")
 
@@ -312,7 +312,10 @@ def _exchange(
     # it returns; the other columns are not recorded, being the run's output
     # rather than a diagnostic of it, and round trips are read from the
     # walker trace after the loop rather than computed in it (issue #778).
+    # The per-pair loop is a call per pair per sweep, so it runs only where
+    # something records.
     tracker: Tracker = current()
+    recording = tracker is not NULL_TRACKER
     for sweep in range(burn_in + n_sweeps):
         for replica in range(n_replicas):
             states[replica], values[replica] = step(
@@ -343,10 +346,14 @@ def _exchange(
             trace.append(rungs)
         fraction = accepted / proposed
         tracker.scalar("swap_acceptance", float(np.mean(fraction)), sweep)
-        for pair in range(n_replicas - 1):
-            tracker.scalar(
-                "swap_acceptance", float(fraction[pair]), sweep, context={"rung": pair}
-            )
+        if recording:
+            for pair in range(n_replicas - 1):
+                tracker.scalar(
+                    "swap_acceptance",
+                    float(fraction[pair]),
+                    sweep,
+                    context={"rung": pair},
+                )
         tracker.scalar("log_density", values[0], sweep)
     return TemperedEnsemble(
         temperatures=tuple(temperatures),
