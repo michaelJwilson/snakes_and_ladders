@@ -4306,8 +4306,8 @@ carries the summary; this is the full ranking, five terms per workload.
 | --- | --- | --- | --- | --- |
 | trees | `search.infer` NNI, 20 taxa x 1,000 sites, 20 evaluations | 20.81 / 21.39 s | `run_backward` 50.5%, `pruning_torch._post_order` 17.5%, `LBFGS.step` 4.0%, `amax` 3.0% (41,058), `add_` 1.9% (124,204) | autograd is **not ours**; the post-order is the **algorithmic cut** taken below; the last two are a few µs each and **below the effect-size bar** |
 | trees | `search.infer` SPR, same instance | 28.25 / 28.51 s | `run_backward` 53.8%, `_post_order` 19.0%, `LBFGS.step` 4.6%, `amax` 3.2% (59,004), `add_` 2.2% (191,897) | as above |
-| Potts | `potts_mcmc` single-site, 32x32, 20 sweeps, `Backend.PYTHON` | 0.289 / 0.290 s | `_site_update` 29.1%, `heat_bath_log_weights` 13.9%, `cumsum` 10.0%, `searchsorted` 7.6%, `_wrapfunc` 7.2% | **default to flip**: the Rust route is measured at 123-134x and opt-in ([#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599)) |
-| Potts | `SwendsenWangMove.propose`, 64x64 open, 8,064 edges | 42.19 / 42.28 ms | `_swendsen_wang_sweep` 30.8%, `_recolour` 26.2% (24,372 calls, 2,437 clusters a sweep), `flatnonzero` 5.3%, `_find` 5.2%, ufunc `reduce` 4.5% | **port candidate**: union-find and a Python loop per cluster. `WolffMove.propose` is 0.555 / 0.549 ms at the same lattice and stores its layout already, so the cluster moves are one ranked loop, not two |
+| Potts | `potts_mcmc` single-site, 32x32, 20 sweeps, `Backend.PYTHON` | 0.289 / 0.290 s | `_site_update` 29.1%, `heat_bath_log_weights` 13.9%, `cumsum` 10.0%, `searchsorted` 7.6%, `_wrapfunc` 7.2% | ~~default to flip~~ **stale, and corrected below**: [#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599) flipped it before this was read, and the row is the oracle route asked for by name |
+| Potts | `SwendsenWangMove.propose`, 64x64 open, 8,064 edges | 42.19 / 42.28 ms, **0.32 ms** after two cuts and the port | `_swendsen_wang_sweep` 30.8%, `_recolour` 26.2% (24,372 calls, 2,437 clusters a sweep), `flatnonzero` 5.3%, `_find` 5.2%, ufunc `reduce` 4.5% | **cut, then ported**, [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754): union-find and a Python loop per cluster. `WolffMove.propose` is 0.555 / 0.549 ms at the same lattice and stores its layout already, so the cluster moves are one ranked loop, not two --- the section below |
 | HMM/coupled | `message_passing` tree schedule, chain 200 | 0.237 s | `schedule.tree_passes` 29.8%, `_logsumexp_last` 10.6%, ufunc `reduce` 8.8%, `_send_from_variables` 7.9%, `_factor_terms` 4.4% | **port candidate**, and the one #341 left at 4.7x the forward recursion: 800 levels of NumPy dispatch, which is control flow and not arithmetic |
 | codes | `convolutional.bcjr`, K = 1,024; `turbo.decode_turbo`, 8 iterations | 47.0 ms / 151 ms, **3 / 5 ms** after the port | `bcjr` 95.8% and 95.5%; after the port the extension call, 53.5% and 84.2% | **ported**, [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754): a four-state trellis walked forward and backward in Python, `cache=True` unavailable to it and no NumPy axis to vectorize over. 26.2x on the decode and the default flipped --- the section below |
 | codes | `ldpc.decode` sum-product / min-sum, 996 bits, 50 iterations | 9.3 / 8.9 ms | `_tanh_rule` 31.6% / `_min_sum` 34.7%, `decode` 23.4 / 19.1%, `reduceat` 19.7 / 31.6%, `syndrome` 5.9%, `_clip` 4.5% | **below the effect-size bar**: already one `reduceat` per iteration over the edges, and the whole decode is 9 ms |
@@ -4400,4 +4400,58 @@ everywhere. Both backends are pinned to `exact_bitwise_posterior` as well, so
 the pair is not established by agreeing with each other.
 
 `docs/experiments/024` carries the table.
+
+## The Swendsen-Wang cluster pass ([#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754))
+
+**2.04x from two algorithmic cuts and 63.4x more from the port: the
+ranking's 42.2 ms `propose` is 0.32 ms.** The cuts come first because
+root `CLAUDE.md` ranks them above a mechanical one, and because a ratio read
+against an uncut reference is the reference's and not the port's. Both are
+bitwise: the same members, the same order, the same values.
+
+| the pass at 64x64, three states, at the transition | two readings |
+| --- | --- |
+| as the ranking read it (`perf_counter`, x10) | 41.59 / 41.19 ms |
+| `beta * rows` hoisted out of the per-cluster loop --- a whole-field multiply and an allocation per cluster, and there is a cluster for every 1.7 sites | 30.66 / 31.01 ms (1.35x) |
+| the clusters grouped by one stable `argsort` where each had scanned the whole labelling: `O(n_clusters * n_nodes)` to `O(n log n)` | 20.36 / 20.13 ms (**2.04x**) |
+| the edge ends read from `PottsGraph.edge_index` instead of two `np.fromiter` passes (#623's store, the 1.9% #757 measured and left) | included above, 0.900 ms to 0.001 |
+
+`pytest-benchmark`, two readings, 1-minute load 2.01 and 1.93 on the shared
+4-core host, NumPy against Rust: `SwendsenWangMove.propose` **20.200 /
+20.692 ms** against **318.5 / 327.6 us**, **63.4x / 63.2x**, which saves
+**19.88 ms of the 20.20 ms pass that encloses it**; `sample_potts` over ten
+Swendsen-Wang sweeps **168.9 / 173.6 ms** against **7.96 / 8.25 ms**,
+21.2x / 21.0x. Ratio and effect size point the same way and the pass is
+99% of the call that holds it, so there is nothing to weigh them against
+each other over.
+
+**The stream is not the oracle's, and that is why the default is not
+flipped.** The oracle draws a cluster's colour and then, only where the field
+difference is negative, its accept uniform --- what the next draw *is*
+depends on the last one's outcome, so no array replays it and the kernel
+cannot consume NumPy's generator. The Rust route draws the bond uniforms the
+oracle draws, then one colour and one uniform per cluster in bulk: each is
+independent and identically distributed as the oracle's own, so the chain is
+of the same law and is not the same chain. `Backend.PYTHON` therefore stays
+the default on `_swendsen_wang_sweep`, `SwendsenWangMove` and
+`sample_potts`'s new `cluster_backend`, and flipping it is its own decision
+against the recorded numbers (`TICKETS.md`).
+
+**Given the same draws it is the oracle bitwise, by construction rather than
+by luck.** The bond probability `1 - exp(-beta J)` and the scaled field cross
+as arrays NumPy evaluated, so the bond pass and the union-find are the
+oracle's arithmetic exactly --- the labels are equal root for root, not
+merely the same partition. What the kernel adds is a cluster's field sum,
+which it takes left to right where NumPy takes it pairwise, and `exp` of the
+difference. Both are thresholds, and both are guarded by `potts_mcmc._GUARD`
+on the derivation the single-site sweep uses: two summation orders of `m`
+terms differ by at most `2m` units of the last place of the sum of their
+magnitudes, the width is eight times that, and a cluster inside it is handed
+back and decided by NumPy before the kernel resumes. Over twelve passes at
+16x16 nothing was handed back; the suite forces the path with a wide guard
+and gets the same configuration.
+
+The law is pinned where the stream cannot be: the enumerated 2x2 Boltzmann
+distribution at two seeds, with and without a field, and the ablation that a
+pass handed a zero field fails it. `docs/experiments/025` carries the table.
 

@@ -34,6 +34,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from scipy import stats
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
 from snakes_and_ladders.learn.potts_nd import (
     CLUSTER_KINDS,
@@ -238,13 +239,19 @@ def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise(temperature: float) -> No
 
 
 @pytest.mark.oracle
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
 @pytest.mark.parametrize("temperature", [0.25, 1.0, 4.0])
 def test_a_swendsen_wang_pass_is_potts_mcmcs_own_sweep_bitwise(
-    temperature: float,
+    temperature: float, backend: Backend
 ) -> None:
-    """The same for the bond pass, which the action does not parameterize at all."""
+    """The same for the bond pass, which the action does not parameterize at all.
+
+    On both routes, each against the sweep on the same route: the arm adds no
+    kernel of its own, and issue #754's Rust pass is the sweep's backend
+    rather than a second implementation reached from here.
+    """
     graph, field, _ = _lattice(4, 3)
-    move = SwendsenWangMove(graph, field)
+    move = SwendsenWangMove(graph, field, backend)
     state = np.ascontiguousarray(
         np.random.default_rng(4).integers(0, 3, size=graph.n_nodes), dtype=np.int64
     )
@@ -254,7 +261,7 @@ def test_a_swendsen_wang_pass_is_potts_mcmcs_own_sweep_bitwise(
     )
     direct = state.copy()
     _swendsen_wang_sweep(
-        direct, graph, field, np.random.default_rng(7), None, 1.0 / temperature
+        direct, graph, field, np.random.default_rng(7), None, 1.0 / temperature, backend
     )
 
     assert np.array_equal(keyed, direct)

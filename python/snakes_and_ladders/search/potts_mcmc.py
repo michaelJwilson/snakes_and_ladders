@@ -41,6 +41,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
+from functools import partial
 from typing import NamedTuple
 
 import numpy as np
@@ -241,6 +242,7 @@ def sample_potts(
     *,
     temperature: float = 1.0,
     backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.PYTHON,
 ) -> PottsChain:
     """Run one chain and return the configuration after every sweep.
 
@@ -276,11 +278,18 @@ def sample_potts(
         cluster moves' bond probabilities and the field accept step are
         tempered by the same division as the heat bath.
     backend : Backend
-        Which implementation runs the **heat-bath** sweep; the cluster moves
-        have one and ignore it. The chain is the same either way, state for
-        state, which is what makes
+        Which implementation runs the **heat-bath** sweep. The chain is the
+        same either way, state for state, which is what makes
         :data:`~snakes_and_ladders.backend.Backend.RUST` the default
         (:func:`_sweep_at`, issue #599).
+    cluster_backend : Backend
+        Which implementation runs the **Swendsen-Wang** pass; the Wolff move
+        has one and ignores it. A separate argument rather than the one
+        above because the two are not the same decision:
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the default
+        here, where it is not there, because the Rust pass draws the same
+        uniforms in a different order and so returns a chain of the same law
+        rather than the same chain (:func:`_cluster_pass_rust`, issue #754).
 
     Returns
     -------
@@ -325,7 +334,7 @@ def sample_potts(
         if sweep is not None:
             sweep(state, rng, 1.0)
         elif move is PottsMove.SWENDSEN_WANG:
-            _swendsen_wang_sweep(state, graph, rows, rng)
+            _swendsen_wang_sweep(state, graph, rows, rng, backend=cluster_backend)
         else:
             cluster_total += _wolff_sweep(
                 state, rows, offsets, neighbours, couplings, rng
@@ -896,6 +905,33 @@ def _site_update(
     state[node] = np.searchsorted(cumulative, draw * cumulative[-1])
 
 
+def _cluster_members(labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Group a labelling into its clusters: the members, and where each starts.
+
+    ``labels[order[bounds[k]:bounds[k + 1]]]`` is the ``k``-th root in
+    increasing order, and the slice of ``order`` is that cluster's members in
+    increasing node order --- which is exactly what
+    ``np.flatnonzero(labels == root)`` returns for ``root`` walked over
+    ``np.unique(labels)``, since a stable sort keeps equal keys in index
+    order. So this changes the grouping's cost and not one member of one
+    cluster.
+
+    The cost is the point. The form it replaces is ``O(n_clusters * n_nodes)``
+    --- one full comparison of the labelling per cluster --- and the bond pass
+    at the transition makes a cluster for every 1.7 sites, so the quadratic
+    term *is* the pass: at 64x64 it was 10.5 ms of a 41.2 ms
+    ``SwendsenWangMove.propose`` against 0.5 ms for this one sort (#754).
+    Root ``CLAUDE.md``'s rule that an algorithmic cut outranks a mechanical
+    one, taken before the port below rather than ported around.
+    """
+    order = np.argsort(labels, kind="stable")
+    sorted_labels = labels[order]
+    starts = np.flatnonzero(
+        np.concatenate(([True], sorted_labels[1:] != sorted_labels[:-1]))
+    )
+    return order, np.concatenate((starts, [labels.size]))
+
+
 def _swendsen_wang_sweep(
     state: np.ndarray,
     graph: PottsGraph,
@@ -903,6 +939,7 @@ def _swendsen_wang_sweep(
     rng: np.random.Generator,
     counter: ClusterCounter | None = None,
     beta: float = 1.0,
+    backend: Backend = Backend.PYTHON,
 ) -> None:
     """Activate bonds, find clusters, recolour each one.
 
@@ -917,27 +954,152 @@ def _swendsen_wang_sweep(
     ``beta`` tempers the bond probability and the accept step together, the
     model scaling :func:`tempered` states, applied here rather than by
     rebuilding the graph per schedule step. At 1.0 it is the identity.
+
+    ``backend`` names which implementation runs the pass.
+    :data:`~snakes_and_ladders.backend.Backend.PYTHON` is this one, the
+    oracle, and is the default for the reason :func:`_cluster_pass_rust`
+    states: the two draw the same uniforms in a different order, so the Rust
+    pass is a chain of the same law and not the same chain. A ``counter`` is
+    refused on the Rust route rather than silently ignored --- the
+    instrumentation reads each cluster's members, which is the gather the
+    port removes.
+
+    The edge ends are :attr:`~snakes_and_ladders.sim.graph.PottsGraph.edge_index`'s
+    rather than two ``np.fromiter`` passes over ``graph.edges``: the graph has
+    held the array form since #623, and rebuilding it per sweep was 0.900 ms
+    of a 42.2 ms pass against 0.001 ms to read the store (#754). Recompute or
+    store, decided as store, and the same ``int64`` indices either way.
     """
-    first = np.fromiter(
-        (edge[0] for edge in graph.edges), dtype=np.int64, count=len(graph.edges)
-    )
-    second = np.fromiter(
-        (edge[1] for edge in graph.edges), dtype=np.int64, count=len(graph.edges)
-    )
-    coupling = beta * graph.edge_coupling
+    if backend is Backend.RUST:
+        if counter is not None:
+            msg = (
+                "the Rust cluster pass takes no counter: the instrumentation "
+                "reads every cluster's members, which is the gather the port "
+                "removes (issue #551, #754)"
+            )
+            raise ValueError(msg)
+        _cluster_pass_rust(state, graph, rows, rng, beta)
+        return
+    if backend is not Backend.PYTHON:
+        msg = f"the Swendsen-Wang pass has no {backend} backend"
+        raise ValueError(msg)
+
+    first, second = graph.edge_index[:, 0], graph.edge_index[:, 1]
     like = state[first] == state[second]
-    active = like & (rng.random(len(graph.edges)) < 1.0 - np.exp(-coupling))
+    active = like & (rng.random(len(graph.edges)) < _bond_probability(graph, beta))
 
     parent = np.arange(graph.n_nodes)
     for edge in np.flatnonzero(active):
         _union(parent, int(first[edge]), int(second[edge]))
 
     labels = np.array([_find(parent, node) for node in range(graph.n_nodes)])
-    for root in np.unique(labels):
-        members = np.flatnonzero(labels == root)
-        outcome = _recolour(state, members, beta * rows, rng)
+    # Scaled once rather than per cluster: the multiply is over the whole
+    # field and there are as many clusters as sites at the transition, which
+    # made it 10.5 ms of the same 41.2 ms pass. Every entry is the value the
+    # per-cluster form produced, so no recolouring moves.
+    scaled = beta * rows
+    order, bounds = _cluster_members(labels)
+    for cluster in range(bounds.size - 1):
+        members = order[bounds[cluster] : bounds[cluster + 1]]
+        outcome = _recolour(state, members, scaled, rng)
         if counter is not None:
             counter.record(members, outcome, graph)
+
+
+def _bond_probability(graph: PottsGraph, beta: float) -> np.ndarray:
+    """``1 - exp(-beta J)`` per edge, in the graph's edge order.
+
+    Factored out because both routes evaluate it and only one may: ``exp`` is
+    a threshold the bond draw is compared against, so a second evaluation in
+    Rust would decide an edge differently in the last place. The kernel takes
+    this array and compares against it, which leaves the bond pass the
+    oracle's arithmetic exactly (#754).
+    """
+    return np.asarray(1.0 - np.exp(-(beta * graph.edge_coupling)))
+
+
+def _cluster_pass_rust(
+    state: np.ndarray,
+    graph: PottsGraph,
+    rows: np.ndarray,
+    rng: np.random.Generator,
+    beta: float,
+) -> None:
+    """:func:`_swendsen_wang_sweep`'s pass, on the extension.
+
+    **The same law, in a different order of draws.** The oracle draws a
+    cluster's colour and then, only where the field difference is negative,
+    its accept uniform --- a lazy stream no array can replay, since what the
+    next draw *is* depends on the last one's outcome. So this route draws the
+    bond uniforms the oracle draws (one array, the same call), and then one
+    colour and one uniform per cluster in bulk, each independent and
+    identically distributed as the oracle's own: the chain is of the same law
+    and is not the same chain, which is why
+    :data:`~snakes_and_ladders.backend.Backend.PYTHON` stays the default and
+    why the pin is the enumerated law rather than the oracle's stream
+    (`tests/regression/search/test_potts_mcmc_cluster_rust.py`).
+
+    **Given the same draws it is the oracle bitwise, by construction.** The
+    bond probability and the scaled field cross as arrays NumPy evaluated, so
+    the only arithmetic the kernel adds is a cluster's field sum and ``exp``
+    of the difference. Both are thresholds, and both are guarded by
+    :data:`_GUARD`: a cluster whose decision sits inside the width two
+    summation orders and two ``exp`` implementations can move it is handed
+    back, and decided here by :func:`_recolour_drawn` --- the oracle's own
+    recolouring --- before the kernel resumes. The construction is
+    :func:`_sweep_at`'s, per cluster rather than per site.
+
+    One crossing per call, and the boundary carries eight contiguous arrays:
+    state and labels out, the flattened edge ends, the bond probabilities and
+    their draws, the colour and accept draws, and the scaled field.
+    """
+    from snakes_and_ladders import oxi_snakes_and_ladders
+
+    n_nodes, n_states = graph.n_nodes, int(rows.shape[1])
+    scaled = np.ascontiguousarray(beta * rows, dtype=np.float64)
+    edges = np.ascontiguousarray(graph.edge_index, dtype=np.int64).reshape(-1)
+    probability = np.ascontiguousarray(_bond_probability(graph, beta), dtype=np.float64)
+    bond_draws = np.ascontiguousarray(rng.random(len(graph.edges)), dtype=np.float64)
+    # One per cluster, indexed by the cluster's rank in increasing root order.
+    # A pass builds at most one cluster per site, so the site count is the
+    # bound the caller can know before the bond pass --- and learning the
+    # real count would cost a second crossing.
+    colour_draws = np.ascontiguousarray(
+        rng.integers(0, n_states, size=n_nodes), dtype=np.int64
+    )
+    accept_draws = np.ascontiguousarray(rng.random(n_nodes), dtype=np.float64)
+    labels = np.empty(n_nodes, dtype=np.int64)
+
+    cluster = 0
+    while True:
+        n_clusters, cluster = oxi_snakes_and_ladders.swendsen_wang_sweep(
+            state,
+            scaled,
+            edges,
+            probability,
+            bond_draws,
+            colour_draws,
+            accept_draws,
+            labels,
+            _GUARD,
+            cluster,
+        )
+        if cluster >= n_clusters:
+            return
+        order, bounds = _cluster_members(labels)
+        members = order[bounds[cluster] : bounds[cluster + 1]]
+        # The draw behind a call rather than as a value, for the reason
+        # `_recolour_drawn` gives: it is read only where the field difference
+        # is negative, and `partial` is what says so without a closure over
+        # the loop.
+        _recolour_drawn(
+            state,
+            members,
+            scaled,
+            int(colour_draws[cluster]),
+            partial(float, accept_draws[cluster]),
+        )
+        cluster += 1
 
 
 def _wolff_sweep(
@@ -1042,13 +1204,37 @@ def _recolour(
         accepted. Issue #551 reads the acceptance against temperature, and a
         run that never proposed is not a run that was rejected.
     """
-    current = int(state[members[0]])
     if proposed is None:
         proposed = int(rng.integers(rows.shape[1]))
+    return _recolour_drawn(state, members, rows, proposed, rng.random)
+
+
+def _recolour_drawn(
+    state: np.ndarray,
+    members: np.ndarray,
+    rows: np.ndarray,
+    proposed: int,
+    draw: Callable[[], float],
+) -> Recolour:
+    """:func:`_recolour` with the colour already chosen and the uniform behind a call.
+
+    The whole of the oracle's recolouring, factored out so the Rust pass's
+    hand-back path decides its cluster by calling this rather than a copy of
+    it --- :func:`_site_update`'s place in :func:`_sweep_at`, one level up
+    (issues #599, #754).
+
+    ``draw`` is a callable and not a float because the acceptance is
+    *conditional*: the oracle consumes a uniform only where the field
+    difference is negative, and taking one eagerly would advance the
+    generator on a cluster that never needed it and move every chain after
+    it. The caller passes ``rng.random``; the hand-back passes the draw the
+    kernel was given.
+    """
+    current = int(state[members[0]])
     if proposed == current:
         return Recolour(proposed=False, accepted=False)
     difference = float(rows[members, proposed].sum() - rows[members, current].sum())
-    if difference >= 0.0 or rng.random() < np.exp(difference):
+    if difference >= 0.0 or draw() < np.exp(difference):
         state[members] = proposed
         return Recolour(proposed=True, accepted=True)
     return Recolour(proposed=True, accepted=False)
