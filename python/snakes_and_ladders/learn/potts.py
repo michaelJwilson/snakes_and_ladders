@@ -42,7 +42,7 @@ from collections.abc import Iterator, Sequence
 import numpy as np
 import torch
 
-from snakes_and_ladders.enumeration import argmax, configurations
+from snakes_and_ladders.enumeration import configurations, enumerated_optimum
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.opt.potts import PottsParams
 
@@ -360,17 +360,16 @@ def optimum(environment: PottsEnvironment) -> tuple[Configuration, float]:
     The independent oracle for "did the search find the best configuration".
     Affordable only because the reference instance is deliberately small.
 
+    The enumeration, the scoring and the argmax are
+    :func:`snakes_and_ladders.enumeration.enumerated_optimum`; what is local
+    here is which sizes and which score (issue #755).
+
     Returns
     -------
     tuple[Configuration, float]
         The maximizing configuration and its energy. Ties resolve to the
         lexicographically first, so the answer is deterministic.
     """
-    candidates = list(
-        enumerate_configurations(environment.n_states, environment.chain_length)
+    return enumerated_optimum(
+        environment.n_states, environment.chain_length, environment.energy
     )
-    energies = np.array([environment.energy(candidate) for candidate in candidates])
-    best = argmax(energies)
-    best_state, best_energy = candidates[best], float(energies[best])
-    assert best_state is not None
-    return best_state, float(best_energy)

@@ -2563,6 +2563,54 @@ overlap percolates, and not the construction. `MoveKind.NIEDERMAYER` is an arm
 `cluster_moves`; Houdayer's move is not one and cannot be, an arm's action
 carrying one labelling to one labelling where his carries a pair.
 
+**`log Z` landed for the lattice, estimated and with its error**
+([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`search.annealed` carries three estimators on one ladder of inverse
+temperatures, from `beta = 0` --- where `log Z_0 = n log q` is exact, and is
+returned bitwise --- to the target, each stepping the shipped kernel once per
+rung so every move set is admissible. `annealed_importance_sampling` (Neal
+2001) weights independent annealing runs; `population_annealing` (Hukushima &
+Iba 2003) resamples a population by the same weights and accumulates the
+per-rung normalizers; with the resampling off the second **is** the first, the
+two agreeing to 1.8e-15 on the same trajectories. Both recover
+`strip_log_partition` at strip widths 4, 6 and 8 and the enumerated `log Z` on
+the two 3x3 lattices, every deviation inside three of its own standard error
+over two seeds --- worst 1.63 --- at an ESS of 59 to 110 of 128. Two ablations:
+dropping the importance weight leaves `mean(log w)`, Jensen's lower bound,
+**7.9 standard errors low** on a six-rung ladder, and multinomial resampling in
+place of systematic leaves a family entropy of 0.19 to 0.80 nats against 4.01
+to 4.17 of a possible 4.85 --- two effective families of 128, which is why the
+default is systematic. `simulated_tempering` (Marinari & Parisi 1992) samples
+the rung as a variable on the weights `g_k = -log Z_k` those runs estimate: its
+configurations are the enumerated Boltzmann law at every rung by chi-square at
+a significance of 0.001, realized 0.0138 to 0.7028, and its rung occupation is
+the one the weights predict, 0.1907 to 0.7083 under exact weights and 0.2765 to
+0.3747 under a pilot's.
+
+**A tempering ladder can now be placed by its round trips, and that does not
+beat placing it by its acceptance.** `opt.schedule.adapt_ladder_by_round_trips`
+redistributes a ladder of fixed length so the local diffusivity is flat
+(Katzgraber et al. 2006), from the fraction of walkers moving up at each rung;
+`search.tempered.up_fraction` measures it off the walker trace
+`parallel_tempering` now records, and `adapt_ladder_round_trips` is the Potts
+binding. The acceptance-placed ladder stays the default and nothing changes for
+a caller that does not ask. Over 8 seeds paired by seed at 2,000 recorded
+sweeps:
+
+| round-trip time, sweeps | acceptance-placed | round-trip-placed |
+| --- | --- | --- |
+| 16x16 open square at `J_c`, 12 rungs | 1,194.4 | 1,053.7 |
+| 12x12 periodic triangular, 9 rungs | 360.1 | 366.6 |
+
+The paired sign test reads `p = 0.2891` and `p = 0.7266`, and a second reading
+at another warm-up seed `p = 1.0` and `p = 0.7266`, so no direction is
+established either way. What the readings do establish is the warm-up: both
+placements beat the geometric ladder they start from, 1,279.7 against 1,690.3
+on the 16x16, and a feedback placement read from 400 sweeps instead of 1,000
+ranges from 1,469.5 to 5,357.1 --- 3.2x worse than geometric --- because `f` is
+then read from its own noise. Recorded as
+`docs/experiments/023-placing-the-tempering-ladder.md`.
+
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
 non-negative the Ising energy is submodular, so a minimum cut finds its global
@@ -3920,6 +3968,24 @@ each read by one simulator, both below the three-consumer rule. One merge was
 taken: fourteen sites across seven modules reduced a score vector by
 `logsumexp(values[None, :], axis=1)[0]`, which is `axis=0`.
 `docs/experiments/016` and `017` carry the runs.
+
+**Data structures at #755.** The survey reads **245** classes and **8** clusters,
+with 12 `Protocol`s across 10 modules and 1,577 API-map entries over 148 flat
+modules. Every cluster was decided against root `CLAUDE.md`'s rule and the
+reason recorded per row (`docs/reviews/2026-09-19.md`): **one meets it and is
+folded, one is already the seam and wants a guard, six are left as they are**
+--- `suffix:Params` (17), `suffix:Decoding` (7), `prefix:Exact` (5),
+`suffix:Fit` (6), `suffix:Result` (6) and `suffix:Dataset` (5) share a name and
+no surface, and `SimulatedDataset` is the phylogenetic alignment rather than
+their base. The fold is the composition #387 left: enumerate, score, take the
+first maximizer, written in full by `learn.potts.optimum`, `learn.hmm.optimum`
+and `learn.relaxed.enumerate_optimum` and now one function,
+`enumeration.enumerated_optimum`. The three return bitwise what they returned,
+asserted against the deleted body in `tests/regression/test_enumeration_seam.py`
+at four sizes. `likelihood.hmm_paths` keeps its own argmax: it reads the score
+vector again for the posterior. `tests/regression/test_duplication_guards.py`
+pins the 245 classes, the eight clusters at their member counts and the one
+named argmax consumer.
 
 **Message schedules (issue #592).** The order messages go in is an interface,
 `likelihood/schedule.py`, where it was two branches of an `if`. Five schedules
