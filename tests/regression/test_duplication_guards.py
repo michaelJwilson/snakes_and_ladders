@@ -20,6 +20,7 @@ source files is exactly the kind that silently matches nothing.
 
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -30,6 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
+import appraise_structures  # noqa: E402
 import duplication_survey  # noqa: E402
 
 #: Issue #717's rows, pinned at the count on the day each was first measured
@@ -57,13 +59,51 @@ SLIMMING_BASELINE = {
     # module lands: `search.balanced`, the one proposal kernel the Potts
     # lattice and the factor graph share, took them from 148 and 1,576
     # (#756). The second moves on a public name too, and #756's cluster moves
-    # for a frustrated lattice added twelve without adding a module; its
+    # for a frustrated lattice added twelve without adding a module; issue
+    # #755's seam is one public callable, so the row rises by one more. A row
+    # that rises states why here or it is a duplicate. #756's
     # `search.annealed` added both, a module and fourteen names, and its two
     # samplers --- `opt.langevin` and `opt.slice`, one module each, which is
     # the package's shape for a sampler --- added two and eight.
     "flat modules": 152,
-    "API-map entries": 1624,
+    "API-map entries": 1625,
 }
+
+#: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
+#: tree): every cluster `infra/appraise_structures.py` reports at three or
+#: more members, and how many members each holds. A cluster that grows is a
+#: near-duplicate added, and a cluster that appears is a shape nobody
+#: decided --- the audit's outcome per row is in `docs/reviews/2026-09-19.md`
+#: and a row that moves without that file moving is the audit going stale.
+#: The consuming-reference counts are deliberately absent: they move with
+#: every unrelated mention of a name, so pinning them would fail for reasons
+#: that are not duplication.
+CLUSTER_BASELINE = {
+    "fields:name": 7,
+    "prefix:Exact": 5,
+    "role:incidence": 15,
+    "suffix:Dataset": 5,
+    "suffix:Decoding": 7,
+    "suffix:Fit": 6,
+    "suffix:Params": 17,
+    "suffix:Result": 6,
+}
+
+#: State-carrying classes over the whole package, the number the clusters are
+#: drawn from.
+#: Re-pinned on the merge with `main` ee16541 (2026-09-19): 255, main's 247
+#: plus the three result records `search.annealed` declares and the five the
+#: two samplers and their kernel seam declare (#756, steps 6 and baselines).
+STRUCTURE_BASELINE = 255
+
+#: `enumeration.argmax` outside its own module. Issue #755 folded the three
+#: `learn` oracles that enumerated, scored and took the first maximizer onto
+#: `enumeration.enumerated_optimum`, so the composition is written once.
+#: `likelihood.hmm_paths` keeps its own call and is named here rather than
+#: folded: it reads the score vector again for the posterior, so the scores
+#: outlive the argmax and `enumerated_optimum`, which returns one score,
+#: cannot carry it.
+ARGMAX_CONSUMERS = {"likelihood/hmm_paths.py"}
 
 # The consolidated home of each pattern, which legitimately contains it once.
 LOGSUMEXP_OWNER = "numerics.py"
@@ -308,3 +348,79 @@ def test_each_slimming_pattern_matches_its_own_kind() -> None:
 
     assert [n for n, text in violating.items() if not patterns[n].search(text)] == []
     assert [n for n, text in clean.items() if patterns[n].search(text)] == []
+
+
+def _imports_argmax(path: Path) -> bool:
+    """Whether ``path`` imports ``argmax`` from the enumeration seam.
+
+    By `ast` rather than by a line regex: the one legitimate consumer spells
+    the import over five lines, and a guard that a parenthesised import slips
+    past is a guard that passes vacuously.
+    """
+    for node in ast.walk(ast.parse(path.read_text())):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "snakes_and_ladders.enumeration"
+            and any(alias.name == "argmax" for alias in node.names)
+        ):
+            return True
+    return False
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_enumerated_argmax_is_composed_in_one_place() -> None:
+    # `learn.potts.optimum`, `learn.hmm.optimum` and
+    # `learn.relaxed.enumerate_optimum` each enumerated, scored and took the
+    # first maximizer in full: three bodies, one arithmetic, and three places
+    # a tie rule could drift apart from the determinism their docstrings
+    # promise. The fourth copy is what this refuses (issue #755).
+    realized = {
+        str(path.relative_to(PACKAGE))
+        for path in sorted(PACKAGE.rglob("*.py"))
+        if path.name != "enumeration.py" and _imports_argmax(path)
+    }
+
+    assert realized == ARGMAX_CONSUMERS
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_argmax_query_reads_a_parenthesised_import(tmp_path: Path) -> None:
+    # The pairing this module requires. The one legitimate consumer spells
+    # the import over five lines, so the failure mode worth exercising is a
+    # query that only reads a single-line `from ... import argmax`.
+    over_five_lines = tmp_path / "wrapped.py"
+    over_five_lines.write_text(
+        "from snakes_and_ladders.enumeration import (\n"
+        "    MAX_ENUMERABLE_CONFIGURATIONS,\n"
+        "    argmax,\n"
+        "    configurations,\n"
+        ")\n"
+    )
+    through_the_seam = tmp_path / "folded.py"
+    through_the_seam.write_text(
+        "from snakes_and_ladders.enumeration import enumerated_optimum\n"
+    )
+
+    assert _imports_argmax(over_five_lines)
+    assert not _imports_argmax(through_the_seam)
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_structure_clusters_hold_at_their_audited_size() -> None:
+    # Issue #755 decided each cluster against root `CLAUDE.md`'s rule --- one
+    # abstraction where it aligns and simplifies several use cases --- and
+    # recorded the reason per row. The decision is only worth what the count
+    # it was taken at is worth, so the count is asserted rather than cited.
+    # The query itself is exercised in `test_structure_survey.py`, which
+    # plants a near-duplicate and a shape below the rule and reads both back.
+    found = appraise_structures.structures()
+    realized = {
+        cluster.key: len(cluster.members)
+        for cluster in appraise_structures.clusters(found)
+    }
+
+    assert len(found) == STRUCTURE_BASELINE
+    assert realized == CLUSTER_BASELINE
