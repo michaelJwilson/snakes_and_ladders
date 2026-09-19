@@ -243,6 +243,12 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.hmc
    :members:
 
+.. automodule:: snakes_and_ladders.opt.langevin
+   :members:
+
+.. automodule:: snakes_and_ladders.opt.slice
+   :members:
+
 .. automodule:: snakes_and_ladders.opt.potts
    :members:
 

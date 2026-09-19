@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from scipy.stats import binomtest
 from snakes_and_ladders.opt.budget import (
     Budget,
     Comparison,
@@ -28,6 +29,20 @@ from snakes_and_ladders.opt.budget import (
 def _draw(instance: float, budget: Budget, rng: np.random.Generator) -> Outcome:
     """A run whose value is uniform on ``[instance, instance + 1)`` and costs its budget."""
     return Outcome(instance + float(rng.random()), budget.size)
+
+
+def _reaches_every_instance(
+    instance: float, _budget: Budget, _rng: np.random.Generator
+) -> Outcome:
+    """Reaches the instance's own value, whatever it is."""
+    return Outcome(instance, 1)
+
+
+def _misses_above_one(
+    instance: float, _budget: Budget, _rng: np.random.Generator
+) -> Outcome:
+    """Reaches the instance's own value below 2, and misses it by 1 above."""
+    return Outcome(instance + (1.0 if instance > 1.0 else 0.0), 1)
 
 
 @pytest.mark.analytic
@@ -151,6 +166,7 @@ def test_a_budget_without_a_unit_or_a_size_is_refused() -> None:
         Budget("evaluations", 0)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_mcnemar_is_the_two_sided_binomial_tail_on_the_discordant_pairs() -> None:
     # Ten discordant instances split 1 against 9: the tail is
@@ -174,6 +190,7 @@ def test_mcnemar_refuses_hits_that_are_not_paired() -> None:
         mcnemar(np.ones(3, dtype=bool), np.ones(4, dtype=bool))
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_a_relative_tolerance_scales_with_the_reference_and_the_paired_p_reads_the_hits() -> (
     None
@@ -202,6 +219,81 @@ def test_a_relative_tolerance_scales_with_the_reference_and_the_paired_p_reads_t
     assert result.reached(1e-3, relative=True)["first"].tolist() == [True] * 3
     assert result.paired_p("first", "second", 1e-3, relative=True) == 2.0 / 8.0
     assert result.paired_p("first", "second") == 1.0
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_mcnemar_reproduces_the_exact_binomial_test_on_every_small_table() -> None:
+    """`mcnemar` against `scipy.stats.binomtest`, the exact binomial test, on
+    every contingency table with up to twelve discordant instances either way.
+
+    The referee is outside the implementation and outside this file: the
+    p-value is the two-sided exact binomial tail at ``p = 1/2`` on the
+    discordant count, and `scipy` computes it from the pmf where `mcnemar`
+    sums binomial coefficients. Concordant instances carry no evidence, so
+    five of them sit in every table and must not move the answer.
+
+    Realized over the 168 tables: the largest relative deviation is
+    **1.84e-16**, two ulps, against a declared 1e-12. The smallest p-value a
+    table reaches here is 2 / 2**24 = 1.19e-07 and the largest is 1.0.
+    """
+    worst = 0.0
+    for only_first in range(13):
+        for only_second in range(13):
+            discordant = only_first + only_second
+            if discordant == 0:
+                continue
+            first = np.array(
+                [True] * only_first + [False] * only_second + [True] * 3 + [False] * 2
+            )
+            second = np.array(
+                [False] * only_first + [True] * only_second + [True] * 3 + [False] * 2
+            )
+
+            realized = mcnemar(first, second)
+            exact = binomtest(
+                min(only_first, only_second), discordant, 0.5, alternative="two-sided"
+            ).pvalue
+
+            assert realized == pytest.approx(exact, rel=1e-12), (
+                only_first,
+                only_second,
+            )
+            assert realized == mcnemar(second, first)
+            worst = max(worst, abs(realized - exact) / exact)
+    print(f"\nworst relative deviation from scipy.stats.binomtest: {worst:.2e}")
+    assert worst < 1e-12
+
+
+@pytest.mark.oracle
+def test_a_hand_built_comparison_reports_the_hits_gaps_and_p_value_it_must() -> None:
+    """One comparison whose every cell is determined, against arithmetic done here.
+
+    The methods return a value fixed by the instance, so the table is not a
+    measurement and there is nothing to average: `first` reaches the known
+    optimum on all six instances, `second` on two and misses four by 1.0. The
+    hits, the mean gaps ``0`` and ``4/6`` and the p-value follow in closed
+    form, and the p-value is the exact binomial on the four discordant
+    instances --- all four `first`'s --- ``2 * C(4,0) / 2**4 = 0.125``.
+
+    Exact equality, not a tolerance: every quantity is a count or a ratio of
+    small integers. Realized 0.125 against `scipy.stats.binomtest`'s 0.125.
+    """
+    instances = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+
+    result = compare(
+        {"first": _reaches_every_instance, "second": _misses_above_one},
+        instances,
+        Budget("evaluations", 1),
+        seeds=(0,),
+        workers=1,
+        known=list(instances),
+    )
+
+    assert result.hits() == {"first": 6, "second": 2}
+    assert result.mean_gap() == {"first": 0.0, "second": 4.0 / 6.0}
+    assert result.paired_p("first", "second") == binomtest(0, 4, 0.5).pvalue
+    assert result.paired_p("first", "second") == 2.0 / 16.0
 
 
 @pytest.mark.infra
