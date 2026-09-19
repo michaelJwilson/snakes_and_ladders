@@ -1,4 +1,4 @@
-"""Benchmarks for the three Potts move sets.
+"""Benchmarks for the five Potts move sets.
 
 Correctness is pinned in `tests/regression/search/`, per the repo's division
 of labor between the two directories.

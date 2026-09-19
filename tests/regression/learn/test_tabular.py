@@ -89,6 +89,7 @@ def test_both_reach_the_grid_optimum_from_every_start(learner: TabularLearner) -
 
 
 @pytest.mark.analytic
+@pytest.mark.oracle
 def test_q_learning_matches_the_optimal_values_and_sarsa_does_not() -> None:
     """``max_a Q`` is ``V*`` for one method and is not for the other.
 
