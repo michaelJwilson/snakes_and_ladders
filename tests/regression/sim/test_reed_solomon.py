@@ -387,3 +387,59 @@ def test_the_planted_message_survives_every_channel_word_inside_the_guarantee() 
     assert abs(realized - expected) < BINOMIAL_INTERVALS * math.sqrt(
         expected * (1.0 - expected) / END2END_DRAWS
     )
+
+
+#: ``alpha^i`` in ``GF(16)`` under ``x^4 + x + 1``, as the standard table
+#: prints it (Lin and Costello 2004, Table 2.8; MacKay 2003 §Appendix). The
+#: integers are the coefficient vectors read most significant bit last, which
+#: is the representation `sim/galois.py` states. Written out because a table
+#: recomputed by the same recursion the code uses is not a referee.
+GF16_POWERS: tuple[int, ...] = (1, 2, 4, 8, 3, 6, 12, 11, 5, 10, 7, 14, 15, 13, 9)
+
+
+@pytest.mark.oracle
+def test_the_field_reproduces_the_published_gf_sixteen_table() -> None:
+    # `field(4)` against the table the literature prints, entry by entry, and
+    # the logarithm against its inverse. Integers, so the comparison is exact
+    # equality with no tolerance to declare. A different primitive polynomial
+    # builds a field just as valid and renames every element, which is what
+    # this catches.
+    #
+    # The cache is cleared first so the tables compared here are ones this
+    # test built: `field` is `@cache`d, so without it whichever test called
+    # `field(4)` first in the process is the only one that runs the
+    # recursion, and this would referee a table rather than a construction.
+    field.cache_clear()
+    gf = field(4)
+
+    assert [gf.alpha(exponent) for exponent in range(15)] == list(GF16_POWERS)
+    assert [int(gf.exponential[exponent]) for exponent in range(15)] == list(
+        GF16_POWERS
+    )
+    for exponent, value in enumerate(GF16_POWERS):
+        assert int(gf.logarithm[value]) == exponent
+
+    # Two products read off the published table rather than off the code:
+    # alpha^5 * alpha^7 = alpha^12 = 15, and alpha^11 * alpha^9 = alpha^20 =
+    # alpha^5 = 6, the wrap the doubled exponential table exists for.
+    assert gf.multiply(GF16_POWERS[5], GF16_POWERS[7]) == GF16_POWERS[12]
+    assert gf.multiply(GF16_POWERS[11], GF16_POWERS[9]) == GF16_POWERS[5]
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("m", sorted(PRIMITIVE))
+def test_every_nonzero_element_satisfies_fermat_and_its_own_inverse(m: int) -> None:
+    # Fermat's little theorem in `GF(2^m)`: `a^(2^m - 1) = 1` for every
+    # nonzero `a`, the statement that the nonzero elements form a group of
+    # that order. Exhaustive over all 2^m - 1 of them at each recorded
+    # degree, 501 elements in total, and `a * a^-1 = 1` beside it, so the
+    # inverse is the group's and not the table's. Exact over integers.
+    field.cache_clear()
+    gf = field(m)
+
+    for value in range(1, gf.order):
+        assert gf.power(value, gf.nonzero) == 1
+        assert gf.multiply(value, gf.inverse(value)) == 1
+        assert gf.divide(value, value) == 1
+        # The discrete logarithm is the exponent the group law gives it.
+        assert gf.alpha(int(gf.logarithm[value])) == value

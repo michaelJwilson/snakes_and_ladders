@@ -69,6 +69,7 @@ from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.gibbs import sample_factor_graph
 from snakes_and_ladders.search.infer import MoveSet, infer
 from snakes_and_ladders.search.maxflow import ising_ground_state
+from snakes_and_ladders.search.potts_keyed import SwendsenWangMove
 from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.search.topology import (
     Topology,
@@ -85,7 +86,7 @@ from snakes_and_ladders.sim.ldpc import (
     all_zero_transmission,
     gallager_code,
 )
-from snakes_and_ladders.sim.potts import energies
+from snakes_and_ladders.sim.potts import critical_coupling, energies
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
@@ -305,6 +306,17 @@ def search_sections(mid: bool) -> list[Section]:
     potts_field = np.random.default_rng(1).normal(size=(graph.n_nodes, 3))
     factor_graph = from_potts(graph, FIELD)
     configurations = np.random.default_rng(3).integers(0, 2, size=(64, graph.n_nodes))
+    # The cluster pass's own instance: three states at the exact transition,
+    # where the bond pass makes a cluster for every 1.7 sites, which is the
+    # loop issue #754 ported.
+    cluster_graph = lattice_graph(
+        (extent, extent), BoundaryCondition.OPEN, critical_coupling(3)
+    )
+    cluster_move = SwendsenWangMove(cluster_graph, potts_field)
+    cluster_state = np.ascontiguousarray(
+        np.random.default_rng(4).integers(0, 3, size=cluster_graph.n_nodes),
+        dtype=np.int64,
+    )
 
     def _neighbourhoods() -> None:
         list(nni_neighbours(topology))
@@ -353,6 +365,18 @@ def search_sections(mid: bool) -> list[Section]:
     def _wolff() -> None:
         sample_potts(graph, FIELD, PottsMove.WOLFF, np.random.default_rng(0), sweeps)
 
+    def _swendsen_wang() -> None:
+        # The oracle pass explicitly, as the single-site cell above: this
+        # ranks *Python* self time, and the Rust cluster pass is opt-in
+        # because it draws the same uniforms in another order (issue #754).
+        cluster_move.propose(
+            cluster_state,
+            temperature=1.0,
+            site=-1,
+            label=-1,
+            rng=np.random.default_rng(7),
+        )
+
     def _gibbs() -> None:
         sample_factor_graph(factor_graph, np.random.default_rng(0), sweeps)
 
@@ -369,6 +393,11 @@ def search_sections(mid: bool) -> list[Section]:
             1,
         ),
         (f"search.potts_mcmc Wolff @ {extent}x{extent}, {sweeps} sweeps", _wolff, 1),
+        (
+            f"search.potts_keyed SwendsenWangMove.propose @ {extent}x{extent}",
+            _swendsen_wang,
+            5,
+        ),
         (
             f"search.gibbs.sample_factor_graph @ {extent}x{extent}, {sweeps} sweeps",
             _gibbs,
