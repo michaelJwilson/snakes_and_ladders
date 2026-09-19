@@ -14,7 +14,7 @@ import matplotlib as mpl
 import numpy as np
 from matplotlib.figure import Figure
 
-from snakes_and_ladders.track import current
+from snakes_and_ladders.track import as_aim, current
 
 # LaTeX special characters a caption may not contain unescaped. Backslash is
 # included: the only escape sequence captions are allowed to use is ``\_``,
@@ -262,6 +262,8 @@ def write_qa_figure(output_dir: Path, stem: str, fig: Figure, caption: str) -> Q
     caption_path.write_text(caption)
     # The one place a QA figure is written, so the one place it is recorded
     # (`snakes_and_ladders.track`): under the stem it is filed by, so the
-    # tracked run and the LaTeX build name the same figure.
-    current().figure(stem, fig)
+    # tracked run and the LaTeX build name the same figure. `as_aim` wraps it
+    # as an `aim.Image` where Aim is installed and hands back the `Figure`
+    # where it is not, which is what `MemoryRun` keeps.
+    current().run.track(as_aim(fig), name=stem)
     return QAFigure(figure_path=figure_path, caption_path=caption_path, caption=caption)
