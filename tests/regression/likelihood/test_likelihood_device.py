@@ -106,6 +106,63 @@ def test_an_unsupported_dtype_is_refused() -> None:
 # --- the tolerance against real arithmetic, on CPU -----------------------
 
 
+@pytest.mark.oracle
+def test_every_device_the_policy_selects_holds_its_tolerance_to_the_numpy_oracle() -> (
+    None
+):
+    """The three routes the policy can take, each judged against
+    `pruning.log_likelihood` --- the NumPy reference `likelihood/CLAUDE.md`
+    declares the oracle --- at the tolerance `cross_device_rtol` returns for
+    the dtype `default_dtype` hands that route.
+
+    Realized relative deviation, over `tree_jc/ci` (20,000 sites) and
+    `tree_jc/stress` (200,000): cuda and cpu take float64 and are bitwise the
+    oracle, 0.0 against a 1e-11 bound; mps takes float32 and reads 5.38e-08
+    and 3.23e-08 against a 1e-06 bound, 31x inside it at the worse of the two.
+    `device.py`'s table reads 4.41e-08 on the second fixture, measured at the
+    host's default thread count where the suite pins the BLAS to one
+    (`tests/conftest.py`): a reduction order, not a disagreement, and the
+    float32 figure is reported rather than pinned for that reason.
+
+    The arithmetic runs on CPU in both dtypes, so the number is evidence on a
+    runner with neither accelerator; what is exercised here is the *policy*,
+    which is the part that is pure.
+    """
+    assert available_device() in {"cuda", "mps", "cpu"}
+    print("\nrelative deviation from the NumPy oracle, per selected route:")
+    for fixture in (SMALL_SITES, FOUR_TAXA):
+        params = load_fixture(fixture)
+        dataset = simulate_alignment(
+            tau=params.tau,
+            k=params.k,
+            pi=params.pi,
+            rng=np.random.default_rng(params.seed),
+            n_sites=params.n_sites,
+        )
+        alignment = dict(dataset.alignment)
+        exact = pruning.log_likelihood(params.tau, params.k, params.pi, alignment)
+
+        for cuda, mps in ((True, True), (False, True), (False, False)):
+            device = select_device(cuda_available=cuda, mps_available=mps)
+            dtype = default_dtype(device)
+            value = float(
+                pruning_torch.log_likelihood(
+                    params.tau,
+                    params.k,
+                    params.pi,
+                    alignment,
+                    pruning_torch.branch_lengths_from_tree(params.tau, dtype=dtype),
+                )
+            )
+            deviation = abs(value - exact) / abs(exact)
+            print(f"  {fixture} {device} {dtype}: {deviation:.2e}")
+            assert_allclose(
+                value, exact, rtol=cross_device_rtol(dtype, torch.float64), atol=0.0
+            )
+            if dtype == torch.float64:
+                assert deviation == 0.0
+
+
 @pytest.mark.analytic
 @pytest.mark.parametrize("fixture", [SMALL_SITES, FOUR_TAXA])
 def test_float32_agrees_with_float64_inside_the_stated_tolerance(
@@ -188,6 +245,7 @@ def test_float32_would_fail_an_absolute_bound_that_float64_passes() -> None:
     assert relative < CROSS_DEVICE_RTOL_FLOAT32
 
 
+@pytest.mark.oracle
 @pytest.mark.smoke
 def test_float64_default_is_unchanged_by_the_dtype_parameter() -> None:
     # No silent behaviour change: a caller who passes nothing still gets
