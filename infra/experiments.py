@@ -50,7 +50,9 @@ REQUIRED_FIELDS = (
 #: the repository supports and this tuple omits is a gap in the index
 #: rather than a licence to invent a name. `bicycle-css` enters with the
 #: quantum code of issue #362, which is the first problem here whose
-#: success criterion is a coset rather than a word.
+#: success criterion is a coset rather than a word. `turbo` enters with the
+#: trellis port of issue #754: the codes were the one family the stress
+#: profile had no workload for, so the vocabulary had no name for them.
 PROBLEMS = (
     "potts-lattice",
     "hmm-path",
@@ -58,6 +60,7 @@ PROBLEMS = (
     "tree",
     "mixture",
     "bicycle-css",
+    "turbo",
 )
 SIZES = ("ci", "stress", "release")
 STATUSES = ("open", "confirmed", "retracted", "superseded")
