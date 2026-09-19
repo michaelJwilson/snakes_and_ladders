@@ -25,7 +25,8 @@ in this module. It is referenced here, never restated. What follows is local.
 - **Every move set states whether it is complete**, in which sense, and what
   it costs per step. A surrogate decides what is fitted, never what is reported.
 
-- **A budget is counted in evaluations and seconds.**
+- **A budget is counted in the unit the method spends, evaluations here, and
+  seconds are reported beside it, never as the unit.**
 
 - **A structure is scored at most once per search**, keyed on a canonical form.
 
@@ -78,8 +79,7 @@ in this module. It is referenced here, never restated. What follows is local.
 - **A ladder placed from a measurement is placed from its noise too.** The
   feedback criterion redistributes rungs on a round-trip statistic, so a
   warm-up too short to resolve that statistic places them where the noise
-  fell: at 400 sweeps per measurement the placed ladder ranged from 1,469 to
-  5,357 recorded sweeps per round trip against the geometric ladder's 1,690,
-  and at 1,000 it landed at 1,280 either way. A placement reports the warm-up
-  it was read from, and a criterion is compared against another criterion at
-  equal rungs and equal warm-up or not at all (#756).
+  fell, wide of the geometric ladder it started from; the two land together
+  once the warm-up resolves the statistic (#756; `STATUS.md` 1.4). A placement
+  reports the warm-up it was read from, and a criterion is compared against
+  another criterion at equal rungs and equal warm-up or not at all.

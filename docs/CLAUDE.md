@@ -26,13 +26,12 @@ policy against oracles the regression suite already establishes.
 
 The build script regenerates the cited figures and then runs `latexmk` per
 document; nothing else invokes `latexmk`, and `DEV.md` holds the selection in
-full. A partial rebuild *moves* a check and never removes one: the release gate
-regenerates and compares every figure, whatever a document cites. The document
-selects, never a stamp predicting which figure a change moved (issue #490).
+full. A figure is rendered, never predicted: `qa/CLAUDE.md` holds that rule and
+what the release gate renders.
 
-Root `CLAUDE.md`'s **Expected Reader** states the formatting contract — what
-belongs in the body, what belongs in the appendix, and the register to write
-in. It is not restated here either.
+**Expected Reader.** A graduate reader of the field, who knows the area and not
+this package: notation is defined once in `notation.tex`, the body carries the
+argument and the appendix its derivation, and no document names code.
 
 ## Local rules
 

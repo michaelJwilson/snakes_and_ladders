@@ -45,15 +45,11 @@ is the ledger, a run store is its source, and the index is generated from
 the files, never edited.
 
 A recorded number is compared to a recomputation of it at the precision the
-number has, never bitwise. A count, an enumeration and a rate over seeded
-draws reproduce exactly and are held to that; a quantity an iterative
-optimiser produced does not, because the ordering of its floating-point
-reduction belongs to the host, and holding it to exact equality fails a
-change that changed nothing --- whereupon the reflex is to rewrite the
-record, which accepts whatever ran that day. The tolerance is therefore
-stated beside the number, derived from a measurement of the spread and not
-chosen, relative and keyed to the lowest precision in the comparison (root
-`CLAUDE.md`), and tight enough that a change worth catching still fails.
+number has. A count, an enumeration and a rate over seeded draws reproduce
+exactly; a quantity an iterative optimiser produced carries its tolerance in
+the record beside it, derived from a measurement of the spread and not chosen,
+at the tolerance root `CLAUDE.md` sets. Rewriting the record instead of
+stating that tolerance accepts whatever ran that day.
 
 A statement is covered when an `end2end` or an `oracle` test reached it,
 and not when a test reached it. Reachability, a shape, a property the
@@ -102,4 +98,4 @@ that needs one skips without it, so the core install carries none of them.
 
 *   **The shared environment carries dependencies, not the project.** On a host with many worktrees the `.venv` is one directory symlinked into all of them, so an editable install is a single mutable path that can name only one — every other worktree then imports a stranger's working copy, silently and with the wrong answer. Sync with `--no-install-project` and let `PYTHONPATH` be the only route: a missing one is then `ModuleNotFoundError`, which stops, rather than a successful run of the wrong code. Every script in `infra/` exports `PYTHONPATH` from its own location for the same reason — a rule the repository's own scripts can break is not a control. **Repair such an environment by adding what is missing, never by re-syncing it**: a sync wide enough to restore the packages also rewrites the one pointer, so the cure for one fault is the other (issue #556).
 
-*   **Incomplete work lives on an origin branch behind a draft pull request, never only in a worktree.** A worktree is scratch space: no backup, no reviewer, and nothing that reads it but the agent that made it. The rule is what lets `infra/reap_worktrees.py` retire a tree on the branch being gone from the remote, and the cost of the opposite policy is measured — this host reached 56 worktrees against 9 open pull requests, and the seventeen that looked like unsaved work held none of it: every one was zero commits ahead of `main`, carrying a stale index that would have reverted it (issue #618).
+*   **Incomplete work lives on an origin branch behind a draft pull request, never only in a worktree.** A worktree is scratch space: no backup, no reviewer, and nothing that reads it but the agent that made it. The rule is what lets `infra/reap_worktrees.py` retire a tree on the branch being gone from the remote, and the cost of the opposite policy is measured: the worktrees on this host that looked like unsaved work held none of it, every one zero commits ahead of `main`, carrying a stale index that would have reverted it (issue #618).
