@@ -233,6 +233,22 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "locally balanced proposal",
+        "search.balanced.log_balanced_weights",
+        "enumeration",
+        T + "search/test_potts_mcmc.py"
+        "::test_the_locally_balanced_chain_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
+        "Gibbs with gradients",
+        "search.potts_mcmc.taylor_log_ratios",
+        "enumeration",
+        T + "search/test_potts_mcmc.py"
+        "::test_the_gibbs_with_gradients_chain_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
         "cluster moves as RL arms",
         "search.potts_keyed.cluster_moves",
         "Potts MCMC, Wolff, Swendsen--Wang",

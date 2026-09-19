@@ -1,4 +1,4 @@
-"""Monte Carlo move sets on a Potts lattice: single-site, Swendsen-Wang, Wolff.
+"""Monte Carlo move sets on a Potts lattice: single-site, cluster, gradient-informed.
 
 `ROADMAP.md` §1.4 names both cluster algorithms. Single-site flips slow
 critically near the transition --- the autocorrelation time of the energy
@@ -15,6 +15,19 @@ plausible configurations, and converges to the wrong distribution. So a cluster
 recolouring carries a Metropolis accept step on that difference, and the
 chi-square tests in `tests/regression/search/test_potts_mcmc.py` are run with
 and without a field because only the first catches its absence.
+
+**Two of the five move sets are gradient-informed, and on this energy they are
+one kernel.** A locally balanced proposal (Zanella 2020) weights every
+single-site change by ``sqrt(pi(s') / pi(s))``; Gibbs-with-gradients
+(Grathwohl et al. 2021) weights it by the same function of the *first-order
+Taylor estimate* of that ratio at the current one-hot state. On a pairwise
+energy the estimate is the ratio --- the relaxed log weight is affine in each
+site's row, so a single-site change has no second-order term ---
+so the two propose from the same law and differ in what they compute to get
+there. That is a property of the Potts energy and not of the implementation,
+which is why it is pinned by a test rather than assumed by a shared branch:
+:func:`taylor_log_ratios` is the estimate, :func:`autodiff_log_ratios` is the
+same quantity from the tape, and the three agree to ``1e-12``.
 
 These are samplers, not optimizers: they are validated by the distribution they
 converge to, and nothing here claims to find a ground state. The exception is
@@ -47,8 +60,21 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.schedule import AdaptedLadder, TempSchedule, adapt_ladder
+from snakes_and_ladders.search.balanced import (
+    draw_change,
+    log_balanced_weights,
+    log_metropolis_ratio,
+    log_normalizer,
+    log_ratios,
+)
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energies, heat_bath_log_weights, site_field
+from snakes_and_ladders.sim.potts import (
+    energies,
+    heat_bath_log_weights,
+    local_fields,
+    owner_rows,
+    site_field,
+)
 
 #: Declared so :func:`snakes_and_ladders.sim.potts.energies` re-exports from
 #: this module, which `mypy --strict` otherwise refuses: the energy moved to
@@ -63,9 +89,11 @@ __all__ = [
     "TemperedChains",
     "adapt_ladder_potts",
     "anneal_potts",
+    "autodiff_log_ratios",
     "energies",
     "parallel_tempering",
     "sample_potts",
+    "taylor_log_ratios",
     "tempered",
 ]
 
@@ -92,6 +120,20 @@ class PottsMove(StrEnum):
     SINGLE_SITE = "single-site"
     SWENDSEN_WANG = "swendsen-wang"
     WOLFF = "wolff"
+    LOCALLY_BALANCED = "locally-balanced"
+    GIBBS_WITH_GRADIENTS = "gibbs-with-gradients"
+
+
+#: The move sets built on the Fortuin-Kasteleyn bond construction, which needs
+#: every coupling non-negative. Named rather than written as "not single-site":
+#: the gradient-informed moves are single-flip and run on an antiferromagnet,
+#: and a negation would have refused them with the clusters.
+_CLUSTER_MOVES = frozenset({PottsMove.SWENDSEN_WANG, PottsMove.WOLFF})
+
+#: The move sets :func:`_balanced_sweep_at` serves.
+_BALANCED_MOVES = frozenset(
+    {PottsMove.LOCALLY_BALANCED, PottsMove.GIBBS_WITH_GRADIENTS}
+)
 
 
 @dataclass(frozen=True)
@@ -251,17 +293,18 @@ def sample_potts(
     field : np.ndarray
         External field ``h``, shape ``(n_states,)``.
     move : PottsMove
-        The move set. All three leave the same Boltzmann distribution
+        The move set. All five leave the same Boltzmann distribution
         invariant, which is what
         `tests/regression/search/test_potts_mcmc.py` asserts.
     rng : np.random.Generator
         Passed in rather than seeded here: seeding inside a call makes every
         draw of an ensemble identical (`sim/CLAUDE.md`, issue #240).
     n_sweeps : int
-        Recorded sweeps. A sweep is ``n_nodes`` heat-bath updates, one
-        Swendsen-Wang bond-and-recolour pass over the whole lattice, or *one*
-        Wolff cluster flip --- see :func:`_wolff_sweep` for why the Wolff
-        sweep cannot be sized to match the other two.
+        Recorded sweeps. A sweep is ``n_nodes`` heat-bath updates, ``n_nodes``
+        gradient-informed proposals, one Swendsen-Wang bond-and-recolour pass
+        over the whole lattice, or *one* Wolff cluster flip --- see
+        :func:`_wolff_sweep` for why the Wolff sweep cannot be sized to match
+        the others.
     burn_in : int
         Sweeps run and discarded before recording starts.
     thin : int
@@ -276,9 +319,9 @@ def sample_potts(
         cluster moves' bond probabilities and the field accept step are
         tempered by the same division as the heat bath.
     backend : Backend
-        Which implementation runs the **heat-bath** sweep; the cluster moves
-        have one and ignore it. The chain is the same either way, state for
-        state, which is what makes
+        Which implementation runs the **heat-bath** sweep; the cluster and
+        gradient-informed moves have one and ignore it. The chain is the same
+        either way, state for state, which is what makes
         :data:`~snakes_and_ladders.backend.Backend.RUST` the default
         (:func:`_sweep_at`, issue #599).
 
@@ -295,7 +338,7 @@ def sample_potts(
         bond probability ``1 - exp(-J)`` is not a probability there, and an
         antiferromagnet has no like-spin clusters to flip.
     """
-    if move is not PottsMove.SINGLE_SITE and min(graph.coupling, default=0.0) < 0.0:
+    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
         msg = (
             f"{move} needs every coupling >= 0: the bond probability "
             "1 - exp(-J) is not a probability for J < 0, and an "
@@ -313,11 +356,11 @@ def sample_potts(
         rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    sweep = (
-        _sweep_at(rows, offsets, neighbours, couplings, backend)
-        if move is PottsMove.SINGLE_SITE
-        else None
-    )
+    sweep: Callable[[np.ndarray, np.random.Generator, float], None] | None = None
+    if move is PottsMove.SINGLE_SITE:
+        sweep = _sweep_at(rows, offsets, neighbours, couplings, backend)
+    elif move in _BALANCED_MOVES:
+        sweep = _balanced_sweep_at(rows, offsets, neighbours, couplings, move)
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
     cluster_total, cluster_count = 0, 0
@@ -394,7 +437,11 @@ def anneal_potts(
     difference between them is a statement about the schedule.
 
     ``move`` names the move set. Single-site is the default and the fair
-    annealed baseline. The two cluster move sets refuse a negative coupling,
+    annealed baseline. The two gradient-informed move sets anneal a coupling
+    of either sign, at ``n_nodes`` times the site visits per sweep: each of
+    their ``n_nodes`` proposals reads every site's conditional, where a
+    heat-bath sweep reads each site's once. The two cluster move sets refuse a
+    negative coupling,
     so they anneal only a ferromagnet --- which `spatio_only` is, and which
     issue #551 anneals them on. They are **not** a faster route to the same
     answer there: the Fortuin-Kasteleyn bond construction is exact at zero
@@ -426,7 +473,7 @@ def anneal_potts(
     -------
     AnnealedPotts
     """
-    if move is not PottsMove.SINGLE_SITE and min(graph.coupling, default=0.0) < 0.0:
+    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
         msg = (
             f"{move} needs every coupling >= 0: the bond probability "
             "1 - exp(-J) is not a probability for J < 0, and an "
@@ -442,7 +489,11 @@ def anneal_potts(
 
     best_state = state.copy()
     best_energy = float(energies(graph, rows, state[None])[0])
-    sweep = _sweep_at(rows, offsets, neighbours, couplings, backend)
+    sweep = (
+        _balanced_sweep_at(rows, offsets, neighbours, couplings, move)
+        if move in _BALANCED_MOVES
+        else _sweep_at(rows, offsets, neighbours, couplings, backend)
+    )
     # A heat-bath sweep reads every site's label once as a neighbour of each
     # incident edge and writes it once; the bond pass of Swendsen-Wang reads
     # the same two labels per edge. Counting both in one unit is what makes
@@ -454,6 +505,9 @@ def anneal_potts(
         if move is PottsMove.SINGLE_SITE:
             sweep(state, rng, 1.0 / temperature)
             visits += per_sweep
+        elif move in _BALANCED_MOVES:
+            sweep(state, rng, 1.0 / temperature)
+            visits += graph.n_nodes * per_sweep
         else:
             counter = ClusterCounter()
             beta = 1.0 / temperature
@@ -894,6 +948,199 @@ def _site_update(
     local -= local.max()
     cumulative = np.cumsum(np.exp(local))
     state[node] = np.searchsorted(cumulative, draw * cumulative[-1])
+
+
+def taylor_log_ratios(
+    rows: np.ndarray,
+    state: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    owner: np.ndarray,
+    beta: float = 1.0,
+) -> np.ndarray:
+    """Gibbs-with-gradients' first-order estimate of every single-flip change.
+
+    Grathwohl et al. (2021) relax the state to the simplex --- the one-hot
+    matrix `learn.relaxed.one_hot` writes --- and estimate
+    ``log pi(s') - log pi(s)`` by ``grad(log pi)(x) . (x' - x)``, one gradient
+    for the whole neighbourhood against one energy per neighbour.
+
+    **On a Potts energy the estimate is exact.** The relaxed log weight
+    ``sum_i h_i . x_i + sum_(ij) J_ij x_i . x_j`` is affine in each site's row
+    --- a lattice has no self-coupling, so no term carries ``x_i`` twice ---
+    and a single-flip change moves one row, so the first-order term is the
+    whole difference. The gradient at a one-hot is then
+    :func:`snakes_and_ladders.sim.potts.local_fields`, which is what this
+    computes: the tape returns the same numbers
+    (:func:`autodiff_log_ratios`, pinned at ``1e-12``) for a tape's cost per
+    proposal. Where the estimate is exact this equals
+    :func:`~snakes_and_ladders.search.balanced.log_ratios`, and the two stay
+    separate functions because that equality is a property of *this* energy
+    and is pinned rather than assumed.
+
+    Parameters
+    ----------
+    rows, state, neighbours, couplings, owner, beta
+        As :func:`snakes_and_ladders.sim.potts.local_fields`.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_nodes, n_states)``.
+    """
+    return log_ratios(
+        local_fields(rows, state, neighbours, couplings, owner, beta), state
+    )
+
+
+def autodiff_log_ratios(
+    graph: PottsGraph, rows: np.ndarray, state: np.ndarray, beta: float = 1.0
+) -> np.ndarray:
+    """:func:`taylor_log_ratios` from the tape: the definition, not the route.
+
+    The relaxed log weight is built in ``torch`` on the one-hot state and
+    differentiated by ``torch.autograd.grad``, which is what Gibbs-with-
+    gradients *is*. It is the oracle rather than the sampler's route: the
+    closed form :func:`taylor_log_ratios` takes reproduces it to ``1e-12``
+    (`tests/regression/search/test_potts_mcmc.py`) and costs one ``bincount``
+    against a tape built and walked per proposal.
+
+    ``torch`` is imported here rather than at module scope: it is the
+    heaviest import in the package and no chain this module runs needs it.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The lattice, read for its edge list and per-edge couplings.
+    rows : np.ndarray
+        The field as one row per site, shape ``(n_nodes, n_states)``.
+    state : np.ndarray
+        The current configuration.
+    beta : float
+        Inverse temperature, scaling the whole log weight.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_nodes, n_states)``.
+    """
+    import torch
+
+    # `torch.tensor` rather than `from_numpy`: a graph hands out read-only
+    # views of its arrays (#623), which `from_numpy` takes with a warning
+    # about undefined behaviour on write. These are read and never written.
+    labels = np.asarray(state, dtype=np.int64)
+    probabilities = torch.zeros(rows.shape, dtype=torch.float64)
+    probabilities[torch.arange(rows.shape[0]), torch.tensor(labels)] = 1.0
+    probabilities.requires_grad_(True)
+
+    value = (probabilities * torch.tensor(rows, dtype=torch.float64)).sum()
+    if graph.edges:
+        ends = graph.edge_index
+        first = probabilities[torch.tensor(ends[:, 0], dtype=torch.long)]
+        second = probabilities[torch.tensor(ends[:, 1], dtype=torch.long)]
+        coupling = torch.tensor(graph.edge_coupling, dtype=torch.float64)
+        value = value + (coupling * (first * second).sum(dim=1)).sum()
+    (gradient,) = torch.autograd.grad(beta * value, probabilities)
+    return log_ratios(gradient.detach().numpy(), labels)
+
+
+def _balanced_sweep_at(
+    rows: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    move: PottsMove,
+) -> Callable[[np.ndarray, np.random.Generator, float], None]:
+    """``n_nodes`` locally balanced proposals per sweep, each Metropolis-corrected.
+
+    The move set Zanella (2020) defines and Grathwohl et al. (2021) take the
+    gradient form of; :mod:`snakes_and_ladders.search.balanced` holds the
+    kernel both share and derives the correction. A sweep is ``n_nodes``
+    proposals, the heat bath's sweep size, so an autocorrelation time in
+    sweeps compares the two without a normalization.
+
+    **The conditional is maintained, not rebuilt.** Every proposal reads every
+    site's conditional, and rebuilding it from the adjacency per proposal
+    would make a sweep quadratic in the lattice for no new information: a flip
+    at ``i`` moves only the rows of ``i``'s neighbours, by the incident
+    coupling. Those rows are copied before the flip and restored on a
+    rejection, so a rejected proposal leaves the array it found rather than a
+    value that has been added to and subtracted from. The array is rebuilt
+    once per sweep, which is also what lets ``beta`` change between sweeps
+    (:func:`anneal_potts`).
+
+    The two move sets differ in one expression --- which estimate of the
+    single-flip differences weights the neighbourhood --- and share the accept
+    step, which takes the *exact* difference whichever proposed it.
+    """
+    owner = owner_rows(offsets)
+    bounds = offsets.tolist()
+    incident, weights = neighbours.tolist(), couplings.tolist()
+    gradient_informed = move is PottsMove.GIBBS_WITH_GRADIENTS
+
+    def sweep(state: np.ndarray, rng: np.random.Generator, beta: float) -> None:
+        local = local_fields(rows, state, neighbours, couplings, owner, beta)
+        for _ in range(state.shape[0]):
+            exact = log_ratios(local, state)
+            estimate = (
+                taylor_log_ratios(rows, state, neighbours, couplings, owner, beta)
+                if gradient_informed
+                else exact
+            )
+            forward_weights = log_balanced_weights(estimate, state)
+            forward_total = log_normalizer(forward_weights)
+            node, colour = draw_change(forward_weights, forward_total, rng)
+
+            previous = int(state[node])
+            log_ratio = float(exact[node, colour])
+            forward = float(forward_weights[node, colour])
+
+            # Advanced indexing already copies, so this is the restore buffer
+            # and not a view of the rows about to change.
+            touched = incident[bounds[node] : bounds[node + 1]]
+            restored = local[touched]
+            _apply_flip(local, state, node, colour, incident, weights, bounds, beta)
+            reverse_estimate = (
+                taylor_log_ratios(rows, state, neighbours, couplings, owner, beta)
+                if gradient_informed
+                else log_ratios(local, state)
+            )
+            reverse_weights = log_balanced_weights(reverse_estimate, state)
+            reverse_total = log_normalizer(reverse_weights)
+            reverse = float(reverse_weights[node, previous])
+
+            log_alpha = log_metropolis_ratio(
+                log_ratio, forward, forward_total, reverse, reverse_total
+            )
+            if not (log_alpha >= 0.0 or rng.random() < np.exp(log_alpha)):
+                local[touched] = restored
+                state[node] = previous
+
+    return sweep
+
+
+def _apply_flip(
+    local: np.ndarray,
+    state: np.ndarray,
+    node: int,
+    colour: int,
+    incident: Sequence[int],
+    weights: Sequence[float],
+    bounds: Sequence[int],
+    beta: float,
+) -> None:
+    """Relabel one site and carry the change into its neighbours' conditionals.
+
+    The site's own row does not move: its conditional is built from its
+    neighbours' labels and its own field, neither of which this touches.
+    """
+    previous = int(state[node])
+    for position in range(bounds[node], bounds[node + 1]):
+        neighbour, coupling = incident[position], beta * weights[position]
+        local[neighbour, previous] -= coupling
+        local[neighbour, colour] += coupling
+    state[node] = colour
 
 
 def _swendsen_wang_sweep(

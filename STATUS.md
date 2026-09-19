@@ -2210,7 +2210,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `search.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -2429,6 +2429,47 @@ algorithms slow by roughly 1.9x, so the gap is 2.1x at extent 24 and widening.
 These lattices are small and their boundary open, both of which soften the
 transition. Recorded as
 `docs/experiments/001-potts-cluster-autocorrelation.md`.
+
+**Two gradient-informed proposals landed, and on this energy they are one
+kernel** ([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`PottsMove.LOCALLY_BALANCED` weights every single-flip change by
+`sqrt(pi(s') / pi(s))` (Zanella 2020); `PottsMove.GIBBS_WITH_GRADIENTS`
+weights it by the same function of the first-order Taylor estimate of that
+ratio at the one-hot state (Grathwohl et al. 2021). The estimate **is** the
+ratio here: the relaxed log weight is affine in each site's row, so a
+single-flip change carries no second-order term. Pinned three ways at
+`1e-12` — the heat bath's own `heat_bath_log_weights`, the tape's gradient
+through `torch.autograd.grad`, and the enumerated energy of every flipped
+configuration — so the coincidence is refereed rather than assumed. Both
+leave the exact Boltzmann law invariant at the enumerable sizes: chi-square
+against enumeration at a significance of 0.001, realized
+0.0157 to 0.9926 over two seeds on the 2x2, the 3x3 and the frustrated
+triangular instance, the two move sets agreeing to four figures on every one
+of them. Dropping the Metropolis correction, which leaves the chain
+stationary at `pi(s) Z(s)`, is rejected at p = 0.0.
+The same two proposals run over the factor graph as
+`GibbsMove.LOCALLY_BALANCED` and `GibbsMove.GIBBS_WITH_GRADIENTS`, where the
+estimate is exact for the same reason and against the same referee
+(p = 0.2208 and 0.0483 over two seeds).
+
+**They halve the sweeps and pay eight times as much to take one.** Energy
+autocorrelation time at the exact transition on a 16x16 open lattice, two
+readings each, a sweep being `n_nodes` updates for all three, at a 1-minute
+load of 0.96 to 1.09:
+
+| 4,000 sweeps, 400 burn-in | single-site | locally balanced | Gibbs with gradients |
+| --- | --- | --- | --- |
+| tau in sweeps, seed 0 | 12.93 | 5.12 | 5.12 |
+| tau in sweeps, seed 1 | 8.07 | 4.79 | 4.79 |
+| wall, NumPy sweep | 9.3 s | 75.7 s | 109.3 s |
+
+An independent energy sample costs 4.96 sweeps against the heat bath's 10.50,
+**2.1x fewer**, at **8.1x** the wall per sweep against the NumPy heat bath and
+250x against the Rust sweep that is the default --- so 3.9x behind at equal
+wall clock, and 380x behind the shipped sampler. Recorded as
+`docs/experiments/021-potts-gradient-proposals.md`;
+[#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754) owns
+the port that would close it.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
