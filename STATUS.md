@@ -136,7 +136,18 @@ over 512 trajectories on `exact`, the enumerated score and gradient at four
 interior points of an ascent on `relaxed`, the `gamma = 1` telescoped return
 on `critic`, and the enumerated binomial on `failure` --- and `canonical.py`
 stays at 77.98%, no learner being run on the chain, the cliff or Hanoi.
-The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
+`likelihood` is the fourth (step 4): judged **85.35%** with `qa` exempt
+against 84.93% and the complement **89.25%** against 89.26%, floored at
+**85.3** and 89.2, with `likelihood` **89.17% to 91.24%**, its judged deficit
+259 to 198 statements and its public callables no judging test enters 41 to
+32, 27 of them declarations whose bodies run at import. Three referees and
+thirteen re-marks carry it --- the device policy's every route against the
+NumPy pruning oracle at the tolerance it returns, density evolution against
+its scalar recursion and the closed-form threshold, and
+`prune_with_matrices` against direct marginalization --- and
+`belief_propagation.ConvergenceError` is left, its non-convergence asserted
+and refereed by nothing.
+The ladder the `oracle` tests form --- 520 of them in 148 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
 over the five problems, 89 pinned by a named `oracle` test and 0 carrying the
