@@ -472,3 +472,107 @@ def test_the_adapted_chain_agrees_with_the_fixed_chain_on_the_four_taxon_posteri
         per_gradient_adapted,
         per_gradient_fixed,
     )
+
+
+@pytest.mark.oracle
+@pytest.mark.analytic
+def test_the_adapted_chains_marginals_are_the_exact_gaussians_within_three_errors() -> (
+    None
+):
+    """The warm-up's own chain against the closed-form marginals, at three
+    Monte Carlo standard errors, with the energy error read beside them.
+
+    The referee is the target: `AnalyticGaussian` carries the mean and the
+    covariance, so each marginal mean and each marginal variance has an exact
+    value and a standard error the chain itself supplies --- ``sd / sqrt(ESS)``
+    for a mean, and for a variance the standard error of the squared
+    deviations at *their* effective sample size, which is the smaller number
+    (320 and 406 against 2,659 and 2,171 here) and the one a bound taken from
+    the mean's would understate.
+
+    The `Adaptation` is built here rather than shared, so what is judged is a
+    warm-up run end to end: 300 proposals, target 0.80, jitter 0.4, from a
+    step of 0.05. It settles on a step of **0.9952** and a mass diagonal of
+    **0.862 and 2.688** against the marginal inverse variances 0.5 and 2.0 ---
+    a variance over the first window's 75 draws, so it recovers the *order*
+    of the two coordinates' stiffness and not their values --- and reports a
+    warm-up acceptance of **0.765** for 1,800 of the chain's 9,000 gradients.
+
+    Realized deviation in standard errors, at 1,200 draws: means **2.17** and
+    **0.06**, variances **0.36** and **0.57**, all against a bound of 3.0.
+    Sampled mean (1.0596, -1.9990) against (1, -2); sampled variance (2.0621,
+    0.5211) against (2.0, 0.5).
+
+    **The energy error, not the acceptance rate, is what says the step is
+    safe** (`opt/CLAUDE.md`). At a target of 0.80 the adapted step sits below
+    the stability limit and the largest energy error over the chain is
+    **27.78**, median 0.1162. At 0.65 --- the target the rest of this module
+    runs --- dual averaging lands on 1.1819, on the cliff `Adaptation`
+    documents: the acceptance is **0.665**, exactly where it was asked to be,
+    while the largest energy error is **1.190e+05**, 4,283 times the safe
+    chain's. That ratio is asserted below. What is not asserted is either
+    chain's rate against its target --- a single 1,200-draw rate carries a
+    binomial standard deviation of 0.011 before the adapted step's own spread
+    across seeds, which is what `_pooled_acceptance` above pools 20 seeds for;
+    realized 0.871 and 0.665, both healthy, separating nothing.
+    """
+    below_the_cliff = sample(
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(729),
+        n_samples=1200,
+        step_size=0.05,
+        n_steps=5,
+        adaptation=Adaptation(warmup=300, target_acceptance=0.80, step_jitter=0.4),
+    )
+    adapted = below_the_cliff.adapted
+    assert adapted is not None
+
+    squares = (below_the_cliff.theta - GAUSSIAN.mean) ** 2
+    exact_variance = GAUSSIAN.covariance.diagonal()
+    mean_errors = (
+        (below_the_cliff.theta.mean(0) - GAUSSIAN.mean).abs()
+        * effective_sample_size(below_the_cliff.theta).sqrt()
+        / exact_variance.sqrt()
+    )
+    variance_errors = (
+        (squares.mean(0) - exact_variance).abs()
+        * effective_sample_size(squares).sqrt()
+        / squares.std(0)
+    )
+    print(
+        f"\nmarginals in standard errors: means {mean_errors.numpy().round(2)}, "
+        f"variances {variance_errors.numpy().round(2)}"
+    )
+    print(
+        f"adapted step {adapted.step_size:.4f}, mass "
+        f"{adapted.mass_diagonal.numpy().round(3)}, warm-up acceptance "
+        f"{adapted.warmup_acceptance:.3f}"
+    )
+
+    assert bool((mean_errors < 3.0).all()), mean_errors
+    assert bool((variance_errors < 3.0).all()), variance_errors
+    assert abs(adapted.warmup_acceptance - 0.80) < 0.05
+    assert adapted.force_evaluations == 300 * leapfrog.force_evaluations(5)
+    # The stiffer coordinate gets the larger mass: the warm-up recovers the
+    # order of 1 / (2.0, 0.5), which is what the metric is for.
+    assert float(adapted.mass_diagonal[1]) > float(adapted.mass_diagonal[0])
+
+    on_the_cliff = sample(
+        GAUSSIAN,
+        generator=torch.Generator().manual_seed(729),
+        n_samples=1200,
+        step_size=0.05,
+        n_steps=5,
+        adaptation=Adaptation(warmup=300, target_acceptance=TARGET, step_jitter=0.4),
+    )
+    safe = float(below_the_cliff.energy_error.max())
+    diverging = float(on_the_cliff.energy_error.max())
+    print(f"largest energy error: {safe:.2f} below the cliff, {diverging:.3e} on it")
+
+    assert safe < 100.0
+    assert diverging > 1000.0 * safe
+    # Both rates are what a practitioner would call healthy, and one chain's
+    # proposals carry an energy error five orders of magnitude larger than
+    # the other's. That is the whole of the module's rule.
+    assert below_the_cliff.acceptance_rate > 0.65
+    assert on_the_cliff.acceptance_rate > 0.65
