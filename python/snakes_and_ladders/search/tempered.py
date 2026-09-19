@@ -34,6 +34,7 @@ from typing import TypeVar
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.search.gibbs import (
     _Indexed,
     cached_topology_score,
@@ -41,9 +42,17 @@ from snakes_and_ladders.search.gibbs import (
     topology_step,
 )
 from snakes_and_ladders.search.infer import Model, MoveSet
-from snakes_and_ladders.search.potts_mcmc import _swap_log_ratio
+from snakes_and_ladders.search.potts_mcmc import (
+    PottsMove,
+    _houdayer_move,
+    _swap_log_ratio,
+    _sweep_for,
+    energies,
+)
 from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
+from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.potts import site_field
 from snakes_and_ladders.track import TrackedOptimization, current
 
 S = TypeVar("S")
@@ -73,6 +82,13 @@ class TemperedEnsemble:
     scores : Mapping[Hashable, float]
         Every structure any replica held at a recorded sweep, keyed, with
         its log-density at temperature one.
+    walkers : np.ndarray
+        ``walkers[t, w]`` is the rung walker ``w`` sat at, at recorded sweep
+        ``t``, shape ``(n_recorded, n_replicas)``. A *walker* is a structure
+        followed through the exchanges, where a *replica* is a temperature
+        that structures pass through --- the two readings of the same run, and
+        a round trip is a statement about the first. :func:`round_trips`
+        counts them.
     """
 
     temperatures: tuple[float, ...]
@@ -80,6 +96,22 @@ class TemperedEnsemble:
     log_densities: np.ndarray
     swap_acceptance: np.ndarray
     scores: Mapping[Hashable, float]
+    walkers: np.ndarray
+
+    @property
+    def round_trip_time(self) -> float:
+        """Recorded sweeps a walker spends per round trip, averaged over walkers.
+
+        ``inf`` where no walker completed one, which is the reading a ladder
+        with a gap gives and is not a division to guard against: a ladder no
+        structure crosses has an infinite round-trip time, and reporting it as
+        such is what makes it comparable with one that does.
+        """
+        counts = round_trips(self.walkers)
+        total = float(counts.sum())
+        if total == 0.0:
+            return float("inf")
+        return float(self.walkers.shape[0] * self.walkers.shape[1]) / total
 
     def replica_at(self, temperature: float) -> int:
         """The index of the replica at ``temperature``.
@@ -96,6 +128,50 @@ class TemperedEnsemble:
                 return index
         msg = f"no replica at temperature {temperature}; the ladder is {self.temperatures}"
         raise ValueError(msg)
+
+
+def round_trips(walkers: np.ndarray) -> np.ndarray:
+    """Round trips completed per walker: the coldest rung to the hottest and back.
+
+    The one definition of a round trip in this package. A walker is counted
+    when it returns to rung ``0`` having reached the last rung since it was
+    there, so a walker rattling at the cold end scores nothing however often
+    it revisits rung ``0`` --- which is the whole reason the statistic is
+    preferred to an exchange acceptance, that being a per-pair quantity a
+    ladder can look healthy in while no structure crosses it
+    (Katzgraber, Trebst, Huse & Troyer 2006).
+
+    Parameters
+    ----------
+    walkers : np.ndarray
+        :attr:`TemperedEnsemble.walkers`: the rung of each walker at each
+        recorded sweep, shape ``(n_recorded, n_replicas)``.
+
+    Returns
+    -------
+    np.ndarray
+        ``(n_replicas,)`` of counts, one per walker.
+
+    Raises
+    ------
+    ValueError
+        If the trace is not two-dimensional.
+    """
+    trace = np.asarray(walkers, dtype=np.int64)
+    if trace.ndim != 2:
+        msg = f"a walker trace is (n_recorded, n_replicas), got {trace.shape}"
+        raise ValueError(msg)
+    top = int(trace.max(initial=0))
+    counts = np.zeros(trace.shape[1], dtype=np.int64)
+    for walker in range(trace.shape[1]):
+        reached_top = False
+        for rung in trace[:, walker].tolist():
+            if rung == top:
+                reached_top = True
+            elif rung == 0 and reached_top:
+                counts[walker] += 1
+                reached_top = False
+    return counts
 
 
 def _check_ladder(
@@ -141,6 +217,11 @@ def _exchange(
     recorded_keys: list[list[Hashable]] = [[] for _ in range(n_replicas)]
     densities: list[list[float]] = []
     scores: dict[Hashable, float] = {}
+    # Which walker sits at each rung. An exchange swaps structures between
+    # temperatures, so this is what says a *structure* crossed the ladder,
+    # which the per-pair acceptance cannot.
+    at_rung = list(range(n_replicas))
+    trace: list[list[int]] = []
     # One lookup for both ensembles (`snakes_and_ladders.track`), since both
     # run this loop. `swap_acceptance` is the mean over adjacent pairs of the
     # fraction accepted so far -- the mean of the vector `TemperedEnsemble`
@@ -165,12 +246,17 @@ def _exchange(
                 accepted[pair] += 1
                 states[pair], states[pair + 1] = states[pair + 1], states[pair]
                 values[pair], values[pair + 1] = values[pair + 1], values[pair]
+                at_rung[pair], at_rung[pair + 1] = at_rung[pair + 1], at_rung[pair]
         if sweep >= burn_in and (sweep - burn_in) % thin == 0:
             for replica in range(n_replicas):
                 name = key(states[replica])
                 scores[name] = values[replica]
                 recorded_keys[replica].append(name)
             densities.append(list(values))
+            rungs = [0] * n_replicas
+            for rung, walker in enumerate(at_rung):
+                rungs[walker] = rung
+            trace.append(rungs)
         tracked.record(
             sweep,
             state=states[0],
@@ -183,6 +269,7 @@ def _exchange(
         log_densities=np.array(densities),
         swap_acceptance=accepted / proposed,
         scores=scores,
+        walkers=np.array(trace, dtype=np.int64).reshape(len(trace), n_replicas),
     )
 
 
@@ -242,6 +329,129 @@ def tempered_factor_graph(
     return _exchange(
         step,
         lambda state: tuple(int(value) for value in state),
+        states,
+        values,
+        temperatures,
+        children,
+        rng,
+        n_sweeps,
+        burn_in,
+        thin,
+    )
+
+
+def tempered_potts_pair(
+    graph: PottsGraph,
+    field: np.ndarray,
+    temperatures: Sequence[float],
+    rng: np.random.Generator,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+    *,
+    move: PottsMove = PottsMove.SINGLE_SITE,
+    houdayer: bool = True,
+    backend: Backend = Backend.RUST,
+) -> TemperedEnsemble:
+    """A replica pair per rung, exchanging along the ladder, joined by Houdayer's move.
+
+    The ensemble Houdayer (2001) defines his move on: two systems run side by
+    side, and at each rung the pair takes the isoenergetic cluster move between
+    the two sweeps and the exchange. The state carried along the ladder is the
+    *pair*, so the joint target at a rung is the product of the two tempered
+    marginals and the exchange ratio takes the pair's summed energy --- which
+    is :func:`_exchange`'s own ratio on that energy, not a second one.
+
+    Nothing here is a new sampler. The within-replica sweep is
+    :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts`'s own, through
+    the one dispatch
+    :func:`~snakes_and_ladders.search.potts_mcmc._sweep_for` holds, and the
+    exchange is the loop the factor graph and the topologies already run.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The lattice. Couplings of either sign, subject to ``move``'s own
+        refusal.
+    field : np.ndarray
+        External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
+    temperatures : Sequence[float]
+        The ladder, at least two, all positive, in the order that fixes which
+        pairs are adjacent for exchange.
+    rng : np.random.Generator
+        The parent: one child per rung, then the exchange uniforms only.
+    n_sweeps, burn_in, thin : int
+        As :func:`tempered_factor_graph`, per rung.
+    move : PottsMove
+        The within-replica move set, applied to each replica of every pair.
+    houdayer : bool
+        Whether each rung's pair takes the isoenergetic move between the
+        sweeps and the exchange. ``False`` is the control the round-trip time
+        is read against.
+    backend : Backend
+        As :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts`.
+
+    Returns
+    -------
+    TemperedEnsemble
+        Keyed by the pair, so :attr:`TemperedEnsemble.keys` names both
+        replicas of a rung and :attr:`TemperedEnsemble.log_densities` is
+        their summed log-density at temperature one.
+
+    Raises
+    ------
+    ValueError
+        If the ladder is unusable, as :func:`tempered_factor_graph` states, or
+        if ``houdayer`` is asked for at other than two states --- Houdayer's
+        overlap is the Ising one (issue #756).
+    """
+    _check_ladder(temperatures, n_sweeps, thin, burn_in)
+    rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
+    n_states = int(rows.shape[1])
+    if houdayer and n_states != 2:
+        msg = (
+            f"Houdayer's move is defined on the Ising overlap q_i = s_i s'_i "
+            f"and this model has {n_states} states: pass houdayer=False, or "
+            "use two states (issue #756)"
+        )
+        raise ValueError(msg)
+
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    advance = _sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+    children = rng.spawn(len(temperatures))
+
+    def start(child: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+        return (
+            np.ascontiguousarray(
+                child.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
+            ),
+            np.ascontiguousarray(
+                child.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
+            ),
+        )
+
+    def density(pair: tuple[np.ndarray, np.ndarray]) -> float:
+        return -float(energies(graph, rows, np.stack(pair)).sum())
+
+    states = [start(child) for child in children]
+    values = [density(pair) for pair in states]
+
+    def step(
+        pair: tuple[np.ndarray, np.ndarray],
+        _: float,
+        temperature: float,
+        child: np.random.Generator,
+    ) -> tuple[tuple[np.ndarray, np.ndarray], float]:
+        beta = 1.0 / temperature
+        for replica in pair:
+            advance(replica, child, beta)
+        if houdayer:
+            _houdayer_move(pair[0], pair[1], offsets, neighbours, child)
+        return pair, density(pair)
+
+    return _exchange(
+        step,
+        lambda pair: tuple(int(value) for value in np.concatenate(pair)),
         states,
         values,
         temperatures,

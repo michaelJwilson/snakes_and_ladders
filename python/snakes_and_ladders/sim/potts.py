@@ -292,6 +292,89 @@ def heat_bath_log_weights(
     return local
 
 
+def owner_rows(offsets: np.ndarray) -> np.ndarray:
+    """Which site each entry of the compressed adjacency belongs to.
+
+    ``offsets`` bounds site ``i``'s neighbours at ``offsets[i]:offsets[i + 1]``,
+    so this is each site repeated by its degree. Built once per run and handed
+    to :func:`local_fields`, which is called once per proposal (the allocation
+    rule).
+    """
+    degree = np.diff(offsets)
+    owner: np.ndarray = np.repeat(np.arange(degree.shape[0]), degree)
+    return owner
+
+
+def local_fields(
+    rows: np.ndarray,
+    state: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    owner: np.ndarray,
+    beta: float = 1.0,
+) -> np.ndarray:
+    """Every site's unnormalized log conditional at once.
+
+    :func:`heat_bath_log_weights` for one site, over the whole lattice in one
+    reduction: a gradient-informed proposal reads every site's conditional per
+    step (:mod:`snakes_and_ladders.search.balanced`), and a Python loop over
+    sites to build it would cost a heat-bath sweep per proposal.
+
+    The couplings reach the right cell by one ``bincount`` over the compressed
+    rows, keyed on ``site * n_states + state[neighbour]``. The entries are
+    walked in the order :func:`heat_bath_log_weights` walks them, but the field
+    is added **after** their sum rather than accumulated into, so the two agree
+    to a relative ``1e-12`` and not bitwise
+    (`tests/regression/sim/test_potts_simulate.py`). The site's own label does
+    not appear: a lattice has no self-coupling, which is what makes a
+    single-site energy difference exact from this array alone.
+
+    Parameters
+    ----------
+    rows : np.ndarray
+        The field as one row per site, shape ``(n_nodes, n_states)``, from
+        :func:`site_field`.
+    state : np.ndarray
+        The current configuration, shape ``(n_nodes,)``.
+    neighbours, couplings : np.ndarray
+        The compressed adjacency's second and third rows.
+    owner : np.ndarray
+        :func:`owner_rows` of the first, hoisted by the caller.
+    beta : float
+        Inverse temperature, applied to the whole conditional as
+        :func:`heat_bath_log_weights` applies it. At 1.0 the multiplication is
+        the identity and is skipped.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_nodes, n_states)``.
+
+    Examples
+    --------
+    >>> offsets = np.array([0, 1, 2])
+    >>> local_fields(
+    ...     np.zeros((2, 2)),
+    ...     np.array([0, 1]),
+    ...     np.array([1, 0]),
+    ...     np.array([0.5, 0.5]),
+    ...     owner_rows(offsets),
+    ... )
+    array([[0. , 0.5],
+           [0.5, 0. ]])
+    """
+    n_nodes, n_states = rows.shape
+    counted = np.bincount(
+        owner * n_states + state[neighbours],
+        weights=couplings,
+        minlength=n_nodes * n_states,
+    )
+    local: np.ndarray = rows + counted.reshape(n_nodes, n_states)
+    if beta != 1.0:
+        local *= beta
+    return local
+
+
 _REQUIRED_FIELDS = frozenset(
     {
         "seed",

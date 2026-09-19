@@ -49,11 +49,16 @@ SLIMMING_BASELINE = {
     "modules without a docstring": 0,
     "root exports": 7,
     "test modules pinning a twin to its oracle beyond the first": 13,
-    # Both rows rise with `track.py`, the run-tracking seam issue #778 put
-    # beside `log.py` and `parallel.py`: one module, and the 23 API-map
-    # entries its classes and functions declare.
-    "flat modules": 149,
-    "API-map entries": 1599,
+    # Both rows count the tree rather than a duplicate, so they move when a
+    # module lands: `search.balanced`, the one proposal kernel the Potts
+    # lattice and the factor graph share, took them from 148 and 1,576
+    # (#756). The second moves on a public name too, and #756's cluster moves
+    # for a frustrated lattice added twelve without adding a module. `track.py`,
+    # the run seam issue #778 put beside `log.py`, is the second module, and
+    # its classes and functions declare entries beside the six `Metrics` sets
+    # added to the modules owning each problem's objective or energy.
+    "flat modules": 150,
+    "API-map entries": 1629,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.

@@ -1,4 +1,4 @@
-"""Monte Carlo move sets on a Potts lattice: single-site, Swendsen-Wang, Wolff.
+"""Monte Carlo move sets on a Potts lattice: single-site, cluster, gradient-informed.
 
 `ROADMAP.md` §1.4 names both cluster algorithms. Single-site flips slow
 critically near the transition --- the autocorrelation time of the energy
@@ -15,6 +15,32 @@ plausible configurations, and converges to the wrong distribution. So a cluster
 recolouring carries a Metropolis accept step on that difference, and the
 chi-square tests in `tests/regression/search/test_potts_mcmc.py` are run with
 and without a field because only the first catches its absence.
+
+**Two of the six move sets are gradient-informed, and on this energy they are
+one kernel.** A locally balanced proposal (Zanella 2020) weights every
+single-site change by ``sqrt(pi(s') / pi(s))``; Gibbs-with-gradients
+(Grathwohl et al. 2021) weights it by the same function of the *first-order
+Taylor estimate* of that ratio at the current one-hot state. On a pairwise
+energy the estimate is the ratio --- the relaxed log weight is affine in each
+site's row, so a single-site change has no second-order term ---
+so the two propose from the same law and differ in what they compute to get
+there. That is a property of the Potts energy and not of the implementation,
+which is why it is pinned by a test rather than assumed by a shared branch:
+:func:`taylor_log_ratios` is the estimate, :func:`autodiff_log_ratios` is the
+same quantity from the tape, and the three agree to ``1e-12``.
+
+**Two of the six run where the Fortuin-Kasteleyn construction cannot.** Its
+bond probability ``1 - exp(-J)`` is not a probability below zero, so Wolff and
+Swendsen-Wang are refused on an antiferromagnet --- the instance a cluster move
+is wanted for. :func:`_niedermayer_sweep` activates a bond on its energy
+relative to a threshold ``E_0`` instead (Niedermayer 1988), which is a
+probability for either sign and is Wolff's own where Wolff runs;
+:func:`sample_potts_pair` runs two replicas at one temperature and moves them
+by Houdayer's isoenergetic cluster swap (2001), whose acceptance is 1 by an
+identity rather than by a construction. Neither is a free lunch and the
+package does not report one: on the frustrated triangular lattice both
+clusters percolate, which
+``docs/experiments/022-cluster-moves-for-frustrated-lattices.md`` measures.
 
 These are samplers, not optimizers: they are validated by the distribution they
 converge to, and nothing here claims to find a ground state. The exception is
@@ -47,8 +73,21 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.opt.schedule import AdaptedLadder, TempSchedule, adapt_ladder
+from snakes_and_ladders.search.balanced import (
+    draw_change,
+    log_balanced_weights,
+    log_metropolis_ratio,
+    log_normalizer,
+    log_ratios,
+)
 from snakes_and_ladders.sim.graph import PottsGraph
-from snakes_and_ladders.sim.potts import energies, heat_bath_log_weights, site_field
+from snakes_and_ladders.sim.potts import (
+    energies,
+    heat_bath_log_weights,
+    local_fields,
+    owner_rows,
+    site_field,
+)
 
 # `current` is aliased: `parallel_tempering` already binds that name to the
 # replicas' energies, and one of the two has to give.
@@ -68,9 +107,14 @@ __all__ = [
     "TemperedChains",
     "adapt_ladder_potts",
     "anneal_potts",
+    "autodiff_log_ratios",
     "energies",
+    "houdayer_cluster",
+    "niedermayer_threshold",
     "parallel_tempering",
     "sample_potts",
+    "sample_potts_pair",
+    "taylor_log_ratios",
     "tempered",
 ]
 
@@ -97,6 +141,23 @@ class PottsMove(StrEnum):
     SINGLE_SITE = "single-site"
     SWENDSEN_WANG = "swendsen-wang"
     WOLFF = "wolff"
+    LOCALLY_BALANCED = "locally-balanced"
+    GIBBS_WITH_GRADIENTS = "gibbs-with-gradients"
+    NIEDERMAYER = "niedermayer"
+
+
+#: The move sets built on the Fortuin-Kasteleyn bond construction, which needs
+#: every coupling non-negative. Named rather than written as "not single-site":
+#: the gradient-informed moves are single-flip and run on an antiferromagnet,
+#: and a negation would have refused them with the clusters. Niedermayer's
+#: rule builds clusters on a coupling of either sign and is not in the set,
+#: which is the whole reason issue #756 adds it.
+_CLUSTER_MOVES = frozenset({PottsMove.SWENDSEN_WANG, PottsMove.WOLFF})
+
+#: The move sets :func:`_balanced_sweep_at` serves.
+_BALANCED_MOVES = frozenset(
+    {PottsMove.LOCALLY_BALANCED, PottsMove.GIBBS_WITH_GRADIENTS}
+)
 
 
 @dataclass(frozen=True)
@@ -256,17 +317,18 @@ def sample_potts(
     field : np.ndarray
         External field ``h``, shape ``(n_states,)``.
     move : PottsMove
-        The move set. All three leave the same Boltzmann distribution
+        The move set. All six leave the same Boltzmann distribution
         invariant, which is what
         `tests/regression/search/test_potts_mcmc.py` asserts.
     rng : np.random.Generator
         Passed in rather than seeded here: seeding inside a call makes every
         draw of an ensemble identical (`sim/CLAUDE.md`, issue #240).
     n_sweeps : int
-        Recorded sweeps. A sweep is ``n_nodes`` heat-bath updates, one
-        Swendsen-Wang bond-and-recolour pass over the whole lattice, or *one*
-        Wolff cluster flip --- see :func:`_wolff_sweep` for why the Wolff
-        sweep cannot be sized to match the other two.
+        Recorded sweeps. A sweep is ``n_nodes`` heat-bath updates, ``n_nodes``
+        gradient-informed proposals, one Swendsen-Wang bond-and-recolour pass
+        over the whole lattice, or *one* Wolff or Niedermayer cluster step ---
+        see :func:`_wolff_sweep` for why a single-cluster sweep cannot be
+        sized to match the others.
     burn_in : int
         Sweeps run and discarded before recording starts.
     thin : int
@@ -281,9 +343,9 @@ def sample_potts(
         cluster moves' bond probabilities and the field accept step are
         tempered by the same division as the heat bath.
     backend : Backend
-        Which implementation runs the **heat-bath** sweep; the cluster moves
-        have one and ignore it. The chain is the same either way, state for
-        state, which is what makes
+        Which implementation runs the **heat-bath** sweep; the cluster and
+        gradient-informed moves have one and ignore it. The chain is the same
+        either way, state for state, which is what makes
         :data:`~snakes_and_ladders.backend.Backend.RUST` the default
         (:func:`_sweep_at`, issue #599).
 
@@ -300,7 +362,7 @@ def sample_potts(
         bond probability ``1 - exp(-J)`` is not a probability there, and an
         antiferromagnet has no like-spin clusters to flip.
     """
-    if move is not PottsMove.SINGLE_SITE and min(graph.coupling, default=0.0) < 0.0:
+    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
         msg = (
             f"{move} needs every coupling >= 0: the bond probability "
             "1 - exp(-J) is not a probability for J < 0, and an "
@@ -318,23 +380,14 @@ def sample_potts(
         rng.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
     )
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    sweep = (
-        _sweep_at(rows, offsets, neighbours, couplings, backend)
-        if move is PottsMove.SINGLE_SITE
-        else None
-    )
+    advance = _sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
 
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
     cluster_total, cluster_count = 0, 0
     for step in range(-burn_in * thin, n_sweeps * thin):
-        if sweep is not None:
-            sweep(state, rng, 1.0)
-        elif move is PottsMove.SWENDSEN_WANG:
-            _swendsen_wang_sweep(state, graph, rows, rng)
-        else:
-            cluster_total += _wolff_sweep(
-                state, rows, offsets, neighbours, couplings, rng
-            )
+        size = advance(state, rng, 1.0)
+        if size:
+            cluster_total += size
             cluster_count += 1
         if step >= 0 and (step + 1) % thin == 0:
             recorded[step // thin] = state
@@ -399,7 +452,11 @@ def anneal_potts(
     difference between them is a statement about the schedule.
 
     ``move`` names the move set. Single-site is the default and the fair
-    annealed baseline. The two cluster move sets refuse a negative coupling,
+    annealed baseline. The two gradient-informed move sets anneal a coupling
+    of either sign, at ``n_nodes`` times the site visits per sweep: each of
+    their ``n_nodes`` proposals reads every site's conditional, where a
+    heat-bath sweep reads each site's once. The two cluster move sets refuse a
+    negative coupling,
     so they anneal only a ferromagnet --- which `spatio_only` is, and which
     issue #551 anneals them on. They are **not** a faster route to the same
     answer there: the Fortuin-Kasteleyn bond construction is exact at zero
@@ -431,7 +488,7 @@ def anneal_potts(
     -------
     AnnealedPotts
     """
-    if move is not PottsMove.SINGLE_SITE and min(graph.coupling, default=0.0) < 0.0:
+    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
         msg = (
             f"{move} needs every coupling >= 0: the bond probability "
             "1 - exp(-J) is not a probability for J < 0, and an "
@@ -447,7 +504,11 @@ def anneal_potts(
 
     best_state = state.copy()
     best_energy = float(energies(graph, rows, state[None])[0])
-    sweep = _sweep_at(rows, offsets, neighbours, couplings, backend)
+    sweep = (
+        _balanced_sweep_at(rows, offsets, neighbours, couplings, move)
+        if move in _BALANCED_MOVES
+        else _sweep_at(rows, offsets, neighbours, couplings, backend)
+    )
     # A heat-bath sweep reads every site's label once as a neighbour of each
     # incident edge and writes it once; the bond pass of Swendsen-Wang reads
     # the same two labels per edge. Counting both in one unit is what makes
@@ -466,6 +527,9 @@ def anneal_potts(
         if move is PottsMove.SINGLE_SITE:
             sweep(state, rng, 1.0 / temperature)
             visits += per_sweep
+        elif move in _BALANCED_MOVES:
+            sweep(state, rng, 1.0 / temperature)
+            visits += graph.n_nodes * per_sweep
         else:
             counter = ClusterCounter()
             beta = 1.0 / temperature
@@ -473,18 +537,32 @@ def anneal_potts(
                 _swendsen_wang_sweep(state, graph, rows, rng, counter, beta)
                 visits += per_sweep
             else:
-                _wolff_sweep(
-                    state,
-                    rows,
-                    offsets,
-                    neighbours,
-                    couplings,
-                    rng,
-                    counter,
-                    graph,
-                    beta,
-                )
-                # A Wolff step reads each cluster member's neighbours and
+                if move is PottsMove.NIEDERMAYER:
+                    _niedermayer_sweep(
+                        state,
+                        rows,
+                        offsets,
+                        neighbours,
+                        couplings,
+                        rng,
+                        counter,
+                        graph,
+                        beta,
+                        niedermayer_threshold(couplings),
+                    )
+                else:
+                    _wolff_sweep(
+                        state,
+                        rows,
+                        offsets,
+                        neighbours,
+                        couplings,
+                        rng,
+                        counter,
+                        graph,
+                        beta,
+                    )
+                # A single-cluster step reads each member's neighbours and
                 # writes the members; a heat-bath sweep is charged the same
                 # way, so one budget covers both.
                 visits += sum(counter.sizes) * (
@@ -735,6 +813,199 @@ def adapt_ladder_potts(
     return adapt_ladder(measure, ladder, band, max_rounds, max_replicas)
 
 
+def _sweep_for(
+    move: PottsMove,
+    graph: PottsGraph,
+    rows: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    backend: Backend,
+) -> Callable[[np.ndarray, np.random.Generator, float], int]:
+    """One sweep of ``move``, as a call taking a state, a generator and ``beta``.
+
+    The one place a move set is turned into a sweep, so
+    :func:`sample_potts` and :func:`sample_potts_pair` run one dispatch rather
+    than two that can drift. Each branch calls the sweep it already called,
+    with the same arguments in the same order, so every existing chain is
+    bitwise what it was.
+
+    Returns
+    -------
+    Callable[[np.ndarray, np.random.Generator, float], int]
+        The sweep, returning the size of the cluster it built and ``0`` where
+        the move set builds none --- which is what
+        :attr:`PottsChain.mean_cluster_size` averages.
+    """
+    if move is PottsMove.SINGLE_SITE or move in _BALANCED_MOVES:
+        single = (
+            _sweep_at(rows, offsets, neighbours, couplings, backend)
+            if move is PottsMove.SINGLE_SITE
+            else _balanced_sweep_at(rows, offsets, neighbours, couplings, move)
+        )
+
+        def sweep(
+            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+        ) -> int:
+            single(state, rng, beta)
+            return 0
+
+        return sweep
+
+    if move is PottsMove.SWENDSEN_WANG:
+
+        def bond_pass(
+            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+        ) -> int:
+            _swendsen_wang_sweep(state, graph, rows, rng, None, beta)
+            return 0
+
+        return bond_pass
+
+    if move is PottsMove.NIEDERMAYER:
+        threshold = niedermayer_threshold(couplings)
+
+        def generalized(
+            state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+        ) -> int:
+            return _niedermayer_sweep(
+                state,
+                rows,
+                offsets,
+                neighbours,
+                couplings,
+                rng,
+                beta=beta,
+                threshold=threshold,
+            )
+
+        return generalized
+
+    def one_cluster(
+        state: np.ndarray, rng: np.random.Generator, beta: float = 1.0
+    ) -> int:
+        return _wolff_sweep(state, rows, offsets, neighbours, couplings, rng, beta=beta)
+
+    return one_cluster
+
+
+def sample_potts_pair(
+    graph: PottsGraph,
+    field: np.ndarray,
+    move: PottsMove,
+    rng: np.random.Generator,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+    *,
+    temperature: float = 1.0,
+    houdayer: bool = True,
+    backend: Backend = Backend.RUST,
+) -> tuple[PottsChain, PottsChain]:
+    """Two replicas at one temperature, joined by Houdayer's isoenergetic move.
+
+    Each recorded step is one sweep of ``move`` on each replica, then --- where
+    ``houdayer`` --- one :func:`_houdayer_move` on the pair. The two replicas
+    are the *pair* Houdayer (2001) defines the move on, so this is where the
+    move lives rather than in :func:`sample_potts`, which has one chain and
+    nothing to exchange with.
+
+    **Each replica's marginal is the same Boltzmann law one chain targets.**
+    The joint target is the product of the two, and the move is an involution
+    on it with a symmetric proposal, so it leaves the product invariant; the
+    marginal follows. `tests/regression/search/test_potts_mcmc.py` asserts it
+    against the enumerated law rather than against this paragraph.
+
+    **Houdayer's move alone is not a sampler**, and nothing here pretends
+    otherwise: it exchanges labels between replicas and so leaves the pair
+    ``{s_i, s'_i}`` at every site exactly as it found it. Run without a move
+    that changes those pairs it explores an orbit of the initial draw, which is
+    a property this file pins rather than a limitation it works around. So
+    ``move`` is the replicas' own sweep and Houdayer's move sits beside it.
+
+    Parameters
+    ----------
+    graph, field, move, rng, n_sweeps, burn_in, thin, temperature, backend
+        As :func:`sample_potts`, applied to each replica. ``rng`` spawns one
+        child per replica and keeps the pair's own draws, so the two replicas
+        do not share a stream --- :func:`parallel_tempering`'s rule, for its
+        reason.
+    houdayer : bool
+        Whether the pair takes the isoenergetic move after each pair of
+        sweeps. ``False`` is the control: two independent chains, which is
+        what a round-trip time or an autocorrelation is read against.
+
+    Returns
+    -------
+    tuple[PottsChain, PottsChain]
+        One per replica, recorded on the same schedule. ``mean_cluster_size``
+        is the replica's own move's, so Houdayer's clusters are not counted
+        into a number that means the within-replica move's cost.
+
+    Raises
+    ------
+    ValueError
+        If the field carries other than two states while ``houdayer`` ---
+        Houdayer's overlap ``q_i = s_i s'_i`` is the Ising one and issue #756
+        validates the move at ``q = 2`` alone --- or if ``move`` is a
+        Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
+        :func:`sample_potts` refuses it.
+    """
+    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
+        msg = (
+            f"{move} needs every coupling >= 0: the bond probability "
+            "1 - exp(-J) is not a probability for J < 0, and an "
+            "antiferromagnet has no like-spin clusters to flip"
+        )
+        raise ValueError(msg)
+
+    graph, field = tempered(graph, field, temperature)
+    rows = site_field(field, graph.n_nodes)
+    n_states = int(rows.shape[1])
+    if houdayer and n_states != 2:
+        msg = (
+            f"Houdayer's move is defined on the Ising overlap q_i = s_i s'_i "
+            f"and this model has {n_states} states: pass houdayer=False, or "
+            "use two states (issue #756)"
+        )
+        raise ValueError(msg)
+
+    children = rng.spawn(2)
+    states = [
+        np.ascontiguousarray(
+            child.integers(0, n_states, size=graph.n_nodes), dtype=np.int64
+        )
+        for child in children
+    ]
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    advance = _sweep_for(move, graph, rows, offsets, neighbours, couplings, backend)
+
+    recorded = [np.empty((n_sweeps, graph.n_nodes), dtype=np.int64) for _ in range(2)]
+    totals, counts = [0, 0], [0, 0]
+    for step in range(-burn_in * thin, n_sweeps * thin):
+        for replica in range(2):
+            size = advance(states[replica], children[replica], 1.0)
+            if size:
+                totals[replica] += size
+                counts[replica] += 1
+        if houdayer:
+            _houdayer_move(states[0], states[1], offsets, neighbours, rng)
+        if step >= 0 and (step + 1) % thin == 0:
+            for replica in range(2):
+                recorded[replica][step // thin] = states[replica]
+    return tuple(  # type: ignore[return-value]
+        PottsChain(
+            states=recorded[replica],
+            mean_cluster_size=(
+                totals[replica] / counts[replica]
+                if counts[replica]
+                else float(graph.n_nodes)
+            ),
+        )
+        for replica in range(2)
+    )
+
+
 def _sweep_at(
     rows: np.ndarray,
     offsets: np.ndarray,
@@ -923,6 +1194,199 @@ def _site_update(
     state[node] = np.searchsorted(cumulative, draw * cumulative[-1])
 
 
+def taylor_log_ratios(
+    rows: np.ndarray,
+    state: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    owner: np.ndarray,
+    beta: float = 1.0,
+) -> np.ndarray:
+    """Gibbs-with-gradients' first-order estimate of every single-flip change.
+
+    Grathwohl et al. (2021) relax the state to the simplex --- the one-hot
+    matrix `learn.relaxed.one_hot` writes --- and estimate
+    ``log pi(s') - log pi(s)`` by ``grad(log pi)(x) . (x' - x)``, one gradient
+    for the whole neighbourhood against one energy per neighbour.
+
+    **On a Potts energy the estimate is exact.** The relaxed log weight
+    ``sum_i h_i . x_i + sum_(ij) J_ij x_i . x_j`` is affine in each site's row
+    --- a lattice has no self-coupling, so no term carries ``x_i`` twice ---
+    and a single-flip change moves one row, so the first-order term is the
+    whole difference. The gradient at a one-hot is then
+    :func:`snakes_and_ladders.sim.potts.local_fields`, which is what this
+    computes: the tape returns the same numbers
+    (:func:`autodiff_log_ratios`, pinned at ``1e-12``) for a tape's cost per
+    proposal. Where the estimate is exact this equals
+    :func:`~snakes_and_ladders.search.balanced.log_ratios`, and the two stay
+    separate functions because that equality is a property of *this* energy
+    and is pinned rather than assumed.
+
+    Parameters
+    ----------
+    rows, state, neighbours, couplings, owner, beta
+        As :func:`snakes_and_ladders.sim.potts.local_fields`.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_nodes, n_states)``.
+    """
+    return log_ratios(
+        local_fields(rows, state, neighbours, couplings, owner, beta), state
+    )
+
+
+def autodiff_log_ratios(
+    graph: PottsGraph, rows: np.ndarray, state: np.ndarray, beta: float = 1.0
+) -> np.ndarray:
+    """:func:`taylor_log_ratios` from the tape: the definition, not the route.
+
+    The relaxed log weight is built in ``torch`` on the one-hot state and
+    differentiated by ``torch.autograd.grad``, which is what Gibbs-with-
+    gradients *is*. It is the oracle rather than the sampler's route: the
+    closed form :func:`taylor_log_ratios` takes reproduces it to ``1e-12``
+    (`tests/regression/search/test_potts_mcmc.py`) and costs one ``bincount``
+    against a tape built and walked per proposal.
+
+    ``torch`` is imported here rather than at module scope: it is the
+    heaviest import in the package and no chain this module runs needs it.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The lattice, read for its edge list and per-edge couplings.
+    rows : np.ndarray
+        The field as one row per site, shape ``(n_nodes, n_states)``.
+    state : np.ndarray
+        The current configuration.
+    beta : float
+        Inverse temperature, scaling the whole log weight.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(n_nodes, n_states)``.
+    """
+    import torch
+
+    # `torch.tensor` rather than `from_numpy`: a graph hands out read-only
+    # views of its arrays (#623), which `from_numpy` takes with a warning
+    # about undefined behaviour on write. These are read and never written.
+    labels = np.asarray(state, dtype=np.int64)
+    probabilities = torch.zeros(rows.shape, dtype=torch.float64)
+    probabilities[torch.arange(rows.shape[0]), torch.tensor(labels)] = 1.0
+    probabilities.requires_grad_(True)
+
+    value = (probabilities * torch.tensor(rows, dtype=torch.float64)).sum()
+    if graph.edges:
+        ends = graph.edge_index
+        first = probabilities[torch.tensor(ends[:, 0], dtype=torch.long)]
+        second = probabilities[torch.tensor(ends[:, 1], dtype=torch.long)]
+        coupling = torch.tensor(graph.edge_coupling, dtype=torch.float64)
+        value = value + (coupling * (first * second).sum(dim=1)).sum()
+    (gradient,) = torch.autograd.grad(beta * value, probabilities)
+    return log_ratios(gradient.detach().numpy(), labels)
+
+
+def _balanced_sweep_at(
+    rows: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    move: PottsMove,
+) -> Callable[[np.ndarray, np.random.Generator, float], None]:
+    """``n_nodes`` locally balanced proposals per sweep, each Metropolis-corrected.
+
+    The move set Zanella (2020) defines and Grathwohl et al. (2021) take the
+    gradient form of; :mod:`snakes_and_ladders.search.balanced` holds the
+    kernel both share and derives the correction. A sweep is ``n_nodes``
+    proposals, the heat bath's sweep size, so an autocorrelation time in
+    sweeps compares the two without a normalization.
+
+    **The conditional is maintained, not rebuilt.** Every proposal reads every
+    site's conditional, and rebuilding it from the adjacency per proposal
+    would make a sweep quadratic in the lattice for no new information: a flip
+    at ``i`` moves only the rows of ``i``'s neighbours, by the incident
+    coupling. Those rows are copied before the flip and restored on a
+    rejection, so a rejected proposal leaves the array it found rather than a
+    value that has been added to and subtracted from. The array is rebuilt
+    once per sweep, which is also what lets ``beta`` change between sweeps
+    (:func:`anneal_potts`).
+
+    The two move sets differ in one expression --- which estimate of the
+    single-flip differences weights the neighbourhood --- and share the accept
+    step, which takes the *exact* difference whichever proposed it.
+    """
+    owner = owner_rows(offsets)
+    bounds = offsets.tolist()
+    incident, weights = neighbours.tolist(), couplings.tolist()
+    gradient_informed = move is PottsMove.GIBBS_WITH_GRADIENTS
+
+    def sweep(state: np.ndarray, rng: np.random.Generator, beta: float) -> None:
+        local = local_fields(rows, state, neighbours, couplings, owner, beta)
+        for _ in range(state.shape[0]):
+            exact = log_ratios(local, state)
+            estimate = (
+                taylor_log_ratios(rows, state, neighbours, couplings, owner, beta)
+                if gradient_informed
+                else exact
+            )
+            forward_weights = log_balanced_weights(estimate, state)
+            forward_total = log_normalizer(forward_weights)
+            node, colour = draw_change(forward_weights, forward_total, rng)
+
+            previous = int(state[node])
+            log_ratio = float(exact[node, colour])
+            forward = float(forward_weights[node, colour])
+
+            # Advanced indexing already copies, so this is the restore buffer
+            # and not a view of the rows about to change.
+            touched = incident[bounds[node] : bounds[node + 1]]
+            restored = local[touched]
+            _apply_flip(local, state, node, colour, incident, weights, bounds, beta)
+            reverse_estimate = (
+                taylor_log_ratios(rows, state, neighbours, couplings, owner, beta)
+                if gradient_informed
+                else log_ratios(local, state)
+            )
+            reverse_weights = log_balanced_weights(reverse_estimate, state)
+            reverse_total = log_normalizer(reverse_weights)
+            reverse = float(reverse_weights[node, previous])
+
+            log_alpha = log_metropolis_ratio(
+                log_ratio, forward, forward_total, reverse, reverse_total
+            )
+            if not (log_alpha >= 0.0 or rng.random() < np.exp(log_alpha)):
+                local[touched] = restored
+                state[node] = previous
+
+    return sweep
+
+
+def _apply_flip(
+    local: np.ndarray,
+    state: np.ndarray,
+    node: int,
+    colour: int,
+    incident: Sequence[int],
+    weights: Sequence[float],
+    bounds: Sequence[int],
+    beta: float,
+) -> None:
+    """Relabel one site and carry the change into its neighbours' conditionals.
+
+    The site's own row does not move: its conditional is built from its
+    neighbours' labels and its own field, neither of which this touches.
+    """
+    previous = int(state[node])
+    for position in range(bounds[node], bounds[node + 1]):
+        neighbour, coupling = incident[position], beta * weights[position]
+        local[neighbour, previous] -= coupling
+        local[neighbour, colour] += coupling
+    state[node] = colour
+
+
 def _swendsen_wang_sweep(
     state: np.ndarray,
     graph: PottsGraph,
@@ -1031,6 +1495,312 @@ def _wolff_sweep(
     if counter is not None:
         counter.record(members, outcome, graph)
     return len(cluster)
+
+
+def niedermayer_threshold(couplings: np.ndarray) -> float:
+    """Niedermayer's ``E_0`` for a graph, in the energy units of :func:`energies`.
+
+    ``max(0, -min J)``: the smallest threshold at which every bond probability
+    of :func:`_niedermayer_sweep` is defined on this graph. On a ferromagnet it
+    is 0 and the rule *is* Wolff's, bond for bond and to the last bit; on the
+    uniform antiferromagnet it is ``|J|``, where bonds form between unlike
+    sites --- which is what an antiferromagnet's satisfied bonds are --- and
+    the construction is again exact, the accept step carrying the field alone.
+
+    **It is the smallest, and that is the point.** The bond probabilities rise
+    with ``E_0``, so a larger threshold buys nothing and costs the cluster:
+    where the couplings are mixed the cluster already percolates here --- 8.94
+    sites of 9 on the instance
+    `tests/regression/search/test_potts_mcmc.py` measures --- and a single
+    cluster that is the whole lattice is a global spin reversal, which is the
+    reason Houdayer's pair move exists beside this one.
+
+    Parameters
+    ----------
+    couplings : np.ndarray
+        Edge couplings, as
+        :meth:`~snakes_and_ladders.sim.graph.PottsGraph.compressed_adjacency`
+        lays them out or in any other order --- only the minimum is read.
+
+    Returns
+    -------
+    float
+        ``E_0``, never negative.
+    """
+    return max(0.0, -float(np.min(couplings))) if couplings.size else 0.0
+
+
+def _niedermayer_sweep(
+    state: np.ndarray,
+    rows: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    rng: np.random.Generator,
+    counter: ClusterCounter | None = None,
+    graph: PottsGraph | None = None,
+    beta: float = 1.0,
+    threshold: float = 0.0,
+    root: int | None = None,
+    partner: int | None = None,
+) -> int:
+    """Grow one cluster under Niedermayer's bond rule, transpose two colours on it.
+
+    Niedermayer (1988) generalizes the Fortuin-Kasteleyn construction by
+    activating a bond on its *energy relative to a threshold* ``E_0`` rather
+    than on its endpoints agreeing. In the energy convention of
+    :func:`energies` --- ``E = -h[s] - sum J [s_i = s_j]`` --- a bond's energy
+    is ``-J`` where its endpoints agree and ``0`` where they do not, so the
+    rule is
+
+    ``p(bond) = 1 - exp(-beta * max(0, E_0 + J [s_i = s_j]))``,
+
+    the ``max`` being what keeps it a probability for any ``E_0`` and any sign
+    of ``J``. **Wolff is the case ``E_0 = 0`` on a ferromagnet**: the unlike
+    bonds get ``p = 0`` and the like ones ``1 - exp(-beta J)``, which is
+    :func:`_wolff_sweep`'s own probability.
+
+    ``E_0`` is the one knob, and it runs between two algorithms. At or above
+    :func:`niedermayer_threshold` every ``max`` is on its linear branch, the
+    boundary terms below cancel exactly, and what is left is a
+    Fortuin-Kasteleyn construction for a coupling of *either* sign whose only
+    accept step is the field's --- Wolff's, where Wolff runs. Below it the
+    like bonds of an antiferromagnet fall to ``p = 0``, the terms survive, and
+    at ``E_0 = 0`` on an antiferromagnet no bond forms at all: the cluster is
+    its seed and the step is a single-site Metropolis flip on the exact
+    difference. The default is the threshold, so the default is the cluster
+    algorithm.
+
+    The cluster is then changed by the *transposition* of two colours rather
+    than by a recolouring to one. Above ``E_0 = 0`` the cluster is no longer
+    monochromatic, and a recolouring would change the agreement of its interior
+    bonds --- the one thing the construction needs left alone, since those are
+    the factors that cancel between the forward move and the reverse. A
+    permutation of the colours cannot change an agreement, which is why it is
+    the move that generalizes.
+
+    What does not cancel is the boundary and the field, and that is the accept
+    step. Writing ``x`` for ``[s_i = s_j]`` on a boundary bond before the
+    transposition and ``x'`` for it after,
+
+    ``delta = sum_C (h[new] - h[old]) + sum_boundary (g(x') - g(x))``,
+    ``g(x) = J x - max(0, E_0 + J x)``,
+
+    and the move is accepted with probability ``min(1, exp(beta * delta))``.
+    ``g`` is constant in ``x`` wherever ``E_0`` and ``E_0 + J`` are both
+    non-negative --- both are then ``-E_0`` --- so at or above the threshold
+    every boundary term cancels and the accept step is the field's alone,
+    which is what :func:`_recolour` applies for Wolff. Below the threshold
+    they do not cancel, and they are what keeps the step a valid
+    Metropolis-Hastings move where it is no longer a Fortuin-Kasteleyn one.
+
+    Parameters
+    ----------
+    state, rows, offsets, neighbours, couplings, rng, counter, graph
+        As :func:`_wolff_sweep`. ``rows`` is the field at one row per site,
+        untempered; ``beta`` scales it here rather than at the call site,
+        because the bond rule and the accept step must carry the same one.
+    beta : float
+        Inverse temperature. ``math.inf`` is admitted and is the ``T = 0``
+        limit taken exactly: a bond of positive energy margin is certain
+        rather than drawn, and a ``delta`` below zero is refused without
+        consuming a uniform.
+    threshold : float
+        ``E_0``. :func:`niedermayer_threshold` is the value that makes the
+        rule Wolff's where Wolff runs.
+    root : int | None
+        The cluster's seed, or ``None`` to draw it uniformly.
+    partner : int | None
+        The colour the seed's own colour is transposed with, or ``None`` to
+        draw it uniformly from the other ``n_states - 1``. Drawn from the
+        colours rather than from the state, so the proposal is symmetric: the
+        reverse move must be able to name the same unordered pair.
+
+    Returns
+    -------
+    int
+        The size of the cluster this step built.
+    """
+    n_nodes = int(state.shape[0])
+    n_states = int(rows.shape[1])
+    bounds = offsets.tolist()
+    incident, weights = neighbours.tolist(), couplings.tolist()
+    labels = state.tolist()
+
+    seed_node = int(rng.integers(n_nodes)) if root is None else int(root)
+    held = int(labels[seed_node])
+    if partner is None:
+        swapped = (held + 1 + int(rng.integers(n_states - 1))) % n_states
+    else:
+        swapped = int(partner)
+
+    in_cluster = np.zeros(n_nodes, dtype=bool)
+    in_cluster[seed_node] = True
+    cluster = [seed_node]
+    frontier = [seed_node]
+    while frontier:
+        node = frontier.pop()
+        for position in range(bounds[node], bounds[node + 1]):
+            neighbour = incident[position]
+            if in_cluster[neighbour]:
+                continue
+            margin = threshold + (
+                weights[position] if labels[neighbour] == labels[node] else 0.0
+            )
+            if margin <= 0.0:
+                continue
+            probability = 1.0 - np.exp(-beta * margin)
+            # Only `beta = inf` reaches one, and there the bond is certain
+            # rather than drawn: the T = 0 limit without a second branch.
+            if probability >= 1.0 or rng.random() < probability:
+                in_cluster[neighbour] = True
+                cluster.append(neighbour)
+                frontier.append(neighbour)
+
+    members = np.array(cluster, dtype=np.int64)
+    delta = 0.0
+    for node in cluster:
+        current = labels[node]
+        if current == held:
+            moved = swapped
+        elif current == swapped:
+            moved = held
+        else:
+            continue
+        delta += float(rows[node, moved] - rows[node, current])
+        for position in range(bounds[node], bounds[node + 1]):
+            neighbour = incident[position]
+            if in_cluster[neighbour]:
+                continue
+            # `g(x') - g(x)` for this boundary bond, with `beta` divided out:
+            # the log-density's own term, then the bond probabilities' one.
+            coupling = weights[position]
+            before = 1.0 if labels[neighbour] == current else 0.0
+            after = 1.0 if labels[neighbour] == moved else 0.0
+            delta += coupling * (after - before)
+            delta -= max(0.0, threshold + coupling * after)
+            delta += max(0.0, threshold + coupling * before)
+
+    accepted = _niedermayer_accept(delta, beta, rng)
+    if accepted:
+        held_members = members[state[members] == held]
+        swapped_members = members[state[members] == swapped]
+        state[held_members] = swapped
+        state[swapped_members] = held
+    if counter is not None:
+        counter.record(members, Recolour(proposed=True, accepted=accepted), graph)
+    return len(cluster)
+
+
+def _niedermayer_accept(delta: float, beta: float, rng: np.random.Generator) -> bool:
+    """Metropolis on ``delta``, with the ``beta = inf`` limit taken exactly.
+
+    A separate function because it is what an ablation replaces:
+    `tests/regression/search/test_potts_mcmc.py` swaps in an unconditional
+    accept and asserts the enumerated chi-square rejects, which is the
+    evidence that the tests above have the power they claim.
+
+    A non-negative ``delta`` is accepted without a draw, and at ``beta = inf``
+    a negative one is refused without a draw --- the ``T = 0`` limit, where a
+    step that lowers the score is refused rather than accepted with
+    probability zero.
+    """
+    return delta >= 0.0 or (
+        bool(np.isfinite(beta)) and bool(rng.random() < np.exp(beta * delta))
+    )
+
+
+def houdayer_cluster(
+    first: np.ndarray, second: np.ndarray, offsets: np.ndarray, neighbours: np.ndarray
+) -> np.ndarray:
+    """Component index per site over the bonds joining two sites where the replicas disagree.
+
+    The overlap ``q_i = s_i s'_i`` of Houdayer (2001) reads ``-1`` exactly where
+    the two replicas disagree, and his cluster is a connected component of that
+    region. Sites where the replicas agree are their own singletons here, so
+    one array answers both questions a caller has --- which sites are in the
+    defect region, and which component each of them is in.
+
+    Uses :func:`_find` and :func:`_union`, so the components are not a second
+    reading of what a component is, and walks the compressed rows rather than
+    the graph's edge tuples (root `CLAUDE.md`'s layout rule).
+
+    Parameters
+    ----------
+    first, second : np.ndarray
+        The two replicas' labellings, ``(n_nodes,)``.
+    offsets, neighbours : np.ndarray
+        The compressed adjacency, as
+        :meth:`~snakes_and_ladders.sim.graph.PottsGraph.compressed_adjacency`
+        lays it out.
+
+    Returns
+    -------
+    np.ndarray
+        ``(n_nodes,)`` of component roots, as :func:`_find` reports them.
+    """
+    n_nodes = int(offsets.shape[0]) - 1
+    parent = np.arange(n_nodes)
+    defect = (first != second).tolist()
+    bounds, incident = offsets.tolist(), neighbours.tolist()
+    for node in range(n_nodes):
+        if not defect[node]:
+            continue
+        for position in range(bounds[node], bounds[node + 1]):
+            neighbour = incident[position]
+            if neighbour > node and defect[neighbour]:
+                _union(parent, node, neighbour)
+    return np.array([_find(parent, node) for node in range(n_nodes)])
+
+
+def _houdayer_move(
+    first: np.ndarray,
+    second: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    rng: np.random.Generator,
+) -> int:
+    """Swap the two replicas' labels on one component of their overlap defect.
+
+    Houdayer's isoenergetic cluster move (2001), in the form his paper states
+    for two replicas at one temperature. The cluster is a connected component
+    of ``{i : s_i != s'_i}``, and on it the two replicas exchange labels.
+
+    **The acceptance is 1, and it is an identity rather than a cancellation.**
+    A bond with both ends in the cluster has its pair of agreements exchanged
+    between the replicas, so the pair's energy is unchanged; a bond with one
+    end in it has its other end where the replicas agree --- a neighbour that
+    disagreed would be in the same component --- so the two terms are again
+    exchanged. The field term is exchanged site by site for the same reason.
+    So ``E(s) + E(s')`` is invariant, the move is an involution, and the
+    defect region it is built from is what the swap leaves alone, which makes
+    the reverse proposal exactly as likely as the forward one.
+
+    Parameters
+    ----------
+    first, second : np.ndarray
+        The two replicas, mutated in place.
+    offsets, neighbours : np.ndarray
+        The compressed adjacency.
+    rng : np.random.Generator
+        Draws the defect site the component is grown from.
+
+    Returns
+    -------
+    int
+        The size of the cluster swapped; ``0`` where the replicas agree
+        everywhere and there is no defect to move.
+    """
+    defects = np.flatnonzero(first != second)
+    if defects.size == 0:
+        return 0
+    partition = houdayer_cluster(first, second, offsets, neighbours)
+    seed_node = int(defects[rng.integers(defects.size)])
+    members = np.flatnonzero(partition == partition[seed_node])
+    held = first[members].copy()
+    first[members] = second[members]
+    second[members] = held
+    return int(members.size)
 
 
 def _recolour(

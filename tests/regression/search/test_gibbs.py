@@ -39,10 +39,14 @@ from snakes_and_ladders.opt.schedule import (
 )
 from snakes_and_ladders.search import gibbs
 from snakes_and_ladders.search.gibbs import (
+    GibbsMove,
     _Indexed,
     anneal_factor_graph,
     anneal_topology,
+    balanced_sweep,
     chain_block_sweep,
+    factor_autodiff_log_ratios,
+    factor_taylor_log_ratios,
     gibbs_sweep,
     sample_factor_graph,
 )
@@ -119,6 +123,78 @@ def test_the_generic_sweep_samples_the_potts_boltzmann_distribution() -> None:
     for state in chain.states:
         counts[int(np.flatnonzero((configurations == state).all(axis=1))[0])] += 1
     assert chi_square_p_value(counts, len(chain.states) * expected) > SIGNIFICANCE
+
+
+#: Sweeps run for a balanced chain; thinned by two, so 2,000 are recorded and
+#: each of the sixteen cells of the 2x2 lattice expects 125.
+BALANCED_SWEEPS = 4_000
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    "move", [GibbsMove.LOCALLY_BALANCED, GibbsMove.GIBBS_WITH_GRADIENTS]
+)
+def test_a_balanced_sweep_samples_the_potts_boltzmann_distribution(
+    move: GibbsMove,
+) -> None:
+    # The same referee as the heat-bath chain above: the 16 configurations of
+    # the 2x2 lattice enumerated by `log_weights`, which shares no proposal or
+    # accept step with the sampler. The move sets here choose *which* variable
+    # to change from the whole neighbourhood, so a sweep visits some variables
+    # twice and others not at all; only the law it converges to is claimed.
+    # Realized p at the declared seed and the next: 0.2208 and 0.0483, the
+    # same to four figures for both move sets, since the estimate is the
+    # difference and the two draw the same uniforms against the same weights.
+    graph, factor_graph = _potts_pair()
+    configurations = np.array(list(product(range(2), repeat=4)))
+    weights = log_weights(graph, FIELD, configurations)
+    expected = np.exp(weights - weights.max())
+    expected /= expected.sum()
+
+    chain = sample_factor_graph(
+        factor_graph,
+        np.random.default_rng(1),
+        BALANCED_SWEEPS,
+        burn_in=100,
+        thin=2,
+        move=move,
+    )
+
+    counts = np.zeros(len(configurations))
+    for state in chain.states:
+        counts[int(np.flatnonzero((configurations == state).all(axis=1))[0])] += 1
+    p_value = chi_square_p_value(counts, len(chain.states) * expected)
+    assert p_value > SIGNIFICANCE, p_value
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_the_factor_graph_taylor_estimate_is_the_enumerated_density_difference() -> (
+    None
+):
+    # Gibbs-with-gradients' estimate is exact on a sum of factor tables, for
+    # the reason the module docstring gives: the multilinear extension is
+    # affine in each variable's row. Refereed three ways --- the tape's
+    # gradient at the one-hot state, and the graph's own `log_density` of every
+    # single-variable change, neither of which is the sweep's arithmetic.
+    _, factor_graph = _potts_pair()
+    indexed = _Indexed(factor_graph)
+    rng = np.random.default_rng(3)
+
+    for _ in range(8):
+        state = np.asarray(rng.integers(0, 2, size=4), dtype=np.int64)
+        estimate = factor_taylor_log_ratios(indexed, state)
+        tape = factor_autodiff_log_ratios(indexed, state)
+        current = indexed.log_density(state)
+
+        assert np.abs(tape - estimate).max() < 1e-12
+        for position in range(4):
+            for value in range(2):
+                moved = state.copy()
+                moved[position] = value
+                difference = indexed.log_density(moved) - current
+                assert estimate[position, value] == pytest.approx(difference, abs=1e-12)
 
 
 @pytest.mark.critical
@@ -666,3 +742,10 @@ def test_refusals() -> None:
     )
     with pytest.raises(ValueError, match="not consecutive"):
         chain_block_sweep(triangle, np.zeros(3, dtype=np.int64), rng, ["a", "b", "c"])
+    with pytest.raises(ValueError, match="is gibbs_sweep"):
+        balanced_sweep(
+            factor_graph,
+            np.zeros(4, dtype=np.int64),
+            rng,
+            move=GibbsMove.HEAT_BATH,
+        )
