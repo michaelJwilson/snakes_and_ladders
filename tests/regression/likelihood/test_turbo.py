@@ -157,6 +157,97 @@ def test_the_joint_posterior_is_the_enumerated_one_where_the_two_chains_agree() 
 # --- the structure of one decoding ----------------------------------------------
 
 
+#: Posterior ratios, in nats, the turbo decoder and BCJR may differ by where
+#: the two compute the same quantity. Declared at 1e-12 and realized at
+#: 1.8e-14 over the 100 draws below: the second pass re-forms the same sums in
+#: a different order, so bitwise is not available, and the decisions are still
+#: held to equality.
+BCJR_TOLERANCE = 1e-12
+
+#: Draws per declared point of the CI fixture.
+CONSTITUENT_DRAWS = 25
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone() -> None:
+    """With the second constituent carrying no evidence, the pair is one BCJR.
+
+    The rung below (issue #734): `convolutional.bcjr`, one pass over one
+    chain. The turbo decoder returns the second decoder's posterior
+    deinterleaved, so the two are compared by taking the second constituent's
+    evidence away --- its parity stream and its tail stream set to zero ratios,
+    which is the received word of a channel that erased them. That decoder then
+    learns nothing of its own: its extrinsic output on the message bits is
+    zero, its posterior is the systematic ratios plus the a priori ratios it
+    was handed, and deinterleaving returns
+    `L_sys + L_ext,1 = bcjr(trellis, systematic, parity_first).posterior_llr`.
+
+    This is where the exchange is pinned rather than the code. A decoder handed
+    the other's *posterior* instead of its extrinsic would return the
+    systematic ratios twice, so the identity holds only if `eq:extrinsic` is
+    subtracted exactly once.
+
+    Over the fixture's four points and 25 draws each, at `iterations = 8`: the
+    posteriors agree to 1.8e-14 against the `BCJR_TOLERANCE` declared, the
+    decisions on all 1,200 message bits agree exactly, and the iteration is
+    stationary --- one iteration and eight differ by 2.1e-14 --- because a zero
+    extrinsic comes back every time.
+
+    Where it stops is two streams away, and both are asserted. Erasing the
+    parity alone leaves the second decoder's tail ratios in, and those are bits
+    nothing else transmits: the identity fails by 18.9 nats. With the code
+    intact it fails by 51.9, which is what the second parity stream adds and
+    what the iteration exists to collect.
+    """
+    params = fixture("turbo", "ci").params
+    code = params.code()
+    where = code.slices()
+
+    def departure(received: np.ndarray, reference: np.ndarray) -> float:
+        """The largest gap, in nats, between the turbo posterior and BCJR's."""
+        decoding = decode_turbo(code, received, iterations=params.iterations)
+        return float(np.abs(decoding.posterior_llr - reference).max())
+
+    worst = stationary = parity_only = intact = 0.0
+    mismatched = 0
+
+    for eb_n0_db in params.eb_n0_db:
+        rng = np.random.default_rng(params.seed)
+        for _ in range(CONSTITUENT_DRAWS):
+            message = rng.integers(0, 2, params.message_length).astype(np.uint8)
+            llr = _transmit(code, message, eb_n0_db, rng)
+            streams = split_streams(code, llr)
+            alone = bcjr(code.trellis, streams.systematic, streams.parity_first)
+            reference = alone.posterior_llr[: code.message_length]
+
+            erased = llr.copy()
+            erased[where["parity_second"]] = 0.0
+            erased[where["tail_second"]] = 0.0
+            decoding = decode_turbo(code, erased, iterations=params.iterations)
+            first = decode_turbo(code, erased, iterations=1)
+
+            worst = max(worst, departure(erased, reference))
+            stationary = max(
+                stationary,
+                float(np.abs(first.posterior_llr - decoding.posterior_llr).max()),
+            )
+            mismatched += int(
+                (decoding.bits != (reference < 0.0).astype(np.uint8)).sum()
+            )
+
+            kept = llr.copy()
+            kept[where["parity_second"]] = 0.0
+            parity_only = max(parity_only, departure(kept, reference))
+            intact = max(intact, departure(llr, reference))
+
+    assert worst < BCJR_TOLERANCE
+    assert stationary < BCJR_TOLERANCE
+    assert mismatched == 0
+    assert parity_only == pytest.approx(18.93, abs=0.01)
+    assert intact == pytest.approx(51.88, abs=0.01)
+
+
 @pytest.mark.smoke
 def test_the_per_iteration_run_is_the_capped_run_at_every_cap() -> None:
     # One run reports every iteration count, which is what makes the release

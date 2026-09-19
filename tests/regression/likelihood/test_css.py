@@ -25,6 +25,11 @@ from snakes_and_ladders.likelihood.css import (
     error_cosets,
     measure_logical_error_rate,
 )
+from snakes_and_ladders.likelihood.ldpc import (
+    DecodingAlgorithm,
+    decode,
+    enumerate_codewords,
+)
 from snakes_and_ladders.sim.css import CssCode, sample_x_error
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.ldpc import BinarySymmetricChannel
@@ -272,6 +277,83 @@ def test_the_correction_depends_on_the_error_only_through_its_syndrome() -> None
             code.checks.syndrome(second.correction),
         )
         np.testing.assert_array_equal(first.correction, second.correction)
+
+
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_the_syndrome_decode_is_belief_propagation_on_the_component_code() -> None:
+    """The CSS decoder against `ldpc.decode` on the same Tanner graph.
+
+    The rung below (issue #734). `sec:ldpc`'s decoder is run unchanged here, so
+    the ladder step is an identity and is asserted as one: over 50 seeded draws
+    and both check updates the residual is `decode(code.checks, llr).bits`
+    bitwise, the correction is the error exclusive-or'd with it, and
+    `converged` is that decoding's `decoded`.
+
+    What the identity buys is the claim on top of it, and that is asserted
+    exhaustively rather than sampled. A syndrome decoder may read `H e` and
+    nothing else; this one is handed the error's ratios. Two errors are taken
+    --- one whose syndrome BP converges on, one it does not --- and *every* one
+    of the 512 words of `ker H` is added to each, which runs over the whole
+    coset and not over the 25 shifts the sampled test takes. The correction is
+    the same 16 bits on all 1,024, so the decoder depends on the error through
+    its syndrome alone.
+
+    Where it stops: converging is what makes the correction reproduce the
+    observed syndrome. On the 71 of 100 decodes that converged, `H ê == H e`
+    exactly; on the 29 that reached the cap the residual is not in `ker H` and
+    the syndrome differs on 25 of them. Sum-product converged on 40 of the 50
+    draws and min-sum on 31.
+    """
+    code = _ci_code()
+    channel = BinarySymmetricChannel(CI_FLIP)
+    magnitude = np.log((1.0 - CI_FLIP) / CI_FLIP)
+    rng = np.random.default_rng(734)
+    converged = {algorithm: 0 for algorithm in DecodingAlgorithm}
+    reproduced = departed = 0
+
+    for _ in range(50):
+        error, llr = sample_x_error(code, channel, rng)
+        for algorithm in DecodingAlgorithm:
+            result = decode_syndrome(code, error, llr, algorithm=algorithm)
+            decoding = decode(code.checks, llr, algorithm=algorithm)
+
+            np.testing.assert_array_equal(result.residual, decoding.bits)
+            np.testing.assert_array_equal(result.correction, error ^ decoding.bits)
+            assert result.converged == decoding.decoded
+            assert result.iterations == decoding.iterations
+
+            same = np.array_equal(
+                code.checks.syndrome(result.correction), code.checks.syndrome(error)
+            )
+            converged[algorithm] += result.converged
+            if result.converged:
+                assert same
+                reproduced += 1
+            else:
+                departed += int(not same)
+
+    assert converged == {
+        DecodingAlgorithm.SUM_PRODUCT: 40,
+        DecodingAlgorithm.MIN_SUM: 31,
+    }
+    assert (reproduced, departed) == (71, 25)
+
+    words = enumerate_codewords(code.checks)
+    assert words.shape == (512, code.checks.n_bits)
+    rng = np.random.default_rng(11)
+    cosets: dict[bool, tuple[np.ndarray, np.ndarray]] = {}
+    while len(cosets) < 2:
+        error, llr = sample_x_error(code, channel, rng)
+        cosets.setdefault(decode_syndrome(code, error, llr).converged, (error, llr))
+
+    for error, llr in cosets.values():
+        base = decode_syndrome(code, error, llr)
+        for word in words:
+            shifted = np.asarray(error ^ word, dtype=np.uint8)
+            result = decode_syndrome(code, shifted, (1.0 - 2.0 * shifted) * magnitude)
+            np.testing.assert_array_equal(result.correction, base.correction)
+            assert result.converged == base.converged
 
 
 @pytest.mark.oracle

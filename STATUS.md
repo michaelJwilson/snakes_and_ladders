@@ -115,13 +115,15 @@ judge --- is the third guard (issue #732, PR
 The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
-over the five problems, 80 pinned by a named `oracle` test and 9 carrying the
+over the five problems, 85 pinned by a named `oracle` test and 4 carrying the
 ticket instead of one --- the Potts ladder pinned to the foot, each of its five
 open rungs against the rung below it (issue #734, step 2), the tree ladder
 with it, its four against the closed-form mixture, enumeration, pruning and the
-analytic surrogate (step 3), and the HMM ladder, its four against the path
+analytic surrogate (step 3), the HMM ladder, its four against the path
 enumeration, the coupled enumeration, the re-estimation equations and the
-coupled E step (step 4).
+coupled E step (step 4), and the codes ladder, its five against the enumerated
+maximum likelihood, belief propagation on the code's own parity check and one
+constituent's BCJR (step 5).
 
 Two releases have been cut under the procedure, each from a Release ticket
 gated on `infra/release.sh`: `0.1.0`

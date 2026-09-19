@@ -618,6 +618,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "codes",
+        "turbo",
+        "likelihood.turbo.decode_turbo",
+        "BCJR",
+        T + "likelihood/test_turbo.py"
+        "::test_the_turbo_posterior_is_bcjr_on_the_first_constituent_alone",
+    ),
+    Rung(
+        "codes",
         "LDPC sum-product / min-sum",
         "likelihood.ldpc.decode",
         "brute-force ML",
@@ -641,11 +649,27 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "codes",
+        "CSS / syndrome",
+        "likelihood.css.decode_syndrome",
+        "LDPC sum-product / min-sum",
+        T + "likelihood/test_css.py"
+        "::test_the_syndrome_decode_is_belief_propagation_on_the_component_code",
+    ),
+    Rung(
+        "codes",
         "polar SC / SCL",
         "sandbox.polar_decoding.decode_sc",
         None,
         T + "sandbox/test_polar_decoding.py"
         "::test_successive_cancellation_is_the_reference_implementation_bitwise",
+    ),
+    Rung(
+        "codes",
+        "polar SC / SCL",
+        "sandbox.polar_decoding.decode_sc",
+        "LDPC sum-product / min-sum",
+        T + "sandbox/test_polar_decoding.py"
+        "::test_successive_cancellation_against_min_sum_on_the_same_parity_check",
     ),
     Rung(
         "codes",
@@ -665,11 +689,27 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "codes",
+        "hamming_correct, golay_code",
+        "sim.elementary_codes.hamming_correct",
+        "brute-force ML",
+        T + "sim/test_elementary_codes.py"
+        "::test_syndrome_correction_is_the_nearest_codeword_enumeration_returns",
+    ),
+    Rung(
+        "codes",
         "Reed--Solomon",
         "sim.reed_solomon.decode",
         None,
         T + "sim/test_reed_solomon.py"
         "::test_reed_solomon_meets_the_singleton_bound_with_equality",
+    ),
+    Rung(
+        "codes",
+        "Reed--Solomon",
+        "sim.reed_solomon.decode",
+        "brute-force ML",
+        T + "sim/test_reed_solomon.py"
+        "::test_the_algebraic_decode_is_the_nearest_codeword_enumeration_returns",
     ),
     # --- mixtures ----------------------------------------------------------
     # The foot and the rung above it name one test: it computes the 65,536
@@ -722,47 +762,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "opt/test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian",
     ),
-    # --- the 9 rungs no test pins, one per bullet of issue #734 ------------
-    Rung(
-        "codes",
-        "hamming_correct, golay_code",
-        "sim.elementary_codes.hamming_correct",
-        "brute-force ML",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "codes",
-        "Reed--Solomon",
-        "sim.reed_solomon.decode",
-        "brute-force ML",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "codes",
-        "polar SC / SCL",
-        "sandbox.polar_decoding.decode_sc",
-        "LDPC sum-product / min-sum",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "codes",
-        "CSS / syndrome",
-        "likelihood.css.decode_syndrome",
-        "LDPC sum-product / min-sum",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "codes",
-        "turbo",
-        "likelihood.turbo.decode_turbo",
-        "BCJR",
-        None,
-        LADDER_TICKET,
-    ),
+    # --- the 4 rungs no test pins, one per bullet of issue #734 ------------
     Rung(
         "mixture",
         "HMC",
