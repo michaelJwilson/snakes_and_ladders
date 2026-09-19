@@ -25,6 +25,7 @@ from snakes_and_ladders.opt.schedule import (
     LinearTempSchedule,
     TempSchedule,
     adapt_ladder,
+    adapt_ladder_by_round_trips,
     temperatures,
 )
 
@@ -320,3 +321,92 @@ def test_a_ladder_or_band_the_warm_up_cannot_use_is_refused() -> None:
         adapt_ladder(_ratio_acceptance, (2.0, 1.0, 0.5), BAND, 1, 2)
     with pytest.raises(ValueError, match="one per neighbouring pair"):
         adapt_ladder(lambda _ladder: [0.5], (2.0, 1.0, 0.5), BAND, 1, 4)
+
+
+# --- the other criterion: a ladder placed by its round trips (#756) ---------
+#
+# An exchange acceptance is a per-pair number and a round trip is a statement
+# about the whole ladder, so the two criteria are measured differently and
+# placed differently. Both synthetic measurements below are closed forms, so
+# what the placement does is checkable rather than sampled.
+
+
+def _linear_up_fraction(ladder: tuple[float, ...]) -> list[float]:
+    """The up-fraction falling linearly in temperature: 1 at the first rung, 0 at the last.
+
+    The one profile whose optimum is in closed form. With ``f`` linear, every
+    interval's mass ``sqrt(-df dT)`` is proportional to its width, so equal
+    mass is equal width and the placement is the ladder uniform in ``T``.
+    """
+    values = np.array(ladder)
+    return list((values - values[-1]) / (values[0] - values[-1]))
+
+
+def _bottleneck_up_fraction(ladder: tuple[float, ...]) -> list[float]:
+    """An up-fraction that falls over a width of 0.03 about ``T = 1``: a barrier there."""
+    values = np.array(ladder)
+    fraction = 1.0 / (1.0 + np.exp((values - 1.0) / 0.03))
+    return list((fraction - fraction.min()) / (fraction.max() - fraction.min()))
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_a_linear_up_fraction_places_the_ladder_uniform_in_temperature() -> None:
+    # The closed-form fixed point: from a ladder whose steps are a factor of
+    # two, one placement returns the uniform one, and the second measurement
+    # moves nothing, so the warm-up converges on round 2 having measured ten
+    # replicas.
+    result = adapt_ladder_by_round_trips(
+        _linear_up_fraction, (8.0, 4.0, 2.0, 1.0, 0.5), 1e-9, 5
+    )
+
+    assert result.converged
+    assert result.rounds == 2
+    assert result.replicas_measured == 10
+    assert_allclose(
+        result.temperatures, [8.0 - 1.875 * k for k in range(5)], rtol=1e-12
+    )
+    assert result.up_fraction == (1.0, 0.75, 0.5, 0.25, 0.0)
+
+
+@pytest.mark.analytic
+def test_the_rungs_concentrate_where_the_up_fraction_falls() -> None:
+    # Katzgraber's claim, on a barrier at T = 1 that a geometric ladder puts
+    # one rung inside: the placement moves five of nine rungs into the window
+    # where the walkers are held up, and leaves both endpoints where the
+    # caller put them, bitwise.
+    start = tuple(0.5 * 1.3**k for k in range(9))
+    inside = [0.9 <= value <= 1.1 for value in start]
+    assert sum(inside) == 1
+
+    result = adapt_ladder_by_round_trips(_bottleneck_up_fraction, start, 1e-3, 6)
+
+    assert sum(0.9 <= value <= 1.1 for value in result.temperatures) == 5
+    assert result.temperatures[0] == start[0]
+    assert result.temperatures[-1] == start[-1]
+    assert not result.converged
+
+
+@pytest.mark.smoke
+def test_a_ladder_or_a_measurement_the_placement_cannot_use_is_refused() -> None:
+    # A ladder of two is two endpoints and nothing to place; a flat
+    # up-fraction is a run in which no walker circulated, which is a
+    # measurement of nothing rather than a ladder that is already right.
+    with pytest.raises(ValueError, match="at least three temperatures"):
+        adapt_ladder_by_round_trips(_linear_up_fraction, (2.0, 1.0), 1e-3, 4)
+    with pytest.raises(ValueError, match="strictly monotone"):
+        adapt_ladder_by_round_trips(_linear_up_fraction, (1.0, 3.0, 2.0), 1e-3, 4)
+    with pytest.raises(ValueError, match="tolerance must be positive"):
+        adapt_ladder_by_round_trips(_linear_up_fraction, (4.0, 2.0, 1.0), 0.0, 4)
+    with pytest.raises(ValueError, match="max_rounds"):
+        adapt_ladder_by_round_trips(_linear_up_fraction, (4.0, 2.0, 1.0), 1e-3, 0)
+    with pytest.raises(ValueError, match="one per rung"):
+        adapt_ladder_by_round_trips(lambda _l: [1.0, 0.0], (4.0, 2.0, 1.0), 1e-3, 1)
+    with pytest.raises(ValueError, match="must be finite"):
+        adapt_ladder_by_round_trips(
+            lambda _l: [1.0, float("nan"), 0.0], (4.0, 2.0, 1.0), 1e-3, 1
+        )
+    with pytest.raises(ValueError, match="flat over the whole ladder"):
+        adapt_ladder_by_round_trips(
+            lambda _l: [1.0, 1.0, 1.0], (4.0, 2.0, 1.0), 1e-3, 1
+        )

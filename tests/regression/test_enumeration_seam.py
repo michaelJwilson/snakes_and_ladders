@@ -5,11 +5,18 @@ Issue #387: five modules built the product space with their own
 seam is checked against ``itertools.product`` itself --- order, count and
 values --- and its reductions against the arithmetic the adapters carried,
 so an adapter that calls it returns what it returned before.
+
+Issue #755 folded the *composition* those three wrote around the two parts:
+enumerate, score, take the first maximizer. The referee below is the body
+that was deleted, run beside the seam on the same scores, and the comparison
+is ``==`` rather than a tolerance --- the fold reorders nothing, so bitwise
+is what it costs.
 """
 
 from __future__ import annotations
 
 import itertools
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -17,6 +24,7 @@ from snakes_and_ladders.enumeration import (
     MAX_ENUMERABLE_CONFIGURATIONS,
     argmax,
     configurations,
+    enumerated_optimum,
     posterior,
     site_marginals,
 )
@@ -97,3 +105,50 @@ def test_the_learn_enumerators_yield_the_same_tuples_under_the_cap() -> None:
     )
     with pytest.raises(ValueError, match="past the limit"):
         next(iter(enumerate_paths(2, 30)))
+
+
+def _the_deleted_body(
+    n_states: int, n_sites: int, score: Callable[[tuple[int, ...]], float]
+) -> tuple[tuple[int, ...], float]:
+    """`learn.relaxed.enumerate_optimum`'s body before issue #755, verbatim.
+
+    Kept here rather than remembered: a fold is bitwise against what it
+    replaced or it is not bitwise, and the only way to assert that after the
+    old code is gone is to carry the old code into the test.
+    """
+    candidates = [tuple(row.tolist()) for row in configurations(n_states, n_sites)]
+    scores = np.array([score(candidate) for candidate in candidates])
+    best = argmax(scores)
+    return candidates[best], float(scores[best])
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+@pytest.mark.parametrize(("n_states", "n_sites"), [(2, 1), (2, 6), (3, 4), (5, 3)])
+def test_the_enumerated_optimum_is_the_loop_the_three_adapters_carried(
+    n_states: int, n_sites: int
+) -> None:
+    # A score with no structure, so nothing about the answer follows from the
+    # problem: what is asserted is that two routes to it agree exactly.
+    draws = np.random.default_rng(755).normal(size=n_states**n_sites)
+    space = itertools.product(range(n_states), repeat=n_sites)
+    score = dict(zip(space, draws, strict=True))
+
+    realized = enumerated_optimum(n_states, n_sites, score.__getitem__)
+
+    assert realized == _the_deleted_body(n_states, n_sites, score.__getitem__)
+    assert realized[1] == max(draws)
+
+
+@pytest.mark.analytic
+def test_the_enumerated_optimum_resolves_a_tie_to_the_first_configuration() -> None:
+    # Every candidate scores the same, so the tie rule is the whole answer.
+    # `argmax` promises the lexicographically first and the adapters'
+    # docstrings promise determinism to their callers on that.
+    assert enumerated_optimum(3, 3, lambda _: 0.0) == ((0, 0, 0), 0.0)
+
+
+@pytest.mark.smoke
+def test_the_enumerated_optimum_declines_past_the_cap_in_the_callers_words() -> None:
+    with pytest.raises(ValueError, match="2\\*\\*40 hidden paths is past the limit"):
+        enumerated_optimum(2, 40, lambda _: 0.0, what="2**40 hidden paths")
