@@ -748,9 +748,11 @@ def parallel_tempering(
     sweep = _sweep_at(rows, offsets, neighbours, couplings, backend)
     # `swap_acceptance` is the mean over adjacent pairs of the fraction
     # accepted so far -- the mean of the vector `TemperedChains` returns, and
-    # so equal to it at the last sweep. Round trips and rung occupation are
-    # not recorded: neither is a number this run computes, and a hook does
-    # not define a metric (issue #778).
+    # so equal to it at the last sweep -- and the same vector is recorded
+    # pair by pair under a context, which is where a ladder shows *which*
+    # rung it is broken at. Round trips are still not recorded: they are read
+    # from the walker trace after the loop, not computed in it, and a hook
+    # does not define a metric (issue #778).
     tracker: Tracker = current_tracker()
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(n_replicas):
@@ -774,7 +776,15 @@ def parallel_tempering(
             for rung, walker in enumerate(at_rung):
                 trace[step // thin, walker] = rung
         if step >= 0:
-            tracker.scalar("swap_acceptance", float(np.mean(accepted / proposed)), step)
+            fraction = accepted / proposed
+            tracker.scalar("swap_acceptance", float(np.mean(fraction)), step)
+            for pair in range(n_replicas - 1):
+                tracker.scalar(
+                    "swap_acceptance",
+                    float(fraction[pair]),
+                    step,
+                    context={"rung": pair},
+                )
     record_cost(tracker, max(n_sweeps * thin - 1, 0), states.nbytes)
     return TemperedChains(
         states=recorded,

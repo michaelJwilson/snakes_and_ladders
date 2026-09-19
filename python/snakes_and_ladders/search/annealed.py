@@ -55,6 +55,7 @@ from snakes_and_ladders.search.potts_mcmc import (
 )
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.track import Tracker, current
 
 
 class Resampling(StrEnum):
@@ -242,6 +243,29 @@ def _entropy(labels: np.ndarray, n_replicas: int) -> float:
     return float(-(fraction * np.log(fraction)).sum())
 
 
+def _relative_variance(log_w: np.ndarray, log_n: float) -> float:
+    """``(sum w^2) n / (sum w)^2 - 1``, the weights' relative variance.
+
+    `expm1` of the log ratio rather than the difference of two reciprocals:
+    at a one-rung ladder every weight is 1, the log ratio is 0 bitwise and
+    the error is 0, where `1 / ess - 1 / n` reads 6.9e-18 off the rounding
+    of `exp(log n)` and reports a positive error on an exact answer.
+    """
+    total = logsumexp(log_w, axis=0)
+    square = logsumexp(2.0 * log_w, axis=0)
+    return math.expm1(float(log_n + square - 2.0 * total))
+
+
+def _ess(log_w: np.ndarray, log_n: float, n_replicas: int) -> float:
+    """``(sum w)^2 / sum w^2``: the effective sample size of the weights so far.
+
+    The expression :func:`annealed_importance_sampling` returns, read at a
+    rung rather than at the end, so the tracked series ends at
+    :attr:`LogPartition.ess` bitwise.
+    """
+    return n_replicas / (_relative_variance(log_w, log_n) + 1.0)
+
+
 def annealed_importance_sampling(
     graph: PottsGraph,
     field: np.ndarray,
@@ -310,21 +334,24 @@ def annealed_importance_sampling(
 
     log_w = np.zeros(n_replicas)
     rung_log_z = [log_zero]
+    # One lookup for the run (`snakes_and_ladders.track`). `log_z` is the
+    # running estimate this loop already forms per rung, the entry that ends
+    # at `LogPartition.log_z`; `ess` is the same expression the result reads
+    # off the final weights, which costs one `logsumexp` over the population
+    # a rung against the `n_replicas` sweeps a rung runs (issue #778).
+    tracker: Tracker = current()
     for rung in range(1, len(ladder)):
         log_w = log_w - (ladder[rung] - ladder[rung - 1]) * energies(
             graph, rows, states
         )
         rung_log_z.append(log_zero + float(logsumexp(log_w, axis=0) - log_n))
+        tracker.scalar("log_z", rung_log_z[-1], rung)
+        tracker.scalar("ess", _ess(log_w, log_n, n_replicas), rung)
         for replica in range(n_replicas):
             advance(states[replica], children[replica], ladder[rung])
 
     total = logsumexp(log_w, axis=0)
-    square = logsumexp(2.0 * log_w, axis=0)
-    # `expm1` of the log ratio rather than the difference of two reciprocals:
-    # at a one-rung ladder every weight is 1, the log ratio is 0 bitwise and
-    # the error is 0, where `1 / ess - 1 / n` reads 6.9e-18 off the rounding
-    # of `exp(log n)` and reports a positive error on an exact answer.
-    relative = math.expm1(float(log_n + square - 2.0 * total))
+    relative = _relative_variance(log_w, log_n)
     return LogPartition(
         log_z=log_zero + float(total - log_n),
         stderr=math.sqrt(max(relative, 0.0) / n_replicas),
@@ -408,6 +435,16 @@ def population_annealing(
     log_z = log_zero
     rung_log_z = [log_zero]
     variance = 0.0
+    # One lookup for the run (`snakes_and_ladders.track`). Each series is a
+    # number this loop already carries, read through the expression the
+    # result reads it through: `log_z` is the accumulated estimate,
+    # `stderr` and `ess` the running pair `LogPartition` returns, and
+    # `family_entropy` the population's spread over its ancestors after the
+    # rung's resampling -- one `bincount` over the population a rung, against
+    # the `n_replicas` sweeps a rung runs. The resampled *indices* are not
+    # recorded: the result reports the entropy of the families, not a count
+    # of copies, and a hook does not define a metric (issue #778).
+    tracker: Tracker = current()
     for rung in range(1, len(ladder)):
         log_weights = log_weights - (ladder[rung] - ladder[rung - 1]) * energies(
             graph, rows, states
@@ -424,6 +461,11 @@ def population_annealing(
             states = np.ascontiguousarray(states[kept])
             families = families[kept]
             log_weights = np.full(n_replicas, -log_n)
+        running = math.sqrt(max(variance, 0.0))
+        tracker.scalar("log_z", log_z, rung)
+        tracker.scalar("stderr", running, rung)
+        tracker.scalar("ess", 1.0 / (running**2 + 1.0 / n_replicas), rung)
+        tracker.scalar("family_entropy", _entropy(families, n_replicas), rung)
         for replica in range(n_replicas):
             advance(states[replica], children[replica], ladder[rung])
 
@@ -581,6 +623,17 @@ def simulated_tempering(
     proposed = 0
     recorded_rungs = np.empty(n_sweeps, dtype=np.int64)
     recorded_states = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
+    # One lookup for the run (`snakes_and_ladders.track`), and one record per
+    # *recorded* sweep. `acceptance` is the running fraction of rung moves
+    # accepted, the burn-in's included, which is what `SimulatedTempered`
+    # reports. The occupation is one series under a context per rung, the
+    # context being Aim's per-series key and not a second quantity: rung
+    # `k`'s entry is its recorded visits over `n_sweeps`, the divisor the
+    # result uses, so at the last recorded sweep it is `occupation[k]`. The
+    # counts are kept here rather than recomputed from a `bincount` per
+    # sweep (issue #778).
+    tracker: Tracker = current()
+    visits = [0] * len(ladder)
     for step in range(-burn_in * thin, n_sweeps * thin):
         advance(state, child, ladder[rung])
         candidate = rung + (1 if rng.random() < 0.5 else -1)
@@ -596,6 +649,13 @@ def simulated_tempering(
         if step >= 0 and (step + 1) % thin == 0:
             recorded_rungs[step // thin] = rung
             recorded_states[step // thin] = state
+            visits[rung] += 1
+            sweep = step // thin
+            tracker.scalar("acceptance", accepted / proposed, sweep)
+            for index, count in enumerate(visits):
+                tracker.scalar(
+                    "occupation", count / n_sweeps, sweep, context={"rung": index}
+                )
     occupation = np.bincount(recorded_rungs, minlength=len(ladder)) / n_sweeps
     return SimulatedTempered(
         betas=ladder,

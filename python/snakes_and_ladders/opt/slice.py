@@ -37,12 +37,14 @@ into.
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass
 from enum import Enum
 
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.track import Tracker, current, record_cost
 
 #: Shrinkages one update may spend before it is refused. The interval halves
 #: on average per shrinkage, so 100 is about 30 orders of magnitude of
@@ -205,6 +207,14 @@ def slice_sample(
     evaluations = 0
     expansions = 0
     shrinkages = 0
+    # One lookup for the chain (`snakes_and_ladders.track`), and one record
+    # per sweep, the burn-in's included: the four counters `SliceChain`
+    # returns are sums and means over *every* sweep, so a series skipping the
+    # burn-in would end on a different divisor from the field. The per-sweep
+    # arithmetic is the division the result does once; nothing is counted
+    # here that the loop was not already counting (issue #778).
+    tracker: Tracker = current()
+    started = time.perf_counter()
     for index in range(n_samples + burn_in):
         for axis in range(dimension):
             update = slice_update(
@@ -222,8 +232,15 @@ def slice_sample(
             shrinkages += update.shrinkages
         if index >= burn_in:
             draws[index - burn_in] = position
+        so_far = index + 1
+        tracker.scalar("objective_evaluations", float(evaluations), index)
+        tracker.scalar("evaluations_per_draw", evaluations / so_far, index)
+        tracker.scalar("expansions_per_draw", expansions / so_far, index)
+        tracker.scalar("shrinkages_per_draw", shrinkages / so_far, index)
+        tracker.scalar("wall_s", time.perf_counter() - started, index)
 
     sweeps = max(n_samples + burn_in, 1)
+    record_cost(tracker, max(n_samples + burn_in - 1, 0), draws.nbytes)
     return SliceChain(
         theta=draws,
         objective_evaluations=evaluations,

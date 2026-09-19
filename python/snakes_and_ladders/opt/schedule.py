@@ -54,6 +54,11 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+# `current` is aliased: both warm-ups below bind that name to the ladder they
+# are revising, and one of the two has to give.
+from snakes_and_ladders.track import Tracker
+from snakes_and_ladders.track import current as current_tracker
+
 
 @runtime_checkable
 class TempSchedule(Protocol):
@@ -525,6 +530,15 @@ def adapt_ladder_by_round_trips(
 
     current = tuple(ladder)
     replicas_measured = 0
+    # One lookup for the warm-up (`snakes_and_ladders.track`), and one record
+    # per round of what that round measured and placed: the cost in
+    # replica-runs, and the two per-rung vectors `FeedbackLadder` returns,
+    # each under a context per rung rather than under a name per rung. The
+    # *placement* is recorded and not the ladder it was measured on, because
+    # the placement is what the last round returns -- so the two series end
+    # at `up_fraction[k]` and `temperatures[k]`. `measure` runs a tempered
+    # run of its own, which records through this same tracker (issue #778).
+    tracker: Tracker = current_tracker()
     for round_index in range(1, max_rounds + 1):
         fraction = tuple(float(value) for value in measure(current))
         replicas_measured += len(current)
@@ -544,6 +558,14 @@ def adapt_ladder_by_round_trips(
         moved = max(
             abs(new / old - 1.0) for new, old in zip(proposal, current, strict=True)
         )
+        tracker.scalar("replicas_measured", float(replicas_measured), round_index)
+        for rung, (value, temperature) in enumerate(
+            zip(fraction, proposal, strict=True)
+        ):
+            tracker.scalar("up_fraction", value, round_index, context={"rung": rung})
+            tracker.scalar(
+                "temperature", temperature, round_index, context={"rung": rung}
+            )
         if moved < tolerance or round_index == max_rounds:
             return FeedbackLadder(
                 proposal, fraction, moved < tolerance, round_index, replicas_measured

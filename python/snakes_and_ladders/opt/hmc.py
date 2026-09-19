@@ -649,7 +649,9 @@ def _run_chain(
     jitter = adaptation.step_jitter if adaptation is not None else 0.0
     # One lookup for the chain (`snakes_and_ladders.track`), and the counters
     # the result is built from read per draw rather than recomputed: at the
-    # last draw each series equals the field `HmcChain` returns.
+    # last draw each series equals the field `HmcChain` returns -- and the
+    # field `LangevinChain` returns, `opt.langevin.mala` running this loop
+    # with its own kernel rather than a second one of its own (issue #778).
     tracker: Tracker = current_tracker()
     started = time.perf_counter()
     warmup_evaluations = adapted.force_evaluations if adapted is not None else 0

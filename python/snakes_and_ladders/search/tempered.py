@@ -306,8 +306,12 @@ def _exchange(
     # One lookup for both ensembles (`snakes_and_ladders.track`), since both
     # run this loop. `swap_acceptance` is the mean over adjacent pairs of the
     # fraction accepted so far -- the mean of the vector `TemperedEnsemble`
-    # returns -- and `log_density` is replica 0's, the first column of the
-    # `log_densities` it returns.
+    # returns -- recorded again pair by pair under a context, which says
+    # which rung a ladder is broken at where the mean says only that one is.
+    # `log_density` is replica 0's, the first column of the `log_densities`
+    # it returns; the other columns are not recorded, being the run's output
+    # rather than a diagnostic of it, and round trips are read from the
+    # walker trace after the loop rather than computed in it (issue #778).
     tracker: Tracker = current()
     for sweep in range(burn_in + n_sweeps):
         for replica in range(n_replicas):
@@ -337,7 +341,12 @@ def _exchange(
             for rung, walker in enumerate(at_rung):
                 rungs[walker] = rung
             trace.append(rungs)
-        tracker.scalar("swap_acceptance", float(np.mean(accepted / proposed)), sweep)
+        fraction = accepted / proposed
+        tracker.scalar("swap_acceptance", float(np.mean(fraction)), sweep)
+        for pair in range(n_replicas - 1):
+            tracker.scalar(
+                "swap_acceptance", float(fraction[pair]), sweep, context={"rung": pair}
+            )
         tracker.scalar("log_density", values[0], sweep)
     return TemperedEnsemble(
         temperatures=tuple(temperatures),
