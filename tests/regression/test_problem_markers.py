@@ -297,6 +297,33 @@ def test_the_problem_crosses_module_directories() -> None:
     assert _grepped("potts_lattice") <= selected
 
 
+def _written_problem_markers(item: pytest.Item) -> set[str]:
+    """The problem markers an author decorated `item`, its class or its module with.
+
+    Read from each object's own ``pytestmark`` and not from `iter_markers`,
+    which cannot tell the two apart: `tests/conftest.py`'s hook calls
+    ``add_marker``, which appends to the *node*, while a decorator writes the
+    *function*, the class or the module it is applied to. A derived marker is
+    therefore absent from every ``pytestmark`` here and a written one is in
+    exactly the object that carries it.
+    """
+    problems = set(PROBLEMS)
+    written: set[str] = set()
+    for owner in (
+        getattr(item, "obj", None),
+        getattr(item, "cls", None),
+        getattr(item, "module", None),
+    ):
+        marks = getattr(owner, "pytestmark", ())
+        # A list where a decorator was applied, and the bare decorator where a
+        # module assigned one: `sandbox/test_maxflow_declined.py` writes
+        # ``pytestmark = pytest.mark.skipif(...)``.
+        if isinstance(marks, pytest.MarkDecorator):
+            marks = [marks]
+        written |= {mark.name for mark in marks}
+    return written & problems
+
+
 @pytest.mark.critical
 @pytest.mark.infra
 def test_the_collected_items_carry_what_their_module_names(
@@ -307,15 +334,28 @@ def test_the_collected_items_carry_what_their_module_names(
     Reading `session.items` rather than a second collection: it is free, it is
     the real tree, and it covers whatever selection the invocation asked for,
     so the check widens with the run rather than being pinned to one tier.
+
+    An item carries the scan's answer *and* whatever an author wrote, which is
+    the selection `-m <key>` collects and the one
+    `test_problem_families.py` reads: `search/test_decoding.py` and
+    `search/test_tightening.py` each decorate the items that build a
+    triangular antiferromagnet from literals with
+    ``frustrated_lattice``, a problem no fixture call and no catalogued import
+    names for those modules. Reading only the derived side called four such
+    items defective and the whole suite red (issue #745); what the two sides
+    are held to is stated separately -- the scan's answer is on *every* item
+    of the module, and an extra is a decorator that is really there.
     """
     problems = set(PROBLEMS)
     items = [item for item in request.session.items if item.path.is_relative_to(TESTS)]
     assert items, "the session collected nothing under tests/"
     for item in items:
         carried = {marker.name for marker in item.iter_markers()} & problems
-        assert carried == set(fixtures_named_in(item.path)), (
+        scanned = set(fixtures_named_in(item.path))
+        assert carried == scanned | _written_problem_markers(item), (
             f"{item.nodeid} carries {sorted(carried)} and its module names "
-            f"{sorted(fixtures_named_in(item.path))}"
+            f"{sorted(scanned)}, with {sorted(_written_problem_markers(item))} "
+            "written on the item, its class or its module"
         )
 
 

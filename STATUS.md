@@ -119,6 +119,23 @@ and `search` **88.96%** against 88.66%, so the whole's 89.2 stands and
 `search`'s rises to 88.9. `search/kernels.py` goes 12.68% to **97.18%**,
 `search/surrogate.py` 79.82% to **97.37%** and `search/projection.py` 92.27%
 to **94.48%**, and the package's statements no test reaches fall 141 to 62.
+The codes are the second (step 3): judged **83.89%** with `qa` exempt and the
+complement **89.28%**, floored at **83.8** and 89.2, with `sim` **77.44% to
+78.64%** as convolutional, turbo, CSS, the elementary codes and Reed--Solomon
+each gain the planted run they lacked. `search` reads **89.86%** against its
+89.9 floor on that tree and the floor does not follow it down: the merges of
+#744 to #749 deleted the `oracle` over the Rust max-flow kernel and `opt`'s
+four Himmelblau minima, which is `search` 89.99% to 89.86% and `opt` 86.42% to
+85.93% and is not this branch's.
+`learn` is the third (step 4): judged **84.93%** with `qa` exempt against
+83.89% and the complement **89.26%** against 89.28%, floored at **84.9** and
+89.2, with `learn` **79.61% to 86.62%** and its judged deficit 342 to 191
+statements. Six referees carry it --- a planted ground state recovered at both
+grains on `potts_nd`, a hand-computed table on `arena`, a forward expansion
+over 512 trajectories on `exact`, the enumerated score and gradient at four
+interior points of an ascent on `relaxed`, the `gamma = 1` telescoped return
+on `critic`, and the enumerated binomial on `failure` --- and `canonical.py`
+stays at 77.98%, no learner being run on the chain, the cliff or Hanoi.
 The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
@@ -2202,7 +2219,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `search.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -2421,6 +2438,92 @@ algorithms slow by roughly 1.9x, so the gap is 2.1x at extent 24 and widening.
 These lattices are small and their boundary open, both of which soften the
 transition. Recorded as
 `docs/experiments/001-potts-cluster-autocorrelation.md`.
+
+**Two gradient-informed proposals landed, and on this energy they are one
+kernel** ([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`PottsMove.LOCALLY_BALANCED` weights every single-flip change by
+`sqrt(pi(s') / pi(s))` (Zanella 2020); `PottsMove.GIBBS_WITH_GRADIENTS`
+weights it by the same function of the first-order Taylor estimate of that
+ratio at the one-hot state (Grathwohl et al. 2021). The estimate **is** the
+ratio here: the relaxed log weight is affine in each site's row, so a
+single-flip change carries no second-order term. Pinned three ways at
+`1e-12` — the heat bath's own `heat_bath_log_weights`, the tape's gradient
+through `torch.autograd.grad`, and the enumerated energy of every flipped
+configuration — so the coincidence is refereed rather than assumed. Both
+leave the exact Boltzmann law invariant at the enumerable sizes: chi-square
+against enumeration at a significance of 0.001, realized
+0.0157 to 0.9926 over two seeds on the 2x2, the 3x3 and the frustrated
+triangular instance, the two move sets agreeing to four figures on every one
+of them. Dropping the Metropolis correction, which leaves the chain
+stationary at `pi(s) Z(s)`, is rejected at p = 0.0.
+The same two proposals run over the factor graph as
+`GibbsMove.LOCALLY_BALANCED` and `GibbsMove.GIBBS_WITH_GRADIENTS`, where the
+estimate is exact for the same reason and against the same referee
+(p = 0.2208 and 0.0483 over two seeds).
+
+**They halve the sweeps and pay eight times as much to take one.** Energy
+autocorrelation time at the exact transition on a 16x16 open lattice, two
+readings each, a sweep being `n_nodes` updates for all three, at a 1-minute
+load of 0.96 to 1.09:
+
+| 4,000 sweeps, 400 burn-in | single-site | locally balanced | Gibbs with gradients |
+| --- | --- | --- | --- |
+| tau in sweeps, seed 0 | 12.93 | 5.12 | 5.12 |
+| tau in sweeps, seed 1 | 8.07 | 4.79 | 4.79 |
+| wall, NumPy sweep | 9.3 s | 75.7 s | 109.3 s |
+
+An independent energy sample costs 4.96 sweeps against the heat bath's 10.50,
+**2.1x fewer**, at **8.1x** the wall per sweep against the NumPy heat bath and
+250x against the Rust sweep that is the default --- so 3.9x behind at equal
+wall clock, and 380x behind the shipped sampler. Recorded as
+`docs/experiments/021-potts-gradient-proposals.md`;
+[#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754) owns
+the port that would close it.
+
+**Two cluster moves landed for the frustrated lattice, and both percolate on
+it** ([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`PottsMove.NIEDERMAYER` activates a bond on its energy relative to a threshold
+`E_0` (Niedermayer 1988) rather than on its endpoints agreeing, so it runs on a
+coupling of either sign --- the instance `sample_potts` refuses Wolff and
+Swendsen-Wang on. At `niedermayer_threshold`'s value it **is** Wolff on a
+ferromagnet: the same bonds, the same field accept step, and the same labelling
+to the last bit over 900 draws at three temperatures. Below that value the
+boundary terms of its ratio survive and the move interpolates down to a
+single-site Metropolis flip, which is pinned against `energies` on the flipped
+configuration. `sample_potts_pair` and `tempered_potts_pair` carry Houdayer's
+isoenergetic move (2001): two replicas at one temperature exchange labels on a
+component of the region where they disagree, which leaves `E(s) + E(s')` where
+it found it --- worst `|dE|` 3.6e-15 over 500 drawn pairs --- so the acceptance
+is 1 by an identity. Both leave the exact Boltzmann law invariant at the
+enumerable sizes: chi-square against enumeration at a significance of 0.001,
+realized 0.0221 to 0.9945 over two seeds on the 3x3 open square and the 3x3
+periodic triangular antiferromagnet, and 0.0039 to 0.9913 per replica for the
+pair. Two ablations are rejected at `p = 0.0`: the accept step dropped, and
+Houdayer's component replaced by the single site it was seeded from. Where a
+chain cannot referee the move --- mixed couplings, where the cluster is 8.94
+sites of 9 and a chain is a global spin reversal --- the kernel's own flow
+`pi(s) K(s, s')` is read against its transpose instead, 0.0016 against a Monte
+Carlo error of 0.0089.
+
+**Neither buys a round trip on this lattice.** Houdayer's cluster is 43 to 59
+sites of a 65 to 72-site defect region on the 12x12 periodic triangular
+antiferromagnet, so the move is a near-global exchange of the two replicas:
+
+| 8 seeds, 2,000 sweeps, 10 rungs | without Houdayer | with Houdayer |
+| --- | --- | --- |
+| round-trip time, sweeps (12x12 triangular) | 1,115.5 | 1,090.7 |
+| round-trip time, sweeps (60-site planted glass) | 955.9 | 772.3 |
+| wall, 8 seeds | 17.4 s | 67.8 s |
+
+The paired sign test reads `p = 0.6875` on the lattice and `p = 0.2891` on the
+glass, so no direction is established in either sense, at 3.90x and 4.01x the
+wall over two readings. Recorded as
+`docs/experiments/022-cluster-moves-for-frustrated-lattices.md`. The moves are
+exact and cheap to have; what the measurement rejects is this instance, whose
+overlap percolates, and not the construction. `MoveKind.NIEDERMAYER` is an arm
+`PottsNDEnvironment` can select beside Wolff and Swendsen-Wang, through
+`cluster_moves`; Houdayer's move is not one and cannot be, an arm's action
+carrying one labelling to one labelling where his carries a pair.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
@@ -3780,6 +3883,24 @@ taken: fourteen sites across seven modules reduced a score vector by
 `logsumexp(values[None, :], axis=1)[0]`, which is `axis=0`.
 `docs/experiments/016` and `017` carry the runs.
 
+**Data structures at #755.** The survey reads **245** classes and **8** clusters,
+with 12 `Protocol`s across 10 modules and 1,577 API-map entries over 148 flat
+modules. Every cluster was decided against root `CLAUDE.md`'s rule and the
+reason recorded per row (`docs/reviews/2026-09-19.md`): **one meets it and is
+folded, one is already the seam and wants a guard, six are left as they are**
+--- `suffix:Params` (17), `suffix:Decoding` (7), `prefix:Exact` (5),
+`suffix:Fit` (6), `suffix:Result` (6) and `suffix:Dataset` (5) share a name and
+no surface, and `SimulatedDataset` is the phylogenetic alignment rather than
+their base. The fold is the composition #387 left: enumerate, score, take the
+first maximizer, written in full by `learn.potts.optimum`, `learn.hmm.optimum`
+and `learn.relaxed.enumerate_optimum` and now one function,
+`enumeration.enumerated_optimum`. The three return bitwise what they returned,
+asserted against the deleted body in `tests/regression/test_enumeration_seam.py`
+at four sizes. `likelihood.hmm_paths` keeps its own argmax: it reads the score
+vector again for the posterior. `tests/regression/test_duplication_guards.py`
+pins the 245 classes, the eight clusters at their member counts and the one
+named argmax consumer.
+
 **The `MessageSchedule` guard (issue #755).** The seam #592 wrote is now
 asserted rather than remembered: `tests/regression/test_duplication_guards.py`
 reads the class tree and the registry, and fails a schedule-shaped class that
@@ -4298,3 +4419,69 @@ counted before anything is written, not assumed.
 **Still not measured:** whether a site-parallel pruning clears root
 `CLAUDE.md`'s 2x bar against the NumPy reference at realistic `(sites, taxa)`.
 No number is claimed here that was not taken.
+
+## The stress-tier ranking, per problem family ([#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754))
+
+**No family's top term is Rust's, and the one Python loop at 95% of its run
+is the BCJR trellis.** `tests/benchmarks/profile_hotpaths.py --tier mid`,
+which now covers the codes as well --- they were the one family with no
+workload, so nothing ranked them. Two readings on an idle host, 4 cores,
+1-minute load 0.06 and 1.00 at the two starts; module walls agreed to 0.02%
+(`search` 56.18 and 56.19 s, `opt` 28.86 and 28.64 s). `docs/experiments/020`
+carries the summary; this is the full ranking, five terms per workload.
+
+| family | workload, `--tier mid` | wall | top five by self time | verdict |
+| --- | --- | --- | --- | --- |
+| trees | `search.infer` NNI, 20 taxa x 1,000 sites, 20 evaluations | 20.81 / 21.39 s | `run_backward` 50.5%, `pruning_torch._post_order` 17.5%, `LBFGS.step` 4.0%, `amax` 3.0% (41,058), `add_` 1.9% (124,204) | autograd is **not ours**; the post-order is the **algorithmic cut** taken below; the last two are a few µs each and **below the effect-size bar** |
+| trees | `search.infer` SPR, same instance | 28.25 / 28.51 s | `run_backward` 53.8%, `_post_order` 19.0%, `LBFGS.step` 4.6%, `amax` 3.2% (59,004), `add_` 2.2% (191,897) | as above |
+| Potts | `potts_mcmc` single-site, 32x32, 20 sweeps, `Backend.PYTHON` | 0.289 / 0.290 s | `_site_update` 29.1%, `heat_bath_log_weights` 13.9%, `cumsum` 10.0%, `searchsorted` 7.6%, `_wrapfunc` 7.2% | **default to flip**: the Rust route is measured at 123-134x and opt-in ([#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599)) |
+| Potts | `SwendsenWangMove.propose`, 64x64 open, 8,064 edges | 42.19 / 42.28 ms | `_swendsen_wang_sweep` 30.8%, `_recolour` 26.2% (24,372 calls, 2,437 clusters a sweep), `flatnonzero` 5.3%, `_find` 5.2%, ufunc `reduce` 4.5% | **port candidate**: union-find and a Python loop per cluster. `WolffMove.propose` is 0.555 / 0.549 ms at the same lattice and stores its layout already, so the cluster moves are one ranked loop, not two |
+| HMM/coupled | `message_passing` tree schedule, chain 200 | 0.237 s | `schedule.tree_passes` 29.8%, `_logsumexp_last` 10.6%, ufunc `reduce` 8.8%, `_send_from_variables` 7.9%, `_factor_terms` 4.4% | **port candidate**, and the one #341 left at 4.7x the forward recursion: 800 levels of NumPy dispatch, which is control flow and not arithmetic |
+| codes | `convolutional.bcjr`, K = 1,024; `turbo.decode_turbo`, 8 iterations | 47.0 ms / 151 ms | `bcjr` 95.8% and 95.5%; nothing else reaches 2.2% | **port candidate**, the highest fraction in the survey: a four-state trellis walked forward and backward in Python, `cache=True` unavailable to it and no NumPy axis to vectorize over |
+| codes | `ldpc.decode` sum-product / min-sum, 996 bits, 50 iterations | 9.3 / 8.9 ms | `_tanh_rule` 31.6% / `_min_sum` 34.7%, `decode` 23.4 / 19.1%, `reduceat` 19.7 / 31.6%, `syndrome` 5.9%, `_clip` 4.5% | **below the effect-size bar**: already one `reduceat` per iteration over the edges, and the whole decode is 9 ms |
+| mixtures/HMC | `opt.hmc.sample`, 1,000 draws, chain 64 | 24.57 / 24.31 s | `run_backward` 41.7%, `torch.logsumexp` 33.2% (512,000 calls), `log_partition` 10.2%, `unsqueeze` 6.0% (512,000), `Tensor.to` 1.5% | **not ours** by the first term; the second is an **algorithmic cut** #341 already named and nobody took --- reassociate the homogeneous transfer-matrix product by squaring, 6 products for 64 positions |
+| learn | `learn.reinforce`, 60 x 32 episodes, chain 8 | 5.60 / 5.50 s | `potts.features` 13.1%, `run_backward` 6.4%, `policy.sample` 6.2%, `surrogate_loss` 4.5%, `np.fromiter` 4.2% (68,706) | **below the effect-size bar**: #341 already cut `features` 1.32x, and what is left is 0.73 s spread over 34,353 calls with no term above 14% |
+| search | `gibbs.sample_factor_graph`, 32x32, 20 sweeps | 2.03 / 0.96 s | `ffi.__call__` 15.6% / `templates.register_global` 16.1%, `marshal.loads` 3.1 / 6.6%, `abc.__new__` 8.1%, `isinstance` 2.2%, `ir._rec_list_vars` 1.8% | **not ours**: every term is `numba`, and the two readings differ by 2.1x because the first wrote the cache the second read |
+
+**The Gibbs sweep's `numba` terms are a cold start, and it is already cached.**
+All three kernels in `search/kernels.py` carry `cache=True` and the objects
+are written beside the source, under the worktree's
+`python/snakes_and_ladders/search/__pycache__/`. Deleting them and measuring
+the first call in a process separates the two costs: **1.108 s** cold against
+**0.628 / 0.620 s** with the cache present, so the cache is worth 0.48 s and
+is working. What remains is paid once per process and is not the sweep ---
+every call after the first is **23.4 / 23.9 ms** at one sweep, **24.2 / 24.0 ms**
+at twenty and **46.4 / 46.9 ms** at two hundred, which puts the sweep itself at
+**0.123 ms** and the rest at a fixed 23.4 ms of graph flattening per call.
+Nothing was changed: the enumerable tier's 12.5% `cpu_options.__init__` and
+7.7% `marshal.loads` are a process paying its JIT once, and a ratio taken
+against a 20-sweep run measures the harness rather than the sampler.
+
+**One cut was taken, and the profile's share of it was an overstatement.**
+
+| loop | pin | before | after |
+| --- | --- | --- | --- |
+| `pruning_torch.log_likelihood`: the post-order hoisted out of the evaluation. A topology fixes the traversal, so the schedule --- the nodes in post-order, each child's branch index baked in --- is built once per topology object and the evaluation is a flat loop over it, where it was a Python frame and two dictionary lookups per node per evaluation | log-likelihood, gradient and the `rescale=False` branch **bitwise** unchanged at 4, 6, 10 and 20 taxa (realized difference: zero, compared as `float.hex()`); `tests/regression/likelihood/test_pruning_torch.py` and `test_pruning_gradient.py` unchanged | value and gradient, `pytest-benchmark` median: 20 taxa x 500 sites **5.891 / 5.863 ms**, 20 x 2,000 **9.448 / 9.408 ms**, 50 x 500 **15.317 / 15.772 ms**, 50 x 2,000 **26.287 / 27.194 ms**. NNI search, 20 evaluations at 20 taxa: **19.40 / 17.94 s** | **5.798 / 5.724 ms** (1.02x), **8.971 / 8.980 ms** (1.05x), **14.343 / 14.647 ms** (1.07x), **24.032 / 24.367 ms** (**1.09x**, 2.54 ms). NNI **18.36 / 17.18 s** |
+
+The ratio grows with the leaf count and not with the site count, which is
+what a per-node cost predicts, and it is **far below the 17.5% the profile
+attributed**. `cProfile` charges a frame per call, and the post-order was
+38 frames per evaluation; removing them removes a cost the profiled run pays
+and the real run largely does not. The honest number is the benchmark's:
+2.54 ms of a 26.3 ms evaluation at 50 taxa, and 0.90 s of an 18.7 s NNI
+search --- above the precedent root `CLAUDE.md` cites for leaving a term
+alone (1.2 ms of 270 ms) by an order of magnitude, and bought with no second
+language, no second implementation and no change to any number. **This is the
+ranking's first correction: a self-time fraction is where to look, and it is
+not the saving.** Every fraction in the table above is to be read that way,
+and the walls beside them are what a port will be judged against.
+
+**One ranked term was measured and not cut.** `_swendsen_wang_sweep` rebuilds
+the edge endpoints per sweep with two `np.fromiter` passes over
+`graph.edges`, where `PottsGraph.edge_index` has held them as one array since
+[#623](https://github.com/michaelJwilson/snakes_and_ladders/issues/623). At
+64x64 the pair is **0.900 / 0.674 ms** against `edge_index`'s **0.001 ms**,
+which is **1.9%** of the 42.2 ms `propose` that encloses it. The store exists,
+the change is one line and the values are the same `int64` indices --- and
+1.9% is the effect size, so it goes with the port that takes the 26.2% beside
+it rather than as a cut of its own (#754).

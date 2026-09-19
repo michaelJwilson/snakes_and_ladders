@@ -22,6 +22,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.likelihood import pruning, pruning_torch
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.tree import balanced_tree
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -128,3 +129,46 @@ def test_fit_general_rate_matrix_benchmark(benchmark: BenchmarkFixture) -> None:
 
     result = benchmark(_fit_step)
     assert math.isfinite(result)
+
+
+#: Leaves whose partials the post-order visits. The hoisted traversal of
+#: issue #754 removes a Python frame and two dictionary lookups *per node*,
+#: so what it buys scales with this and not with the site count; both are
+#: parametrized here so the reader can read that off the table rather than
+#: take it on the docstring's word.
+@pytest.mark.parametrize("n_sites", [500, 2_000])
+@pytest.mark.parametrize("n_taxa", [20, 50])
+def test_gradient_at_many_leaves_benchmark(
+    benchmark: BenchmarkFixture, n_taxa: int, n_sites: int
+) -> None:
+    """One value and gradient on a many-leaved tree: the search's inner unit.
+
+    `test_torch_log_likelihood_benchmark` above is four and eight leaves over
+    hundreds of thousands of sites, which is the opposite shape: there the
+    per-node Python is nothing beside the tensors. A topology search is here
+    instead --- tens of leaves, thousands of sites --- and `--tier mid` of
+    `profile_hotpaths.py` ranked the post-order at 17.5% of a 20-taxon NNI
+    search and 19.1% of an SPR one.
+    """
+    tau = balanced_tree(n_taxa, 0.5)
+    dataset = simulate_alignment(
+        tau=tau,
+        k=4,
+        pi=np.full(4, 0.25),
+        rng=np.random.default_rng(754),
+        n_sites=n_sites,
+    )
+    alignment = dict(dataset.alignment)
+    branch_lengths = pruning_torch.branch_lengths_from_tree(tau).requires_grad_(True)
+
+    def _value_and_gradient() -> tuple[torch.Tensor, torch.Tensor]:
+        value = pruning_torch.log_likelihood(
+            tau, 4, np.full(4, 0.25), alignment, branch_lengths
+        )
+        (gradient,) = torch.autograd.grad(value, branch_lengths)
+        return value, gradient
+
+    value, gradient = benchmark(_value_and_gradient)
+
+    assert math.isfinite(float(value))
+    assert bool(torch.isfinite(gradient).all())
