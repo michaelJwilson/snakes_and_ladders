@@ -519,6 +519,8 @@ def test_no_schedule_is_written_outside_the_base() -> None:
     )
 
 
+@pytest.mark.critical
+@pytest.mark.infra
 def test_no_compressed_store_is_built_outside_the_incidence_seam() -> None:
     # One compressed layout, ten modules building through it (issue #755).
     # Three wrote the counting sort separately before #586 -- `ParityCheck`
@@ -572,6 +574,8 @@ def test_no_consumer_branches_on_a_schedules_name() -> None:
     assert _offenders(SCHEDULE_NAME_MATCH, SCHEDULE_OWNER) == []
 
 
+@pytest.mark.critical
+@pytest.mark.infra
 def test_no_module_builds_a_scipy_sparse_store() -> None:
     # `scipy` is carried for `linear_sum_assignment`. A `csr_matrix` beside
     # `SparseIncidence` would be a second compressed layout whose row order,
