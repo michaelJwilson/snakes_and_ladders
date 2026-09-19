@@ -14,10 +14,12 @@ import math
 import numpy as np
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood import message_passing_reference as reference
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
 from snakes_and_ladders.likelihood.message_passing import (
     MessageScheduleName,
+    max_product,
     sum_product,
 )
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
@@ -39,12 +41,47 @@ def _chain() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def test_sum_product_on_a_chain_benchmark(benchmark: BenchmarkFixture) -> None:
-    """The general algorithm on the chain the forward recursion is written for."""
+    """The general algorithm on the chain the forward recursion is written for.
+
+    The NumPy route by name: it is the oracle and the before number, and the
+    default moved to the kernel in issue #754.
+    """
     graph = from_hmm(*_chain())
 
-    result = benchmark(sum_product, graph)
+    result = benchmark(sum_product, graph, backend=Backend.PYTHON)
 
     # Benchmarks assert finiteness only; correctness is pinned in the regression suite.
+    assert math.isfinite(result.log_partition)
+
+
+def test_rust_sum_product_on_the_same_chain_benchmark(
+    benchmark: BenchmarkFixture,
+) -> None:
+    """The kernel the per-level dispatch was ported to: the after number."""
+    graph = from_hmm(*_chain())
+
+    result = benchmark(sum_product, graph, backend=Backend.RUST)
+
+    assert math.isfinite(result.log_partition)
+
+
+def test_max_product_on_the_same_chain_benchmark(benchmark: BenchmarkFixture) -> None:
+    """Viterbi through the same schedule, NumPy: the reduction is ``max``."""
+    graph = from_hmm(*_chain())
+
+    _, result = benchmark(max_product, graph, backend=Backend.PYTHON)
+
+    assert math.isfinite(result.log_partition)
+
+
+def test_rust_max_product_on_the_same_chain_benchmark(
+    benchmark: BenchmarkFixture,
+) -> None:
+    """Viterbi through the kernel, for the ratio the reduction is read at."""
+    graph = from_hmm(*_chain())
+
+    _, result = benchmark(max_product, graph, backend=Backend.RUST)
+
     assert math.isfinite(result.log_partition)
 
 
