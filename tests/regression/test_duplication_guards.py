@@ -108,10 +108,12 @@ SLIMMING_BASELINE = {
     # test-lines row excludes this module: a count including its own pin
     # moves every time the pin is edited, and the first two readings taken
     # while writing these rows disagreed by exactly the comment that
-    # explained them.
-    "package lines": 51516,
-    "test modules": 251,
-    "test lines": 56986,
+    # explained them. #813's PR 2 moved all three: one test module for the
+    # seam survey, and nine package lines stating why `MessageSchedule`
+    # stands at one named consumer.
+    "package lines": 51525,
+    "test modules": 252,
+    "test lines": 57035,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
