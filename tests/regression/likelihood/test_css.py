@@ -480,3 +480,77 @@ def test_the_decoder_runs_at_the_stress_length_with_no_oracle_behind_it() -> Non
     assert (code.n_logical, code.four_cycles()) == (16, 160)
     assert (measured.logical_failures, measured.undecoded) == (168, 112)
     assert measured.rate == 0.28
+
+
+# --- end to end: a planted error, its syndrome, and the rate on record ----------
+
+#: The seeds and the budget `docs/experiments/015-css-decoding-under-degeneracy.md`
+#: declares, and the run `STATUS.md` reports from them. 12,000 decodes are
+#: 10.5 s, over the 10 s a per-pull-request test may take, so the run is
+#: `release`: a shorter one would report a rate the record does not carry.
+EXPERIMENT_SEEDS = (11, 12, 13)
+EXPERIMENT_TRIALS = 4000
+
+#: The logical error rate that run records, its spread over the three seeds,
+#: and the two failures counted apart: 403 decodes that converged on a logical
+#: coset and 1,742 that reached the iteration cap.
+RECORDED_LOGICAL_RATE = 0.178750
+RECORDED_SPREAD = 0.005788
+RECORDED_FAILURES = (403, 1742)
+
+#: What a figure recorded to six decimals is recomputed to (`DEV.md`): half of
+#: its last digit. A rate over seeded draws reproduces exactly, so the
+#: recomputation is held to the precision the record has and no looser.
+RECORDED_PRECISION = 5e-7
+
+
+@pytest.mark.release
+@pytest.mark.end2end
+def test_a_planted_error_is_corrected_at_the_logical_rate_on_record() -> None:
+    """Realized 0.178750 over 12,000 planted errors, against the 0.178750
+    `STATUS.md` records, with the 403 and 1,742 failures split as recorded and
+    the spread over the three seeds 0.005788; 2.54 times the exact degenerate
+    floor 0.070297 the enumeration returns on the same code and rate.
+
+    **There is no message to plant, and that is the path this code has.** A
+    qubit is not measured, so nothing here transmits a codeword and reads one
+    back: what is drawn is an `X` error at the declared physical rate, and
+    what the decoder is given is the syndrome that error produces. The truth
+    that generated the data is therefore the error pattern, and the judgement
+    is :func:`decode_succeeds` --- whether the residual `e + ê` is a
+    stabilizer, which is the criterion degeneracy forces and which
+    `likelihood.css` writes down before any decoder runs. Everything else is
+    the package's own: `sim.css.sample_x_error` is the channel,
+    :func:`measure_logical_error_rate` is the run, and belief propagation on
+    `H` is the decoder `STATUS.md` reports.
+
+    Two referees, and they answer different questions. The record says where
+    this decoder lands on this instance: three seeds of 4,000 trials, and the
+    rate a seeded run reproduces exactly. The enumeration says where the
+    optimum is: `error_cosets` sums each coset's probability over all
+    `2 ** 16` errors, and a decoder below that floor would be a defect in the
+    floor rather than a result. The gap between them is 2.54x and is what the
+    30 four-cycles of a CSS Tanner graph cost a decoder that assumes a tree.
+    """
+    code = _ci_code()
+    channel = BinarySymmetricChannel(CI_FLIP)
+    rates = []
+    logical = undecoded = 0
+
+    for seed in EXPERIMENT_SEEDS:
+        measured = measure_logical_error_rate(
+            code, channel, np.random.default_rng(seed), EXPERIMENT_TRIALS
+        )
+        assert measured.trials == EXPERIMENT_TRIALS
+        rates.append(measured.rate)
+        logical += measured.logical_failures
+        undecoded += measured.undecoded
+
+    realized = float(np.mean(rates))
+    assert (logical, undecoded) == RECORDED_FAILURES
+    assert abs(realized - RECORDED_LOGICAL_RATE) < RECORDED_PRECISION
+    assert abs(float(np.std(rates)) - RECORDED_SPREAD) < RECORDED_PRECISION
+
+    floor = error_cosets(code, CI_FLIP).degenerate_logical_error_rate
+    assert floor == pytest.approx(CI_DEGENERATE_RATE, abs=RECORDED_PRECISION)
+    assert realized == pytest.approx(2.54 * floor, rel=0.01)

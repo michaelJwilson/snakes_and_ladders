@@ -119,6 +119,14 @@ and `search` **88.96%** against 88.66%, so the whole's 89.2 stands and
 `search`'s rises to 88.9. `search/kernels.py` goes 12.68% to **97.18%**,
 `search/surrogate.py` 79.82% to **97.37%** and `search/projection.py` 92.27%
 to **94.48%**, and the package's statements no test reaches fall 141 to 62.
+The codes are the second (step 3): judged **83.89%** with `qa` exempt and the
+complement **89.28%**, floored at **83.8** and 89.2, with `sim` **77.44% to
+78.64%** as convolutional, turbo, CSS, the elementary codes and Reed--Solomon
+each gain the planted run they lacked. `search` reads **89.86%** against its
+89.9 floor on that tree and the floor does not follow it down: the merges of
+#744 to #749 deleted the `oracle` over the Rust max-flow kernel and `opt`'s
+four Himmelblau minima, which is `search` 89.99% to 89.86% and `opt` 86.42% to
+85.93% and is not this branch's.
 The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
