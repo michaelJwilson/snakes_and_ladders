@@ -58,9 +58,11 @@ SLIMMING_BASELINE = {
     # lattice and the factor graph share, took them from 148 and 1,576
     # (#756). The second moves on a public name too, and #756's cluster moves
     # for a frustrated lattice added twelve without adding a module; its
-    # `search.annealed` added both, a module and fourteen names.
-    "flat modules": 150,
-    "API-map entries": 1616,
+    # `search.annealed` added both, a module and fourteen names, and its two
+    # samplers --- `opt.langevin` and `opt.slice`, one module each, which is
+    # the package's shape for a sampler --- added two and eight.
+    "flat modules": 152,
+    "API-map entries": 1624,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
