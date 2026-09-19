@@ -252,6 +252,7 @@ def test_a_gap_below_the_band_is_bisected_until_the_ladder_is_geometric() -> Non
     assert_allclose(result.acceptance, [0.5] * 4)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_a_temperature_between_two_gaps_above_the_band_is_removed() -> None:
     # A ladder twice as dense as the band needs loses every other interior
@@ -265,6 +266,7 @@ def test_a_temperature_between_two_gaps_above_the_band_is_removed() -> None:
     assert_allclose(result.temperatures, [8.0 / 2**k for k in range(5)], rtol=1e-12)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_a_gap_above_the_band_beside_one_inside_it_moves_their_shared_temperature() -> (
     None
