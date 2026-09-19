@@ -770,8 +770,8 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "mixture",
-        "non-Euclidean projection seedings",
-        "search.projection.data_seeding",
+        "emission_seeding, data_seeding",
+        "search.projection.emission_seeding",
         "k-means++ seeding",
         T + "search/test_projection_seeding.py"
         "::test_the_non_euclidean_seedings_draw_the_law_of_the_metric_they_declare",
