@@ -49,12 +49,15 @@ from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.surrogate import MLPSurrogate, fit_surrogate
 from snakes_and_ladders.likelihood import pruning, pruning_rust, pruning_torch
 from snakes_and_ladders.likelihood.belief_propagation import belief_propagation
+from snakes_and_ladders.likelihood.convolutional import bcjr
+from snakes_and_ladders.likelihood.ldpc import DecodingAlgorithm, decode
 from snakes_and_ladders.likelihood.message_passing import (
     MessageScheduleName,
     sum_product,
 )
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.likelihood.parsimony import fitch_score
+from snakes_and_ladders.likelihood.turbo import decode_turbo, noise_scale, split_streams
 from snakes_and_ladders.numerics import sample_rows
 from snakes_and_ladders.opt import hmc
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare
@@ -73,8 +76,15 @@ from snakes_and_ladders.search.topology import (
     nni_neighbours,
     spr_neighbours,
 )
+from snakes_and_ladders.sim import fixtures
+from snakes_and_ladders.sim.convolutional import turbo_code
 from snakes_and_ladders.sim.factor_graph import from_hmm, from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.ldpc import (
+    BinarySymmetricChannel,
+    all_zero_transmission,
+    gallager_code,
+)
 from snakes_and_ladders.sim.potts import energies
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
@@ -367,6 +377,89 @@ def search_sections(mid: bool) -> list[Section]:
     ]
 
 
+# --- codes ---------------------------------------------------------------------
+
+
+def codes_sections(mid: bool) -> list[Section]:
+    """The decoders, at the two block lengths the fixtures declare.
+
+    Added for issue #754: the codes were the one family with no workload
+    here, so nothing ranked them. Both instances are read from the fixture
+    store rather than restated (issue #622). Which file each tier reads is a
+    statement about cost, and the fixture tiers are not: `ldpc/stress.yaml`
+    is 96 bits because dense encoding is cubic and refuses past 512, and
+    `ldpc/release.yaml` is 996 because that is where the thresholds turn. So
+    the enumerable tier here reads `stress` and the mid tier reads
+    `release`, which orders the two by the work they do.
+    """
+    ldpc = fixtures.fixture("ldpc", "release" if mid else "stress").params
+    turbo = fixtures.fixture("turbo", "release" if mid else "stress").params
+    code = gallager_code(
+        ldpc.n_bits,
+        ldpc.column_weight,
+        ldpc.row_weight,
+        np.random.default_rng(ldpc.seed),
+    )
+    llr = all_zero_transmission(
+        code,
+        BinarySymmetricChannel(ldpc.flip_probability),
+        np.random.default_rng(0),
+    )
+    trellis_code = turbo_code(
+        turbo.feedback,
+        turbo.feedforward,
+        turbo.memory,
+        turbo.message_length,
+        np.random.default_rng(turbo.seed),
+    )
+    sigma = noise_scale(1.0, trellis_code.rate)
+    received = 1.0 + sigma * np.random.default_rng(9).standard_normal(
+        trellis_code.block_length
+    )
+    channel_llr = np.asarray(2.0 * received / sigma**2)
+    streams = split_streams(trellis_code, channel_llr)
+
+    def _sum_product() -> None:
+        decode(
+            code,
+            llr,
+            algorithm=DecodingAlgorithm.SUM_PRODUCT,
+            max_iterations=50,
+            early_stop=False,
+        )
+
+    def _min_sum() -> None:
+        decode(
+            code,
+            llr,
+            algorithm=DecodingAlgorithm.MIN_SUM,
+            max_iterations=50,
+            early_stop=False,
+        )
+
+    def _bcjr() -> None:
+        bcjr(trellis_code.trellis, streams.systematic, streams.parity_first)
+
+    def _turbo() -> None:
+        decode_turbo(trellis_code, channel_llr, iterations=turbo.iterations)
+
+    return [
+        (
+            f"codes.ldpc sum-product @ {ldpc.n_bits} bits, 50 iterations",
+            _sum_product,
+            1,
+        ),
+        (f"codes.ldpc min-sum @ {ldpc.n_bits} bits, 50 iterations", _min_sum, 1),
+        (f"codes.convolutional.bcjr @ K={turbo.message_length}", _bcjr, 5),
+        (
+            f"codes.turbo.decode_turbo @ K={turbo.message_length}, "
+            f"{turbo.iterations} iterations",
+            _turbo,
+            1,
+        ),
+    ]
+
+
 # --- learn ----------------------------------------------------------------------
 
 
@@ -418,6 +511,7 @@ MODULES: dict[str, Callable[[bool], list[Section]]] = {
     "likelihood": likelihood_sections,
     "opt": opt_sections,
     "search": search_sections,
+    "codes": codes_sections,
     "learn": learn_sections,
 }
 
