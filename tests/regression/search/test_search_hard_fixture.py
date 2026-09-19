@@ -113,12 +113,13 @@ def test_the_generating_topology_is_the_enumerated_maximum(
     assert environment.score(params.tau) == _enumerated_maximum(environment, alignment)
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
     alignment: dict[str, np.ndarray],
 ) -> None:
-    # (2n - 5)!! at n = 7. The oracle every other assertion here rests on is
-    # only an oracle if it is exhaustive.
+    # Refereed by the closed form `(2n - 5)!!`, which is 945 at n = 7. The
+    # oracle every other assertion here rests on is only an oracle if it is
+    # exhaustive. Realized 945.
     assert len(list(enumerate_topologies(sorted(alignment)))) == 945
 
 

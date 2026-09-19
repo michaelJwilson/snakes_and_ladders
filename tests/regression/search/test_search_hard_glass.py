@@ -129,7 +129,7 @@ def test_every_descent_failure_stops_at_a_genuine_local_minimum(
             assert energy(glass.graph, FIELD, flipped) >= here - 1e-12, node
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 def test_random_restart_descent_still_reaches_the_ground_state(
     record: Baseline, glass: PlantedSpinGlass
 ) -> None:
@@ -137,6 +137,10 @@ def test_random_restart_descent_still_reaches_the_ground_state(
     # Milestone 2.1: the baseline a learned searcher has to beat is
     # random-restart descent, and over the declared 50 restarts that baseline
     # is 1.000 on every seed measured. The headroom is against a single run.
+    # Refereed by `enumerated_ground_energy`, the exhaustive minimum the
+    # fixture's baseline record carries, as the two tests above are; realized
+    # 8 of the 50 restarts within 1e-9 of it at this seed, so a run of 50
+    # reaches it and a single descent mostly does not.
     best = record.value("enumerated_ground_energy")
     reached = [abs(found - best) < 1e-9 for _, found in _descents(glass, 20260908, 50)]
 

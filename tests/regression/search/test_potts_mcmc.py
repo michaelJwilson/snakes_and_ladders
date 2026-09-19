@@ -179,16 +179,31 @@ def test_a_cluster_move_refuses_a_negative_coupling(move: PottsMove) -> None:
         sample_potts(graph, NO_FIELD, move, np.random.default_rng(SEED), 10)
 
 
-@pytest.mark.smoke
-def test_single_site_still_runs_on_a_negative_coupling() -> None:
-    # The refusal is a property of the cluster construction, not of the model.
+@pytest.mark.oracle
+def test_single_site_is_still_exact_on_a_negative_coupling() -> None:
+    # The refusal above is a property of the cluster construction, not of the
+    # model, and what says so is that the heat bath is still drawing from the
+    # right distribution at J = -0.5: the same enumeration of all 16
+    # configurations refereeing the ferromagnetic tests, at the coupling the
+    # cluster moves decline. Realized p = 0.524 at the declared seed and
+    # 0.608 at the next, against the 0.001 significance.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, -0.5)
+    index, probability = _exact_distribution(graph, NO_FIELD)
 
     chain = sample_potts(
-        graph, NO_FIELD, PottsMove.SINGLE_SITE, np.random.default_rng(SEED), 10
+        graph,
+        NO_FIELD,
+        PottsMove.SINGLE_SITE,
+        np.random.default_rng(SEED),
+        SWEEPS,
+        burn_in=SWEEPS // 10,
+        thin=THINNING[PottsMove.SINGLE_SITE],
     )
 
-    assert chain.states.shape == (10, graph.n_nodes)
+    observed = np.zeros(len(probability))
+    for row in chain.states:
+        observed[index[tuple(row)]] += 1
+    assert chi_square_p_value(observed, probability * SWEEPS) > SIGNIFICANCE
 
 
 # The instance at the transition, declared rather than built here (issue
@@ -348,12 +363,15 @@ def test_tempering_is_model_scaling_exactly(temperature: float) -> None:
     assert np.abs(scaled - expected).max() == 0.0
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 @pytest.mark.parametrize("move", list(PottsMove))
 @pytest.mark.parametrize("temperature", TEMPERATURES)
 def test_a_tempered_chain_is_drawn_from_the_tempered_boltzmann_distribution(
     move: PottsMove, temperature: float
 ) -> None:
+    # Refereed by `_tempered_exact_distribution`, the enumeration of all 16
+    # configurations at the same temperature, which shares no sweep, cluster
+    # or accept step with the sampler.
     # Hot and cold, in a field, for every move set: the bond probabilities
     # and the field accept step are tempered by the same division as the heat
     # bath. Realized p-values over two seeds range 0.016 to 0.89 against the
@@ -469,11 +487,12 @@ def _replica_p_values(
     return p_values
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 @pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
 def test_every_replica_is_drawn_from_its_own_tempered_distribution(
     backend: Backend,
 ) -> None:
+    # Refereed by the same enumeration, once per rung of the ladder.
     # The joint target is a product of tempered marginals, so with exchanges
     # *on* each replica must still pass the chi-square against exp(-E / T_r)
     # enumerated from the unscaled model; a wrong exchange ratio contaminates
@@ -616,7 +635,7 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
         parallel_tempering(graph, NO_FIELD, (1.0, 0.0), np.random.default_rng(SEED), 10)
 
 
-@pytest.mark.smoke
+@pytest.mark.end2end
 def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
     # The instance where restarts can lose: the planted Viana-Bray spin
     # glass, 60 sites at mean degree 4 and frustration 0.2, whose planted
@@ -632,7 +651,9 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
     #
     # Asserted at the margin the measurement supports: restarts below both,
     # and the two tempered methods at or below the planted energy on every
-    # instance.
+    # instance. The referee is that planted energy: `planted_spin_glass`
+    # plants a configuration and reports its energy, so a solver at or below
+    # it has recovered the truth the instance was generated from.
     budget = Budget("sweeps", 400)
     ladder = (2.0, 1.2, 0.7, 0.4)
     instances = [
@@ -759,11 +780,15 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
         assert bool((fresh.swap_acceptance < 0.9).all()), fresh.swap_acceptance
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 @at_scale("n_seeds", ci=10, stress=20)
 def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
     n_seeds: int,
 ) -> None:
+    # Refereed by `sim.canonical.minimum_frustrated_edges`, the closed-form
+    # ground energy |J| * N of the periodic triangular antiferromagnet --- the
+    # same referee the annealing and tempering rungs above are judged against
+    # --- so a hit is the exact minimum and not a solver's own best.
     # The warm-up is charged: 2400 sweeps per seed, of which the adapted
     # ladder spends its warm-up (895 on average, 500 to 1900) and splits the
     # rest across its rungs, while the hand ladder spends 600 per replica on
