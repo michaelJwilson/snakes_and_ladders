@@ -112,6 +112,13 @@ judge --- is the third guard (issue #732, PR
 [#733](https://github.com/michaelJwilson/snakes_and_ladders/pull/733)): **89.25%** with `qa` exempt,
 `search` **88.66%**, floored at 89.2 and 88.6, and `--functions` lists the
 330 public callables no judging test enters, 157 of them entered by no test.
+The `search` audit is the first directory to raise them (step 2): judged
+**83.75%** with `qa` exempt against 83.08% and `search` **89.99%** against
+87.07%, floored at 83.7 and 89.9; the complement **89.29%** against 89.31%
+and `search` **88.96%** against 88.66%, so the whole's 89.2 stands and
+`search`'s rises to 88.9. `search/kernels.py` goes 12.68% to **97.18%**,
+`search/surrogate.py` 79.82% to **97.37%** and `search/projection.py` 92.27%
+to **94.48%**, and the package's statements no test reaches fall 141 to 62.
 The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs

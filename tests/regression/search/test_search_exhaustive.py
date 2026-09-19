@@ -128,11 +128,13 @@ def test_enumeration_refuses_unusable_leaf_sets(names: list[str], message: str) 
         list(enumerate_topologies(names))
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 @pytest.mark.release
 def test_enumeration_scales_to_the_size_cap() -> None:
     # DEV.md caps exhaustive topological tests at n <= 10; 8 taxa is 10395
-    # topologies and is where that cap starts to bite.
+    # topologies and is where that cap starts to bite. Refereed by the closed
+    # form `(2n - 5)!!` through `sim.newick.count_topologies`; realized 10,395
+    # produced and 10,395 distinct.
     names = [f"t{index}" for index in range(8)]
     produced = list(enumerate_topologies(names))
 

@@ -119,13 +119,16 @@ def test_the_two_return_the_same_tree_on_an_ultrametric_matrix() -> None:
     assert _splits(theirs, ULTRAMETRIC_NAMES) == ULTRAMETRIC_SPLITS
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 def test_upgma_returns_the_wrong_tree_where_the_matrix_is_not_ultrametric() -> None:
     # Two long branches that are not a cherry: the true tree is
     # ((t1,t2),(t3,t4)) with t1 and t3 long, so the two shortest branches are
     # t2 and t4 and the closest pair by distance is t2 with t4 --- which is
     # what average linkage joins first, and it is wrong. The matrix is exactly
     # additive, so this is the criterion failing and not noise in an estimate.
+    # The referee is that tree, written into the matrix by hand rather than
+    # taken from either implementation: neighbour joining recovers it and
+    # average linkage returns {t2, t4} instead. Realized exactly, on splits.
     names = ("t1", "t2", "t3", "t4")
     matrix = np.array(
         [

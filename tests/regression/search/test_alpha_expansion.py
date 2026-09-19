@@ -195,11 +195,14 @@ def test_a_zero_coupling_problem_is_solved_exactly_by_the_data_term() -> None:
     np.testing.assert_array_equal(result.labelling, field_values.argmax(axis=1))
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 def test_a_dominant_coupling_drives_every_site_to_one_label() -> None:
-    # The opposite corner: a coupling large enough that any disagreement costs
-    # more than the whole field can repay, so the optimum is constant and
-    # equals whichever label the summed field prefers.
+    # The opposite corner, and its optimum has a closed form: at J = 50 one
+    # disagreement costs more than the whole field can repay, so the minimizer
+    # is the constant labelling and the label is `argmax` of the summed field.
+    # That closed form is the referee, derived from the model rather than read
+    # from a solver. Realized: the returned labelling is constant at label 1,
+    # which is the summed field's argmax.
     rng = np.random.default_rng(6)
     graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 50.0)
     field_values = rng.normal(size=(graph.n_nodes, 3))

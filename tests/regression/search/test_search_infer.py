@@ -197,13 +197,14 @@ def test_the_search_converges_and_ends_on_its_best_score(moves: MoveSet) -> None
     assert result.log_likelihood == max(result.trace)
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 def test_no_topology_is_scored_twice() -> None:
-    # The deduplication claim, checked against the closed-form count: at 4
-    # taxa there are 3 unrooted topologies, so a converged search can never
-    # have spent more than 3 fits however many times a neighbourhood
-    # proposes the same tree.
-    alignment, _ = _alignment()
+    # The deduplication claim, refereed by the closed-form count `(2n - 5)!!`
+    # through `sim.newick.count_topologies`: at 4 taxa there are 3 unrooted
+    # topologies, so a converged search can never have spent more than 3 fits
+    # however many times a neighbourhood proposes the same tree. Realized 2
+    # evaluations against the bound of 3.
+    alignment, k = _alignment()
 
     result = _searched(MoveSet.SPR)
 

@@ -239,11 +239,14 @@ def test_the_unit_step_matrix_walks_the_same_path_as_fitch() -> None:
         assert leaf_bipartitions(unit.topology) == leaf_bipartitions(fitch.topology)
 
 
-@pytest.mark.smoke
+@pytest.mark.oracle
 def test_no_topology_is_scored_twice() -> None:
-    # At five taxa there are 15 topologies, so a converged SPR search --
-    # whose neighbourhood at this size is every other topology -- can never
-    # have scored more than 14 candidates however often the moves repeat one.
+    # Refereed by the closed-form count `(2n - 5)!!` through
+    # `sim.newick.count_topologies`: at five taxa there are 15 topologies, so
+    # a converged SPR search -- whose neighbourhood at this size is every
+    # other topology -- can never have scored more than 14 candidates however
+    # often the moves repeat one. Realized 14 evaluations against the bound
+    # of 14, so the bound binds.
     alignment, k = _alignment(FIVE_TAXA)
 
     result = parsimony_search(
