@@ -41,7 +41,11 @@ import duplication_survey  # noqa: E402
 SLIMMING_BASELINE = {
     "Potts energies of a labelling": 1,
     "site-field broadcasts": 0,
-    "annealers": 3,
+    # `anneal\w*` catches a name and not a duplicate: #756's
+    # `search.annealed.annealed_importance_sampling` is an estimator of
+    # `log Z`, not a fourth annealing optimizer, and the row moves with the
+    # spelling Neal gave it.
+    "annealers": 4,
     "ground-state run_ wrappers": 7,
     "backend enums": 1,
     "Python paths above a compiled kernel": 6,
@@ -53,9 +57,10 @@ SLIMMING_BASELINE = {
     # module lands: `search.balanced`, the one proposal kernel the Potts
     # lattice and the factor graph share, took them from 148 and 1,576
     # (#756). The second moves on a public name too, and #756's cluster moves
-    # for a frustrated lattice added twelve without adding a module.
-    "flat modules": 149,
-    "API-map entries": 1602,
+    # for a frustrated lattice added twelve without adding a module; its
+    # `search.annealed` added both, a module and fourteen names.
+    "flat modules": 150,
+    "API-map entries": 1616,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
