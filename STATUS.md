@@ -2463,6 +2463,51 @@ wall clock, and 380x behind the shipped sampler. Recorded as
 [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754) owns
 the port that would close it.
 
+**Two cluster moves landed for the frustrated lattice, and both percolate on
+it** ([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`PottsMove.NIEDERMAYER` activates a bond on its energy relative to a threshold
+`E_0` (Niedermayer 1988) rather than on its endpoints agreeing, so it runs on a
+coupling of either sign --- the instance `sample_potts` refuses Wolff and
+Swendsen-Wang on. At `niedermayer_threshold`'s value it **is** Wolff on a
+ferromagnet: the same bonds, the same field accept step, and the same labelling
+to the last bit over 900 draws at three temperatures. Below that value the
+boundary terms of its ratio survive and the move interpolates down to a
+single-site Metropolis flip, which is pinned against `energies` on the flipped
+configuration. `sample_potts_pair` and `tempered_potts_pair` carry Houdayer's
+isoenergetic move (2001): two replicas at one temperature exchange labels on a
+component of the region where they disagree, which leaves `E(s) + E(s')` where
+it found it --- worst `|dE|` 3.6e-15 over 500 drawn pairs --- so the acceptance
+is 1 by an identity. Both leave the exact Boltzmann law invariant at the
+enumerable sizes: chi-square against enumeration at a significance of 0.001,
+realized 0.0221 to 0.9945 over two seeds on the 3x3 open square and the 3x3
+periodic triangular antiferromagnet, and 0.0039 to 0.9913 per replica for the
+pair. Two ablations are rejected at `p = 0.0`: the accept step dropped, and
+Houdayer's component replaced by the single site it was seeded from. Where a
+chain cannot referee the move --- mixed couplings, where the cluster is 8.94
+sites of 9 and a chain is a global spin reversal --- the kernel's own flow
+`pi(s) K(s, s')` is read against its transpose instead, 0.0016 against a Monte
+Carlo error of 0.0089.
+
+**Neither buys a round trip on this lattice.** Houdayer's cluster is 43 to 59
+sites of a 65 to 72-site defect region on the 12x12 periodic triangular
+antiferromagnet, so the move is a near-global exchange of the two replicas:
+
+| 8 seeds, 2,000 sweeps, 10 rungs | without Houdayer | with Houdayer |
+| --- | --- | --- |
+| round-trip time, sweeps (12x12 triangular) | 1,115.5 | 1,090.7 |
+| round-trip time, sweeps (60-site planted glass) | 955.9 | 772.3 |
+| wall, 8 seeds | 17.4 s | 67.8 s |
+
+The paired sign test reads `p = 0.6875` on the lattice and `p = 0.2891` on the
+glass, so no direction is established in either sense, at 3.90x and 4.01x the
+wall over two readings. Recorded as
+`docs/experiments/022-cluster-moves-for-frustrated-lattices.md`. The moves are
+exact and cheap to have; what the measurement rejects is this instance, whose
+overlap percolates, and not the construction. `MoveKind.NIEDERMAYER` is an arm
+`PottsNDEnvironment` can select beside Wolff and Swendsen-Wang, through
+`cluster_moves`; Houdayer's move is not one and cannot be, an arm's action
+carrying one labelling to one labelling where his carries a pair.
+
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
 non-negative the Ising energy is submodular, so a minimum cut finds its global
