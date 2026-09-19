@@ -78,6 +78,61 @@ def _package_modules(package: Path = PACKAGE) -> list[Path]:
     ]
 
 
+def _non_blank(paths: list[Path]) -> int:
+    """Lines that carry something, over ``paths``.
+
+    Blank lines are not counted because a reformat moves them and the rows
+    here exist to be compared across months. A comment and a docstring line
+    do count: both are read, and #813 is about what a reader must get
+    through, not about statements a compiler would see.
+    """
+    return sum(
+        1
+        for path in paths
+        for line in path.read_text().splitlines()
+        if line.strip()
+    )
+
+
+def package_lines(package: Path = PACKAGE) -> int:
+    """Non-blank lines of the package, the sandbox excluded as everywhere here.
+
+    The target #813 states is read against this row and the one below it.
+    The sandbox is conserved declined work (`sandbox/CLAUDE.md`), so removing
+    it would be a saving nobody made.
+    """
+    return _non_blank(_package_modules(package))
+
+
+def test_modules(tests: Path = TESTS) -> int:
+    """Regression test modules: the files a reader chooses between."""
+    return sum(1 for path in tests.rglob("test_*.py"))
+
+
+#: The module that pins these rows, excluded from the row that would count it.
+#: A count including its own pin moves every time the pin is edited, so the
+#: first edit after this one would have reported a duplication that is a
+#: comment (#813).
+PINNING_MODULE = "test_duplication_guards.py"
+
+
+def test_lines(tests: Path = TESTS) -> int:
+    """Non-blank lines of the regression suite, excluding the module that pins it.
+
+    Counted beside the package's because #813's rows are meant to fall
+    together: thirteen test modules pinning one twin is one duplication with
+    two line counts, and a fold that moves lines from the second row into the
+    first has saved nothing.
+    """
+    return _non_blank(
+        [
+            path
+            for path in sorted(tests.rglob("test_*.py"))
+            if path.name != PINNING_MODULE
+        ]
+    )
+
+
 def flat_modules(package: Path = PACKAGE) -> int:
     """Modules that are not a package's ``__init__``: the entry points a reader meets."""
     return sum(1 for path in _package_modules(package) if path.name != "__init__.py")
@@ -234,6 +289,12 @@ FINDINGS = (
     ),
     Finding("flat modules", "", 150, counter=flat_modules),
     Finding("API-map entries", "", 1576, counter=api_map_entries),
+    # The three rows #813 reads its target against. `at_filing` is the count
+    # on the day that ticket was filed, `main` at e795a73, so a later reader
+    # can see what the folds returned rather than what was hoped for.
+    Finding("package lines", "", 51516, counter=package_lines),
+    Finding("test modules", "", 251, counter=test_modules),
+    Finding("test lines", "", 56986, counter=test_lines),
 )
 
 

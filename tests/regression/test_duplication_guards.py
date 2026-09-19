@@ -99,6 +99,19 @@ SLIMMING_BASELINE = {
     # another directory.
     "flat modules": 158,
     "API-map entries": 1659,
+    # Issue #813 reads its target against these three, and they are the
+    # survey's convention rather than a shell's: the sandbox is excluded,
+    # as it is from every row here, and the test rows count
+    # `tests/regression/test_*.py` -- not the benchmarks, which are a
+    # separate invocation, and not the helpers a test imports. A row that
+    # falls is a fold that landed; a row that rises states why here. The
+    # test-lines row excludes this module: a count including its own pin
+    # moves every time the pin is edited, and the first two readings taken
+    # while writing these rows disagreed by exactly the comment that
+    # explained them.
+    "package lines": 51516,
+    "test modules": 251,
+    "test lines": 56986,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
