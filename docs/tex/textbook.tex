@@ -6011,6 +6011,139 @@ and one over the edges, against one exact tree pass per edge for
 \eqref{eq:spanning-tree-bound}, which is why they are the bracket at the
 sizes that bound does not reach.
 
+\section{The Analytic Results the Implementation Rests On}
+\label{app:analytic-results}
+
+Every claim this book makes about an implementation rests on a result that is
+true independently of it. This appendix is the inventory: what each result
+says, what it assumes, and where the text uses it. Where a derivation is
+given, the row points at it rather than repeating it; where none is given, the
+result is standard and the assumption is the part worth stating, because the
+assumption is what an instance can violate.
+
+Three generated tables carry the other half of the picture, and are the place
+to look for a method rather than a result: Table~\ref{tab:declared-instances}
+states every instance the registry declares and the shape each one has,
+Table~\ref{tab:ladder} gives the oracle ladder per problem --- each rung, the
+rung it is pinned against, and what pins the pair --- and
+Table~\ref{tab:algorithms-problems} says which algorithms apply to which
+problem and what referees each. All three are written from the repository
+rather than typed, so a method added without a referee is visible in them as a
+gap rather than absent from them altogether.
+
+\subsection{Results whose derivation is given here}
+
+Five of the results the implementation uses most are derived in
+Section~\ref{app:proofs}, and are listed here only so the inventory is
+complete: the factorization of a tree likelihood over internal states
+(Section~\ref{app:pruning}); the same marginalization on a chain, which is the
+forward--backward recursion; sum-product on a tree and its loopy stationary
+point, with the Bethe and region-based free energies it is stationary at;
+detailed balance for a cluster move in a field, which is why a field forces an
+accept step the zero-field construction does not need; and the exchange ratio
+in parallel tempering (Section~\ref{app:tempering}).
+
+\subsection{Results the text uses and does not derive}
+
+\begin{longtable}{@{}p{0.27\textwidth}p{0.34\textwidth}p{0.31\textwidth}@{}}
+  \caption{The analytic results the implementation rests on, what each
+  assumes, and the statement that uses it. An assumption in the middle column
+  is the thing an instance can violate --- which is what makes the row worth
+  stating rather than the result, all of which are
+  standard.}\label{tab:analytic-results}\\
+  \toprule
+  Result & What it assumes & Where it is used \\
+  \midrule
+  \endfirsthead
+  \toprule
+  Result & What it assumes & Where it is used \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+
+  The Jukes--Cantor transition matrix in closed form, and its inverse as an
+  expected distance
+  & Equal equilibrium frequencies and one substitution rate. The inverse is
+  defined only below the saturation distance, above which an observed
+  difference carries no information about elapsed time
+  & Section~\ref{sec:phylo}: the simulator draws from it, and a distance
+  estimate inverts it \\
+
+  The Hadamard conjugation of a two-state process on a tree
+  & Two states and a reversible process; the edge spectrum and the sequence
+  spectrum are related by an orthogonal transform
+  & Section~\ref{sec:phylo}: an evaluator that shares no traversal with the
+  recursion, which is what makes it an independent answer rather than a second
+  spelling \\
+
+  The transfer matrix for a chain, and its powers by repeated squaring
+  & A chain, or a strip of fixed width read as a chain of columns. Exactness
+  is in the model's structure, not in the arithmetic: a wider strip is exact
+  at a cost exponential in the width
+  & Section~\ref{sec:potts}: the exact normalizer a sampler's estimate is read
+  against, and the $\log n$ route to the $n$th power \\
+
+  Maximum-flow/minimum-cut duality
+  & Pairwise terms that are submodular at two labels. Beyond two labels the
+  cut is no longer the optimum, and an expansion move gives a bound rather
+  than an answer
+  & Section~\ref{sec:potts}: the exact ground state at two labels, and the
+  move that reaches more labels through it \\
+
+  The BCJR recursion and the extrinsic split
+  & A trellis, and information exchanged between constituent decoders that
+  excludes what the receiving decoder already knows --- the split is what
+  keeps the iteration from feeding a decoder its own belief
+  & Sections~\ref{sec:ldpc} and~\ref{sec:turbo}: the per-bit posterior on a
+  trellis, and the quantity the turbo iteration passes \\
+
+  Channel polarization and the reliability order
+  & A symmetric binary-input channel, and a transform whose synthetic channels
+  separate toward useless and noiseless as the block grows. The order is a
+  property of the channel parameter, so a frozen set earned at one parameter
+  is not earned at another
+  & Section~\ref{sec:polar}: the frozen set, and the order successive
+  cancellation decodes in \\
+
+  The exponential family's Bregman divergence
+  & A density of the form $\exp(-D_\phi(y,\mu))\,b_\phi(y)$. Squared Euclidean
+  distance is the Gaussian's case, which is why the general rule must reduce
+  to $k$-means$++$ there and nowhere else by accident
+  & Section~\ref{sec:mixture}: $D^2$ sampling under the family's own
+  divergence rather than under a negative log density, which normalizes rather
+  than shifts \\
+
+  The Gumbel--softmax relaxation
+  & A temperature above zero throughout, and exactness only at the corners of
+  the simplex: the relaxed objective equals the discrete one there and
+  nowhere between
+  & Section~\ref{sec:relaxation}: a gradient route over discrete states, whose
+  estimator's bias and variance are measured rather than assumed small \\
+
+  McNemar's exact test
+  & Paired outcomes over shared seeds. The exact form is the two-sided
+  binomial tail on the discordant pairs, which is what lets a comparison over
+  a few dozen starts state a result at all
+  & Section~\ref{sec:comparisons}: the test a budget-matched comparison is
+  settled by, in place of two means read side by side \\
+
+  The chi-square goodness-of-fit test against an exact law
+  & Independent draws, which a Markov chain does not give: the thinning
+  interval is part of the test, not an implementation detail, and an
+  unthinned chain fails the assumption before it fails the test
+  & Section~\ref{sec:potts}: how a sampler is shown to draw from the
+  distribution it claims \\
+
+  The enumeration counts: $(2n-5)!!$ unrooted topologies, $k^{m}$ labellings
+  of $m$ internal nodes, $q^{n}$ configurations
+  & Nothing --- they are counts. They are here because they decide what
+  ``enumerable'' means, and every exact oracle in this book is bounded by one
+  of them
+  & Throughout: the size at which an exact answer stops being available, and
+  therefore the size at which a claim changes its referee \\
+\end{longtable}
+
 \section{Algorithms Cited From the Text}
 \label{app:algorithms}
 
