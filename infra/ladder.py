@@ -273,6 +273,30 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "annealed importance sampling",
+        "search.annealed.annealed_importance_sampling",
+        "transfer matrix",
+        T + "search/test_search_annealed.py"
+        "::test_the_importance_sampled_log_partition_is_the_transfer_matrix",
+    ),
+    Rung(
+        "potts",
+        "population annealing",
+        "search.annealed.population_annealing",
+        "transfer matrix",
+        T + "search/test_search_annealed.py"
+        "::test_the_population_annealed_log_partition_is_the_transfer_matrix",
+    ),
+    Rung(
+        "potts",
+        "simulated tempering",
+        "search.annealed.simulated_tempering",
+        "enumeration",
+        T + "search/test_search_annealed.py"
+        "::test_the_simulated_tempering_walker_is_the_enumerated_law_at_every_rung",
+    ),
+    Rung(
+        "potts",
         "cluster moves as RL arms",
         "search.potts_keyed.cluster_moves",
         "Potts MCMC, Wolff, Swendsen--Wang",

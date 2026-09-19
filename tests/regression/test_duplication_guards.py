@@ -43,7 +43,11 @@ import duplication_survey  # noqa: E402
 SLIMMING_BASELINE = {
     "Potts energies of a labelling": 1,
     "site-field broadcasts": 0,
-    "annealers": 3,
+    # `anneal\w*` catches a name and not a duplicate: #756's
+    # `search.annealed.annealed_importance_sampling` is an estimator of
+    # `log Z`, not a fourth annealing optimizer, and the row moves with the
+    # spelling Neal gave it.
+    "annealers": 4,
     "ground-state run_ wrappers": 7,
     "backend enums": 1,
     "Python paths above a compiled kernel": 7,
@@ -57,11 +61,12 @@ SLIMMING_BASELINE = {
     # (#756). The second moves on a public name too, and #756's cluster moves
     # for a frustrated lattice added twelve without adding a module; issue
     # #755's seam is one public callable, so the row rises by one more. A row
-    # that rises states why here or it is a duplicate. #754's BCJR pass in
-    # Rust added one module, `likelihood/convolutional_rust.py`, and one
-    # public name.
-    "flat modules": 150,
-    "API-map entries": 1604,
+    # that rises states why here or it is a duplicate. #756's
+    # `search.annealed` added both, a module and fourteen names. #754's BCJR
+    # pass in Rust added one module, `likelihood/convolutional_rust.py`, and
+    # one public name.
+    "flat modules": 151,
+    "API-map entries": 1618,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
@@ -86,9 +91,9 @@ CLUSTER_BASELINE = {
 
 #: State-carrying classes over the whole package, the number the clusters are
 #: drawn from.
-#: Re-pinned on the merge with `main` 5fe6ef2 (2026-09-19): the audit's 245
-#: read 247 there, main having added two state-carrying classes since.
-STRUCTURE_BASELINE = 247
+#: Re-pinned on the merge with `main` ee16541 (2026-09-19): 250, main's 247
+#: plus the three result records `search.annealed` declares (#756, step 6).
+STRUCTURE_BASELINE = 250
 
 #: `enumeration.argmax` outside its own module. Issue #755 folded the three
 #: `learn` oracles that enumerated, scored and took the first maximizer onto

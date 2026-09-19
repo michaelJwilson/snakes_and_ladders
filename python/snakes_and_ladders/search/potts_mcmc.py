@@ -156,6 +156,24 @@ _BALANCED_MOVES = frozenset(
 )
 
 
+def _refuse_negative_coupling(move: PottsMove, graph: PottsGraph) -> None:
+    """Refuse a Fortuin-Kasteleyn cluster move on a graph with a negative coupling.
+
+    One message for every entry point that runs one, rather than a copy of
+    it apiece: the bond probability ``1 - exp(-J)`` is not a probability
+    below zero, and an antiferromagnet has no like-spin clusters to flip.
+    Niedermayer's rule is not in :data:`_CLUSTER_MOVES` and is the move for
+    that case (issue #756).
+    """
+    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
+        msg = (
+            f"{move} needs every coupling >= 0: the bond probability "
+            "1 - exp(-J) is not a probability for J < 0, and an "
+            "antiferromagnet has no like-spin clusters to flip"
+        )
+        raise ValueError(msg)
+
+
 @dataclass(frozen=True)
 class PottsChain:
     """One chain's recorded configurations, and what a sweep cost.
@@ -367,13 +385,7 @@ def sample_potts(
         bond probability ``1 - exp(-J)`` is not a probability there, and an
         antiferromagnet has no like-spin clusters to flip.
     """
-    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
-        msg = (
-            f"{move} needs every coupling >= 0: the bond probability "
-            "1 - exp(-J) is not a probability for J < 0, and an "
-            "antiferromagnet has no like-spin clusters to flip"
-        )
-        raise ValueError(msg)
+    _refuse_negative_coupling(move, graph)
 
     graph, field = tempered(graph, field, temperature)
     rows = site_field(field, graph.n_nodes)
@@ -495,13 +507,7 @@ def anneal_potts(
     -------
     AnnealedPotts
     """
-    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
-        msg = (
-            f"{move} needs every coupling >= 0: the bond probability "
-            "1 - exp(-J) is not a probability for J < 0, and an "
-            "antiferromagnet has no like-spin clusters to flip"
-        )
-        raise ValueError(msg)
+    _refuse_negative_coupling(move, graph)
 
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     state = np.ascontiguousarray(
@@ -607,6 +613,16 @@ class TemperedChains:
     n_sweeps : int
         Sweeps run per replica after burn-in --- the budget per replica, so
         the whole run cost ``n_replicas`` times this.
+    walkers : np.ndarray
+        ``walkers[t, w]`` is the rung walker ``w`` sat at, at recorded sweep
+        ``t``, shape ``(n_sweeps, n_replicas)``. The other reading of the
+        same run: a *replica* is a temperature configurations pass through,
+        where a *walker* is a configuration followed through the swaps, and
+        a round trip is a statement about the second.
+        :func:`snakes_and_ladders.search.tempered.round_trips` and
+        :func:`snakes_and_ladders.search.tempered.up_fraction` read it, an
+        exchange acceptance being a per-pair number a ladder can look
+        healthy in while nothing crosses it (issue #756).
     """
 
     states: np.ndarray
@@ -615,6 +631,7 @@ class TemperedChains:
     best: np.ndarray
     best_energy: float
     n_sweeps: int
+    walkers: np.ndarray
 
 
 def _swap_log_ratio(
@@ -716,6 +733,11 @@ def parallel_tempering(
     offsets, neighbours, couplings = graph.compressed_adjacency()
 
     recorded = np.empty((n_sweeps, n_replicas, graph.n_nodes), dtype=np.int64)
+    # Which walker sits at each rung, as `search.tempered._exchange` tracks
+    # it: a swap moves configurations between temperatures, so this is what
+    # says a configuration crossed the ladder.
+    at_rung = list(range(n_replicas))
+    trace = np.empty((n_sweeps, n_replicas), dtype=np.int64)
     proposed = np.zeros(n_replicas - 1)
     accepted = np.zeros(n_replicas - 1)
     current = energies(graph, rows, states)
@@ -736,11 +758,14 @@ def parallel_tempering(
                 accepted[pair] += 1
                 states[[pair, pair + 1]] = states[[pair + 1, pair]]
                 current[[pair, pair + 1]] = current[[pair + 1, pair]]
+                at_rung[pair], at_rung[pair + 1] = at_rung[pair + 1], at_rung[pair]
         lowest = int(np.argmin(current))
         if current[lowest] < best_energy:
             best, best_energy = states[lowest].copy(), float(current[lowest])
         if step >= 0 and (step + 1) % thin == 0:
             recorded[step // thin] = states
+            for rung, walker in enumerate(at_rung):
+                trace[step // thin, walker] = rung
     return TemperedChains(
         states=recorded,
         temperatures=tuple(temperatures),
@@ -748,6 +773,7 @@ def parallel_tempering(
         best=best,
         best_energy=best_energy,
         n_sweeps=n_sweeps,
+        walkers=trace,
     )
 
 
@@ -941,13 +967,7 @@ def sample_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`sample_potts` refuses it.
     """
-    if move in _CLUSTER_MOVES and min(graph.coupling, default=0.0) < 0.0:
-        msg = (
-            f"{move} needs every coupling >= 0: the bond probability "
-            "1 - exp(-J) is not a probability for J < 0, and an "
-            "antiferromagnet has no like-spin clusters to flip"
-        )
-        raise ValueError(msg)
+    _refuse_negative_coupling(move, graph)
 
     graph, field = tempered(graph, field, temperature)
     rows = site_field(field, graph.n_nodes)
