@@ -15,7 +15,10 @@ parenthesis the only way a ticket is cited.
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
 - Support the different lattice types (#231)
-- CRC-aided list decoding of the polar code, and the SC/SCL/CA-SCL figure against the enumerated maximum-likelihood floor --- the fourth step of #593, which needs the elementary codes' CRC (#594)
+- One notebook per problem: `PROBLEMS.md` carries 18 rows against six
+  notebooks in `docs/nb/`, so twelve problems are walked from fixture to
+  oracle to fit nowhere (#682)
+- CRC-aided list decoding of the polar code, and the SC/SCL/CA-SCL figure against the enumerated maximum-likelihood floor --- the fourth step of #593, unblocked: the elementary codes' CRC landed with #700 (#593)
 - A linear-time LDPC encoder at full size, so a non-trivial codeword can be
   sent through the 19,998-bit code (#340)
 - Correlated `X` and `Z` errors on the CSS code, whose one sector landed: a
@@ -82,6 +85,9 @@ parenthesis the only way a ticket is cited.
 
 - Iterated conditional modes as a first-class solver across every lattice
   model (#226)
+- Iterated conditional modes over HMM paths (#176) — the deterministic move
+  set this milestone names beside Viterbi, and the one its HMM family is
+  missing
 - MAP decoding of an LDPC code as energy minimization: sum-product against
   the Gibbs sampler, the annealer and single-site descent at matched
   evaluations on enumerable codes, the ML codeword as referee (#340)
@@ -117,9 +123,6 @@ parenthesis the only way a ticket is cited.
 
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 
-- Iterated conditional modes over HMM paths (#176) — the deterministic
-  counterpart of the samplers here, and the one move set the milestone's
-  family is missing
 - A mixing-time claim for the tempered ensemble. The exchange ratio is pinned
   against enumeration and the cold replica is shown uncontaminated, but how
   long a chain must run before its marginals are usable is unmeasured, so
@@ -133,9 +136,11 @@ parenthesis the only way a ticket is cited.
 
 ## Milestone 2.1 — RL Agent Formulation & Deployment
 
-- Tabular Q-learning and SARSA on the canonical fixtures (#597's second pull request): the cliff walk's on-policy against off-policy distinction is untestable without both, and it is the only pass condition in the suite that is a *difference* rather than an agreement
 - The two canonical fixtures a deterministic `Environment.step` cannot express (#597): the k-armed bandit, whose tension is a stochastic reward, and the slippery Frozen Lake. Either the protocol widens for every implementer and `learn.exact`'s enumeration is replaced by an expectation over successors, or the two stay out --- a decision, not a default
-- The gate's per-problem pull requests (#596): the Potts lattice at critical coupling, the planted glass, the coupled model, the two tree surfaces, Max-Cut and the codes, each sized with `learn.failure` until its classical baseline fails and then argued at a matched budget. Step 0, the sizing harness, has landed; a problem whose baseline does not fail inside the budget is reported with its curve and excluded from the gate
+- The gate's per-problem pull requests (#596): the Potts lattice at critical coupling, the planted glass, the coupled model, the two tree surfaces, Max-Cut and the codes, each sized with `learn.failure` until its classical baseline fails and then argued at a matched budget. Step 0, the sizing harness, and the Potts-lattice arm have landed (#704); a problem whose baseline does not fail inside the budget is reported with its curve and excluded from the gate
+- A learning environment over the coupled model's labels, refereed by the
+  planted labelling: the one problem where a move's value depends on a fitted
+  chain rather than reparameterizing greedy (#686)
 
 - The surrogate-bound columns of #308 in the tree feature set — the plug-in
   lower and parsimony upper bounds — measured at the budget of
@@ -217,6 +222,18 @@ parenthesis the only way a ticket is cited.
 
 ## Cross-Cutting Infrastructure
 
+- A stacked pull request runs no checks: `.github/workflows/ci.yml` triggers on
+  `pull_request` against `main` alone, so a stacked branch reports an empty
+  checks list until its base merges, or `DEV.md` states that as the design (#685)
+- `infra/select_tests.py` under-selected silently: every per-pull-request gate
+  passed on #667 while three pushes to `main` failed on one test it did not
+  select, so the stage that lost the file is established and widened (#688)
+- `STATUS.md` as one ledger against the roadmap: five per-ticket sections sit
+  after the audit sections and no `## Milestone 2.2` or `## Milestone 2.3`
+  section exists, which the milestone-id guard cannot see (#683)
+- The 13 problem x method-family cells the applicability table marks untested,
+  each either refereed by a test naming its oracle or marked not-applicable
+  with a reason in `docs/tex/method_notes.yaml` (#684)
 - The oracle ladder per problem: every algorithm pinned to the simpler one
   below it, declared once in `infra/ladder.py` and generated into the
   textbook's applicability tables, and the 22 rungs no test pins (#734)
