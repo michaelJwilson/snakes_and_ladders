@@ -66,7 +66,13 @@ GAUSSIAN = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
 
 
 def _potts_posterior() -> WithGaussianPrior:
-    """A real `Objective` whose `theta` is 2-D, so quadrature can referee it."""
+    """A real `Objective` whose `theta` is 2-D, so quadrature can referee it.
+
+    At ``q = 2`` and a chain of 8 the normalizer takes the squaring route
+    (``opt.potts.squaring_is_cheaper``), so the quadrature and step-size pins
+    below run on it and hold at the values they held on the recursion
+    (issue #754).
+    """
     field = np.array([0.3, -0.3])
     field = field - np.log(np.exp(field).sum())
     params = PottsParams(
