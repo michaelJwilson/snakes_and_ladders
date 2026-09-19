@@ -233,6 +233,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "Swendsen--Wang, Rust",
+        "search.potts_mcmc._cluster_pass_rust",
+        "Potts MCMC, Wolff, Swendsen--Wang",
+        T + "search/test_potts_mcmc_cluster_rust.py"
+        "::test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws",
+    ),
+    Rung(
+        "potts",
         "locally balanced proposal",
         "search.balanced.log_balanced_weights",
         "enumeration",
@@ -547,6 +555,14 @@ LADDER: tuple[Rung, ...] = (
         "forward / forward-backward",
         T + "likelihood/test_message_passing.py"
         "::test_the_tree_schedule_on_a_deep_chain_is_the_forward_recursion",
+    ),
+    Rung(
+        "hmm",
+        "tree schedule, Rust",
+        "likelihood.message_passing_rust.tree_messages",
+        "forward via sum-product",
+        T + "likelihood/test_message_passing_rust.py"
+        "::test_the_rust_tree_schedule_agrees_with_the_numpy_oracle",
     ),
     Rung(
         "hmm",

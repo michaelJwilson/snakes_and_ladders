@@ -16,6 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.message_passing import (
     MessageScheduleName,
     sum_product,
@@ -76,7 +77,13 @@ def test_tree_schedule_benchmark(
     benchmark: BenchmarkFixture, graph: FactorGraph
 ) -> None:
     # The whole call, so the plan's share stays visible as the denominator.
-    marginals = benchmark(lambda: sum_product(graph, schedule=MessageScheduleName.TREE))
+    # The NumPy route by name: the plan is what this cell measures the share
+    # of, and issue #754's kernel builds no plan at all.
+    marginals = benchmark(
+        lambda: sum_product(
+            graph, schedule=MessageScheduleName.TREE, backend=Backend.PYTHON
+        )
+    )
 
     assert marginals.exact
 
@@ -89,6 +96,10 @@ def test_upward_is_half_the_work_benchmark(
     # rather than two. Both rows are here so the ratio is read, not asserted.
     graph = _chain(1000)
 
-    marginals = benchmark(lambda: sum_product(graph, schedule=schedule))
+    # Both arms on the NumPy route: only the tree schedule has a kernel, so
+    # the default would compare a compiled half against an interpreted one.
+    marginals = benchmark(
+        lambda: sum_product(graph, schedule=schedule, backend=Backend.PYTHON)
+    )
 
     assert np.isfinite(marginals.log_partition)

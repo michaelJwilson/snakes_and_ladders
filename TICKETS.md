@@ -59,9 +59,9 @@ parenthesis the only way a ticket is cited.
 - Retier the turbo waterfalls after #754's Rust trellis: the release tier
   fell from 182 s to 6.0 s and the stress one from 12.1 s to 0.46 s, so
   `release` is no longer what the measurement says (#754)
-- Port the `message_passing` tree schedule's per-level dispatch, which #341
-  left at 4.7x the forward recursion and the stress profile ranks at 29.8% of
-  a 200-step chain (#754)
+- Cut what the Rust tree schedule left on top: `FactorGraph.is_tree` and
+  `Layout.__init__` are 21.3% and 10.4% of the profiled section after #754's
+  port, a union-find over formatted strings rebuilt per call (#754)
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
@@ -127,13 +127,15 @@ parenthesis the only way a ticket is cited.
   audit names
 - Transcribe the seven- and eight-taxon calibration table of #331 from a
   release-gate run into `STATUS.md`, where #350 left a placeholder
-- Make the Rust single-site sweep the default on its exact pin (#599) — the
-  stress profile ranks `_site_update` at 29.1% of the Python sweep at 32x32,
-  against a route already measured at 123-134x (#754)
-- Port the Swendsen-Wang cluster pass: `_recolour` is 26.2% of a 42.2 ms
-  `propose` at 64x64 over 2,437 clusters a sweep, and the per-sweep edge
-  rebuild that `PottsGraph.edge_index` already stores — 0.9 ms, 1.9% — goes
-  with it rather than as a cut of its own (#754)
+- Decide the Swendsen-Wang default against the recorded numbers. The Rust
+  pass is 63.4x the cut NumPy one at 64x64 and bitwise on the same draws, and
+  it draws its colours and accept uniforms in bulk where the oracle draws
+  them lazily — so flipping it changes every recorded chain while the law is
+  unchanged, and `Backend.PYTHON` is the default until that is weighed (#754)
+- Let the Rust cluster pass carry `ClusterCounter`: it refuses one today
+  because the instrumentation reads each cluster's members, which is the
+  gather the port removes, so `anneal_potts` and #551's acceptance
+  measurement stay on the oracle route (#754)
 
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 

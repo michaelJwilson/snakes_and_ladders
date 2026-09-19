@@ -46,6 +46,18 @@ def bcjr_forward_backward(
     apriori_llr: np.ndarray,
     terminated: bool,
 ) -> tuple[np.ndarray, np.ndarray, float]: ...
+def tree_message_passing(
+    cardinality: np.ndarray,
+    variable_offsets: np.ndarray,
+    variable_edges: np.ndarray,
+    factor_offsets: np.ndarray,
+    factor_edges: np.ndarray,
+    edge_variable: np.ndarray,
+    table_offsets: np.ndarray,
+    tables: np.ndarray,
+    width: int,
+    maximum: bool,
+) -> tuple[np.ndarray, np.ndarray]: ...
 def sample_rows(
     distributions: np.ndarray,
     n_categories: int,
@@ -104,6 +116,18 @@ def single_site_sweeps(
     guard: float,
     first: int,
 ) -> int: ...
+def swendsen_wang_sweep(
+    state: np.ndarray,
+    field: np.ndarray,
+    edges: np.ndarray,
+    bond_probability: np.ndarray,
+    bond_draws: np.ndarray,
+    colour_draws: np.ndarray,
+    accept_draws: np.ndarray,
+    labels: np.ndarray,
+    guard: float,
+    first: int,
+) -> tuple[int, int]: ...
 def class_posteriors(
     totals: np.ndarray,
     successes: np.ndarray,

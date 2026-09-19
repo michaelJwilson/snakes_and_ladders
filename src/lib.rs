@@ -21,6 +21,7 @@ pub mod coupled;
 pub mod maxflow;
 #[cfg(feature = "sandbox")]
 pub mod maxflow_declined;
+pub mod message_passing;
 pub mod potts;
 pub mod pruning;
 #[cfg(feature = "sandbox")]
@@ -34,7 +35,8 @@ pub use coupled::{class_posteriors, external_field};
 pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
 #[cfg(feature = "sandbox")]
 pub use maxflow_declined::{ising_ground_state_declined, max_flow_declined};
-pub use potts::single_site_sweeps;
+pub use message_passing::tree_message_passing;
+pub use potts::{single_site_sweeps, swendsen_wang_sweep};
 pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
 pub use pruning_burn::pruning_gradient;
@@ -71,10 +73,12 @@ fn oxi_snakes_and_ladders(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "sandbox")]
     m.add_function(wrap_pyfunction!(ising_ground_state_declined, m)?)?;
     m.add_function(wrap_pyfunction!(single_site_sweeps, m)?)?;
+    m.add_function(wrap_pyfunction!(swendsen_wang_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_count_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(bcjr_forward_backward, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_message_passing, m)?)?;
     Ok(())
 }
 

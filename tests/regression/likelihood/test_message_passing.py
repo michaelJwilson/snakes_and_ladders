@@ -18,6 +18,7 @@ import math
 
 import numpy as np
 import pytest
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import CategoricalEmission
 from snakes_and_ladders.enumeration import configurations
 from snakes_and_ladders.likelihood import message_passing_reference as reference
@@ -522,6 +523,12 @@ def test_an_empty_domain_is_refused() -> None:
 # replaced. The arithmetic per message is the same in the same order, so the
 # pin is bitwise on every marginal and every schedule; only ``log_partition``
 # sums its Bethe terms in a different order and is held to 1e-12 relative.
+#
+# The bitwise claim is the NumPy route's, so the tree schedule is asked for it
+# by name here (issue #754): `sum_product`'s default is the Rust kernel, whose
+# `exp` and `log` differ from NumPy's vectorized ones in the last place, and it
+# is pinned to this same route at `CROSS_DEVICE_RTOL_FLOAT64` in
+# `test_message_passing_rust.py` rather than by loosening this.
 
 
 def _assert_same_marginals(realized: Marginals, expected: Marginals) -> None:
@@ -572,7 +579,9 @@ def _coupled_mixed_cardinality() -> FactorGraph:
 def test_the_tree_schedule_reproduces_the_dictionary_oracle_bitwise(
     graph: FactorGraph,
 ) -> None:
-    _assert_same_marginals(sum_product(graph), reference.sum_product(graph))
+    _assert_same_marginals(
+        sum_product(graph, backend=Backend.PYTHON), reference.sum_product(graph)
+    )
 
 
 @pytest.mark.critical
@@ -592,8 +601,10 @@ def test_sum_and_max_product_on_the_chain_reproduce_the_dictionary_oracle_bitwis
         emission_log_density(params, observations),
     )
 
-    _assert_same_marginals(sum_product(graph), reference.sum_product(graph))
-    assignment, marginals = max_product(graph)
+    _assert_same_marginals(
+        sum_product(graph, backend=Backend.PYTHON), reference.sum_product(graph)
+    )
+    assignment, marginals = max_product(graph, backend=Backend.PYTHON)
     expected_assignment, expected = reference.max_product(graph)
     assert assignment == expected_assignment
     _assert_same_marginals(marginals, expected)
@@ -612,7 +623,9 @@ def test_the_tree_site_reproduces_the_dictionary_oracle_bitwise() -> None:
         params.tau, params.k, params.pi, site, _transitions(params.tau, params.k)
     )
 
-    _assert_same_marginals(sum_product(graph), reference.sum_product(graph))
+    _assert_same_marginals(
+        sum_product(graph, backend=Backend.PYTHON), reference.sum_product(graph)
+    )
 
 
 @pytest.mark.critical
