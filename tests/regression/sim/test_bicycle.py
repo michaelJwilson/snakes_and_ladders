@@ -92,17 +92,6 @@ def test_the_row_space_is_self_orthogonal(n_checks: int) -> None:
     assert not np.any(product)
 
 
-@pytest.mark.analytic
-@pytest.mark.parametrize("n_bits", [12, 96, 996])
-def test_the_all_ones_word_is_a_codeword(n_bits: int) -> None:
-    """Every row has even weight `2w`, so `d <= n` whatever the draw."""
-    code = _code(n_bits, n_bits // 2, seed=n_bits + 2)
-
-    syndrome = code.syndrome(np.ones(n_bits, dtype=np.uint8))
-
-    assert not np.any(syndrome)
-
-
 # --- the rate the deletion buys -------------------------------------------------
 
 

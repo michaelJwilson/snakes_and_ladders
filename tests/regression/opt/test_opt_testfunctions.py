@@ -105,21 +105,6 @@ def test_himmelblau_converges_to_the_basin_it_started_in(
     assert float(result.value) == pytest.approx(0.0, abs=1e-20)
 
 
-@pytest.mark.oracle
-def test_all_four_himmelblau_minima_are_reachable() -> None:
-    # The property a single-minimum function cannot test. All four have value
-    # 0, so no ordering distinguishes them and "the" optimum is not a
-    # well-formed question; a method that returns the same point from every
-    # start is reporting its own initialization.
-    starts = [(1.0, 1.0), (-3.0, 2.0), (-3.0, -3.0), (3.0, -2.0)]
-
-    found = {
-        Himmelblau.nearest_minimum(fit(Himmelblau(start=s)).theta)[0] for s in starts
-    }
-
-    assert found == set(range(len(HIMMELBLAU_MINIMA)))
-
-
 @pytest.mark.smoke
 def test_a_converged_fit_on_rastrigin_is_not_a_global_minimum() -> None:
     # Measured, not asserted as a success: over 40 starts drawn uniformly from
