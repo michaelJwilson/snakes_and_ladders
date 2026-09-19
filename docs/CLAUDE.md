@@ -31,7 +31,8 @@ what the release gate renders.
 
 **Expected Reader.** A graduate reader of the field, who knows the area and not
 this package: notation is defined once in `notation.tex`, the body carries the
-argument and the appendix its derivation, and no document names code.
+argument and the appendix its derivation, and the textbook and the paper name
+no code (the mind map is the one document that does).
 
 ## Local rules
 
