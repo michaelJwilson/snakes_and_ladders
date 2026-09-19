@@ -87,10 +87,7 @@ def _non_blank(paths: list[Path]) -> int:
     through, not about statements a compiler would see.
     """
     return sum(
-        1
-        for path in paths
-        for line in path.read_text().splitlines()
-        if line.strip()
+        1 for path in paths for line in path.read_text().splitlines() if line.strip()
     )
 
 
@@ -292,9 +289,9 @@ FINDINGS = (
     # The three rows #813 reads its target against. `at_filing` is the count
     # on the day that ticket was filed, `main` at e795a73, so a later reader
     # can see what the folds returned rather than what was hoped for.
-    Finding("package lines", "", 51516, counter=package_lines),
-    Finding("test modules", "", 251, counter=test_modules),
-    Finding("test lines", "", 56986, counter=test_lines),
+    Finding("package lines", "", 51525, counter=package_lines),
+    Finding("test modules", "", 252, counter=test_modules),
+    Finding("test lines", "", 57035, counter=test_lines),
 )
 
 
