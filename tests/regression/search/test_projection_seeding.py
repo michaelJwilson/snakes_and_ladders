@@ -8,17 +8,23 @@ At release the key model's 100 components carry the ordering
 `docs/experiments/009-projection-emission-seedings.md` records, through
 `opt.budget.compare` so no candidate wins by fitting longer.
 
-**What refereed what.** The projection has no exact evidence at either size,
-so the referee is the draw's own truth: the generating component of every
-observation and the generating negative-binomial means. The one exact
-statement available is a reduction --- squared Euclidean distance over a pair
-whose second channel is constant is the one-dimensional k-means++ of
-`opt.mixture`, draw for draw --- and it is asserted here because it is what
-says the Euclidean candidate is k-means++ as it stands and not a second
+**What refereed what.** A *fit* of the projection has no exact evidence at
+either size, so the referee for every candidate is the draw's own truth: the
+generating component of every observation and the generating negative-binomial
+means. Two exact statements stand beside that. The *draw* has a closed form ---
+one mixture over the ``M x K`` (class, state) pairs, its weights the class
+shares over the uniform stationary states --- and `project` is pinned to it
+here (issue #734). The Euclidean candidate has a reduction --- squared
+Euclidean distance over a pair whose second channel is constant is the
+one-dimensional k-means++ of `opt.mixture`, draw for draw --- asserted because
+it is what says that candidate is k-means++ as it stands and not a second
 algorithm.
 """
 
 from __future__ import annotations
+
+import math
+from collections.abc import Iterable
 
 import numpy as np
 import pytest
@@ -42,7 +48,8 @@ from snakes_and_ladders.search.projection import (
     flatten,
     project,
 )
-from snakes_and_ladders.sim.count_pairs import binned_model
+from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sim.count_pairs import binned_model, planted_labels
 from snakes_and_ladders.sim.fixtures import KEY, fixture
 
 PROBLEM = "spatio_sequential_counts"
@@ -66,6 +73,10 @@ SAMPLED_RECOVERY = 0.70
 #: what separates them is the key model's business, at release.
 CI_RECOVERY = 0.40
 
+#: The tail probability below which a draw is judged not to be the closed-form
+#: law, the repository's convention for a sampler (`search/test_gibbs.py`).
+SIGNIFICANCE = 0.001
+
 
 def _projection(tier: str, n_samples: int, seed: int) -> ProjectedCounts:
     """One projected draw of a declared model, at a bin factor of one."""
@@ -83,6 +94,146 @@ def _seam(tier: str) -> CountPairAt:
         float(truth.successes.concentration.mean()),
         float(truth.successes.trials[0]),
     )
+
+
+def _negative_binomial(
+    support: Iterable[int], dispersion: float, mean: float
+) -> np.ndarray:
+    """``NegativeBinomial(r, mu)``'s mass function, written from the definition."""
+    probability = dispersion / (dispersion + mean)
+    return np.array(
+        [
+            math.exp(
+                math.lgamma(count + dispersion)
+                - math.lgamma(dispersion)
+                - math.lgamma(count + 1.0)
+                + dispersion * math.log(probability)
+                + count * math.log1p(-probability)
+            )
+            for count in support
+        ]
+    )
+
+
+def _beta_binomial(
+    support: Iterable[int], trials: float, alpha: float, beta: float
+) -> np.ndarray:
+    """``BetaBinomial(n, a, b)``'s mass function, written from the definition."""
+
+    def log_beta(first: float, second: float) -> float:
+        return math.lgamma(first) + math.lgamma(second) - math.lgamma(first + second)
+
+    return np.array(
+        [
+            math.exp(
+                math.lgamma(trials + 1.0)
+                - math.lgamma(count + 1.0)
+                - math.lgamma(trials - count + 1.0)
+                + log_beta(count + alpha, trials - count + beta)
+                - log_beta(alpha, beta)
+            )
+            for count in support
+        ]
+    )
+
+
+def _pooled(
+    mass: np.ndarray, counts: np.ndarray, n_samples: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Cells merged left to right until each expects five, the tail in the last.
+
+    Five is the usual floor for the chi-square approximation, and the mass
+    beyond the largest count observed goes in the last cell so the expected
+    counts sum to the sample size rather than to a truncation of it.
+    """
+    observed, expected, pending_o, pending_e = [], [], 0.0, 0.0
+    for probability, count in zip(mass, counts, strict=True):
+        pending_e += probability * n_samples
+        pending_o += count
+        if pending_e >= 5.0:
+            expected.append(pending_e)
+            observed.append(pending_o)
+            pending_o = pending_e = 0.0
+    expected[-1] += pending_e + (1.0 - float(mass.sum())) * n_samples
+    observed[-1] += pending_o
+    return np.array(observed), np.array(expected)
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_projected_draw_is_the_closed_form_mixture_of_the_flattened_families() -> (
+    None
+):
+    # The rung has nothing below it in the ladder and its referee is a closed
+    # form (issue #734): what `project` returns is a draw from one mixture over
+    # the `M x K` (class, state) pairs, and that mixture is written out here
+    # from the definitions rather than read back from the package.
+    #
+    # Three statements, in that order.
+    #
+    # 1. The weights are the closed form -- the share of vertices
+    #    `planted_labels` gives each class, divided equally among the states
+    #    because the shared transition is circulant and its stationary
+    #    distribution is uniform. Equality, and realized as equality: the four
+    #    weights are 0.25 bitwise on the `ci` model's two classes of 32 nodes.
+    # 2. The components drawn are that categorical law. Chi-square over the
+    #    four cells, realized p 0.389, 0.171 and 0.874 on the three draws,
+    #    against the 0.001 declared.
+    # 3. Conditional on the component, each channel is its family's own law --
+    #    the negative binomial on the total and the beta-binomial on the
+    #    successes, at the parameters `flatten` puts at that component.
+    #    Chi-square per channel per component, 24 tests in all, the smallest
+    #    realized p 0.064 against the 0.001 declared.
+    #
+    # What this does *not* establish is the independence of the two channels,
+    # which the draw asserts and no marginal can refute; that gap is the
+    # ticket's, not this test's.
+    params = binned_model(fixture(PROBLEM, "ci").params.model, 1)
+    truth = flatten(params)
+    trials = float(truth.successes.trials[0])
+    share = np.bincount(
+        planted_labels(params, params.n_classes), minlength=params.n_classes
+    ) / float(params.graph.n_nodes)
+    closed_form = np.repeat(share / params.n_states, params.n_states)
+
+    for seed in range(3):
+        instance = _projection("ci", CI_SAMPLES, seed)
+
+        assert np.array_equal(instance.weights, closed_form)
+        drawn = np.bincount(instance.components, minlength=len(closed_form))
+        assert (
+            chi_square_p_value(drawn.astype(float), closed_form * CI_SAMPLES)
+            > SIGNIFICANCE
+        )
+
+        for component in range(len(closed_form)):
+            rows = instance.observations[instance.components == component]
+            n_samples = len(rows)
+            for channel, mass in (
+                (
+                    0,
+                    _negative_binomial(
+                        range(int(rows[:, 0].max()) + 1),
+                        float(truth.total.dispersion[component]),
+                        float(truth.total.mean[component]),
+                    ),
+                ),
+                (
+                    1,
+                    _beta_binomial(
+                        range(int(trials) + 1),
+                        trials,
+                        float(truth.successes.alpha[component]),
+                        float(truth.successes.beta[component]),
+                    ),
+                ),
+            ):
+                observed, expected = _pooled(
+                    mass,
+                    np.bincount(rows[:, channel], minlength=len(mass)).astype(float),
+                    n_samples,
+                )
+                assert chi_square_p_value(observed, expected) > SIGNIFICANCE
 
 
 @pytest.mark.end2end
