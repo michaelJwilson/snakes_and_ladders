@@ -25,6 +25,8 @@ from snakes_and_ladders.search.potts_mcmc import (
     PottsMove,
     _houdayer_move,
     _sweep_for,
+    adapt_ladder_potts,
+    parallel_tempering,
 )
 from snakes_and_ladders.search.statistics import chi_square_p_value, sign_test_p_value
 from snakes_and_ladders.search.support import (
@@ -37,10 +39,13 @@ from snakes_and_ladders.search.support import (
 )
 from snakes_and_ladders.search.tempered import (
     TemperedEnsemble,
+    adapt_ladder_round_trips,
+    round_trip_time,
     round_trips,
     tempered_factor_graph,
     tempered_potts_pair,
     tempered_topologies,
+    up_fraction,
 )
 from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.canonical import (
@@ -49,8 +54,8 @@ from snakes_and_ladders.sim.canonical import (
     frustrated_triangular_lattice,
 )
 from snakes_and_ladders.sim.factor_graph import FactorGraph, from_hmm, from_potts
-from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.potts import critical_coupling, site_field
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FOUR_TAXA, load_fixture
@@ -459,3 +464,184 @@ def test_the_pair_ensemble_refuses_houdayers_move_above_two_states() -> None:
         tempered_potts_pair(
             graph, np.zeros(3), (1.0, 2.0), np.random.default_rng(0), 10
         )
+
+
+# --- placing the ladder by its round trips (#756) ---------------------------
+#
+# The other criterion. `adapt_ladder_potts` places a ladder by its exchange
+# acceptance, which is a per-pair number; `adapt_ladder_round_trips` places
+# one of the same length by the fraction of walkers moving up at each rung,
+# and flattens the local diffusivity (Katzgraber et al. 2006). What that buys
+# is read as a round-trip time, paired by seed.
+
+#: The warm-up both criteria are given: sweeps per replica per measurement,
+#: measurements, and the seed that fixes the ladder each returns. 1,000 sweeps
+#: rather than 400 because the placement is read from an up-fraction and a
+#: measurement too short to resolve it places rungs on its noise --- at 400
+#: sweeps over four rounds the placed ladder ranged from 1,469 to 5,357
+#: sweeps per round trip against a geometric ladder's 1,690 on the 16x16
+#: (`docs/experiments/023-placing-the-tempering-ladder.md`).
+WARM_UP_SWEEPS = 1_000
+WARM_UP_ROUNDS = 3
+WARM_UP_SEED = 11
+
+#: The acceptance criterion's band and budget. The budget is above the
+#: starting length, because insertion is the acceptance criterion's whole
+#: remedy for a gap and capping it at the starting length leaves it with
+#: nothing to do; the length it settles on is then the length the round-trip
+#: criterion is given, so the comparison is at equal rungs and equal cost.
+WARM_UP_BAND = (0.2, 0.6)
+WARM_UP_REPLICAS = 16
+
+#: The readings: recorded sweeps per replica, and the paired seeds.
+PLACEMENT_SWEEPS = 2_000
+
+
+def _geometric(cold: float, hot: float, n_rungs: int) -> tuple[float, ...]:
+    return tuple(
+        cold * (hot / cold) ** (rung / (n_rungs - 1)) for rung in range(n_rungs)
+    )
+
+
+def _placed_ladders(
+    graph: PottsGraph, cold: float, hot: float, n_start: int
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """The two ladders, placed from the same warm-up budget and the same seed."""
+    accepted = adapt_ladder_potts(
+        graph,
+        np.zeros(2),
+        _geometric(cold, hot, n_start),
+        np.random.default_rng(WARM_UP_SEED),
+        WARM_UP_SWEEPS,
+        WARM_UP_BAND,
+        WARM_UP_ROUNDS,
+        WARM_UP_REPLICAS,
+    )
+    feedback = adapt_ladder_round_trips(
+        graph,
+        np.zeros(2),
+        _geometric(cold, hot, len(accepted.temperatures)),
+        np.random.default_rng(WARM_UP_SEED),
+        WARM_UP_SWEEPS,
+        0.02,
+        WARM_UP_ROUNDS,
+    )
+    assert len(feedback.temperatures) == len(accepted.temperatures)
+    return accepted.temperatures, feedback.temperatures
+
+
+def _round_trip_times(graph: PottsGraph, ladder: tuple[float, ...]) -> np.ndarray:
+    """Round-trip time per seed on one ladder, the seeds paired across ladders."""
+    return np.array(
+        [
+            round_trip_time(
+                parallel_tempering(
+                    graph,
+                    np.zeros(2),
+                    ladder,
+                    np.random.default_rng(seed),
+                    PLACEMENT_SWEEPS,
+                    burn_in=PLACEMENT_SWEEPS // 10,
+                ).walkers
+            )
+            for seed in range(ROUND_TRIP_SEEDS)
+        ]
+    )
+
+
+@pytest.mark.analytic
+@pytest.mark.critical
+def test_the_up_fraction_labels_a_walker_by_the_end_it_last_touched() -> None:
+    """The measurement the placement reads, on the trace whose answer is counted by hand.
+
+    The same three walkers `test_a_round_trip_is_the_cold_rung_reached_through_the_hot_one`
+    counts trips in. Rung 0 sees 8 labelled visits and every one is a walker
+    on its way up; rung 1 sees 4 up and 3 down; the top rung sees 6 and none
+    of them up. So ``f`` is 1 and 0 at the ends by construction, which is what
+    makes the placement's cumulative read a fraction of a whole.
+    """
+    trace = np.array(
+        [
+            [0, 0, 0],
+            [1, 1, 2],
+            [0, 2, 1],
+            [1, 1, 2],
+            [0, 0, 1],
+            [1, 2, 2],
+            [0, 0, 2],
+        ]
+    )
+
+    assert up_fraction(trace).tolist() == [1.0, 4.0 / 7.0, 0.0]
+
+
+@pytest.mark.smoke
+@pytest.mark.critical
+def test_the_tempering_trace_holds_one_walker_per_rung() -> None:
+    """A swap moves configurations between rungs; it does not create them.
+
+    `parallel_tempering` records the trace `round_trips` and `up_fraction`
+    read, so every recorded sweep must be a permutation of the rungs --- a
+    trace in which two walkers sit at one rung would still produce a
+    round-trip time, and a wrong one.
+    """
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.4)
+
+    run = parallel_tempering(
+        graph, np.zeros(2), (0.5, 1.0, 2.0), np.random.default_rng(0), 50
+    )
+
+    assert run.walkers.shape == (50, 3)
+    for row in run.walkers.tolist():
+        assert sorted(row) == [0, 1, 2]
+    assert round_trip_time(run.walkers) == pytest.approx(
+        150.0 / float(round_trips(run.walkers).sum())
+    )
+
+
+@pytest.mark.analytic
+@pytest.mark.release
+def test_the_round_trip_placed_ladder_does_not_separate_at_the_transition() -> None:
+    """The measurement issue #756's plan asks for, on the 16x16 square at ``J_c``.
+
+    256 sites at ``J_c = ln(1 + sqrt(2))``, where the correlation length is
+    the lattice and the walkers are held up. The acceptance warm-up settles on
+    12 rungs from 0.6 to 2; the round-trip warm-up places 12 of its own, and
+    over `ROUND_TRIP_SEEDS` paired seeds the times are 1,053.7 recorded sweeps
+    per trip against 1,194.4, six seeds of eight shorter, `p = 0.2891`. A
+    second reading at another warm-up seed gave 1,053.1 against 1,092.8 and
+    `p = 1.0`, at a 1-minute load of 3.86 and 12.2 s of wall for the eight
+    pairs.
+
+    Asserted as a failure to separate, which is what eight paired seeds carry;
+    both ladders beat the geometric one they were placed from, which
+    `docs/experiments/023-placing-the-tempering-ladder.md` reports and this
+    does not assert.
+    """
+    graph = lattice_graph((16, 16), BoundaryCondition.OPEN, critical_coupling(2))
+    accepted, feedback = _placed_ladders(graph, 0.6, 2.0, 10)
+
+    difference = _round_trip_times(graph, feedback) - _round_trip_times(graph, accepted)
+
+    assert sign_test_p_value(difference) > SEPARATION, difference
+
+
+@pytest.mark.analytic
+@pytest.mark.release
+def test_the_round_trip_placed_ladder_does_not_separate_on_the_frustrated_lattice() -> (
+    None
+):
+    """The same comparison on the 12x12 triangular antiferromagnet of step 5.
+
+    The acceptance warm-up settles on 9 rungs from 0.2 to 2.4333 and the
+    round-trip warm-up places 9. Round-trip time 366.6 recorded sweeps
+    against 360.1, five seeds of eight shorter, `p = 0.7266`; a second reading
+    gave 353.4 against 360.1 at the same `p`. So neither criterion is
+    established over the other here, at 7.0 s of wall for the eight pairs.
+    """
+    graph = frustrated_triangular_lattice((12, 12), BoundaryCondition.PERIODIC, -1.0)
+    accepted, feedback = _placed_ladders(graph, 0.2, 2.4333, 10)
+
+    difference = _round_trip_times(graph, feedback) - _round_trip_times(graph, accepted)
+
+    assert sign_test_p_value(difference) > SEPARATION, difference

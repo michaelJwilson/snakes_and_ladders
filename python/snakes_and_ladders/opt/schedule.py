@@ -28,6 +28,17 @@ pair sits inside the band or a budget is spent. It takes the measurement as a
 callable so it knows no model (issue #333). Reheating on a stalled chain --- a
 schedule in *time* that adapts --- remains absent.
 
+**An acceptance is a per-pair number, and a round trip is a statement about
+the ladder.** A ladder every pair exchanges across can still be one no walker
+crosses end to end, so :func:`adapt_ladder_by_round_trips` places a ladder of
+the *same length* by the other criterion (Katzgraber, Trebst, Huse & Troyer
+2006): the fraction of walkers moving up at each rung, and the rungs
+redistributed so the local diffusivity is flat. It is the sibling of
+:func:`adapt_ladder` and not its replacement --- the acceptance-placed ladder
+is what a caller that asks for neither gets --- and the two answer different
+questions with different measurements, which is why the measurement is a
+different callable rather than a flag on one (issue #756).
+
 The policy's learned softmax weight is an inverse temperature too, and is
 **not** put on a schedule: it is what the agent learns, and a declared
 schedule would remove it.
@@ -35,6 +46,7 @@ schedule would remove it.
 
 from __future__ import annotations
 
+import bisect
 import itertools
 import math
 from abc import abstractmethod
@@ -399,3 +411,182 @@ def _check_ladder(ladder: tuple[float, ...]) -> None:
             f"its exchanges, got {ladder}"
         )
         raise ValueError(msg)
+
+
+@dataclass(frozen=True)
+class FeedbackLadder:
+    """What a round-trip warm-up placed, and the circulation it placed it from.
+
+    Parameters
+    ----------
+    temperatures : tuple[float, ...]
+        The ladder, the same length as the one it started from and with the
+        same endpoints: the criterion redistributes rungs, it does not buy
+        them.
+    up_fraction : tuple[float, ...]
+        The fraction of labelled visits at each rung made by a walker on its
+        way up --- one per temperature, ``1`` at the rung walkers start their
+        ascent from and ``0`` at the far end. Measured on the ladder
+        :attr:`temperatures` was placed *from*, one round back, where
+        :attr:`AdaptedLadder.acceptance` is measured on the ladder it is
+        returned with: a placement consumes its measurement where a revision
+        stops on one, so a single round here is one measurement and one
+        placement rather than a ladder unchanged.
+    converged : bool
+        Whether the last revision moved every temperature by less than
+        ``tolerance``, relatively. False means the warm-up stopped on its
+        budget or on a measurement too noisy to settle, and the caller
+        decides whether that ladder is usable.
+    rounds : int
+        Measurements taken, the last one included.
+    replicas_measured : int
+        Sum of the ladder's length over every measurement --- the warm-up's
+        cost in replica-runs, as :attr:`AdaptedLadder.replicas_measured` is.
+    """
+
+    temperatures: tuple[float, ...]
+    up_fraction: tuple[float, ...]
+    converged: bool
+    rounds: int
+    replicas_measured: int
+
+
+def adapt_ladder_by_round_trips(
+    measure: Callable[[tuple[float, ...]], Sequence[float]],
+    ladder: tuple[float, ...],
+    tolerance: float,
+    max_rounds: int,
+) -> FeedbackLadder:
+    """Redistribute a ladder of fixed length so a walker's round trip is fastest.
+
+    Feedback-optimized parallel tempering (Katzgraber, Trebst, Huse & Troyer
+    2006). ``measure`` returns ``f(T)``, the fraction of labelled visits at
+    each rung made by walkers moving up the ladder; it falls from 1 at the
+    rung where the ascent is labelled to 0 at the far end, and where it falls
+    *steeply* the walkers are held up. The local diffusivity of a walker is
+    then flattened by placing the rungs at equal increments of
+
+        ``eta(T) dT = sqrt((-df/dT) / (dT)) dT = sqrt(-df dT)``,
+
+    so an interval across which ``f`` drops by a lot, or which is wide, takes
+    more rungs. The endpoints are the caller's and are returned bitwise: the
+    ladder's job is to connect them, and only the rungs between are the
+    criterion's business.
+
+    ``f`` is measured, so it need not be monotone; it is made non-increasing
+    by a running minimum before the placement, rather than refused, because a
+    reversal is Monte Carlo noise on a monotone quantity and refusing it would
+    reject a ladder for the noise of its own warm-up.
+
+    Parameters
+    ----------
+    measure : Callable[[tuple[float, ...]], Sequence[float]]
+        The up-fraction per rung of a ladder --- one per temperature, all
+        finite.
+        :func:`snakes_and_ladders.search.tempered.up_fraction` computes it
+        from a walker trace.
+    ladder : tuple[float, ...]
+        The starting ladder, at least three temperatures --- two are the
+        endpoints and there is nothing to place --- strictly monotone in
+        either direction, all positive.
+    tolerance : float
+        Relative move, positive: a round whose largest ``|T' / T - 1|`` is
+        below it stops the warm-up and reports ``converged``.
+    max_rounds : int
+        Measurements to take before stopping, at least 1.
+
+    Returns
+    -------
+    FeedbackLadder
+
+    Raises
+    ------
+    ValueError
+        If the ladder has fewer than three temperatures, is not strictly
+        monotone or is not positive; if ``tolerance`` is not positive or
+        ``max_rounds`` is below 1; if ``measure`` returns other than one value
+        per rung, or a value that is not finite; or if ``f`` is flat over the
+        whole ladder, which is a run in which no walker circulated and so
+        carries no placement.
+    """
+    _check_ladder(ladder)
+    if len(ladder) < 3:
+        msg = (
+            f"a round-trip placement needs at least three temperatures, got "
+            f"{len(ladder)}: the two endpoints are the caller's"
+        )
+        raise ValueError(msg)
+    if not tolerance > 0.0:
+        msg = f"tolerance must be positive, got {tolerance}"
+        raise ValueError(msg)
+    if max_rounds < 1:
+        msg = f"max_rounds must be at least 1, got {max_rounds}"
+        raise ValueError(msg)
+
+    current = tuple(ladder)
+    replicas_measured = 0
+    for round_index in range(1, max_rounds + 1):
+        fraction = tuple(float(value) for value in measure(current))
+        replicas_measured += len(current)
+        if len(fraction) != len(current):
+            msg = (
+                f"measure returned {len(fraction)} up-fractions for a ladder of "
+                f"{len(current)}; expected one per rung"
+            )
+            raise ValueError(msg)
+        if not all(math.isfinite(value) for value in fraction):
+            msg = (
+                f"every up-fraction must be finite, got {fraction}: a rung no "
+                "labelled walker visited is a ladder the placement cannot read"
+            )
+            raise ValueError(msg)
+        proposal = _place(current, fraction)
+        moved = max(
+            abs(new / old - 1.0) for new, old in zip(proposal, current, strict=True)
+        )
+        if moved < tolerance or round_index == max_rounds:
+            return FeedbackLadder(
+                proposal, fraction, moved < tolerance, round_index, replicas_measured
+            )
+        current = proposal
+    msg = "unreachable: the loop returns on its last round"  # pragma: no cover
+    raise AssertionError(msg)  # pragma: no cover
+
+
+def _place(ladder: tuple[float, ...], fraction: Sequence[float]) -> tuple[float, ...]:
+    """The rungs at equal increments of ``sqrt(-df dT)``, the endpoints kept bitwise.
+
+    ``f`` is made non-increasing by a running minimum, the mass
+    ``sqrt(-df dT)`` of each interval is accumulated, and rung ``k`` is placed
+    where the accumulation reaches ``k / (n - 1)`` of the total --- by linear
+    interpolation inside the interval, where the mass is uniform in ``T``
+    because ``eta`` is piecewise constant.
+    """
+    n = len(ladder)
+    monotone = list(itertools.accumulate(fraction, min))
+    widths = [abs(ladder[i + 1] - ladder[i]) for i in range(n - 1)]
+    mass = [
+        math.sqrt(max(monotone[i] - monotone[i + 1], 0.0) * widths[i])
+        for i in range(n - 1)
+    ]
+    total = math.fsum(mass)
+    if total == 0.0:
+        msg = (
+            f"the up-fraction is flat over the whole ladder, {tuple(fraction)}: no "
+            "walker circulated, and a placement read from that is read from nothing"
+        )
+        raise ValueError(msg)
+    cumulative = list(itertools.accumulate(mass, initial=0.0))
+    placed = [ladder[0]]
+    for rung in range(1, n - 1):
+        target = total * rung / (n - 1)
+        # `target` is strictly inside `(0, total)` and `cumulative` ends at
+        # `total`, so this interval exists and carries mass; a run of
+        # zero-mass intervals sharing a boundary resolves to the last of them.
+        interval = bisect.bisect_right(cumulative, target) - 1
+        within = (target - cumulative[interval]) / mass[interval]
+        placed.append(
+            ladder[interval] + within * (ladder[interval + 1] - ladder[interval])
+        )
+    placed.append(ladder[-1])
+    return tuple(placed)
