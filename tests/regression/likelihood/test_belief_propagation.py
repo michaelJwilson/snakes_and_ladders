@@ -90,6 +90,20 @@ def test_the_pairwise_beliefs_reduce_to_the_single_site_ones_on_a_tree() -> None
         )
 
 
+@pytest.mark.oracle
+def test_a_zero_coupling_lattice_is_exact_despite_its_loops() -> None:
+    # The loops are still there; the coupling that makes them matter is gone.
+    # Separating "loopy" from "approximate" shows the error measured below
+    # comes from the cycles carrying correlation, not the geometry alone.
+    shape = (6, 4)
+    graph = lattice_graph(shape, BoundaryCondition.OPEN, 0.0)
+    exact = strip_log_partition(shape, BoundaryCondition.OPEN, 0.0, FIELD)
+
+    result = belief_propagation(graph, FIELD)
+
+    assert _relative(result.bethe_log_partition, exact) < RELATIVE_TOLERANCE
+
+
 # Measured on a 6x4 open strip against `strip_log_partition`, 3 states,
 # field (0.3, -0.7, 0.15). The exact q-state Potts transition on a square
 # lattice is at J_c = ln(1 + sqrt(q)) = 1.005 for q = 3.
