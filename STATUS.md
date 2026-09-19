@@ -3272,6 +3272,32 @@ writes a run to a temporary repository, reads it back and compares each
 sequence against the `MemoryTracker` record of the same call; it
 `importorskip`s the package, so it skips wherever Aim is absent.
 
+**A rung is a context, not a name** (#778, part 2). `Tracker.scalar` takes an
+optional `context` --- Aim's own per-series key, so one name under two
+contexts is two sequences --- and a loop over rungs records one series with a
+context per rung instead of one name per rung; a context distinguishes
+instances of one quantity and never carries a second. `MemoryTracker` keys a
+series by `(name, context)` and reads it back with `series` and `last`.
+`opt.langevin.mala` and `opt.slice.slice_sample` record per draw what their
+chains report, `search.annealed`'s three estimators per rung --- `log_z` and
+`ess`, the population's `stderr` and `family_entropy`, and simulated
+tempering's `occupation` under `{"rung": k}` --- `search.potts_mcmc`'s and
+`search.tempered`'s replica exchange the acceptance of each adjacent pair,
+and `opt.schedule.adapt_ladder_by_round_trips` what each round placed. Every
+series still ends at the field its result returns, pinned by `==`:
+`occupation` under `{"rung": k}` at `occupation[k]`, `log_z` at
+`LogPartition.log_z`, `evaluations_per_draw` at `SliceChain`'s. Round trips
+are declined, being read from the walker trace after the loop rather than
+computed in it. **The cost is the no-op calls.** At the minimum of three
+repeats in each of three processes, `simulated_tempering` (32x32 periodic,
+three states, nine rungs, the Rust sweep, 40,000 sweeps, ten records a
+sweep) reads **4.269 s** with the hooks against **4.158 s** with the hook
+lines stripped, **1.027x**, against a **1.9%** spread between processes of
+one variant; its 440,000 no-op calls timed directly are **44.3 ms**, 1.1% of
+that wall. `mala` (Rosenbrock at dimension 10, 5,000 draws after 500
+burn-in) reads **3.104 s** against **3.099 s**, **1.002x**, its 22,000 calls
+**1.3 ms**. Measured on the 4-core host at a 1-minute load of 0.80 to 1.14.
+
 ## Stage 5 — Research Extensions
 
 **Both halves are built, and the second's block was the referee, not the
