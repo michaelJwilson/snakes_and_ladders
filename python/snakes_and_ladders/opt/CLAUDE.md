@@ -30,6 +30,12 @@ PyTorch.
   mass adapted toward a target is set in a discarded warm-up, opted into and
   reported on the result; the draws are a fixed-parameter chain.
 
+- **A cost unit belongs to a sampler, not to the comparison.** A gradient is
+  an objective evaluation and a backward pass through the same tape, so a
+  method that spends gradients and one that spends evaluations are not ranked
+  by either column alone. Report each in the unit it spends, name the unit,
+  and settle the ranking on what all of them spend.
+
 - **A negative log-likelihood is not a log posterior.** Reading a bare
   likelihood as a density is a posterior under an improper flat prior, which
   for most models is not normalizable, and no diagnostic inside a sampler can
