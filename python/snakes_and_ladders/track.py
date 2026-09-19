@@ -1,29 +1,42 @@
-"""The run tracker: what a sweep did, what it cost, and where the numbers go (issue #778).
+"""The run seam: Aim's own interface, a metrics set per problem, one record per sweep (issue #778).
+
+**The store is ``aim.Run`` with no adapter between it and a sampler.**
+:class:`Run` is a ``runtime_checkable`` Protocol of exactly the three members
+a hook uses --- ``track``, ``__setitem__``, ``close`` --- written with Aim's
+signatures, so ``aim.Run`` satisfies it structurally and
+``tests/regression/test_track.py`` asserts the ``isinstance``. Nothing in the
+package imports ``aim`` at module scope.
 
 A sampler reports its diagnostics once, at the end, in the dataclass it
 returns. That is enough to judge a run and not enough to watch one: an
 annealer that stalls at sweep 400 of 10,000, a chain whose acceptance
 collapses when the step size is adapted, a search whose resident set grows
-with every round, all look the same from the outside until they finish. This
-is the seam that lets a run say so as it goes, without any sampler learning
-where the numbers are stored.
+with every round, all look the same from the outside until they finish.
 
 Libraries emit, entry points configure --- the division
-:mod:`snakes_and_ladders.log` takes, for the same reason. A sampler calls
-:func:`current` once at the top of its loop and :meth:`Tracker.scalar` once
-per sweep; an entry point --- a notebook, a QA script, an experiment --- opens
-:func:`track` and names the store. Outside any context the tracker is
-:class:`NullTracker`, whose every method is a no-op, so the default run
-records nothing, allocates nothing and is bitwise the run before this module
-existed.
+:mod:`snakes_and_ladders.log` takes, for the same reason. A loop calls
+:func:`current` once at its top and :meth:`TrackedOptimization.record` once
+per iteration, sweep, round or figure; an entry point opens :func:`track` and
+names the store::
+
+    with track(aim.Run(repo="runs"), metrics=PottsMetrics(graph, field)):
+        anneal_potts(graph, field, schedule, rng)
+
+Outside any block the bound object is :data:`NULL`, whose run is
+:data:`NULL_RUN`: :meth:`TrackedOptimization.record` returns on its first
+line, no metric is computed, and the default run is bitwise the run before
+this module existed.
 
 **A tracked number is a number the run already reports.** Every hook records
 a quantity its result dataclass returns, so the last value of a series equals
-the field, and the series can be read as the field's history rather than as a
-second definition of it to keep in step
-(``tests/regression/test_track.py`` pins that equality).
+the field and the series reads as the field's history rather than as a second
+definition to keep in step. A *metric* is the other half: a :class:`Metrics`
+instance, bound by the entry point and never by a loop, reports what the
+problem means --- an energy, a likelihood, a distance to a known truth ---
+beside the objective, each metric computed by a function the package already
+has.
 
-The active tracker is a :class:`contextvars.ContextVar` rather than a module
+The bound object is a :class:`contextvars.ContextVar` rather than a module
 global, so two contexts in one process do not write into each other. A
 ``ContextVar`` does not cross into a pool worker: a task run on
 :mod:`snakes_and_ladders.parallel`'s thread or process backend starts from the
@@ -38,158 +51,285 @@ import sys
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 if TYPE_CHECKING:  # pragma: no cover - the import is for the annotation only
     from matplotlib.figure import Figure
 
+#: The state a :class:`Metrics` reads. Contravariant, because a metrics set is
+#: consumed and never produced through the Protocol: one written for a
+#: labelling is usable wherever a set over anything it accepts is asked for.
+S_contra = TypeVar("S_contra", contravariant=True)
+
 
 @runtime_checkable
-class Tracker(Protocol):
-    """Where a run's metrics go: three writes, no reads.
+class Run(Protocol):
+    """Where a run's numbers go: Aim's three members, with Aim's signatures.
 
-    A sampler holds one of these and calls it; nothing in the package asks a
-    tracker what it recorded, so a store that only writes --- Aim, a file, a
-    socket --- satisfies it as well as :class:`MemoryTracker` does. An
-    optional ``close`` is called by :func:`track` on exit where the
-    implementation defines one.
+    Written from ``aim.Run`` (3.29.1, ``aim/sdk/run.py``) rather than from
+    what a sampler would have asked for, so the optional store implements the
+    Protocol as it stands and no adapter sits between them. Nothing reads a
+    run back through this interface --- a store that only writes satisfies it
+    --- and :class:`MemoryRun` adds the readers the tests need.
     """
 
-    def params(self, values: Mapping[str, object]) -> None:
-        """Record the run's parameters: what was run, at what settings."""
+    def track(
+        self,
+        value: Any,
+        name: str | None = None,
+        step: int | None = None,
+        epoch: int | None = None,
+        *,
+        context: Mapping[str, Any] | None = None,
+    ) -> None:
+        """Append ``value`` to the sequence ``(name, context)`` at ``step``."""
 
-    def scalar(self, name: str, value: float, step: int) -> None:
-        """Record one number of the series ``name`` at ``step``."""
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Record one of the run's parameters: what was run, at what settings."""
 
-    def figure(self, name: str, fig: Figure) -> None:
-        """Record a rendered figure under ``name``."""
+    def close(self) -> None:
+        """Close the run, flushing what it holds."""
 
 
-class NullTracker:
-    """The default: every method a no-op, so an untracked run pays a call and nothing else."""
+class NullRun:
+    """The default: every method a no-op, so an untracked run pays one returned call a sweep."""
 
-    def params(self, values: Mapping[str, object]) -> None:
-        """Discard ``values``."""
-
-    def scalar(self, name: str, value: float, step: int) -> None:
+    def track(
+        self,
+        value: Any,
+        name: str | None = None,
+        step: int | None = None,
+        epoch: int | None = None,
+        *,
+        context: Mapping[str, Any] | None = None,
+    ) -> None:
         """Discard ``value``."""
 
-    def figure(self, name: str, fig: Figure) -> None:
-        """Discard ``fig``."""
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Discard ``value``."""
+
+    def close(self) -> None:
+        """Do nothing: there is nothing to flush."""
 
 
-class MemoryTracker:
-    """The referee for the tests: keeps what it is given, in order.
+#: The run outside any :func:`track` block, and the identity
+#: :meth:`TrackedOptimization.record` returns on. One shared instance rather
+#: than one per lookup: it holds no state, so nothing distinguishes two.
+NULL_RUN: Run = NullRun()
+
+
+def _key(name: str | None, context: Mapping[str, Any] | None) -> tuple[Any, ...]:
+    """The sequence key ``(name, frozen context)``, as Aim keys a sequence."""
+    if context is None:
+        return (name, ())
+    return (name, tuple(sorted(context.items())))
+
+
+class MemoryRun:
+    """The referee for the tests: a :class:`Run` that keeps what it is given, in order.
+
+    Keyed by ``(name, context)`` as Aim keys a sequence, so a per-rung or
+    per-replica series recorded under a context reads back under that context
+    rather than merged into the series of the same name.
 
     Attributes
     ----------
-    scalars : dict[str, list[tuple[int, float]]]
-        Per series name, ``(step, value)`` in the order recorded.
-    parameters : dict[str, object]
-        The parameters, accumulated over every :meth:`params` call. Named
-        ``parameters`` and not ``params`` because ``params`` is the method
-        that writes it.
-    figures : dict[str, Figure]
-        The last figure recorded under each name.
+    params : dict[str, Any]
+        What ``__setitem__`` was given, in insertion order.
     """
 
     def __init__(self) -> None:
-        self.scalars: dict[str, list[tuple[int, float]]] = {}
-        self.parameters: dict[str, object] = {}
-        self.figures: dict[str, Figure] = {}
+        self.params: dict[str, Any] = {}
+        self._series: dict[tuple[Any, ...], list[tuple[int, Any]]] = {}
 
-    def params(self, values: Mapping[str, object]) -> None:
-        """Merge ``values`` into :attr:`parameters`."""
-        self.parameters.update(values)
+    def track(
+        self,
+        value: Any,
+        name: str | None = None,
+        step: int | None = None,
+        epoch: int | None = None,  # noqa: ARG002 - Aim's signature; see below
+        *,
+        context: Mapping[str, Any] | None = None,
+    ) -> None:
+        """Append ``(step, value)`` to the sequence ``(name, context)``.
 
-    def scalar(self, name: str, value: float, step: int) -> None:
-        """Append ``(step, value)`` to the series ``name``."""
-        self.scalars.setdefault(name, []).append((step, value))
+        ``step`` is auto-incremented where it is omitted, as Aim does: the
+        next index of the sequence it lands in. ``epoch`` is accepted and
+        discarded: the signature is Aim's, no hook passes one, and a referee
+        that stored it would be refereeing a field nothing writes.
+        """
+        entries = self._series.setdefault(_key(name, context), [])
+        entries.append((len(entries) if step is None else step, value))
 
-    def figure(self, name: str, fig: Figure) -> None:
-        """Keep ``fig`` under ``name``."""
-        self.figures[name] = fig
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Record the parameter ``key``."""
+        self.params[key] = value
 
-    def last(self, name: str) -> float:
-        """The last value of the series ``name``.
+    def close(self) -> None:
+        """Do nothing: the record is the object."""
+
+    def series(
+        self, name: str, context: Mapping[str, Any] | None = None
+    ) -> list[tuple[int, Any]]:
+        """The sequence ``(name, context)``, as ``(step, value)`` in the order recorded.
 
         Raises
         ------
         KeyError
-            If nothing was recorded under ``name``: an assertion against a
+            If nothing was recorded under that key: an assertion against a
             series that was never written is a test that passes on nothing.
         """
-        return self.scalars[name][-1][1]
+        return self._series[_key(name, context)]
+
+    def last(self, name: str, context: Mapping[str, Any] | None = None) -> Any:
+        """The last value of the sequence ``(name, context)``."""
+        return self.series(name, context)[-1][1]
 
 
-class AimTracker:
-    """An Aim run as a :class:`Tracker`: the optional store, imported where it is used.
+def as_aim(fig: Figure) -> Any:
+    """``aim.Image(fig)`` where ``aim`` imports, and ``fig`` itself where it does not.
 
-    ``aim`` is declared in no extra --- ``pyproject.toml`` states the two
-    advisories standing against its current release --- so it is installed by
-    hand where it is wanted, and the import is inside ``__init__`` rather than
-    at module scope: this module is imported by every sampler and must import
-    without it.
-
-    A figure is recorded as ``aim.Image(fig)``. Aim's ``aim.Figure`` takes a
-    Plotly figure; ``aim.Image`` is the one that accepts a matplotlib
-    ``Figure``, which is what ``qa`` renders.
+    Aim's ``aim.Figure`` takes a Plotly figure; ``aim.Image`` is the one that
+    accepts a matplotlib ``Figure``, which is what :mod:`snakes_and_ladders.qa`
+    renders. The import is here rather than at module scope because ``aim`` is
+    declared in no extra --- ``pyproject.toml`` states the two advisories
+    standing against its current release --- and this module is imported by
+    every sampler.
 
     Parameters
     ----------
-    repo : str | Path | None
-        The Aim repository to write into; ``None`` is Aim's default, the
-        ``.aim`` directory of the working directory. A run written here is
-        readable back only after the repository is indexed
-        (``aim storage --repo <path> reindex``), which ``DEV.md`` states
-        beside the viewer.
-    experiment : str | None
-        The experiment the run belongs to.
+    fig : Figure
+        The rendered figure.
+
+    Returns
+    -------
+    Any
+        ``aim.Image`` wrapping ``fig``, or ``fig`` itself, which is what
+        :class:`MemoryRun` keeps and :class:`NullRun` discards.
+    """
+    try:
+        import aim
+    except ImportError:
+        return fig
+    return aim.Image(fig)
+
+
+@runtime_checkable
+class Metrics(Protocol[S_contra]):
+    """What a problem's state means, in numbers a person reads.
+
+    One instance per problem class, defined in the module owning that class's
+    objective or energy, and bound by an entry point --- never by a loop,
+    which knows its own counters and not what they are about. Every metric is
+    computed by a function the package already has, cited in the
+    implementation's docstring: a metrics set restates the science, it does
+    not define it.
     """
 
-    def __init__(
-        self, repo: str | Path | None = None, experiment: str | None = None
-    ) -> None:
-        import aim
+    @property
+    def names(self) -> tuple[str, ...]:
+        """The series this set records, in the order :meth:`__call__` returns them.
 
-        self._aim = aim
-        self._run = aim.Run(
-            repo=None if repo is None else str(repo), experiment=experiment
-        )
+        So an entry point can name them before a run starts. Declared
+        read-only: every implementation is a frozen dataclass, and a settable
+        member would refuse them all.
+        """
+
+    def __call__(self, state: S_contra) -> Mapping[str, float]:
+        """The metrics of ``state``, keyed by :attr:`names`."""
+
+
+@dataclass(frozen=True)
+class TrackedOptimization:
+    """The run and its metrics bound together: the one object a loop holds.
+
+    Parameters
+    ----------
+    run : Run
+        Where the numbers go. :data:`NULL_RUN` is the default, and the
+        identity :meth:`record` returns on.
+    metrics : Metrics[Any] | None
+        What the state means, or ``None`` for the counters alone. Evaluated
+        only inside a :func:`track` block and only where a hook passes a
+        ``state``, so an untracked run never computes one.
+    """
+
+    run: Run
+    metrics: Metrics[Any] | None = None
 
     @property
-    def run_hash(self) -> str:
-        """Aim's identifier for this run, which is how it is read back."""
-        return str(self._run.hash)
+    def is_null(self) -> bool:
+        """Whether this records nothing, so a loop can skip assembling what it would pass."""
+        return self.run is NULL_RUN
 
-    def params(self, values: Mapping[str, object]) -> None:
-        """Set each entry on the run."""
-        for key, value in values.items():
-            self._run[key] = value
+    def record(
+        self,
+        step: int,
+        *,
+        state: Any = None,
+        objective: float | None = None,
+        context: Mapping[str, Any] | None = None,
+        **diagnostics: float,
+    ) -> None:
+        """Record one iteration: the objective, the metrics of ``state``, and the diagnostics.
 
-    def scalar(self, name: str, value: float, step: int) -> None:
-        """Track ``value`` on the sequence ``name`` at ``step``."""
-        self._run.track(value, name=name, step=step)
+        One call per iteration, sweep, round or figure, never one per site:
+        the whole cost of the seam on an untracked run is this call and its
+        first line.
 
-    def figure(self, name: str, fig: Figure) -> None:
-        """Track ``fig`` as an ``aim.Image`` under ``name``."""
-        self._run.track(self._aim.Image(fig), name=name)
+        Parameters
+        ----------
+        step : int
+            The iteration the numbers belong to, shared by every series
+            written here.
+        state : Any
+            The problem's state --- ``theta``, a labelling, a topology ---
+            passed to :attr:`metrics`, and ignored where either is absent.
+        objective : float | None
+            The value being minimized, recorded under the name ``objective``.
+        context : Mapping[str, Any] | None
+            Aim's per-sequence key, for a series that exists once per rung or
+            per replica.
+        **diagnostics : float
+            One series per keyword, under the keyword's own name.
+        """
+        if self.run is NULL_RUN:
+            return
+        if objective is not None:
+            self.run.track(
+                float(objective), name="objective", step=step, context=context
+            )
+        if self.metrics is not None and state is not None:
+            for metric, measured in self.metrics(state).items():
+                self.run.track(float(measured), name=metric, step=step, context=context)
+        for name, value in diagnostics.items():
+            self.run.track(float(value), name=name, step=step, context=context)
 
-    def close(self) -> None:
-        """Close the run, flushing what it holds."""
-        self._run.close()
+    def record_cost(self, step: int, state_bytes: int) -> None:
+        """Record what the run cost the machine: peak resident bytes, and the bytes its state holds.
+
+        Called once, at the end of a run, at the step its last series entry
+        carries, so the two land beside the last number rather than past it.
+        """
+        if self.run is NULL_RUN:
+            return
+        self.record(
+            step,
+            peak_rss_bytes=float(peak_rss_bytes()),
+            state_bytes=float(state_bytes),
+        )
 
 
-#: The tracker outside any :func:`track` block. One shared instance rather
-#: than one per lookup: it holds no state, so nothing distinguishes two.
-_NULL: Tracker = NullTracker()
+#: What :func:`current` returns outside any block: the shared null run, and no
+#: metrics. Bound once rather than built per lookup.
+NULL = TrackedOptimization(NULL_RUN, None)
 
-_CURRENT: ContextVar[Tracker] = ContextVar("sal_tracker", default=_NULL)
+_CURRENT: ContextVar[TrackedOptimization] = ContextVar("sal_tracked", default=NULL)
 
 
-def current() -> Tracker:
-    """The tracker of the enclosing :func:`track` block, or :class:`NullTracker`.
+def current() -> TrackedOptimization:
+    """The :class:`TrackedOptimization` of the enclosing :func:`track` block, or :data:`NULL`.
 
     Read once at the top of a loop and held, not called per step: the lookup
     is cheap and a hook that repeats it per sweep is a hook that can be seen
@@ -200,36 +340,38 @@ def current() -> Tracker:
 
 @contextmanager
 def track(
-    name: str, *, tracker: Tracker | None = None, **params: object
-) -> Iterator[Tracker]:
-    """Run the block with ``tracker`` active, restoring the previous one on exit.
+    run: Run | None = None,
+    *,
+    metrics: Metrics[Any] | None = None,
+    **params: Any,
+) -> Iterator[TrackedOptimization]:
+    """Run the block recording into ``run``, restoring the previous binding on exit.
 
     Parameters
     ----------
-    name : str
-        What the run is, recorded as the parameter ``name``.
-    tracker : Tracker | None
-        Where the metrics go; ``None`` is a fresh :class:`MemoryTracker`,
-        which is what a test wants and what an entry point overrides with
-        :class:`AimTracker`.
-    **params : object
-        Further parameters, recorded with ``name``.
+    run : Run | None
+        Where the numbers go; ``None`` is a fresh :class:`MemoryRun`, which is
+        what a test wants and what an entry point overrides with an
+        ``aim.Run``.
+    metrics : Metrics[Any] | None
+        The problem's metrics set, or ``None``.
+    **params : Any
+        The run's parameters, set on it through ``__setitem__``.
 
     Yields
     ------
-    Tracker
-        The active tracker, so a caller can read what it recorded.
+    TrackedOptimization
+        The bound object, so a caller can read what its run recorded.
     """
-    active: Tracker = MemoryTracker() if tracker is None else tracker
+    active = TrackedOptimization(MemoryRun() if run is None else run, metrics)
     token = _CURRENT.set(active)
-    active.params({"name": name, **params})
+    for key, value in params.items():
+        active.run[key] = value
     try:
         yield active
     finally:
         _CURRENT.reset(token)
-        close = getattr(active, "close", None)
-        if callable(close):
-            close()
+        active.run.close()
 
 
 def peak_rss_bytes() -> int:
@@ -244,23 +386,16 @@ def peak_rss_bytes() -> int:
     return int(peak) if sys.platform == "darwin" else int(peak) * 1024
 
 
-def record_cost(tracker: Tracker, step: int, state_bytes: int) -> None:
-    """Record what a run cost the machine: peak resident bytes, and the bytes its state holds.
-
-    Called once, at the end of a run, at the step its last series entry
-    carries, so the two land beside the last scalar rather than past it.
-    """
-    tracker.scalar("peak_rss_bytes", float(peak_rss_bytes()), step)
-    tracker.scalar("state_bytes", float(state_bytes), step)
-
-
 __all__ = [
-    "AimTracker",
-    "MemoryTracker",
-    "NullTracker",
-    "Tracker",
+    "NULL",
+    "NULL_RUN",
+    "MemoryRun",
+    "Metrics",
+    "NullRun",
+    "Run",
+    "TrackedOptimization",
+    "as_aim",
     "current",
     "peak_rss_bytes",
-    "record_cost",
     "track",
 ]
