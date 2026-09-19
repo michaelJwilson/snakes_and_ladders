@@ -26,11 +26,24 @@ space under the cap, :func:`posterior` the normalized weights and
 arithmetic: what moved is the space, not the weight, so every value the
 adapters returned before is the value they return.
 
+**The composition is the fourth** (issue #755). Enumerate, score each
+candidate, take the first maximizer: three modules wrote that in full ---
+:func:`snakes_and_ladders.learn.potts.optimum`,
+:func:`snakes_and_ladders.learn.hmm.optimum` and
+:func:`snakes_and_ladders.learn.relaxed.enumerate_optimum` --- against three
+scoring functions of one signature, ``tuple[int, ...] -> float``. Three
+modules calling through one callable is root ``CLAUDE.md``'s rule met, so
+:func:`enumerated_optimum` is that callable and the three are calls. The
+arithmetic is the one they carried, term for term, so the values are bitwise
+the values they returned.
+
 The module names no model, so anything may import it, on the same terms as
 :mod:`snakes_and_ladders.numerics`.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 import numpy as np
 
@@ -164,3 +177,63 @@ def site_marginals(
 def argmax(values: np.ndarray) -> int:
     """The first index of the largest value: ties resolve to the lexicographically first configuration."""
     return int(np.argmax(values))
+
+
+def enumerated_optimum(
+    n_states: int,
+    n_sites: int,
+    score: Callable[[tuple[int, ...]], float],
+    *,
+    what: str | None = None,
+    limit: int = MAX_ENUMERABLE_CONFIGURATIONS,
+) -> tuple[tuple[int, ...], float]:
+    """The highest-scoring configuration and its score, by trying every one.
+
+    The oracle three ``learn`` modules asked for in full before this: the
+    product space under the cap, one call of ``score`` per candidate in
+    enumeration order, and :func:`argmax`, so ties resolve to the
+    lexicographically first configuration.
+
+    Exponential in ``n_sites``, and affordable only on the deliberately small
+    reference instances --- the bargain
+    :func:`snakes_and_ladders.search.topology.enumerate_topologies` strikes
+    below eight taxa.
+
+    Parameters
+    ----------
+    n_states : int
+        States per site.
+    n_sites : int
+        Sites.
+    score : Callable[[tuple[int, ...]], float]
+        What is maximized, called once per configuration. An environment's
+        energy or an objective's discrete score; the caller supplies the
+        bound method, so no model type crosses into this module.
+    what : str | None
+        What the configurations are, for the refusal, as
+        :func:`configurations` takes it.
+    limit : int
+        The cap, passed to :func:`configurations`.
+
+    Returns
+    -------
+    tuple[tuple[int, ...], float]
+        The maximizing configuration and its score.
+
+    Raises
+    ------
+    ValueError
+        Above the cap.
+
+    Examples
+    --------
+    >>> enumerated_optimum(2, 3, lambda state: float(sum(state)))
+    ((1, 1, 1), 3.0)
+    """
+    candidates: list[tuple[int, ...]] = [
+        tuple(row.tolist())
+        for row in configurations(n_states, n_sites, what=what, limit=limit)
+    ]
+    values = np.array([score(candidate) for candidate in candidates])
+    best = argmax(values)
+    return candidates[best], float(values[best])

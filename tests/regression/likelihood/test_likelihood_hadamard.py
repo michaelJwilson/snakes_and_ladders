@@ -126,6 +126,7 @@ def test_the_four_state_recoding_returns_two_thirds_of_every_branch(name: str) -
     )
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 @pytest.mark.parametrize("name", [FOUR_TAXA, FIVE_TAXA, SIX_TAXA, HARD, EIGHT_TAXA])
 def test_the_closest_tree_of_the_exact_weights_is_the_tree(name: str) -> None:
