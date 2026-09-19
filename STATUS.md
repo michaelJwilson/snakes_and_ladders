@@ -4148,13 +4148,13 @@ change is which directory names it and which `CLAUDE.md` states its rules.
 `sample/CLAUDE.md` holds the sampler rules that were split between
 `opt/CLAUDE.md` and `search/CLAUDE.md`, and each donor keeps what is its own:
 an optimizer is judged by the optimum it reaches and a sampler by the
-distribution it converges to. **Every old path still imports**: eleven shims
-emit one `DeprecationWarning` naming the new module and re-export the 95
-public names those modules define, asserted by identity in
-`tests/regression/sample/test_sample_deprecated_paths.py`, and removed in the
-release after 0.3.0 (#522). The flat-module row rises from 158 to 169 by
-exactly those eleven and falls back when they go; the API-map row does not
-move, since a shim re-exports names the map already carries. The twelve test
+distribution it converges to. **The old paths are gone rather than deprecated**: an
+import of `opt.hmc` or `search.potts_mcmc` raises `ModuleNotFoundError` and
+names nothing, which is the repository's own trade --- silent-and-wrong for
+loud-and-absent --- and leaves no second path to the same object for a reader
+to choose between. 83 files in the tree name `sample` and none names a donor.
+Neither counting row moves: the same modules and the same public names, under
+another directory. The twelve test
 modules moved with them to `tests/regression/sample/`, markers unchanged.
 
 **The `MessageSchedule` guard (issue #755).** The seam #592 wrote is now

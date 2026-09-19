@@ -93,15 +93,11 @@ SLIMMING_BASELINE = {
     # two and eight. #754's tree schedule in Rust added one module,
     # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
     # Issue #779's three deprecation shims are three modules while they
-    # stand, and issue #777's eleven are eleven more, so the first row falls
-    # by fourteen at the release after 0.3.0 that removes them. #777 moved
-    # eleven modules rather than adding any: the eleven it leaves behind are
-    # the old paths, each a re-export of the module now under `sample/`, and
-    # the row rises by exactly that count -- 158 before the move, 169 after.
-    # `sample/__init__.py` is a package and no flat module, so it does not
-    # count. The second row does not move: a shim re-exports names the map
-    # already has under their new path.
-    "flat modules": 169,
+    # stand, so the first row falls by three at the release after 0.3.0 that
+    # removes them. Issue #777 moved eleven modules into `sample/` and left
+    # nothing at the old paths, so neither row moves with it: the same
+    # modules and the same public names, under another directory.
+    "flat modules": 158,
     "API-map entries": 1659,
 }
 

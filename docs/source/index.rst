@@ -252,14 +252,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.emission_mixture
    :members:
 
-.. automodule:: snakes_and_ladders.opt.hmc
-
-.. automodule:: snakes_and_ladders.opt.langevin
-
-.. automodule:: snakes_and_ladders.opt.slice
-
-.. automodule:: snakes_and_ladders.opt.schedule
-
 .. automodule:: snakes_and_ladders.sample
    :members:
 
@@ -409,20 +401,6 @@ whether or not it has members yet.
 
 .. automodule:: snakes_and_ladders.search.maxflow_rust
    :members:
-
-.. automodule:: snakes_and_ladders.search.potts_mcmc
-
-.. automodule:: snakes_and_ladders.search.gibbs
-
-.. automodule:: snakes_and_ladders.search.balanced
-
-.. automodule:: snakes_and_ladders.search.potts_keyed
-
-.. automodule:: snakes_and_ladders.search.tempered
-
-.. automodule:: snakes_and_ladders.search.annealed
-
-.. automodule:: snakes_and_ladders.search.statistics
 
 .. automodule:: snakes_and_ladders.search.rl
 
