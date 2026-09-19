@@ -44,6 +44,7 @@ from snakes_and_ladders.search.infer import Model, MoveSet
 from snakes_and_ladders.search.potts_mcmc import _swap_log_ratio
 from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
+from snakes_and_ladders.track import Tracker, current
 
 S = TypeVar("S")
 
@@ -140,6 +141,12 @@ def _exchange(
     recorded_keys: list[list[Hashable]] = [[] for _ in range(n_replicas)]
     densities: list[list[float]] = []
     scores: dict[Hashable, float] = {}
+    # One lookup for both ensembles (`snakes_and_ladders.track`), since both
+    # run this loop. `swap_acceptance` is the mean over adjacent pairs of the
+    # fraction accepted so far -- the mean of the vector `TemperedEnsemble`
+    # returns -- and `log_density` is replica 0's, the first column of the
+    # `log_densities` it returns.
+    tracker: Tracker = current()
     for sweep in range(burn_in + n_sweeps):
         for replica in range(n_replicas):
             states[replica], values[replica] = step(
@@ -163,6 +170,8 @@ def _exchange(
                 scores[name] = values[replica]
                 recorded_keys[replica].append(name)
             densities.append(list(values))
+        tracker.scalar("swap_acceptance", float(np.mean(accepted / proposed)), sweep)
+        tracker.scalar("log_density", values[0], sweep)
     return TemperedEnsemble(
         temperatures=tuple(temperatures),
         keys=tuple(tuple(names) for names in recorded_keys),
