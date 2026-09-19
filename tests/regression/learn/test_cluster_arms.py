@@ -30,6 +30,8 @@ method itself. Four kinds of claim, in the order of how much they prove:
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -37,6 +39,7 @@ from scipy import stats
 from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
 from snakes_and_ladders.learn.potts_nd import (
     CLUSTER_KINDS,
+    PARAMETRIC_KINDS,
     FeatureColumn,
     MoveKind,
     PottsAction,
@@ -52,11 +55,16 @@ from snakes_and_ladders.search.ground_state import (
     run_wolff,
 )
 from snakes_and_ladders.search.potts_keyed import (
+    NiedermayerMove,
     SwendsenWangMove,
     WolffMove,
     cluster_moves,
 )
-from snakes_and_ladders.search.potts_mcmc import _swendsen_wang_sweep, _wolff_sweep
+from snakes_and_ladders.search.potts_mcmc import (
+    _niedermayer_sweep,
+    _swendsen_wang_sweep,
+    _wolff_sweep,
+)
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, energies, spatio_only_field
 
@@ -192,7 +200,7 @@ def test_a_move_built_on_another_lattice_is_refused() -> None:
 def test_a_move_and_a_field_of_different_heights_are_refused() -> None:
     """The same check on the move's own side, where the field arrives."""
     graph, _, _ = _lattice(4, 3)
-    for kind in (WolffMove, SwendsenWangMove):
+    for kind in (WolffMove, SwendsenWangMove, NiedermayerMove):
         with pytest.raises(ValueError, match="a move and its environment score"):
             kind(graph, np.zeros((9, 3)))
 
@@ -231,6 +239,48 @@ def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise(temperature: float) -> No
         beta=1.0 / temperature,
         root=5,
         proposed=1,
+    )
+
+    assert np.array_equal(keyed, direct)
+    assert charge == size * (1 + 2 * len(graph.edges) // graph.n_nodes)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("temperature", [0.0, 0.25, 1.0, 4.0])
+def test_a_niedermayer_step_is_potts_mcmcs_own_sweep_bitwise(
+    temperature: float,
+) -> None:
+    """The same for issue #756's arm, and at ``T = 0`` as well.
+
+    Where `WolffMove` writes the zero-temperature limit out --- ``beta = 1/0``
+    is not a number its sweep can carry --- this one passes ``math.inf``
+    through, because `_niedermayer_sweep` takes it: a bond of positive energy
+    margin is certain rather than drawn, and a step that lowers the score is
+    refused without a uniform. So there is one kernel at every temperature and
+    this asserts it at four, the zero included.
+    """
+    graph, field, _ = _lattice(4, 2)
+    move = NiedermayerMove(graph, field)
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    state = np.ascontiguousarray(
+        np.random.default_rng(3).integers(0, 2, size=graph.n_nodes), dtype=np.int64
+    )
+
+    keyed, charge = move.propose(
+        state, temperature=temperature, site=5, label=1, rng=np.random.default_rng(99)
+    )
+    direct = state.copy()
+    size = _niedermayer_sweep(
+        direct,
+        field,
+        offsets,
+        neighbours,
+        couplings,
+        np.random.default_rng(99),
+        beta=math.inf if temperature == 0.0 else 1.0 / temperature,
+        threshold=move.threshold,
+        root=5,
+        partner=1,
     )
 
     assert np.array_equal(keyed, direct)
@@ -419,8 +469,8 @@ def test_the_score_after_a_cluster_move_is_the_negated_energy_bitwise(
         state = environment.reset(rng)
         action = PottsAction(
             kind,
-            int(rng.integers(side * side)) if kind is MoveKind.WOLFF else -1,
-            int(rng.integers(3)) if kind is MoveKind.WOLFF else -1,
+            int(rng.integers(side * side)) if kind in PARAMETRIC_KINDS else -1,
+            int(rng.integers(3)) if kind in PARAMETRIC_KINDS else -1,
             int(rng.integers(len(environment._ladder))),
         )
         successor, _ = environment.step(state, action)
@@ -474,8 +524,8 @@ def test_visits_is_the_charge_the_move_itself_reports(kind: MoveKind) -> None:
         state = environment.reset(rng)
         action = PottsAction(
             kind,
-            int(rng.integers(side * side)) if kind is MoveKind.WOLFF else -1,
-            int(rng.integers(3)) if kind is MoveKind.WOLFF else -1,
+            int(rng.integers(side * side)) if kind in PARAMETRIC_KINDS else -1,
+            int(rng.integers(3)) if kind in PARAMETRIC_KINDS else -1,
             rung,
         )
         _, charge = move.propose(
@@ -548,8 +598,8 @@ def test_a_cluster_move_replays_and_another_key_does_not(kind: MoveKind) -> None
     state = environment.reset(rng)
     action = PottsAction(
         kind,
-        7 if kind is MoveKind.WOLFF else -1,
-        1 if kind is MoveKind.WOLFF else -1,
+        7 if kind in PARAMETRIC_KINDS else -1,
+        1 if kind in PARAMETRIC_KINDS else -1,
         3,
     )
 
@@ -700,8 +750,8 @@ def _declared_control(
         for rung_index in order:
             action = PottsAction(
                 kind,
-                int(rng.integers(side * side)) if kind is MoveKind.WOLFF else -1,
-                int(rng.integers(n_states)) if kind is MoveKind.WOLFF else -1,
+                int(rng.integers(side * side)) if kind in PARAMETRIC_KINDS else -1,
+                int(rng.integers(n_states)) if kind in PARAMETRIC_KINDS else -1,
                 rung_index,
             )
             spent += environment.visits(state, action)
