@@ -13,6 +13,7 @@ import math
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from scipy.special import logsumexp as scipy_logsumexp
 from snakes_and_ladders.numerics import logsumexp, sample_rows
 
 
@@ -123,3 +124,37 @@ def test_the_shift_survives_an_exponent_the_linear_domain_would_lose() -> None:
     assert float(logsumexp(values, axis=(0, 1))) == pytest.approx(
         800.0 + math.log(4.0), rel=1e-15
     )
+
+
+@pytest.mark.oracle
+def test_logsumexp_is_scipys_at_exponents_the_linear_domain_cannot_hold() -> None:
+    """`scipy.special.logsumexp` is the referee, and it is the same algorithm.
+
+    So the comparison strives for equality and reaches it: over a 128-entry
+    vector, a batch centred at ``+800`` and one at ``-750`` --- either side of
+    what a float64 exponent holds --- and the constant array whose answer is
+    ``800 + log 4``, the two agree **bitwise**. Reducing two axes at once is
+    the one case that does not, `scipy` reshaping where this shifts, and the
+    declared tolerance there is 1e-15 relative against a realized
+    **1.78e-16**. The closed form is checked beside it, since two
+    implementations of one algorithm can be wrong together.
+    """
+    rng = np.random.default_rng(20260919)
+    vector = rng.normal(scale=5.0, size=128)
+    overflowing = rng.normal(loc=800.0, scale=20.0, size=(4, 7))
+    underflowing = rng.normal(loc=-750.0, scale=15.0, size=(4, 7))
+    several = rng.normal(scale=3.0, size=(4, 5, 6))
+
+    assert float(logsumexp(vector, axis=0)) == float(scipy_logsumexp(vector, axis=0))
+    for values, axis in ((overflowing, 1), (underflowing, 0)):
+        assert np.array_equal(
+            logsumexp(values, axis=axis), scipy_logsumexp(values, axis=axis)
+        )
+    assert_allclose(
+        logsumexp(several, axis=(0, 2)),
+        scipy_logsumexp(several, axis=(0, 2)),
+        rtol=1e-15,
+        atol=0.0,
+    )
+    constant = np.full((2, 2), 800.0)
+    assert float(logsumexp(constant, axis=(0, 1))) == 800.0 + math.log(4.0)

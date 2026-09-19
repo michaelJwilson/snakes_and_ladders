@@ -113,6 +113,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "log Z by squaring",
+        "opt.potts.log_partition_by_squaring",
+        "transfer matrix",
+        T + "opt/test_opt_potts.py"
+        "::test_squaring_is_the_transfer_matrix_on_a_strip_one_site_wide",
+    ),
+    Rung(
+        "potts",
         "sum-product / BP",
         "likelihood.message_passing.sum_product",
         "enumeration",
@@ -555,6 +563,14 @@ LADDER: tuple[Rung, ...] = (
         "forward / forward-backward",
         T + "likelihood/test_message_passing.py"
         "::test_the_tree_schedule_on_a_deep_chain_is_the_forward_recursion",
+    ),
+    Rung(
+        "hmm",
+        "tree schedule, Rust",
+        "likelihood.message_passing_rust.tree_messages",
+        "forward via sum-product",
+        T + "likelihood/test_message_passing_rust.py"
+        "::test_the_rust_tree_schedule_agrees_with_the_numpy_oracle",
     ),
     Rung(
         "hmm",

@@ -74,7 +74,7 @@ SLIMMING_BASELINE = {
     "annealers": 4,
     "ground-state run_ wrappers": 7,
     "backend enums": 1,
-    "Python paths above a compiled kernel": 7,
+    "Python paths above a compiled kernel": 8,
     "surrogate modules": 4,
     "modules without a docstring": 0,
     "root exports": 7,
@@ -90,11 +90,13 @@ SLIMMING_BASELINE = {
     # pass in Rust added one module, `likelihood/convolutional_rust.py`, and
     # one public name. #756's two samplers --- `opt.langevin` and `opt.slice`,
     # one module each, which is the package's shape for a sampler --- added
-    # two and eight. Issue #779's three deprecation shims are three modules
-    # while they stand, so the first row reads 156 until the release after
-    # 0.3.0 removes them.
-    "flat modules": 156,
-    "API-map entries": 1626,
+    # two and eight. #754's tree schedule in Rust added one module,
+    # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
+    # Issue #779's three deprecation shims are three modules while they
+    # stand, so the first row reads 157 until the release after 0.3.0
+    # removes them.
+    "flat modules": 157,
+    "API-map entries": 1632,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
@@ -578,11 +580,15 @@ def test_no_module_builds_a_scipy_sparse_store() -> None:
     # `SparseIncidence` would be a second compressed layout whose row order,
     # duplicate handling and transpose are somebody else's, and the compiled
     # consumers take `as_arrays`, which it does not have.
+    # The package and the notebooks, not the tests: a test may hold
+    # `scipy.sparse` as the independent referee of the one layout, which
+    # `tests/regression/test_incidence.py` does (#776), and a referee is not
+    # a second store.
     assert (
         _found(
             FOREIGN_SPARSE,
             "test_duplication_guards.py",
-            SEARCHED,
+            (PACKAGE, REPO_ROOT / "docs" / "nb"),
             ("*.py", "*.ipynb"),
         )
         == []

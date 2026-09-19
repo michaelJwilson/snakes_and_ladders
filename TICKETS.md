@@ -59,9 +59,9 @@ parenthesis the only way a ticket is cited.
 - Retier the turbo waterfalls after #754's Rust trellis: the release tier
   fell from 182 s to 6.0 s and the stress one from 12.1 s to 0.46 s, so
   `release` is no longer what the measurement says (#754)
-- Port the `message_passing` tree schedule's per-level dispatch, which #341
-  left at 4.7x the forward recursion and the stress profile ranks at 29.8% of
-  a 200-step chain (#754)
+- Cut what the Rust tree schedule left on top: `FactorGraph.is_tree` and
+  `Layout.__init__` are 21.3% and 10.4% of the profiled section after #754's
+  port, a union-find over formatted strings rebuilt per call (#754)
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
@@ -143,11 +143,6 @@ parenthesis the only way a ticket is cited.
   against enumeration and the cold replica is shown uncontaminated, but how
   long a chain must run before its marginals are usable is unmeasured, so
   every budget here is stated in sweeps rather than in mixing times
-
-- Reassociate the homogeneous transfer-matrix product by repeated squaring,
-  6 products for 64 positions: `torch.logsumexp` is 33.2% of `hmc.sample` at
-  1,000 draws over 512,000 calls, an algorithmic cut #341 named and nobody
-  took (#754)
 
 ## Milestone 2.0 — RL Definition
 
@@ -265,10 +260,10 @@ parenthesis the only way a ticket is cited.
 - Assess the computational efficiency of the key algorithms for scaling
   fixtures through simulation, optimization and learning (#405)
 - The targets the runtime-optimization audit left unmet: the tree schedule
-  within 2x of the forward recursion on a chain, the reassociated
-  transfer-matrix product in the Potts chain objective, and a compiled sweep
-  for the factor-graph Gibbs sampler (#405). Alpha expansion's inner solver
-  is done (#528)
+  within 2x of the forward recursion on a chain, and a compiled sweep for the
+  factor-graph Gibbs sampler (#405). Alpha expansion's inner solver is done
+  (#528), and the reassociated transfer-matrix product in the Potts chain
+  objective is done (#754)
 - Adopt `rustworkx` on a hot path where a measurement says so —
   `search.topology._component`, the spanning trees of the bound — moving the
   replaced implementation to `sandbox/`. `PottsGraph.compressed_adjacency`
