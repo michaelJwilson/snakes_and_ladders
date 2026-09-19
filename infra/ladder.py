@@ -473,6 +473,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "hmm",
+        "path sampling",
+        "likelihood.forward_backward.sample_path",
+        "path enumeration",
+        T + "likelihood/test_hmm_paths.py"
+        "::test_the_sampled_paths_are_drawn_from_the_enumerated_path_posterior",
+    ),
+    Rung(
+        "hmm",
         "forward via sum-product",
         "likelihood.message_passing.sum_product",
         "forward / forward-backward",
@@ -489,6 +497,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "hmm",
+        "Viterbi",
+        "likelihood.message_passing.max_product",
+        "coupled E and M steps",
+        T + "likelihood/test_message_passing.py"
+        "::test_max_product_decodes_the_mode_of_the_coupled_e_step_s_path_law",
+    ),
+    Rung(
+        "hmm",
         "relaxed MAP",
         "learn.relaxed.optimize",
         "Viterbi",
@@ -502,6 +518,14 @@ LADDER: tuple[Rung, ...] = (
         "path enumeration",
         T + "opt/test_opt_hmm.py"
         "::test_baum_welch_reaches_the_enumerated_path_evidence_and_its_fixed_point",
+    ),
+    Rung(
+        "hmm",
+        "Baum--Welch",
+        "opt.hmm.baum_welch",
+        None,
+        T + "opt/test_opt_hmm.py"
+        "::test_baum_welch_ascends_and_settles_on_the_re_estimation_equations",
     ),
     Rung(
         "hmm",
@@ -550,6 +574,14 @@ LADDER: tuple[Rung, ...] = (
         "coupled model, exact",
         T + "search/test_spatio_sequential_fit.py"
         "::test_the_label_step_reaches_the_enumerated_map_from_the_planted_labels",
+    ),
+    Rung(
+        "hmm",
+        "coupled Gibbs",
+        "search.gibbs.sample_factor_graph",
+        "coupled model, exact",
+        T + "search/test_gibbs.py"
+        "::test_the_coupled_sweep_draws_labellings_from_the_enumerated_joint_law",
     ),
     # --- codes -------------------------------------------------------------
     Rung(
@@ -690,32 +722,7 @@ LADDER: tuple[Rung, ...] = (
         None,
         T + "opt/test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian",
     ),
-    # --- the 13 rungs no test pins, one per bullet of issue #734 -----------
-    Rung(
-        "hmm",
-        "path sampling",
-        "likelihood.forward_backward.sample_path",
-        "path enumeration",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung(
-        "hmm",
-        "coupled Gibbs",
-        "search.gibbs.sample_factor_graph",
-        "coupled model, exact",
-        None,
-        LADDER_TICKET,
-    ),
-    Rung("hmm", "Baum--Welch", "opt.hmm.baum_welch", None, None, LADDER_TICKET),
-    Rung(
-        "hmm",
-        "Viterbi",
-        "likelihood.message_passing.max_product",
-        "coupled E and M steps",
-        None,
-        LADDER_TICKET,
-    ),
+    # --- the 9 rungs no test pins, one per bullet of issue #734 ------------
     Rung(
         "codes",
         "hamming_correct, golay_code",

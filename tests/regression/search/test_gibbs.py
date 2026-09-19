@@ -18,6 +18,7 @@ from itertools import product
 import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.enumeration import configurations
 from snakes_and_ladders.likelihood.hmm_paths import (
     PathEnumeration,
     emission_log_density,
@@ -26,7 +27,12 @@ from snakes_and_ladders.likelihood.hmm_paths import (
 )
 from snakes_and_ladders.likelihood.message_passing import sum_product
 from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.likelihood.spatio_sequential import enumerate_spatio_sequential
+from snakes_and_ladders.likelihood.spatio_sequential import (
+    enumerate_spatio_sequential,
+    log_chain,
+    log_prior,
+)
+from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.opt.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
@@ -71,7 +77,9 @@ from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.spatio_sequential import (
+    SpatioSequentialParams,
     coupled_factor_graph,
+    gated_log_density,
     simulate_spatio_sequential,
 )
 from snakes_and_ladders.sim.tree import preorder
@@ -374,6 +382,116 @@ def test_the_generic_sweep_recovers_the_exact_marginals_on_a_tree() -> None:
         counts = np.bincount(chain.states[:, column], minlength=params.k).astype(float)
         assert (
             chi_square_p_value(counts, len(chain.states) * exact[name]) > SIGNIFICANCE
+        )
+
+
+#: The coupled chain, thinned. One sweep redraws every label and every chain
+#: state in place, so successive sweeps are correlated and a chi-square over
+#: them rejects a sampler that is right: at the `thin = 3` the marginal test
+#: below runs at, node 3's marginal returns p = 5.7e-6 on generator seed 4.
+#: The thinning is part of the test, not a speed knob (`test_potts_mcmc.py`).
+COUPLED_SWEEPS = 40_000
+COUPLED_THIN = 10
+COUPLED_BURN_IN = 1_000
+
+#: Total variation between the drawn frequencies and the enumerated law over
+#: all 16 labellings. Realized 0.0132, and 0.0229 the worst over generator
+#: seeds 0 to 7, against what 4,000 draws support.
+COUPLED_TOTAL_VARIATION = 0.04
+
+
+def _enumerated_labelling_law(
+    params: SpatioSequentialParams, observations: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """``p(l | x)`` over every labelling, by enumerating each class's paths.
+
+    `enumerate_spatio_sequential` returns the node marginals of this law and
+    not the law, so the sum over each class's ``K ** S`` paths is written out
+    here from the enumeration's own terms --- its Potts prior and its per-class
+    chain score --- and the marginals of what it returns are asserted to be
+    the enumeration's.
+    """
+    labellings = configurations(params.n_classes, params.graph.n_nodes)
+    paths = configurations(params.n_states, params.n_positions)
+    gated = gated_log_density(params, observations)  # (n_nodes, S, M, K)
+    positions = np.arange(params.n_positions)
+    prior = log_prior(params, labellings)
+    terms = np.empty(labellings.shape[0])
+    for index, labelling in enumerate(labellings):
+        total = float(prior[index])
+        for m in range(params.n_classes):
+            scores = log_chain(params, m, paths)
+            for node in np.flatnonzero(labelling == m):
+                scores = scores + gated[node, positions, m, :][positions, paths].sum(
+                    axis=1
+                )
+            total += float(logsumexp(scores, axis=0))
+        terms[index] = total
+    return labellings, np.exp(terms - logsumexp(terms, axis=0))
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_the_coupled_sweep_draws_labellings_from_the_enumerated_joint_law() -> None:
+    # The rung below (issue #734): the coupled model's exact enumeration. The
+    # test above reads the same chain marginally, one node at a time, which a
+    # sampler that drew each label from its own marginal would also pass --
+    # and the Potts term is exactly what makes the labels dependent. What is
+    # pinned here is the joint over all 2**4 labellings of the declared
+    # instance, as `test_potts_mcmc.py` and `test_potts_simulate.py` pin the
+    # lattice chain over its 16 configurations.
+    #
+    # Realized on generator seed 3: the written-out law's node marginals are
+    # the enumeration's to 1.6e-15; over 4,000 thinned draws the joint
+    # chi-square over 12 lumped cells returns p = 0.882 and the smallest node
+    # marginal p = 0.389, both against the 0.001 declared, and total variation
+    # over the 16 cells is 0.0132. Over generator seeds 0 to 7 the smallest of
+    # either was 0.125 and 0.028.
+    params = fixture("spatio_sequential", "ci").params
+    data = simulate_spatio_sequential(params, np.random.default_rng(1))
+    exact = enumerate_spatio_sequential(params, data.observations)
+    labellings, law = _enumerated_labelling_law(params, data.observations)
+
+    marginal = np.zeros_like(exact.label_posterior)
+    nodes = np.arange(params.graph.n_nodes)
+    for weight, labelling in zip(law, labellings, strict=True):
+        marginal[nodes, labelling] += weight
+    assert np.abs(marginal - exact.label_posterior).max() < 1e-13
+
+    graph = coupled_factor_graph(params, data.observations)
+    chain = sample_factor_graph(
+        graph,
+        np.random.default_rng(3),
+        COUPLED_SWEEPS,
+        burn_in=COUPLED_BURN_IN,
+        thin=COUPLED_THIN,
+    )
+    columns = [chain.variables.index(f"l{node}") for node in nodes]
+    index = {
+        tuple(int(value) for value in labelling): position
+        for position, labelling in enumerate(labellings)
+    }
+    drawn = np.zeros(labellings.shape[0])
+    for row in chain.states[:, columns]:
+        drawn[index[tuple(int(value) for value in row)]] += 1
+
+    n_draws = len(chain.states)
+    cells = _lumped(law, n_draws)
+    assert (
+        chi_square_p_value(
+            np.array([drawn[cell].sum() for cell in cells]),
+            np.array([law[cell].sum() for cell in cells]) * n_draws,
+        )
+        > SIGNIFICANCE
+    )
+    assert 0.5 * np.abs(drawn / n_draws - law).sum() < COUPLED_TOTAL_VARIATION
+    for node in nodes:
+        counts = np.bincount(
+            chain.states[:, columns[node]], minlength=params.n_classes
+        ).astype(float)
+        assert (
+            chi_square_p_value(counts, n_draws * exact.label_posterior[node])
+            > SIGNIFICANCE
         )
 
 
