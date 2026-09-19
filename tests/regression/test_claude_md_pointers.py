@@ -49,7 +49,8 @@ def _rule_five_sentence() -> str:
             sentence = line.split("**Maintain formatting:**", 1)[1].strip()
             assert len(sentence) > 20, "rule 5 is too short to search for"
             return sentence
-    raise AssertionError("root CLAUDE.md states no Maintain formatting rule")
+    msg = "root CLAUDE.md states no Maintain formatting rule"
+    raise AssertionError(msg)
 
 
 # Rule 6 says a `CLAUDE.md` carries principles rather than technical detail,
