@@ -18,10 +18,13 @@ log-likelihood ``likelihood/CLAUDE.md`` states a relative bound for.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.convolutional import (
     bcjr,
+    enumerate_messages,
     exact_bitwise_posterior,
     viterbi,
 )
@@ -323,3 +326,111 @@ def test_an_impossible_edge_is_a_finite_floor_and_not_minus_infinity() -> None:
     assert not np.isfinite(
         sum_product(hard, schedule=MessageScheduleName.TREE).log_partition
     )
+
+
+# --- end to end: a planted message through the Gaussian channel -----------------
+
+#: The message length the weight spectrum is enumerated at: 1,024 terminated
+#: inputs, each run through the register once, is 0.1 s.
+END2END_LENGTH = 10
+
+#: The two noise scales. At 0.5 the union bound over the spectrum is 5e-5, so
+#: the run is inside what the code guarantees and exact recovery is asserted;
+#: at 0.8 the bound is 8.1e-2 and a rate is measurable.
+CLEAN_SIGMA, NOISY_SIGMA = 0.5, 0.8
+
+#: Draws at each noise scale. The clean point asserts recovery where the union
+#: bound is 4.9e-5, so 500 draws expect 0.02 failures and one would refute it;
+#: the noisy point carries the rate, where 2,000 draws give a standard error of
+#: 5.3e-3 against a bracket 7.8e-2 wide.
+CLEAN_DRAWS, NOISY_DRAWS = 500, 2000
+
+#: The free distance of the `(7, 5)` memory-2 register, which the terminated
+#: code's enumerated spectrum must show as its minimum weight.
+FREE_DISTANCE = 5
+
+
+def _q_function(argument: float) -> float:
+    """`Q(x)`, the Gaussian tail, through `erfc` rather than a table."""
+    return 0.5 * math.erfc(argument / math.sqrt(2.0))
+
+
+@pytest.mark.critical
+@pytest.mark.end2end
+def test_the_trellis_returns_the_planted_message_and_fails_inside_the_union_bound() -> (
+    None
+):
+    """At `sigma = 0.5` both decoders return all 500 planted messages exactly;
+    at `sigma = 0.8` Viterbi's block error rate over 2,000 draws is 0.0600 and
+    BCJR's 0.0630, inside `[2.6e-3, 8.1e-2]` --- the nearest-codeword
+    probability and the union bound over the enumerated weight spectrum.
+
+    The path is the package's: a message from a seeded generator,
+    `sim.convolutional.terminate` and `encode_stream` through the `(7, 5)`
+    register, `sim.ldpc`'s Gaussian channel on both streams, and the two
+    decoders this module ships --- `viterbi`, the blockwise MAP, and `bcjr`'s
+    hard decision, the bitwise one. The truth judged is the planted message,
+    read off the first `END2END_LENGTH` inputs; the tail is the register's and
+    is not a message.
+
+    What referees the rate is the code's own weight spectrum, enumerated here
+    rather than quoted: terminated, the code is linear, so the distance from
+    the sent word to any other is the weight of some codeword, and the 1,024
+    weights are computed by running the register over every message. The
+    minimum is `FREE_DISTANCE`, which is what the `(7, 5)` register is chosen
+    for. Two bounds follow and bracket maximum likelihood exactly:
+
+    * **below**, `Q(sqrt(d_free) / sigma)`: a decode fails at least as often
+      as one named nearest neighbour beats the word that was sent;
+    * **above**, `sum_w A_w Q(sqrt(w) / sigma)`: the union over every other
+      codeword.
+
+    Viterbi is maximum likelihood over the terminated code, so the bracket is
+    a statement about it and not an approximation to it. BCJR's hard decision
+    is the bitwise MAP and minimizes bit errors rather than block errors, so
+    its block rate is reported beside Viterbi's and is not asserted below it:
+    at these 2,000 draws it is higher, and a sample this size cannot order the
+    two.
+
+    The upper bound is not slack. A 4,000-draw run of the same path reads
+    0.0510, so the union bound is 1.6 times the rate it holds, and these 2,000
+    draws sit 1.8 standard errors above that: a decoder losing a factor of two
+    would read 0.102 and fail the bound, which is what it is kept tight for.
+    """
+    trellis = recursive_systematic_trellis(FEEDBACK, FEEDFORWARD, MEMORY)
+    weights = np.array(
+        [
+            int(inputs.sum() + encode_stream(trellis, inputs)[0].sum())
+            for inputs in (
+                terminate(trellis, message)
+                for message in enumerate_messages(END2END_LENGTH)
+            )
+        ]
+    )
+    spectrum = weights[weights > 0]
+    assert weights.size == 2**END2END_LENGTH
+    assert int(spectrum.min()) == FREE_DISTANCE
+
+    rates: dict[float, tuple[float, float]] = {}
+    for sigma, draws in ((CLEAN_SIGMA, CLEAN_DRAWS), (NOISY_SIGMA, NOISY_DRAWS)):
+        rng = np.random.default_rng(729)
+        blockwise = bitwise = 0
+        for _ in range(draws):
+            message = rng.integers(0, 2, size=END2END_LENGTH).astype(np.uint8)
+            systematic, parity = _received(trellis, message, sigma, rng)
+            path = viterbi(trellis, systematic, parity)
+            decisions = (bcjr(trellis, systematic, parity).posterior_llr < 0.0).astype(
+                np.uint8
+            )
+            blockwise += int(not np.array_equal(path[:END2END_LENGTH], message))
+            bitwise += int(not np.array_equal(decisions[:END2END_LENGTH], message))
+        rates[sigma] = (blockwise / draws, bitwise / draws)
+
+    assert rates[CLEAN_SIGMA] == (0.0, 0.0)
+
+    union = sum(_q_function(math.sqrt(weight) / NOISY_SIGMA) for weight in spectrum)
+    nearest = _q_function(math.sqrt(FREE_DISTANCE) / NOISY_SIGMA)
+    noisy_blockwise, noisy_bitwise = rates[NOISY_SIGMA]
+    assert (noisy_blockwise, noisy_bitwise) == (0.06, 0.063)
+    assert nearest < noisy_blockwise < union
+    assert nearest < noisy_bitwise < union

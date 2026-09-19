@@ -181,6 +181,7 @@ FINDINGS = (
         "enumerate-shaped functions",
         r"^def (?:enumerate\w*|brute_force\w*|optimum)\(",
         8,
+        owner="enumeration.py",
     ),
     Finding("private logsumexp copies", r"^def _logsumexp\(", 4),
     Finding(
