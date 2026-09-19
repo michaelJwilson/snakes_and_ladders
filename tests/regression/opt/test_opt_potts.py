@@ -6,6 +6,14 @@ configuration -- a computation that shares no code with the recursion under
 test -- and the objective's sufficient-statistic shortcut is checked against
 a naive per-chain sum. ``opt/CLAUDE.md`` makes the finite-difference
 derivative check mandatory; it is here, not deferred to the optimizer.
+
+The normalizer has two routes -- the per-site recursion and the same product
+reassociated by repeated squaring (issue #754) -- and every claim above is
+asserted of both, because ``log_partition`` picks between them on ``q`` and
+``length`` and a fixture exercises whichever its own size selects. The two are
+pinned against each other, and the squaring route against the rung below it in
+``infra/ladder.py``: ``likelihood.potts.strip_log_partition`` on a strip one
+site wide.
 """
 
 from __future__ import annotations
@@ -17,18 +25,32 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
+from snakes_and_ladders.likelihood.potts import strip_log_partition
 from snakes_and_ladders.opt.constrain import log_simplex
 from snakes_and_ladders.opt.potts import (
     PottsObjective,
     load_potts_params,
     log_partition,
+    log_partition_by_recursion,
+    log_partition_by_squaring,
     simulate_chains,
+    squaring_is_cheaper,
 )
+from snakes_and_ladders.sim.graph import BoundaryCondition
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences
 
 FIXTURE = FIXTURES_DIR / "potts_chain/ci.yaml"
+
+#: ``(q, length)`` either side of :func:`squaring_is_cheaper`'s rule: it takes
+#: the squaring route at (2, 8), (3, 2), (3, 16) and (3, 64) and declines it at
+#: (3, 3) and (3, 8), so both branches of ``log_partition`` are exercised.
+ROUTE_CASES = ((2, 8), (3, 2), (3, 3), (3, 8), (3, 16), (3, 64))
+
+#: Both routes of the normalizer, named so a test says which it ran.
+ROUTES = (log_partition_by_recursion, log_partition_by_squaring)
 
 # Tolerances are relative throughout, per `DEV.md`: the log-likelihood is a
 # sum over chains and sites, so an absolute bound fixed at one fixture size
@@ -52,16 +74,134 @@ def _brute_force_log_partition(
 
 
 @pytest.mark.oracle
+@pytest.mark.parametrize("route", [*ROUTES, log_partition], ids=lambda f: f.__name__)
 @pytest.mark.parametrize("length", [1, 2, 3, 5, 8])
-def test_transfer_matrix_matches_brute_force_enumeration(length: int) -> None:
+def test_transfer_matrix_matches_brute_force_enumeration(
+    length: int, route: object
+) -> None:
     params = load_potts_params(FIXTURE)
     expected = _brute_force_log_partition(params.coupling, params.field, length)
-    actual = log_partition(
+    actual = route(  # type: ignore[operator]
         torch.tensor(params.coupling, dtype=torch.float64),
         torch.as_tensor(params.field, dtype=torch.float64),
         length,
     )
     assert_allclose(float(actual), expected, rtol=_RTOL_ORACLE)
+
+
+def _gauge_fixed(values: np.ndarray) -> np.ndarray:
+    """``h`` in the gauge the model is identified in, ``logsumexp(h) == 0``."""
+    return values - float(np.log(np.exp(values).sum()))
+
+
+@pytest.mark.oracle
+@pytest.mark.patch
+@pytest.mark.parametrize(("n_states", "length"), ROUTE_CASES)
+def test_squaring_reproduces_the_per_site_recursion(n_states: int, length: int) -> None:
+    # The reassociation is exact and changes only the order the log-space
+    # sums are taken in, so the recursion is the referee and bitwise is the
+    # target (root `CLAUDE.md`). It is reached wherever the two orders
+    # coincide -- every chain whose exponent is 0 or 1 runs the same
+    # sequence of operations on both routes -- and where they do not, the
+    # guard is the declared cross-device tolerance and the realized
+    # difference is asserted to sit two orders inside it rather than at it.
+    rng = np.random.default_rng(11)
+    field = torch.as_tensor(_gauge_fixed(rng.normal(size=n_states)))
+    coupling = torch.tensor(0.6, dtype=torch.float64)
+
+    recursion = log_partition_by_recursion(coupling, field, length)
+    squaring = log_partition_by_squaring(coupling, field, length)
+
+    if length <= 2:
+        assert float(squaring) == float(recursion)
+    realized = abs(float(squaring) - float(recursion)) / abs(float(recursion))
+    assert realized < 1e-13
+    assert_allclose(float(squaring), float(recursion), rtol=CROSS_DEVICE_RTOL_FLOAT64)
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(("n_states", "length"), ROUTE_CASES)
+def test_the_route_takes_no_more_logsumexp_calls_than_the_recursion(
+    n_states: int, length: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # What `squaring_is_cheaper` claims, counted rather than argued: where it
+    # says yes, the route it picks makes no more `logsumexp` calls and touches
+    # no more elements than the recursion, so it cannot lose on either term.
+    # Where it says no, the recursion is what the function always did.
+    calls: dict[str, list[int]] = {}
+    real = torch.logsumexp
+
+    def _counted(values: torch.Tensor, dim: object) -> torch.Tensor:
+        counted = calls.setdefault("counted", [])
+        counted.append(values.numel())
+        return real(values, dim)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(torch, "logsumexp", _counted)
+    field = torch.zeros(n_states, dtype=torch.float64)
+    coupling = torch.tensor(0.6, dtype=torch.float64)
+
+    log_partition(coupling, field, length)
+    chosen = calls.pop("counted", [])
+    log_partition_by_recursion(coupling, field, length)
+    recursion = calls.pop("counted", [])
+    log_partition_by_squaring(coupling, field, length)
+    squaring = calls.pop("counted", [])
+
+    if squaring_is_cheaper(n_states, length):
+        assert chosen == squaring
+        assert len(squaring) <= len(recursion)
+        assert sum(squaring) <= sum(recursion)
+    else:
+        assert chosen == recursion
+        # Declined for a reason, and this is it: one of the two terms is
+        # worse, so the rule is not conservative to the point of vacuity.
+        assert len(squaring) > len(recursion) or sum(squaring) > sum(recursion)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("length", [2, 5, 16, 64])
+def test_squaring_is_the_transfer_matrix_on_a_strip_one_site_wide(
+    length: int,
+) -> None:
+    # The rung below in `infra/ladder.py`. A chain of `length` sites is an
+    # open `length x 1` strip, where `strip_log_partition` transfers a whole
+    # column and shares no code with either route here -- so it referees the
+    # squaring at lengths brute force cannot reach.
+    params = load_potts_params(FIXTURE)
+    expected = strip_log_partition(
+        (length, 1), BoundaryCondition.OPEN, params.coupling, params.field
+    )
+    actual = log_partition_by_squaring(
+        torch.tensor(params.coupling, dtype=torch.float64),
+        torch.as_tensor(params.field, dtype=torch.float64),
+        length,
+    )
+    assert_allclose(float(actual), expected, rtol=CROSS_DEVICE_RTOL_FLOAT64)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("coupling", [-0.8, 0.0, 1.4])
+@pytest.mark.parametrize("length", [3, 16, 64])
+def test_the_squaring_gradient_matches_central_finite_differences(
+    coupling: float, length: int
+) -> None:
+    # Autograd follows the reassociation, and what says so is the derivative
+    # of the reassociated product against central differences of its own
+    # value -- at lengths either side of the route rule and at couplings of
+    # both signs, since the transfer matrix's off-diagonal is where the sign
+    # enters.
+    field = torch.as_tensor(
+        _gauge_fixed(np.random.default_rng(3).normal(size=3))
+    ).requires_grad_(True)
+    j = torch.tensor(coupling, dtype=torch.float64, requires_grad=True)
+
+    gradient = torch.autograd.grad(log_partition_by_squaring(j, field, length), [j])[0]
+
+    step = 1e-6
+    with torch.no_grad():
+        up = float(log_partition_by_squaring(j + step, field.detach(), length))
+        down = float(log_partition_by_squaring(j - step, field.detach(), length))
+    assert_allclose(float(gradient), (up - down) / (2 * step), rtol=1e-6)
 
 
 @pytest.mark.analytic

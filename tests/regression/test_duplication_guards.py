@@ -91,9 +91,9 @@ SLIMMING_BASELINE = {
     # one public name. #756's two samplers --- `opt.langevin` and `opt.slice`,
     # one module each, which is the package's shape for a sampler --- added
     # two and eight. #754's tree schedule in Rust added one module,
-    # `likelihood/message_passing_rust.py`, and three public names.
+    # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
     "flat modules": 154,
-    "API-map entries": 1629,
+    "API-map entries": 1632,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this

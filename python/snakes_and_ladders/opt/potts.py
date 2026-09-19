@@ -129,10 +129,61 @@ def load_potts_params(path: Path) -> PottsParams:
     )
 
 
-def log_partition(
+def _log_transfer(coupling: torch.Tensor, field: torch.Tensor) -> torch.Tensor:
+    """``T[i, j] = J * delta(i, j) + h[j]``, the one matrix every site carries."""
+    return coupling * torch.eye(
+        field.shape[0], dtype=field.dtype, device=field.device
+    ) + field.unsqueeze(0)
+
+
+def squaring_is_cheaper(n_states: int, length: int) -> bool:
+    """Whether :func:`log_partition_by_squaring` does no more work than the recursion.
+
+    Counted in ``q ** 2``-element `logsumexp` calls, which is one step of the
+    recursion. The recursion takes ``n = length - 1`` of them. Squaring takes
+    ``floor(log2 n)`` matrix squarings, each ``q ** 3`` and so ``q`` of those
+    units, plus one vector-matrix product per set bit of ``n``; it is taken
+    when the total does not exceed ``n``, where it touches no more elements
+    *and* makes no more calls and so cannot lose on either term.
+
+    **The route reads the alphabet, not the chain length** (root
+    ``CLAUDE.md``, "Cost depends on the data"): the cube in ``q`` is what a
+    reassociation buys its shorter product with. Measured over ``q`` in 2..64
+    and ``length`` in 2..1,024, squaring is 4.51x at ``q = 3, length = 64``
+    and 0.04x at ``q = 64, length = 4`` -- a rule reading the length alone
+    would take both (issue #754, ``docs/experiments/028``).
+
+    The rule is conservative by construction: it declines wins it cannot
+    bound, 1.25x at ``q = 3, length = 8`` and 2.53x at ``q = 32,
+    length = 64``. The recursion is what this function always did, so the
+    branch it declines to is never a regression.
+
+    Parameters
+    ----------
+    n_states : int
+        States per site, ``q``.
+    length : int
+        Chain length.
+
+    Returns
+    -------
+    bool
+        True where squaring is taken.
+    """
+    exponent = length - 1
+    if exponent <= 1:
+        return True
+    return n_states * (exponent.bit_length() - 1) + exponent.bit_count() <= exponent
+
+
+def log_partition_by_recursion(
     coupling: torch.Tensor, field: torch.Tensor, length: int
 ) -> torch.Tensor:
-    """Exact ``log Z`` for a chain of ``length`` sites, by transfer matrix.
+    """``log Z`` by carrying one message across the chain, site by site.
+
+    The reference: ``length - 1`` vector-matrix products in log space, in the
+    order the chain is written. :func:`log_partition_by_squaring` is pinned
+    against it.
 
     Parameters
     ----------
@@ -148,13 +199,92 @@ def log_partition(
     torch.Tensor
         Scalar ``log Z``, differentiable with respect to both parameters.
     """
-    log_transfer = coupling * torch.eye(
-        field.shape[0], dtype=field.dtype, device=field.device
-    ) + field.unsqueeze(0)
+    log_transfer = _log_transfer(coupling, field)
     alpha = field
     for _ in range(length - 1):
         alpha = torch.logsumexp(alpha.unsqueeze(1) + log_transfer, dim=0)
     return torch.logsumexp(alpha, dim=0)
+
+
+def log_partition_by_squaring(
+    coupling: torch.Tensor, field: torch.Tensor, length: int
+) -> torch.Tensor:
+    """``log Z`` with the transfer product reassociated by repeated squaring.
+
+    The chain is homogeneous -- one ``J`` and one ``h`` for every site -- so
+    ``T ** (length - 1)`` is a power of a single matrix, and a power
+    reassociates: ``T ** 63`` is five squarings and six vector-matrix
+    products rather than 63 products in sequence. The count goes from
+    ``O(length)`` `logsumexp` calls to ``O(log length)``, which is what the
+    autograd tape is built over as well as what the forward pass runs.
+
+    Exact, not an approximation: the reassociation changes the *order* of the
+    log-space sums and nothing else. It is bitwise with
+    :func:`log_partition_by_recursion` where the order happens to coincide
+    and within
+    :data:`~snakes_and_ladders.likelihood.device.CROSS_DEVICE_RTOL_FLOAT64`
+    where it does not; the realized difference is 6.815e-16 relative at the
+    stress instance (``q = 3``, ``length = 64``), and 6.13e-14 is the largest
+    over ``q`` in 2..8 and ``length`` in 1..129 where the route is taken.
+
+    A site-dependent field would make the product inhomogeneous and this
+    route wrong. ``field`` is one vector, so the case cannot arise here; it
+    is what would have to change first.
+
+    Parameters
+    ----------
+    coupling : torch.Tensor
+        Scalar ``J``.
+    field : torch.Tensor
+        ``h``, shape ``(q,)``, shared by every site.
+    length : int
+        Chain length, >= 1.
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar ``log Z``, differentiable with respect to both parameters.
+    """
+    alpha = field
+    exponent = length - 1
+    if exponent > 0:
+        power = _log_transfer(coupling, field)
+        while exponent:
+            if exponent & 1:
+                alpha = torch.logsumexp(alpha.unsqueeze(1) + power, dim=0)
+            exponent >>= 1
+            if exponent:
+                power = torch.logsumexp(power.unsqueeze(2) + power.unsqueeze(0), dim=1)
+    return torch.logsumexp(alpha, dim=0)
+
+
+def log_partition(
+    coupling: torch.Tensor, field: torch.Tensor, length: int
+) -> torch.Tensor:
+    """Exact ``log Z`` for a chain of ``length`` sites, by transfer matrix.
+
+    Two routes compute the same number and :func:`squaring_is_cheaper` picks
+    between them on ``q`` and ``length`` together. Either is exact; they
+    differ in the order the log-space sums are taken, by 6.815e-16 relative at
+    the stress instance.
+
+    Parameters
+    ----------
+    coupling : torch.Tensor
+        Scalar ``J``.
+    field : torch.Tensor
+        ``h``, shape ``(q,)``.
+    length : int
+        Chain length, >= 1.
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar ``log Z``, differentiable with respect to both parameters.
+    """
+    if squaring_is_cheaper(int(field.shape[0]), length):
+        return log_partition_by_squaring(coupling, field, length)
+    return log_partition_by_recursion(coupling, field, length)
 
 
 def simulate_chains(params: PottsParams) -> np.ndarray:

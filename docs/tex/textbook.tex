@@ -3950,7 +3950,17 @@ boundaries and $\operatorname{tr}(\transfer^{L})$ under periodic ones, where
 the translation invariance folds $\nu$ into $\transfer$. Either way it costs
 $O(L q^{2W})$: exponential in the width and
 \emph{linear} in the length. That asymmetry is the whole reason the method
-earns a rung. Enumeration over $q^{WL}$ configurations dies in both
+earns a rung.
+
+The length is linear only if the product is taken in the order it is written.
+Where $\transfer$ is the same at every $\ell$ the product is a \emph{power},
+and a power reassociates: repeated squaring reaches $\transfer^{L-1}$ in
+$\lfloor \log_2 (L-1) \rfloor$ squarings of $O(q^{3W})$ each and one
+vector-matrix product per set bit of $L-1$, for $O(q^{3W} \log L)$ in place of
+$O(L q^{2W})$. The cube in $q^{W}$ is what buys the logarithm in $L$, so the
+reassociation pays where the width is small and the length is not, and loses
+the other way; which of the two costs less is a statement about $q^{W}$ and
+$L$ together and not about the length alone. Enumeration over $q^{WL}$ configurations dies in both
 directions at once, while the transfer matrix dies only in $W$, so it supplies
 an exact normalizer on a strip of any length at a width that fits --- which is
 what refereeing belief propagation on a loopy graph requires, since the
