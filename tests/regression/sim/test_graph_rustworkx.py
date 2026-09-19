@@ -254,3 +254,81 @@ def test_the_networkx_cut_is_the_enumerated_minimum_where_enumeration_fits() -> 
     assert cut_energy(graph, field_values, cut_value) == pytest.approx(
         enumerated, abs=1e-9
     )
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("shape", [(2, 2), (3, 4), (5, 3), (6, 6)])
+def test_a_lattice_read_in_from_rustworkx_s_own_grid_is_the_one_we_build(
+    shape: tuple[int, int],
+) -> None:
+    # `from_rustworkx` against a graph this repository did not construct:
+    # `rustworkx.generators.grid_graph` builds the open square lattice, its
+    # edges are weighted with the coupling, and what comes back must be the
+    # `lattice_graph` of the same shape -- same node count, same edges as
+    # unordered pairs, same coupling on each. The referee is the second
+    # implementation, so a reader that transposed the node indexing or
+    # dropped an edge fails here and not on a round trip through itself.
+    coupling = 0.3
+    theirs = rustworkx.generators.grid_graph(*shape)
+    weighted = rustworkx.PyGraph(multigraph=True)
+    weighted.add_nodes_from(range(theirs.num_nodes()))
+    weighted.add_edges_from(
+        [(first, second, coupling) for first, second in theirs.edge_list()]
+    )
+
+    read = PottsGraph.from_rustworkx(weighted)
+    ours = lattice_graph(shape, BoundaryCondition.OPEN, coupling)
+
+    assert read.n_nodes == ours.n_nodes
+    assert _pairs(read.edges) == _pairs(ours.edges)
+    assert set(read.coupling) == {coupling}
+    assert len(read.edges) == len(ours.edges)
+    # And the closed-form counts the lattice is defined by, read off the
+    # graph that came back: (rows - 1) * columns + rows * (columns - 1)
+    # edges, and every interior node of degree 4.
+    rows, columns = shape
+    assert len(read.edges) == (rows - 1) * columns + rows * (columns - 1)
+    degree = [0] * read.n_nodes
+    for first, second in read.edges:
+        degree[first] += 1
+        degree[second] += 1
+    assert degree == [
+        (2 if row in (0, rows - 1) else 3) + (0 if column in (0, columns - 1) else 1)
+        for row in range(rows)
+        for column in range(columns)
+    ]
+
+
+@pytest.mark.oracle
+def test_the_converted_triangular_lattice_is_the_degree_six_torus_it_claims() -> None:
+    # `to_rustworkx` refereed by rustworkx's own reading of what it produced,
+    # against the closed form the construction states: a periodic triangular
+    # lattice has three edges per site and every node of degree 6, and the
+    # open one drops exactly the edges leaving the grid. Counted through
+    # `rustworkx.PyGraph.degree`, which walks its own adjacency and not ours.
+    rows, columns = 4, 5
+    periodic = triangular_lattice_graph(
+        (rows, columns), BoundaryCondition.PERIODIC, -0.6
+    ).to_rustworkx()
+
+    assert periodic.num_nodes() == rows * columns
+    assert periodic.num_edges() == 3 * rows * columns
+    assert [periodic.degree(node) for node in range(rows * columns)] == [6] * (
+        rows * columns
+    )
+
+    opened = triangular_lattice_graph(
+        (rows, columns), BoundaryCondition.OPEN, -0.6
+    ).to_rustworkx()
+    closed_form = (
+        rows * (columns - 1) + (rows - 1) * columns + (rows - 1) * (columns - 1)
+    )
+
+    assert opened.num_edges() == closed_form
+    # What the boundary condition adds, counted separately: one wrap per row,
+    # one per column, and one diagonal per cell on either far edge.
+    assert periodic.num_edges() - opened.num_edges() == rows + columns + (
+        rows + columns - 1
+    )
+    assert max(opened.degree(node) for node in range(rows * columns)) == 6
+    assert opened.degree(0) == 3

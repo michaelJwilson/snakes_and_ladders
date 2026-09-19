@@ -44,6 +44,21 @@ issue #586 measured rather than assumed that: building the whole layout is
 variables and 24.4 at 2,000, because a chain has one message per level and
 the grouping machinery is paid per level to group one thing. That is issue
 #592, and it is a different change from this one.
+
+**A backend, for the one order a kernel implements.** The per-level dispatch
+that grouping leaves is the cost on a chain --- one message per level, so the
+NumPy calls are over single rows --- and issue #754's stress profile ranked
+it. :mod:`snakes_and_ladders.likelihood.message_passing_rust` runs the two
+tree passes over the same layout in Rust and is the default of
+:func:`sum_product` and :func:`max_product`: **9.05x / 9.28x** at the chain
+of 200, saving **21.6 ms** of that call's 24.3, with the NumPy route below
+kept as its oracle and reachable by naming
+:data:`~snakes_and_ladders.backend.Backend.PYTHON`. Which schedules it runs
+is the schedule's own answer ---
+:attr:`~snakes_and_ladders.likelihood.schedule.MessageSchedule.compiled` ---
+so the seam is a method and not an ``if`` on a name (issue #755), and a
+schedule without a kernel takes the NumPy route whichever backend is asked
+for.
 """
 
 from __future__ import annotations
@@ -54,6 +69,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.schedule import (
     FactorSends,
     FloodingMessageSchedule,
@@ -239,13 +255,22 @@ def _run(
     damping: float,
     tolerance: float,
     max_iterations: int,
+    backend: Backend,
 ) -> tuple[Layout, np.ndarray, np.ndarray, int, MessageSchedule, float]:
     """Messages in both directions as edge rows, the sweeps run, and the schedule.
 
     One loop for every schedule (issue #592). A bounded schedule's plan is
     finite and runs once; an unbounded one repeats its sweep until the largest
-    change falls below the tolerance.
+    change falls below the tolerance. The compiled route replaces the first
+    of those and nothing else: it is asked for by
+    :attr:`~snakes_and_ladders.likelihood.schedule.MessageSchedule.compiled`,
+    which is the schedule's own answer and not a branch on its name.
     """
+    if backend not in (Backend.PYTHON, Backend.RUST):
+        msg = (
+            f"message passing runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
+        )
+        raise ValueError(msg)
     plan = resolve(schedule)
     layout = Layout(graph)
     if plan.requires_tree and not graph.is_tree():
@@ -254,6 +279,20 @@ def _run(
             "this graph has a cycle or is disconnected"
         )
         raise ValueError(msg)
+
+    if backend is Backend.RUST and plan.compiled:
+        # Local, because the twin imports this module's layout through
+        # `schedule`: the seam is `pruning`/`pruning_rust`'s and
+        # `convolutional`/`convolutional_rust`'s.
+        from snakes_and_ladders.likelihood import message_passing_rust
+
+        to_variable, to_factor = message_passing_rust.tree_messages(
+            layout, maximum=maximum
+        )
+        # `0.0` and not the scale: a schedule reading the scale answers false
+        # to `compiled`, so no caller of this branch reads the last field.
+        return layout, to_variable, to_factor, 2, plan, 0.0
+
     to_variable = np.zeros((layout.n_edges, layout.width))
     to_factor = np.zeros((layout.n_edges, layout.width))
 
@@ -374,19 +413,46 @@ def sum_product(
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    backend: Backend = Backend.RUST,
 ) -> Marginals:
     """Marginals and ``log Z``: exact under the tree schedule, Bethe under flooding.
+
+    Parameters
+    ----------
+    graph : FactorGraph
+    schedule : MessageSchedule | MessageScheduleName | str
+    damping, tolerance, max_iterations
+        What an unbounded schedule mixes, stops at, and gives up after.
+    backend : Backend
+        Which implementation sends the messages.
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the NumPy
+        route below, which stays as the oracle;
+        :data:`~snakes_and_ladders.backend.Backend.RUST` is
+        :func:`snakes_and_ladders.likelihood.message_passing_rust.tree_messages`
+        and the default, because it is **9.05x / 9.28x** a tree-schedule
+        ``sum_product`` at the chain of 200 the stress profile ranks, which
+        saves **21.6 ms** of that call's 24.3 (``docs/experiments/027``). It
+        runs the schedules that answer
+        :attr:`~snakes_and_ladders.likelihood.schedule.MessageSchedule.compiled`
+        --- the two-pass tree schedule --- and the others take the NumPy
+        route whichever backend is named, since no kernel implements them.
+        The two agree to **3.3e-15** absolute on the marginals and
+        **1.4e-14** on ``log Z``, inside
+        :data:`~snakes_and_ladders.likelihood.device.CROSS_DEVICE_RTOL_FLOAT64`:
+        the arithmetic is the same in the same order and NumPy's vectorized
+        ``exp`` and ``log`` differ from ``libm``'s in the last place.
 
     Raises
     ------
     ValueError
-        If the tree schedule is asked of a loopy graph, or ``damping`` is
-        outside ``[0, 1)``.
+        If the tree schedule is asked of a loopy graph, ``damping`` is
+        outside ``[0, 1)``, or ``backend`` names an implementation this
+        function does not have.
     ConvergenceError
         If flooding does not settle in ``max_iterations`` sweeps.
     """
     layout, to_variable, to_factor, iterations, plan, scale = _run(
-        graph, schedule, False, damping, tolerance, max_iterations
+        graph, schedule, False, damping, tolerance, max_iterations, backend
     )
     variable, factor, log_partition = _beliefs(
         layout, to_variable, to_factor, False, plan.defined(layout)
@@ -408,15 +474,21 @@ def max_product(
     damping: float = DEFAULT_DAMPING,
     tolerance: float = DEFAULT_TOLERANCE,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    backend: Backend = Backend.RUST,
 ) -> tuple[dict[str, int], Marginals]:
     """The MAP assignment by max-marginals, and the max-marginals themselves.
 
     On a tree with a unique maximum this is the exact MAP -- Viterbi on a
     chain. Ties are broken by the smallest state, which is the tie rule
     :func:`snakes_and_ladders.likelihood.hmm_paths.enumerate_hidden_paths` uses.
+
+    ``backend`` is :func:`sum_product`'s, on the same terms and with the same
+    default: the kernel reduces by ``max`` where sum-product reduces by
+    ``logsumexp``, and the assignment and its max-marginals are bitwise the
+    NumPy route's.
     """
     layout, to_variable, to_factor, iterations, plan, scale = _run(
-        graph, schedule, True, damping, tolerance, max_iterations
+        graph, schedule, True, damping, tolerance, max_iterations, backend
     )
     variable, factor, _ = _beliefs(
         layout, to_variable, to_factor, True, plan.defined(layout)

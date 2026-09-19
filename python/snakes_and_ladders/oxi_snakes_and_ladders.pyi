@@ -2,7 +2,8 @@
 
 Hand-written, so it can drift: keep the signatures here matching the
 `#[pyfunction]` definitions in src/lib.rs, src/pruning.rs, src/pruning_burn.rs,
-src/maxflow.rs, src/sampling.rs, src/coupled.rs and src/count_pairs.rs. Issue #37 tracks putting `stubtest` in CI so the drift
+src/maxflow.rs, src/sampling.rs, src/coupled.rs, src/count_pairs.rs and
+src/bcjr.rs. Issue #37 tracks putting `stubtest` in CI so the drift
 is caught by a check rather than by whoever notices; until then,
 `mypy --strict` catches only the direction where the stub is missing something
 a caller uses, which is how `sample_rows` was caught.
@@ -37,6 +38,26 @@ def pruning_gradient(
     weight: np.ndarray | None,
     rescale: bool,
 ) -> tuple[float, list[float]]: ...
+def bcjr_forward_backward(
+    next_state: np.ndarray,
+    parity: np.ndarray,
+    systematic_llr: np.ndarray,
+    parity_llr: np.ndarray,
+    apriori_llr: np.ndarray,
+    terminated: bool,
+) -> tuple[np.ndarray, np.ndarray, float]: ...
+def tree_message_passing(
+    cardinality: np.ndarray,
+    variable_offsets: np.ndarray,
+    variable_edges: np.ndarray,
+    factor_offsets: np.ndarray,
+    factor_edges: np.ndarray,
+    edge_variable: np.ndarray,
+    table_offsets: np.ndarray,
+    tables: np.ndarray,
+    width: int,
+    maximum: bool,
+) -> tuple[np.ndarray, np.ndarray]: ...
 def sample_rows(
     distributions: np.ndarray,
     n_categories: int,
@@ -95,6 +116,18 @@ def single_site_sweeps(
     guard: float,
     first: int,
 ) -> int: ...
+def swendsen_wang_sweep(
+    state: np.ndarray,
+    field: np.ndarray,
+    edges: np.ndarray,
+    bond_probability: np.ndarray,
+    bond_draws: np.ndarray,
+    colour_draws: np.ndarray,
+    accept_draws: np.ndarray,
+    labels: np.ndarray,
+    guard: float,
+    first: int,
+) -> tuple[int, int]: ...
 def class_posteriors(
     totals: np.ndarray,
     successes: np.ndarray,

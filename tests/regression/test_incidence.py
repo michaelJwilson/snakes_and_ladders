@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from scipy.sparse import csr_matrix
 from snakes_and_ladders.incidence import SparseIncidence
 from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph, Variable
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
@@ -224,3 +225,46 @@ def test_an_unknown_variable_has_no_degree() -> None:
 
     with pytest.raises(KeyError):
         graph.degree("c")
+
+
+def _distinct_pairs(
+    seed: int, n_rows: int, n_cols: int, n_entries: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Random entries of the relation, no pair repeated."""
+    rng = np.random.default_rng(seed)
+    flat = rng.choice(n_rows * n_cols, size=n_entries, replace=False)
+    return flat // n_cols, flat % n_cols
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize(
+    ("n_rows", "n_cols", "n_entries"), [(7, 5, 30), (40, 9, 200), (64, 64, 512)]
+)
+def test_the_compressed_layout_is_scipys_csr_on_the_same_pairs(
+    n_rows: int, n_cols: int, n_entries: int
+) -> None:
+    """`scipy.sparse.csr_matrix` builds the same layout by another route.
+
+    The dictionary-of-lists oracle above decides which row an entry landed
+    in; this decides that the *compressed* arrays are the ones a second
+    compressed implementation produces. `scipy` orders within a row and sums
+    repeated pairs, so the comparison is against ``ascending=True`` on
+    relations with no pair repeated. Over three of them --- 30 entries in
+    7 x 5, 200 in 40 x 9 and 512 in 64 x 64 --- ``offsets`` equals
+    ``indptr``, ``indices`` equals ``indices``, ``degrees`` equals
+    ``diff(indptr)`` and :meth:`dense` equals ``toarray`` **entry for
+    entry**, the tolerance declared for an integer layout being equality.
+    """
+    rows, columns = _distinct_pairs(31 + n_rows, n_rows, n_cols, n_entries)
+    incidence = SparseIncidence.from_pairs(
+        n_rows, n_cols, rows, columns, ascending=True, distinct=True
+    )
+    reference = csr_matrix(
+        (np.ones(n_entries, dtype=np.int64), (rows, columns)), shape=(n_rows, n_cols)
+    )
+
+    assert incidence.n_entries == n_entries == int(reference.nnz)
+    assert np.array_equal(incidence.offsets, reference.indptr)
+    assert np.array_equal(incidence.indices, reference.indices)
+    assert np.array_equal(incidence.degrees, np.diff(reference.indptr))
+    assert np.array_equal(incidence.dense(), reference.toarray())

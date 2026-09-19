@@ -174,6 +174,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.message_passing_reference
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.message_passing_rust
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.spatio_sequential
    :members:
 
@@ -207,6 +210,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.convolutional
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.convolutional_rust
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.turbo
    :members:
 
@@ -238,6 +244,12 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.opt.hmc
+   :members:
+
+.. automodule:: snakes_and_ladders.opt.langevin
+   :members:
+
+.. automodule:: snakes_and_ladders.opt.slice
    :members:
 
 .. automodule:: snakes_and_ladders.opt.potts
@@ -343,6 +355,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.tempered
+   :members:
+
+.. automodule:: snakes_and_ladders.search.annealed
    :members:
 
 .. automodule:: snakes_and_ladders.search.rl

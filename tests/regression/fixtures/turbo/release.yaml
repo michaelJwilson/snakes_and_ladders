@@ -2,9 +2,11 @@ model: turbo
 oracle: none
 
 # The memory-2 (7, 5) turbo code at the message length the waterfall is
-# measured at: K = 1024, 6 points, 200 frames -- 1,200 decodings, measured
-# at 0.196 s each, so this tier is `release` by measurement and not by
-# guess.
+# measured at: K = 1024, 6 points, 200 frames -- 1,200 decodings. Measured
+# at 0.196 s each before issue #754's Rust trellis and at 5.0 ms after, so
+# the whole tier fell from 182 s to 6.0 s and `release` is no longer the
+# measurement's verdict: #754 records it and the retiering is its own
+# change, since moving it adds 6 s to every pull request.
 #
 # `oracle: none` is the statement sim/CLAUDE.md asks for: 2 ** 1024 messages
 # is past every enumeration and the ensemble's threshold is an asymptotic

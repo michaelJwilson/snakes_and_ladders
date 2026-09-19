@@ -48,6 +48,7 @@ def _pair_from_frequencies(
     return first, second
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 @pytest.mark.parametrize("t", LENGTHS)
 @pytest.mark.parametrize("k", [2, 4])

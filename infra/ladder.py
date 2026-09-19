@@ -113,6 +113,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "log Z by squaring",
+        "opt.potts.log_partition_by_squaring",
+        "transfer matrix",
+        T + "opt/test_opt_potts.py"
+        "::test_squaring_is_the_transfer_matrix_on_a_strip_one_site_wide",
+    ),
+    Rung(
+        "potts",
         "sum-product / BP",
         "likelihood.message_passing.sum_product",
         "enumeration",
@@ -233,6 +241,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "Swendsen--Wang, Rust",
+        "search.potts_mcmc._cluster_pass_rust",
+        "Potts MCMC, Wolff, Swendsen--Wang",
+        T + "search/test_potts_mcmc_cluster_rust.py"
+        "::test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws",
+    ),
+    Rung(
+        "potts",
         "locally balanced proposal",
         "search.balanced.log_balanced_weights",
         "enumeration",
@@ -262,6 +278,30 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "search/test_potts_mcmc.py"
         "::test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distribution",
+    ),
+    Rung(
+        "potts",
+        "annealed importance sampling",
+        "search.annealed.annealed_importance_sampling",
+        "transfer matrix",
+        T + "search/test_search_annealed.py"
+        "::test_the_importance_sampled_log_partition_is_the_transfer_matrix",
+    ),
+    Rung(
+        "potts",
+        "population annealing",
+        "search.annealed.population_annealing",
+        "transfer matrix",
+        T + "search/test_search_annealed.py"
+        "::test_the_population_annealed_log_partition_is_the_transfer_matrix",
+    ),
+    Rung(
+        "potts",
+        "simulated tempering",
+        "search.annealed.simulated_tempering",
+        "enumeration",
+        T + "search/test_search_annealed.py"
+        "::test_the_simulated_tempering_walker_is_the_enumerated_law_at_every_rung",
     ),
     Rung(
         "potts",
@@ -526,6 +566,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "hmm",
+        "tree schedule, Rust",
+        "likelihood.message_passing_rust.tree_messages",
+        "forward via sum-product",
+        T + "likelihood/test_message_passing_rust.py"
+        "::test_the_rust_tree_schedule_agrees_with_the_numpy_oracle",
+    ),
+    Rung(
+        "hmm",
         "Viterbi",
         "likelihood.message_passing.max_product",
         "path enumeration",
@@ -636,6 +684,14 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "likelihood/test_convolutional.py"
         "::test_bcjr_posteriors_are_the_exact_bitwise_map",
+    ),
+    Rung(
+        "codes",
+        "BCJR, Rust",
+        "likelihood.convolutional_rust.bcjr",
+        "BCJR",
+        T + "likelihood/test_convolutional_rust.py"
+        "::test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers",
     ),
     Rung(
         "codes",
@@ -822,6 +878,37 @@ LADDER: tuple[Rung, ...] = (
         "assignment enumeration",
         T + "opt/test_opt_hmc.py"
         "::test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture",
+    ),
+    Rung(
+        "mixture",
+        "MALA",
+        "opt.langevin.mala",
+        None,
+        T + "opt/test_opt_langevin.py"
+        "::test_the_langevin_chain_recovers_an_analytic_gaussian",
+    ),
+    Rung(
+        "mixture",
+        "MALA",
+        "opt.langevin.mala",
+        "assignment enumeration",
+        T + "opt/test_opt_langevin.py"
+        "::test_the_langevin_chain_recovers_the_enumerated_assignment_posterior",
+    ),
+    Rung(
+        "mixture",
+        "slice sampling",
+        "opt.slice.slice_sample",
+        None,
+        T + "opt/test_opt_slice.py::test_the_slice_chain_recovers_an_analytic_gaussian",
+    ),
+    Rung(
+        "mixture",
+        "slice sampling",
+        "opt.slice.slice_sample",
+        "assignment enumeration",
+        T + "opt/test_opt_slice.py"
+        "::test_the_slice_chain_recovers_the_enumerated_assignment_posterior",
     ),
     Rung(
         "mixture",

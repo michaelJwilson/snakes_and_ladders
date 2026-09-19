@@ -35,6 +35,7 @@ from typing import TypeVar
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.opt.schedule import FeedbackLadder, adapt_ladder_by_round_trips
 from snakes_and_ladders.search.gibbs import (
     _Indexed,
     cached_topology_score,
@@ -45,9 +46,11 @@ from snakes_and_ladders.search.infer import Model, MoveSet
 from snakes_and_ladders.search.potts_mcmc import (
     PottsMove,
     _houdayer_move,
+    _refuse_negative_coupling,
     _swap_log_ratio,
     _sweep_for,
     energies,
+    parallel_tempering,
 )
 from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
@@ -102,16 +105,12 @@ class TemperedEnsemble:
     def round_trip_time(self) -> float:
         """Recorded sweeps a walker spends per round trip, averaged over walkers.
 
-        ``inf`` where no walker completed one, which is the reading a ladder
-        with a gap gives and is not a division to guard against: a ladder no
-        structure crosses has an infinite round-trip time, and reporting it as
-        such is what makes it comparable with one that does.
+        :func:`round_trip_time` on :attr:`walkers`, which is where the
+        arithmetic lives: a
+        :class:`~snakes_and_ladders.search.potts_mcmc.TemperedChains` carries
+        the same trace and is read by the same definition.
         """
-        counts = round_trips(self.walkers)
-        total = float(counts.sum())
-        if total == 0.0:
-            return float("inf")
-        return float(self.walkers.shape[0] * self.walkers.shape[1]) / total
+        return round_trip_time(self.walkers)
 
     def replica_at(self, temperature: float) -> int:
         """The index of the replica at ``temperature``.
@@ -172,6 +171,88 @@ def round_trips(walkers: np.ndarray) -> np.ndarray:
                 counts[walker] += 1
                 reached_top = False
     return counts
+
+
+def round_trip_time(walkers: np.ndarray) -> float:
+    """Recorded sweeps a walker spends per round trip, averaged over walkers.
+
+    ``inf`` where no walker completed one, which is the reading a ladder with
+    a gap gives and is not a division to guard against: a ladder no structure
+    crosses has an infinite round-trip time, and reporting it as such is what
+    makes it comparable with one that does.
+
+    Parameters
+    ----------
+    walkers : np.ndarray
+        The rung of each walker at each recorded sweep, shape
+        ``(n_recorded, n_replicas)``.
+
+    Returns
+    -------
+    float
+    """
+    counts = round_trips(walkers)
+    total = float(counts.sum())
+    if total == 0.0:
+        return float("inf")
+    trace = np.asarray(walkers)
+    return float(trace.shape[0] * trace.shape[1]) / total
+
+
+def up_fraction(walkers: np.ndarray) -> np.ndarray:
+    """Fraction of labelled visits at each rung made by a walker on its way up.
+
+    The measurement a feedback-optimized ladder is placed from
+    (Katzgraber, Trebst, Huse & Troyer 2006), and the same trace
+    :func:`round_trips` counts trips in: a walker is labelled *up* from the
+    moment it touches rung ``0`` and *down* from the moment it touches the
+    last rung, and every recorded sweep between is a visit carrying that
+    label. ``f`` is 1 at rung 0 and 0 at the last rung by construction, and
+    falls steeply where walkers are held up --- which is what the placement
+    reads.
+
+    Visits before a walker has touched either end carry no label and are not
+    counted; they are the walker's start, which says nothing about a
+    direction it has not yet had.
+
+    Parameters
+    ----------
+    walkers : np.ndarray
+        :attr:`TemperedEnsemble.walkers`, shape
+        ``(n_recorded, n_replicas)``.
+
+    Returns
+    -------
+    np.ndarray
+        ``(n_rungs,)``, and ``nan`` at a rung no labelled walker visited ---
+        a ladder that carries no placement, reported rather than filled in.
+
+    Raises
+    ------
+    ValueError
+        If the trace is not two-dimensional.
+    """
+    trace = np.asarray(walkers, dtype=np.int64)
+    if trace.ndim != 2:
+        msg = f"a walker trace is (n_recorded, n_replicas), got {trace.shape}"
+        raise ValueError(msg)
+    top = int(trace.max(initial=0))
+    up = np.zeros(top + 1)
+    down = np.zeros(top + 1)
+    for walker in range(trace.shape[1]):
+        label = 0
+        for rung in trace[:, walker].tolist():
+            if rung == 0:
+                label = 1
+            elif rung == top:
+                label = -1
+            if label == 1:
+                up[rung] += 1.0
+            elif label == -1:
+                down[rung] += 1.0
+    total = up + down
+    with np.errstate(invalid="ignore"):
+        return np.where(total > 0.0, up / total, np.nan)
 
 
 def _check_ladder(
@@ -401,11 +482,14 @@ def tempered_potts_pair(
     Raises
     ------
     ValueError
-        If the ladder is unusable, as :func:`tempered_factor_graph` states, or
-        if ``houdayer`` is asked for at other than two states --- Houdayer's
-        overlap is the Ising one (issue #756).
+        If the ladder is unusable, as :func:`tempered_factor_graph` states, if
+        ``houdayer`` is asked for at other than two states --- Houdayer's
+        overlap is the Ising one (issue #756) --- or if ``move`` is a
+        Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
+        :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts` refuses it.
     """
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
+    _refuse_negative_coupling(move, graph)
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
     n_states = int(rows.shape[1])
     if houdayer and n_states != 2:
@@ -522,3 +606,52 @@ def tempered_topologies(
         burn_in,
         thin,
     )
+
+
+def adapt_ladder_round_trips(
+    graph: PottsGraph,
+    field: np.ndarray,
+    ladder: tuple[float, ...],
+    rng: np.random.Generator,
+    n_sweeps: int,
+    tolerance: float,
+    max_rounds: int,
+    *,
+    backend: Backend = Backend.RUST,
+) -> FeedbackLadder:
+    """A ladder for :func:`~snakes_and_ladders.search.potts_mcmc.parallel_tempering`, placed by its own round trips.
+
+    :func:`snakes_and_ladders.opt.schedule.adapt_ladder_by_round_trips`, the
+    measurement being a :func:`~snakes_and_ladders.search.potts_mcmc.parallel_tempering`
+    run of ``n_sweeps`` per replica on the candidate ladder, read through
+    :func:`up_fraction`. The sibling of
+    :func:`~snakes_and_ladders.search.potts_mcmc.adapt_ladder_potts`, which
+    places the same ladder by its exchange acceptance; both draw from ``rng``
+    in sequence, so one seed reproduces the warm-up, and
+    ``replicas_measured * n_sweeps`` is its cost in sweeps, which a comparison
+    at equal budget charges.
+
+    Parameters
+    ----------
+    graph, field, rng, backend
+        As :func:`~snakes_and_ladders.search.potts_mcmc.parallel_tempering`.
+    ladder : tuple[float, ...]
+        The starting ladder; its endpoints and its length are the result's.
+    n_sweeps : int
+        Sweeps per replica per measurement. The up-fraction is a ratio of
+        visit counts over these, so it sets what the placement can resolve.
+    tolerance, max_rounds
+        As :func:`snakes_and_ladders.opt.schedule.adapt_ladder_by_round_trips`.
+
+    Returns
+    -------
+    FeedbackLadder
+    """
+
+    def measure(candidate: tuple[float, ...]) -> list[float]:
+        run = parallel_tempering(
+            graph, field, candidate, rng, n_sweeps, backend=backend
+        )
+        return [float(value) for value in up_fraction(run.walkers)]
+
+    return adapt_ladder_by_round_trips(measure, ladder, tolerance, max_rounds)

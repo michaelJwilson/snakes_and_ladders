@@ -12,6 +12,25 @@ coincidence of two literals rather than by construction (issue #413). A
 closed form computed in three places is the same defect as a function
 implemented in three places, so it is checked the same way.
 
+The fifth is a *seam* rather than a duplication, and what it guards is a
+shape rather than a text (issue #755). `likelihood.schedule.MessageSchedule`
+is the base the five schedules inherit and five modules call through, so a
+sixth written beside it rather than under it would type-check, run, and carry
+none of the guarantee its consumers read. That claim is structural, so it is
+read from the class tree rather than from a regex; the one half a regex
+answers is that no consumer branches on a schedule's name, which is the `if`
+issue #592 deleted.
+
+
+A *seam* rather than a duplication: no module builds a compressed-sparse
+store by hand (issue #755). `incidence.SparseIncidence` is the one compressed
+layout (#586) and `as_arrays()` the one way across the FFI boundary, so a
+second `csr` or `coo` written beside them carries no transpose, no stable
+order within a row and no oracle. The claim is structural --- an offsets array
+is a `cumsum` over degrees whatever the line is spelled like --- so it is read
+from the syntax tree, and only the imported `csr_matrix` spelling is read as a
+text.
+
 Each guard is paired with a test that the guard fails on a violating input.
 That pairing is the discipline `tests/regression/docs` established: a check
 that has never been seen to fail is not known to work, and a regex over
@@ -20,16 +39,23 @@ source files is exactly the kind that silently matches nothing.
 
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from pathlib import Path
 
 import pytest
+from snakes_and_ladders.likelihood.schedule import (
+    SCHEDULES,
+    MessageSchedule,
+    MessageScheduleName,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "python" / "snakes_and_ladders"
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
+import appraise_structures  # noqa: E402
 import duplication_survey  # noqa: E402
 
 #: Issue #717's rows, pinned at the count on the day each was first measured
@@ -41,10 +67,14 @@ import duplication_survey  # noqa: E402
 SLIMMING_BASELINE = {
     "Potts energies of a labelling": 1,
     "site-field broadcasts": 0,
-    "annealers": 3,
+    # `anneal\w*` catches a name and not a duplicate: #756's
+    # `search.annealed.annealed_importance_sampling` is an estimator of
+    # `log Z`, not a fourth annealing optimizer, and the row moves with the
+    # spelling Neal gave it.
+    "annealers": 4,
     "ground-state run_ wrappers": 7,
     "backend enums": 1,
-    "Python paths above a compiled kernel": 6,
+    "Python paths above a compiled kernel": 8,
     "surrogate modules": 4,
     "modules without a docstring": 0,
     "root exports": 7,
@@ -53,13 +83,63 @@ SLIMMING_BASELINE = {
     # module lands: `search.balanced`, the one proposal kernel the Potts
     # lattice and the factor graph share, took them from 148 and 1,576
     # (#756). The second moves on a public name too, and #756's cluster moves
-    # for a frustrated lattice added twelve without adding a module. `track.py`,
-    # the run seam issue #778 put beside `log.py`, is the second module, and
-    # its classes and functions declare entries beside the six `Metrics` sets
-    # added to the modules owning each problem's objective or energy.
-    "flat modules": 150,
-    "API-map entries": 1629,
+    # for a frustrated lattice added twelve without adding a module; issue
+    # #755's seam is one public callable, so the row rises by one more. A row
+    # that rises states why here or it is a duplicate. #756's
+    # `search.annealed` added both, a module and fourteen names. #754's BCJR
+    # pass in Rust added one module, `likelihood/convolutional_rust.py`, and
+    # one public name. #756's two samplers --- `opt.langevin` and `opt.slice`,
+    # one module each, which is the package's shape for a sampler --- added
+    # two and eight. #754's tree schedule in Rust added one module,
+    # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
+    # `track.py`, the run seam issue #778 put beside `log.py`, is another
+    # module, and its classes and functions declare entries beside the six
+    # `Metrics` sets added to the modules owning each problem's objective or
+    # energy.
+    "flat modules": 155,
+    "API-map entries": 1659,
 }
+
+#: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
+#: tree): every cluster `infra/appraise_structures.py` reports at three or
+#: more members, and how many members each holds. A cluster that grows is a
+#: near-duplicate added, and a cluster that appears is a shape nobody
+#: decided --- the audit's outcome per row is in `docs/reviews/2026-09-19.md`
+#: and a row that moves without that file moving is the audit going stale.
+#: The consuming-reference counts are deliberately absent: they move with
+#: every unrelated mention of a name, so pinning them would fail for reasons
+#: that are not duplication.
+CLUSTER_BASELINE = {
+    "fields:name": 7,
+    # The cluster issue #778 added: `HmmMetrics`, `MixtureMetrics` and
+    # `TestFunctionMetrics` carry an objective and the series names, because a
+    # metrics set over `theta` is defined by the objective it reads. What each
+    # computes is its problem's, so folding the three would put three problems
+    # in one class. Decided in `docs/reviews/2026-09-19.md`.
+    "fields:names,objective": 3,
+    "prefix:Exact": 5,
+    "role:incidence": 15,
+    "suffix:Dataset": 5,
+    "suffix:Decoding": 7,
+    "suffix:Fit": 6,
+    "suffix:Params": 17,
+    "suffix:Result": 6,
+}
+
+#: State-carrying classes over the whole package, the number the clusters are
+#: drawn from.
+#: Re-pinned on the merge with `main` 929b998 (2026-09-19): 263, main's 257
+#: plus the six `Metrics` sets issue #778 declares, one per problem class.
+STRUCTURE_BASELINE = 263
+
+#: `enumeration.argmax` outside its own module. Issue #755 folded the three
+#: `learn` oracles that enumerated, scored and took the first maximizer onto
+#: `enumeration.enumerated_optimum`, so the composition is written once.
+#: `likelihood.hmm_paths` keeps its own call and is named here rather than
+#: folded: it reads the score vector again for the posterior, so the scores
+#: outlive the argmax and `enumerated_optimum`, which returns one score,
+#: cannot carry it.
+ARGMAX_CONSUMERS = {"likelihood/hmm_paths.py"}
 
 # The consolidated home of each pattern, which legitimately contains it once.
 LOGSUMEXP_OWNER = "numerics.py"
@@ -90,6 +170,91 @@ RETIRED_ENVIRONMENTS = re.compile(
     r"\b(PottsLandscape|StatePathLandscape|TopologyEnvironment)\b"
 )
 
+#: The module owning the schedule seam, and the base every schedule inherits.
+SCHEDULE_OWNER = "likelihood/schedule.py"
+SCHEDULE_BASE = "MessageSchedule"
+
+#: The registered schedules, pinned at what the 2026-09-19 audit read from the
+#: tree: `tree`, `upward`, `downward`, `flooding` and `sequential`. The audit's
+#: `fields:name` cluster has seven members; the seventh,
+#: `search.ground_state.Entry`, shares the field `name` and nothing else and is
+#: not a schedule, so this pin is five and not seven. A sixth schedule raises
+#: it in the pull request that registers it.
+SCHEDULE_COUNT = 5
+
+#: A consumer branching on which schedule it holds, by name. The base's
+#: methods are the seam --- `message_passing._run` reads `requires_tree`,
+#: `bounded`, `guarantee` and `steps`, and `name` only to build a message ---
+#: so a branch on the name is the `if` issue #592 deleted, returning. The
+#: names come from `MessageScheduleName` rather than from a list here, so a
+#: sixth schedule is guarded as soon as it is registered.
+#: `likelihood.message_passing_reference` is not a consumer of the base: it
+#: takes the enum, implements the two orders that predate the seam and is the
+#: oracle the seam is pinned against, which is why the pattern reads `.name`
+#: and not the enum members it compares.
+SCHEDULE_NAMES = "|".join(str(member) for member in MessageScheduleName)
+SCHEDULE_NAME_BRANCH = re.compile(
+    r"(?:if|elif|while)\b[^\n]*\.name\s*(?:==|!=|in)\s*[^\n]*"
+    rf"""(?:MessageScheduleName\.|["'](?:{SCHEDULE_NAMES})["'])"""
+)
+SCHEDULE_NAME_MATCH = re.compile(r"match\s+[^\n]*\b(?:schedule|plan)\w*\.name\s*:")
+
+
+#: The module owning the compressed layout, and the two calls that build a
+#: store through it: `SparseIncidence.from_pairs` and, for a Potts graph,
+#: `PottsGraph.compressed_adjacency`, which holds one.
+INCIDENCE_OWNER = "incidence.py"
+
+#: Package modules building a store through the seam, pinned at what this
+#: guard reads on `main` at 048a342: `sim/graph.py`,
+#: `sim/ldpc.py`, `sim/factor_graph.py`, `sim/potts.py`, `search/maxflow.py`,
+#: `search/potts_mcmc.py`, `search/potts_keyed.py`, `search/ground_state.py`,
+#: `search/alpha_expansion.py` and `search/spatio_sequential.py`; the eleventh
+#: and twelfth are `search/tempered.py` and `search/annealed.py`, which #766
+#: added. The pull request that adds a consumer raises the pin; one that
+#: removes the last caller of the seam lowers it to a number a reader can
+#: question.
+SEAM_CONSUMERS = 12
+
+#: Files this guard does not read, each against the reason, rather than an
+#: allow-list nobody can audit. The first two are measurements the
+#: 2026-09-19 review records and `infra/appraise_structures.py` prints in
+#: `MEASURED`; the third is what this guard found on `main`.
+EXCLUDED: dict[str, str] = {
+    "ragged.py": (
+        "offsets rebuilt per call kept: the Python scan is 39.3 us against "
+        "335.11 ms for one Baum-Welch iteration over the same batch, 0.012% "
+        "(#677)"
+    ),
+    "search/maxflow.py": (
+        "list of lists kept: a row is 1.95 ms as lists against 3.93 ms flat "
+        "with offsets over 16,384 rows of degree six, and the compiled "
+        "consumer takes `as_arrays` (#586); `from_arcs` builds through the "
+        "seam"
+    ),
+    "learn/surrogate.py": (
+        "found by this guard, to be folded or declined under #755: "
+        "`_Batch.__init__` lays the token blocks of a batch end to end and "
+        "computes their starts with `np.cumsum`"
+    ),
+}
+
+#: The object graphs are not excluded because nothing reads them: the rule
+#: says nothing about them. Eleven of the `role:incidence` cluster's fifteen
+#: members --- `sim.tree.Node`, `sim.factor_graph.Factor`,
+#: `sandbox.region_graph.Region` and eight more --- are graphs where the
+#: relation *is* the model, which the compressed layout serves rather than
+#: replaces (the 2026-09-19 review, `role:incidence`). They build no store, so
+#: they trip neither rule below and need no entry above.
+#:
+#: The one spelling a syntax tree cannot decide: `scipy.sparse` builds the
+#: store, and the name it is built under is whatever the import aliased. The
+#: package carries `scipy` for `linear_sum_assignment` and nothing else, and a
+#: `csr_matrix` here would be a second compressed layout with a second set of
+#: conventions. Searched over the suite and the notebooks too, because that is
+#: where a reader reaches for one.
+FOREIGN_SPARSE = re.compile(r"\b(?:csr|csc|coo)_(?:matrix|array)\s*\(")
+
 #: Where a caller of the transition may live: the package, the suite and the
 #: notebooks. Wider than the package alone, because both copies this guard
 #: exists for were outside it.
@@ -119,6 +284,140 @@ def _found(
         for path in sorted(root.rglob(suffix))
         if not path.as_posix().endswith(owner) and pattern.search(path.read_text())
     ]
+
+
+def _members(node: ast.ClassDef) -> set[str]:
+    """The attributes and methods one class defines in its own body."""
+    found: set[str] = set()
+    for statement in node.body:
+        if isinstance(statement, ast.AnnAssign) and isinstance(
+            statement.target, ast.Name
+        ):
+            found.add(statement.target.id)
+        elif isinstance(statement, ast.Assign):
+            found |= {
+                target.id
+                for target in statement.targets
+                if isinstance(target, ast.Name)
+            }
+        elif isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+            found.add(statement.name)
+    return found
+
+
+def _schedule_shaped(source: str) -> dict[str, list[str]]:
+    """Classes shaped like a schedule in one source, and the bases each lists.
+
+    Shaped is read two ways, because a sixth schedule may arrive under either:
+    a name ending in ``MessageSchedule``, or the pair `resolve` needs --- a
+    ``guarantee`` and a ``name``. `search.ground_state.Entry` carries ``name``
+    alone, so it is not shaped and this guard says nothing about it; that is
+    the audited `fields:name` cluster's seventh member and the reason the pin
+    below is five.
+    """
+    shaped: dict[str, list[str]] = {}
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.ClassDef) or node.name == SCHEDULE_BASE:
+            continue
+        if not (
+            node.name.endswith(SCHEDULE_BASE) or {"guarantee", "name"} <= _members(node)
+        ):
+            continue
+        shaped[node.name] = [
+            base.id if isinstance(base, ast.Name) else base.attr
+            for base in node.bases
+            if isinstance(base, ast.Name | ast.Attribute)
+        ]
+    return shaped
+
+
+def _schedule_classes() -> dict[str, list[str]]:
+    """Every schedule-shaped class in the package, read from the source."""
+    found: dict[str, list[str]] = {}
+    for path in sorted(PACKAGE.rglob("*.py")):
+        found.update(_schedule_shaped(path.read_text()))
+    return found
+
+
+def _names(node: ast.Assign | ast.AnnAssign) -> list[str]:
+    """Every name a binding writes to, `self._offsets` reading as `_offsets`."""
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+    return [
+        sub.id if isinstance(sub, ast.Name) else sub.attr
+        for target in targets
+        for sub in ast.walk(target)
+        if isinstance(sub, ast.Name | ast.Attribute)
+    ]
+
+
+def _called(node: ast.AST) -> str:
+    """The name a call calls, without its module: `np.cumsum` reads `cumsum`."""
+    if not isinstance(node, ast.Call):
+        return ""
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return node.func.id if isinstance(node.func, ast.Name) else ""
+
+
+#: The two arrays a compressed store is: the row starts, and the permutation
+#: that put the pairs in row-major order. Matched on the name a line binds
+#: rather than on the arithmetic, because the arithmetic is four lines and a
+#: reader writing a fifth spelling still calls the result `offsets`.
+ROW_STARTS = re.compile(r"offsets|indptr")
+ROW_INDEX = re.compile(r"\brows?\b|\brow_|_rows?\b")
+
+
+def _hand_built_stores(source: str) -> list[str]:
+    """The compressed-sparse stores one source builds by hand, with their lines.
+
+    Two rules, and each is what `incidence._row_major` does in one line, so the
+    owner's own source trips both --- which is the positive control the guard
+    asserts rather than a coincidence. A `cumsum` bound to an `offsets` or
+    `indptr` name is the row starts; a `lexsort` or `argsort` over a row index
+    bound to an `order` name is the COO pair sorted into row-major order.
+    """
+    found: set[tuple[int, str]] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and _called(node) == "cumsum":
+            out = [kw for kw in node.keywords if kw.arg == "out"]
+            if out and ROW_STARTS.search(ast.unparse(out[0].value)):
+                found.add((node.lineno, "row starts by cumsum"))
+        if not isinstance(node, ast.Assign | ast.AnnAssign) or node.value is None:
+            continue
+        names = _names(node)
+        for call in ast.walk(node.value):
+            called = _called(call)
+            if called == "cumsum" and any(ROW_STARTS.search(n) for n in names):
+                found.add((node.lineno, "row starts by cumsum"))
+            if (
+                called in ("lexsort", "argsort")
+                and any("order" in n for n in names)
+                and ROW_INDEX.search(ast.unparse(call))
+            ):
+                found.add((node.lineno, "pairs sorted into row-major order"))
+    return [f"{line}: {what}" for line, what in sorted(found)]
+
+
+def _builds_through_the_seam(source: str) -> bool:
+    """Whether one source calls `SparseIncidence.from_pairs` or the adjacency."""
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr == "compressed_adjacency":
+            return True
+        if node.func.attr == "from_pairs" and ast.unparse(node.func.value).endswith(
+            "SparseIncidence"
+        ):
+            return True
+    return False
+
+
+def _package_sources() -> dict[str, str]:
+    """Every package module, keyed by its path below the package root."""
+    return {
+        path.relative_to(PACKAGE).as_posix(): path.read_text()
+        for path in sorted(PACKAGE.rglob("*.py"))
+    }
 
 
 @pytest.mark.critical
@@ -203,6 +502,103 @@ def test_no_retired_environment_name_returns() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
+def test_no_schedule_is_written_outside_the_base() -> None:
+    # Five schedules, one base, five modules calling through it (issue #755).
+    # A class written beside the base carries no `guarantee`, no `bounded` and
+    # no `requires_tree` the consumers read, and `sum_product` would take the
+    # default for each -- a bounded, approximate schedule run on a loopy graph
+    # -- rather than refuse it. Read from the class tree and from the registry
+    # rather than from a regex, because the claim is what a class *is*.
+    classes = _schedule_classes()
+
+    assert [name for name, bases in classes.items() if SCHEDULE_BASE not in bases] == []
+    assert len(classes) == SCHEDULE_COUNT
+    # One registration each, under a name `MessageScheduleName` carries: the
+    # registry is `resolve`'s authority and the enum is the convenience, so
+    # the two disagreeing is a schedule a name cannot reach or a name that
+    # reaches none.
+    assert sorted(type(schedule).__name__ for schedule in SCHEDULES.values()) == sorted(
+        classes
+    )
+    assert set(SCHEDULES) == {str(member) for member in MessageScheduleName}
+    # The runtime view and the source view agree, which is what says the walk
+    # read every module a subclass can be defined in.
+    assert sorted(cls.__name__ for cls in MessageSchedule.__subclasses__()) == sorted(
+        classes
+    )
+
+
+def test_no_compressed_store_is_built_outside_the_incidence_seam() -> None:
+    # One compressed layout, ten modules building through it (issue #755).
+    # Three wrote the counting sort separately before #586 -- `ParityCheck`
+    # by `lexsort` and `searchsorted`, `PottsGraph` per call, `FactorGraph`
+    # not at all -- and they agreed, so nothing failed; what a fourth costs
+    # is the contract `SparseIncidence` states and a copy does not: a stable
+    # order within a row, a transpose sharing one per-entry array, and the
+    # refusals `from_pairs` makes at the build.
+    sources = _package_sources()
+    by_hand = {
+        path: stores
+        for path, source in sources.items()
+        if path != INCIDENCE_OWNER and path not in EXCLUDED
+        for stores in [_hand_built_stores(source)]
+        if stores
+    }
+
+    assert by_hand == {}
+    # The reading is not vacuous: the owner builds the store this guard is
+    # about, and both rules find it there.
+    owner = [
+        store.split(": ", 1)[1]
+        for store in _hand_built_stores(sources[INCIDENCE_OWNER])
+    ]
+    assert owner == ["row starts by cumsum", "pairs sorted into row-major order"]
+    assert (
+        len(
+            [
+                path
+                for path, source in sources.items()
+                if path != INCIDENCE_OWNER and _builds_through_the_seam(source)
+            ]
+        )
+        == SEAM_CONSUMERS
+    )
+    # An exclusion is a file and a reason, and a file that has moved takes its
+    # reason with it rather than leaving a rule nothing applies to.
+    assert [path for path in EXCLUDED if not (PACKAGE / path).exists()] == []
+    assert [path for path, why in EXCLUDED.items() if not why] == []
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_no_consumer_branches_on_a_schedules_name() -> None:
+    # The seam is the base's methods. `sum_product` chose between two orders
+    # with an `if` until #592, and the defect that surfaced was in that branch:
+    # a plain string compares equal to a `StrEnum` member without being it, so
+    # `schedule="tree"` ran flooding. A branch on the name brings the shape
+    # back one schedule at a time.
+    assert _offenders(SCHEDULE_NAME_BRANCH, SCHEDULE_OWNER) == []
+    assert _offenders(SCHEDULE_NAME_MATCH, SCHEDULE_OWNER) == []
+
+
+def test_no_module_builds_a_scipy_sparse_store() -> None:
+    # `scipy` is carried for `linear_sum_assignment`. A `csr_matrix` beside
+    # `SparseIncidence` would be a second compressed layout whose row order,
+    # duplicate handling and transpose are somebody else's, and the compiled
+    # consumers take `as_arrays`, which it does not have.
+    assert (
+        _found(
+            FOREIGN_SPARSE,
+            "test_duplication_guards.py",
+            SEARCHED,
+            ("*.py", "*.ipynb"),
+        )
+        == []
+    )
+
+
+@pytest.mark.critical
+@pytest.mark.infra
 def test_each_guard_fails_on_violating_source() -> None:
     # The guards exercised. Each searches source text, so each passes
     # vacuously if the pattern is wrong -- which is the failure mode a guard
@@ -217,6 +613,10 @@ def test_each_guard_fails_on_violating_source() -> None:
         SQUARE_TRANSITION: "TRANSITION = math.log(1.0 + " + "math.sqrt(3.0))\n",
         # Split for the same reason as the line above.
         RETIRED_ENVIRONMENTS: "landscape = Potts" + "Landscape(graph, field)\n",
+        SCHEDULE_NAME_BRANCH: '    if plan.name == "flooding":\n',
+        SCHEDULE_NAME_MATCH: '    match plan.name:\n        case "tree":\n',
+        # Split for the same reason: this module is inside the search.
+        FOREIGN_SPARSE: "matrix = csr" + "_matrix((data, (rows, cols)))\n",
     }
     clean = {
         PRIVATE_LOGSUMEXP: "from snakes_and_ladders.numerics import logsumexp\n",
@@ -227,10 +627,64 @@ def test_each_guard_fails_on_violating_source() -> None:
         ),
         SQUARE_TRANSITION: 'print(f"at J_c = ln(1 + sqrt(3)) = {coupling:.4f}")\n',
         RETIRED_ENVIRONMENTS: "environment = TreeEnvironment(alignment, k=4)\n",
+        SCHEDULE_NAME_BRANCH: (
+            "    if plan.requires_tree and not graph.is_tree():\n"
+            '        msg = f"the {plan.name} schedule is exact only on a tree"\n'
+        ),
+        SCHEDULE_NAME_MATCH: "    for step in plan.steps(layout):\n",
+        FOREIGN_SPARSE: "from snakes_and_ladders.incidence import SparseIncidence\n",
     }
 
     assert [p for p, text in violating.items() if not p.search(text)] == []
     assert [p for p, text in clean.items() if p.search(text)] == []
+
+    # The structural guard on the same discipline, since it cannot be written
+    # as a pattern: a sixth schedule beside the base and the same class under
+    # it, and `Entry`'s shape, which carries `name` alone and is not one.
+    outside = (
+        "class LayeredMessageSchedule:\n"
+        '    name: str = "layered"\n\n'
+        "    @property\n"
+        "    def guarantee(self) -> Guarantee:\n"
+        "        return Guarantee.APPROXIMATE\n"
+    )
+    inside = outside.replace(
+        "LayeredMessageSchedule:", f"LayeredMessageSchedule({SCHEDULE_BASE}):"
+    )
+
+    assert _schedule_shaped(outside) == {"LayeredMessageSchedule": []}
+    assert _schedule_shaped(inside) == {"LayeredMessageSchedule": [SCHEDULE_BASE]}
+    assert _schedule_shaped("@dataclass\nclass Entry:\n    name: str\n") == {}
+
+    # The structural guard on the same discipline, since the claim is what a
+    # line computes and not how it is spelled: the row starts by `cumsum`
+    # under three names, the pairs sorted into row-major order, and the two
+    # clean forms -- a build through the seam, and a `cumsum` that addresses
+    # no relation, which is the `restarts`-for-`starts` failure the structure
+    # survey exists to avoid.
+    builds = (
+        "degrees = np.bincount(rows, minlength=n)\n"
+        "offsets = np.cumsum(degrees)\n"
+        "self._indptr = np.cumsum(counts)\n"
+        "np.cumsum(degrees, out=starts_offsets[1:])\n"
+        "order = np.lexsort((columns, rows))\n"
+    )
+    through = (
+        "offsets, neighbours, couplings = graph.compressed_adjacency()\n"
+        "grouped = SparseIncidence.from_pairs(n_rows, n_cols, rows, columns)\n"
+        "cumulative = np.cumsum(np.exp(local))\n"
+        "rank[np.lexsort((np.arange(n), mean_bit))] = np.arange(n)\n"
+    )
+
+    assert _hand_built_stores(builds) == [
+        "2: row starts by cumsum",
+        "3: row starts by cumsum",
+        "4: row starts by cumsum",
+        "5: pairs sorted into row-major order",
+    ]
+    assert _hand_built_stores(through) == []
+    assert _builds_through_the_seam(through) is True
+    assert _builds_through_the_seam(builds) is False
 
 
 @pytest.mark.critical
@@ -304,3 +758,79 @@ def test_each_slimming_pattern_matches_its_own_kind() -> None:
 
     assert [n for n, text in violating.items() if not patterns[n].search(text)] == []
     assert [n for n, text in clean.items() if patterns[n].search(text)] == []
+
+
+def _imports_argmax(path: Path) -> bool:
+    """Whether ``path`` imports ``argmax`` from the enumeration seam.
+
+    By `ast` rather than by a line regex: the one legitimate consumer spells
+    the import over five lines, and a guard that a parenthesised import slips
+    past is a guard that passes vacuously.
+    """
+    for node in ast.walk(ast.parse(path.read_text())):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "snakes_and_ladders.enumeration"
+            and any(alias.name == "argmax" for alias in node.names)
+        ):
+            return True
+    return False
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_enumerated_argmax_is_composed_in_one_place() -> None:
+    # `learn.potts.optimum`, `learn.hmm.optimum` and
+    # `learn.relaxed.enumerate_optimum` each enumerated, scored and took the
+    # first maximizer in full: three bodies, one arithmetic, and three places
+    # a tie rule could drift apart from the determinism their docstrings
+    # promise. The fourth copy is what this refuses (issue #755).
+    realized = {
+        str(path.relative_to(PACKAGE))
+        for path in sorted(PACKAGE.rglob("*.py"))
+        if path.name != "enumeration.py" and _imports_argmax(path)
+    }
+
+    assert realized == ARGMAX_CONSUMERS
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_argmax_query_reads_a_parenthesised_import(tmp_path: Path) -> None:
+    # The pairing this module requires. The one legitimate consumer spells
+    # the import over five lines, so the failure mode worth exercising is a
+    # query that only reads a single-line `from ... import argmax`.
+    over_five_lines = tmp_path / "wrapped.py"
+    over_five_lines.write_text(
+        "from snakes_and_ladders.enumeration import (\n"
+        "    MAX_ENUMERABLE_CONFIGURATIONS,\n"
+        "    argmax,\n"
+        "    configurations,\n"
+        ")\n"
+    )
+    through_the_seam = tmp_path / "folded.py"
+    through_the_seam.write_text(
+        "from snakes_and_ladders.enumeration import enumerated_optimum\n"
+    )
+
+    assert _imports_argmax(over_five_lines)
+    assert not _imports_argmax(through_the_seam)
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_structure_clusters_hold_at_their_audited_size() -> None:
+    # Issue #755 decided each cluster against root `CLAUDE.md`'s rule --- one
+    # abstraction where it aligns and simplifies several use cases --- and
+    # recorded the reason per row. The decision is only worth what the count
+    # it was taken at is worth, so the count is asserted rather than cited.
+    # The query itself is exercised in `test_structure_survey.py`, which
+    # plants a near-duplicate and a shape below the rule and reads both back.
+    found = appraise_structures.structures()
+    realized = {
+        cluster.key: len(cluster.members)
+        for cluster in appraise_structures.clusters(found)
+    }
+
+    assert len(found) == STRUCTURE_BASELINE
+    assert realized == CLUSTER_BASELINE
