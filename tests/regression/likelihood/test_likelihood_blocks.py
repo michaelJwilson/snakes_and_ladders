@@ -81,6 +81,7 @@ def _random_alignment(
     }
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 @pytest.mark.critical
 def test_the_interval_contains_the_exact_log_likelihood() -> None:
@@ -110,6 +111,7 @@ def test_the_interval_contains_the_exact_log_likelihood() -> None:
                     assert interval.contains(exact, tolerance=1e-9)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_every_cutoff_of_one_evaluates_the_alignment_exactly() -> None:
     # A cutoff of one bounds nothing, so the interval collapses onto the

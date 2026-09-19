@@ -56,6 +56,7 @@ def _alignment(
     return params, dict(dataset.alignment)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 @pytest.mark.critical
 def test_a_patterns_weight_is_its_column_count() -> None:
@@ -78,6 +79,7 @@ def test_a_patterns_weight_is_its_column_count() -> None:
         assert patterns.n_patterns == len(counted)
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 @pytest.mark.critical
 def test_the_compressed_log_likelihood_equals_the_uncompressed() -> None:
@@ -145,6 +147,7 @@ def test_the_compression_ratio_at_each_fixtures_declared_size() -> None:
         )
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_weights_carry_through_the_gradient() -> None:
     # The weighted backend must differentiate the weighted sum, not the
@@ -173,6 +176,7 @@ def test_weights_carry_through_the_gradient() -> None:
     )
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_an_uncompressible_alignment_compresses_to_itself() -> None:
     # The identity at the other end: every column distinct means every

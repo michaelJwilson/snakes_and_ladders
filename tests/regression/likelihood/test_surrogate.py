@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Callable
+from dataclasses import replace
 
 import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.bound import Bound, BoundViolation, Certificate, certify
+from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
 from snakes_and_ladders.likelihood.features import (
     TREE_FEATURE_NAMES,
     tree_features,
@@ -43,8 +45,9 @@ from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.surrogate import shuffle_children
 from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.simulate import simulate_alignment
-from snakes_and_ladders.sim.tree import Node
+from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR, load_fixture
 
@@ -124,6 +127,7 @@ def test_parsimony_bound_is_above_every_fitted_likelihood(scored: Scored) -> Non
     assert int(np.argmax(values)) == int(np.argmax(exact))
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_parsimony_bound_is_the_maximum_over_the_vertices() -> None:
     # The site likelihood is multilinear in one variable per branch under
@@ -165,6 +169,48 @@ def _site_log_likelihoods(
         column = {name: states[site : site + 1] for name, states in alignment.items()}
         values[site] = prune_with_matrices(tau, k, pi, column, matrices)
     return values
+
+
+def _scaled(tau: Node, factor: float) -> Node:
+    """``tau`` with every branch length multiplied by ``factor``."""
+    return replace(
+        tau,
+        branch_length=(
+            None if tau.branch_length is None else tau.branch_length * factor
+        ),
+        children=tuple(_scaled(child, factor) for child in tau.children),
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.critical
+def test_prune_with_matrices_is_the_enumeration_at_the_jukes_cantor_matrices() -> None:
+    """Handed `P(t)` per branch, the arbitrary-matrix recursion is the
+    Jukes--Cantor likelihood: against direct marginalization over the internal
+    states, `brute_force_log_likelihood`, at three scalings of the five-taxon
+    fixture's branch lengths over 60 sites. Realized 3.29e-16, 1.87e-16 and
+    0.0 relative, against a declared 1e-12.
+
+    The generality is what leaves it unrefereed by the module's own tests ---
+    the parsimony bound feeds it vertices of the matrix box, which nothing
+    else computes --- so it is pinned where the matrices are a model an oracle
+    also scores, and the rest of its domain rests on that recursion being the
+    one checked here. Enumeration and not `pruning`: it is the foot of the
+    tree ladder, and one referee per seam (issue #717).
+    """
+    alignment, k, pi = _alignment()
+    params = load_fixture(FIVE_TAXA)
+    short = {name: states[:60] for name, states in alignment.items()}
+    for factor in (0.25, 1.0, 3.0):
+        tau = _scaled(params.tau, factor)
+        matrices = {
+            node.name: jc_transition_probabilities(node.branch_length, k)
+            for node in preorder(tau)
+            if node.branch_length is not None
+        }
+        assert prune_with_matrices(tau, k, pi, short, matrices) == pytest.approx(
+            brute_force_log_likelihood(tau, k, pi, short), rel=1e-12
+        )
 
 
 @pytest.mark.critical
@@ -241,6 +287,7 @@ def test_mean_field_and_spanning_tree_bounds_sandwich_log_z(
         assert (upper - exact) / graph.n_nodes < 0.1
 
 
+@pytest.mark.oracle
 @pytest.mark.analytic
 def test_spanning_tree_bound_is_exact_on_a_tree_and_mean_field_without_couplings() -> (
     None
