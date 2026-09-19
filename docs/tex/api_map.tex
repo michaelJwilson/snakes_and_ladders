@@ -26,6 +26,16 @@ it carries in its own docstring}
 \begin{document}
 \maketitle
 
+% The map as a whole. Every label the generated entries carry hangs under it
+% --- `sec:api:reading`, `sec:api:package:<package>`, `sec:api:<module>` ---
+% and code citing one of those names this stem, the way `app:algorithms` in
+% the textbook is the stem of `app:algorithms:samplers`. Written here and not
+% into `generated/api_map.tex`, which is not committed and so is not in the
+% tree a citation is read against. `\phantomsection` because the point being
+% named is the document and not a numbered sectional unit.
+\phantomsection
+\label{sec:api}
+
 \begin{abstract}
 \noindent
 A map of what the package exposes, generated from the sources rather than
