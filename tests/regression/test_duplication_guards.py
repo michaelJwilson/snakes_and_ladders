@@ -50,7 +50,7 @@ SLIMMING_BASELINE = {
     "annealers": 4,
     "ground-state run_ wrappers": 7,
     "backend enums": 1,
-    "Python paths above a compiled kernel": 6,
+    "Python paths above a compiled kernel": 7,
     "surrogate modules": 4,
     "modules without a docstring": 0,
     "root exports": 7,
@@ -62,9 +62,11 @@ SLIMMING_BASELINE = {
     # for a frustrated lattice added twelve without adding a module; issue
     # #755's seam is one public callable, so the row rises by one more. A row
     # that rises states why here or it is a duplicate. #756's
-    # `search.annealed` added both, a module and fourteen names.
-    "flat modules": 150,
-    "API-map entries": 1617,
+    # `search.annealed` added both, a module and fourteen names. #754's BCJR
+    # pass in Rust added one module, `likelihood/convolutional_rust.py`, and
+    # one public name.
+    "flat modules": 151,
+    "API-map entries": 1618,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
