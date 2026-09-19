@@ -165,7 +165,6 @@ parenthesis the only way a ticket is cited.
 - The factor-graph environment over the Gibbs moves of #309, and the
   surrogates of #308 as a tree reward model — the parts of #313 left
   unticketed since it closed
-- Truth as a terminal penalty, never a training signal
 - A move set for the code, so decoding is an environment like the other
   three (#340)
 
