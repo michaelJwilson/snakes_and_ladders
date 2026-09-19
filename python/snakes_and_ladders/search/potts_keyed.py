@@ -32,8 +32,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.learn.potts_nd import MoveKind
 from snakes_and_ladders.search.potts_mcmc import (
+    _cluster_members,
     _find,
     _swendsen_wang_sweep,
     _union,
@@ -204,6 +206,14 @@ class SwendsenWangMove:
     ----------
     graph, field
         As :class:`WolffMove`.
+    backend : Backend
+        Which implementation runs the ``T > 0`` pass, as
+        ``potts_mcmc._swendsen_wang_sweep`` takes it.
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the oracle and
+        the default: the Rust pass draws the same uniforms in a different
+        order, so it is a chain of the same law and not the same chain
+        (#754). The ``T = 0`` limit has one implementation, which no backend
+        selects: it draws no bond uniforms at all.
 
     Raises
     ------
@@ -211,7 +221,12 @@ class SwendsenWangMove:
         As :class:`WolffMove`.
     """
 
-    def __init__(self, graph: PottsGraph, field: np.ndarray) -> None:
+    def __init__(
+        self,
+        graph: PottsGraph,
+        field: np.ndarray,
+        backend: Backend = Backend.PYTHON,
+    ) -> None:
         field = np.asarray(field, dtype=np.float64)
         if field.shape[0] != graph.n_nodes:
             msg = (
@@ -222,6 +237,7 @@ class SwendsenWangMove:
             raise ValueError(msg)
         self._graph = graph
         self._field = field
+        self._backend = backend
         offsets, neighbours, _ = graph.compressed_adjacency()
         self._offsets = offsets
         self._neighbours = neighbours
@@ -258,26 +274,40 @@ class SwendsenWangMove:
         labels = np.ascontiguousarray(state, dtype=np.int64).copy()
         if temperature == 0.0:
             partition = monochrome_partition(labels, self._offsets, self._neighbours)
-            for root in np.unique(partition):
-                members = np.flatnonzero(partition == root)
+            # Grouped in one pass rather than a comparison of the whole
+            # partition per cluster, which `potts_mcmc._cluster_members`
+            # measures: the members and their order are the same
+            # (issue #754).
+            order, bounds = _cluster_members(partition)
+            for cluster in range(bounds.size - 1):
+                members = order[bounds[cluster] : bounds[cluster + 1]]
                 proposed = int(rng.integers(self.n_states))
                 _recolour_at_zero(labels, members, self._field, proposed)
         else:
             _swendsen_wang_sweep(
-                labels, self._graph, self._field, rng, None, 1.0 / temperature
+                labels,
+                self._graph,
+                self._field,
+                rng,
+                None,
+                1.0 / temperature,
+                self._backend,
             )
         return labels, self._visits
 
 
 def cluster_moves(
-    graph: PottsGraph, field: np.ndarray
+    graph: PottsGraph,
+    field: np.ndarray,
+    backend: Backend = Backend.PYTHON,
 ) -> dict[MoveKind, WolffMove | SwendsenWangMove]:
     """Both cluster moves on one lattice, keyed as the environment expects them.
 
     One call rather than two, so an arm cannot be built with a Wolff move on
-    one field and a Swendsen-Wang move on another.
+    one field and a Swendsen-Wang move on another. ``backend`` reaches the
+    Swendsen-Wang pass alone, which is the one with two implementations.
     """
     return {
         MoveKind.WOLFF: WolffMove(graph, field),
-        MoveKind.SWENDSEN_WANG: SwendsenWangMove(graph, field),
+        MoveKind.SWENDSEN_WANG: SwendsenWangMove(graph, field, backend),
     }
