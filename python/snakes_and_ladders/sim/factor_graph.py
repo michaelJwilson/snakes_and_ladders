@@ -223,7 +223,7 @@ class FactorGraph:
 
         The definition every adapter is pinned against, by enumeration, and
         the oracle of the compiled path a sampler takes over the edge layout
-        (:meth:`snakes_and_ladders.search.gibbs._Indexed.log_density`, issue
+        (:meth:`snakes_and_ladders.sample.gibbs._Indexed.log_density`, issue
         #563), which sums the same terms in the same order and so reproduces
         this bitwise.
         """

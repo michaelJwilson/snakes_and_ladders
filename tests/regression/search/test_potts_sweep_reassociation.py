@@ -1,7 +1,7 @@
 """Why the tempered sweep scales the accumulated field, not its parts (#651).
 
 Dropping two whole-array temporaries per sweep is available for free in
-`search/potts_mcmc.py`: pass ``beta`` into the parts and compute
+`sample/potts_mcmc.py`: pass ``beta`` into the parts and compute
 ``beta h + sum(beta J)`` instead of ``(h + sum J) beta``. The two are equal in
 real arithmetic, and #571 refused the cheaper one for not being bitwise.
 
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.search.potts_mcmc import _GUARD
+from snakes_and_ladders.sample.potts_mcmc import _GUARD
 
 SEED = 20260916
 #: Sites drawn per trial, over neighbourhoods and alphabets the lattice fixtures

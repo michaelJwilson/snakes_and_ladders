@@ -44,8 +44,8 @@ from snakes_and_ladders.learn.tree import (
     RewardModel,
     TreeEnvironment,
 )
+from snakes_and_ladders.sample.statistics import sign_test_p_value
 from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.statistics import sign_test_p_value
 from snakes_and_ladders.search.topology import (
     Topology,
     enumerate_topologies,

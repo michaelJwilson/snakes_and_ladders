@@ -226,7 +226,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "Gibbs / heat bath",
-        "search.gibbs.gibbs_sweep",
+        "sample.gibbs.gibbs_sweep",
         "enumeration",
         T + "sim/test_potts_simulate.py"
         "::test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice",
@@ -234,7 +234,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "Potts MCMC, Wolff, Swendsen--Wang",
-        "search.potts_mcmc.sample_potts",
+        "sample.potts_mcmc.sample_potts",
         "enumeration",
         T + "search/test_potts_mcmc.py"
         "::test_the_chain_is_drawn_from_the_exact_boltzmann_distribution",
@@ -242,7 +242,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "Swendsen--Wang, Rust",
-        "search.potts_mcmc._cluster_pass_rust",
+        "sample.potts_mcmc._cluster_pass_rust",
         "Potts MCMC, Wolff, Swendsen--Wang",
         T + "search/test_potts_mcmc_cluster_rust.py"
         "::test_the_rust_pass_is_the_oracles_pass_bitwise_on_the_same_draws",
@@ -250,7 +250,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "locally balanced proposal",
-        "search.balanced.log_balanced_weights",
+        "sample.balanced.log_balanced_weights",
         "enumeration",
         T + "search/test_potts_mcmc.py"
         "::test_the_locally_balanced_chain_is_drawn_from_the_exact_boltzmann_distribution",
@@ -258,7 +258,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "Gibbs with gradients",
-        "search.potts_mcmc.taylor_log_ratios",
+        "sample.potts_mcmc.taylor_log_ratios",
         "enumeration",
         T + "search/test_potts_mcmc.py"
         "::test_the_gibbs_with_gradients_chain_is_drawn_from_the_exact_boltzmann_distribution",
@@ -266,7 +266,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "Niedermayer cluster move",
-        "search.potts_keyed.NiedermayerMove",
+        "sample.potts_keyed.NiedermayerMove",
         "enumeration",
         T + "search/test_potts_mcmc.py"
         "::test_the_niedermayer_chain_is_drawn_from_the_exact_boltzmann_distribution",
@@ -274,7 +274,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "Houdayer pair move",
-        "search.potts_mcmc.sample_potts_pair",
+        "sample.potts_mcmc.sample_potts_pair",
         "enumeration",
         T + "search/test_potts_mcmc.py"
         "::test_each_replica_of_a_houdayer_pair_is_drawn_from_the_exact_boltzmann_distribution",
@@ -282,7 +282,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "annealed importance sampling",
-        "search.annealed.annealed_importance_sampling",
+        "sample.annealed.annealed_importance_sampling",
         "transfer matrix",
         T + "search/test_search_annealed.py"
         "::test_the_importance_sampled_log_partition_is_the_transfer_matrix",
@@ -290,7 +290,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "population annealing",
-        "search.annealed.population_annealing",
+        "sample.annealed.population_annealing",
         "transfer matrix",
         T + "search/test_search_annealed.py"
         "::test_the_population_annealed_log_partition_is_the_transfer_matrix",
@@ -298,7 +298,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "simulated tempering",
-        "search.annealed.simulated_tempering",
+        "sample.annealed.simulated_tempering",
         "enumeration",
         T + "search/test_search_annealed.py"
         "::test_the_simulated_tempering_walker_is_the_enumerated_law_at_every_rung",
@@ -306,7 +306,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "cluster moves as RL arms",
-        "search.potts_keyed.cluster_moves",
+        "sample.potts_keyed.cluster_moves",
         "Potts MCMC, Wolff, Swendsen--Wang",
         T + "learn/test_cluster_arms.py"
         "::test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise",
@@ -314,7 +314,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "annealing",
-        "search.potts_mcmc.anneal_potts",
+        "sample.potts_mcmc.anneal_potts",
         None,
         T + "search/test_potts_mcmc.py"
         "::test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not",
@@ -322,7 +322,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "potts",
         "parallel tempering",
-        "search.potts_mcmc.parallel_tempering",
+        "sample.potts_mcmc.parallel_tempering",
         "annealing",
         T + "search/test_potts_mcmc.py"
         "::test_tempering_reaches_the_ground_energy_annealing_reaches",
@@ -527,7 +527,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "tree",
         "Gibbs / annealing over topologies",
-        "search.gibbs.topology_step",
+        "sample.gibbs.topology_step",
         "topology enumeration",
         T + "search/test_gibbs.py"
         "::test_the_topology_move_at_temperature_one_samples_the_enumerated_flat_prior_weight",
@@ -663,7 +663,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "hmm",
         "coupled Gibbs",
-        "search.gibbs.sample_factor_graph",
+        "sample.gibbs.sample_factor_graph",
         "coupled model, exact",
         T + "search/test_gibbs.py"
         "::test_the_coupled_sweep_draws_labellings_from_the_enumerated_joint_law",
@@ -867,14 +867,14 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "mixture",
         "HMC",
-        "opt.hmc.sample",
+        "sample.hmc.sample",
         None,
         T + "opt/test_opt_hmc.py::test_the_chain_recovers_an_analytic_gaussian",
     ),
     Rung(
         "mixture",
         "HMC",
-        "opt.hmc.sample",
+        "sample.hmc.sample",
         "assignment enumeration",
         T + "opt/test_opt_hmc.py"
         "::test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture",
@@ -882,7 +882,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "mixture",
         "MALA",
-        "opt.langevin.mala",
+        "sample.langevin.mala",
         None,
         T + "opt/test_opt_langevin.py"
         "::test_the_langevin_chain_recovers_an_analytic_gaussian",
@@ -890,7 +890,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "mixture",
         "MALA",
-        "opt.langevin.mala",
+        "sample.langevin.mala",
         "assignment enumeration",
         T + "opt/test_opt_langevin.py"
         "::test_the_langevin_chain_recovers_the_enumerated_assignment_posterior",
@@ -898,14 +898,14 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "mixture",
         "slice sampling",
-        "opt.slice.slice_sample",
+        "sample.slice.slice_sample",
         None,
         T + "opt/test_opt_slice.py::test_the_slice_chain_recovers_an_analytic_gaussian",
     ),
     Rung(
         "mixture",
         "slice sampling",
-        "opt.slice.slice_sample",
+        "sample.slice.slice_sample",
         "assignment enumeration",
         T + "opt/test_opt_slice.py"
         "::test_the_slice_chain_recovers_the_enumerated_assignment_posterior",

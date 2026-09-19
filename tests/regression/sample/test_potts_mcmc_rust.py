@@ -28,10 +28,10 @@ import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.search import potts_mcmc
-from snakes_and_ladders.search.potts_mcmc import _GUARD, PottsChain, PottsMove
-from snakes_and_ladders.search.potts_mcmc import sample_potts as oracle_sample_potts
-from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sample import potts_mcmc
+from snakes_and_ladders.sample.potts_mcmc import _GUARD, PottsChain, PottsMove
+from snakes_and_ladders.sample.potts_mcmc import sample_potts as oracle_sample_potts
+from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import site_field
 

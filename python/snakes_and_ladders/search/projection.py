@@ -58,7 +58,7 @@ from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
     emission_mixture_plus_plus,
 )
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.count_pairs import (
     TOTAL,
     IndependentCountPair,
@@ -76,7 +76,7 @@ PASSES_PER_GRADIENT = 2.0
 #: candidate reports is what says whether the step suited the surface.
 CHAIN_STEP = 2.0e-2
 
-#: Leapfrog steps per proposal, below :data:`snakes_and_ladders.opt.hmc.DEFAULT_STEPS`
+#: Leapfrog steps per proposal, below :data:`snakes_and_ladders.sample.hmc.DEFAULT_STEPS`
 #: because a seeding is charged for every gradient it takes.
 CHAIN_TRAJECTORY = 8
 

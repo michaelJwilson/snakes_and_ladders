@@ -1,10 +1,10 @@
 """A tempered ensemble over structures, composed from moves that already exist (issue #331).
 
 Replica exchange over the factor graph and over tree topologies: replicas at
-fixed temperatures, each stepped by a move :mod:`snakes_and_ladders.search.gibbs`
+fixed temperatures, each stepped by a move :mod:`snakes_and_ladders.sample.gibbs`
 already holds -- the heat-bath sweep for a labelling or a decoding, the
 Metropolis move for a topology -- and exchanged on the ratio
-:func:`snakes_and_ladders.search.potts_mcmc.parallel_tempering` uses
+:func:`snakes_and_ladders.sample.potts_mcmc.parallel_tempering` uses
 (``docs/tex/textbook.tex``, ``eq:exchange``). Nothing here is a new sampler;
 the ensemble is the moves of issue #309 on the ladder of issue #267.
 
@@ -35,15 +35,13 @@ from typing import TypeVar
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.opt.schedule import FeedbackLadder, adapt_ladder_by_round_trips
-from snakes_and_ladders.search.gibbs import (
+from snakes_and_ladders.sample.gibbs import (
     _Indexed,
     cached_topology_score,
     gibbs_sweep,
     topology_step,
 )
-from snakes_and_ladders.search.infer import Model, MoveSet
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
     _houdayer_move,
     _refuse_negative_coupling,
@@ -52,6 +50,11 @@ from snakes_and_ladders.search.potts_mcmc import (
     energies,
     parallel_tempering,
 )
+from snakes_and_ladders.sample.schedule import (
+    FeedbackLadder,
+    adapt_ladder_by_round_trips,
+)
+from snakes_and_ladders.search.infer import Model, MoveSet
 from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -107,7 +110,7 @@ class TemperedEnsemble:
 
         :func:`round_trip_time` on :attr:`walkers`, which is where the
         arithmetic lives: a
-        :class:`~snakes_and_ladders.search.potts_mcmc.TemperedChains` carries
+        :class:`~snakes_and_ladders.sample.potts_mcmc.TemperedChains` carries
         the same trace and is read by the same definition.
         """
         return round_trip_time(self.walkers)
@@ -366,7 +369,7 @@ def tempered_factor_graph(
 ) -> TemperedEnsemble:
     """Replicas of the heat-bath sweep over ``graph`` at fixed temperatures, exchanging by Metropolis.
 
-    One :func:`snakes_and_ladders.search.gibbs.gibbs_sweep` per replica per
+    One :func:`snakes_and_ladders.sample.gibbs.gibbs_sweep` per replica per
     step at its own ``beta``, then every adjacent pair proposes an exchange.
     Serves a Potts labelling and a hidden path alike, through the adapters
     of :mod:`snakes_and_ladders.sim.factor_graph`.
@@ -382,7 +385,7 @@ def tempered_factor_graph(
         The parent generator: one child per replica, then the exchange
         uniforms only.
     n_sweeps, burn_in, thin : int
-        As :func:`snakes_and_ladders.search.gibbs.sample_factor_graph`, per
+        As :func:`snakes_and_ladders.sample.gibbs.sample_factor_graph`, per
         replica.
     start : np.ndarray | None
         A starting state every replica takes; ``None`` draws one per replica
@@ -391,7 +394,7 @@ def tempered_factor_graph(
     Raises
     ------
     ValueError
-        As :func:`snakes_and_ladders.search.gibbs.sample_factor_graph`, and if
+        As :func:`snakes_and_ladders.sample.gibbs.sample_factor_graph`, and if
         the ladder has fewer than two temperatures or one that is not
         positive.
     """
@@ -444,9 +447,9 @@ def tempered_potts_pair(
     is :func:`_exchange`'s own ratio on that energy, not a second one.
 
     Nothing here is a new sampler. The within-replica sweep is
-    :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts`'s own, through
+    :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts`'s own, through
     the one dispatch
-    :func:`~snakes_and_ladders.search.potts_mcmc._sweep_for` holds, and the
+    :func:`~snakes_and_ladders.sample.potts_mcmc._sweep_for` holds, and the
     exchange is the loop the factor graph and the topologies already run.
 
     Parameters
@@ -470,7 +473,7 @@ def tempered_potts_pair(
         sweeps and the exchange. ``False`` is the control the round-trip time
         is read against.
     backend : Backend
-        As :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts`.
+        As :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts`.
 
     Returns
     -------
@@ -486,7 +489,7 @@ def tempered_potts_pair(
         ``houdayer`` is asked for at other than two states --- Houdayer's
         overlap is the Ising one (issue #756) --- or if ``move`` is a
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
-        :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts` refuses it.
+        :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts` refuses it.
     """
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
     _refuse_negative_coupling(move, graph)
@@ -563,7 +566,7 @@ def tempered_topologies(
 ) -> TemperedEnsemble:
     """Replicas of the Metropolis topology move at fixed temperatures, exchanging by Metropolis.
 
-    One :func:`snakes_and_ladders.search.gibbs.topology_step` per replica
+    One :func:`snakes_and_ladders.sample.gibbs.topology_step` per replica
     per step on the fitted log-likelihood, every replica from ``start``.
     The energy in the exchange ratio is the negative fitted log-likelihood,
     so the replica at temperature one targets the flat-prior weight over
@@ -619,13 +622,13 @@ def adapt_ladder_round_trips(
     *,
     backend: Backend = Backend.RUST,
 ) -> FeedbackLadder:
-    """A ladder for :func:`~snakes_and_ladders.search.potts_mcmc.parallel_tempering`, placed by its own round trips.
+    """A ladder for :func:`~snakes_and_ladders.sample.potts_mcmc.parallel_tempering`, placed by its own round trips.
 
-    :func:`snakes_and_ladders.opt.schedule.adapt_ladder_by_round_trips`, the
-    measurement being a :func:`~snakes_and_ladders.search.potts_mcmc.parallel_tempering`
+    :func:`snakes_and_ladders.sample.schedule.adapt_ladder_by_round_trips`, the
+    measurement being a :func:`~snakes_and_ladders.sample.potts_mcmc.parallel_tempering`
     run of ``n_sweeps`` per replica on the candidate ladder, read through
     :func:`up_fraction`. The sibling of
-    :func:`~snakes_and_ladders.search.potts_mcmc.adapt_ladder_potts`, which
+    :func:`~snakes_and_ladders.sample.potts_mcmc.adapt_ladder_potts`, which
     places the same ladder by its exchange acceptance; both draw from ``rng``
     in sequence, so one seed reproduces the warm-up, and
     ``replicas_measured * n_sweeps`` is its cost in sweeps, which a comparison
@@ -634,14 +637,14 @@ def adapt_ladder_round_trips(
     Parameters
     ----------
     graph, field, rng, backend
-        As :func:`~snakes_and_ladders.search.potts_mcmc.parallel_tempering`.
+        As :func:`~snakes_and_ladders.sample.potts_mcmc.parallel_tempering`.
     ladder : tuple[float, ...]
         The starting ladder; its endpoints and its length are the result's.
     n_sweeps : int
         Sweeps per replica per measurement. The up-fraction is a ratio of
         visit counts over these, so it sets what the placement can resolve.
     tolerance, max_rounds
-        As :func:`snakes_and_ladders.opt.schedule.adapt_ladder_by_round_trips`.
+        As :func:`snakes_and_ladders.sample.schedule.adapt_ladder_by_round_trips`.
 
     Returns
     -------

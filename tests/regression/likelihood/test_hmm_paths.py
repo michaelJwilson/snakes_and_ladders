@@ -27,7 +27,7 @@ from snakes_and_ladders.likelihood.hmm_paths import (
     path_log_probability,
 )
 from snakes_and_ladders.opt.hmm import forward_log_likelihood
-from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
 from snakes_and_ladders.sim.hmm import HmmParams
 

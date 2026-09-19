@@ -9,7 +9,7 @@ statistics: the acceptance lands at its target, the adapted chain and the
 fixed one agree on the posterior within Monte Carlo error, and what a draw
 costs in gradients is reported for both (issue #333).
 
-:class:`~snakes_and_ladders.opt.hmc.Adaptation` records the measurement that
+:class:`~snakes_and_ladders.sample.hmc.Adaptation` records the measurement that
 shaped the module: on a locally quadratic target the acceptance is a cliff in
 the step size, and dual averaging at a single-proposal statistic oscillates
 across it. The step jitter and the dual-averaging gain are set from that
@@ -27,7 +27,8 @@ import pytest
 import torch
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.opt.fit import fit, standard_errors_at
-from snakes_and_ladders.opt.hmc import (
+from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.sample.hmc import (
     DUAL_AVERAGING_GAMMA,
     DUAL_AVERAGING_KAPPA,
     DUAL_AVERAGING_T0,
@@ -41,7 +42,6 @@ from snakes_and_ladders.opt.hmc import (
     leapfrog,
     sample,
 )
-from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FOUR_TAXA, load_fixture

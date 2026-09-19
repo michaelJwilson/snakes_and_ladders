@@ -35,7 +35,7 @@ import math
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_mcmc import (
     MoveKind,
     _cluster_members,
     _find,
@@ -202,10 +202,10 @@ class NiedermayerMove:
     """One cluster grown under Niedermayer's bond rule, two colours transposed on it.
 
     Wolff's arm generalized (issue #756):
-    :func:`~snakes_and_ladders.search.potts_mcmc._niedermayer_sweep` activates a
+    :func:`~snakes_and_ladders.sample.potts_mcmc._niedermayer_sweep` activates a
     bond on its energy relative to a threshold ``E_0`` rather than on its
     endpoints agreeing, so the arm runs on a coupling of either sign, and at
-    :func:`~snakes_and_ladders.search.potts_mcmc.niedermayer_threshold`'s value
+    :func:`~snakes_and_ladders.sample.potts_mcmc.niedermayer_threshold`'s value
     it *is* Wolff on a ferromagnet --- same bonds, same acceptance of one.
 
     The action names a root and a colour, as :class:`WolffMove`'s does. The
@@ -414,8 +414,8 @@ def cluster_moves(
     Houdayer's move is not here and cannot be: it acts on a *pair* of replicas
     and an arm's action carries one labelling to one labelling, so there is no
     action of this environment that names it.
-    :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts_pair` and
-    :func:`~snakes_and_ladders.search.tempered.tempered_potts_pair` are where
+    :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts_pair` and
+    :func:`~snakes_and_ladders.sample.tempered.tempered_potts_pair` are where
     it is offered (issue #756).
     """
     return {

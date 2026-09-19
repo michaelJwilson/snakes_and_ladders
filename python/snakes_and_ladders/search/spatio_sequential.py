@@ -54,7 +54,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     labelled_log_likelihood,
 )
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
-from snakes_and_ladders.opt.schedule import TempSchedule
+from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_expansion,
 )

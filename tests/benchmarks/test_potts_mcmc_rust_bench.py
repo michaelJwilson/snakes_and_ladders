@@ -21,8 +21,8 @@ import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search.potts_keyed import SwendsenWangMove
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_keyed import SwendsenWangMove
+from snakes_and_ladders.sample.potts_mcmc import (
     _GUARD,
     PottsChain,
     PottsMove,

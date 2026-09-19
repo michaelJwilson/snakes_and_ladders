@@ -3,8 +3,8 @@
 Three estimators on one ladder of inverse temperatures, from ``beta = 0`` ---
 where ``log Z_0 = n log q`` is exact, the uniform law over ``q ** n``
 configurations --- to the target. Each steps the shipped kernel
-:func:`~snakes_and_ladders.search.potts_mcmc._sweep_for` once per rung, so
-every move set :class:`~snakes_and_ladders.search.potts_mcmc.PottsMove`
+:func:`~snakes_and_ladders.sample.potts_mcmc._sweep_for` once per rung, so
+every move set :class:`~snakes_and_ladders.sample.potts_mcmc.PottsMove`
 declares is admissible here and no second physics enters. What is new is the
 bookkeeping around the sweep, never the sweep.
 
@@ -30,8 +30,8 @@ rungs. One walker moves over the ladder with the rung as a dynamic variable,
 and the rung weights ``g_k`` it needs are ``-log Z_k`` --- which is what
 :attr:`LogPartition.rung_log_z` holds, so a pilot run of either estimator
 configures the sampler. Its walker trace is a one-column
-:attr:`~snakes_and_ladders.search.tempered.TemperedEnsemble.walkers`, so
-:func:`~snakes_and_ladders.search.tempered.round_trips` reads it unchanged.
+:attr:`~snakes_and_ladders.sample.tempered.TemperedEnsemble.walkers`, so
+:func:`~snakes_and_ladders.sample.tempered.round_trips` reads it unchanged.
 """
 
 from __future__ import annotations
@@ -46,13 +46,13 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule, temperatures
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
     _refuse_negative_coupling,
     _sweep_for,
     energies,
 )
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, temperatures
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
 
@@ -127,7 +127,7 @@ def geometric_betas(beta: float, n_rungs: int, *, beta_min: float) -> tuple[floa
     The zero rung is prepended rather than approached, because a geometric
     sequence never reaches zero and zero is the one rung whose ``log Z`` is
     exact. The rest is
-    :class:`~snakes_and_ladders.opt.schedule.ExponentialTempSchedule`'s own
+    :class:`~snakes_and_ladders.sample.schedule.ExponentialTempSchedule`'s own
     interpolation, so both of its ends come out bitwise and the geometric
     spacing is written once.
 
@@ -204,7 +204,7 @@ def _population(
     **Every replica draws from its own generator**, spawned from the parent
     that then draws only the resampling uniforms, where a caller asked for
     any --- the rule
-    :func:`~snakes_and_ladders.search.potts_mcmc.parallel_tempering` states
+    :func:`~snakes_and_ladders.sample.potts_mcmc.parallel_tempering` states
     and for the reason it gives. The states are one contiguous block so
     :func:`~snakes_and_ladders.sim.potts.energies` scores the population in
     one call and each row is still a buffer the kernel can borrow.
@@ -285,7 +285,7 @@ def annealed_importance_sampling(
     move : PottsMove
         The move set each rung's sweep uses.
     backend : Backend
-        As :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts`.
+        As :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts`.
 
     Returns
     -------
@@ -298,7 +298,7 @@ def annealed_importance_sampling(
     ValueError
         If the ladder does not start at zero, is not strictly increasing, or
         fewer than two replicas are asked for; and as
-        :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts` for a
+        :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts` for a
         Fortuin-Kasteleyn cluster move on a negative coupling.
     """
     ladder = _check_betas(betas, from_zero=True)
@@ -479,7 +479,7 @@ class SimulatedTempered:
         """The rung trace as one walker's column, shape ``(n_recorded, 1)``.
 
         The shape
-        :func:`~snakes_and_ladders.search.tempered.round_trips` reads, so a
+        :func:`~snakes_and_ladders.sample.tempered.round_trips` reads, so a
         round trip over a simulated-tempering ladder is counted by the one
         definition this package has rather than by a second one here.
         """
@@ -543,7 +543,7 @@ def simulated_tempering(
         the rung proposals and their uniforms, so the sweep's stream is the
         one a fixed-rung chain would consume.
     n_sweeps, burn_in, thin : int
-        As :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts`. A
+        As :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts`. A
         chi-square over the recorded states assumes independent draws, so the
         thinning is part of that test rather than a speed knob.
 

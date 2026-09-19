@@ -6,12 +6,12 @@ serves the Potts lattice, the hidden Markov chain, a tree at one site and the
 coupled model alike, through the adapters that already exist -- no sampler
 knows what the variables mean. Tempering multiplies every factor's log table
 by ``beta``, which is the same graph with its tables scaled; annealing is the
-sweep on a :class:`~snakes_and_ladders.opt.schedule.TempSchedule`, returning the
+sweep on a :class:`~snakes_and_ladders.sample.schedule.TempSchedule`, returning the
 best state visited.
 
 Three things are held fixed from the specialised samplers. The single-site
 update draws one uniform per variable and searches a cumulative sum, the
-arithmetic of :func:`snakes_and_ladders.search.potts_mcmc._single_site_sweep`,
+arithmetic of :func:`snakes_and_ladders.sample.potts_mcmc._single_site_sweep`,
 so on a Potts graph the two agree draw for draw except where a uniform lands
 within rounding of a boundary; the pin is distributional and the agreement is
 reported. A sweep never stops on a state-dependent condition
@@ -25,7 +25,7 @@ factors touch it (the block Gibbs move the coupled model's chains need); a
 Metropolis move over tree topologies whose stationary distribution at
 temperature one is the flat-prior weight over fitted likelihoods that
 :mod:`snakes_and_ladders.search.support` enumerates; and the gradient-informed
-single-variable proposals of :mod:`snakes_and_ladders.search.balanced`, which
+single-variable proposals of :mod:`snakes_and_ladders.sample.balanced`, which
 choose *which* variable to change from the whole neighbourhood rather than
 visiting every one in turn. The first-order estimate Gibbs-with-gradients
 proposes from is **exact here**: the multilinear extension of a sum of factor
@@ -53,14 +53,14 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.opt.schedule import TempSchedule
-from snakes_and_ladders.search.balanced import (
+from snakes_and_ladders.sample.balanced import (
     draw_change,
     log_balanced_weights,
     log_metropolis_ratio,
     log_normalizer,
     log_ratios,
 )
+from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
 from snakes_and_ladders.search.topology import (
     Topology,
@@ -75,7 +75,7 @@ class GibbsMove(StrEnum):
     """Which single-variable move a chain over the factor graph proposes from.
 
     A ``StrEnum`` for the reason
-    :class:`~snakes_and_ladders.search.potts_mcmc.PottsMove` is one: an
+    :class:`~snakes_and_ladders.sample.potts_mcmc.PottsMove` is one: an
     unrecognized move is refused by ``mypy --strict`` at the call site.
     """
 
@@ -226,7 +226,7 @@ class _Indexed:
 
         The neighbourhood of single-variable changes is ragged where the
         cardinalities differ, and
-        :mod:`snakes_and_ladders.search.balanced` takes one rectangle with
+        :mod:`snakes_and_ladders.sample.balanced` takes one rectangle with
         ``-inf`` past each variable's own count --- a weight of zero, so a
         value a variable does not have is never drawn.
         """
@@ -578,8 +578,8 @@ def balanced_sweep(
     """``n_variables`` gradient-informed proposals, each Metropolis-corrected, in place.
 
     The factor-graph form of
-    :func:`snakes_and_ladders.search.potts_mcmc._balanced_sweep_at`, over the
-    same kernel (:mod:`snakes_and_ladders.search.balanced`). One sweep is one
+    :func:`snakes_and_ladders.sample.potts_mcmc._balanced_sweep_at`, over the
+    same kernel (:mod:`snakes_and_ladders.sample.balanced`). One sweep is one
     proposal per variable, :func:`gibbs_sweep`'s sweep size, so the two are
     comparable in sweeps without a normalization --- but a sweep here is
     ``n_variables`` *proposals over the whole neighbourhood*, not one visit
@@ -693,7 +693,7 @@ def sample_factor_graph(
     n_sweeps : int
         Sweeps after burn-in; every ``thin``-th is recorded.
     burn_in, thin : int
-        As :func:`snakes_and_ladders.search.potts_mcmc.sample_potts`.
+        As :func:`snakes_and_ladders.sample.potts_mcmc.sample_potts`.
     temperature : float
         Every factor's log table is scaled by ``1 / temperature``.
     start : np.ndarray | None
@@ -744,7 +744,7 @@ def anneal_factor_graph(
 ) -> Annealed:
     """Simulated annealing by heat-bath sweeps: one sweep per schedule step at that step's temperature.
 
-    The generic form of :func:`snakes_and_ladders.search.potts_mcmc.anneal_potts`,
+    The generic form of :func:`snakes_and_ladders.sample.potts_mcmc.anneal_potts`,
     tracking the state of highest log-density seen. At ``T -> 0`` the heat
     bath is the argmax over each variable's conditional, so the two ends of a
     schedule are single-site descent and free sampling, as there.
@@ -924,7 +924,7 @@ def cached_topology_score(
 
     The fit is the whole cost of a walk over topologies, so every walk
     shares this: :func:`anneal_topology` and the tempered ensemble of
-    :mod:`snakes_and_ladders.search.tempered` alike.
+    :mod:`snakes_and_ladders.sample.tempered` alike.
     """
 
     def score(topology: Topology) -> float:

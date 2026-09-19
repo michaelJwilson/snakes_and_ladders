@@ -21,7 +21,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     map_labelling,
 )
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus, kmeans_plus_plus
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.spatio_sequential import (
     LabelSolver,
     fit_spatio_sequential,

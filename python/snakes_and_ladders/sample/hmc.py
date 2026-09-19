@@ -64,7 +64,7 @@ from typing import Protocol
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.schedule import TempSchedule
+from snakes_and_ladders.sample.schedule import TempSchedule
 
 # `current` is aliased: `_coefficients` already binds that name to a
 # sub-step length, and one of the two has to give.
@@ -151,7 +151,7 @@ class Kernel(Protocol):
     positions a proposal leaves. Both hold of any sampler whose move is
     parameterized by one scale, so the loop takes the transition as an
     argument and :func:`sample` and
-    :func:`snakes_and_ladders.opt.langevin.mala` share it rather than
+    :func:`snakes_and_ladders.sample.langevin.mala` share it rather than
     running two copies that drift.
 
     An implementation draws from ``generator`` and from nothing else, and
@@ -529,7 +529,7 @@ def sample(
     temperature : float
         The chain targets ``exp(-objective / temperature)``; 1 is the
         objective as declared. Whether that is a tempered *energy* or a power
-        posterior is the caller's to say (`snakes_and_ladders.opt.schedule`).
+        posterior is the caller's to say (`snakes_and_ladders.sample.schedule`).
     adaptation : Adaptation | None
         A warm-up that sets the step size and the mass diagonal before the
         ``burn_in`` and the draws, both of which then run at fixed values.
@@ -601,7 +601,7 @@ def _run_chain(
     per_proposal : int
         Evaluations one proposal costs, in the unit the sampler is compared
         on: gradients for :func:`sample` and
-        :func:`snakes_and_ladders.opt.langevin.mala`.
+        :func:`snakes_and_ladders.sample.langevin.mala`.
     objective, generator, n_samples, step_size, theta0, burn_in, temperature, adaptation
         As :func:`sample`.
 
@@ -836,7 +836,7 @@ def _swap_log_ratio(
     The joint target is the product of the tempered marginals, so the ratio
     is ``(1/T_cold - 1/T_hot)(U_cold - U_hot)``: an exchange that hands the
     colder replica the lower value is always accepted. The same expression
-    :func:`snakes_and_ladders.search.potts_mcmc.parallel_tempering` accepts
+    :func:`snakes_and_ladders.sample.potts_mcmc.parallel_tempering` accepts
     on, with the objective where that has an energy.
     """
     return (1.0 / temperature_cold - 1.0 / temperature_hot) * (value_cold - value_hot)
@@ -860,7 +860,7 @@ def parallel_tempering(
     accepts on :func:`_swap_log_ratio`. The hot replicas cross barriers the
     cold one cannot, and an exchange carries what they find down the ladder
     (Swendsen & Wang, 1986; Geyer, 1991; Earl & Deem, 2005). The continuous
-    counterpart of :func:`snakes_and_ladders.search.potts_mcmc.parallel_tempering`,
+    counterpart of :func:`snakes_and_ladders.sample.potts_mcmc.parallel_tempering`,
     which ``opt`` cannot import and which moves spins rather than a vector.
 
     **The replicas must not share a stream and must be reproducible from one

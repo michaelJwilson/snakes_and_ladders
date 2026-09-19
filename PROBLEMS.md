@@ -27,11 +27,11 @@ A test module importing any of it exercises the problem, which is how
 `tests/_problems.py` marks it — no list of every symbol to maintain, and a
 function added to a defining module is covered the day it is written.
 
-**Shared machinery defines nothing.** `opt.fit`, `opt.hmc`, `opt.initialize`
-and `opt.schedule` fit, sample, start and temper *every* row — `ROADMAP.md`
+**Shared machinery defines nothing.** `opt.fit`, `sample.hmc`, `opt.initialize`
+and `sample.schedule` fit, sample, start and temper *every* row — `ROADMAP.md`
 §1.1's claim — and `likelihood.message_passing`, `sim.factor_graph`,
-`search.gibbs`, `likelihood.potts`, `sim.ldpc`, `sim.graph`, `sim.potts`,
-`sim.canonical`, `search.alpha_expansion`, `search.potts_mcmc`, `search.infer`,
+`sample.gibbs`, `likelihood.potts`, `sim.ldpc`, `sim.graph`, `sim.potts`,
+`sim.canonical`, `search.alpha_expansion`, `sample.potts_mcmc`, `search.infer`,
 `search.topology`, `emissions` and the rest of `likelihood/` are reached from
 several. Importing one says nothing about which problem a test exercises, so
 none of them defines one.

@@ -1,7 +1,7 @@
 """The Metropolis-adjusted Langevin algorithm: HMC at one leapfrog step.
 
 The baseline every Hamiltonian number in this package is read against.
-:func:`~snakes_and_ladders.opt.hmc.sample` costs ``n_steps + 1`` gradients a
+:func:`~snakes_and_ladders.sample.hmc.sample` costs ``n_steps + 1`` gradients a
 proposal and buys a trajectory with them; MALA (Roberts & Tweedie, 1996) costs
 two and buys one gradient-informed step, so a comparison at equal *gradients*
 is the one that says whether the trajectory was worth it. Reported as
@@ -11,7 +11,7 @@ effective samples per gradient, never per draw.
 The proposal ``x' = x - (h^2 / 2) grad U(x) + h sqrt(T) z`` is one leapfrog
 step from momentum ``z sqrt(T)``, and the Metropolis ratio of the two Gaussian
 transition densities is ``exp(-(H(x', -p') - H(x, p)) / T)`` --- the same
-number :func:`~snakes_and_ladders.opt.hmc.sample` accepts on. This module
+number :func:`~snakes_and_ladders.sample.hmc.sample` accepts on. This module
 writes the *densities*, not the trajectory, so the identity is a measurement
 between two implementations rather than a transcription of one;
 ``tests/regression/opt/test_opt_langevin.py`` reads the difference against
@@ -48,13 +48,13 @@ from dataclasses import dataclass
 
 import torch
 
-from snakes_and_ladders.opt.hmc import (
+from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.sample.hmc import (
     Adaptation,
     Adapted,
     _gradient,
     _run_chain,
 )
-from snakes_and_ladders.opt.objective import Objective
 
 #: The acceptance a MALA step is adapted toward: the optimal scaling of the
 #: Langevin diffusion in the limit of many dimensions (Roberts & Rosenthal,
@@ -62,7 +62,7 @@ from snakes_and_ladders.opt.objective import Objective
 #: single step's error is order ``h^3`` per coordinate where a trajectory's is
 #: bounded --- so a warm-up reaching for HMC's target here adapts to the wrong
 #: step. Stated as a constant and passed by the caller through
-#: :class:`~snakes_and_ladders.opt.hmc.Adaptation`, whose every field is
+#: :class:`~snakes_and_ladders.sample.hmc.Adaptation`, whose every field is
 #: required.
 MALA_TARGET_ACCEPTANCE = 0.574
 
@@ -79,7 +79,7 @@ GRADIENTS_PER_PROPOSAL = 2
 class LangevinChain:
     """A Langevin chain, what it cost, and whether it was corrected.
 
-    :class:`~snakes_and_ladders.opt.hmc.HmcChain`'s fields, plus the flag,
+    :class:`~snakes_and_ladders.sample.hmc.HmcChain`'s fields, plus the flag,
     because an uncorrected chain's acceptance rate is 1 by construction and
     reading the two objects alike would read that 1 as a diagnostic.
 
@@ -95,7 +95,7 @@ class LangevinChain:
         ``|H(proposal) - H(current)|`` per proposal, ``H`` being the
         Hamiltonian of the equivalent one-step trajectory. For a corrected
         chain it separates a step too large from a bug, as it does for
-        :func:`~snakes_and_ladders.opt.hmc.sample`; for an uncorrected one it
+        :func:`~snakes_and_ladders.sample.hmc.sample`; for an uncorrected one it
         is the correction that was not applied, and so the bias itself.
     force_evaluations : int
         Gradients spent, warm-up and burn-in included, at
@@ -133,7 +133,7 @@ def mala(
     ----------
     objective : Objective
         Read as an unnormalized negative log density, as
-        :func:`~snakes_and_ladders.opt.hmc.sample` reads it. The same warning
+        :func:`~snakes_and_ladders.sample.hmc.sample` reads it. The same warning
         applies: a bare negative log-likelihood here is a posterior under an
         improper flat prior and nothing in this module can tell.
     generator : torch.Generator
@@ -157,7 +157,7 @@ def mala(
     adaptation : Adaptation | None
         A warm-up that sets the step size and the mass diagonal before the
         ``burn_in`` and the draws, the same two windows
-        :func:`~snakes_and_ladders.opt.hmc.sample` runs. Its
+        :func:`~snakes_and_ladders.sample.hmc.sample` runs. Its
         ``target_acceptance`` belongs at :data:`MALA_TARGET_ACCEPTANCE` here
         and not at HMC's 0.65.
     corrected : bool

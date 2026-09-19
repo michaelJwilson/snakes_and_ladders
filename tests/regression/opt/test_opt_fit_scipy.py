@@ -15,7 +15,7 @@ step lengths and not a claim; the central-cell start is used instead, and the
 success-rate claim the section makes stays where it is.
 
 ``scipy`` is not a declared dependency of this repository
-(``search.statistics`` and ``opt.fit`` write out the few constants they would
+(``sample.statistics`` and ``opt.fit`` write out the few constants they would
 need from it), so this skips unless it is installed. Whether to declare it is
 the open question issue #376 leaves standing.
 """

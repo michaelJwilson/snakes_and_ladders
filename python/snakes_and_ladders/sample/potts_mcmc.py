@@ -53,7 +53,7 @@ model with ``(J / T, h / T)`` at temperature 1. So a tempered chain runs the
 untempered sweeps on the scaled model and there is no second code path:
 :func:`tempered` is checked against the energies, and the chain it produces
 against ``exp(-E / T)`` enumerated from the *unscaled* model. Tempering a
-likelihood is a different object (`snakes_and_ladders.opt.schedule` says why);
+likelihood is a different object (`snakes_and_ladders.sample.schedule` says why);
 here the objective is an energy and the temperature is physical.
 
 See ``docs/tex/textbook.tex``, ``sec:potts`` (Newman &
@@ -73,14 +73,14 @@ from typing import NamedTuple
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.opt.schedule import AdaptedLadder, TempSchedule, adapt_ladder
-from snakes_and_ladders.search.balanced import (
+from snakes_and_ladders.sample.balanced import (
     draw_change,
     log_balanced_weights,
     log_metropolis_ratio,
     log_normalizer,
     log_ratios,
 )
+from snakes_and_ladders.sample.schedule import AdaptedLadder, TempSchedule, adapt_ladder
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import (
     energies,
@@ -654,8 +654,8 @@ class TemperedChains:
         same run: a *replica* is a temperature configurations pass through,
         where a *walker* is a configuration followed through the swaps, and
         a round trip is a statement about the second.
-        :func:`snakes_and_ladders.search.tempered.round_trips` and
-        :func:`snakes_and_ladders.search.tempered.up_fraction` read it, an
+        :func:`snakes_and_ladders.sample.tempered.round_trips` and
+        :func:`snakes_and_ladders.sample.tempered.up_fraction` read it, an
         exchange acceptance being a per-pair number a ladder can look
         healthy in while nothing crosses it (issue #756).
     """
@@ -768,7 +768,7 @@ def parallel_tempering(
     offsets, neighbours, couplings = graph.compressed_adjacency()
 
     recorded = np.empty((n_sweeps, n_replicas, graph.n_nodes), dtype=np.int64)
-    # Which walker sits at each rung, as `search.tempered._exchange` tracks
+    # Which walker sits at each rung, as `sample.tempered._exchange` tracks
     # it: a swap moves configurations between temperatures, so this is what
     # says a configuration crossed the ladder.
     at_rung = list(range(n_replicas))
@@ -837,7 +837,7 @@ def adapt_ladder_potts(
 ) -> AdaptedLadder:
     """A ladder for :func:`parallel_tempering`, from its own exchange acceptances.
 
-    :func:`snakes_and_ladders.opt.schedule.adapt_ladder`, the measurement being
+    :func:`snakes_and_ladders.sample.schedule.adapt_ladder`, the measurement being
     a :func:`parallel_tempering` run of ``n_sweeps`` per replica on the
     candidate ladder, drawn from ``rng`` in sequence so one seed reproduces the
     warm-up. ``replicas_measured * n_sweeps`` is the warm-up's cost in sweeps,
@@ -854,7 +854,7 @@ def adapt_ladder_potts(
         Sweeps per replica per measurement. Each acceptance is a fraction of
         ``n_sweeps`` proposals, so this sets what the band can resolve.
     band, max_rounds, max_replicas
-        As :func:`snakes_and_ladders.opt.schedule.adapt_ladder`.
+        As :func:`snakes_and_ladders.sample.schedule.adapt_ladder`.
 
     Returns
     -------
@@ -1301,7 +1301,7 @@ def taylor_log_ratios(
     computes: the tape returns the same numbers
     (:func:`autodiff_log_ratios`, pinned at ``1e-12``) for a tape's cost per
     proposal. Where the estimate is exact this equals
-    :func:`~snakes_and_ladders.search.balanced.log_ratios`, and the two stay
+    :func:`~snakes_and_ladders.sample.balanced.log_ratios`, and the two stay
     separate functions because that equality is a property of *this* energy
     and is pinned rather than assumed.
 
@@ -1382,7 +1382,7 @@ def _balanced_sweep_at(
     """``n_nodes`` locally balanced proposals per sweep, each Metropolis-corrected.
 
     The move set Zanella (2020) defines and Grathwohl et al. (2021) take the
-    gradient form of; :mod:`snakes_and_ladders.search.balanced` holds the
+    gradient form of; :mod:`snakes_and_ladders.sample.balanced` holds the
     kernel both share and derives the correction. A sweep is ``n_nodes``
     proposals, the heat bath's sweep size, so an autocorrelation time in
     sweeps compares the two without a normalization.

@@ -20,7 +20,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.hmc import effective_sample_size
 from snakes_and_ladders.qa.hmc_warmup import (
     COVARIANCE,
     MEAN,
@@ -36,6 +35,7 @@ from snakes_and_ladders.qa.hmc_warmup import (
     settling_draw,
     target,
 )
+from snakes_and_ladders.sample.hmc import effective_sample_size
 
 from tests._objective_checks import AnalyticGaussian
 

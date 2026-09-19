@@ -5,7 +5,7 @@ inputs in neighbour order, so a permutation here would change which draw a
 site sees without changing any distribution a chi-square could catch.
 
 The oracle is :func:`_neighbour_lists` below: the list-of-lists loop the five
-builders issue #277 retired each held --- `search.potts_mcmc._adjacency`,
+builders issue #277 retired each held --- `sample.potts_mcmc._adjacency`,
 `search.potts_mcmc_rust.flatten_adjacency`, and the open-coded copies in
 `search.ground_state`, `search.alpha_expansion` and `sim.potts`. Each was
 asserted equal to `compressed_adjacency` on these graphs before its call site

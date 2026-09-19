@@ -1,6 +1,6 @@
 """QA figure: what a Hamiltonian Monte Carlo warm-up buys, and what it costs.
 
-The warm-up of ``snakes_and_ladders.opt.hmc.Adaptation`` discards every draw
+The warm-up of ``snakes_and_ladders.sample.hmc.Adaptation`` discards every draw
 it takes, so the question it raises is whether the draws that follow repay
 them. This figure answers it on the one target whose answer is known in closed
 form: a correlated Gaussian, whose mean and covariance are declared rather
@@ -14,7 +14,7 @@ distribution --- the comparison is of cost per effective draw and of nothing
 else, which is why the caption reports both chains' agreement with the closed
 form alongside their convergence.
 
-Renders what `snakes_and_ladders.opt.hmc` sampled; it reimplements no sampler
+Renders what `snakes_and_ladders.sample.hmc` sampled; it reimplements no sampler
 (`qa/CLAUDE.md`).
 """
 
@@ -28,12 +28,6 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 
-from snakes_and_ladders.opt.hmc import (
-    Adaptation,
-    HmcChain,
-    effective_sample_size,
-    sample,
-)
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.runner import figure_main
@@ -42,6 +36,12 @@ from snakes_and_ladders.qa.style import (
     ONE_COLUMN_WIDE,
     letter_style,
     series_style,
+)
+from snakes_and_ladders.sample.hmc import (
+    Adaptation,
+    HmcChain,
+    effective_sample_size,
+    sample,
 )
 
 #: The target's mean, declared. The figure's horizontal reference lines are

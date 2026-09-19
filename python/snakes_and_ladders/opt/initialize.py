@@ -28,7 +28,7 @@ asserts it. Those belong beside the objective they initialize ---
 neighbor-joining and Hadamard starts (issue #364).
 
 **Three of these sample rather than propose.** `FromChain`, `FromAnnealing`
-and `FromTempering` run `opt/hmc.py` on the objective and take a start from
+and `FromTempering` run `sample/hmc.py` on the objective and take a start from
 where the chain went (issue #541). They read the objective and no data, so
 they stay here; each reports what it spent in gradients, because a start
 that costs as much as the fit it seeds is a different proposition from one
@@ -43,9 +43,9 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import torch
 
-from snakes_and_ladders.opt import hmc
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.schedule import TempSchedule
+from snakes_and_ladders.sample import hmc
+from snakes_and_ladders.sample.schedule import TempSchedule
 
 
 @runtime_checkable
@@ -308,7 +308,7 @@ class FromAnnealing(Initializer):
 
         Returns
         -------
-        snakes_and_ladders.opt.hmc.Annealed
+        snakes_and_ladders.sample.hmc.Annealed
         """
         return hmc.anneal(
             objective,
@@ -342,7 +342,7 @@ class FromTempering(Initializer):
     ----------
     temperatures : tuple[float, ...]
         The ladder, coldest first, as
-        :func:`snakes_and_ladders.opt.hmc.parallel_tempering` requires.
+        :func:`snakes_and_ladders.sample.hmc.parallel_tempering` requires.
     n_rounds : int
         Transitions per replica, at least one.
     step_size : float

@@ -1,7 +1,7 @@
 """Slice sampling over an :class:`~snakes_and_ladders.opt.objective.Objective`.
 
-The tuning-free baseline. :func:`~snakes_and_ladders.opt.hmc.sample` needs a
-step size and a trajectory length, :func:`~snakes_and_ladders.opt.langevin.mala`
+The tuning-free baseline. :func:`~snakes_and_ladders.sample.hmc.sample` needs a
+step size and a trajectory length, :func:`~snakes_and_ladders.sample.langevin.mala`
 a step size, and both are wrong silently when they are wrong; slice sampling
 (Neal, 2003) needs an initial width ``w`` and adapts to the target within a
 single update by stepping out and shrinking. A width off by an order of
@@ -147,7 +147,7 @@ def slice_sample(
     ----------
     objective : Objective
         Read as an unnormalized negative log density, as
-        :func:`~snakes_and_ladders.opt.hmc.sample` reads it.
+        :func:`~snakes_and_ladders.sample.hmc.sample` reads it.
     generator : torch.Generator
         The stream every uniform, direction and slice level comes from.
     n_samples : int

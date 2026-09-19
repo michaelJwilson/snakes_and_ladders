@@ -483,7 +483,7 @@ def adapt_ladder_by_round_trips(
     measure : Callable[[tuple[float, ...]], Sequence[float]]
         The up-fraction per rung of a ladder --- one per temperature, all
         finite.
-        :func:`snakes_and_ladders.search.tempered.up_fraction` computes it
+        :func:`snakes_and_ladders.sample.tempered.up_fraction` computes it
         from a walker trace.
     ladder : tuple[float, ...]
         The starting ladder, at least three temperatures --- two are the

@@ -30,7 +30,7 @@ from snakes_and_ladders.learn.critic import Critic, fit_critic, state_features
 from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import EpsilonGreedyPolicy, TrainablePolicy
 from snakes_and_ladders.learn.rollout import rollout
-from snakes_and_ladders.opt.schedule import TempSchedule
+from snakes_and_ladders.sample.schedule import TempSchedule
 
 
 @dataclass(frozen=True)
@@ -176,7 +176,7 @@ def ppo[S, A](
     search can leave a local optimum the softmax would settle into -- and the
     ratio is then ``pi / beta`` with ``beta`` the wrapper's own distribution,
     which is what makes the update valid off-policy. ``epsilon_schedule``
-    sets the wrapper's epsilon per iteration from ``opt.schedule`` (issue
+    sets the wrapper's epsilon per iteration from ``sample.schedule`` (issue
     #194 measured a constant one) and must span ``iterations`` steps.
     """
     if iterations < 1 or batch < 1 or epochs < 1:

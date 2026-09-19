@@ -27,8 +27,8 @@ from snakes_and_ladders.learn.potts_nd import (
     PottsAction,
     PottsNDEnvironment,
 )
-from snakes_and_ladders.search.potts_keyed import cluster_moves
-from snakes_and_ladders.search.potts_mcmc import MoveKind
+from snakes_and_ladders.sample.potts_keyed import cluster_moves
+from snakes_and_ladders.sample.potts_mcmc import MoveKind
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, spatio_only_field
 

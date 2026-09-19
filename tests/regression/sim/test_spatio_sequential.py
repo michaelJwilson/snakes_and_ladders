@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 import pytest
 from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.spatio_sequential import (

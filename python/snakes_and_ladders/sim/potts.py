@@ -190,7 +190,7 @@ class PottsMetrics:
     it.
 
     The series is ``state_energy`` and not ``energy``:
-    :func:`snakes_and_ladders.search.potts_mcmc.anneal_potts` records the
+    :func:`snakes_and_ladders.sample.potts_mcmc.anneal_potts` records the
     *best* energy so far under ``energy``, and this is the energy of the
     labelling it is handed.
 
@@ -227,7 +227,7 @@ def heat_bath_log_weights(
     ``log p(s_i = k | rest) + c = beta * (h_ik + sum_j J_ij [k = s_j])``, the
     arithmetic every heat-bath sweep performs and three of them each wrote
     out before issue #277: the vectorized simulator :func:`_simulate_gibbs`,
-    the sequential sampler `search.potts_mcmc._single_site_sweep`, and the
+    the sequential sampler `sample.potts_mcmc._single_site_sweep`, and the
     Rust kernel. The *loops* stay separate --- one steps a chain in time, one
     is vectorized across independent chains, one is compiled --- because they
     are separate; what they share is this expression.
@@ -263,7 +263,7 @@ def heat_bath_log_weights(
         The site's row: ``offsets[i]`` and ``offsets[i + 1]``.
     beta : float
         Inverse temperature, applied to the whole conditional --- the model
-        scaling `search.potts_mcmc.tempered` states. At 1.0 the
+        scaling `sample.potts_mcmc.tempered` states. At 1.0 the
         multiplication is the identity, so it is skipped rather than applied.
     chain_index : np.ndarray | None
         ``arange(n_chains)``, for the block form only. Passed in so the
@@ -317,7 +317,7 @@ def local_fields(
 
     :func:`heat_bath_log_weights` for one site, over the whole lattice in one
     reduction: a gradient-informed proposal reads every site's conditional per
-    step (:mod:`snakes_and_ladders.search.balanced`), and a Python loop over
+    step (:mod:`snakes_and_ladders.sample.balanced`), and a Python loop over
     sites to build it would cost a heat-bath sweep per proposal.
 
     The couplings reach the right cell by one ``bincount`` over the compressed

@@ -225,9 +225,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.constrain
    :members:
 
-.. automodule:: snakes_and_ladders.opt.schedule
-   :members:
-
 .. automodule:: snakes_and_ladders.opt.fit
    :members:
 
@@ -243,15 +240,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.opt.testfunctions
    :members:
 
-.. automodule:: snakes_and_ladders.opt.hmc
-   :members:
-
-.. automodule:: snakes_and_ladders.opt.langevin
-   :members:
-
-.. automodule:: snakes_and_ladders.opt.slice
-   :members:
-
 .. automodule:: snakes_and_ladders.opt.potts
    :members:
 
@@ -262,6 +250,42 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.opt.emission_mixture
+   :members:
+
+.. automodule:: snakes_and_ladders.sample
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.hmc
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.langevin
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.slice
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.schedule
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.potts_mcmc
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.gibbs
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.balanced
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.potts_keyed
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.tempered
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.annealed
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.statistics
    :members:
 
 .. automodule:: snakes_and_ladders.learn
@@ -348,18 +372,6 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.ground_state
    :members:
 
-.. automodule:: snakes_and_ladders.search.gibbs
-   :members:
-
-.. automodule:: snakes_and_ladders.search.balanced
-   :members:
-
-.. automodule:: snakes_and_ladders.search.tempered
-   :members:
-
-.. automodule:: snakes_and_ladders.search.annealed
-   :members:
-
 .. automodule:: snakes_and_ladders.learn.tree
    :members:
 
@@ -388,15 +400,6 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.maxflow_rust
-   :members:
-
-.. automodule:: snakes_and_ladders.search.potts_keyed
-   :members:
-
-.. automodule:: snakes_and_ladders.search.potts_mcmc
-   :members:
-
-.. automodule:: snakes_and_ladders.search.statistics
    :members:
 
 .. automodule:: snakes_and_ladders.search.rl

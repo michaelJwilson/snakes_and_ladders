@@ -30,7 +30,10 @@ from snakes_and_ladders.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
 from snakes_and_ladders.opt.constrain import log_simplex
-from snakes_and_ladders.opt.hmc import (
+from snakes_and_ladders.opt.mixture import responsibilities
+from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
+from snakes_and_ladders.sample.hmc import (
     YOSHIDA_WEIGHTS,
     Integrator,
     WithGaussianPrior,
@@ -42,10 +45,7 @@ from snakes_and_ladders.opt.hmc import (
     sample,
     yoshida,
 )
-from snakes_and_ladders.opt.mixture import responsibilities
-from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
-from snakes_and_ladders.opt.schedule import (
+from snakes_and_ladders.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )

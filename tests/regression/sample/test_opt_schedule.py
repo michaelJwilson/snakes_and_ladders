@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
-from snakes_and_ladders.opt.schedule import (
+from snakes_and_ladders.sample.schedule import (
     ConstantTempSchedule,
     CosineTempSchedule,
     ExponentialTempSchedule,

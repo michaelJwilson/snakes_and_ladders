@@ -218,7 +218,7 @@ FINDINGS = (
         owner="sim/potts.py",
     ),
     Finding("site-field broadcasts", r"^def _?site_field\(", 2, owner="sim/potts.py"),
-    Finding("annealers", r"^def anneal\w*\(", 4, owner="search/gibbs.py"),
+    Finding("annealers", r"^def anneal\w*\(", 4, owner="sample/gibbs.py"),
     Finding("ground-state run_ wrappers", r"^def run_\w+\(", 10),
     Finding("backend enums", r"^class \w*Backend\b", 1, owner="backend.py"),
     # The ticket counted nine; `ragged_rust` has no `ragged` beside it.

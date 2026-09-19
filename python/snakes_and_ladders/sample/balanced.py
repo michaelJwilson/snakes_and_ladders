@@ -18,8 +18,8 @@ not the ratio it stands for --- so :func:`log_metropolis_ratio` is written in
 the general form and the collapse is what a test asserts where it holds.
 
 Two consumers, one kernel: the Potts lattice
-(:mod:`snakes_and_ladders.search.potts_mcmc`) and the factor graph
-(:mod:`snakes_and_ladders.search.gibbs`). Both present a neighbourhood as one
+(:mod:`snakes_and_ladders.sample.potts_mcmc`) and the factor graph
+(:mod:`snakes_and_ladders.sample.gibbs`). Both present a neighbourhood as one
 row per variable and one column per value, ``-inf`` where a variable has no
 such value, so a ragged cardinality reaches the same rectangular arithmetic.
 
@@ -49,7 +49,7 @@ class BalancingFunction(StrEnum):
     """Which ``g`` weights the neighbourhood.
 
     A ``StrEnum`` for the reason
-    :class:`~snakes_and_ladders.search.potts_mcmc.PottsMove` is one: an
+    :class:`~snakes_and_ladders.sample.potts_mcmc.PottsMove` is one: an
     unrecognized choice is refused by ``mypy --strict`` at the call site.
     """
 

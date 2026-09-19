@@ -513,7 +513,7 @@ def max_product(
 #: `MessageSchedule`, `Layout` and `Step` are *not* here though this module imports
 #: them: they are `schedule`'s interface, and listing them gave Sphinx a
 #: second target for each, which made every `MessageSchedule` reference ambiguous
-#: against `opt.schedule.Schedule` and failed the `-W` docs build.
+#: against `sample.schedule.Schedule` and failed the `-W` docs build.
 __all__ = [
     "DEFAULT_DAMPING",
     "DEFAULT_MAX_ITERATIONS",

@@ -25,7 +25,7 @@ import pytest
 import torch
 from snakes_and_ladders.likelihood.potts import log_weights, strip_log_partition
 from snakes_and_ladders.opt.potts import graph_statistics, log_partition_graph
-from snakes_and_ladders.search.annealed import (
+from snakes_and_ladders.sample.annealed import (
     LogPartition,
     Resampling,
     annealed_importance_sampling,
@@ -34,9 +34,9 @@ from snakes_and_ladders.search.annealed import (
     rung_weights,
     simulated_tempering,
 )
-from snakes_and_ladders.search.potts_mcmc import PottsMove
-from snakes_and_ladders.search.statistics import chi_square_p_value
-from snakes_and_ladders.search.tempered import round_trips
+from snakes_and_ladders.sample.potts_mcmc import PottsMove
+from snakes_and_ladders.sample.statistics import chi_square_p_value
+from snakes_and_ladders.sample.tempered import round_trips
 from snakes_and_ladders.sim.canonical import frustrated_triangular_lattice
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 

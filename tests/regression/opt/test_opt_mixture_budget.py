@@ -36,14 +36,14 @@ from snakes_and_ladders.opt.budget import (
     restarts,
 )
 from snakes_and_ladders.opt.fit import fit
-from snakes_and_ladders.opt.hmc import anneal, leapfrog, parallel_tempering
 from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
     MixtureFit,
     expectation_maximization,
     uniform_seeds,
 )
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.hmc import anneal, leapfrog, parallel_tempering
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim import fixtures
 from snakes_and_ladders.sim.mixture import simulate_mixture
 
