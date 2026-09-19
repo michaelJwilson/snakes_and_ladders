@@ -23,6 +23,7 @@ correctly under autograd.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import NamedTuple
 
 import numpy as np
 import torch
@@ -181,6 +182,90 @@ def _leaf_partial(
     return partial
 
 
+#: One step of a topology's post-order schedule: the slot the node's partial
+#: lands in, the alignment key if the node is a leaf, and one
+#: ``(child slot, branch index)`` pair per child if it is not. A tuple rather
+#: than a class because the evaluation loop unpacks one per node.
+_Step = tuple[int, str | None, tuple[tuple[int, int], ...]]
+
+
+class _Traversal(NamedTuple):
+    """What a topology fixes, so an evaluation reads it instead of walking.
+
+    Parameters
+    ----------
+    order : list[str]
+        ``branch_order(tau)``, which ``branch_lengths`` is checked against.
+    leaf_names : tuple[str, ...]
+        Leaf names, left to right --- the order ``preorder`` reports them in,
+        which post-order also reports them in, the two differing only on
+        internal nodes.
+    steps : tuple[_Step, ...]
+        The nodes in post-order: children before their parent, children in
+        the topology's own order, so the sequence of arithmetic is the
+        recursion's exactly.
+    root_slot : int
+        The slot the root's partial lands in, which is the last step's.
+    """
+
+    order: list[str]
+    leaf_names: tuple[str, ...]
+    steps: tuple[_Step, ...]
+    root_slot: int
+
+
+#: Post-order schedules, keyed by the topology's identity with the topology
+#: held in the value, as `_LEAF_PARTIALS` holds its states array and for the
+#: same reason: the key is sound only while the object it names is alive.
+#:
+#: The traversal is a function of the topology and of nothing that is fitted,
+#: so a fit evaluating one tree hundreds of times walks it once. At the
+#: enumerable tier the Python recursion was 15.0% of an NNI search (0.75 s of
+#: 4.97 s) and 14.9% of an SPR one, one frame and two dictionary lookups per
+#: node per evaluation (issue #754).
+_TRAVERSALS: dict[int, tuple[Node, _Traversal]] = {}
+
+#: Schedules kept before the oldest is dropped. One entry is a few hundred
+#: integers; a 20-taxon search holds one per candidate topology it is still
+#: fitting.
+_TRAVERSAL_LIMIT = 256
+
+
+def _build_traversal(tau: Node) -> _Traversal:
+    """The post-order schedule of ``tau``, with each branch's index baked in."""
+    order = branch_order(tau)
+    index = {name: i for i, name in enumerate(order)}
+    steps: list[_Step] = []
+    leaf_names: list[str] = []
+
+    def _visit(node: Node) -> int:
+        children = tuple((_visit(child), index[child.name]) for child in node.children)
+        slot = len(steps)
+        if node.is_leaf:
+            leaf_names.append(node.name)
+            steps.append((slot, node.name, ()))
+        else:
+            steps.append((slot, None, children))
+        return slot
+
+    root_slot = _visit(tau)
+    return _Traversal(order, tuple(leaf_names), tuple(steps), root_slot)
+
+
+def _traversal(tau: Node) -> _Traversal:
+    """``_build_traversal(tau)``, built once per topology object."""
+    key = id(tau)
+    hit = _TRAVERSALS.get(key)
+    if hit is not None and hit[0] is tau:
+        return hit[1]
+
+    built = _build_traversal(tau)
+    if len(_TRAVERSALS) >= _TRAVERSAL_LIMIT:
+        _TRAVERSALS.pop(next(iter(_TRAVERSALS)))
+    _TRAVERSALS[key] = (tau, built)
+    return built
+
+
 def log_likelihood(
     tau: Node,
     k: int,
@@ -249,22 +334,20 @@ def log_likelihood(
         msg = f"pi has shape {tuple(pi_t.shape)}, expected ({k},)"
         raise ValueError(msg)
 
-    order = branch_order(tau)
-    if branch_lengths.shape != (len(order),):
+    traversal = _traversal(tau)
+    if branch_lengths.shape != (len(traversal.order),):
         msg = (
             f"branch_lengths has shape {tuple(branch_lengths.shape)}, "
-            f"expected ({len(order)},) to match branch_order(tau)"
+            f"expected ({len(traversal.order)},) to match branch_order(tau)"
         )
         raise ValueError(msg)
-    index = {name: i for i, name in enumerate(order)}
 
-    leaves = [node for node in preorder(tau) if node.is_leaf]
-    missing = [leaf.name for leaf in leaves if leaf.name not in alignment]
+    missing = [name for name in traversal.leaf_names if name not in alignment]
     if missing:
         msg = f"alignment is missing leaf(ves) {missing}"
         raise ValueError(msg)
 
-    n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
+    n_sites = int(torch.as_tensor(alignment[traversal.leaf_names[0]]).shape[0])
     weight = check_weights(weights, n_sites)
     log_scale = torch.zeros(n_sites, dtype=dtype, device=device)
     # The scalar the rescale falls back to, built once per call rather
@@ -273,21 +356,28 @@ def log_likelihood(
     # Every branch's transition matrix at once, indexed by branch_order.
     transitions = transition_probabilities(branch_lengths, k, rate_matrix)
 
-    def _post_order(node: Node) -> torch.Tensor:
-        nonlocal log_scale
-        if node.is_leaf:
-            return _leaf_partial(alignment[node.name], n_sites, k, dtype, device)
+    # The post-order, flat: one pass over the schedule the topology fixes,
+    # rather than a Python frame and two dictionary lookups per node per
+    # evaluation. Each partial is popped by the parent that consumes it, so
+    # what is held at once is what the recursion held (issue #754). The
+    # arithmetic, its operands and its order are the recursion's, so the
+    # log-likelihood is bitwise unchanged.
+    partials: dict[int, torch.Tensor] = {}
+    for slot, leaf_name, children in traversal.steps:
+        if leaf_name is not None:
+            partials[slot] = _leaf_partial(
+                alignment[leaf_name], n_sites, k, dtype, device
+            )
+            continue
 
         # The first child's message seeds the product rather than a tensor of
         # ones being multiplied by it: the ones were allocated and multiplied
         # once per internal node per evaluation, and a product over one term is
         # that term. The value is unchanged, so this is bitwise.
         partial: torch.Tensor | None = None
-        for child in node.children:
-            child_partial = _post_order(child)
-            transition = transitions[index[child.name]]
+        for child_slot, branch in children:
             # message[s, i] = sum_j P_ij(t) * L_child(s, j) -- eq:pruning.
-            message = child_partial @ transition.T
+            message = partials.pop(child_slot) @ transitions[branch].T
             partial = message if partial is None else partial * message
         if partial is None:
             # A childless non-leaf constrains nothing.
@@ -304,9 +394,9 @@ def log_likelihood(
             partial = partial / safe_scale.unsqueeze(1)
             log_scale = log_scale + torch.log(safe_scale)
 
-        return partial
+        partials[slot] = partial
 
-    root_partial = _post_order(tau)
+    root_partial = partials.pop(traversal.root_slot)
     site_likelihood = root_partial @ pi_t  # eq:root
     site_log_likelihood = torch.log(site_likelihood) + log_scale
     if weight is None:
