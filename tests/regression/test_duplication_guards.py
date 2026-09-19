@@ -62,9 +62,11 @@ SLIMMING_BASELINE = {
     # samplers --- `opt.langevin` and `opt.slice`, one module each, which is
     # the package's shape for a sampler --- added two and eight. `track.py`,
     # the run-tracking seam issue #778 put beside `log.py` and `parallel.py`,
-    # added one module and the 23 entries its classes and functions declare.
+    # added one module and the 23 entries its classes and functions declare;
+    # its second part added one more, `MemoryTracker.series`, the reader of a
+    # series recorded under a context.
     "flat modules": 153,
-    "API-map entries": 1647,
+    "API-map entries": 1648,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.
