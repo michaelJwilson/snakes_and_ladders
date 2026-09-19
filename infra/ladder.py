@@ -265,6 +265,30 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "annealed importance sampling",
+        "search.annealed.annealed_importance_sampling",
+        "transfer matrix",
+        T + "search/test_search_annealed.py"
+        "::test_the_importance_sampled_log_partition_is_the_transfer_matrix",
+    ),
+    Rung(
+        "potts",
+        "population annealing",
+        "search.annealed.population_annealing",
+        "transfer matrix",
+        T + "search/test_search_annealed.py"
+        "::test_the_population_annealed_log_partition_is_the_transfer_matrix",
+    ),
+    Rung(
+        "potts",
+        "simulated tempering",
+        "search.annealed.simulated_tempering",
+        "enumeration",
+        T + "search/test_search_annealed.py"
+        "::test_the_simulated_tempering_walker_is_the_enumerated_law_at_every_rung",
+    ),
+    Rung(
+        "potts",
         "cluster moves as RL arms",
         "search.potts_keyed.cluster_moves",
         "Potts MCMC, Wolff, Swendsen--Wang",
@@ -636,6 +660,14 @@ LADDER: tuple[Rung, ...] = (
         "brute-force ML",
         T + "likelihood/test_convolutional.py"
         "::test_bcjr_posteriors_are_the_exact_bitwise_map",
+    ),
+    Rung(
+        "codes",
+        "BCJR, Rust",
+        "likelihood.convolutional_rust.bcjr",
+        "BCJR",
+        T + "likelihood/test_convolutional_rust.py"
+        "::test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers",
     ),
     Rung(
         "codes",

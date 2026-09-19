@@ -204,6 +204,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.convolutional
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.convolutional_rust
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.turbo
    :members:
 
@@ -340,6 +343,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.search.tempered
+   :members:
+
+.. automodule:: snakes_and_ladders.search.annealed
    :members:
 
 .. automodule:: snakes_and_ladders.search.rl

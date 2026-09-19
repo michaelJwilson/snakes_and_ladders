@@ -136,7 +136,18 @@ over 512 trajectories on `exact`, the enumerated score and gradient at four
 interior points of an ascent on `relaxed`, the `gamma = 1` telescoped return
 on `critic`, and the enumerated binomial on `failure` --- and `canonical.py`
 stays at 77.98%, no learner being run on the chain, the cliff or Hanoi.
-The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
+`likelihood` is the fourth (step 4): judged **85.35%** with `qa` exempt
+against 84.93% and the complement **89.25%** against 89.26%, floored at
+**85.3** and 89.2, with `likelihood` **89.17% to 91.24%**, its judged deficit
+259 to 198 statements and its public callables no judging test enters 41 to
+32, 27 of them declarations whose bodies run at import. Three referees and
+thirteen re-marks carry it --- the device policy's every route against the
+NumPy pruning oracle at the tolerance it returns, density evolution against
+its scalar recursion and the closed-form threshold, and
+`prune_with_matrices` against direct marginalization --- and
+`belief_propagation.ConvergenceError` is left, its non-convergence asserted
+and refereed by nothing.
+The ladder the `oracle` tests form --- 520 of them in 148 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
 over the five problems, 89 pinned by a named `oracle` test and 0 carrying the
@@ -1527,8 +1538,8 @@ message bits per point, the bit error rate at 8 iterations is 0.115, 0.061,
 iteration is asserted only *no worse* than its first iteration, because at 2 dB
 the two tie at 40 errors; the strict improvement is asserted over the four
 points together, 267 errors against 306. At `K = 1,024`, 200 frames
-per point over six points (182 s), the waterfall turns between 0.4 and 1.2
-dB.
+per point over six points (182 s, **6.0 s** after #754's Rust trellis), the
+waterfall turns between 0.4 and 1.2 dB.
 
 *The one optimization, ranked before it was written.* `cProfile` over five
 `K = 1024` decodings at 8 iterations put **21.9%** of self time in
@@ -1545,8 +1556,11 @@ fell from 239 s to 182 s with it. Agreement with the enumeration oracle is
 unchanged at 2.8e-14 in log-odds and 1.4e-14 on the evidence, which is what
 says the reassociation moved nothing. After the change 95.1% of self time is
 `bcjr`'s own bytecode --- the Python loop over `K + m` steps --- the shape a
-compiled backend would take next; none has been measured through its binding,
-so no port is proposed.
+compiled backend would take next. Issue #754 took it: `src/bcjr.rs`, behind
+`likelihood.convolutional_rust`, is 26.2x the decode at the declared
+`K = 256` and is now `bcjr`'s default backend, with the `(7, 5)` register's
+outputs bitwise unchanged. *The BCJR trellis in Rust*
+below carries the table.
 
 *The departure, reported rather than asserted.* The ensemble bit error rate
 is **not** monotone in the iteration count. Over the six declared points at
@@ -2524,6 +2538,54 @@ overlap percolates, and not the construction. `MoveKind.NIEDERMAYER` is an arm
 `PottsNDEnvironment` can select beside Wolff and Swendsen-Wang, through
 `cluster_moves`; Houdayer's move is not one and cannot be, an arm's action
 carrying one labelling to one labelling where his carries a pair.
+
+**`log Z` landed for the lattice, estimated and with its error**
+([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`search.annealed` carries three estimators on one ladder of inverse
+temperatures, from `beta = 0` --- where `log Z_0 = n log q` is exact, and is
+returned bitwise --- to the target, each stepping the shipped kernel once per
+rung so every move set is admissible. `annealed_importance_sampling` (Neal
+2001) weights independent annealing runs; `population_annealing` (Hukushima &
+Iba 2003) resamples a population by the same weights and accumulates the
+per-rung normalizers; with the resampling off the second **is** the first, the
+two agreeing to 1.8e-15 on the same trajectories. Both recover
+`strip_log_partition` at strip widths 4, 6 and 8 and the enumerated `log Z` on
+the two 3x3 lattices, every deviation inside three of its own standard error
+over two seeds --- worst 1.63 --- at an ESS of 59 to 110 of 128. Two ablations:
+dropping the importance weight leaves `mean(log w)`, Jensen's lower bound,
+**7.9 standard errors low** on a six-rung ladder, and multinomial resampling in
+place of systematic leaves a family entropy of 0.19 to 0.80 nats against 4.01
+to 4.17 of a possible 4.85 --- two effective families of 128, which is why the
+default is systematic. `simulated_tempering` (Marinari & Parisi 1992) samples
+the rung as a variable on the weights `g_k = -log Z_k` those runs estimate: its
+configurations are the enumerated Boltzmann law at every rung by chi-square at
+a significance of 0.001, realized 0.0138 to 0.7028, and its rung occupation is
+the one the weights predict, 0.1907 to 0.7083 under exact weights and 0.2765 to
+0.3747 under a pilot's.
+
+**A tempering ladder can now be placed by its round trips, and that does not
+beat placing it by its acceptance.** `opt.schedule.adapt_ladder_by_round_trips`
+redistributes a ladder of fixed length so the local diffusivity is flat
+(Katzgraber et al. 2006), from the fraction of walkers moving up at each rung;
+`search.tempered.up_fraction` measures it off the walker trace
+`parallel_tempering` now records, and `adapt_ladder_round_trips` is the Potts
+binding. The acceptance-placed ladder stays the default and nothing changes for
+a caller that does not ask. Over 8 seeds paired by seed at 2,000 recorded
+sweeps:
+
+| round-trip time, sweeps | acceptance-placed | round-trip-placed |
+| --- | --- | --- |
+| 16x16 open square at `J_c`, 12 rungs | 1,194.4 | 1,053.7 |
+| 12x12 periodic triangular, 9 rungs | 360.1 | 366.6 |
+
+The paired sign test reads `p = 0.2891` and `p = 0.7266`, and a second reading
+at another warm-up seed `p = 1.0` and `p = 0.7266`, so no direction is
+established either way. What the readings do establish is the warm-up: both
+placements beat the geometric ladder they start from, 1,279.7 against 1,690.3
+on the 16x16, and a feedback placement read from 400 sweeps instead of 1,000
+ranges from 1,469.5 to 5,357.1 --- 3.2x worse than geometric --- because `f` is
+then read from its own noise. Recorded as
+`docs/experiments/023-placing-the-tempering-ladder.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
@@ -3901,6 +3963,16 @@ vector again for the posterior. `tests/regression/test_duplication_guards.py`
 pins the 245 classes, the eight clusters at their member counts and the one
 named argmax consumer.
 
+**The `MessageSchedule` guard (issue #755).** The seam #592 wrote is now
+asserted rather than remembered: `tests/regression/test_duplication_guards.py`
+reads the class tree and the registry, and fails a schedule-shaped class that
+does not inherit `likelihood.schedule.MessageSchedule`, a schedule no
+`MessageScheduleName` reaches, or a consumer branching on a schedule's name.
+**Five schedules, one base, five modules calling through it** --- the
+`fields:name` cluster's seventh member, `search.ground_state.Entry`, shares the
+field and is not a schedule, so the pin is five. 0.41 s on the `critical` tier,
+and both halves are exercised on a violating source.
+
 **The incidence seam is guarded (issue #755).** `test_duplication_guards.py`
 reads every package module's syntax tree: no `offsets` or `indptr` array by
 `cumsum` and no pair list sorted into row-major order outside `incidence.py`,
@@ -4436,7 +4508,7 @@ carries the summary; this is the full ranking, five terms per workload.
 | Potts | `potts_mcmc` single-site, 32x32, 20 sweeps, `Backend.PYTHON` | 0.289 / 0.290 s | `_site_update` 29.1%, `heat_bath_log_weights` 13.9%, `cumsum` 10.0%, `searchsorted` 7.6%, `_wrapfunc` 7.2% | **default to flip**: the Rust route is measured at 123-134x and opt-in ([#599](https://github.com/michaelJwilson/snakes_and_ladders/issues/599)) |
 | Potts | `SwendsenWangMove.propose`, 64x64 open, 8,064 edges | 42.19 / 42.28 ms | `_swendsen_wang_sweep` 30.8%, `_recolour` 26.2% (24,372 calls, 2,437 clusters a sweep), `flatnonzero` 5.3%, `_find` 5.2%, ufunc `reduce` 4.5% | **port candidate**: union-find and a Python loop per cluster. `WolffMove.propose` is 0.555 / 0.549 ms at the same lattice and stores its layout already, so the cluster moves are one ranked loop, not two |
 | HMM/coupled | `message_passing` tree schedule, chain 200 | 0.237 s | `schedule.tree_passes` 29.8%, `_logsumexp_last` 10.6%, ufunc `reduce` 8.8%, `_send_from_variables` 7.9%, `_factor_terms` 4.4% | **port candidate**, and the one #341 left at 4.7x the forward recursion: 800 levels of NumPy dispatch, which is control flow and not arithmetic |
-| codes | `convolutional.bcjr`, K = 1,024; `turbo.decode_turbo`, 8 iterations | 47.0 ms / 151 ms | `bcjr` 95.8% and 95.5%; nothing else reaches 2.2% | **port candidate**, the highest fraction in the survey: a four-state trellis walked forward and backward in Python, `cache=True` unavailable to it and no NumPy axis to vectorize over |
+| codes | `convolutional.bcjr`, K = 1,024; `turbo.decode_turbo`, 8 iterations | 47.0 ms / 151 ms, **3 / 5 ms** after the port | `bcjr` 95.8% and 95.5%; after the port the extension call, 53.5% and 84.2% | **ported**, [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754): a four-state trellis walked forward and backward in Python, `cache=True` unavailable to it and no NumPy axis to vectorize over. 26.2x on the decode and the default flipped --- the section below |
 | codes | `ldpc.decode` sum-product / min-sum, 996 bits, 50 iterations | 9.3 / 8.9 ms | `_tanh_rule` 31.6% / `_min_sum` 34.7%, `decode` 23.4 / 19.1%, `reduceat` 19.7 / 31.6%, `syndrome` 5.9%, `_clip` 4.5% | **below the effect-size bar**: already one `reduceat` per iteration over the edges, and the whole decode is 9 ms |
 | mixtures/HMC | `opt.hmc.sample`, 1,000 draws, chain 64 | 24.57 / 24.31 s | `run_backward` 41.7%, `torch.logsumexp` 33.2% (512,000 calls), `log_partition` 10.2%, `unsqueeze` 6.0% (512,000), `Tensor.to` 1.5% | **not ours** by the first term; the second is an **algorithmic cut** #341 already named and nobody took --- reassociate the homogeneous transfer-matrix product by squaring, 6 products for 64 positions |
 | learn | `learn.reinforce`, 60 x 32 episodes, chain 8 | 5.60 / 5.50 s | `potts.features` 13.1%, `run_backward` 6.4%, `policy.sample` 6.2%, `surrogate_loss` 4.5%, `np.fromiter` 4.2% (68,706) | **below the effect-size bar**: #341 already cut `features` 1.32x, and what is left is 0.73 s spread over 34,353 calls with no term above 14% |
@@ -4484,3 +4556,47 @@ which is **1.9%** of the 42.2 ms `propose` that encloses it. The store exists,
 the change is one line and the values are the same `int64` indices --- and
 1.9% is the effect size, so it goes with the port that takes the 26.2% beside
 it rather than as a cut of its own (#754).
+
+## The BCJR trellis in Rust ([#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754))
+
+**26.2x on the eight-iteration turbo decode at the declared `K = 256`, which
+saves 35.6 ms of 37.0, so the default flipped.** The ranking above put `bcjr`
+at 95.8% of one pass and 95.5% of a decode, one Python loop over `K + m`
+steps with four states to vectorize over; `src/bcjr.rs` runs the same
+recursions and `likelihood.convolutional_rust` marshals the two trellis
+tables and the three ratio vectors across once, contiguous and borrowed, with
+the GIL released. `pytest-benchmark`, two readings, 1-minute load 1.40 and
+1.79 on the shared 4-core host:
+
+| mean, two readings | NumPy | Rust | ratio |
+| --- | --- | --- | --- |
+| `bcjr`, `K = 256` (`turbo/stress.yaml`) | 2.319 / 2.311 ms | 66.6 / 66.1 us | 34.8x / 35.0x |
+| `bcjr`, `K = 1,024` | 9.023 / 8.873 ms | 275.1 / 272.7 us | 32.8x / 32.5x |
+| `decode_turbo`, `K = 256`, 8 iterations | 37.00 / 37.19 ms | 1.410 / 1.412 ms | 26.2x / 26.3x |
+| `decode_turbo`, `K = 1,024`, 8 iterations | 143.5 / 141.6 ms | 4.778 / 4.737 ms | 30.0x / 29.9x |
+| the stress waterfall, 6 points x 50 frames | 11.37 s | 0.46 s | 24.7x |
+
+**The ratio and the effect size point the same way, which is why this one was
+taken and the LDPC decode beside it was not.** A pass is 2.32 ms of a 37.0 ms
+decode and sixteen of them are 36.1, so the port is the decode; `ldpc.decode`
+is 9 ms whole and stays NumPy. The residue after it is `_iterate`'s
+interleaving at 4.7% and the wrapper at 1.5%: what is left to take is 0.2 ms
+of 1.41, which is below the effect-size bar.
+
+**Agreement is bitwise where the repository decodes, and a reassociation
+above it.** `logaddexp` in the kernel is NumPy's `npy_logaddexp` branch for
+branch and the log-sum-exp is `numerics.logsumexp`'s shift by the row
+maximum, so at `memory` 1 and 2 --- four states, the `(7, 5)` register every
+fixture and both benchmark lengths use --- the posterior, the extrinsic and
+the log evidence are **equal to the last bit**, and the `ci` waterfall
+returns the recorded 0.115, 0.061, 0.033 and 0.013 with the per-iteration
+decisions identical frame by frame. At `memory` 3 and 4 NumPy's pairwise sum
+switches to eight accumulators and this kernel stays left to right: realized
+**2.3e-13** absolute and **2.2e-12** relative over `K` up to 1,024, inside
+`CROSS_DEVICE_RTOL_FLOAT64`, with the log evidence still bitwise. The suite
+asserts the equality and the bound separately rather than the looser one
+everywhere. Both backends are pinned to `exact_bitwise_posterior` as well, so
+the pair is not established by agreeing with each other.
+
+`docs/experiments/024` carries the table.
+

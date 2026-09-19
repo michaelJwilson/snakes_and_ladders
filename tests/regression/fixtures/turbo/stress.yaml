@@ -3,8 +3,9 @@ oracle: closed-form
 
 # The memory-2 (7, 5) turbo code at the message length the waterfall's shape
 # is visible at inside the 30 s cited-figure render cap (`DEV.md`), which is
-# what `qa.turbo_waterfall` draws: 6 points x 50 frames x 51 ms per frame
-# at K = 256 is 15.4 s of decoding.
+# what `qa.turbo_waterfall` draws: 6 points x 50 frames at K = 256 was
+# 51 ms per frame and 15.4 s of decoding, and is 1.5 ms and 0.46 s after
+# issue #754's Rust trellis.
 #
 # Past enumeration, so the closed form this tier is refereed against is the
 # uncoded antipodal bit error rate Q(sqrt(2 E_b / N_0)) measured through the
