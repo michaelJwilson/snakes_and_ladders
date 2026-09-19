@@ -17,6 +17,15 @@ per sweep; an entry point --- a notebook, a QA script, an experiment --- opens
 records nothing, allocates nothing and is bitwise the run before this module
 existed.
 
+**A series is one quantity, and a context says which instance of it.** A
+loop over rungs, replicas or chains records one series per quantity and keys
+the instance with :meth:`Tracker.scalar`'s ``context`` --- Aim's own
+per-series key, which :class:`MemoryTracker` mirrors --- so
+``occupation`` under ``{"rung": 2}`` is rung 2's occupation and
+``occupation`` is not a name that has to be spelled per rung. A context
+never carries a second quantity: two numbers under one name are two metrics
+in one series, and the series stops being the history of one field.
+
 **A tracked number is a number the run already reports.** Every hook records
 a quantity its result dataclass returns, so the last value of a series equals
 the field, and the series can be read as the field's history rather than as a
@@ -59,8 +68,25 @@ class Tracker(Protocol):
     def params(self, values: Mapping[str, object]) -> None:
         """Record the run's parameters: what was run, at what settings."""
 
-    def scalar(self, name: str, value: float, step: int) -> None:
-        """Record one number of the series ``name`` at ``step``."""
+    def scalar(
+        self,
+        name: str,
+        value: float,
+        step: int,
+        *,
+        context: Mapping[str, object] | None = None,
+    ) -> None:
+        """Record one number of the series ``name`` at ``step``, under ``context``.
+
+        ``context`` is Aim's own per-series key: the same ``name`` under two
+        contexts is two sequences, which is how one loop records one quantity
+        for each of its rungs, replicas or chains without inventing a name per
+        instance. **It distinguishes instances of one quantity and never
+        carries a second one**: ``occupation`` under ``{"rung": 2}`` is the
+        occupation of rung 2, where a context holding the acceptance beside it
+        would be two metrics in one series and no longer readable as the
+        field's history.
+        """
 
     def figure(self, name: str, fig: Figure) -> None:
         """Record a rendered figure under ``name``."""
@@ -72,11 +98,29 @@ class NullTracker:
     def params(self, values: Mapping[str, object]) -> None:
         """Discard ``values``."""
 
-    def scalar(self, name: str, value: float, step: int) -> None:
+    def scalar(
+        self,
+        name: str,
+        value: float,
+        step: int,
+        *,
+        context: Mapping[str, object] | None = None,
+    ) -> None:
         """Discard ``value``."""
 
     def figure(self, name: str, fig: Figure) -> None:
         """Discard ``fig``."""
+
+
+#: How :class:`MemoryTracker` keys a contexted series: the name, and the
+#: context's items sorted. A tuple rather than the mapping itself, a mapping
+#: not being hashable.
+type _Key = tuple[str, tuple[tuple[str, object], ...]]
+
+
+def _frozen(context: Mapping[str, object]) -> tuple[tuple[str, object], ...]:
+    """``context`` as a hashable, sorted by key so insertion order is not part of it."""
+    return tuple(sorted(context.items()))
 
 
 class MemoryTracker:
@@ -85,7 +129,14 @@ class MemoryTracker:
     Attributes
     ----------
     scalars : dict[str, list[tuple[int, float]]]
-        Per series name, ``(step, value)`` in the order recorded.
+        Per series name, ``(step, value)`` in the order recorded, for the
+        series recorded **outside any context**. A contexted series is not
+        here: it is a different series, and merging the two would read one
+        rung's occupation as the run's.
+    keyed : dict[tuple[str, tuple[tuple[str, object], ...]], list[tuple[int, float]]]
+        The same, per ``(name, context)``, the context frozen to a sorted
+        tuple of its items so two mappings that differ only in insertion
+        order are one key. Read through :meth:`series` rather than directly.
     parameters : dict[str, object]
         The parameters, accumulated over every :meth:`params` call. Named
         ``parameters`` and not ``params`` because ``params`` is the method
@@ -96,6 +147,7 @@ class MemoryTracker:
 
     def __init__(self) -> None:
         self.scalars: dict[str, list[tuple[int, float]]] = {}
+        self.keyed: dict[_Key, list[tuple[int, float]]] = {}
         self.parameters: dict[str, object] = {}
         self.figures: dict[str, Figure] = {}
 
@@ -103,24 +155,51 @@ class MemoryTracker:
         """Merge ``values`` into :attr:`parameters`."""
         self.parameters.update(values)
 
-    def scalar(self, name: str, value: float, step: int) -> None:
-        """Append ``(step, value)`` to the series ``name``."""
-        self.scalars.setdefault(name, []).append((step, value))
+    def scalar(
+        self,
+        name: str,
+        value: float,
+        step: int,
+        *,
+        context: Mapping[str, object] | None = None,
+    ) -> None:
+        """Append ``(step, value)`` to the series ``(name, context)``."""
+        if context is None:
+            self.scalars.setdefault(name, []).append((step, value))
+        else:
+            self.keyed.setdefault((name, _frozen(context)), []).append((step, value))
 
     def figure(self, name: str, fig: Figure) -> None:
         """Keep ``fig`` under ``name``."""
         self.figures[name] = fig
 
-    def last(self, name: str) -> float:
-        """The last value of the series ``name``.
+    def series(
+        self, name: str, context: Mapping[str, object] | None = None
+    ) -> list[tuple[int, float]]:
+        """The ``(step, value)`` pairs recorded under ``name`` in ``context``.
+
+        ``context`` of ``None`` is the series recorded outside any context,
+        the one :attr:`scalars` holds under ``name``.
 
         Raises
         ------
         KeyError
-            If nothing was recorded under ``name``: an assertion against a
-            series that was never written is a test that passes on nothing.
+            If nothing was recorded there: an assertion against a series that
+            was never written is a test that passes on nothing.
         """
-        return self.scalars[name][-1][1]
+        if context is None:
+            return self.scalars[name]
+        return self.keyed[name, _frozen(context)]
+
+    def last(self, name: str, context: Mapping[str, object] | None = None) -> float:
+        """The last value of the series ``name`` in ``context``.
+
+        Raises
+        ------
+        KeyError
+            As :meth:`series`.
+        """
+        return self.series(name, context)[-1][1]
 
 
 class AimTracker:
@@ -168,9 +247,20 @@ class AimTracker:
         for key, value in values.items():
             self._run[key] = value
 
-    def scalar(self, name: str, value: float, step: int) -> None:
-        """Track ``value`` on the sequence ``name`` at ``step``."""
-        self._run.track(value, name=name, step=step)
+    def scalar(
+        self,
+        name: str,
+        value: float,
+        step: int,
+        *,
+        context: Mapping[str, object] | None = None,
+    ) -> None:
+        """Track ``value`` on the sequence ``name`` at ``step``, in ``context``.
+
+        Passed through as Aim's own ``context``: ``aim.Run.track`` keys a
+        sequence by the pair, so nothing is encoded into the name here.
+        """
+        self._run.track(value, name=name, step=step, context=context)
 
     def figure(self, name: str, fig: Figure) -> None:
         """Track ``fig`` as an ``aim.Image`` under ``name``."""
