@@ -104,6 +104,18 @@ def single_site_sweeps(
     guard: float,
     first: int,
 ) -> int: ...
+def swendsen_wang_sweep(
+    state: np.ndarray,
+    field: np.ndarray,
+    edges: np.ndarray,
+    bond_probability: np.ndarray,
+    bond_draws: np.ndarray,
+    colour_draws: np.ndarray,
+    accept_draws: np.ndarray,
+    labels: np.ndarray,
+    guard: float,
+    first: int,
+) -> tuple[int, int]: ...
 def class_posteriors(
     totals: np.ndarray,
     successes: np.ndarray,
