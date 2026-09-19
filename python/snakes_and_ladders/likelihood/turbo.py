@@ -40,6 +40,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.enumeration import refuse_oversized
 from snakes_and_ladders.likelihood.convolutional import bcjr, enumerate_messages
 from snakes_and_ladders.likelihood.ldpc import Decoding, MapEstimate
@@ -125,13 +126,16 @@ def _second_systematic(code: TurboCode, streams: TurboStreams) -> np.ndarray:
 
 
 def _iterate(
-    code: TurboCode, llr: np.ndarray, iterations: int
+    code: TurboCode, llr: np.ndarray, iterations: int, backend: Backend
 ) -> Iterator[tuple[np.ndarray, bool, float]]:
     """One extrinsic exchange per step: the message posterior, agreement, residual.
 
     The single loop both public decoders read, so a waterfall at four
     iteration counts costs the deepest one rather than their sum -- 8 passes
-    against 36 at the release tier's cap.
+    against 36 at the release tier's cap. ``backend`` reaches both
+    constituent passes and nothing else: the interleaving between them is
+    two permutations and a clip, 4.7% of a decode's self time against the
+    passes' 84.2% (issue #754).
 
     Yields
     ------
@@ -152,13 +156,25 @@ def _iterate(
     apriori_first = np.zeros(steps)
     extrinsic_second = np.zeros(steps)
     for _ in range(iterations):
-        first = bcjr(trellis, streams.systematic, streams.parity_first, apriori_first)
+        first = bcjr(
+            trellis,
+            streams.systematic,
+            streams.parity_first,
+            apriori_first,
+            backend=backend,
+        )
         # Only the K message positions cross the interleaver: the tails
         # belong to their own encoder, and a decoder given another's tail
         # extrinsic would be given evidence about a different bit.
         apriori_second = np.zeros(steps)
         apriori_second[:k] = np.clip(first.extrinsic_llr[:k], -LLR_CAP, LLR_CAP)[order]
-        second = bcjr(trellis, second_systematic, streams.parity_second, apriori_second)
+        second = bcjr(
+            trellis,
+            second_systematic,
+            streams.parity_second,
+            apriori_second,
+            backend=backend,
+        )
         previous = extrinsic_second
         extrinsic_second = np.zeros(steps)
         extrinsic_second[:k] = np.clip(second.extrinsic_llr[:k], -LLR_CAP, LLR_CAP)[
@@ -182,6 +198,7 @@ def decode_turbo(
     *,
     iterations: int = DEFAULT_ITERATIONS,
     early_stop: bool = False,
+    backend: Backend = Backend.RUST,
 ) -> Decoding:
     """Run ``iterations`` extrinsic exchanges and return the message decision.
 
@@ -197,6 +214,12 @@ def decode_turbo(
         every message bit. Off by default, because an error rate measured per
         iteration wants every iteration run; ``iterations`` reports where it
         stopped.
+    backend : Backend
+        Which implementation runs the two BCJR passes, passed through to
+        :func:`~snakes_and_ladders.likelihood.convolutional.bcjr` and
+        carrying its default. Issue #754 moved that default to
+        :data:`~snakes_and_ladders.backend.Backend.RUST`, which is 26.2x
+        this function at the declared ``K = 256``.
 
     Returns
     -------
@@ -214,7 +237,7 @@ def decode_turbo(
     """
     posterior = np.zeros(code.message_length)
     agree, residual, ran = False, np.inf, 0
-    for step, state in enumerate(_iterate(code, llr, iterations), start=1):
+    for step, state in enumerate(_iterate(code, llr, iterations, backend), start=1):
         posterior, agree, residual = state
         ran = step
         if early_stop and agree:
@@ -230,13 +253,27 @@ def decode_turbo(
 
 
 def decode_turbo_per_iteration(
-    code: TurboCode, llr: np.ndarray, *, iterations: int = DEFAULT_ITERATIONS
+    code: TurboCode,
+    llr: np.ndarray,
+    *,
+    iterations: int = DEFAULT_ITERATIONS,
+    backend: Backend = Backend.RUST,
 ) -> np.ndarray:
     """The message decision after each of ``1 .. iterations`` iterations.
 
     The rows are what :func:`decode_turbo` returns at each cap -- both read
     :func:`_iterate`, and a test asserts the two agree at every cap rather
     than trusting that they must.
+
+    Parameters
+    ----------
+    code : TurboCode
+    llr : np.ndarray
+        Shape ``(3 K + 4 m,)``.
+    iterations : int
+        Full iterations, each two BCJR passes. At least one.
+    backend : Backend
+        :func:`decode_turbo`'s, passed through.
 
     Returns
     -------
@@ -246,7 +283,7 @@ def decode_turbo_per_iteration(
     return np.array(
         [
             (posterior < 0.0).astype(np.uint8)
-            for posterior, _, _ in _iterate(code, llr, iterations)
+            for posterior, _, _ in _iterate(code, llr, iterations, backend)
         ],
         dtype=np.uint8,
     )
@@ -447,6 +484,7 @@ def measure_error_rates(
     rng: np.random.Generator,
     *,
     iterations: int = DEFAULT_ITERATIONS,
+    backend: Backend = Backend.RUST,
 ) -> ErrorRates:
     """Simulate ``frames`` transmissions at one ``E_b / N_0`` and count errors.
 
@@ -469,6 +507,8 @@ def measure_error_rates(
     iterations : int
         The deepest iteration count; every shallower one is read from the
         same run.
+    backend : Backend
+        :func:`decode_turbo`'s, passed through to the constituent passes.
 
     Returns
     -------
@@ -481,7 +521,7 @@ def measure_error_rates(
     for _ in range(frames):
         received = (1.0 - 2.0 * zero) + sigma * rng.standard_normal(code.block_length)
         decisions = decode_turbo_per_iteration(
-            code, 2.0 * received / sigma**2, iterations=iterations
+            code, 2.0 * received / sigma**2, iterations=iterations, backend=backend
         )
         errors = decisions.sum(axis=1, dtype=np.int64)
         bit_errors += errors

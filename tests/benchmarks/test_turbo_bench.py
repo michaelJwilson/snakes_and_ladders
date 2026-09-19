@@ -6,6 +6,11 @@ would pay: one BCJR pass at the waterfall's block length, which is the whole
 of the inner loop, and eight turbo iterations, which is sixteen of those
 passes plus the interleaving. A fixed iteration count with the early stop off,
 so the number is a cost per iteration and not a function of the noise.
+
+Both cells run on each backend, which is what issue #754's port is decided
+on: a ratio read at a gate size decides nothing, so the declared `stress`
+length is the first point and 1,024 the second (root `CLAUDE.md`,
+*Measurement*).
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.convolutional import bcjr
 from snakes_and_ladders.likelihood.turbo import (
     decode_turbo,
@@ -46,26 +52,36 @@ def _instance(message_length: int) -> tuple[TurboCode, np.ndarray]:
     return code, np.asarray(2.0 * received / sigma**2)
 
 
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
 @pytest.mark.parametrize("message_length", [256, 1024])
-def test_bcjr_benchmark(benchmark: BenchmarkFixture, message_length: int) -> None:
+def test_bcjr_benchmark(
+    benchmark: BenchmarkFixture, message_length: int, backend: Backend
+) -> None:
     """One forward-backward pass over `K + m` steps of a four-state trellis."""
     code, llr = _instance(message_length)
     streams = split_streams(code, llr)
 
-    result = benchmark(bcjr, code.trellis, streams.systematic, streams.parity_first)
+    result = benchmark(
+        bcjr,
+        code.trellis,
+        streams.systematic,
+        streams.parity_first,
+        backend=backend,
+    )
 
     # Benchmarks assert finiteness only; correctness is pinned in the suite.
     assert np.all(np.isfinite(result.posterior_llr))
 
 
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST])
 @pytest.mark.parametrize("message_length", [256, 1024])
 def test_decode_turbo_benchmark(
-    benchmark: BenchmarkFixture, message_length: int
+    benchmark: BenchmarkFixture, message_length: int, backend: Backend
 ) -> None:
     """Eight iterations: sixteen BCJR passes plus the interleaving between them."""
     code, llr = _instance(message_length)
 
-    result = benchmark(decode_turbo, code, llr, iterations=ITERATIONS)
+    result = benchmark(decode_turbo, code, llr, iterations=ITERATIONS, backend=backend)
 
     assert result.iterations == ITERATIONS
     assert np.all(np.isfinite(result.posterior_llr))

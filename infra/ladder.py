@@ -663,6 +663,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "codes",
+        "BCJR, Rust",
+        "likelihood.convolutional_rust.bcjr",
+        "BCJR",
+        T + "likelihood/test_convolutional_rust.py"
+        "::test_the_rust_pass_is_the_numpy_oracle_bitwise_on_the_declared_registers",
+    ),
+    Rung(
+        "codes",
         "Viterbi on the trellis",
         "likelihood.convolutional.viterbi",
         "brute-force ML",
@@ -846,6 +854,37 @@ LADDER: tuple[Rung, ...] = (
         "assignment enumeration",
         T + "opt/test_opt_hmc.py"
         "::test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture",
+    ),
+    Rung(
+        "mixture",
+        "MALA",
+        "opt.langevin.mala",
+        None,
+        T + "opt/test_opt_langevin.py"
+        "::test_the_langevin_chain_recovers_an_analytic_gaussian",
+    ),
+    Rung(
+        "mixture",
+        "MALA",
+        "opt.langevin.mala",
+        "assignment enumeration",
+        T + "opt/test_opt_langevin.py"
+        "::test_the_langevin_chain_recovers_the_enumerated_assignment_posterior",
+    ),
+    Rung(
+        "mixture",
+        "slice sampling",
+        "opt.slice.slice_sample",
+        None,
+        T + "opt/test_opt_slice.py::test_the_slice_chain_recovers_an_analytic_gaussian",
+    ),
+    Rung(
+        "mixture",
+        "slice sampling",
+        "opt.slice.slice_sample",
+        "assignment enumeration",
+        T + "opt/test_opt_slice.py"
+        "::test_the_slice_chain_recovers_the_enumerated_assignment_posterior",
     ),
     Rung(
         "mixture",

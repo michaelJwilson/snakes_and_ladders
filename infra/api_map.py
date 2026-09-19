@@ -274,6 +274,27 @@ def escape(text: str) -> str:
     return "".join(_ESCAPES.get(character, character) for character in text)
 
 
+#: Inside ``\\texttt`` the five characters below are set from the typewriter
+#: font itself, which carries them at their ASCII slots. ``\\textbar``,
+#: ``\\textless``, ``\\textgreater`` and the brace commands ask for the OMS
+#: symbol font in the typewriter family, which has no such shape, so LaTeX
+#: substitutes ``cmsy`` and pdfTeX's font expansion refuses it at the shipout
+#: of whichever page the line lands on (#770's build).
+_CODE_ESCAPES = {
+    **_ESCAPES,
+    "{": r"\char`\{{}",
+    "}": r"\char`\}{}",
+    "|": r"\char`\|{}",
+    "<": r"\char`\<{}",
+    ">": r"\char`\>{}",
+}
+
+
+def escape_code(text: str) -> str:
+    """``text`` as it is set inside ``\texttt``: as :func:`escape`, braces from the font."""
+    return "".join(_CODE_ESCAPES.get(character, character) for character in text)
+
+
 def tex_text(text: str) -> str:
     """One docstring summary as LaTeX: inline code set in ``\\texttt``.
 
@@ -289,7 +310,7 @@ def tex_text(text: str) -> str:
         token = role or double or single or ""
         if role is not None and role.startswith("~"):
             token = role.lstrip("~").rpartition(".")[2]
-        pieces.append(rf"\texttt{{{escape(token)}}}")
+        pieces.append(rf"\texttt{{{escape_code(token)}}}")
         position = match.end()
     pieces.append(escape(text[position:]))
     return "".join(pieces)
