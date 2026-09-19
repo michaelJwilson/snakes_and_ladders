@@ -102,15 +102,32 @@ def _endpoints(environment: TreeEnvironment, seed: int) -> list[Topology]:
     ]
 
 
+@pytest.fixture(scope="module")
+def nni(params: SimulationParams, alignment: dict[str, np.ndarray]) -> TreeEnvironment:
+    """The NNI reward surface three tests below score against, built once."""
+    return _environment(params, alignment, MoveSet.NNI)
+
+
+@pytest.fixture(scope="module")
+def nni_maximum(nni: TreeEnvironment, alignment: dict[str, np.ndarray]) -> float:
+    """The enumerated maximum over all 945 topologies, scored once."""
+    return _enumerated_maximum(nni, alignment)
+
+
+@pytest.fixture(scope="module")
+def nni_endpoints(nni: TreeEnvironment, params: SimulationParams) -> list[Topology]:
+    """Where the `STARTS` seeded NNI runs stop, rolled out once."""
+    return _endpoints(nni, params.seed)
+
+
 @pytest.mark.oracle
 def test_the_generating_topology_is_the_enumerated_maximum(
-    params: SimulationParams, alignment: dict[str, np.ndarray]
+    params: SimulationParams, nni: TreeEnvironment, nni_maximum: float
 ) -> None:
     # Without this the fixture is unusable: a search that fails to find the
     # best topology would be finding the right answer, and a search that
     # succeeded would be finding the wrong one.
-    environment = _environment(params, alignment, MoveSet.NNI)
-    assert environment.score(params.tau) == _enumerated_maximum(environment, alignment)
+    assert nni.score(params.tau) == nni_maximum
 
 
 @pytest.mark.smoke
@@ -124,13 +141,10 @@ def test_the_fixture_enumerates_every_unrooted_topology_on_seven_leaves(
 
 @pytest.mark.end2end
 def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
-    params: SimulationParams, alignment: dict[str, np.ndarray]
+    nni: TreeEnvironment, nni_maximum: float, nni_endpoints: list[Topology]
 ) -> None:
-    environment = _environment(params, alignment, MoveSet.NNI)
-    best = _enumerated_maximum(environment, alignment)
-    reached = [
-        environment.score(state) for state in _endpoints(environment, params.seed)
-    ]
+    best = nni_maximum
+    reached = [nni.score(state) for state in nni_endpoints]
     success = float(np.mean([value == best for value in reached]))
 
     # Both bounds matter. A fixture greedy always solves cannot separate a
@@ -149,18 +163,15 @@ def test_nni_hill_climbing_fails_from_a_substantial_fraction_of_starts(
 
 @pytest.mark.analytic
 def test_every_nni_failure_stops_at_a_genuine_local_optimum(
-    params: SimulationParams, alignment: dict[str, np.ndarray]
+    nni: TreeEnvironment, nni_maximum: float, nni_endpoints: list[Topology]
 ) -> None:
     # The difference between a hard fixture and too short an episode. If a
     # run stopped with an improving move still available, the failure would
     # measure HORIZON rather than the environment.
-    environment = _environment(params, alignment, MoveSet.NNI)
-    best = _enumerated_maximum(environment, alignment)
-    endpoints = _endpoints(environment, params.seed)
-    failures = [state for state in endpoints if environment.score(state) != best]
+    failures = [state for state in nni_endpoints if nni.score(state) != nni_maximum]
 
     assert failures, "expected some NNI runs to fall short on this fixture"
-    assert all(environment.is_terminal(state) for state in failures)
+    assert all(nni.is_terminal(state) for state in failures)
 
 
 @pytest.mark.oracle

@@ -155,22 +155,6 @@ def test_the_flow_value_equals_the_capacity_of_the_cut_it_induces() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("extent", [4, 8, 12])
-def test_the_rust_kernel_reproduces_the_python_oracle_exactly(extent: int) -> None:
-    # Exact equality of energy, not a tolerance: this is a combinatorial
-    # minimum. The configuration itself may differ where the minimum is
-    # degenerate, which is why the energy is what is compared.
-    rng = np.random.default_rng(extent)
-    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
-    field_values = rng.normal(size=(graph.n_nodes, 2))
-
-    _, expected = ising_ground_state(graph, field_values)
-    _, realized = maxflow_rust.ising_ground_state(graph, field_values)
-
-    assert realized == pytest.approx(expected, abs=1e-12)
-
-
-@pytest.mark.oracle
 def test_the_rust_min_cut_reproduces_a_hand_computed_value_and_cut() -> None:
     # Two disjoint paths carry 2 each; the cross edge carries a third unit a
     # greedy first path would have blocked. The minimum cut is the two arcs
@@ -353,7 +337,7 @@ def test_a_batch_of_the_wrong_shape_is_refused() -> None:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("extent", [4, 8, 16])
+@pytest.mark.parametrize("extent", [4, 8, 12, 16])
 def test_the_kernel_returns_the_python_configuration_as_well_as_its_energy(
     extent: int,
 ) -> None:
