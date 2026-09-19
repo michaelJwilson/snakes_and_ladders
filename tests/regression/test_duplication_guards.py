@@ -144,10 +144,11 @@ INCIDENCE_OWNER = "incidence.py"
 #: guard reads on `main` at 048a342: `sim/graph.py`,
 #: `sim/ldpc.py`, `sim/factor_graph.py`, `sim/potts.py`, `search/maxflow.py`,
 #: `search/potts_mcmc.py`, `search/potts_keyed.py`, `search/ground_state.py`,
-#: `search/alpha_expansion.py` and `search/spatio_sequential.py`. The pull
+#: `search/alpha_expansion.py` and `search/spatio_sequential.py`; the eleventh
+#: is `search/tempered.py`, which #766's Potts pair build added. The pull
 #: request that adds a consumer raises the pin; one that removes the last
 #: caller of the seam lowers it to a number a reader can question.
-SEAM_CONSUMERS = 10
+SEAM_CONSUMERS = 11
 
 #: Files this guard does not read, each against the reason, rather than an
 #: allow-list nobody can audit. The first two are measurements the
