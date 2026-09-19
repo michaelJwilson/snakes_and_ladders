@@ -33,7 +33,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     marginal_log_likelihood_torch,
 )
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.hmm import HmmParams
 from snakes_and_ladders.sim.spatio_sequential import (

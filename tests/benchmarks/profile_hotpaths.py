@@ -60,17 +60,17 @@ from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.likelihood.turbo import decode_turbo, noise_scale, split_streams
 from snakes_and_ladders.numerics import sample_rows
-from snakes_and_ladders.opt import hmc
+from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.gibbs import sample_factor_graph
+from snakes_and_ladders.sample.gibbs import sample_factor_graph
 from snakes_and_ladders.search.infer import MoveSet, infer
 from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.search.potts_keyed import SwendsenWangMove
-from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
+from snakes_and_ladders.sample.potts_keyed import SwendsenWangMove
+from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.search.topology import (
     Topology,
     enumerate_topologies,
@@ -289,7 +289,7 @@ def opt_sections(mid: bool) -> list[Section]:
     return [
         (f"opt.fit L-BFGS on the tree @ {n_taxa} taxa x 500 sites", _tree_fit, 1),
         (f"opt.fit L-BFGS on the Potts chain @ length {chain_length}", _potts_fit, 1),
-        (f"opt.hmc.sample @ {draws} draws on the Potts chain", _hmc, 1),
+        (f"sample.hmc.sample @ {draws} draws on the Potts chain", _hmc, 1),
         ("opt.budget.compare @ 2 methods x 2 instances x 40 seeds", _budget, 20),
     ]
 
@@ -388,18 +388,18 @@ def search_sections(mid: bool) -> list[Section]:
         (f"sim.potts.energies @ {extent}x{extent}, 64 configurations", _energy, 20),
         (f"search.alpha_expansion @ {extent}x{extent}, 3 labels", _expansion, 1),
         (
-            f"search.potts_mcmc single-site @ {extent}x{extent}, {sweeps} sweeps",
+            f"sample.potts_mcmc single-site @ {extent}x{extent}, {sweeps} sweeps",
             _single_site,
             1,
         ),
-        (f"search.potts_mcmc Wolff @ {extent}x{extent}, {sweeps} sweeps", _wolff, 1),
+        (f"sample.potts_mcmc Wolff @ {extent}x{extent}, {sweeps} sweeps", _wolff, 1),
         (
-            f"search.potts_keyed SwendsenWangMove.propose @ {extent}x{extent}",
+            f"sample.potts_keyed SwendsenWangMove.propose @ {extent}x{extent}",
             _swendsen_wang,
             5,
         ),
         (
-            f"search.gibbs.sample_factor_graph @ {extent}x{extent}, {sweeps} sweeps",
+            f"sample.gibbs.sample_factor_graph @ {extent}x{extent}, {sweeps} sweeps",
             _gibbs,
             1,
         ),

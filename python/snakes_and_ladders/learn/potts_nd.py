@@ -16,7 +16,7 @@ prefers the same label, so the answer is ``argmax(h)`` everywhere.
 iterated-conditional-modes sweep --- each site taking its conditional mode in
 index order --- and the same action at ``T > 0`` is a heat-bath pass. So the
 schedule is *learned* rather than declared, where
-``search.potts_mcmc.anneal_potts`` takes it as two constants, and **the
+``sample.potts_mcmc.anneal_potts`` takes it as two constants, and **the
 classical method is a point in the policy class rather than a separate
 program**: a policy that always takes the sweep at rung zero reproduces
 ``search.alpha_expansion.iterated_conditional_modes``'s labelling exactly,
@@ -59,7 +59,7 @@ import torch
 
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
-from snakes_and_ladders.search.potts_mcmc import MoveKind
+from snakes_and_ladders.sample.potts_mcmc import MoveKind
 
 #: One label per site.
 Configuration = tuple[int, ...]
@@ -171,7 +171,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         smaller.
     moves : Mapping[MoveKind, KeyedMove] | None
         The cluster moves, one per kind in :data:`CLUSTER_KINDS` this arm
-        admits, from :func:`snakes_and_ladders.search.potts_keyed.cluster_moves`
+        admits, from :func:`snakes_and_ladders.sample.potts_keyed.cluster_moves`
         or another implementer. Supplied rather than imported because ``learn``
         imports nothing from ``search``; checked against this environment's own
         ``n_nodes`` and ``n_states``, since a move built on a different lattice
@@ -571,7 +571,7 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
         Sites are visited in index order and each update sees the labels the
         earlier ones left, which is what makes a sweep a sweep rather than a
         batch of independent flips --- and what
-        ``search.potts_mcmc._single_site_sweep`` does.
+        ``sample.potts_mcmc._single_site_sweep`` does.
         """
         labels = np.asarray(state, dtype=np.int64).copy()
         before = self.score(tuple(int(value) for value in labels))

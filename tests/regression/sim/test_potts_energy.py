@@ -1,6 +1,6 @@
 """The one Potts energy, against the oracle it replaced four loops with.
 
-`sim.potts.energies` is what `search.potts_mcmc`, `search.alpha_expansion`
+`sim.potts.energies` is what `sample.potts_mcmc`, `search.alpha_expansion`
 and `search.maxflow` each scored a labelling with before issue #277.
 `likelihood.potts.log_weights` is deliberately **not** merged into it: it is
 the independent answer this is refereed by, and an implementation that

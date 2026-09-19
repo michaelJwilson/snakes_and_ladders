@@ -12,7 +12,7 @@ loop would match only to the last place.
 That exactness is why these are ``numba`` rather than Rust. Root
 ``CLAUDE.md``'s backend rule admits one compiled path per measurement; the
 Rust extension already carries the Potts *sampling* sweep
-(:func:`snakes_and_ladders.search.potts_mcmc.sample_potts` on the extension), and a second copy of it
+(:func:`snakes_and_ladders.sample.potts_mcmc.sample_potts` on the extension), and a second copy of it
 is what the rule exists to refuse. A kernel whose pin is exact carries no
 such cost and lives here.
 
@@ -101,8 +101,8 @@ def gibbs_sweep_sites(
 ) -> int:
     """Heat-bath updates from ``first`` on, in place; returns where it stopped.
 
-    The update :func:`snakes_and_ladders.search.gibbs.gibbs_sweep` states, over the
-    edge layout :class:`snakes_and_ladders.search.gibbs._EdgeLayout` builds: the
+    The update :func:`snakes_and_ladders.sample.gibbs.gibbs_sweep` states, over the
+    edge layout :class:`snakes_and_ladders.sample.gibbs._EdgeLayout` builds: the
     variable's conditional is gathered from ``tables`` by the entries that
     touch it, scaled by ``beta``, shifted by its maximum, exponentiated into a
     running cumulative sum, and searched for ``draws[position]`` times that
@@ -125,7 +125,7 @@ def gibbs_sweep_sites(
     (:mod:`snakes_and_ladders.backend`).
 
     ``guard`` sets that boundary in units of the last place, per state:
-    :func:`snakes_and_ladders.search.gibbs.gibbs_sweep` passes the bound it derives,
+    :func:`snakes_and_ladders.sample.gibbs.gibbs_sweep` passes the bound it derives,
     and a test raises it to drive every site onto the NumPy path and pin the
     handing back itself, which no realistic draw reaches.
 
@@ -184,7 +184,7 @@ def factor_graph_log_density(
 
     The density :meth:`snakes_and_ladders.sim.factor_graph.FactorGraph.log_density`
     defines, read from the ``tables`` of
-    :class:`snakes_and_ladders.search.gibbs._EdgeLayout` rather than from a table
+    :class:`snakes_and_ladders.sample.gibbs._EdgeLayout` rather than from a table
     and a tuple key per factor: each factor's element is the offset its axes
     fix, and the sum runs left to right over factors in graph order.
 

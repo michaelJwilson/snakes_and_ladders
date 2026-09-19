@@ -22,9 +22,9 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.opt.constrain import log_simplex
-from snakes_and_ladders.opt.hmc import effective_sample_size
+from snakes_and_ladders.sample.hmc import effective_sample_size
 from snakes_and_ladders.opt.mixture import responsibilities
-from snakes_and_ladders.opt.slice import (
+from snakes_and_ladders.sample.slice import (
     MAX_SHRINKAGES,
     SliceDirection,
     slice_sample,

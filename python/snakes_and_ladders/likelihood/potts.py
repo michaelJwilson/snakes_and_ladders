@@ -46,7 +46,7 @@ from snakes_and_ladders.sim.potts import site_field
 #: the threshold only decides where the win is banked (issue #598).
 #:
 #: The case that pays is one configuration:
-#: :func:`snakes_and_ladders.search.potts_mcmc.anneal_potts` scores a single
+#: :func:`snakes_and_ladders.sample.potts_mcmc.anneal_potts` scores a single
 #: state after every sweep, where the gather is 27x to 300x and carries the
 #: whole run from 1,105.6 ms to 171.5 ms at 32x32.
 GATHER_BELOW = 128

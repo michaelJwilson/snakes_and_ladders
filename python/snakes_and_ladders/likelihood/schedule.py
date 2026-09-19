@@ -28,7 +28,7 @@ schedule against every adapter rather than asserting that it would work.
 
 **Two families of schedule, named apart.** This package schedules two
 unrelated things: *messages*, here, and *temperatures*, in
-:mod:`snakes_and_ladders.opt.schedule`. They were both called ``Schedule``,
+:mod:`snakes_and_ladders.sample.schedule`. They were both called ``Schedule``,
 which read as one concept and was not --- and which a documented package
 cannot carry twice, since every cross-reference to either then resolves two
 ways and the ``-W`` docs build refuses it. So each family carries its half in

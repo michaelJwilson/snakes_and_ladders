@@ -31,7 +31,7 @@ from snakes_and_ladders.likelihood.message_passing import (
     max_product,
 )
 from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search import ground_state
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_beta_swap,
@@ -42,7 +42,7 @@ from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.search.maxflow_rust import (
     ising_ground_state as rust_ground_state,
 )
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
     anneal_potts,
     parallel_tempering,
@@ -246,7 +246,7 @@ def test_gibbs_at_zero_temperature_is_the_descent_update() -> None:
     offsets, neighbours, couplings = rung.graph.compressed_adjacency()
 
     cold = state.copy()
-    from snakes_and_ladders.search.potts_mcmc import _single_site_sweep
+    from snakes_and_ladders.sample.potts_mcmc import _single_site_sweep
 
     _single_site_sweep(
         cold, rung.field, offsets, neighbours, couplings, np.random.default_rng(3), 1e6

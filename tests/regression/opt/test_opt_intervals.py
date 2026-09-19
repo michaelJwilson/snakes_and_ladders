@@ -372,7 +372,7 @@ def test_where_the_laplace_approximation_is_exact_the_chain_agrees_with_it() -> 
     # Carlo error. Realized ratios 1.0004 and 0.9953 at 4000 draws; the 5%
     # bound is 2.7 times the largest deviation seen over three seeds, and the
     # Potts case below is where the two are *allowed* to differ.
-    from snakes_and_ladders.opt.hmc import sample
+    from snakes_and_ladders.sample.hmc import sample
 
     target = AnalyticGaussian([1.0, -2.0], [[2.0, 0.6], [0.6, 0.5]])
     exact = target.covariance.diagonal().sqrt()
@@ -403,7 +403,7 @@ def test_the_delta_method_interval_and_the_sampled_posterior_agree() -> None:
     # one across the three parameters. The Laplace approximation is slightly
     # *optimistic* here, which is the expected direction for a mildly
     # non-Gaussian posterior and is reported rather than asserted away.
-    from snakes_and_ladders.opt.hmc import WithGaussianPrior, sample
+    from snakes_and_ladders.sample.hmc import WithGaussianPrior, sample
 
     field = np.array([0.3, -0.3])
     field = field - np.log(np.exp(field).sum())

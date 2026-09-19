@@ -13,9 +13,9 @@ from typing import Any
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.opt.schedule import ConstantTempSchedule
-from snakes_and_ladders.search.gibbs import _Indexed, gibbs_sweep
-from snakes_and_ladders.search.potts_mcmc import anneal_potts
+from snakes_and_ladders.sample.schedule import ConstantTempSchedule
+from snakes_and_ladders.sample.gibbs import _Indexed, gibbs_sweep
+from snakes_and_ladders.sample.potts_mcmc import anneal_potts
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 

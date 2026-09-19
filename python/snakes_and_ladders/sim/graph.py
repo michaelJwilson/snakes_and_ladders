@@ -229,7 +229,7 @@ class PottsGraph:
         Derived once for the reason :attr:`incidence` is (issue #586's
         recompute-or-store rule): the alternative is
         ``np.asarray(graph.edges)`` inside a loop, and
-        :func:`snakes_and_ladders.search.potts_mcmc.anneal_potts` scores once
+        :func:`snakes_and_ladders.sample.potts_mcmc.anneal_potts` scores once
         per sweep.
 
         Read-only, as :attr:`incidence` is and for the same reason.

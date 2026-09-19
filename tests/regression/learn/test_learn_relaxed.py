@@ -640,7 +640,7 @@ def test_a_temperature_below_the_floor_is_refused() -> None:
 def test_an_invalid_annealing_is_refused(
     temperature: float, final_temperature: float, steps: int, message: str
 ) -> None:
-    # The geometric schedule is `opt.schedule`'s since issue #717 and is
+    # The geometric schedule is `sample.schedule`'s since issue #717 and is
     # pinned there; what stays here is what `optimize` refuses.
     with pytest.raises(ValueError, match=message):
         optimize(

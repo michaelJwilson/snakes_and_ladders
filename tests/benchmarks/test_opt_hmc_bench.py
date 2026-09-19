@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from snakes_and_ladders.opt.hmc import sample
+from snakes_and_ladders.sample.hmc import sample
 from snakes_and_ladders.opt.testfunctions import Rosenbrock
 
 

@@ -16,7 +16,7 @@ stated here, each as what it is and never as another:
   other quantities are compared to;
 * **tempered support**: the fraction of a tempered ensemble's
   temperature-one replica spent at the structure
-  (:mod:`snakes_and_ladders.search.tempered`; ``docs/tex/textbook.tex``,
+  (:mod:`snakes_and_ladders.sample.tempered`; ``docs/tex/textbook.tex``,
   ``eq:tempered-weight``): a Monte Carlo estimate of the enumerated weight
   that reaches where enumeration is refused, named a posterior weight only
   beside the exchange acceptance and autocorrelation time that show the
@@ -64,8 +64,8 @@ from snakes_and_ladders.enumeration import (
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.parallel import Backend, map_tasks
 from snakes_and_ladders.search.infer import Model, MoveSet, infer, score_topology
-from snakes_and_ladders.search.statistics import integrated_autocorrelation_time
-from snakes_and_ladders.search.tempered import TemperedEnsemble
+from snakes_and_ladders.sample.statistics import integrated_autocorrelation_time
+from snakes_and_ladders.sample.tempered import TemperedEnsemble
 from snakes_and_ladders.search.topology import (
     Topology,
     enumerate_topologies,
@@ -349,7 +349,7 @@ def tempered_labelling_support(
     """The fraction of ``ensemble``'s temperature-one replica spent at ``labelling``.
 
     ``ensemble`` is a run of
-    :func:`snakes_and_ladders.search.tempered.tempered_factor_graph` on
+    :func:`snakes_and_ladders.sample.tempered.tempered_factor_graph` on
     ``graph``; the estimate is
     :func:`enumerated_labelling_support`'s weight where that is affordable,
     and the diagnostics say whether to believe it where it is not.
@@ -375,7 +375,7 @@ def tempered_topology_support(
     """The fraction of ``ensemble``'s temperature-one replica spent at ``topology``.
 
     ``ensemble`` is a run of
-    :func:`snakes_and_ladders.search.tempered.tempered_topologies` on
+    :func:`snakes_and_ladders.sample.tempered.tempered_topologies` on
     ``alignment``; the estimate is :func:`enumerated_support`'s weight where
     ``(2n-5)!!`` fits, and reaches where it does not. A topology the
     ensemble never visited is fitted here, once.

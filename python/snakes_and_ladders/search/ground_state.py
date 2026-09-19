@@ -63,13 +63,13 @@ from snakes_and_ladders.likelihood.message_passing import (
     max_product,
 )
 from snakes_and_ladders.opt.budget import Budget, Outcome
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_beta_swap,
     alpha_expansion,
     iterated_conditional_modes,
 )
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_mcmc import (
     ClusterCounter,
     PottsMove,
     anneal_potts,

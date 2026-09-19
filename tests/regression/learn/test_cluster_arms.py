@@ -46,7 +46,7 @@ from snakes_and_ladders.learn.potts_nd import (
     PottsNDEnvironment,
 )
 from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.ground_state import (
     ANNEAL_END,
     ANNEAL_START,
@@ -54,13 +54,13 @@ from snakes_and_ladders.search.ground_state import (
     run_swendsen_wang,
     run_wolff,
 )
-from snakes_and_ladders.search.potts_keyed import (
+from snakes_and_ladders.sample.potts_keyed import (
     NiedermayerMove,
     SwendsenWangMove,
     WolffMove,
     cluster_moves,
 )
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_mcmc import (
     MoveKind,
     _niedermayer_sweep,
     _swendsen_wang_sweep,
@@ -438,7 +438,7 @@ def test_the_bond_probability_is_the_oracles_and_exactly_one_at_zero() -> None:
 
     ``1 / 0`` is not a float and the value it stands for is one, which is the
     whole reason zero temperature is written out in
-    :mod:`snakes_and_ladders.search.potts_keyed` rather than passed through as
+    :mod:`snakes_and_ladders.sample.potts_keyed` rather than passed through as
     ``beta``.
     """
     ladder = (0.0, 0.25, 1.0, 4.0)

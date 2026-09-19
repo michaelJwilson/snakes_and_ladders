@@ -35,8 +35,8 @@ import pytest
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.search import potts_mcmc
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample import potts_mcmc
+from snakes_and_ladders.sample.potts_mcmc import (
     _GUARD,
     ClusterCounter,
     PottsMove,
@@ -44,7 +44,7 @@ from snakes_and_ladders.search.potts_mcmc import (
     _swendsen_wang_sweep,
     sample_potts,
 )
-from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 # `test_potts_mcmc.py`'s fixture, significance and thinning, so the two routes

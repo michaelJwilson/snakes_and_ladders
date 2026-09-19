@@ -68,7 +68,7 @@ SLIMMING_BASELINE = {
     "Potts energies of a labelling": 1,
     "site-field broadcasts": 0,
     # `anneal\w*` catches a name and not a duplicate: #756's
-    # `search.annealed.annealed_importance_sampling` is an estimator of
+    # `sample.annealed.annealed_importance_sampling` is an estimator of
     # `log Z`, not a fourth annealing optimizer, and the row moves with the
     # spelling Neal gave it.
     "annealers": 4,
@@ -80,15 +80,15 @@ SLIMMING_BASELINE = {
     "root exports": 7,
     "test modules pinning a twin to its oracle beyond the first": 13,
     # Both rows count the tree rather than a duplicate, so they move when a
-    # module lands: `search.balanced`, the one proposal kernel the Potts
+    # module lands: `sample.balanced`, the one proposal kernel the Potts
     # lattice and the factor graph share, took them from 148 and 1,576
     # (#756). The second moves on a public name too, and #756's cluster moves
     # for a frustrated lattice added twelve without adding a module; issue
     # #755's seam is one public callable, so the row rises by one more. A row
     # that rises states why here or it is a duplicate. #756's
-    # `search.annealed` added both, a module and fourteen names. #754's BCJR
+    # `sample.annealed` added both, a module and fourteen names. #754's BCJR
     # pass in Rust added one module, `likelihood/convolutional_rust.py`, and
-    # one public name. #756's two samplers --- `opt.langevin` and `opt.slice`,
+    # one public name. #756's two samplers --- `sample.langevin` and `sample.slice`,
     # one module each, which is the package's shape for a sampler --- added
     # two and eight. #754's tree schedule in Rust added one module,
     # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
@@ -211,9 +211,9 @@ INCIDENCE_OWNER = "incidence.py"
 #: Package modules building a store through the seam, pinned at what this
 #: guard reads on `main` at 048a342: `sim/graph.py`,
 #: `sim/ldpc.py`, `sim/factor_graph.py`, `sim/potts.py`, `search/maxflow.py`,
-#: `search/potts_mcmc.py`, `search/potts_keyed.py`, `search/ground_state.py`,
+#: `sample/potts_mcmc.py`, `sample/potts_keyed.py`, `search/ground_state.py`,
 #: `search/alpha_expansion.py` and `search/spatio_sequential.py`; the eleventh
-#: and twelfth are `search/tempered.py` and `search/annealed.py`, which #766
+#: and twelfth are `sample/tempered.py` and `sample/annealed.py`, which #766
 #: added. The pull request that adds a consumer raises the pin; one that
 #: removes the last caller of the seam lowers it to a number a reader can
 #: question.

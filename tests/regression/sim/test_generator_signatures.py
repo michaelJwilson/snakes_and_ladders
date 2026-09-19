@@ -17,7 +17,7 @@ module quietly breaks: at filing, #230 counted 12 seed-taking signatures
 against 10 generator-taking ones, and by implementation it was 16 against 16.
 
 Issue #337 converted the three the first pass deferred, the `torch` stream --
-`opt.hmc.sample`, `opt.hmc.anneal` and `search.max_cut.goemans_williamson` --
+`sample.hmc.sample`, `sample.hmc.anneal` and `search.max_cut.goemans_williamson` --
 so the pairing runs over both streams and the guard has no exemption left.
 """
 
@@ -29,11 +29,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.opt.hmc import anneal, sample
-from snakes_and_ladders.opt.schedule import ConstantTempSchedule
+from snakes_and_ladders.sample.hmc import anneal, sample
+from snakes_and_ladders.sample.schedule import ConstantTempSchedule
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.max_cut import goemans_williamson
-from snakes_and_ladders.search.potts_mcmc import PottsMove, sample_potts
+from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import simulate_potts
 from snakes_and_ladders.sim.simulate import simulate_alignment
@@ -204,8 +204,8 @@ def _seed_parameters(path: Path) -> list[str]:
 def test_no_public_signature_takes_a_seed() -> None:
     """The rule, enforced where it can be, over both streams.
 
-    No function is exempt: the `torch` stream #254 deferred -- `opt.hmc.sample`,
-    `opt.hmc.anneal` and `search.max_cut.goemans_williamson` -- takes a
+    No function is exempt: the `torch` stream #254 deferred -- `sample.hmc.sample`,
+    `sample.hmc.anneal` and `search.max_cut.goemans_williamson` -- takes a
     `torch.Generator` since #337. The one thing that keeps its `seed` is a
     declared fixture parameter's *field*, which is how a run is declared
     reproducible and which `_seed_parameters` does not read; only the

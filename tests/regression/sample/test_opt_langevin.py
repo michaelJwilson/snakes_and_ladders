@@ -21,12 +21,12 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.opt.constrain import log_simplex
-from snakes_and_ladders.opt.hmc import (
+from snakes_and_ladders.sample.hmc import (
     Adaptation,
     effective_sample_size,
     sample,
 )
-from snakes_and_ladders.opt.langevin import (
+from snakes_and_ladders.sample.langevin import (
     GRADIENTS_PER_PROPOSAL,
     LANGEVIN_STEPS,
     MALA_TARGET_ACCEPTANCE,

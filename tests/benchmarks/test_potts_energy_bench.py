@@ -63,7 +63,7 @@ def test_log_weights_on_one_configuration_benchmark(
 ) -> None:
     """One configuration, the shape the annealing loop scores per sweep (#598).
 
-    :func:`~snakes_and_ladders.search.potts_mcmc.anneal_potts` calls this once
+    :func:`~snakes_and_ladders.sample.potts_mcmc.anneal_potts` calls this once
     a step, so a per-edge Python loop here is paid once per edge per sweep.
     """
     graph = lattice_graph((extent, extent), BoundaryCondition.PERIODIC, 1.0)

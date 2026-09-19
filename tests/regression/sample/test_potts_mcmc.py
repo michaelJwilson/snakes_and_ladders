@@ -30,21 +30,21 @@ from numpy.testing import assert_allclose
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
-from snakes_and_ladders.opt.schedule import (
+from snakes_and_ladders.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )
-from snakes_and_ladders.search import potts_mcmc
+from snakes_and_ladders.sample import potts_mcmc
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
-from snakes_and_ladders.search.balanced import (
+from snakes_and_ladders.sample.balanced import (
     BalancingFunction,
     log_balanced_weights,
     log_metropolis_ratio,
     log_normalizer,
     log_ratios,
 )
-from snakes_and_ladders.search.potts_mcmc import _GUARD as GUARD
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_mcmc import _GUARD as GUARD
+from snakes_and_ladders.sample.potts_mcmc import (
     ClusterCounter,
     PottsChain,
     PottsMove,
@@ -61,7 +61,7 @@ from snakes_and_ladders.search.potts_mcmc import (
     taylor_log_ratios,
     tempered,
 )
-from snakes_and_ladders.search.statistics import (
+from snakes_and_ladders.sample.statistics import (
     chi_square_p_value,
     integrated_autocorrelation_time,
 )

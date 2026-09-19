@@ -40,7 +40,7 @@ from snakes_and_ladders.opt.initialize import (
     Initializer,
 )
 from snakes_and_ladders.opt.mixture import kmeans_plus_plus, uniform_seeds
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.projection import (
     PASSES_PER_GRADIENT,
     SEEDINGS,
@@ -53,7 +53,7 @@ from snakes_and_ladders.search.projection import (
     flatten,
     project,
 )
-from snakes_and_ladders.search.statistics import chi_square_p_value
+from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.sim.count_pairs import (
     SUCCESSES,
     TOTAL,

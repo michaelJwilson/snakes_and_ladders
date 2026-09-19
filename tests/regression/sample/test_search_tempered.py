@@ -21,14 +21,14 @@ import pytest
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.hmm_paths import emission_log_density
 from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.search.potts_mcmc import (
+from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
     _houdayer_move,
     _sweep_for,
     adapt_ladder_potts,
     parallel_tempering,
 )
-from snakes_and_ladders.search.statistics import chi_square_p_value, sign_test_p_value
+from snakes_and_ladders.sample.statistics import chi_square_p_value, sign_test_p_value
 from snakes_and_ladders.search.support import (
     SupportKind,
     TemperedSupport,
@@ -37,7 +37,7 @@ from snakes_and_ladders.search.support import (
     tempered_labelling_support,
     tempered_topology_support,
 )
-from snakes_and_ladders.search.tempered import (
+from snakes_and_ladders.sample.tempered import (
     TemperedEnsemble,
     adapt_ladder_round_trips,
     round_trip_time,
@@ -374,7 +374,7 @@ def test_the_round_trip_does_not_separate_with_houdayers_move() -> None:
 
     Round-trip time in recorded sweeps on the 12x12 periodic triangular
     antiferromagnet, `ROUND_TRIP_SEEDS` seeds paired by seed and read by
-    `search.statistics.sign_test_p_value`: 1,115.5 sweeps without the move
+    `sample.statistics.sign_test_p_value`: 1,115.5 sweeps without the move
     against 1,090.7 with it, five seeds of eight shorter with the move and
     two longer, `p = 0.6875`. So the direction is not established in either
     sense, at 3.96x the wall --- 17.0 s against 67.3 s.

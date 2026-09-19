@@ -82,10 +82,10 @@ parenthesis the only way a ticket is cited.
   truth about which seeding is better, between 40 and 1,000 observations a
   component (#559)
 - Adapt the leapfrog step size of a seeding chain to the instance. #548 ran
-  `opt.hmc.sample`, `anneal` and `parallel_tempering` at one fixed step across
+  `sample.hmc.sample`, `anneal` and `parallel_tempering` at one fixed step across
   two sample sizes: acceptance 1.000 over 500 observations and 0.000 over
   504,100, so at the larger size all three returned their starting point and
-  cost 110 to 220% of the fit budget to do it. `opt.hmc.Adaptation` exists and
+  cost 110 to 220% of the fit budget to do it. `sample.hmc.Adaptation` exists and
   `anneal` and `parallel_tempering` do not take one
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
@@ -296,7 +296,7 @@ parenthesis the only way a ticket is cited.
 - Merge the eight annealing entry points onto one driver, and the eight
   enumerators onto one weighted enumeration, each against the oracle #375
   recorded for it
-- Replace `search.potts_mcmc`'s union-find cluster labelling with
+- Replace `sample.potts_mcmc`'s union-find cluster labelling with
   `rustworkx.connected_components` on the bond graph, measured first
 - Replace `learn.surrogate.GraphSurrogate` with PyTorch Geometric's
   `GINConv` and `global_add_pool`, measured first

@@ -223,7 +223,7 @@ _CSR_PARTNER = frozenset(
 #: `sim.hmm.HmmParams` carries `lengths` and no flat array, because there it
 #: declares the shape of a batch rather than addressing one, and a params is
 #: not a layout. And `sizes` is deliberately **not** a length field:
-#: `search.potts_mcmc.ClusterCounter.sizes` is a histogram of cluster sizes,
+#: `sample.potts_mcmc.ClusterCounter.sizes` is a histogram of cluster sizes,
 #: `search.ground_state.Rung.sizes` and `sim.potts.SpatioOnlyParams.sizes` are
 #: problem sizes, and admitting the name would misfile all three --- the same
 #: failure as matching `restarts` for `starts`.

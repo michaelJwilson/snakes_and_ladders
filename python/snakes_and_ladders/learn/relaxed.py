@@ -68,7 +68,7 @@ import torch
 
 from snakes_and_ladders.enumeration import enumerated_optimum
 from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment
-from snakes_and_ladders.opt.schedule import (
+from snakes_and_ladders.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
     TempSchedule,
@@ -439,7 +439,7 @@ def optimize(
     final_temperature : float | None
         ``None`` holds ``temperature`` fixed. A value anneals geometrically to
         it over ``steps`` on
-        :class:`snakes_and_ladders.opt.schedule.ExponentialTempSchedule`:
+        :class:`snakes_and_ladders.sample.schedule.ExponentialTempSchedule`:
         geometric because the relaxation's behaviour is set by the *ratio* of
         logit gaps to ``tau``, so equal multiplicative steps are equal steps
         in the thing that matters. Both are supported because the

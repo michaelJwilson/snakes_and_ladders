@@ -295,7 +295,7 @@ def test_a_declaration_of_lengths_is_not_a_layout(
 @pytest.mark.parametrize(
     "qualified",
     [
-        "search.potts_mcmc.ClusterCounter",
+        "sample.potts_mcmc.ClusterCounter",
         "search.ground_state.Rung",
         "sim.potts.SpatioOnlyParams",
     ],
@@ -347,7 +347,7 @@ def test_a_finding_on_an_unclustered_class_is_reported(
 ) -> None:
     # The second blindness (#677). Findings printed only inside a cluster, so a
     # cost on a class sharing its shape with nobody was derived and dropped:
-    # nine of them, on `likelihood.schedule.Layout`, `search.gibbs._Indexed`,
+    # nine of them, on `likelihood.schedule.Layout`, `sample.gibbs._Indexed`,
     # `learn.surrogate.Examples` and the rest. What a structure costs does not
     # depend on how many others look like it.
     loose = appraise_structures.unclustered_findings(found, grouped)

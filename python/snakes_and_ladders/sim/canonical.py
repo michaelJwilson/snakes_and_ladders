@@ -19,7 +19,7 @@ The three:
    exact ground-state energy at every size (:func:`minimum_frustrated_edges`).
    Generated here, its energy enumerated by :mod:`snakes_and_ladders.likelihood.potts`, its
    optimum reachable by :func:`snakes_and_ladders.search.max_cut.enumerate_max_cut`, and
-   the instance on which :func:`snakes_and_ladders.search.potts_mcmc.sample_potts` must
+   the instance on which :func:`snakes_and_ladders.sample.potts_mcmc.sample_potts` must
    *refuse* its cluster moves.
 2. :func:`planted_spin_glass` --- a Viana-Bray instance carrying a state of
    known energy, which is the only oracle that survives past the size

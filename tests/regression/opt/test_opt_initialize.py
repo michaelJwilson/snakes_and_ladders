@@ -27,7 +27,7 @@ from snakes_and_ladders.opt.initialize import (
     Perturbed,
     RandomRestart,
 )
-from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.opt.testfunctions import (
     HIMMELBLAU_MINIMA,
     Himmelblau,
