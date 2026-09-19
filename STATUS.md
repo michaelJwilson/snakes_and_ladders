@@ -1032,7 +1032,7 @@ be independently known, and more than one module must consume it
 
 | Fixture | Known from | Consumed by |
 | --- | --- | --- |
-| Triangular Ising antiferromagnet | a double count that closes exactly: `N` of `3N` edges agree in any ground state, at every size | `sim` builds, `likelihood.potts` enumerates, `search.max_cut` optimizes, `search.potts_mcmc` refuses |
+| Triangular Ising antiferromagnet | a double count that closes exactly: `N` of `3N` edges agree in any ground state, at every size | `sim` builds, `likelihood.potts` enumerates, `search.max_cut` optimizes, `sample.potts_mcmc` refuses |
 | Planted Viana-Bray spin glass | the planted state's energy, an upper bound on the ground state past enumeration | `sim` builds, `search.alpha_expansion` scores |
 | Ambiguous-emission HMM | enumeration of all `2**5` paths | `sim` builds, `likelihood.hmm_paths` decodes both ways |
 
@@ -1805,7 +1805,7 @@ state.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `opt.hmc` and `opt.schedule`).
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`).
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,
@@ -2065,7 +2065,7 @@ Five components 1.5 standard deviations apart with unequal weights, 500
 observations, built from `sim.mixture` under seed 20260908 since #262 committed
 neither of the five-component fixtures it measured. Multi-start EM, simulated
 annealing with Hamiltonian proposals and parallel tempering — the continuous
-counterpart of the Potts one, now in `opt.hmc` beside `anneal` — each spend
+counterpart of the Potts one, now in `sample.hmc` beside `anneal` — each spend
 3,000 likelihood evaluations per start through `opt.budget.compare`, every
 method ending with the same charged L-BFGS polish because raw EM sits 4 to 6
 nats above its basin's optimum 500 iterations in. Against the best-known
@@ -2342,7 +2342,7 @@ posterior-decoded path's -0.6066. The single-site neighbourhood is the whole
 space only where one site is free — on a two-site chain it reaches 5 of 9
 labellings — and there the two weights agree to 1e-12. The bootstrap stays a
 tree quantity: it resamples sites, which a chain's ordered sites do not license
-and a labelling does not have. `search.tempered` runs replica exchange from the
+and a labelling does not have. `sample.tempered` runs replica exchange from the
 moves of #309 on the ladder of #267 with `parallel_tempering`'s exchange ratio,
 over labellings and over topologies; the fraction of the temperature-one
 replica's sweeps at a structure is its tempered weight (`eq:tempered-weight`),
@@ -2400,7 +2400,7 @@ for this instance.**
 
 **One Gibbs sampler and one annealer serve every problem, over the factor
 graph** ([#309](https://github.com/michaelJwilson/snakes_and_ladders/issues/309)).
-`search.gibbs` runs a heat-bath sweep over any `FactorGraph` — a variable's
+`sample.gibbs` runs a heat-bath sweep over any `FactorGraph` — a variable's
 conditional is the product of the factors touching it — tempered by a
 schedule for annealing, with an exact block move for a chain-shaped subset
 by forward filter and backward sample, and a Metropolis move over tree
@@ -2597,7 +2597,7 @@ carrying one labelling to one labelling where his carries a pair.
 
 **`log Z` landed for the lattice, estimated and with its error**
 ([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
-`search.annealed` carries three estimators on one ladder of inverse
+`sample.annealed` carries three estimators on one ladder of inverse
 temperatures, from `beta = 0` --- where `log Z_0 = n log q` is exact, and is
 returned bitwise --- to the target, each stepping the shipped kernel once per
 rung so every move set is admissible. `annealed_importance_sampling` (Neal
@@ -2620,10 +2620,10 @@ the one the weights predict, 0.1907 to 0.7083 under exact weights and 0.2765 to
 0.3747 under a pilot's.
 
 **A tempering ladder can now be placed by its round trips, and that does not
-beat placing it by its acceptance.** `opt.schedule.adapt_ladder_by_round_trips`
+beat placing it by its acceptance.** `sample.schedule.adapt_ladder_by_round_trips`
 redistributes a ladder of fixed length so the local diffusivity is flat
 (Katzgraber et al. 2006), from the fraction of walkers moving up at each rung;
-`search.tempered.up_fraction` measures it off the walker trace
+`sample.tempered.up_fraction` measures it off the walker trace
 `parallel_tempering` now records, and `adapt_ladder_round_trips` is the Potts
 binding. The acceptance-placed ladder stays the default and nothing changes for
 a caller that does not ask. Over 8 seeds paired by seed at 2,000 recorded
@@ -2646,7 +2646,7 @@ then read from its own noise. Recorded as
 **The two baselines every Hamiltonian number is read against landed, and they
 beat the trajectory at equal evaluations**
 ([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
-`opt.langevin.mala` is `opt.hmc.sample` at one leapfrog step (Roberts &
+`sample.langevin.mala` is `sample.hmc.sample` at one leapfrog step (Roberts &
 Tweedie 1996), written as the two Gaussian transition densities rather than as
 a trajectory, so the identity is measured between two implementations: over
 400 proposals at step sizes 0.3, 0.7 and 1.0 the draws agree to 2.7e-15, the
@@ -2658,7 +2658,7 @@ bias is reported and never argued away: on a unit Gaussian at a step of 1.0
 its variance is 1.338 against the closed-form `s^2 / (1 - h^2 / (4 s^2))` of
 1.333, 0.14 standard errors, and against the target's 1.000, 11.09 of them,
 while the corrected chain lands at 1.45 and the acceptance rate reads 1.00 for
-the biased chain and 0.927 for the correct one. `opt.slice.slice_sample` is
+the biased chain and 0.927 for the correct one. `sample.slice.slice_sample` is
 Neal's (2003) stepping-out and shrinkage, coordinate-wise and hit-and-run,
 with no tuning beyond an initial width; it reports objective evaluations
 because it spends no gradient, and its shrinkage is ablated on cost rather
@@ -2887,7 +2887,7 @@ is exactly `|E|`, the ratio comes out slightly **above 1** — impossible for an
 exact solve.
 
 **Temperature is one object, and it lives where all three consumers can reach
-it.** `snakes_and_ladders.opt.schedule` carries the schedules — constant, linear,
+it.** `snakes_and_ladders.sample.schedule` carries the schedules — constant, linear,
 geometric, cosine, each mirroring its `torch.optim.lr_scheduler` counterpart
 and checked against it to 1e-12 (1e-10 for the cosine, whose torch form is a
 recursion) — with both endpoints reached *exactly* at the declared steps, and
@@ -3075,7 +3075,7 @@ is checkable against.
 
 **The classical baseline is a point in the action space, and which point it is was measured rather than assumed.** A sweep action at temperature zero is one iterated-conditional-modes sweep — each site taking its conditional mode in index order — and repeating it reproduces `iterated_conditional_modes`'s labelling **label for label** at 16 and 36 sites from the start that method draws for itself. The best single flip at zero temperature is a *different* baseline, steepest ascent: on the 6x6 fixture it reaches 61.87 from the field-only start where ICM's own random start reaches 57.33, which is two methods and two starts rather than one beating the other. Mistaking the second for the first is the defect the test caught.
 
-**Both cluster arms are `search.potts_mcmc`'s own moves, and each is its classical run** ([#706](https://github.com/michaelJwilson/snakes_and_ladders/issues/706), the Wolff and Swendsen-Wang controls). Above zero temperature the move delegates to `_wolff_sweep` or `_swendsen_wang_sweep` and its labelling matches a direct call **bitwise**, so no second cluster kernel exists to drift from an oracle; what the wrapper adds is the root and colour the action names, and the `T = 0` limit, where the bond probability is one, a cluster is a like-coloured connected component and the accept step keeps only a recolouring that does not lower the score. The arm walking `search.ground_state`'s declared exponential ladder is indistinguishable from the classical run over 32 seeds at 144 sites: Swendsen-Wang reaches -263.5 ± 5.2 against `run_swendsen_wang`'s -262.3 ± 5.8 at an identical 134,400 site visits (Welch p = 0.38), and Wolff -203.6 ± 13.2 against -206.5 ± 17.8 at 25,393 ± 7,584 site visits against 26,328 ± 11,998 (p = 0.47, p = 0.72). A learned schedule now has a declared one to be measured against.
+**Both cluster arms are `sample.potts_mcmc`'s own moves, and each is its classical run** ([#706](https://github.com/michaelJwilson/snakes_and_ladders/issues/706), the Wolff and Swendsen-Wang controls). Above zero temperature the move delegates to `_wolff_sweep` or `_swendsen_wang_sweep` and its labelling matches a direct call **bitwise**, so no second cluster kernel exists to drift from an oracle; what the wrapper adds is the root and colour the action names, and the `T = 0` limit, where the bond probability is one, a cluster is a like-coloured connected component and the accept step keeps only a recolouring that does not lower the score. The arm walking `search.ground_state`'s declared exponential ladder is indistinguishable from the classical run over 32 seeds at 144 sites: Swendsen-Wang reaches -263.5 ± 5.2 against `run_swendsen_wang`'s -262.3 ± 5.8 at an identical 134,400 site visits (Welch p = 0.38), and Wolff -203.6 ± 13.2 against -206.5 ± 17.8 at 25,393 ± 7,584 site visits against 26,328 ± 11,998 (p = 0.47, p = 0.72). A learned schedule now has a declared one to be measured against.
 
 **A feature column an arm cannot vary is dropped rather than carried.** A Swendsen-Wang action names a temperature and nothing else, so a gain column would be constant across every action at a state and would sit in the direction a softmax over scored actions cancels — a weight nothing identifies. The width is decided from the declared move set and ladder, so it is fixed for a policy: three columns for the single-site arm, four for Wolff and the mixed set, two for Swendsen-Wang.
 
@@ -3085,7 +3085,7 @@ is checkable against.
 (490 lines), `search.gym` (206) and `search.surrogate` (323) are `learn.tree`,
 `learn.gym` and `learn.ranking`; `search.surrogate` and `learn.surrogate` share
 no name, so it moved rather than folding. `MoveKind` went the other way, from
-`learn.potts_nd` to `search.potts_mcmc`, beside the moves it names. Excluding
+`learn.potts_nd` to `sample.potts_mcmc`, beside the moves it names. Excluding
 the three deprecation shims, `search/` now imports nothing from `learn/`, where
 it imported it on four lines. The move is pure: 25 import statements and 16
 prose references rewritten across 29 files, and no reward, feature, policy,
@@ -3302,6 +3302,29 @@ What survives both is the offset --- every prediction, the diverged fit
 included, stays inside the bracket, which is what predicting a gap above a
 bound buys. Both failures are ticketed rather than worked around.
 
+## Milestone 2.3 — Empirical Validation & Benchmarking
+
+**The comparison machinery landed and the comparison the milestone asks for
+has not been run.** What exists: `opt.budget.compare` puts two methods on one
+budget over shared seeds, and `opt.budget.mcnemar` decides the pair by
+McNemar's exact test rather than by two means read side by side. Six
+budget-matched comparisons are recorded against it --- the planted glass,
+Rastrigin, the mixture, the relaxation against greedy, the cluster updates at
+the transition, and the tree's starts at equal evaluations, the last as
+experiment 006 over twenty seeds at 2,000 evaluations (#364). The paired test
+is exact rather than asymptotic, which is what lets a comparison over 40
+shared starts state a result at all.
+
+**What the milestone asks for and this file cannot evidence:** the *RL agents*
+benchmarked past the size enumeration reaches, against the classical
+heuristics this repository implements --- large parsimony under NNI and SPR,
+and hill climbing. Every comparison above is between classical methods or
+between a relaxation and greedy; none has a learner on one side at a size an
+oracle cannot reach. The empirical alignment against an external solver stays
+out of scope by rule (`docs/external_tools.md`), and #126 carries what would
+replace it. Recorded **not started** on the milestone's own terms, with the
+machinery it will use already built and refereed.
+
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 
 **Modules.** The surrogates and the bounds they claim: `likelihood.surrogate`, `learn.surrogate` and `learn.ranking`, the examples and targets joining the two halves (`search.surrogate` until #779).
@@ -3360,8 +3383,8 @@ members a hook uses --- `track`, `__setitem__`, `close` --- written with
 `aim.Run`'s signatures, so an Aim run is the store and there is no adapter to
 keep in step; a `release` test asserts the `isinstance`. `track(run,
 metrics=)` binds a `TrackedOptimization` to a `contextvars.ContextVar` for a
-block, and `opt.fit.fit`, `opt.hmc`'s three drivers, `search.potts_mcmc`'s
-two, `search.tempered`'s two ensembles and `qa.figure.write_qa_figure` call
+block, and `opt.fit.fit`, `sample.hmc`'s three drivers, `sample.potts_mcmc`'s
+two, `sample.tempered`'s two ensembles and `qa.figure.write_qa_figure` call
 its one `record` per iteration, sweep, round or figure. Every counter
 recorded is one the result already returns --- the acceptance rate, the
 gradients spent, the best energy, the swap acceptance --- so a series ends at
@@ -3849,7 +3872,7 @@ merged.
   cited figures whose input stamp differs, which is `DEV.md`'s to state in
   full; the local rule now carries the principle and points there.
 - **`scipy` is not imported anywhere.** The audit's own plan recorded it as
-  imported by `opt.fit` and `search.statistics`. Both modules say the opposite
+  imported by `opt.fit` and `sample.statistics`. Both modules say the opposite
   and write out the constants they would need. The three referee tests this
   release adds `importorskip` it and skip everywhere until it is declared,
   which `DEV.md` and `INSTALL.md` now say and which stands as the open
@@ -3893,7 +3916,7 @@ exist.
 
 **Seams (issue #400).** The package is 33,900 lines of Python across six modules (`search` 6,579, `qa` 6,707, `likelihood` 5,487, `opt` 5,417, `learn` 3,792, `sim` 3,483, top level 2,448) and 1,385 of Rust, against 35,780 of tests. At that audit the package declared 11 protocols and 4 shared contracts (`SEAMS.md`, deleted by issue #586 in favour of the declarations themselves): 7 protocols and 3 contracts have three or more consuming modules (`Objective` has 15 implementers and 14 consumers and reaches 7 of the 11 catalogue problems; `Environment` 12 consumers; `FactorGraph` 7); `CountEmissionFamily`, `RelaxedObjective` and `Channel` have no consumer outside their module, `Policy` one, `SpatioSequentialParams` two, each kept for the reason the table prints. One merge proposed under this ticket was measured and declined: the HMM and mixture EM loops share 16 lines, and a driver would add more than it removed. `infra/duplication_survey.py` at this audit: enumerate-shaped functions 15 (8 at #230's filing; #387 owns them), energy-shaped 8 (5), private logsumexp 0 (4), open-coded edge zips 0 (6).
 
-**Slimming baseline (issue #717).** The survey gained twelve rows on 2026-09-18 at `main` a5b6fa4, each pinned at its count by `test_duplication_guards.py` so nothing grows while the ticket's eight pull requests land, and the pull request that lowers a row lowers its pin: Potts energies of a labelling beyond `sim.potts.energies` 3, site-field broadcasts beyond `sim.potts.site_field` 2, annealers beyond `search.gibbs` 4, `ground_state.run_*` wrappers 10, backend enums beyond `search.backend` 1, Python paths above a compiled kernel 8, surrogate modules 4, modules without a docstring 1, root exports 1 (`double`), regression test modules pinning a twin to its oracle beyond the first 12, flat modules 150, API-map entries 1,576. Two of the ticket's numbers were impressions the query corrected: it named 14 modules without a docstring and there is one (`scripts/__init__.py`), and nine compiled twins where eight sit beside an oracle (`ragged_rust` has no `ragged`). The sandbox is excluded from every row, since what sits there is declined.
+**Slimming baseline (issue #717).** The survey gained twelve rows on 2026-09-18 at `main` a5b6fa4, each pinned at its count by `test_duplication_guards.py` so nothing grows while the ticket's eight pull requests land, and the pull request that lowers a row lowers its pin: Potts energies of a labelling beyond `sim.potts.energies` 3, site-field broadcasts beyond `sim.potts.site_field` 2, annealers beyond `sample.gibbs` 4, `ground_state.run_*` wrappers 10, backend enums beyond `search.backend` 1, Python paths above a compiled kernel 8, surrogate modules 4, modules without a docstring 1, root exports 1 (`double`), regression test modules pinning a twin to its oracle beyond the first 12, flat modules 150, API-map entries 1,576. Two of the ticket's numbers were impressions the query corrected: it named 14 modules without a docstring and there is one (`scripts/__init__.py`), and nine compiled twins where eight sit beside an oracle (`ragged_rust` has no `ragged`). The sandbox is excluded from every row, since what sits there is declined.
 Pull request 2 folded the energies and the site fields: `search.maxflow.energy`, `search.maxflow.site_field`, `search.alpha_expansion.energy` and `alpha_expansion._site_field` are gone, `sim.potts.energy` is the scalar entry and `sim.potts.site_field` takes the column check the two carried, so the rows read energies 1 (`maxflow.cut_energy`, a cut value's energy and not a labelling's), site fields 0, API-map entries 1,574; every numeric pin ran unchanged, and the one test that compared the two entry points to each other was deleted as a tautology, `log_weights` remaining the referee.
 
 Pull request 3 (issue #387) put one enumeration behind the oracles: `enumeration.configurations` is the product space under the cap, `posterior`, `site_marginals` and `argmax` its reductions, and the five enumerators and three `optimum` helpers call it with every signature and value unchanged --- the row of enumerate-shaped names stays at 19 because #387 keeps every name; what went were five copies of the product space, two of them uncapped, and three of the argmax loop; the seam's four functions read API-map entries 1,580.
@@ -3902,9 +3925,9 @@ Pull request 5 folded the first compiled twin: `numerics_rust.sample_rows` is `n
 Pull request 7 made the root a surface: `snakes_and_ladders` exports `Objective`, `Environment`, `FactorGraph`, `PottsGraph`, `fixture`, `Backend` and `parallel`, each resolved on first use so the bare import loads no submodule (asserted in a fresh process), and `double` is the extension's alone; `scripts` gained the docstring it lacked. The rows read root exports 7, modules without a docstring 0.
 Pull request 8 folded the second twin, `search.potts_mcmc_rust`, which since #599 was one line of dispatch onto `potts_mcmc.sample_potts(backend=Backend.RUST)`, that function's default; the name issue #246 published lives on in the test and benchmark that cite it. The rows read twins 6, flat modules 148.
 
-Pull request 6 judged `opt`'s three misplaced modules by their importers rather than by the ticket's list: `failure`, the sizing harness, is imported by nothing but the learning gate's tests and is `learn.failure` now, imports only; `budget` and `schedule` stay, because `opt.hmc` and `opt.initialize` import the schedule and `opt.failure` did the budget, and moving either under `search` would make `opt`, `likelihood` and `learn` import `search`, which `learn/CLAUDE.md` forbids. The four surrogate modules were judged on the same rule and stay four: `bound` is the seam and imports nothing, `likelihood.surrogate` the analytic bounds with their proofs, `learn.surrogate` the fit over tensors with no application import, and `search.surrogate` the examples and targets that join the two halves, which is the one place that may import both; dissolving it would move an import of `search` into `learn` or of `learn` into `likelihood`, and the row reads 4 with this as its reason.
+Pull request 6 judged `opt`'s three misplaced modules by their importers rather than by the ticket's list: `failure`, the sizing harness, is imported by nothing but the learning gate's tests and is `learn.failure` now, imports only; `budget` and `schedule` stay, because `sample.hmc` and `opt.initialize` import the schedule and `opt.failure` did the budget, and moving either under `search` would make `opt`, `likelihood` and `learn` import `search`, which `learn/CLAUDE.md` forbids. The four surrogate modules were judged on the same rule and stay four: `bound` is the seam and imports nothing, `likelihood.surrogate` the analytic bounds with their proofs, `learn.surrogate` the fit over tensors with no application import, and `search.surrogate` the examples and targets that join the two halves, which is the one place that may import both; dissolving it would move an import of `search` into `learn` or of `learn` into `likelihood`, and the row reads 4 with this as its reason.
 
-Pull request 4 judged the annealers rather than folding them by name: `learn.relaxed.anneal` was `opt.schedule.ExponentialTempSchedule` in a second spelling (3.2e-16 relative apart, one ulp) and is that class now, and the three annealed `ground_state.run_*` wrappers are one run with a move set, so the rows read annealers 3, wrappers 7, API-map entries 1,572. The three that remain are three algorithms and not three spellings: `potts_mcmc.anneal_potts` runs a compiled heat-bath sweep with cluster moves and the counters `STATUS.md`'s seed-for-seed pins read, `gibbs.anneal_factor_graph` a factor-graph Gibbs sweep, and `hmc.anneal` with `projection.annealed_seeding` above it a Hamiltonian chain on a continuous surrogate; a driver over the three would carry a sweep callback across the compiled boundary to save the ten lines they share, and is declined.
+Pull request 4 judged the annealers rather than folding them by name: `learn.relaxed.anneal` was `sample.schedule.ExponentialTempSchedule` in a second spelling (3.2e-16 relative apart, one ulp) and is that class now, and the three annealed `ground_state.run_*` wrappers are one run with a move set, so the rows read annealers 3, wrappers 7, API-map entries 1,572. The three that remain are three algorithms and not three spellings: `potts_mcmc.anneal_potts` runs a compiled heat-bath sweep with cluster moves and the counters `STATUS.md`'s seed-for-seed pins read, `gibbs.anneal_factor_graph` a factor-graph Gibbs sweep, and `hmc.anneal` with `projection.annealed_seeding` above it a Hamiltonian chain on a continuous surrogate; a driver over the three would carry a sweep callback across the compiled boundary to save the ten lines they share, and is declined.
 
 **A dual bound on a ground state at #696.** `search.tightening` decomposes the
 energy into subproblems whose shares sum to it, so
@@ -4061,7 +4084,7 @@ over 25,216 and 14 calls. #642 carries the layout half.
 nothing for Rust to take. The **cold call pays 738 ms of `llvmlite`
 compilation** --- 74x the entire warm run of 50 sweeps --- which is a caching
 question and not a language one. Its warm profile's top self-time entry is
-`search.gibbs._Indexed.layout` at **30%**, the same line the structure survey
+`sample.gibbs._Indexed.layout` at **30%**, the same line the structure survey
 surfaces once it stops dropping findings outside clusters (#690).
 
 **Data structures (issue #586).** `infra/appraise_structures.py` walks the tree
@@ -4089,12 +4112,12 @@ offsets derived --- so `ragged.Ragged` was filed as carrying no layout;
 of #586 is what keeps that from over-matching: a payload partner is required,
 so `HmmParams.lengths` stays a declaration rather than a layout, and `sizes`
 is refused as a length field because it is a histogram in
-`search.potts_mcmc.ClusterCounter` and a set of problem sizes in
+`sample.potts_mcmc.ClusterCounter` and a set of problem sizes in
 `search.ground_state.Rung` and `sim.potts.SpatioOnlyParams` --- the
 `restarts`-for-`starts` failure one spelling later. Second, a finding printed
 only inside a cluster, so a cost on a class sharing its shape with nobody was
 derived and dropped: **nine findings** were invisible, on
-`likelihood.schedule.Layout`, `search.gibbs._Indexed` (three between them),
+`likelihood.schedule.Layout`, `sample.gibbs._Indexed` (three between them),
 `learn.surrogate.Examples`, `learn.surrogate._Batch`,
 `emissions.NegativeBinomialEmission`, `learn.potts.PottsEnvironment` and
 `sandbox.pruning_burn._Flattened`; they are #690's to price. One finding the
@@ -4234,7 +4257,7 @@ code, and fixed in the same pull request:
   branch-and-bound (#329), device dispatch (#280), the milestone re-keying
   (#324), the uncited figures (#325).
 - `DEV.md`'s repository layout put the temperature schedules in `search/`
-  (they are `opt.schedule` since #272), described `opt/` and `learn/` by their
+  (they are `sample.schedule` since #272), described `opt/` and `learn/` by their
   first two instances, and said no memory helper existed (#232 added the
   footprint table); its measured counts were re-taken on this host and dated.
   `INSTALL.md` counted eleven QA scripts and put `mypy` over two directories
@@ -4257,14 +4280,14 @@ oracle that would pin a merge.
 
 | entry point | what it is | classification | oracle for a merge |
 | --- | --- | --- | --- |
-| `search.potts_mcmc.anneal_potts` | heat-bath sweep per `Schedule` step, best kept | Potts type | draw-for-draw equality with `anneal_factor_graph` on the Potts adapter (measured, 2,000 of 2,000 sweeps) |
-| `search.gibbs.anneal_factor_graph` | the same loop over any `FactorGraph` | general type | as above, plus the triangular ground state on 6 of 6 seeds |
-| `search.gibbs.anneal_topology` | Metropolis over topologies per schedule step | a distinct move in a copied driver | the flat-prior weight at `T = 1` (#270) and the enumerated best at `T -> 0` |
-| `opt.hmc.anneal` | one Hamiltonian transition per schedule step | the same driver over a continuous transition | a constant schedule reproduces `hmc.sample` draw for draw |
-| `learn.relaxed.anneal` | a geometric temperature at one step | a copy of `opt.schedule.Exponential` | equality at every step with both endpoints exact |
-| `search.potts_mcmc.parallel_tempering` | replicas on spawned generators, Metropolis exchange | Potts type; `_swap_log_ratio` copied | per-replica chi-square against the unscaled enumeration, and identical exchange acceptances once the driver is shared |
-| `opt.hmc.parallel_tempering` | the same replica and exchange loop over `torch` generators | continuous type | the analytic Gaussian's spread per replica, and experiment 004's mixture comparison unchanged |
-| `search.tempered` (#350) | replica exchange from the Gibbs moves, weights from the cold replica | a third copy of the replica driver | the tempered weights against enumeration on the three instances #331 pins |
+| `sample.potts_mcmc.anneal_potts` | heat-bath sweep per `Schedule` step, best kept | Potts type | draw-for-draw equality with `anneal_factor_graph` on the Potts adapter (measured, 2,000 of 2,000 sweeps) |
+| `sample.gibbs.anneal_factor_graph` | the same loop over any `FactorGraph` | general type | as above, plus the triangular ground state on 6 of 6 seeds |
+| `sample.gibbs.anneal_topology` | Metropolis over topologies per schedule step | a distinct move in a copied driver | the flat-prior weight at `T = 1` (#270) and the enumerated best at `T -> 0` |
+| `sample.hmc.anneal` | one Hamiltonian transition per schedule step | the same driver over a continuous transition | a constant schedule reproduces `hmc.sample` draw for draw |
+| `learn.relaxed.anneal` | a geometric temperature at one step | a copy of `sample.schedule.Exponential` | equality at every step with both endpoints exact |
+| `sample.potts_mcmc.parallel_tempering` | replicas on spawned generators, Metropolis exchange | Potts type; `_swap_log_ratio` copied | per-replica chi-square against the unscaled enumeration, and identical exchange acceptances once the driver is shared |
+| `sample.hmc.parallel_tempering` | the same replica and exchange loop over `torch` generators | continuous type | the analytic Gaussian's spread per replica, and experiment 004's mixture comparison unchanged |
+| `sample.tempered` (#350) | replica exchange from the Gibbs moves, weights from the cold replica | a third copy of the replica driver | the tempered weights against enumeration on the three instances #331 pins |
 
 The fix is one driver — a schedule, a transition and a generator in, the best
 state and trajectory out — and one exchange step over `(state, energy, beta)`
@@ -4710,7 +4733,7 @@ carries the summary; this is the full ranking, five terms per workload.
 | HMM/coupled | `message_passing` tree schedule, chain 200 | 0.237 s, **0.031 s** after the port | `schedule.tree_passes` 29.8%, `_logsumexp_last` 10.6%, ufunc `reduce` 8.8%, `_send_from_variables` 7.9%, `_factor_terms` 4.4%; after the port `is_tree` 11.4%, `Layout.__init__` 10.4%, `find` 9.9% | **ported**, [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754): 800 levels of NumPy dispatch, which is control flow and not arithmetic. 9.05x on the enclosing `sum_product` and the default flipped --- the section below |
 | codes | `convolutional.bcjr`, K = 1,024; `turbo.decode_turbo`, 8 iterations | 47.0 ms / 151 ms, **3 / 5 ms** after the port | `bcjr` 95.8% and 95.5%; after the port the extension call, 53.5% and 84.2% | **ported**, [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754): a four-state trellis walked forward and backward in Python, `cache=True` unavailable to it and no NumPy axis to vectorize over. 26.2x on the decode and the default flipped --- the section below |
 | codes | `ldpc.decode` sum-product / min-sum, 996 bits, 50 iterations | 9.3 / 8.9 ms | `_tanh_rule` 31.6% / `_min_sum` 34.7%, `decode` 23.4 / 19.1%, `reduceat` 19.7 / 31.6%, `syndrome` 5.9%, `_clip` 4.5% | **below the effect-size bar**: already one `reduceat` per iteration over the edges, and the whole decode is 9 ms |
-| mixtures/HMC | `opt.hmc.sample`, 1,000 draws, chain 64 | 24.57 / 24.31 s, **7.25 s** after the cut | `run_backward` 41.7%, `torch.logsumexp` 33.2% (512,000 calls), `log_partition` 10.2%, `unsqueeze` 6.0% (512,000), `Tensor.to` 1.5%; after the cut `run_backward` 40.4%, `logsumexp` 23.4% (96,000), `log_partition_by_squaring` 6.7%, `unsqueeze` 5.0% (136,000), `PottsObjective.__call__` 3.7% | **cut**, [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754): the homogeneous transfer product reassociated by squaring, 12 `logsumexp` calls for 64 positions where there were 64. 3.57x on the enclosing `sample`, and the first term was **not** outside the package --- it is this loop's tape and it falls with the loop, 10.19 s to 2.93 s --- the section below |
+| mixtures/HMC | `sample.hmc.sample`, 1,000 draws, chain 64 | 24.57 / 24.31 s, **7.25 s** after the cut | `run_backward` 41.7%, `torch.logsumexp` 33.2% (512,000 calls), `log_partition` 10.2%, `unsqueeze` 6.0% (512,000), `Tensor.to` 1.5%; after the cut `run_backward` 40.4%, `logsumexp` 23.4% (96,000), `log_partition_by_squaring` 6.7%, `unsqueeze` 5.0% (136,000), `PottsObjective.__call__` 3.7% | **cut**, [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754): the homogeneous transfer product reassociated by squaring, 12 `logsumexp` calls for 64 positions where there were 64. 3.57x on the enclosing `sample`, and the first term was **not** outside the package --- it is this loop's tape and it falls with the loop, 10.19 s to 2.93 s --- the section below |
 | learn | `learn.reinforce`, 60 x 32 episodes, chain 8 | 5.60 / 5.50 s | `potts.features` 13.1%, `run_backward` 6.4%, `policy.sample` 6.2%, `surrogate_loss` 4.5%, `np.fromiter` 4.2% (68,706) | **below the effect-size bar**: #341 already cut `features` 1.32x, and what is left is 0.73 s spread over 34,353 calls with no term above 14% |
 | search | `gibbs.sample_factor_graph`, 32x32, 20 sweeps | 2.03 / 0.96 s | `ffi.__call__` 15.6% / `templates.register_global` 16.1%, `marshal.loads` 3.1 / 6.6%, `abc.__new__` 8.1%, `isinstance` 2.2%, `ir._rec_list_vars` 1.8% | **not ours**: every term is `numba`, and the two readings differ by 2.1x because the first wrote the cache the second read |
 

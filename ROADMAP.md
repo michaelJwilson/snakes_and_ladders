@@ -250,8 +250,14 @@ Replace hand-designed search heuristics with classical learned proposal policies
 exact or (differentiable) surrogates, e.g. neural networks.
 
 - **Milestone 2.0: RL definition**
-  A comprehensive formulation of RL in the textbook, defining classical methods and
-  a discussion of their suitability for the supported problems.
+  - *Deliverable:* a comprehensive formulation of RL in the textbook, defining
+    classical methods and a discussion of their suitability for the supported
+    problems.
+  - *Validation:* every method the formulation names is defined against the
+    problem it is claimed for, and the claim of suitability is settled by a
+    measurement this repository can produce rather than by argument --- which
+    is what the milestones below are for. A method named and nowhere applied
+    is recorded as named and nowhere applied.
 
 - **Milestone 2.1: RL Agent Formulation & Deployment**
   - *Deliverable:* define the MDPs across all problems.
@@ -296,6 +302,12 @@ of what it is refereed against.
   - *Landed:* as certified analytic bounds plus learned predictors on the gap
     above them, ranking a neighbourhood for exact re-scoring of the top-`K`
     (#317); the filter's cost ratio at large `n` is unmeasured.
+  - *Validation:* the surrogate recovers the exact top-`K` on held-out
+    neighbourhoods, reported as the fraction recovered rather than as a
+    correlation, and its **cost ratio against the exact evaluation is measured
+    at the size the claim is made for**. The `10,000×` above is the target the
+    milestone was written against and is not a result: until the ratio is
+    read at large `n`, a filter that ranks well is a filter of unknown value.
 
 ## Stage 4: Experiment Tracking & Ablations
 
@@ -335,9 +347,26 @@ and reduce the number of exact evaluations.
   e.g. whose number is sampled via a Dirichlet process, for efficiency and to tunnel.
   - *Landed:* nothing learned (#147); an exact block move over a chain-shaped
     subset exists (#310).
-- Attention as applied to Newick strings.
-- *HMMs:* spectral initialization against the k-means++ start; variational
-  EM against Baum-Welch at equal evaluations.
-- *LDPC (#340):* neural belief propagation with learned message weights,
-  refereed by maximum-likelihood decoding below 24 bits and the
-  density-evolution threshold above.
+- **Attention over Newick strings.** A sequence model over the canonical
+  string #114 gave topologies, as the encoder a policy or a surrogate reads.
+  - *Validation:* the enumerated optimum at 5 to 8 taxa says whether its
+    ranking is right, and the claim is read at 10 taxa and above, where
+    enumeration stops and the classical baseline is what it must beat at
+    equal evaluations. A model that ranks well only where enumeration is
+    affordable has not been tested at the size it exists for.
+- **HMMs: spectral initialization against the k-means++ start; variational EM
+  against Baum-Welch at equal evaluations.**
+  - *Validation:* the exact forward likelihood and `enumerate_hidden_paths`
+    referee both at the enumerable tier; each is reported in the unit it
+    spends --- evaluations for the seeding, iterations for the fit --- and at
+    the `hmm/stress` instance, since a seeding that helps only where the
+    posterior is already unimodal helps nowhere that matters.
+- **LDPC (#340): neural belief propagation with learned message weights.**
+  - *Validation:* maximum-likelihood decoding below 24 bits and the
+    density-evolution threshold above it, with the block-error curve against
+    the channel parameter reported beside the sum-product decoder it would
+    replace, over shared seeds.
+
+The candidate list these draw on, each with the oracle that referees it, the
+tier it runs at and the roadmap item it serves, is `docs/blue_sky.md`. A
+proposal without an oracle is blocked on the oracle, not on effort.
