@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import itertools
 import sys
+from functools import cache
 
 import numpy as np
 import pytest
@@ -47,6 +48,27 @@ def _enumerated_minimum(graph: PottsGraph, field_values: np.ndarray) -> float:
         list(itertools.product(range(2), repeat=graph.n_nodes)), dtype=np.int64
     )
     return float(energies(graph, field_values, configurations).min())
+
+
+@cache
+def _oracle_and_kernel(
+    extent: int,
+) -> tuple[np.ndarray, float, np.ndarray, float]:
+    """One seeded square lattice solved twice, in Python and in Rust.
+
+    The two tests below read different halves of the same solve --- the
+    energy, which is a combinatorial minimum, and the configuration, which is
+    read off the minimal cut --- so the solve is run once per extent and the
+    claims stay two tests with two names (issue #745, the form #735 hoisted
+    eight clusters into).
+    """
+    rng = np.random.default_rng(extent)
+    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
+    field_values = rng.normal(size=(graph.n_nodes, 2))
+
+    expected_state, expected = ising_ground_state(graph, field_values)
+    realized_state, realized = maxflow_rust.ising_ground_state(graph, field_values)
+    return expected_state, expected, realized_state, realized
 
 
 @pytest.mark.oracle
@@ -152,6 +174,17 @@ def test_the_flow_value_equals_the_capacity_of_the_cut_it_induces() -> None:
         if cut.source_side[tail] and not cut.source_side[head]
     )
     assert crossing == pytest.approx(cut.value, rel=1e-11)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("extent", [4, 8, 12])
+def test_the_rust_kernel_reproduces_the_python_oracle_exactly(extent: int) -> None:
+    # Exact equality of energy, not a tolerance: this is a combinatorial
+    # minimum. The configuration itself may differ where the minimum is
+    # degenerate, which is why the energy is what is compared.
+    _, expected, _, realized = _oracle_and_kernel(extent)
+
+    assert realized == pytest.approx(expected, abs=1e-12)
 
 
 @pytest.mark.oracle
@@ -344,12 +377,7 @@ def test_the_kernel_returns_the_python_configuration_as_well_as_its_energy(
     # The configuration is read off the minimal minimum cut, which every
     # maximum flow shares, so a kernel that returned a different one would
     # have returned a different cut and not a tie (issue #715).
-    rng = np.random.default_rng(extent)
-    graph = lattice_graph((extent, extent), BoundaryCondition.OPEN, 0.6)
-    field_values = rng.normal(size=(graph.n_nodes, 2))
-
-    expected_state, expected = ising_ground_state(graph, field_values)
-    realized_state, realized = maxflow_rust.ising_ground_state(graph, field_values)
+    expected_state, expected, realized_state, realized = _oracle_and_kernel(extent)
 
     assert realized == expected
     assert np.array_equal(realized_state, expected_state)
