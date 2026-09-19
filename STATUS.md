@@ -2459,7 +2459,7 @@ An independent energy sample costs 4.96 sweeps against the heat bath's 10.50,
 **2.1x fewer**, at **8.1x** the wall per sweep against the NumPy heat bath and
 250x against the Rust sweep that is the default --- so 3.9x behind at equal
 wall clock, and 380x behind the shipped sampler. Recorded as
-`docs/experiments/020-potts-gradient-proposals.md`;
+`docs/experiments/021-potts-gradient-proposals.md`;
 [#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754) owns
 the port that would close it.
 
