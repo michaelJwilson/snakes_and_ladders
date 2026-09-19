@@ -3963,6 +3963,16 @@ vector again for the posterior. `tests/regression/test_duplication_guards.py`
 pins the 245 classes, the eight clusters at their member counts and the one
 named argmax consumer.
 
+**The `MessageSchedule` guard (issue #755).** The seam #592 wrote is now
+asserted rather than remembered: `tests/regression/test_duplication_guards.py`
+reads the class tree and the registry, and fails a schedule-shaped class that
+does not inherit `likelihood.schedule.MessageSchedule`, a schedule no
+`MessageScheduleName` reaches, or a consumer branching on a schedule's name.
+**Five schedules, one base, five modules calling through it** --- the
+`fields:name` cluster's seventh member, `search.ground_state.Entry`, shares the
+field and is not a schedule, so the pin is five. 0.41 s on the `critical` tier,
+and both halves are exercised on a violating source.
+
 **Message schedules (issue #592).** The order messages go in is an interface,
 `likelihood/schedule.py`, where it was two branches of an `if`. Five schedules
 declare a `Guarantee` of three values rather than a boolean, because the
