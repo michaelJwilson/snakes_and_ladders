@@ -1805,7 +1805,7 @@ state.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `opt.langevin` and `opt.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756).
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `opt.hmc` and `opt.schedule`).
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,
@@ -2289,7 +2289,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `search.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777.
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -4138,6 +4138,24 @@ at four sizes. `likelihood.hmm_paths` keeps its own argmax: it reads the score
 vector again for the posterior. `tests/regression/test_duplication_guards.py`
 pins the 245 classes, the eight clusters at their member counts and the one
 named argmax consumer.
+
+**Sampling is one directory (issue #777).** Eleven modules and 7,667 lines
+moved to `python/snakes_and_ladders/sample/`: four from `opt/` --- `hmc`,
+`langevin`, `slice`, `schedule` --- and seven from `search/` --- `potts_mcmc`,
+`gibbs`, `balanced`, `potts_keyed`, `tempered`, `annealed`, `statistics`. No
+module carried a relative import, so each moved file is what it was; the
+change is which directory names it and which `CLAUDE.md` states its rules.
+`sample/CLAUDE.md` holds the sampler rules that were split between
+`opt/CLAUDE.md` and `search/CLAUDE.md`, and each donor keeps what is its own:
+an optimizer is judged by the optimum it reaches and a sampler by the
+distribution it converges to. **Every old path still imports**: eleven shims
+emit one `DeprecationWarning` naming the new module and re-export the 95
+public names those modules define, asserted by identity in
+`tests/regression/sample/test_sample_deprecated_paths.py`, and removed in the
+release after 0.3.0 (#522). The flat-module row rises from 158 to 169 by
+exactly those eleven and falls back when they go; the API-map row does not
+move, since a shim re-exports names the map already carries. The twelve test
+modules moved with them to `tests/regression/sample/`, markers unchanged.
 
 **The `MessageSchedule` guard (issue #755).** The seam #592 wrote is now
 asserted rather than remembered: `tests/regression/test_duplication_guards.py`

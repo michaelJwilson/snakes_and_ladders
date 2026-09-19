@@ -30,10 +30,10 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.sample.hmc import anneal, sample
+from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.sample.schedule import ConstantTempSchedule
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.max_cut import goemans_williamson
-from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import simulate_potts
 from snakes_and_ladders.sim.simulate import simulate_alignment

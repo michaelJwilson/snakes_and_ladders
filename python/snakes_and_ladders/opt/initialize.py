@@ -43,8 +43,8 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 import torch
 
-from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.schedule import TempSchedule
 
 

@@ -31,6 +31,12 @@ from snakes_and_ladders.likelihood.message_passing import (
     max_product,
 )
 from snakes_and_ladders.opt.budget import Budget
+from snakes_and_ladders.sample.potts_mcmc import (
+    PottsMove,
+    anneal_potts,
+    parallel_tempering,
+    sample_potts,
+)
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search import ground_state
 from snakes_and_ladders.search.alpha_expansion import (
@@ -41,12 +47,6 @@ from snakes_and_ladders.search.alpha_expansion import (
 from snakes_and_ladders.search.maxflow import ising_ground_state
 from snakes_and_ladders.search.maxflow_rust import (
     ising_ground_state as rust_ground_state,
-)
-from snakes_and_ladders.sample.potts_mcmc import (
-    PottsMove,
-    anneal_potts,
-    parallel_tempering,
-    sample_potts,
 )
 from snakes_and_ladders.sim.factor_graph import from_potts
 from snakes_and_ladders.sim.fixtures import fixture

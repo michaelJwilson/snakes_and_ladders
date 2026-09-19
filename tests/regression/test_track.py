@@ -44,7 +44,6 @@ from snakes_and_ladders.likelihood.mixture_assignments import (
 )
 from snakes_and_ladders.likelihood.objective import TreeMetrics
 from snakes_and_ladders.opt import testfunctions
-from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import HmmMetrics, HmmObjective, forward_log_likelihood
 from snakes_and_ladders.opt.mixture import (
@@ -53,11 +52,11 @@ from snakes_and_ladders.opt.mixture import (
     clustering_cost,
     mixture_log_likelihood,
 )
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.opt.testfunctions import Himmelblau, Rastrigin, Rosenbrock
 from snakes_and_ladders.parallel import map_tasks
 from snakes_and_ladders.qa.figure import write_qa_figure
-from snakes_and_ladders.sample import potts_mcmc
+from snakes_and_ladders.sample import hmc, potts_mcmc
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.topology import robinson_foulds
 from snakes_and_ladders.sim.elementary_codes import hamming_code
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph

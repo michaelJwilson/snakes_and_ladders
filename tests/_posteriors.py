@@ -31,8 +31,8 @@ from snakes_and_ladders.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
-from snakes_and_ladders.sample.hmc import WithGaussianPrior, effective_sample_size
 from snakes_and_ladders.opt.mixture import mixture_log_likelihood
+from snakes_and_ladders.sample.hmc import WithGaussianPrior, effective_sample_size
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 
 #: The enumerable mixture the chain is run on: twelve observations over two

@@ -48,13 +48,13 @@ from dataclasses import dataclass
 
 import torch
 
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     Adapted,
     _gradient,
     _run_chain,
 )
-from snakes_and_ladders.opt.objective import Objective
 
 #: The acceptance a MALA step is adapted toward: the optimal scaling of the
 #: Langevin diffusion in the limit of many dimensions (Roberts & Rosenthal,

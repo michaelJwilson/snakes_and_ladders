@@ -33,10 +33,6 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     log_prior,
 )
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.sample.schedule import (
-    ConstantTempSchedule,
-    ExponentialTempSchedule,
-)
 from snakes_and_ladders.sample import gibbs
 from snakes_and_ladders.sample.gibbs import (
     GibbsMove,
@@ -50,13 +46,17 @@ from snakes_and_ladders.sample.gibbs import (
     gibbs_sweep,
     sample_factor_graph,
 )
-from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.sample.potts_mcmc import (
     _single_site_sweep,
     anneal_potts,
     energies,
 )
+from snakes_and_ladders.sample.schedule import (
+    ConstantTempSchedule,
+    ExponentialTempSchedule,
+)
 from snakes_and_ladders.sample.statistics import chi_square_p_value
+from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.topology import (
     enumerate_topologies,
     leaf_bipartitions,

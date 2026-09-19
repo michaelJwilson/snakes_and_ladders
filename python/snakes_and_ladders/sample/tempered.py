@@ -35,14 +35,12 @@ from typing import TypeVar
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.sample.schedule import FeedbackLadder, adapt_ladder_by_round_trips
 from snakes_and_ladders.sample.gibbs import (
     _Indexed,
     cached_topology_score,
     gibbs_sweep,
     topology_step,
 )
-from snakes_and_ladders.search.infer import Model, MoveSet
 from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
     _houdayer_move,
@@ -52,6 +50,11 @@ from snakes_and_ladders.sample.potts_mcmc import (
     energies,
     parallel_tempering,
 )
+from snakes_and_ladders.sample.schedule import (
+    FeedbackLadder,
+    adapt_ladder_by_round_trips,
+)
+from snakes_and_ladders.search.infer import Model, MoveSet
 from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 from snakes_and_ladders.sim.graph import PottsGraph

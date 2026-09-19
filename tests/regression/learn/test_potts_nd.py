@@ -43,10 +43,10 @@ from snakes_and_ladders.learn.potts_nd import (
     PottsNDEnvironment,
 )
 from snakes_and_ladders.learn.rollout import rollout
+from snakes_and_ladders.sample.potts_mcmc import MoveKind
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
 from snakes_and_ladders.search.ground_state import Rung
 from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.sample.potts_mcmc import MoveKind
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, energies, spatio_only_field
 

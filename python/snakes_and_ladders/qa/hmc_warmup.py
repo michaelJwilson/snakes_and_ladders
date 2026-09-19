@@ -28,12 +28,6 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 
-from snakes_and_ladders.sample.hmc import (
-    Adaptation,
-    HmcChain,
-    effective_sample_size,
-    sample,
-)
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.runner import figure_main
@@ -42,6 +36,12 @@ from snakes_and_ladders.qa.style import (
     ONE_COLUMN_WIDE,
     letter_style,
     series_style,
+)
+from snakes_and_ladders.sample.hmc import (
+    Adaptation,
+    HmcChain,
+    effective_sample_size,
+    sample,
 )
 
 #: The target's mean, declared. The figure's horizontal reference lines are

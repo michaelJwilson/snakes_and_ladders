@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders.opt.constrain import log_simplex
+from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     effective_sample_size,
@@ -32,7 +33,6 @@ from snakes_and_ladders.sample.langevin import (
     MALA_TARGET_ACCEPTANCE,
     mala,
 )
-from snakes_and_ladders.opt.mixture import responsibilities
 
 from tests._objective_checks import AnalyticGaussian
 from tests._posteriors import (

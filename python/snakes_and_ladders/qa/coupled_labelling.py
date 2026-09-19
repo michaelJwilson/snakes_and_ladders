@@ -35,7 +35,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.layout import discrete_legend
 from snakes_and_ladders.qa.runner import (
@@ -49,6 +48,7 @@ from snakes_and_ladders.qa.style import (
     discrete_palette,
     letter_style,
 )
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.spatio_sequential import (
     SpatioSequentialFit,
     fit_spatio_sequential,

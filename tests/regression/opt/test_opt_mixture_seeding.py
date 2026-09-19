@@ -43,7 +43,6 @@ from snakes_and_ladders.opt.emission_mixture import (
     expectation_maximization,
     plus_plus_start,
 )
-from snakes_and_ladders.sample.hmc import anneal, leapfrog, parallel_tempering, sample
 from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
     canonical_order,
@@ -54,6 +53,7 @@ from snakes_and_ladders.opt.mixture import (
     responsibilities,
     uniform_seeds,
 )
+from snakes_and_ladders.sample.hmc import anneal, leapfrog, parallel_tempering, sample
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture

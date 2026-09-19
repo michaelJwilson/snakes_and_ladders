@@ -27,6 +27,7 @@ import pytest
 import torch
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.opt.fit import fit, standard_errors_at
+from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sample.hmc import (
     DUAL_AVERAGING_GAMMA,
     DUAL_AVERAGING_KAPPA,
@@ -41,7 +42,6 @@ from snakes_and_ladders.sample.hmc import (
     leapfrog,
     sample,
 )
-from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FOUR_TAXA, load_fixture

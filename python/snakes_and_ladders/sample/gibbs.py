@@ -53,7 +53,6 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.sample.balanced import (
     draw_change,
     log_balanced_weights,
@@ -61,6 +60,7 @@ from snakes_and_ladders.sample.balanced import (
     log_normalizer,
     log_ratios,
 )
+from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
 from snakes_and_ladders.search.topology import (
     Topology,

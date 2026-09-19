@@ -46,14 +46,6 @@ from snakes_and_ladders.learn.potts_nd import (
     PottsNDEnvironment,
 )
 from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.search.ground_state import (
-    ANNEAL_END,
-    ANNEAL_START,
-    Rung,
-    run_swendsen_wang,
-    run_wolff,
-)
 from snakes_and_ladders.sample.potts_keyed import (
     NiedermayerMove,
     SwendsenWangMove,
@@ -65,6 +57,14 @@ from snakes_and_ladders.sample.potts_mcmc import (
     _niedermayer_sweep,
     _swendsen_wang_sweep,
     _wolff_sweep,
+)
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
+from snakes_and_ladders.search.ground_state import (
+    ANNEAL_END,
+    ANNEAL_START,
+    Rung,
+    run_swendsen_wang,
+    run_wolff,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, energies, spatio_only_field

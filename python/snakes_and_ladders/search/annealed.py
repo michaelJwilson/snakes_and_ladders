@@ -1,9 +1,10 @@
 """Deprecated: moved to :mod:`snakes_and_ladders.sample.annealed` (issue #777).
 
 Importing this module emits one :class:`DeprecationWarning` and re-exports
-every public name from the new one; the objects are the same objects, which
-``tests/regression/sample/test_sample_deprecated_paths.py`` asserts with ``is``.
-The shim is removed in the release after 0.3.0, whose number issue #522 names.
+every public name the new one defines; the objects are the same objects,
+which ``tests/regression/sample/test_sample_deprecated_paths.py`` asserts
+with ``is``. The shim is removed in the release after 0.3.0, whose number
+issue #522 names.
 """
 
 from __future__ import annotations
@@ -11,9 +12,7 @@ from __future__ import annotations
 import warnings
 
 from snakes_and_ladders.sample.annealed import (
-    ExponentialTempSchedule,
     LogPartition,
-    PottsMove,
     Resampling,
     SimulatedTempered,
     annealed_importance_sampling,
@@ -21,7 +20,6 @@ from snakes_and_ladders.sample.annealed import (
     population_annealing,
     rung_weights,
     simulated_tempering,
-    temperatures,
 )
 
 warnings.warn(
@@ -32,9 +30,7 @@ warnings.warn(
 )
 
 __all__ = [
-    "ExponentialTempSchedule",
     "LogPartition",
-    "PottsMove",
     "Resampling",
     "SimulatedTempered",
     "annealed_importance_sampling",
@@ -42,5 +38,4 @@ __all__ = [
     "population_annealing",
     "rung_weights",
     "simulated_tempering",
-    "temperatures",
 ]

@@ -46,13 +46,13 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import logsumexp
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, temperatures
 from snakes_and_ladders.sample.potts_mcmc import (
     PottsMove,
     _refuse_negative_coupling,
     _sweep_for,
     energies,
 )
+from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, temperatures
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
 

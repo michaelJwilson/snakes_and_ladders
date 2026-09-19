@@ -29,14 +29,6 @@ from snakes_and_ladders.sample.potts_mcmc import (
     parallel_tempering,
 )
 from snakes_and_ladders.sample.statistics import chi_square_p_value, sign_test_p_value
-from snakes_and_ladders.search.support import (
-    SupportKind,
-    TemperedSupport,
-    enumerated_labelling_support,
-    enumerated_support,
-    tempered_labelling_support,
-    tempered_topology_support,
-)
 from snakes_and_ladders.sample.tempered import (
     TemperedEnsemble,
     adapt_ladder_round_trips,
@@ -46,6 +38,14 @@ from snakes_and_ladders.sample.tempered import (
     tempered_potts_pair,
     tempered_topologies,
     up_fraction,
+)
+from snakes_and_ladders.search.support import (
+    SupportKind,
+    TemperedSupport,
+    enumerated_labelling_support,
+    enumerated_support,
+    tempered_labelling_support,
+    tempered_topology_support,
 )
 from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.canonical import (

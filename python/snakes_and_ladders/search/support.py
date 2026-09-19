@@ -63,9 +63,9 @@ from snakes_and_ladders.enumeration import (
 )
 from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.parallel import Backend, map_tasks
-from snakes_and_ladders.search.infer import Model, MoveSet, infer, score_topology
 from snakes_and_ladders.sample.statistics import integrated_autocorrelation_time
 from snakes_and_ladders.sample.tempered import TemperedEnsemble
+from snakes_and_ladders.search.infer import Model, MoveSet, infer, score_topology
 from snakes_and_ladders.search.topology import (
     Topology,
     enumerate_topologies,
