@@ -2862,8 +2862,22 @@ is checkable against.
 
 **The first draft of that feature map broke the ticket's own feasibility premise, and the profile said so.** #706 was argued on 0.30 µs per scored candidate; reading the gain through a per-action call measured **12.4 µs** — 70% of a decision, 0.442 s of 0.634 s over 300 — which is `learn/CLAUDE.md`'s inlining rule violated exactly. Vectorized into one gather, and with the greedy bound read only where an action needs it, a Wolff decision fell from 1,562 µs to **171 µs** over 126 candidates (**9.1×**) and the mixed arm's from 2,670 µs to 393 µs (6.8×); the vectorized gain is pinned **bitwise** against the scalar one. Against the move a decision buys — 2,068 µs for a Swendsen-Wang pass, 5,927 µs for a sweep — the overhead is now 1% and 8%. Folding the remaining tuple reads into one structured pass measured *slower* (293 µs against 279 µs) and was not kept.
 
+**Reinforcement learning lives in one package (issue #779).** `search.rl`
+(490 lines), `search.gym` (206) and `search.surrogate` (323) are `learn.tree`,
+`learn.gym` and `learn.ranking`; `search.surrogate` and `learn.surrogate` share
+no name, so it moved rather than folding. `MoveKind` went the other way, from
+`learn.potts_nd` to `search.potts_mcmc`, beside the moves it names. Excluding
+the three deprecation shims, `search/` now imports nothing from `learn/`, where
+it imported it on four lines. The move is pure: 25 import statements and 16
+prose references rewritten across 29 files, and no reward, feature, policy,
+default, RNG order or return value moved --- the ten test modules that moved to
+`tests/regression/learn/` pin the same values from the new paths, markers
+unchanged. `learn/`'s no-application-imports rule now names its three
+exceptions --- `tree.py`, `ranking.py` and `potts_nd.py` --- rather than
+admitting none.
+
 **A Monte Carlo move keeps a deterministic `step`.** The realization is keyed on a `blake2b` digest of the labelling and the action rather than drawn from a stream (`learn/keyed.py`), so replaying an action replays its successor, a different state draws differently, and `learn.exact`'s enumeration stays valid — the obstacle #597 left open for the bandit and slippery Frozen Lake, settled here without widening the protocol. Prices are `search.ground_state`'s own: a sweep costs `n_nodes + 2 n_edges` and a flip its degree plus one, so a matched-budget comparison is against that module's unit.
-**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, and `search.gym`, the Gymnasium adapter over the same interface. `learn.canonical`: canonical control problems, with an exact optimum written a second way (#597). `learn.failure`: where a classical baseline first fails, which is where a gate can be argued (#597; under `opt` until #717). `learn.tabular`: tabular Q-learning and SARSA, which differ in one expression (#597). `learn.keyed`: randomness inside a move, without giving up a deterministic ``step`` (#706). `learn.potts_nd`: a Potts lattice in N dimensions with a per-site field, searched by Monte Carlo moves (#706).
+**Modules.** The learning interface, the estimators and the episodes they run on: `learn.environment`, `learn.reinforce`, `learn.rollout`, `learn.potts`, `learn.hmm`, `learn.tree`, the phylogenetic environment, and `learn.gym`, the Gymnasium adapter over the same interface (both under `search` until #779). `learn.canonical`: canonical control problems, with an exact optimum written a second way (#597). `learn.failure`: where a classical baseline first fails, which is where a gate can be argued (#597; under `opt` until #717). `learn.tabular`: tabular Q-learning and SARSA, which differ in one expression (#597). `learn.keyed`: randomness inside a move, without giving up a deterministic ``step`` (#706). `learn.potts_nd`: a Potts lattice in N dimensions with a per-site field, searched by Monte Carlo moves (#706).
 
 **The estimator is pinned to a closed form, not to a training curve**
 ([#135](https://github.com/michaelJwilson/snakes_and_ladders/pull/135)). With a finite
@@ -3012,7 +3026,7 @@ factor-graph environment and the surrogate reward model wait on #296 and #308.
 
 ## Milestone 3.1 — Model Surrogates & Bounds for Supported Problems
 
-**Modules.** The surrogates and the bounds they claim: `likelihood.surrogate`, `search.surrogate` and `learn.surrogate`.
+**Modules.** The surrogates and the bounds they claim: `likelihood.surrogate`, `learn.surrogate` and `learn.ranking`, the examples and targets joining the two halves (`search.surrogate` until #779).
 
 **Landed as bounds first and predictors second**
 ([#317](https://github.com/michaelJwilson/snakes_and_ladders/issues/317)). The

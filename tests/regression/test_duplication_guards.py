@@ -49,9 +49,16 @@ SLIMMING_BASELINE = {
     "modules without a docstring": 0,
     "root exports": 7,
     "test modules pinning a twin to its oracle beyond the first": 13,
-    "flat modules": 148,
+    "flat modules": 151,
     "API-map entries": 1576,
 }
+
+# Issue #779 moved three modules from `search/` to `learn/` and left a
+# deprecation shim at each old path, so six modules stand where three did and
+# `flat modules` rose 148 to 151. The shims go one release after 0.3.0 and the
+# row returns to 148 with them. Every other row is unmoved: the API map counts
+# the same entries (a shim re-exports and defines nothing), and `surrogate
+# modules` is still 4, since `search/surrogate.py` remains a module.
 
 # The consolidated home of each pattern, which legitimately contains it once.
 LOGSUMEXP_OWNER = "numerics.py"

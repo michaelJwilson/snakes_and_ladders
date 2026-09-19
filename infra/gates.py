@@ -313,7 +313,7 @@ JUDGED_COVERAGE = JudgedCoverage(
     counting=("end2end", "oracle"),
     exempt_packages=("qa",),
     floor=83.7,
-    package_floors={"search": 89.9},
+    package_floors={"search": 90.5},
 )
 
 #: The complement (issue #732): every kind and finding but the two that
@@ -328,7 +328,7 @@ UNJUDGED_COVERAGE = JudgedCoverage(
     ),
     exempt_packages=("qa",),
     floor=89.2,
-    package_floors={"search": 88.9},
+    package_floors={"search": 89.5},
 )
 
 #: The two recuts of one run, in the order the report prints them.

@@ -4,7 +4,7 @@ One topology: a full fit, the plug-in bound, the parsimony bound, and a
 learned prediction. One lattice: enumeration, the four bounds, and the
 feature and token vectors a learned lattice surrogate reads (issue #365).
 Correctness is pinned in ``tests/regression/likelihood/test_surrogate.py``
-and ``tests/regression/search/test_search_lattice_surrogate.py``.
+and ``tests/regression/learn/test_search_lattice_surrogate.py``.
 
 The lattice bounds are timed against a **per-site** field, the shape the
 `spatio_only` fixtures declare, since that is the shape the feature vector

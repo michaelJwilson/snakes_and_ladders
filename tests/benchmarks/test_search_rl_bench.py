@@ -1,6 +1,6 @@
 """Benchmarks for the phylogenetic environment.
 
-See tests/regression/test_search_rl.py for correctness. The number that
+See tests/regression/learn/test_search_rl.py for correctness. The number that
 matters is the ratio between the two reward models, because that ratio is the
 entire argument for issue #131's simplification: one candidate scored at
 known parameters against the same candidate scored at maximized ones.

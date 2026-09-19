@@ -228,7 +228,11 @@ def test_the_complement_counts_what_the_judged_guard_leaves_out(
     assert reach["search/kernel.py"].counted == 7
     assert set(JUDGED_COVERAGE.counting).isdisjoint(UNJUDGED_COVERAGE.counting)
     assert COVERAGE_GUARDS == (JUDGED_COVERAGE, UNJUDGED_COVERAGE)
-    assert UNJUDGED_COVERAGE.package_floors["search"] < UNJUDGED_COVERAGE.floor
+    # `search`'s complement floor sat below the whole's until issue #779 moved
+    # three modules out of the package --- `gym.py` among them, at 28.17% judged
+    # --- and it now sits above it, as its judged floor already did. Both floors
+    # are the measurement rounded down; the relation is read, never chosen.
+    assert UNJUDGED_COVERAGE.package_floors["search"] > UNJUDGED_COVERAGE.floor
 
 
 @pytest.mark.critical
