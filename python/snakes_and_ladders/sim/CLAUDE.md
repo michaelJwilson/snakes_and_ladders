@@ -4,8 +4,8 @@ Generation: data drawn from a declared model under a declared generator, with
 the truth that produced it retained beside it. Nothing here performs inference.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file and related work — and every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
 
 ## Local rules
 

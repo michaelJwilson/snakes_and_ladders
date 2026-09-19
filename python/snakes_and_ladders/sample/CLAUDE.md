@@ -10,8 +10,8 @@ the other. An optimizer is judged by the optimum it reaches and a sampler by
 the distribution it converges to, which is why the two directories are two.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file and related work — e.g. every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
 
 ## Assumed frameworks
 
@@ -62,8 +62,8 @@ NumPy, PyTorch for the continuous samplers, the Rust sweeps behind
 - **A ladder placed from a measurement is placed from its noise too.** The
   feedback criterion redistributes rungs on a round-trip statistic, so a
   warm-up too short to resolve that statistic places them where the noise
-  fell: at 400 sweeps per measurement the placed ladder ranged from 1,469 to
-  5,357 recorded sweeps per round trip against the geometric ladder's 1,690,
-  and at 1,000 it landed at 1,280 either way. A placement reports the warm-up
-  it was read from, and a criterion is compared against another criterion at
-  equal rungs and equal warm-up or not at all (#756).
+  fell --- at one warm-up the placed ladder's recorded sweeps per round trip
+  spanned a factor of three and at a longer one both criteria landed
+  together, which `STATUS.md` records under #756. A placement reports the
+  warm-up it was read from, and a criterion is compared against another
+  criterion at equal rungs and equal warm-up or not at all.

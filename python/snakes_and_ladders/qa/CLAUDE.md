@@ -4,8 +4,8 @@ Quality assurance scripts: the plots and tables that with scientific value for `
 and that validate the results expected of supported problems.
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
-section binds this file and related work — e.g. every docstring, comment and commit message
-in this module. It is referenced here, never restated. What follows is local.
+section binds this file and every docstring, comment and commit message in this
+module. It is referenced here, never restated. What follows is local.
 
 ## Local rules
 

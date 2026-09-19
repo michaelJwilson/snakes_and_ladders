@@ -28,6 +28,7 @@ MODULE_DIRECTORIES = (
     "python/snakes_and_ladders/opt",
     "python/snakes_and_ladders/learn",
     "python/snakes_and_ladders/search",
+    "python/snakes_and_ladders/sample",
     "python/snakes_and_ladders/qa",
     "python/snakes_and_ladders/sandbox",
     "infra",
@@ -36,9 +37,20 @@ MODULE_DIRECTORIES = (
 
 POINTER = "**Writing Style**"
 
-# Rule 5's label, distinctive enough that a file reproducing the section would
-# contain it and a file referencing the section would not.
-RESTATEMENT = "Apply naming, terminology, and syntax consistently"
+
+#: Rule 5's own sentence, read from root rather than copied here. The copy
+#: this replaces said "naming, terminology, and syntax" where root says
+#: "naming, terminology, notation and syntax", so it matched nothing and the
+#: check could not fail (#787, #803). Derived, it cannot drift again.
+def _rule_five_sentence() -> str:
+    """The sentence root `CLAUDE.md` states under **Maintain formatting**."""
+    for line in (REPO_ROOT / "CLAUDE.md").read_text().splitlines():
+        if "**Maintain formatting:**" in line:
+            sentence = line.split("**Maintain formatting:**", 1)[1].strip()
+            assert len(sentence) > 20, "rule 5 is too short to search for"
+            return sentence
+    raise AssertionError("root CLAUDE.md states no Maintain formatting rule")
+
 
 # Rule 6 says a `CLAUDE.md` carries principles rather than technical detail,
 # and the detail accreting fastest is a measurement: a result belongs to
@@ -46,7 +58,11 @@ RESTATEMENT = "Apply naming, terminology, and syntax consistently"
 # cover what was found in these files (issue #235): scientific notation, an
 # "N of M" count, and a decimal carrying two or more fractional digits.
 MEASUREMENT = re.compile(
-    r"\b\d+(?:\.\d+)?e[-+]?\d+\b|\b\d+ of \d+\b|\b\d+\.\d{2,}\b",
+    r"\b\d+(?:\.\d+)?e[-+]?\d+\b|\b\d+ of \d+\b|\b\d+\.\d{2,}\b"
+    # A fourth shape, which the three above missed: a comma-grouped count,
+    # as `sample/CLAUDE.md`'s ladder rule carried until #803 moved its
+    # numbers to `STATUS.md` (#787 found the same class in `search/`).
+    r"|\b\d{1,3}(?:,\d{3})+\b",
     re.IGNORECASE,
 )
 
@@ -55,6 +71,16 @@ MEASUREMENT = re.compile(
 # that growth resuming: it is above the longest file after issue #235 rewrote
 # them, so adding a rule past it means removing one.
 LINE_BUDGET = 120
+
+
+#: How a module file names a section of root, and how root writes one: root
+#: uses headings (`## Writing Style`) and a module file bold (#803).
+_ROOT_SECTION = r"Root `CLAUDE.md`'s \*\*([A-Z][^*]{2,40})\*\*"
+
+
+def _in_root(name: str, root: str) -> bool:
+    """Whether root `CLAUDE.md` carries a section called ``name``."""
+    return f"**{name}**" in root or f"# {name}" in root
 
 
 def _module_claude_files() -> list[Path]:
@@ -110,10 +136,11 @@ def test_no_module_claude_md_restates_the_writing_style() -> None:
     # Why the pointer is a pointer: root `CLAUDE.md`'s Writing Style section
     # changed three times on the day this was written, and nine copies would
     # already disagree.
+    sentence = _rule_five_sentence()
     restating = [
         str(path.relative_to(REPO_ROOT))
         for path in _module_claude_files()
-        if RESTATEMENT in path.read_text()
+        if sentence in path.read_text()
     ]
 
     assert restating == []
@@ -160,16 +187,45 @@ def test_the_root_file_states_that_the_rules_reach_the_module_files() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_the_expected_reader_contract_lives_only_in_docs() -> None:
-    # A contract about the documents, so the seven other module files have no
-    # business restating it, and only `docs/` may refer to it.
-    elsewhere = [
-        str(path.relative_to(REPO_ROOT))
-        for path in _module_claude_files()
-        if "Expected Reader" in path.read_text() and path.parent.name != "docs"
-    ]
+def test_no_module_claude_md_points_at_a_root_section_root_does_not_have() -> None:
+    # This checked that only `docs/` named root's **Expected Reader**, while
+    # root had no such section -- so it asserted the absence of a reference to
+    # something absent, and passed for the wrong reason (#787). What is worth
+    # checking is the opposite direction: a module file naming a bold root
+    # section that root does not carry sends a reader nowhere.
+    root = (REPO_ROOT / "CLAUDE.md").read_text()
+    dangling: dict[str, list[str]] = {}
+    for path in _module_claude_files():
+        named = set(re.findall(_ROOT_SECTION, path.read_text()))
+        missing = sorted(name for name in named if not _in_root(name, root))
+        if missing:
+            dangling[str(path.relative_to(REPO_ROOT))] = missing
 
-    assert elsewhere == []
+    assert dangling == {}, (
+        f"module CLAUDE.md files naming a root section root does not have: {dangling}"
+    )
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_the_dangling_section_check_catches_one() -> None:
+    # The guard above passes on a clean tree, which says nothing about whether
+    # it can fail: the shape it replaced passed for exactly that reason. Both
+    # directions, on text rather than on the tree.
+    root = (REPO_ROOT / "CLAUDE.md").read_text()
+    names = re.findall(
+        _ROOT_SECTION, "Root `CLAUDE.md`'s **Expected Reader** states the contract."
+    )
+
+    assert names == ["Expected Reader"]
+    assert not _in_root(names[0], root)
+    # Root writes its sections as headings and a module file names them in
+    # bold, so the membership test reads both spellings or it would report
+    # every correct pointer as dangling.
+    assert re.findall(
+        _ROOT_SECTION, "Root `CLAUDE.md`'s **Writing Style** binds this file."
+    ) == ["Writing Style"]
+    assert _in_root("Writing Style", root)
 
 
 @pytest.mark.critical
@@ -200,7 +256,12 @@ def test_no_module_claude_md_carries_a_measurement() -> None:
 def test_the_measurement_check_catches_each_shape_it_claims_to() -> None:
     # The check exercised per shape rather than in aggregate: a guard never
     # seen to fail is not known to work, and a regex silently matches nothing.
-    caught = ["worst deviation 3.7e-15", "39 of 40 runs", "a ratio of 0.87856"]
+    caught = [
+        "worst deviation 3.7e-15",
+        "39 of 40 runs",
+        "a ratio of 0.87856",
+        "ranged from 1,469 to 5,357 sweeps",
+    ]
     passed = [
         "the deviation is reported rather than asserted",
         "a bound that holds at every size",

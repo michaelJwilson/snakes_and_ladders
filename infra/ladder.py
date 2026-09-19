@@ -900,7 +900,8 @@ LADDER: tuple[Rung, ...] = (
         "slice sampling",
         "sample.slice.slice_sample",
         None,
-        T + "sample/test_opt_slice.py::test_the_slice_chain_recovers_an_analytic_gaussian",
+        T
+        + "sample/test_opt_slice.py::test_the_slice_chain_recovers_an_analytic_gaussian",
     ),
     Rung(
         "mixture",
