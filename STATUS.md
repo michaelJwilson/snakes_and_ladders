@@ -3973,6 +3973,15 @@ does not inherit `likelihood.schedule.MessageSchedule`, a schedule no
 field and is not a schedule, so the pin is five. 0.41 s on the `critical` tier,
 and both halves are exercised on a violating source.
 
+**The incidence seam is guarded (issue #755).** `test_duplication_guards.py`
+reads every package module's syntax tree: no `offsets` or `indptr` array by
+`cumsum` and no pair list sorted into row-major order outside `incidence.py`,
+against **10** modules that build a store through `SparseIncidence.from_pairs`
+or `compressed_adjacency` and **3** files excluded against a reason each ---
+`ragged.py` and `search.maxflow` on the measurements above, and
+`learn.surrogate`, which the guard found on `main`: `_Batch.__init__` lays a
+batch's token blocks end to end and computes their starts with `np.cumsum`.
+
 **Message schedules (issue #592).** The order messages go in is an interface,
 `likelihood/schedule.py`, where it was two branches of an `if`. Five schedules
 declare a `Guarantee` of three values rather than a boolean, because the
