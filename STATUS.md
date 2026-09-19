@@ -127,7 +127,27 @@ each gain the planted run they lacked. `search` reads **89.86%** against its
 #744 to #749 deleted the `oracle` over the Rust max-flow kernel and `opt`'s
 four Himmelblau minima, which is `search` 89.99% to 89.86% and `opt` 86.42% to
 85.93% and is not this branch's.
-The ladder the `oracle` tests form --- 448 of them in 142 files on this tree,
+`learn` is the third (step 4): judged **84.93%** with `qa` exempt against
+83.89% and the complement **89.26%** against 89.28%, floored at **84.9** and
+89.2, with `learn` **79.61% to 86.62%** and its judged deficit 342 to 191
+statements. Six referees carry it --- a planted ground state recovered at both
+grains on `potts_nd`, a hand-computed table on `arena`, a forward expansion
+over 512 trajectories on `exact`, the enumerated score and gradient at four
+interior points of an ascent on `relaxed`, the `gamma = 1` telescoped return
+on `critic`, and the enumerated binomial on `failure` --- and `canonical.py`
+stays at 77.98%, no learner being run on the chain, the cliff or Hanoi.
+`likelihood` is the fourth (step 4): judged **85.35%** with `qa` exempt
+against 84.93% and the complement **89.25%** against 89.26%, floored at
+**85.3** and 89.2, with `likelihood` **89.17% to 91.24%**, its judged deficit
+259 to 198 statements and its public callables no judging test enters 41 to
+32, 27 of them declarations whose bodies run at import. Three referees and
+thirteen re-marks carry it --- the device policy's every route against the
+NumPy pruning oracle at the tolerance it returns, density evolution against
+its scalar recursion and the closed-form threshold, and
+`prune_with_matrices` against direct marginalization --- and
+`belief_propagation.ConvergenceError` is left, its non-convergence asserted
+and refereed by nothing.
+The ladder the `oracle` tests form --- 520 of them in 148 files on this tree,
 416 in 141 when issue #734 surveyed it --- is declared once in
 `infra/ladder.py` and generated into the textbook as `tab:ladder`: 89 rungs
 over the five problems, 89 pinned by a named `oracle` test and 0 carrying the
@@ -2218,7 +2238,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706).
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology`, `search.statistics` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `search.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `search.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756).
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively
@@ -2437,6 +2457,140 @@ algorithms slow by roughly 1.9x, so the gap is 2.1x at extent 24 and widening.
 These lattices are small and their boundary open, both of which soften the
 transition. Recorded as
 `docs/experiments/001-potts-cluster-autocorrelation.md`.
+
+**Two gradient-informed proposals landed, and on this energy they are one
+kernel** ([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`PottsMove.LOCALLY_BALANCED` weights every single-flip change by
+`sqrt(pi(s') / pi(s))` (Zanella 2020); `PottsMove.GIBBS_WITH_GRADIENTS`
+weights it by the same function of the first-order Taylor estimate of that
+ratio at the one-hot state (Grathwohl et al. 2021). The estimate **is** the
+ratio here: the relaxed log weight is affine in each site's row, so a
+single-flip change carries no second-order term. Pinned three ways at
+`1e-12` — the heat bath's own `heat_bath_log_weights`, the tape's gradient
+through `torch.autograd.grad`, and the enumerated energy of every flipped
+configuration — so the coincidence is refereed rather than assumed. Both
+leave the exact Boltzmann law invariant at the enumerable sizes: chi-square
+against enumeration at a significance of 0.001, realized
+0.0157 to 0.9926 over two seeds on the 2x2, the 3x3 and the frustrated
+triangular instance, the two move sets agreeing to four figures on every one
+of them. Dropping the Metropolis correction, which leaves the chain
+stationary at `pi(s) Z(s)`, is rejected at p = 0.0.
+The same two proposals run over the factor graph as
+`GibbsMove.LOCALLY_BALANCED` and `GibbsMove.GIBBS_WITH_GRADIENTS`, where the
+estimate is exact for the same reason and against the same referee
+(p = 0.2208 and 0.0483 over two seeds).
+
+**They halve the sweeps and pay eight times as much to take one.** Energy
+autocorrelation time at the exact transition on a 16x16 open lattice, two
+readings each, a sweep being `n_nodes` updates for all three, at a 1-minute
+load of 0.96 to 1.09:
+
+| 4,000 sweeps, 400 burn-in | single-site | locally balanced | Gibbs with gradients |
+| --- | --- | --- | --- |
+| tau in sweeps, seed 0 | 12.93 | 5.12 | 5.12 |
+| tau in sweeps, seed 1 | 8.07 | 4.79 | 4.79 |
+| wall, NumPy sweep | 9.3 s | 75.7 s | 109.3 s |
+
+An independent energy sample costs 4.96 sweeps against the heat bath's 10.50,
+**2.1x fewer**, at **8.1x** the wall per sweep against the NumPy heat bath and
+250x against the Rust sweep that is the default --- so 3.9x behind at equal
+wall clock, and 380x behind the shipped sampler. Recorded as
+`docs/experiments/021-potts-gradient-proposals.md`;
+[#754](https://github.com/michaelJwilson/snakes_and_ladders/issues/754) owns
+the port that would close it.
+
+**Two cluster moves landed for the frustrated lattice, and both percolate on
+it** ([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`PottsMove.NIEDERMAYER` activates a bond on its energy relative to a threshold
+`E_0` (Niedermayer 1988) rather than on its endpoints agreeing, so it runs on a
+coupling of either sign --- the instance `sample_potts` refuses Wolff and
+Swendsen-Wang on. At `niedermayer_threshold`'s value it **is** Wolff on a
+ferromagnet: the same bonds, the same field accept step, and the same labelling
+to the last bit over 900 draws at three temperatures. Below that value the
+boundary terms of its ratio survive and the move interpolates down to a
+single-site Metropolis flip, which is pinned against `energies` on the flipped
+configuration. `sample_potts_pair` and `tempered_potts_pair` carry Houdayer's
+isoenergetic move (2001): two replicas at one temperature exchange labels on a
+component of the region where they disagree, which leaves `E(s) + E(s')` where
+it found it --- worst `|dE|` 3.6e-15 over 500 drawn pairs --- so the acceptance
+is 1 by an identity. Both leave the exact Boltzmann law invariant at the
+enumerable sizes: chi-square against enumeration at a significance of 0.001,
+realized 0.0221 to 0.9945 over two seeds on the 3x3 open square and the 3x3
+periodic triangular antiferromagnet, and 0.0039 to 0.9913 per replica for the
+pair. Two ablations are rejected at `p = 0.0`: the accept step dropped, and
+Houdayer's component replaced by the single site it was seeded from. Where a
+chain cannot referee the move --- mixed couplings, where the cluster is 8.94
+sites of 9 and a chain is a global spin reversal --- the kernel's own flow
+`pi(s) K(s, s')` is read against its transpose instead, 0.0016 against a Monte
+Carlo error of 0.0089.
+
+**Neither buys a round trip on this lattice.** Houdayer's cluster is 43 to 59
+sites of a 65 to 72-site defect region on the 12x12 periodic triangular
+antiferromagnet, so the move is a near-global exchange of the two replicas:
+
+| 8 seeds, 2,000 sweeps, 10 rungs | without Houdayer | with Houdayer |
+| --- | --- | --- |
+| round-trip time, sweeps (12x12 triangular) | 1,115.5 | 1,090.7 |
+| round-trip time, sweeps (60-site planted glass) | 955.9 | 772.3 |
+| wall, 8 seeds | 17.4 s | 67.8 s |
+
+The paired sign test reads `p = 0.6875` on the lattice and `p = 0.2891` on the
+glass, so no direction is established in either sense, at 3.90x and 4.01x the
+wall over two readings. Recorded as
+`docs/experiments/022-cluster-moves-for-frustrated-lattices.md`. The moves are
+exact and cheap to have; what the measurement rejects is this instance, whose
+overlap percolates, and not the construction. `MoveKind.NIEDERMAYER` is an arm
+`PottsNDEnvironment` can select beside Wolff and Swendsen-Wang, through
+`cluster_moves`; Houdayer's move is not one and cannot be, an arm's action
+carrying one labelling to one labelling where his carries a pair.
+
+**`log Z` landed for the lattice, estimated and with its error**
+([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`search.annealed` carries three estimators on one ladder of inverse
+temperatures, from `beta = 0` --- where `log Z_0 = n log q` is exact, and is
+returned bitwise --- to the target, each stepping the shipped kernel once per
+rung so every move set is admissible. `annealed_importance_sampling` (Neal
+2001) weights independent annealing runs; `population_annealing` (Hukushima &
+Iba 2003) resamples a population by the same weights and accumulates the
+per-rung normalizers; with the resampling off the second **is** the first, the
+two agreeing to 1.8e-15 on the same trajectories. Both recover
+`strip_log_partition` at strip widths 4, 6 and 8 and the enumerated `log Z` on
+the two 3x3 lattices, every deviation inside three of its own standard error
+over two seeds --- worst 1.63 --- at an ESS of 59 to 110 of 128. Two ablations:
+dropping the importance weight leaves `mean(log w)`, Jensen's lower bound,
+**7.9 standard errors low** on a six-rung ladder, and multinomial resampling in
+place of systematic leaves a family entropy of 0.19 to 0.80 nats against 4.01
+to 4.17 of a possible 4.85 --- two effective families of 128, which is why the
+default is systematic. `simulated_tempering` (Marinari & Parisi 1992) samples
+the rung as a variable on the weights `g_k = -log Z_k` those runs estimate: its
+configurations are the enumerated Boltzmann law at every rung by chi-square at
+a significance of 0.001, realized 0.0138 to 0.7028, and its rung occupation is
+the one the weights predict, 0.1907 to 0.7083 under exact weights and 0.2765 to
+0.3747 under a pilot's.
+
+**A tempering ladder can now be placed by its round trips, and that does not
+beat placing it by its acceptance.** `opt.schedule.adapt_ladder_by_round_trips`
+redistributes a ladder of fixed length so the local diffusivity is flat
+(Katzgraber et al. 2006), from the fraction of walkers moving up at each rung;
+`search.tempered.up_fraction` measures it off the walker trace
+`parallel_tempering` now records, and `adapt_ladder_round_trips` is the Potts
+binding. The acceptance-placed ladder stays the default and nothing changes for
+a caller that does not ask. Over 8 seeds paired by seed at 2,000 recorded
+sweeps:
+
+| round-trip time, sweeps | acceptance-placed | round-trip-placed |
+| --- | --- | --- |
+| 16x16 open square at `J_c`, 12 rungs | 1,194.4 | 1,053.7 |
+| 12x12 periodic triangular, 9 rungs | 360.1 | 366.6 |
+
+The paired sign test reads `p = 0.2891` and `p = 0.7266`, and a second reading
+at another warm-up seed `p = 1.0` and `p = 0.7266`, so no direction is
+established either way. What the readings do establish is the warm-up: both
+placements beat the geometric ladder they start from, 1,279.7 against 1,690.3
+on the 16x16, and a feedback placement read from 400 sweeps instead of 1,000
+ranges from 1,469.5 to 5,357.1 --- 3.2x worse than geometric --- because `f` is
+then read from its own noise. Recorded as
+`docs/experiments/023-placing-the-tempering-ladder.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
@@ -3795,6 +3949,34 @@ each read by one simulator, both below the three-consumer rule. One merge was
 taken: fourteen sites across seven modules reduced a score vector by
 `logsumexp(values[None, :], axis=1)[0]`, which is `axis=0`.
 `docs/experiments/016` and `017` carry the runs.
+
+**Data structures at #755.** The survey reads **245** classes and **8** clusters,
+with 12 `Protocol`s across 10 modules and 1,577 API-map entries over 148 flat
+modules. Every cluster was decided against root `CLAUDE.md`'s rule and the
+reason recorded per row (`docs/reviews/2026-09-19.md`): **one meets it and is
+folded, one is already the seam and wants a guard, six are left as they are**
+--- `suffix:Params` (17), `suffix:Decoding` (7), `prefix:Exact` (5),
+`suffix:Fit` (6), `suffix:Result` (6) and `suffix:Dataset` (5) share a name and
+no surface, and `SimulatedDataset` is the phylogenetic alignment rather than
+their base. The fold is the composition #387 left: enumerate, score, take the
+first maximizer, written in full by `learn.potts.optimum`, `learn.hmm.optimum`
+and `learn.relaxed.enumerate_optimum` and now one function,
+`enumeration.enumerated_optimum`. The three return bitwise what they returned,
+asserted against the deleted body in `tests/regression/test_enumeration_seam.py`
+at four sizes. `likelihood.hmm_paths` keeps its own argmax: it reads the score
+vector again for the posterior. `tests/regression/test_duplication_guards.py`
+pins the 245 classes, the eight clusters at their member counts and the one
+named argmax consumer.
+
+**The `MessageSchedule` guard (issue #755).** The seam #592 wrote is now
+asserted rather than remembered: `tests/regression/test_duplication_guards.py`
+reads the class tree and the registry, and fails a schedule-shaped class that
+does not inherit `likelihood.schedule.MessageSchedule`, a schedule no
+`MessageScheduleName` reaches, or a consumer branching on a schedule's name.
+**Five schedules, one base, five modules calling through it** --- the
+`fields:name` cluster's seventh member, `search.ground_state.Entry`, shares the
+field and is not a schedule, so the pin is five. 0.41 s on the `critical` tier,
+and both halves are exercised on a violating source.
 
 **Message schedules (issue #592).** The order messages go in is an interface,
 `likelihood/schedule.py`, where it was two branches of an `if`. Five schedules
