@@ -4,6 +4,13 @@
 % generator emits against and the framing below.
 \documentclass[11pt,a4paper]{article}
 \input{preamble}
+% Font expansion off for this document alone. pdfTeX refuses to expand a
+% font at the shipout of a page of this map --- "auto expansion is only
+% possible with scalable fonts", every font on the page having a Type 1
+% file --- and which page depends on the layout: main's builds, the tree
+% with two more sampler modules does not (#770). The map is code set in
+% typewriter, which microtype never expands, so nothing is lost by it.
+\microtypesetup{expansion=false}
 \input{notation}
 
 % One row per entry: the name in the left column and its own summary line in

@@ -857,6 +857,37 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "mixture",
+        "MALA",
+        "opt.langevin.mala",
+        None,
+        T + "opt/test_opt_langevin.py"
+        "::test_the_langevin_chain_recovers_an_analytic_gaussian",
+    ),
+    Rung(
+        "mixture",
+        "MALA",
+        "opt.langevin.mala",
+        "assignment enumeration",
+        T + "opt/test_opt_langevin.py"
+        "::test_the_langevin_chain_recovers_the_enumerated_assignment_posterior",
+    ),
+    Rung(
+        "mixture",
+        "slice sampling",
+        "opt.slice.slice_sample",
+        None,
+        T + "opt/test_opt_slice.py::test_the_slice_chain_recovers_an_analytic_gaussian",
+    ),
+    Rung(
+        "mixture",
+        "slice sampling",
+        "opt.slice.slice_sample",
+        "assignment enumeration",
+        T + "opt/test_opt_slice.py"
+        "::test_the_slice_chain_recovers_the_enumerated_assignment_posterior",
+    ),
+    Rung(
+        "mixture",
         "FromChain, FromAnnealing, FromTempering",
         "opt.initialize.FromChain",
         None,

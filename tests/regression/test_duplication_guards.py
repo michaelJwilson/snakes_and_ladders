@@ -88,9 +88,11 @@ SLIMMING_BASELINE = {
     # that rises states why here or it is a duplicate. #756's
     # `search.annealed` added both, a module and fourteen names. #754's BCJR
     # pass in Rust added one module, `likelihood/convolutional_rust.py`, and
-    # one public name.
-    "flat modules": 151,
-    "API-map entries": 1618,
+    # one public name. #756's two samplers --- `opt.langevin` and `opt.slice`,
+    # one module each, which is the package's shape for a sampler --- added
+    # two and eight.
+    "flat modules": 153,
+    "API-map entries": 1626,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
@@ -115,9 +117,10 @@ CLUSTER_BASELINE = {
 
 #: State-carrying classes over the whole package, the number the clusters are
 #: drawn from.
-#: Re-pinned on the merge with `main` ee16541 (2026-09-19): 250, main's 247
-#: plus the three result records `search.annealed` declares (#756, step 6).
-STRUCTURE_BASELINE = 250
+#: Re-pinned on the merge with `main` ee16541 (2026-09-19): 255, main's 247
+#: plus the three result records `search.annealed` declares and the five the
+#: two samplers and their kernel seam declare (#756, steps 6 and baselines).
+STRUCTURE_BASELINE = 255
 
 #: `enumeration.argmax` outside its own module. Issue #755 folded the three
 #: `learn` oracles that enumerated, scored and took the first maximizer onto

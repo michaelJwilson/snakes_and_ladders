@@ -1749,7 +1749,7 @@ state.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is.
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `opt.langevin` and `opt.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756).
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,
@@ -2586,6 +2586,53 @@ on the 16x16, and a feedback placement read from 400 sweeps instead of 1,000
 ranges from 1,469.5 to 5,357.1 --- 3.2x worse than geometric --- because `f` is
 then read from its own noise. Recorded as
 `docs/experiments/023-placing-the-tempering-ladder.md`.
+
+**The two baselines every Hamiltonian number is read against landed, and they
+beat the trajectory at equal evaluations**
+([#756](https://github.com/michaelJwilson/snakes_and_ladders/issues/756)).
+`opt.langevin.mala` is `opt.hmc.sample` at one leapfrog step (Roberts &
+Tweedie 1996), written as the two Gaussian transition densities rather than as
+a trajectory, so the identity is measured between two implementations: over
+400 proposals at step sizes 0.3, 0.7 and 1.0 the draws agree to 2.7e-15, the
+energy error to 1.4e-14 and every accept/reject decision exactly, against a
+declared 1e-12. It adapts through the same two warm-up windows toward Roberts
+& Rosenthal's 0.574 rather than HMC's 0.65 --- the drawn chain's acceptance is
+0.537 pooled over four seeds --- and carries an opt-in uncorrected route whose
+bias is reported and never argued away: on a unit Gaussian at a step of 1.0
+its variance is 1.338 against the closed-form `s^2 / (1 - h^2 / (4 s^2))` of
+1.333, 0.14 standard errors, and against the target's 1.000, 11.09 of them,
+while the corrected chain lands at 1.45 and the acceptance rate reads 1.00 for
+the biased chain and 0.927 for the correct one. `opt.slice.slice_sample` is
+Neal's (2003) stepping-out and shrinkage, coordinate-wise and hit-and-run,
+with no tuning beyond an initial width; it reports objective evaluations
+because it spends no gradient, and its shrinkage is ablated on cost rather
+than on bias --- the rejection form reaches the 100-candidate refusal at
+widths 2.0, 10.0 and 40.0 where the shrinkage holds a sweep to 11.3, 12.6 and
+16.0 evaluations. Both recover the analytic Gaussian inside three of their own
+ESS-corrected standard errors over two seeds (MALA worst 0.87 on a mean and
+0.47 on a variance; slice 0.64 and 1.66) and the enumerated assignment
+posterior inside four (MALA 1.15, slice 1.62), which puts four new rungs on
+the mixture ladder.
+
+Effective samples per 1,000 evaluations, worst coordinate, two seeds, each
+sampler at its own warm-up, at a 1-minute load of 3.90 to 4.32 on a 4-core
+host shared with two other agents:
+
+| per 1,000 evaluations, seeds 1 / 2 | HMC (gradients) | MALA (gradients) | slice (objective) |
+| --- | --- | --- | --- |
+| analytic Gaussian, 2,000 draws | 25.3 / 22.0 | 59.1 / 71.8 | 30.8 / 29.4 |
+| analytic Gaussian, 8,000 draws | 27.8 / 30.5 | 53.0 / 54.7 | 31.4 / 30.3 |
+| mixture posterior, 800 draws | 19.4 / 20.5 | 191.8 / 166.5 | 100.8 / 116.5 |
+| mixture posterior, 3,200 draws | 38.8 / 30.2 | 196.2 / 235.0 | 125.2 / 115.1 |
+| wall, 8,000 / 3,200 draws | 17.5 s / 15.1 s | 3.8 s / 3.8 s | 2.6 s / 2.5 s |
+
+The trajectory is not paid for at these dimensions: MALA takes 1.7x to 2.6x
+HMC's samples per gradient on the two-coordinate Gaussian and 5.1x to 7.8x on
+the one-coordinate mixture posterior, where ten steps retrace a line already
+crossed. A gradient is a forward evaluation and a backward pass, so slice
+sampling's column is not HMC's column and the ranking is settled on the wall
+instead, where it is the same. Recorded as
+`docs/experiments/026-what-a-draw-costs-in-gradients.md`.
 
 **An exact ground state landed, and it is the repository's first optimum that
 is proved rather than enumerated.** For two states with every coupling
