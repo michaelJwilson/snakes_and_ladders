@@ -3780,6 +3780,24 @@ taken: fourteen sites across seven modules reduced a score vector by
 `logsumexp(values[None, :], axis=1)[0]`, which is `axis=0`.
 `docs/experiments/016` and `017` carry the runs.
 
+**Data structures at #755.** The survey reads **245** classes and **8** clusters,
+with 12 `Protocol`s across 10 modules and 1,577 API-map entries over 148 flat
+modules. Every cluster was decided against root `CLAUDE.md`'s rule and the
+reason recorded per row (`docs/reviews/2026-09-19.md`): **one meets it and is
+folded, one is already the seam and wants a guard, six are left as they are**
+--- `suffix:Params` (17), `suffix:Decoding` (7), `prefix:Exact` (5),
+`suffix:Fit` (6), `suffix:Result` (6) and `suffix:Dataset` (5) share a name and
+no surface, and `SimulatedDataset` is the phylogenetic alignment rather than
+their base. The fold is the composition #387 left: enumerate, score, take the
+first maximizer, written in full by `learn.potts.optimum`, `learn.hmm.optimum`
+and `learn.relaxed.enumerate_optimum` and now one function,
+`enumeration.enumerated_optimum`. The three return bitwise what they returned,
+asserted against the deleted body in `tests/regression/test_enumeration_seam.py`
+at four sizes. `likelihood.hmm_paths` keeps its own argmax: it reads the score
+vector again for the posterior. `tests/regression/test_duplication_guards.py`
+pins the 245 classes, the eight clusters at their member counts and the one
+named argmax consumer.
+
 **Message schedules (issue #592).** The order messages go in is an interface,
 `likelihood/schedule.py`, where it was two branches of an `if`. Five schedules
 declare a `Guarantee` of three values rather than a boolean, because the
