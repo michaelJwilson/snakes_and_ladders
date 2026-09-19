@@ -30,14 +30,18 @@ independently computable, which is what
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from snakes_and_ladders.learn.potts_nd import MoveKind
 from snakes_and_ladders.search.potts_mcmc import (
     _find,
+    _niedermayer_sweep,
     _swendsen_wang_sweep,
     _union,
     _wolff_sweep,
+    niedermayer_threshold,
 )
 from snakes_and_ladders.sim.graph import PottsGraph
 
@@ -192,6 +196,106 @@ class WolffMove:
         return labels, size * self._per_member
 
 
+class NiedermayerMove:
+    """One cluster grown under Niedermayer's bond rule, two colours transposed on it.
+
+    Wolff's arm generalized (issue #756):
+    :func:`~snakes_and_ladders.search.potts_mcmc._niedermayer_sweep` activates a
+    bond on its energy relative to a threshold ``E_0`` rather than on its
+    endpoints agreeing, so the arm runs on a coupling of either sign, and at
+    :func:`~snakes_and_ladders.search.potts_mcmc.niedermayer_threshold`'s value
+    it *is* Wolff on a ferromagnet --- same bonds, same acceptance of one.
+
+    The action names a root and a colour, as :class:`WolffMove`'s does. The
+    colour is read as the one the root's own colour is **transposed** with
+    rather than the one the cluster is recoloured to: above ``E_0 = 0`` a
+    cluster is not monochromatic and a recolouring would move its interior
+    bonds, which is the one thing the construction needs left alone.
+
+    **Zero temperature is passed through rather than written out**, which is
+    where this differs from :class:`WolffMove`. ``beta = inf`` is a number the
+    sweep carries: a bond of positive energy margin is certain rather than
+    drawn, and a step that lowers the score is refused without consuming a
+    uniform, so the limit is the sweep's own rather than a second kernel
+    beside it.
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The lattice. Couplings of either sign, unlike :class:`WolffMove`'s.
+    field : np.ndarray
+        ``(n_nodes, n_states)``, as :class:`WolffMove` takes it.
+
+    Raises
+    ------
+    ValueError
+        If the field's first axis is not the graph's site count.
+    """
+
+    def __init__(self, graph: PottsGraph, field: np.ndarray) -> None:
+        field = np.asarray(field, dtype=np.float64)
+        if field.shape[0] != graph.n_nodes:
+            msg = (
+                f"field has {field.shape[0]} rows for {graph.n_nodes} sites: "
+                "a move and its environment score one problem or neither is "
+                "measured (issue #706)"
+            )
+            raise ValueError(msg)
+        self._n_nodes = graph.n_nodes
+        self._field = field
+        offsets, neighbours, couplings = graph.compressed_adjacency()
+        self._offsets = offsets
+        self._neighbours = neighbours
+        self._couplings = couplings
+        self._threshold = niedermayer_threshold(couplings)
+        self._per_member = 1 + 2 * len(graph.edges) // graph.n_nodes
+
+    @property
+    def n_nodes(self) -> int:
+        """Sites the move expects."""
+        return self._n_nodes
+
+    @property
+    def n_states(self) -> int:
+        """Labels the move expects."""
+        return int(self._field.shape[1])
+
+    @property
+    def parametric(self) -> bool:
+        """A Niedermayer action names its root and the colour to transpose with."""
+        return True
+
+    @property
+    def threshold(self) -> float:
+        """``E_0``, the bond rule's threshold on this lattice."""
+        return self._threshold
+
+    def propose(
+        self,
+        state: np.ndarray,
+        *,
+        temperature: float,
+        site: int,
+        label: int,
+        rng: np.random.Generator,
+    ) -> tuple[np.ndarray, int]:
+        """Grow the cluster at ``site``, transpose its colour with ``label``, charge it."""
+        labels = np.ascontiguousarray(state, dtype=np.int64).copy()
+        size = _niedermayer_sweep(
+            labels,
+            self._field,
+            self._offsets,
+            self._neighbours,
+            self._couplings,
+            rng,
+            beta=math.inf if temperature == 0.0 else 1.0 / temperature,
+            threshold=self._threshold,
+            root=site,
+            partner=label,
+        )
+        return labels, size * self._per_member
+
+
 class SwendsenWangMove:
     """Every bond drawn, every cluster recoloured, once per action.
 
@@ -271,13 +375,21 @@ class SwendsenWangMove:
 
 def cluster_moves(
     graph: PottsGraph, field: np.ndarray
-) -> dict[MoveKind, WolffMove | SwendsenWangMove]:
-    """Both cluster moves on one lattice, keyed as the environment expects them.
+) -> dict[MoveKind, WolffMove | SwendsenWangMove | NiedermayerMove]:
+    """Every cluster move on one lattice, keyed as the environment expects them.
 
-    One call rather than two, so an arm cannot be built with a Wolff move on
+    One call rather than three, so an arm cannot be built with a Wolff move on
     one field and a Swendsen-Wang move on another.
+
+    Houdayer's move is not here and cannot be: it acts on a *pair* of replicas
+    and an arm's action carries one labelling to one labelling, so there is no
+    action of this environment that names it.
+    :func:`~snakes_and_ladders.search.potts_mcmc.sample_potts_pair` and
+    :func:`~snakes_and_ladders.search.tempered.tempered_potts_pair` are where
+    it is offered (issue #756).
     """
     return {
         MoveKind.WOLFF: WolffMove(graph, field),
         MoveKind.SWENDSEN_WANG: SwendsenWangMove(graph, field),
+        MoveKind.NIEDERMAYER: NiedermayerMove(graph, field),
     }
