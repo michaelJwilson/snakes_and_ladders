@@ -74,7 +74,7 @@ SLIMMING_BASELINE = {
     "annealers": 4,
     "ground-state run_ wrappers": 7,
     "backend enums": 1,
-    "Python paths above a compiled kernel": 7,
+    "Python paths above a compiled kernel": 8,
     "surrogate modules": 4,
     "modules without a docstring": 0,
     "root exports": 7,
@@ -90,9 +90,10 @@ SLIMMING_BASELINE = {
     # pass in Rust added one module, `likelihood/convolutional_rust.py`, and
     # one public name. #756's two samplers --- `opt.langevin` and `opt.slice`,
     # one module each, which is the package's shape for a sampler --- added
-    # two and eight.
-    "flat modules": 153,
-    "API-map entries": 1626,
+    # two and eight. #754's tree schedule in Rust added one module,
+    # `likelihood/message_passing_rust.py`, and three public names.
+    "flat modules": 154,
+    "API-map entries": 1629,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this

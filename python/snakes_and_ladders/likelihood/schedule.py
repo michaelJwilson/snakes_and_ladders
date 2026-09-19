@@ -460,6 +460,25 @@ class MessageSchedule(ABC):
         return False
 
     @property
+    def compiled(self) -> bool:
+        """Whether :mod:`snakes_and_ladders.likelihood.message_passing_rust` runs this order.
+
+        False here, and true only on the two-pass tree schedule, which is the
+        order issue #754 measured and ported. It is a property of the schedule
+        rather than a lookup on its name, so a consumer asks the seam what it
+        offers and no `if` on the name returns (issue #755).
+
+        The two halves answer false although the kernel sends them: their
+        ``log_partition`` reads the scale normalizing removed, which is a
+        running float sum over the levels, and a kernel walking the order
+        rather than the levels would reassociate it. What they would buy is
+        the same passes; what it would cost is a ``log Z`` that is no longer
+        bitwise against :func:`snakes_and_ladders.likelihood.pruning.log_likelihood`,
+        which is the comparison they exist for.
+        """
+        return False
+
+    @property
     def damped(self) -> bool:
         """Whether a send is mixed with the value it replaces.
 
@@ -511,6 +530,10 @@ class TreeMessageSchedule(MessageSchedule):
 
     @property
     def requires_tree(self) -> bool:
+        return True
+
+    @property
+    def compiled(self) -> bool:
         return True
 
     def steps(self, layout: Layout) -> Iterator[Step]:

@@ -55,17 +55,22 @@ DECLARED = frozenset(problem_names())
 #: **Statement** column beside it, which carries a LaTeX label and not a name.
 STATEMENT = re.compile(r"`([^`]+)`")
 
-#: The two modules that name a family and exercise none, with the word and what
-#: it means there. Neither is a gap: the first names notebooks in the map
+#: The three modules that name a family and exercise none, with the word and
+#: what it means there. None is a gap: the first names notebooks in the map
 #: `select_tests.py` is checked against --- ``docs/nb/hmm.ipynb`` is data, the
-#: case `test_problem_markers.py` already meets in `QUOTED_CALLS` --- and the
+#: case `test_problem_markers.py` already meets in `QUOTED_CALLS` --- the
 #: second passes ``parsimony_start=True`` to `search.infer`, shared machinery
 #: that `PROBLEMS.md` says defines nothing, where the parsimony statement's own
-#: tests import `likelihood.parsimony` and are selected. Asserted below, so an
-#: entry that stops being a false match fails rather than hiding a gap.
+#: tests import `likelihood.parsimony` and are selected; and the third names
+#: `tree_messages` and the tree schedule, which are the graph-theoretic tree
+#: `_stem_pattern` already excuses in its bare form --- the kernel is exact on
+#: a chain and a Potts tree and touches no phylogeny, whose own tests import
+#: `likelihood.pruning` and are selected. Asserted below, so an entry that
+#: stops being a false match fails rather than hiding a gap.
 BY_WORD: dict[str, str] = {
     "tests/regression/test_select_tests.py": "sec:hmm",
     "tests/regression/search/test_search_exhaustive.py": "sec:parsimony",
+    "tests/regression/likelihood/test_message_passing_rust.py": "sec:phylo",
 }
 
 #: Spelled rather than written, for `test_problem_markers.py`'s reason: a

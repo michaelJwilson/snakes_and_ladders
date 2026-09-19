@@ -46,6 +46,18 @@ def bcjr_forward_backward(
     apriori_llr: np.ndarray,
     terminated: bool,
 ) -> tuple[np.ndarray, np.ndarray, float]: ...
+def tree_message_passing(
+    cardinality: np.ndarray,
+    variable_offsets: np.ndarray,
+    variable_edges: np.ndarray,
+    factor_offsets: np.ndarray,
+    factor_edges: np.ndarray,
+    edge_variable: np.ndarray,
+    table_offsets: np.ndarray,
+    tables: np.ndarray,
+    width: int,
+    maximum: bool,
+) -> tuple[np.ndarray, np.ndarray]: ...
 def sample_rows(
     distributions: np.ndarray,
     n_categories: int,

@@ -558,6 +558,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "hmm",
+        "tree schedule, Rust",
+        "likelihood.message_passing_rust.tree_messages",
+        "forward via sum-product",
+        T + "likelihood/test_message_passing_rust.py"
+        "::test_the_rust_tree_schedule_agrees_with_the_numpy_oracle",
+    ),
+    Rung(
+        "hmm",
         "Viterbi",
         "likelihood.message_passing.max_product",
         "path enumeration",
