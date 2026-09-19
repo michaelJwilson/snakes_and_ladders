@@ -16,6 +16,8 @@ from itertools import combinations
 import numpy as np
 import pytest
 from snakes_and_ladders.sim.newick import (
+    _parse_newick,
+    _parse_unrooted_newick,
     count_topologies,
     to_newick,
     validate_newick,
@@ -207,3 +209,110 @@ def test_validate_unrooted_newick_rejects_malformed_strings(malformed: str) -> N
 @pytest.mark.smoke
 def test_validate_unrooted_newick_accepts_binary_subtrees_under_the_root() -> None:
     assert validate_unrooted_newick("(A,B,(C,D)anc:0.1)root;")
+
+
+# The two trees the Newick format's own documentation carries (Felsenstein,
+# PHYLIP's `newicktree.html`; the six-species primate tree of Olsen's
+# description of the format). They are written here as the literature states
+# them, to the digit, so what the parser returns is read against a source
+# outside this repository rather than against a tree this repository built.
+PUBLISHED_ROOTED = "(((One:0.2,Two:0.3):0.3,(Three:0.5,Four:0.3):0.2):0.3,Five:0.7);"
+PUBLISHED_UNROOTED = (
+    "(Bovine:0.69395,(Gibbon:0.36079,(Orang:0.33636,(Gorilla:0.17147,"
+    "(Chimp:0.19268,Human:0.11927):0.08386):0.06124):0.15057):0.54939,"
+    "Mouse:1.21460);"
+)
+
+#: The primate tree's branch lengths, leaf by leaf, as the published string
+#: writes them. Read back by name, so a permuted parse fails here and not on
+#: a count.
+PUBLISHED_UNROOTED_LEAVES = {
+    "Bovine": 0.69395,
+    "Gibbon": 0.36079,
+    "Orang": 0.33636,
+    "Gorilla": 0.17147,
+    "Chimp": 0.19268,
+    "Human": 0.11927,
+    "Mouse": 1.21460,
+}
+
+
+@pytest.mark.end2end
+def test_the_published_rooted_tree_round_trips_byte_for_byte() -> None:
+    # Parse and write against a string this repository did not produce: the
+    # rooted five-taxon tree of the Newick format's documentation. Byte
+    # equality is the tolerance -- every length in it is a float whose
+    # shortest repr is the published digits -- so a reordered child, a
+    # dropped internal branch or a rounded length all fail.
+    parsed = _parse_newick(PUBLISHED_ROOTED)
+
+    assert validate_newick(PUBLISHED_ROOTED)
+    assert to_newick(parsed) == PUBLISHED_ROOTED
+    assert [node.name for node in preorder(parsed) if node.is_leaf] == [
+        "One",
+        "Two",
+        "Three",
+        "Four",
+        "Five",
+    ]
+    # In preorder, so the two unnamed internal nodes are told apart by where
+    # they sit rather than by a name the format does not give them.
+    assert [(node.name, node.branch_length) for node in preorder(parsed)] == [
+        ("", None),
+        ("", 0.3),
+        ("", 0.3),
+        ("One", 0.2),
+        ("Two", 0.3),
+        ("", 0.2),
+        ("Three", 0.5),
+        ("Four", 0.3),
+        ("Five", 0.7),
+    ]
+
+
+@pytest.mark.end2end
+def test_the_published_primate_tree_reads_back_its_topology_and_lengths() -> None:
+    # The trifurcating-root convention, on the six-species primate tree the
+    # format's description carries. The topology is read back as the nested
+    # leaf sets of the root's three subtrees and every leaf's length by name,
+    # exactly: these are decimal literals a double represents to 1e-17, so
+    # the comparison is equality and not a tolerance.
+    parsed = _parse_unrooted_newick(PUBLISHED_UNROOTED)
+
+    assert validate_unrooted_newick(PUBLISHED_UNROOTED)
+    assert not validate_newick(PUBLISHED_UNROOTED)
+    assert len(parsed.children) == 3
+
+    def leaves(node: Node) -> frozenset[str]:
+        return frozenset(one.name for one in preorder(node) if one.is_leaf)
+
+    assert [leaves(child) for child in parsed.children] == [
+        frozenset({"Bovine"}),
+        frozenset({"Gibbon", "Orang", "Gorilla", "Chimp", "Human"}),
+        frozenset({"Mouse"}),
+    ]
+    # Chimp and Human are sisters, and that clade sits under Gorilla: the
+    # nesting the string states, checked as a set rather than as a string.
+    inner = parsed.children[1].children[1].children[1]
+    assert leaves(inner) == frozenset({"Gorilla", "Chimp", "Human"})
+    assert leaves(inner.children[1]) == frozenset({"Chimp", "Human"})
+
+    read = {node.name: node.branch_length for node in preorder(parsed) if node.is_leaf}
+    assert read == PUBLISHED_UNROOTED_LEAVES
+    # Written back, the one difference from the published string is the
+    # trailing zero of `1.21460`, which a float's shortest repr drops.
+    assert to_newick(parsed) == PUBLISHED_UNROOTED.replace("1.21460", "1.2146")
+
+
+@pytest.mark.oracle
+def test_a_published_length_survives_a_comment_between_it_and_its_label() -> None:
+    # The state-labelled form this module writes is the published grammar's
+    # comment, so a published tree carrying one must parse to the same tree
+    # with the same lengths. Checked against the uncommented parse, which is
+    # the literature's string and not a second run of the annotator.
+    annotated = PUBLISHED_ROOTED.replace("One:0.2", "One[&state=2]:0.2").replace(
+        "Five:0.7", "Five[&state=0]:0.7"
+    )
+
+    assert validate_newick(annotated)
+    assert to_newick(_parse_newick(annotated)) == PUBLISHED_ROOTED

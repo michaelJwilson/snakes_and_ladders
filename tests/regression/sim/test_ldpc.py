@@ -372,3 +372,81 @@ def test_a_non_square_or_singular_matrix_has_no_inverse_over_gf2() -> None:
         gf2_inverse(np.zeros((2, 3), dtype=np.uint8))
     with pytest.raises(ValueError, match="singular over GF"):
         gf2_inverse(np.array([[1, 1], [1, 1]], dtype=np.uint8))
+
+
+#: The (7, 4) Hamming code's parity check as MacKay 2003 §1.2 prints it, the
+#: three information bits' checks written out rather than generated. A
+#: published matrix is the one thing a construction cannot be refereed
+#: against by rebuilding it.
+PUBLISHED_HAMMING = np.array(
+    [
+        [1, 1, 1, 0, 1, 0, 0],
+        [0, 1, 1, 1, 0, 1, 0],
+        [1, 0, 1, 1, 0, 0, 1],
+    ]
+)
+
+
+@pytest.mark.oracle
+def test_the_published_parity_check_reads_back_with_its_published_properties() -> None:
+    # `ParityCheck` over a matrix from the literature: the offsets layout
+    # against the dense array it was built from, the syndrome of each
+    # single-bit error against the column of `H` the textbook says it is, and
+    # the rank, dimension and minimum distance the (7, 4) Hamming code is
+    # defined by. Integers throughout: the comparison is equality.
+    code = ParityCheck.from_dense(PUBLISHED_HAMMING)
+
+    assert (code.n_bits, code.n_checks) == (7, 3)
+    assert np.array_equal(code.dense(), PUBLISHED_HAMMING.astype(np.uint8))
+    assert gf2_rank(PUBLISHED_HAMMING) == 3
+
+    for position in range(code.n_bits):
+        error = np.zeros(code.n_bits, dtype=np.uint8)
+        error[position] = 1
+        assert np.array_equal(
+            code.syndrome(error), PUBLISHED_HAMMING[:, position].astype(np.uint8)
+        )
+
+    words = enumerate_codewords(code)
+    weights = words.sum(axis=1)
+
+    assert len(words) == 2**4, "n - rank H = 4, the published dimension"
+    assert int(weights[weights > 0].min()) == 3, "the published minimum distance"
+    # The distance is what makes the syndromes above a decoder: the seven
+    # single-bit syndromes are the seven nonzero patterns, each once.
+    assert len({tuple(column) for column in PUBLISHED_HAMMING.T}) == 7
+
+
+@pytest.mark.oracle
+def test_the_generator_of_the_published_code_spans_it_and_the_encoder_lands_in_it() -> (
+    None
+):
+    # `generator_matrix` and `encode` against the enumeration of the same
+    # published code: the four rows must be codewords, the sixteen messages
+    # must encode to the sixteen enumerated words with no repeat, and each
+    # must carry its message in the code's free positions. Exact over GF(2).
+    code = ParityCheck.from_dense(PUBLISHED_HAMMING)
+    generator = generator_matrix(code)
+    enumerated = {tuple(int(bit) for bit in word) for word in enumerate_codewords(code)}
+
+    assert generator.shape == (4, 7)
+    assert all(tuple(int(bit) for bit in row) in enumerated for row in generator)
+
+    encoded = set()
+    for value in range(16):
+        message = np.array([(value >> bit) & 1 for bit in range(4)], dtype=np.uint8)
+        codeword = encode(code, message)
+
+        assert not code.syndrome(codeword).any()
+        encoded.add(tuple(int(bit) for bit in codeword))
+
+    assert encoded == enumerated
+
+    # `gf2_inverse` on the code's three pivot columns, against the identity
+    # it is defined by -- the one square submatrix of a published `H` whose
+    # inverse is read rather than searched for.
+    pivots = PUBLISHED_HAMMING[:, [4, 5, 6]]
+    inverse = gf2_inverse(pivots)
+
+    assert np.array_equal((pivots @ inverse) % 2, np.eye(3, dtype=np.uint8))
+    assert np.array_equal(inverse, np.eye(3, dtype=np.uint8))
