@@ -60,6 +60,12 @@ Geometric: the external implementations the suite pins its own against).
 one of its packages skips without it, and `snakes_and_ladders.search.gym` is
 the only module that imports one at module level.
 
+`aim` is the exception to that list: it is the optional store behind
+`snakes_and_ladders.track.AimTracker` (issue #778), declared in no extra
+while PYSEC-2026-1087 and PYSEC-2026-1088 stand unfixed against its current
+release, and installed by hand (`uv pip install aim`) by whoever wants it.
+The default tracker records nothing and needs nothing.
+
 `scipy` is a core dependency since the 0.5.0 audit (issue #376): three
 regression modules referee our neighbor joining, Hadamard transform and fit
 against it, and `search.maxflow`'s replacement (#388) will front its maximum

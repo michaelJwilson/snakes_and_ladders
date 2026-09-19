@@ -49,8 +49,11 @@ SLIMMING_BASELINE = {
     "modules without a docstring": 0,
     "root exports": 7,
     "test modules pinning a twin to its oracle beyond the first": 13,
-    "flat modules": 148,
-    "API-map entries": 1576,
+    # Both rows rise with `track.py`, the run-tracking seam issue #778 put
+    # beside `log.py` and `parallel.py`: one module, and the 23 API-map
+    # entries its classes and functions declare.
+    "flat modules": 149,
+    "API-map entries": 1599,
 }
 
 # The consolidated home of each pattern, which legitimately contains it once.

@@ -16,6 +16,7 @@ against the objective's own magnitude.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 
@@ -24,6 +25,7 @@ import torch
 from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.parallel import Backend, map_tasks
+from snakes_and_ladders.track import Tracker, current
 
 _log = logging.getLogger(__name__)
 
@@ -152,12 +154,25 @@ def fit(
         value.backward()  # type: ignore[no-untyped-call]
         return value
 
+    # One lookup for the whole fit (`snakes_and_ladders.track`): the hooks
+    # below record numbers the loop already computes -- the objective L-BFGS
+    # returns from its own first evaluation, the relative norm the
+    # convergence test reads -- so a tracked fit costs the same arithmetic as
+    # an untracked one.
+    tracker: Tracker = current()
+    started = time.perf_counter()
     iterations = 0
     converged = False
     while iterations < max_iterations:
         iterations += 1
-        optimizer.step(closure)  # type: ignore[no-untyped-call]
-        if _relative_gradient_norm(objective, theta) <= gradient_tolerance:
+        value = optimizer.step(closure)  # type: ignore[no-untyped-call]
+        gradient_norm = _relative_gradient_norm(objective, theta)
+        # `detach` because L-BFGS hands back the closure's loss, which
+        # carries a graph; reading it as a number must not look like a use.
+        tracker.scalar("objective", float(value.detach()), iterations - 1)
+        tracker.scalar("relative_gradient_norm", gradient_norm, iterations - 1)
+        tracker.scalar("wall_s", time.perf_counter() - started, iterations - 1)
+        if gradient_norm <= gradient_tolerance:
             converged = True
             break
 
@@ -168,6 +183,12 @@ def fit(
         iterations=iterations,
         converged=converged,
     )
+    # The closing record is the result's own numbers, so the series ends
+    # where the fit does: the entries above are the objective and the norm
+    # *entering* each iteration, and the last iteration's outcome is here.
+    tracker.scalar("objective", result.value, iterations)
+    tracker.scalar("relative_gradient_norm", result.gradient_norm, iterations)
+    tracker.scalar("wall_s", time.perf_counter() - started, iterations)
     _log.debug(
         "fit %s after %d iterations at value %.6f, relative gradient norm %.2e",
         "converged" if converged else "stopped",
