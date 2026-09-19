@@ -28,11 +28,11 @@ import coverage_recut  # noqa: E402
 import ladder  # noqa: E402
 from ladder import LADDER, PROBLEMS, Rung  # noqa: E402
 
-#: What issue #734 counts as unpinned today, one per bullet of its list:
-#: mixtures 4. The Potts five (step 2), the tree four (step 3), the HMM four
-#: (step 4) and the codes five (step 5) are pinned, so only the mixture ladder
-#: carries a ticket.
-UNPINNED_TODAY = 4
+#: What issue #734 counts as unpinned today: none. The Potts five (step 2),
+#: the tree four (step 3), the HMM four (step 4), the codes five (step 5) and
+#: the mixture four (step 6) are pinned, so no ladder carries a ticket. The
+#: rule below is unchanged by that: a rung without a test names an issue.
+UNPINNED_TODAY = 0
 
 #: The package every rung's callable is relative to.
 PACKAGE = "snakes_and_ladders"
@@ -129,7 +129,9 @@ def test_a_rung_carries_either_a_test_or_a_ticket() -> None:
         rung.name for rung in LADDER if rung.test is None and rung.ticket is None
     ] == []
     assert [rung.name for rung in LADDER if rung.test is not None and rung.ticket] == []
-    assert {rung.ticket for rung in ladder.unpinned()} == {734}
+    assert [
+        rung.name for rung in ladder.unpinned() if rung.ticket != ladder.LADDER_TICKET
+    ] == []
 
 
 @pytest.mark.critical
@@ -176,7 +178,7 @@ def test_the_unpinned_rungs_are_the_count_the_ticket_states() -> None:
         problem: sum(1 for rung in ladder.rungs(problem) if rung.test is None)
         for problem in PROBLEMS
     }
-    assert per_problem == {"potts": 0, "tree": 0, "hmm": 0, "codes": 0, "mixture": 4}
+    assert per_problem == {"potts": 0, "tree": 0, "hmm": 0, "codes": 0, "mixture": 0}
 
 
 @pytest.mark.critical

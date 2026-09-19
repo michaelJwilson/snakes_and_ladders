@@ -20,10 +20,14 @@ from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.opt.fit import fit, fit_from
 from snakes_and_ladders.opt.hmm import HmmObjective
 from snakes_and_ladders.opt.initialize import (
+    FromAnnealing,
+    FromChain,
     FromObjective,
+    FromTempering,
     Perturbed,
     RandomRestart,
 )
+from snakes_and_ladders.opt.schedule import ExponentialTempSchedule
 from snakes_and_ladders.opt.testfunctions import (
     HIMMELBLAU_MINIMA,
     Himmelblau,
@@ -336,3 +340,149 @@ def test_every_restart_lands_on_a_published_himmelblau_minimizer() -> None:
     assert worst_distance < PUBLISHED_TOLERANCE, worst_distance
     assert worst_value < 1e-12, worst_value
     assert reached == set(range(len(HIMMELBLAU_MINIMA))), reached
+
+
+#: The generators the three sampled starts are run from. Eight, because what
+#: they buy is a rate and one seed is an anecdote.
+SAMPLED_SEEDS = range(8)
+
+#: Where Rastrigin's descent-only fit stops from the objective's own start:
+#: the cell at (3.9798, 3.9798), whose value is a closed-form property of the
+#: surface and not a measured one.
+TRAPPED_VALUE = 31.83848758492307
+
+#: How far a Rastrigin local minimizer sits from the lattice point it belongs
+#: to: ``2 x + 20 pi sin(2 pi x) = 0`` puts it inside a thirtieth of a cell,
+#: and every fit below is checked to land on one rather than between them.
+#: Realized over the 80 fits: 0.0253.
+LATTICE_TOLERANCE = 0.03
+
+#: The largest value a fit from each sampled start reaches on any of the eight
+#: seeds. All three are below :data:`TRAPPED_VALUE`; none is 0.
+SAMPLED_CEILING = {"chain": 7.9597, "anneal": 25.8687, "temper": 7.9597}
+
+
+def _on_the_lattice(theta: torch.Tensor) -> float:
+    """How far ``theta`` sits from the integer lattice Rastrigin's minima lie on."""
+    return float((theta - torch.round(theta)).abs().max())
+
+
+def _lowest(objective: Rastrigin, points: list[torch.Tensor]) -> float:
+    """The least value over ``points``, each checked to be a lattice cell."""
+    for point in points:
+        assert _on_the_lattice(point) < LATTICE_TOLERANCE, point
+    return min(float(objective(point)) for point in points)
+
+
+def _chain_start(seed: int) -> FromChain:
+    """Six draws of a short chain, at the step the surface accepts."""
+    return FromChain(
+        6, 0.05, torch.Generator().manual_seed(seed), n_steps=10, burn_in=20
+    )
+
+
+def _annealed_start(seed: int) -> FromAnnealing:
+    """A falling temperature over 120 proposals: 1,320 gradients."""
+    return FromAnnealing(
+        ExponentialTempSchedule(20.0, 0.05, 120),
+        0.05,
+        torch.Generator().manual_seed(seed),
+        n_steps=10,
+    )
+
+
+def _tempered_start(seed: int) -> FromTempering:
+    """Four replicas over 30 rounds: the same 1,320 gradients as annealing."""
+    return FromTempering(
+        (1.0, 3.0, 9.0, 27.0), 30, 0.05, torch.Generator().manual_seed(seed), n_steps=10
+    )
+
+
+@pytest.mark.oracle
+@pytest.mark.release
+def test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descent_cannot() -> (
+    None
+):
+    # The referee is outside the ladder (issue #734): each run's own record,
+    # bitwise, and Rastrigin's closed form -- roughly 10 ** n local minima on
+    # the integer lattice, one global minimum of 0 at the origin, and a fit
+    # that stops at whichever cell it was started in.
+    #
+    # What a start *is*, asserted rather than described. From generators
+    # seeded alike, `FromChain.starts` is the chain's own draws in order,
+    # `FromAnnealing.starts` is `[run.theta]` and `FromTempering.starts` is
+    # `[run.theta]`, every one of them equal bit for bit; both runs report the
+    # value at the point they return, exactly; annealing's best is at or below
+    # where its chain ended; and tempering's best is the lowest value in the
+    # positions it recorded, with a gap of exactly 0.0.
+    #
+    # What the sampling buys, over eight seeds. Descent from the objective's
+    # own start lands at 31.8385 every time -- the cell at (3.9798, 3.9798) --
+    # and every one of the three sampled starts lands strictly below it on all
+    # eight: at most 7.9597 for the chain and for tempering, 25.8687 for
+    # annealing, every landing point on the lattice to 0.0253 against the
+    # 0.03 declared.
+    #
+    # One wording the ticket offers does not hold. The tempered start is *not*
+    # the coldest replica's: over the eight seeds the lowest value recorded
+    # sits at the coldest replica on 7 and at a hotter one on the eighth,
+    # which is what a ladder is for, so the count is what is asserted.
+    #
+    # Where it stops, and it stops short of the ticket's wording: none of the
+    # three *reaches* the closed-form optimum at this budget. Over 24 runs the
+    # global minimum is found 0 times, so what is pinned is escape from the
+    # start's cell and not a solution of Rastrigin. The cheapest of the three
+    # is no worse here: 1,320 gradients of annealing buy a ceiling three times
+    # the 286-gradient chain's.
+    objective = Rastrigin()
+
+    drawn = _chain_start(0).starts(objective)
+    recorded = _chain_start(0).chain(objective).theta
+    assert len(drawn) == recorded.shape[0] == 6
+    for start, draw in zip(drawn, recorded, strict=True):
+        assert torch.equal(start, draw)
+
+    annealed = _annealed_start(0).run(objective)
+    assert torch.equal(_annealed_start(0).starts(objective)[0], annealed.theta)
+    assert annealed.value == float(objective(annealed.theta))
+    assert annealed.value <= float(objective(annealed.final))
+
+    trapped = fit(objective)
+    assert _on_the_lattice(trapped.theta) < LATTICE_TOLERANCE, trapped.theta
+    np.testing.assert_allclose(float(trapped.value), TRAPPED_VALUE, rtol=1e-12)
+
+    reached: dict[str, list[float]] = {"chain": [], "anneal": [], "temper": []}
+    coldest = 0
+    for seed in SAMPLED_SEEDS:
+        fitted = [
+            fit(objective, theta0=start).theta
+            for start in _chain_start(seed).starts(objective)
+        ]
+        reached["chain"].append(_lowest(objective, fitted))
+
+        annealed = _annealed_start(seed).run(objective)
+        reached["anneal"].append(
+            _lowest(objective, [fit(objective, theta0=annealed.theta).theta])
+        )
+
+        tempered = _tempered_start(seed).run(objective)
+        assert torch.equal(_tempered_start(seed).starts(objective)[0], tempered.theta)
+        assert tempered.value == float(objective(tempered.theta))
+        visited = np.array(
+            [
+                [float(objective(position)) for position in exchange]
+                for exchange in tempered.positions
+            ]
+        )
+        assert visited.min() - tempered.value == 0.0
+        coldest += int(np.unravel_index(int(visited.argmin()), visited.shape)[1] == 0)
+        reached["temper"].append(
+            _lowest(objective, [fit(objective, theta0=tempered.theta).theta])
+        )
+
+    for name, values in reached.items():
+        assert max(values) <= SAMPLED_CEILING[name] + 1e-9, (name, values)
+        assert max(values) < TRAPPED_VALUE, (name, values)
+        assert min(values) > 1e-9, (name, values)
+
+    assert coldest == 7, coldest
