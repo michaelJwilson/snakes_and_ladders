@@ -72,6 +72,20 @@ frameworks = [
     "torchrl>=0.6",
     "torch_geometric>=2.5",
 ]
+# The run store behind `snakes_and_ladders.track` (issue #778). An extra
+# rather than a core dependency: `track.Run` is a Protocol written with
+# `aim.Run`'s own signatures, so the package imports, records and tests
+# without it, and only a reader who wants the UI installs it. Apache-2.0 and
+# above the 1,000-star bar, as issue #778 states in approving it, so neither
+# dependency rule is triggered. It carries two advisories with no fixed
+# version, PYSEC-2026-1087
+# (XSS in the report endpoint) and PYSEC-2026-1088 (a sandbox escape in the
+# query handler), both in the server `aim up` runs; the audit job syncs
+# `dev` and so does not install it, and DEV.md says what a reader who does
+# install it is taking on.
+track = [
+    "aim>=3.29,<4",
+]
 test = [
     # >=9.0.3 is the fix for PYSEC-2026-1845; the previous <9 cap blocked it.
     "pytest>=9.0.3",
@@ -207,6 +221,17 @@ module = [
     "torch_geometric.*",
     "networkx.*",
 ]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# `aim` is the optional store behind `snakes_and_ladders.track.Run` (issue
+# #778), declared in the `track` extra and installed by no CI job: nothing in
+# the package imports it at module scope, since `Run` is a Protocol written
+# with `aim.Run`'s own signatures and `track.as_aim`, the one function that
+# touches the package, imports it where it is called. So `mypy` type-checks
+# `track.py` in an environment without it. Narrowed to the one distribution,
+# as the entries above are.
+module = "aim.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

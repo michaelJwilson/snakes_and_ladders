@@ -325,6 +325,58 @@ def responsibilities(
 
 
 @dataclass(frozen=True)
+class MixtureMetrics:
+    """What a mixture parameter vector means: its log-likelihood and its k-means cost (issue #778).
+
+    A :class:`snakes_and_ladders.track.Metrics` over ``theta``, satisfied
+    structurally.
+
+    * ``log_likelihood`` is :func:`mixture_log_likelihood` at ``theta``'s
+      weights and components, which
+      :meth:`GaussianMixtureObjective.__call__` negates to minimize.
+    * ``clustering_cost`` is :func:`clustering_cost` at the fitted component
+      means: the summed squared distance of the observations to their nearest
+      centre, which :func:`optimal_clustering_cost` bounds below in one
+      dimension.
+
+    **The assignment agreement the ticket listed is left out.** The only
+    package function that produces one is
+    :func:`snakes_and_ladders.likelihood.mixture_assignments.enumerate_mixture_assignments`,
+    which sums ``k ** n`` assignments and refuses above
+    ``MAX_ENUMERABLE_CONFIGURATIONS`` --- not a quantity to compute once a
+    sweep --- and ``opt`` may not import ``likelihood``
+    (``tests/regression/opt/test_opt_objective.py``).
+
+    Parameters
+    ----------
+    objective : GaussianMixtureObjective
+        The objective being fitted, which owns the observations and the
+        constraint map.
+    """
+
+    objective: GaussianMixtureObjective
+
+    names: tuple[str, ...] = ("log_likelihood", "clustering_cost")
+
+    def __call__(self, theta: torch.Tensor) -> dict[str, float]:
+        """The two metrics at ``theta``, computed without a graph."""
+        with torch.no_grad():
+            components = self.objective.components(theta)
+            value = mixture_log_likelihood(
+                self.objective.observations,
+                self.objective.constrain(theta)["log_weight"],
+                components,
+            )
+            return {
+                "log_likelihood": float(value),
+                "clustering_cost": clustering_cost(
+                    self.objective.observations.numpy(),
+                    components.mean.detach().numpy(),
+                ),
+            }
+
+
+@dataclass(frozen=True)
 class MixtureFit:
     """What one expectation-maximization run produced.
 

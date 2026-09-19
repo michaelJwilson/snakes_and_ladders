@@ -90,6 +90,11 @@ from snakes_and_ladders.sim.potts import (
     site_field,
 )
 
+# `current` is aliased: `parallel_tempering` already binds that name to the
+# replicas' energies, and one of the two has to give.
+from snakes_and_ladders.track import TrackedOptimization
+from snakes_and_ladders.track import current as current_tracked
+
 #: Declared so :func:`snakes_and_ladders.sim.potts.energies` re-exports from
 #: this module, which `mypy --strict` otherwise refuses: the energy moved to
 #: `sim/` in issue #277 so the simulator could score with it, and every
@@ -547,6 +552,13 @@ def anneal_potts(
     # the budget comparable across move sets (issue #551).
     per_sweep = graph.n_nodes + 2 * len(graph.edges)
     visits, trace = 0, []
+    # One lookup for the run (`snakes_and_ladders.track`) and one `record` a
+    # sweep. `energy` is the best energy so far, which is what
+    # `AnnealedPotts.energy` returns; the visited state's energy is computed
+    # below either way, so the hook costs a call and no arithmetic. The best
+    # labelling is the state passed, so a bound `PottsMetrics` scores what
+    # the run returns.
+    tracked: TrackedOptimization = current_tracked()
     for step in range(schedule.n_steps):
         temperature = schedule(step)
         if move is PottsMove.SINGLE_SITE:
@@ -597,6 +609,10 @@ def anneal_potts(
         energy = float(energies(graph, rows, state[None])[0])
         if energy < best_energy:
             best_state, best_energy = state.copy(), energy
+        tracked.record(
+            step, state=best_state, energy=best_energy, temperature=temperature
+        )
+    tracked.record_cost(max(schedule.n_steps - 1, 0), state.nbytes)
     return AnnealedPotts(
         labelling=best_state,
         energy=best_energy,
@@ -764,6 +780,12 @@ def parallel_tempering(
     best, best_energy = states[best_index].copy(), float(current[best_index])
 
     sweep = _sweep_at(rows, offsets, neighbours, couplings, backend)
+    # `swap_acceptance` is the mean over adjacent pairs of the fraction
+    # accepted so far -- the mean of the vector `TemperedChains` returns, and
+    # so equal to it at the last sweep. Round trips and rung occupation are
+    # not recorded: neither is a number this run computes, and a hook does
+    # not define a metric (issue #778).
+    tracked: TrackedOptimization = current_tracked()
     for step in range(-burn_in * thin, n_sweeps * thin):
         for replica in range(n_replicas):
             sweep(states[replica], children[replica], betas[replica])
@@ -785,6 +807,11 @@ def parallel_tempering(
             recorded[step // thin] = states
             for rung, walker in enumerate(at_rung):
                 trace[step // thin, walker] = rung
+        if step >= 0:
+            tracked.record(
+                step, state=best, swap_acceptance=float(np.mean(accepted / proposed))
+            )
+    tracked.record_cost(max(n_sweeps * thin - 1, 0), states.nbytes)
     return TemperedChains(
         states=recorded,
         temperatures=tuple(temperatures),

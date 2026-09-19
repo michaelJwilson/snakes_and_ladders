@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
@@ -64,6 +65,11 @@ import torch
 
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.schedule import TempSchedule
+
+# `current` is aliased: `_coefficients` already binds that name to a
+# sub-step length, and one of the two has to give.
+from snakes_and_ladders.track import TrackedOptimization
+from snakes_and_ladders.track import current as current_tracked
 
 DEFAULT_STEPS = 20
 
@@ -641,6 +647,14 @@ def _run_chain(
     accepted = 0
 
     jitter = adaptation.step_jitter if adaptation is not None else 0.0
+    # One lookup for the chain (`snakes_and_ladders.track`) and one `record`
+    # per draw. The counters the result is built from are read rather than
+    # recomputed: at the last draw each series equals the field `HmcChain`
+    # returns. The position is passed so a bound `Metrics` reports what the
+    # draw means beside them.
+    tracked: TrackedOptimization = current_tracked()
+    started = time.perf_counter()
+    warmup_evaluations = adapted.force_evaluations if adapted is not None else 0
     for index in range(n_samples + burn_in):
         position, error, was_accepted, _ = kernel(
             target,
@@ -651,17 +665,26 @@ def _run_chain(
         )
         errors[index] = error
         if index >= burn_in:
+            drawn = index - burn_in
             accepted += was_accepted
-            draws[index - burn_in] = position
+            draws[drawn] = position
+            tracked.record(
+                drawn,
+                state=position,
+                acceptance_so_far=accepted / (drawn + 1),
+                energy_error=float(error),
+                force_evaluations=(index + 1) * per_proposal + warmup_evaluations,
+                wall_s=time.perf_counter() - started,
+            )
 
     if scale is not None:
         draws = draws * scale
+    tracked.record_cost(max(n_samples - 1, 0), draws.nbytes)
     return (
         draws,
         accepted / n_samples if n_samples else 0.0,
         errors[burn_in:],
-        (n_samples + burn_in) * per_proposal
-        + (adapted.force_evaluations if adapted is not None else 0),
+        (n_samples + burn_in) * per_proposal + warmup_evaluations,
         adapted,
     )
 
@@ -738,11 +761,17 @@ def anneal(
 
     best, best_value = position.clone(), float(objective(position))
     accepted = 0
+    # `energy` is the best value so far, which is what `Annealed.value`
+    # returns: the series ends at the field rather than at the last visited
+    # point, which the result does not report. `best` is the state passed,
+    # for the same reason.
+    tracked: TrackedOptimization = current_tracked()
     for step in range(schedule.n_steps):
+        temperature = schedule(step)
         position, _, was_accepted, _ = _transition(
             objective,
             position,
-            schedule(step),
+            temperature,
             generator,
             step_size,
             n_steps,
@@ -752,6 +781,7 @@ def anneal(
         value = float(objective(position))
         if value < best_value:
             best, best_value = position.clone(), value
+        tracked.record(step, state=best, temperature=temperature, energy=best_value)
     return Annealed(
         theta=best,
         value=best_value,
@@ -901,6 +931,12 @@ def parallel_tempering(
     swapped = torch.zeros(n_replicas - 1, dtype=torch.float64)
     recorded = torch.empty((n_rounds, n_replicas, start.shape[0]), dtype=torch.float64)
 
+    # `swap_acceptance` is the mean over adjacent pairs of the fraction
+    # accepted so far -- the mean of the vector `Tempered.swap_acceptance`
+    # returns -- and `energy` the best value so far, which is `Tempered.value`.
+    # Neither is a new definition; a per-replica energy series is not
+    # recorded because the result reports the minimum over replicas.
+    tracked: TrackedOptimization = current_tracked()
     for round_index in range(n_rounds):
         for replica in range(n_replicas):
             positions[replica], _, was_accepted, _ = _transition(
@@ -933,6 +969,12 @@ def parallel_tempering(
         if values[lowest] < best_value:
             best, best_value = positions[lowest].clone(), values[lowest]
         recorded[round_index] = torch.stack(positions)
+        tracked.record(
+            round_index,
+            state=best,
+            swap_acceptance=float(swapped.mean()) / (round_index + 1),
+            energy=best_value,
+        )
 
     return Tempered(
         theta=best,

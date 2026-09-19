@@ -3342,6 +3342,65 @@ the guard now fails an eleventh content line. The Aim run store (#75) is part 2,
 behind the dependency's approval; until then the numbers are typed from the
 measurement and the file names the command that produced them.
 
+**A run reports as it goes through Aim's own interface, and the untracked run
+is the run that was there**
+([#778](https://github.com/michaelJwilson/snakes_and_ladders/issues/778)).
+`snakes_and_ladders.track.Run` is a `runtime_checkable` Protocol of the three
+members a hook uses --- `track`, `__setitem__`, `close` --- written with
+`aim.Run`'s signatures, so an Aim run is the store and there is no adapter to
+keep in step; a `release` test asserts the `isinstance`. `track(run,
+metrics=)` binds a `TrackedOptimization` to a `contextvars.ContextVar` for a
+block, and `opt.fit.fit`, `opt.hmc`'s three drivers, `search.potts_mcmc`'s
+two, `search.tempered`'s two ensembles and `qa.figure.write_qa_figure` call
+its one `record` per iteration, sweep, round or figure. Every counter
+recorded is one the result already returns --- the acceptance rate, the
+gradients spent, the best energy, the swap acceptance --- so a series ends at
+the field; `peak_rss_bytes` and the state's bytes are recorded once at the
+end. **What the state means is the other half, and it is not a hook's to
+define.** Six `Metrics` sets sit beside their problem's objective or energy
+--- `PottsMetrics` (`sim/potts.py`), `HmmMetrics` (`opt/hmm.py`),
+`TreeMetrics` (`likelihood/objective.py`), `MixtureMetrics`
+(`opt/mixture.py`), `CodeMetrics` (`likelihood/ldpc.py`) and
+`TestFunctionMetrics` (`opt/testfunctions.py`) --- and each metric is a call
+to a function the package already had, pinned against it and against an
+independent answer where the problem carries one: zero split distance on the
+topology that generated the alignment, zero bit errors on the word that was
+sent, zero distance at a known minimizer, and the likelihoods against
+`enumerate_hidden_paths` and `enumerate_mixture_assignments`. Outside a block
+the bound object is `NULL`, whose run is the shared `NULL_RUN`: `record`
+returns on its first line and no metric is computed, which
+`tests/regression/test_track.py` pins bitwise on `hmc.sample`, `anneal_potts`
+and `potts_mcmc.parallel_tempering`. **The cost is one returned call a sweep,
+and at the stress instance the walls cannot resolve it.** Timed directly on
+the null run, `record` costs **0.246 us** at the annealer's four arguments
+and **0.352 us** at the chain's six (minimum of five runs of 200,000 calls):
+**0.50 ms over 2,000 sweeps** and **0.35 ms over 1,000 draws**. Both calls
+were then read against `main` at 121a1c7, the tree without the seam, three
+processes each and alternating so the two share the machine, at the minimum
+of three repeats per process. `hmc.sample` at the instance #754's stress
+ranking uses --- a Potts chain of length 64 over 200 chains, 1,000 draws,
+five leapfrog steps --- reads **6.418 s** hooked against **6.389 s**,
+**1.005x**, over spreads of 2.2% and 3.3% between processes of one variant.
+`anneal_potts` on the 64x64 open lattice at the critical coupling, three
+states and the Rust sweep over 2,000 sweeps, reads **0.7068 s** against
+**0.7066 s**, **1.0003x**, over spreads of 1.0% and 0.3%. Both are inside
+the ticket's 1% bar, and both differences are smaller than the spread of
+either variant, which is what the direct timing predicts: 0.35 ms is 0.006%
+of the chain and 0.50 ms is 0.07% of the anneal. Measured 2026-09-19 on the
+4-core host at a 1-minute load of 0.04 rising to 0.97. **Aim is the store #75 asked
+for, and it is the optional `track` extra**: nothing imports it at module
+scope --- `track.as_aim` imports it where it is called --- so no CI job
+installs it and the audit job, which syncs `dev`, stays clean. What the
+extra carries is stated where it is declared: `pip-audit` reports
+PYSEC-2026-1087 and PYSEC-2026-1088 against 3.29.1, its current release,
+with no fixed version, both in the server `aim up` runs. Verified both ways
+on 3.29.1: with the extra synced, `mypy --strict` is clean and 22 of
+`test_track.py` pass; without it, `mypy --strict` is clean, 20 pass and the
+two Aim tests skip, and `pip-audit` reports nothing. two `release` tests assert that an `aim.Run`
+satisfies `Run` and that a run written to a temporary repository reads back
+each sequence equal to the `MemoryRun` record of the same call; both
+`importorskip` the package, so they skip wherever Aim is absent.
+
 ## Stage 5 — Research Extensions
 
 **Both halves are built, and the second's block was the referee, not the

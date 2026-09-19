@@ -37,6 +37,11 @@ and `parallel` --- each resolved on first use, and every package resolves its
 submodules the same way, so `sal.sim.tree` reads as written after
 `import snakes_and_ladders as sal` and a bare import loads nothing.
 
+A run reports as it goes through one seam: `snakes_and_ladders.track` records,
+per sweep, the numbers a sampler's result already carries, beside a metrics set
+that says what the state means --- into nothing by default, and into an
+`aim.Run`, which its `Run` Protocol is written from, where Aim is installed.
+
 ---
 
 # Infrastructure

@@ -93,10 +93,14 @@ SLIMMING_BASELINE = {
     # two and eight. #754's tree schedule in Rust added one module,
     # `likelihood/message_passing_rust.py`, and three public names; #775's squaring adds three names and no module.
     # Issue #779's three deprecation shims are three modules while they
-    # stand, so the first row reads 157 until the release after 0.3.0
-    # removes them.
-    "flat modules": 157,
-    "API-map entries": 1632,
+    # stand, so the first row falls by three at the release after 0.3.0 that
+    # removes them. `track.py`, the run seam issue #778 put beside `log.py`,
+    # is the one module this pull request adds, and 27 of the second row's
+    # entries are its public names and the six `Metrics` sets added to the
+    # modules owning each problem's objective or energy: 157 and 1,632 on
+    # `main` at 121a1c7.
+    "flat modules": 158,
+    "API-map entries": 1659,
 }
 
 #: Issue #755's audit, pinned at the count it was taken on (2026-09-19, this
@@ -110,6 +114,12 @@ SLIMMING_BASELINE = {
 #: that are not duplication.
 CLUSTER_BASELINE = {
     "fields:name": 7,
+    # The cluster issue #778 added: `HmmMetrics`, `MixtureMetrics` and
+    # `TestFunctionMetrics` carry an objective and the series names, because a
+    # metrics set over `theta` is defined by the objective it reads. What each
+    # computes is its problem's, so folding the three would put three problems
+    # in one class. Decided in `docs/reviews/2026-09-19.md`.
+    "fields:names,objective": 3,
     "prefix:Exact": 5,
     "role:incidence": 15,
     "suffix:Dataset": 5,
@@ -121,10 +131,9 @@ CLUSTER_BASELINE = {
 
 #: State-carrying classes over the whole package, the number the clusters are
 #: drawn from.
-#: Re-pinned on the merge with `main` ee16541 (2026-09-19): 255, main's 247
-#: plus the three result records `search.annealed` declares and the five the
-#: two samplers and their kernel seam declare (#756, steps 6 and baselines).
-STRUCTURE_BASELINE = 255
+#: Re-pinned on the merge with `main` 929b998 (2026-09-19): 263, main's 257
+#: plus the six `Metrics` sets issue #778 declares, one per problem class.
+STRUCTURE_BASELINE = 263
 
 #: `enumeration.argmax` outside its own module. Issue #755 folded the three
 #: `learn` oracles that enumerated, scored and took the first maximizer onto

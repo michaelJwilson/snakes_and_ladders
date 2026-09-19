@@ -942,6 +942,46 @@ def forward_log_likelihood_from_density(
     return torch.logsumexp(alpha, dim=1).sum()
 
 
+@dataclass(frozen=True)
+class HmmMetrics:
+    """What an HMM parameter vector means: the forward log-likelihood (issue #778).
+
+    A :class:`snakes_and_ladders.track.Metrics` over ``theta``, satisfied
+    structurally, for any family :class:`_HmmObjective` serves --- categorical,
+    Gaussian, Poisson, binomial, beta-binomial, negative binomial --- because
+    the number comes from the objective's own forward pass.
+
+    ``log_likelihood`` is
+    :func:`forward_log_likelihood_from_density` of ``theta``'s emissions,
+    which :meth:`_HmmObjective.__call__` negates to minimize; it is read here
+    with the sign the model states rather than the sign the optimizer wants.
+
+    **The state accuracy the ticket listed is left out.**
+    :func:`align_states` returns a permutation, not a number, and the decoder
+    that would turn one into an accuracy ---
+    :mod:`snakes_and_ladders.likelihood.forward_backward`, or
+    :func:`snakes_and_ladders.search.spatio_sequential.label_accuracy` --- is
+    outside what ``opt`` may import
+    (``tests/regression/opt/test_opt_objective.py``). A state path is also not
+    what a fit holds: ``theta`` is.
+
+    Parameters
+    ----------
+    objective : _HmmObjective
+        The objective being fitted, which owns the observations and the
+        constraint map.
+    """
+
+    objective: _HmmObjective
+
+    names: tuple[str, ...] = ("log_likelihood",)
+
+    def __call__(self, theta: torch.Tensor) -> dict[str, float]:
+        """``{"log_likelihood": -objective(theta)}``, computed without a graph."""
+        with torch.no_grad():
+            return {"log_likelihood": -float(self.objective(theta))}
+
+
 def align_states(
     log_emission: torch.Tensor, reference: torch.Tensor
 ) -> tuple[int, ...]:

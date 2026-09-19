@@ -56,6 +56,7 @@ from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.track import TrackedOptimization, current
 
 S = TypeVar("S")
 
@@ -302,6 +303,13 @@ def _exchange(
     # which the per-pair acceptance cannot.
     at_rung = list(range(n_replicas))
     trace: list[list[int]] = []
+    # One lookup for both ensembles (`snakes_and_ladders.track`), since both
+    # run this loop. `swap_acceptance` is the mean over adjacent pairs of the
+    # fraction accepted so far -- the mean of the vector `TemperedEnsemble`
+    # returns -- and `log_density` is replica 0's, the first column of the
+    # `log_densities` it returns, whose state is replica 0's, so a bound
+    # `Metrics` reads the same replica the density is taken from.
+    tracked: TrackedOptimization = current()
     for sweep in range(burn_in + n_sweeps):
         for replica in range(n_replicas):
             states[replica], values[replica] = step(
@@ -330,6 +338,12 @@ def _exchange(
             for rung, walker in enumerate(at_rung):
                 rungs[walker] = rung
             trace.append(rungs)
+        tracked.record(
+            sweep,
+            state=states[0],
+            swap_acceptance=float(np.mean(accepted / proposed)),
+            log_density=values[0],
+        )
     return TemperedEnsemble(
         temperatures=tuple(temperatures),
         keys=tuple(tuple(names) for names in recorded_keys),

@@ -98,6 +98,50 @@ class Decoding:
     estimate: MapEstimate
 
 
+@dataclass(frozen=True)
+class CodeMetrics:
+    """What a decoder's hard decision means: how wrong it is, and whether it is a codeword (issue #778).
+
+    A :class:`snakes_and_ladders.track.Metrics` over :attr:`Decoding.bits`,
+    satisfied structurally.
+
+    * ``bit_error_rate`` is the fraction of positions where the decision
+      differs from the word that was sent --- the per-bit count
+      :func:`snakes_and_ladders.likelihood.turbo.measure_error_rates` sums
+      over a frame, divided by the block length. Zero exactly when the
+      decoder recovered the transmitted word.
+    * ``syndrome_weight`` is the number of unsatisfied checks,
+      :meth:`snakes_and_ladders.sim.ldpc.ParityCheck.syndrome` summed. Zero
+      on any codeword, which is weaker than zero errors: a decoder that lands
+      on the wrong codeword satisfies every check.
+
+    Parameters
+    ----------
+    code : ParityCheck
+        The code being decoded, whose checks the syndrome is over.
+    sent : np.ndarray
+        The transmitted word, shape ``(n_bits,)``. The truth a simulated
+        transmission carries;
+        :func:`snakes_and_ladders.sim.ldpc.all_zero_transmission` sends the
+        zero word.
+    """
+
+    code: ParityCheck
+    sent: np.ndarray
+
+    names: tuple[str, ...] = ("bit_error_rate", "syndrome_weight")
+
+    def __call__(self, state: np.ndarray) -> dict[str, float]:
+        """The two metrics of the hard decision ``state``."""
+        bits = np.asarray(state, dtype=np.uint8)
+        return {
+            "bit_error_rate": float(
+                np.mean(bits != np.asarray(self.sent, dtype=np.uint8))
+            ),
+            "syndrome_weight": float(self.code.syndrome(bits).sum()),
+        }
+
+
 def _segments(code: ParityCheck) -> np.ndarray:
     """The check each edge belongs to, in check order."""
     return np.repeat(np.arange(code.n_checks), code.row_weights)
