@@ -4148,14 +4148,10 @@ change is which directory names it and which `CLAUDE.md` states its rules.
 `sample/CLAUDE.md` holds the sampler rules that were split between
 `opt/CLAUDE.md` and `search/CLAUDE.md`, and each donor keeps what is its own:
 an optimizer is judged by the optimum it reaches and a sampler by the
-distribution it converges to. **The old paths are gone rather than deprecated**: an
-import of `opt.hmc` or `search.potts_mcmc` raises `ModuleNotFoundError` and
-names nothing, which is the repository's own trade --- silent-and-wrong for
-loud-and-absent --- and leaves no second path to the same object for a reader
-to choose between. 83 files in the tree name `sample` and none names a donor.
-Neither counting row moves: the same modules and the same public names, under
-another directory. The twelve test
-modules moved with them to `tests/regression/sample/`, markers unchanged.
+distribution it converges to. 83 files in the tree name `sample` and none
+names a donor. Neither counting row moves: the same modules and the same
+public names, under another directory. The twelve test modules moved with them
+to `tests/regression/sample/`, markers unchanged.
 
 **The `MessageSchedule` guard (issue #755).** The seam #592 wrote is now
 asserted rather than remembered: `tests/regression/test_duplication_guards.py`
