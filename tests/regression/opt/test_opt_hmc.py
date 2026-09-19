@@ -22,16 +22,14 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Mapping
 
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.emissions import GaussianEmission
 from snakes_and_ladders.likelihood.mixture_assignments import (
     enumerate_mixture_assignments,
 )
-from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
+from snakes_and_ladders.opt.constrain import log_simplex
 from snakes_and_ladders.opt.hmc import (
     YOSHIDA_WEIGHTS,
     Integrator,
@@ -44,19 +42,20 @@ from snakes_and_ladders.opt.hmc import (
     sample,
     yoshida,
 )
-from snakes_and_ladders.opt.mixture import (
-    mixture_log_likelihood,
-    responsibilities,
-)
+from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
 from snakes_and_ladders.opt.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )
-from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 
 from tests._objective_checks import AnalyticGaussian, Counted
+from tests._posteriors import (
+    MIXTURE_PRIOR_SCALE,
+    enumerated_quadrature,
+    weight_posterior,
+)
 from tests._scale import stress_only
 
 EXACT = 1e-13
@@ -727,26 +726,6 @@ def test_a_ladder_that_cannot_exchange_is_refused() -> None:
         )
 
 
-#: The enumerable mixture the chain is run on: twelve observations over two
-#: Gaussian components 1.5 standard deviations apart, so ``2 ** 12 = 4,096``
-#: assignments enumerate and no observation's component is obvious --- the
-#: enumerated marginals below run from 0.003 to 0.999.
-MIXTURE_SAMPLES = 12
-MIXTURE_WEIGHTS = np.array([0.4, 0.6])
-MIXTURE_MEAN = np.array([-1.5, 1.5])
-MIXTURE_SCALE = np.array([1.0, 1.0])
-
-#: The prior that makes the one free coordinate a posterior rather than the
-#: improper flat-prior one, and the window and spacing the quadrature runs on.
-#: The posterior's mean is 0.415 and its standard deviation 0.660, so the
-#: window is 13 of them wide, and the quadrature is converged: over half-widths
-#: 4.0 to 12.0 and 301 to 1,201 points the mean weight moves by at most
-#: 1.4e-06 and a marginal by 1.4e-06, against the 2.0e-02 the chain is judged
-#: to below.
-MIXTURE_PRIOR_SCALE = 2.0
-QUADRATURE_WINDOW = 9.0
-QUADRATURE_POINTS = 451
-
 #: The chain: draws kept, leapfrog step, steps per proposal, proposals
 #: discarded first. The tolerance every comparison below is declared against
 #: is four standard errors at this draw count, formed from the chain's own
@@ -756,88 +735,6 @@ MIXTURE_STEP = 0.9
 MIXTURE_TRAJECTORY = 10
 MIXTURE_BURN_IN = 100
 MONTE_CARLO_SIGMAS = 4.0
-
-
-class WeightPosterior:
-    """The enumerable mixture with its components known and its weight free.
-
-    One free coordinate, so the posterior integrates on a line and the
-    enumeration supplies every value on it. The mixture's own objective carries
-    six coordinates and no reference but a sampler; what is wanted from it here
-    is the *assignment* posterior, which does not need the other five free.
-
-    Parameters
-    ----------
-    observations : np.ndarray
-        The draw, shape ``(n_samples,)``.
-    components : GaussianEmission
-        The known component densities.
-    """
-
-    def __init__(self, observations: np.ndarray, components: GaussianEmission) -> None:
-        self.values = torch.as_tensor(observations, dtype=torch.float64)
-        self.components = components
-
-    def initial(self) -> torch.Tensor:
-        return torch.zeros(1, dtype=torch.float64)
-
-    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
-        return {"log_weight": log_simplex(theta)}
-
-    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
-        return free_from_log_simplex(named["log_weight"])
-
-    def __call__(self, theta: torch.Tensor) -> torch.Tensor:
-        return -mixture_log_likelihood(self.values, log_simplex(theta), self.components)
-
-
-def _mixture_draw() -> tuple[np.ndarray, GaussianEmission]:
-    """The twelve observations and the components that generated them."""
-    components = GaussianEmission(MIXTURE_MEAN, MIXTURE_SCALE, 1e-12)
-    params = MixtureParams(
-        weights=MIXTURE_WEIGHTS,
-        components=components,
-        n_samples=MIXTURE_SAMPLES,
-        seed=734,
-        tolerance=1e-12,
-    )
-    return simulate_mixture(params).observations, components
-
-
-def _enumerated_quadrature(
-    observations: np.ndarray, components: GaussianEmission
-) -> tuple[float, np.ndarray]:
-    """The posterior mean weight and marginal assignment probabilities, by quadrature.
-
-    Every value on the grid comes from the enumeration: the evidence is the
-    sum over all 4,096 assignments and the marginals are that sum's own, so
-    the reference uses no factorized form anywhere.
-    """
-    grid = np.linspace(-QUADRATURE_WINDOW, QUADRATURE_WINDOW, QUADRATURE_POINTS)
-    log_posterior = np.empty(grid.shape)
-    marginal = np.empty((grid.shape[0], observations.shape[0]))
-    weight = np.empty(grid.shape)
-    for index, point in enumerate(grid):
-        theta = torch.tensor([point], dtype=torch.float64)
-        weights = torch.exp(log_simplex(theta)).numpy()
-        enumerated = enumerate_mixture_assignments(weights, components, observations)
-        log_posterior[index] = enumerated.log_evidence - 0.5 * point**2 / (
-            MIXTURE_PRIOR_SCALE**2
-        )
-        marginal[index] = enumerated.responsibilities[:, 0]
-        weight[index] = weights[0]
-
-    density = np.exp(log_posterior - log_posterior.max())
-    density /= np.trapezoid(density, grid)
-    return (
-        float(np.trapezoid(density * weight, grid)),
-        np.array(
-            [
-                np.trapezoid(density * marginal[:, site], grid)
-                for site in range(observations.shape[0])
-            ]
-        ),
-    )
 
 
 @pytest.mark.oracle
@@ -868,11 +765,8 @@ def test_the_chain_recovers_the_enumerated_assignment_posterior_of_a_mixture() -
     # coordinate. The declared mixture fixture is 500 observations over five
     # components -- 5 ** 500 assignments -- and the six-coordinate objective
     # has no quadrature reference at all; the pin is the small instance's.
-    observations, components = _mixture_draw()
-    target = WithGaussianPrior(
-        WeightPosterior(observations, components), scale=MIXTURE_PRIOR_SCALE
-    )
-    quadrature_weight, quadrature_marginal = _enumerated_quadrature(
+    target, observations, components = weight_posterior()
+    quadrature_weight, quadrature_marginal = enumerated_quadrature(
         observations, components
     )
 
