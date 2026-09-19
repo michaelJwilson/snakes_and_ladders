@@ -9,11 +9,18 @@ Stating an invariant is not enforcing it. `docs/source/index.rst` claimed to
 cover every submodule while missing all eighteen of `snakes_and_ladders.qa`,
 since `sphinx-build -W` fails on a broken entry and never on an absent one
 (issue #154).
+
+Four guards this file carried matched a string for a judgement and were
+deleted by issue #787: the restatement guard searched for a sentence root
+`CLAUDE.md` no longer contained and could not fail, the measurement regex
+missed the comma-grouped sweeps a module file carried, and the Expected Reader
+guard asserted absence elsewhere while the section it named was absent. What
+they checked is the Principles section of the release template, read by the
+auditor against the tree.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -36,19 +43,6 @@ MODULE_DIRECTORIES = (
 
 POINTER = "**Writing Style**"
 
-# Rule 5's label, distinctive enough that a file reproducing the section would
-# contain it and a file referencing the section would not.
-RESTATEMENT = "Apply naming, terminology, and syntax consistently"
-
-# Rule 6 says a `CLAUDE.md` carries principles rather than technical detail,
-# and the detail accreting fastest is a measurement: a result belongs to
-# whatever produced it, and a second copy is a copy to keep true. Three shapes
-# cover what was found in these files (issue #235): scientific notation, an
-# "N of M" count, and a decimal carrying two or more fractional digits.
-MEASUREMENT = re.compile(
-    r"\b\d+(?:\.\d+)?e[-+]?\d+\b|\b\d+ of \d+\b|\b\d+\.\d{2,}\b",
-    re.IGNORECASE,
-)
 
 # The module files were 26 to 93 lines when written and 48-183 by the time rule
 # 6 landed, while root grew by four lines over 26 commits. This ceiling stops
@@ -106,21 +100,6 @@ def test_every_module_claude_md_points_at_the_writing_style() -> None:
 
 @pytest.mark.critical
 @pytest.mark.infra
-def test_no_module_claude_md_restates_the_writing_style() -> None:
-    # Why the pointer is a pointer: root `CLAUDE.md`'s Writing Style section
-    # changed three times on the day this was written, and nine copies would
-    # already disagree.
-    restating = [
-        str(path.relative_to(REPO_ROOT))
-        for path in _module_claude_files()
-        if RESTATEMENT in path.read_text()
-    ]
-
-    assert restating == []
-
-
-@pytest.mark.critical
-@pytest.mark.infra
 def test_a_module_directory_added_without_a_pointer_is_caught(
     tmp_path: Path,
 ) -> None:
@@ -156,59 +135,6 @@ def test_the_root_file_states_that_the_rules_reach_the_module_files() -> None:
         "the root CLAUDE.md no longer says its rules reach the module files; "
         "eight module files point at a scope nothing declares"
     )
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_the_expected_reader_contract_lives_only_in_docs() -> None:
-    # A contract about the documents, so the seven other module files have no
-    # business restating it, and only `docs/` may refer to it.
-    elsewhere = [
-        str(path.relative_to(REPO_ROOT))
-        for path in _module_claude_files()
-        if "Expected Reader" in path.read_text() and path.parent.name != "docs"
-    ]
-
-    assert elsewhere == []
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_no_module_claude_md_carries_a_measurement() -> None:
-    # Rule 6, made checkable. A measurement in one of these files is a second
-    # copy of a number `STATUS.md`, a docstring or a test already owns, and the
-    # copy is the one that goes stale: nothing recomputes it.
-    carrying = {
-        str(path.relative_to(REPO_ROOT)): sorted(
-            set(MEASUREMENT.findall(path.read_text()))
-        )
-        for path in _module_claude_files()
-        if MEASUREMENT.search(path.read_text())
-    }
-
-    assert carrying == {}, (
-        "measurements in a module CLAUDE.md: "
-        + "; ".join(f"{name}: {found}" for name, found in carrying.items())
-        + ". Move each to what produces it -- `STATUS.md` where it is evidence "
-        "for a milestone, the module defining the constant where a caller acts "
-        "on it -- and leave the principle behind."
-    )
-
-
-@pytest.mark.critical
-@pytest.mark.infra
-def test_the_measurement_check_catches_each_shape_it_claims_to() -> None:
-    # The check exercised per shape rather than in aggregate: a guard never
-    # seen to fail is not known to work, and a regex silently matches nothing.
-    caught = ["worst deviation 3.7e-15", "39 of 40 runs", "a ratio of 0.87856"]
-    passed = [
-        "the deviation is reported rather than asserted",
-        "a bound that holds at every size",
-        "Python 3 and a single digit 0.5 are not measurements",
-    ]
-
-    assert [text for text in caught if not MEASUREMENT.search(text)] == []
-    assert [text for text in passed if MEASUREMENT.search(text)] == []
 
 
 @pytest.mark.critical

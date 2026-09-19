@@ -1,15 +1,15 @@
 #!/usr/bin/env python
-"""Report the orphans the two documents carry (issues #492, #495).
+"""Report the orphan the two documents carry (issue #492).
 
 An orphan is a thing one side of the repository pays for and the other side
-never reads. Two kinds are visible from here, and neither is gated --- both
-belong to tickets of their own, and what the suite asserts is that the
-*detector* works, not that the set is empty:
+never reads. One kind is visible from here, and it is not gated --- it belongs
+to a ticket of its own, and what the suite asserts is that the *detector*
+works, not that the set is empty: a figure the QA manifest renders, paid for
+at the release gate, and cited by no document.
 
-* a figure the QA manifest renders, paid for at the release gate, and cited
-  by no document (issue #492);
-* a problem statement the textbook carries with no box in the release
-  checklist, whose fix the release follow-up owns.
+The second kind this module reported --- a problem statement with no box in
+the release checklist (issue #495) --- went with the boxes in issue #787: the
+release template now reads the textbook's sections by name.
 
 The third orphan this module used to report --- a textbook statement no
 ``PROBLEMS.md`` row is code for, and a row keyed to no statement --- is gone
@@ -19,8 +19,8 @@ because the root ``CLAUDE.md`` splits the documents so the textbook can state
 an algorithm without naming any code; that constraint is asserted, on the
 hand-written sources, by ``test_document_orphans.py``.
 
-Infrastructure, not science: it reads a LaTeX label, a manifest and a YAML
-form, and knows nothing about what a Potts lattice is. Run::
+Infrastructure, not science: it reads a LaTeX label and a manifest, and
+knows nothing about what a Potts lattice is. Run::
 
     python infra/document_orphans.py    # print what it sees
 """
@@ -35,7 +35,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TEX_DIR = REPO_ROOT / "docs" / "tex"
 TEXTBOOK = TEX_DIR / "textbook.tex"
 DOCUMENTS = (TEX_DIR / "paper.tex", TEXTBOOK)
-RELEASE_TEMPLATE = REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "release.yml"
 MANIFEST = REPO_ROOT / "python" / "snakes_and_ladders" / "qa" / "manifest.py"
 
 
@@ -58,9 +57,6 @@ _STATEMENT = re.compile(
 _MANIFEST_STEM = re.compile(r'FigureSpec\(\s*"([A-Za-z0-9_]+)"')
 _FIGURE_REFERENCE = re.compile(r"figures/([A-Za-z0-9_]+)")
 _CAPTION_SUFFIX = "_caption"
-#: How the release checklist spells one problem: a ``- label:`` under the
-#: ``problem-statements`` block.
-_CHECKBOX = re.compile(r"^\s*- label:\s*(.+?)\s*$")
 
 
 def statements(textbook: Path = TEXTBOOK) -> dict[str, str]:
@@ -128,48 +124,8 @@ def uncited_figures(
     return sorted(rendered_figures(manifest) - cited_figures(documents))
 
 
-def checklist_labels(template: Path = RELEASE_TEMPLATE) -> list[str]:
-    """The release template's per-problem checkbox labels, in order.
-
-    Returns
-    -------
-    list[str]
-        Empty when the template carries no ``problem-statements`` block.
-    """
-    text = template.read_text()
-    start = text.find("id: problem-statements")
-    if start < 0:
-        return []
-    following = text.find("\n  - type:", start)
-    block = text[start : following if following > 0 else len(text)]
-    return [
-        match.group(1) for match in map(_CHECKBOX.match, block.splitlines()) if match
-    ]
-
-
-def unchecked_statements(
-    textbook: Path = TEXTBOOK, template: Path = RELEASE_TEMPLATE
-) -> list[str]:
-    """Problem statements the release checklist has no box for, sorted.
-
-    Matched on the statement's own title, case-folded, since the checklist
-    spells each in the textbook's words. Reported and not asserted: adding a
-    box is the release follow-up's, not this ticket's (issue #495).
-
-    Returns
-    -------
-    list[str]
-    """
-    boxed = {label.casefold() for label in checklist_labels(template)}
-    return sorted(
-        title
-        for title in statements(textbook).values()
-        if title.casefold() not in boxed
-    )
-
-
 def render(textbook: Path = TEXTBOOK) -> str:
-    """What the two detectors see, as text.
+    """What the detector sees, as text.
 
     Returns
     -------
@@ -178,10 +134,6 @@ def render(textbook: Path = TEXTBOOK) -> str:
     lines = [f"{len(statements(textbook))} problem statements.", "", "seen, not gated:"]
     lines += [
         f"  rendered and cited by nothing (#492): {stem}" for stem in uncited_figures()
-    ]
-    lines += [
-        f"  no box in the release checklist: {title}"
-        for title in unchecked_statements(textbook)
     ]
     return "\n".join(lines) + "\n"
 
@@ -192,7 +144,7 @@ def main() -> int:
     Returns
     -------
     int
-        Always 0: neither orphan gates.
+        Always 0: the orphan does not gate.
     """
     sys.stdout.write(render(TEXTBOOK))
     return 0

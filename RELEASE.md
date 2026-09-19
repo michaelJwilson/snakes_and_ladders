@@ -67,7 +67,7 @@ answers (issue #468).
 
 | Precondition | Verdict |
 | --- | --- |
-| `dev` is `main` plus the open pull requests | **Not met.** Diverged both ways, 104 and 270 commits (issue #489). No release has been built from `dev` |
+| The cut is one commit of `main`, named in the pull request | **Met by construction.** The template asked for `dev` = `main` plus the open pull requests until issue #787; that never held (diverged 104 and 270 commits, issue #489) and no release was built from `dev` |
 | The previous release's tag exists | **Not met, and recorded rather than waited for.** `git tag -l` is empty; the repository has never carried a tag, through 0.3.0 and 0.4.0 alike. The baseline an audit reads against is the `[0.3.0]` section built into `CHANGELOG.md` on 2026-09-03 |
 | Every required check reports under the name branch protection lists | **Met**, confirmed three ways: `main` took three merges on 2026-09-09 after issue #377's rename landed; #463 reported ten check runs including `Documents (paper and textbook)`, all green, with `mergeable_state: clean`; and the same job later reported `skipped` on a pull request without holding it up (issue #503) |
 | The textbook's applicability tables are regenerated (`infra/problems_tables.py --write`) | **Met** at the 0.5.0 cut |
@@ -92,18 +92,29 @@ script: it needs the issue tracker and a judgement.
 ### 1. The audit
 
 The release template's sections, answered in the release pull request rather
-than on the ticket: roadmap progress per milestone, taken from `STATUS.md` with
-the pull request that moved it rather than re-derived, and an edit to
-`ROADMAP.md` where a milestone was reached that it does not describe — in the
-document's existing tone, never a rewrite; the consistency audit over
-`CLAUDE.md`, `DEV.md`, `README.md`, `INSTALL.md`, `ROADMAP.md`, this file and
-`docs/tex/` against the code; one box per problem statement in
-`docs/tex/textbook.tex`, counting the textbook's sections rather than the
-template's boxes; and the framework table, in which every hand-rolled
-implementation with an equivalent is classified `Validation`, `Extension` or
-`Replacement` under `infra/CLAUDE.md`'s rule. Ten frameworks were measured
-between 0.3.0 and the 0.5.0 audit and ten declined, so that table came out
-all-`Validation`.
+than on the ticket, and answered by reading: the audit is the auditor reading
+the tree against the text each section names, with `grep` for a count, and
+no script stands in for it (issue #787). Roadmap progress per milestone,
+taken from `STATUS.md` with the pull request that moved it rather than
+re-derived, and an edit to `ROADMAP.md` where a milestone was reached that it
+does not describe — in the document's existing tone, never a rewrite.
+**Principles:** every bulleted rule of the ten `CLAUDE.md` files, by kind,
+with the rules no test enforces read against the tree, the rules that carry a
+number re-found in `STATUS.md`, and the rules two files state differently.
+**Intents:** one box per milestone carrying the validation sentence
+`ROADMAP.md` declares, ticked only where `STATUS.md`'s evidence meets it.
+**Seams:** every `Protocol` and `ABC` the package declares with its
+implementers, consumers and guard; a seam with no consumer, a consumer that
+branches on the concrete type, and a seam a document records that no code
+declares are findings. **Textbook:** one row per section of the Problems
+part, read from the document, for the five parts and for how many of its
+labels a test cites. Then the consistency audit over `DEV.md`, `README.md`,
+`INSTALL.md`, `PROBLEMS.md`, this file and the template against the code, for
+what those four do not read; and the framework table, in which every
+hand-rolled implementation with an equivalent is classified `Validation`,
+`Extension` or `Replacement` under `infra/CLAUDE.md`'s rule. Ten frameworks
+were measured between 0.3.0 and the 0.5.0 audit and ten declined, so that
+table came out all-`Validation`.
 
 A count a worked-in document restates — the test tiers, the flat module counts,
 the figure counts — is re-measured on the audit host and dated, or the audit

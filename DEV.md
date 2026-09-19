@@ -463,8 +463,10 @@ runs it per pull request.
 
 A release is cut from a Release-template issue
 (`.github/ISSUE_TEMPLATE/release.yml`): it drives the repository-consolidation
-audit — roadmap progress, document/code consistency, duplicated machinery,
-follow-up tickets — and gates on `infra/release.sh` before a maintainer adds
+audit — roadmap progress, the `CLAUDE.md` principles against the tree, the
+milestones' validation sentences against `STATUS.md`, the declared seams, the
+textbook's statements, document/code consistency, follow-up tickets — read by
+the auditor rather than run by a script (issue #787), and gates on `infra/release.sh` before a maintainer adds
 the `release` label.
 
 [RELEASE.md](RELEASE.md) carries the procedure in full: what the cut is taken

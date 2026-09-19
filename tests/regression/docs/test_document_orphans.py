@@ -1,12 +1,14 @@
-"""The two documents pay for things nothing reads (issues #492, #495).
+"""The documents pay for a figure nothing reads (issue #492).
 
 An orphan here is one-sided: a figure the QA manifest renders at the release
-gate and no document cites, and a problem statement the textbook carries with
-no box in the release checklist. Neither is asserted empty --- whether each
-should exist belongs to its own ticket --- so what is asserted is that the
-detector works, on a figure the manifest declares and a checklist that
-parsed. An unparsed template would otherwise report every statement as
-unboxed and read as a finding.
+gate and no document cites. It is not asserted empty --- whether each should
+exist belongs to its own ticket --- so what is asserted is that the detector
+works, on a figure the manifest declares.
+
+The second orphan this module reported, a problem statement with no box in
+the release checklist (issue #495), went with the boxes: the release template
+reads the textbook's sections by name rather than from a list, since the list
+was already one short (Polar Codes, 2026-09-19) when issue #787 replaced it.
 
 The join these two used to sit beside is gone with ``PROBLEMS.md``'s
 inventory columns (issue #640). What it protected is not: the root
@@ -45,18 +47,6 @@ def test_a_rendered_figure_no_document_cites_is_seen() -> None:
     assert rendered, "the manifest declares no figure"
     assert set(uncited) <= rendered
     assert set(uncited).isdisjoint(document_orphans.cited_figures())
-
-
-@pytest.mark.infra
-def test_a_statement_the_release_checklist_has_no_box_for_is_seen() -> None:
-    # The second orphan shape. Reported and not gated: adding the boxes is the
-    # release follow-up's. What is asserted is that the checklist was read at
-    # all, since an unparsed template reports every statement as unboxed.
-    boxed = document_orphans.checklist_labels()
-    unchecked = document_orphans.unchecked_statements()
-
-    assert boxed, "the release template's problem-statement block did not parse"
-    assert set(unchecked) < set(document_orphans.statements().values())
 
 
 @pytest.mark.critical

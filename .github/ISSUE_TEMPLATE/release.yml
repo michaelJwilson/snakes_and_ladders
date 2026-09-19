@@ -11,6 +11,12 @@ body:
         once answered, so replace each with what it asks for rather than
         adding to it, and put the evidence where it is refereed — `STATUS.md`
         for a measurement, an experiment file for a sweep.
+
+        The audit is a reading, not a script (issue #787): each section is
+        answered by reading the tree against the text it names, with `grep`
+        for a count, and every count states the commit, host and date it was
+        taken on. A finding sized larger than an edit is filed from the task
+        template and labelled `blocked`, never folded in.
   - type: input
     id: version
     attributes:
@@ -35,16 +41,143 @@ body:
     validations:
       required: true
   - type: textarea
+    id: principles
+    attributes:
+      label: Principles
+      description: >
+        Read every bulleted rule of root `CLAUDE.md` and the nine module
+        `CLAUDE.md` files against the tree. A rule a test enforces is checked
+        by that test; a rule no test enforces is checked here, by reading, or
+        not at all. Three things are recorded, and the rows live in the
+        release pull request when they do not fit.
+      value: |
+        | kind | rules | guarded | judgement | not kept by the tree (file:line) |
+        | --- | ---: | ---: | ---: | --- |
+        | writing |  |  |  |  |
+        | performance |  |  |  |  |
+        | testing |  |  |  |  |
+        | seam |  |  |  |  |
+        | dependency |  |  |  |  |
+        | process |  |  |  |  |
+        | science |  |  |  |  |
+
+        **Numbers.** Every rule that carries a figure, re-found in `STATUS.md`
+        at its line or corrected in the rule.
+
+        **Disagreements.** Every rule two files state differently, both lines
+        quoted, and which stays.
+    validations:
+      required: true
+  - type: checkboxes
+    id: intents
+    attributes:
+      label: Intents
+      description: >
+        One box per milestone in `STATUS.md`'s summary table, carrying the
+        validation `ROADMAP.md` declares for it. A box is ticked only where
+        the evidence row meets that sentence; an unticked box is answered
+        with the clause that fails and the ticket that carries it.
+      options:
+        - label: >
+            §0 Development loop — every new functionality has an oracle that
+            shares no code with it and a regression test pinning the claim
+            within a stated tolerance, and recovers known parameters across
+            a range of sizes
+        - label: >
+            1.1 Simulation & ground truth — tests against generated
+            simulations, analytic and canonical cases, for every problem
+            class the milestone lists
+        - label: >
+            1.2 Likelihood & energy engine — brute-force marginalization on
+            small (n ≤ 10) graphs within the specified floating-point
+            tolerance, with the API application-agnostic
+        - label: >
+            1.3 Continuous optimization — autodiff against central finite
+            differences; a sampler validated where exact (reversibility,
+            order) before statistically, then against a quadrature-known
+            normalizer; a start against the structure it recovers exactly,
+            then against the objective's own start at an equal budget
+        - label: >
+            1.4 Move sets & classical baselines — a move set against an
+            exhaustive neighbourhood count; a baseline against the exact
+            answer where one exists and against enumeration at a matched
+            budget where stochastic; a certificate reported with its solve
+        - label: >
+            1.5 Continuous samplers, HMC & tempering — a chain's spread
+            against the analytic Gaussian; a replica's marginals against the
+            unscaled model's enumeration with exchanges on
+        - label: >
+            2.0 RL definition — a formulation of RL in the textbook defining
+            the classical methods and their suitability per supported problem
+        - label: >
+            2.1 RL formulation & deployment — a policy that strictly
+            outperforms classical baselines on held-out simulated validation
+            sets under a similar evaluation budget
+        - label: >
+            2.2 Curriculum learning — the transferred model against its own
+            zero-shot score at the larger size, both reported
+        - label: >
+            2.3 Empirical validation — convergence speed and final objectives
+            against the classical heuristics this repository implements
+        - label: >
+            3.1 Surrogates & bounds — each stand-in admitted with a statement
+            of what referees it; the filter's cost ratio at large n measured
+        - label: >
+            4.1 Tracking, ablations & leaderboard — variants ranked by
+            budget-matched metrics over shared seeds, with a paired test
+            before a new state of the art is adopted
+        - label: >
+            Stage 5 Research extensions — a relaxation reduces to the
+            discrete objective exactly at the simplex corners; the
+            estimator's bias and variance measured against the exact gradient
+  - type: textarea
+    id: seams
+    attributes:
+      label: Seams
+      description: >
+        Every `Protocol` and `ABC` the package declares, read with `grep -rn
+        "(Protocol)\|(ABC)" python/snakes_and_ladders`, with the modules that
+        implement it, the modules that consume it, and the test that pins it
+        or none. A seam with zero consumers, a consumer that accepts a seam
+        and branches on `isinstance` over its implementers, and a seam a
+        document records that no code declares are each a finding.
+      value: |
+        | seam | module:line | implementers | consumers | guard |
+        | --- | --- | ---: | ---: | --- |
+        |  |  |  |  |  |
+    validations:
+      required: true
+  - type: textarea
+    id: textbook
+    attributes:
+      label: Textbook
+      description: >
+        One row per section of the Problems part of `docs/tex/textbook.tex`,
+        read from the document rather than from a list here. A statement is
+        complete when it carries the five labelled parts `docs/CLAUDE.md`
+        states — the model, the supported sizes, the factor graph with its
+        sketch, an algorithm cited from the appendix, and the validation
+        naming each referee with what it does and does not establish.
+        `tests/regression/test_problem_statements_complete.py` checks the
+        shape; the row is for whether the content is true, and for how much
+        of the statement a test reads: its `alg:` and `eq:` labels cited from
+        `tests/`, over those it defines.
+      value: |
+        | problem | five parts true | `alg:` cited / defined | `eq:` cited / defined |
+        | --- | --- | ---: | ---: |
+        |  |  |  |  |
+    validations:
+      required: true
+  - type: textarea
     id: consistency-audit
     attributes:
       label: Consistency audit
       value: |
-        Check `CLAUDE.md`, `DEV.md`, `RELEASE.md`, `README.md`, `INSTALL.md`,
-        `ROADMAP.md`, `PROBLEMS.md`, `docs/tex/`, the latest `docs/reviews/` entry and the code against each other. Record what is stale, contradictory,
-        or duplicated (including duplicated machinery/code across modules), and fix it in this
-        ticket's PR. Code duplication should be common language.
-
-        Include consistency of the release template and text with respect to recent development.
+        Check `DEV.md`, `RELEASE.md`, `README.md`, `INSTALL.md`, `PROBLEMS.md`,
+        the latest `docs/reviews/` entry and this template against the code
+        and against each other, for what the four sections above do not
+        read. Record what is stale, contradictory or duplicated (including
+        duplicated machinery across modules), and fix it in this ticket's PR.
 
         The counts a worked-in document restates — the test tiers, the flat
         module counts, the figure counts — are re-measured on the audit host
@@ -58,39 +191,16 @@ body:
         precondition that does not hold is recorded as not met, with what
         follows from that, rather than waited for.
       options:
-        - label: "`dev` matches `main` plus the open pull requests"
+        - label: >
+            The cut is one commit of `main`, named in the pull request; not a
+            union of open branches and not `dev` (`RELEASE.md`, issue #468)
         - label: >
             The tag for the previous release exists. The repository carried no
             tag at all through 0.3.0 and 0.4.0, so an audit that finds none
             says so and names the release its baseline is instead.
         - label: Every required check reports under the name branch protection lists, after any job rename
         - label: The applicability tables in the textbook are regenerated (`infra/problems_tables.py --write`)
-        - label: The checks ledger and the experiment index are regenerated (`infra/checks_ledger.py --write`, `infra/experiments.py`)
-  - type: checkboxes
-    id: problem-statements
-    attributes:
-      label: Every problem statement is complete
-      description: >
-        One box per problem in `docs/tex/textbook.tex`. A statement is
-        complete when it carries the five labelled parts `docs/CLAUDE.md`
-        states — the model, the supported sizes, the factor graph with its
-        sketch, an algorithm cited from the appendix, and the validation
-        naming each referee with what it does and does not establish.
-        `tests/regression/test_problem_statements_complete.py` checks the
-        shape; these boxes are for whether the content is true.
-      options:
-        - label: Phylogenetic inference
-        - label: Potts models in an external field
-        - label: Hidden Markov models
-        - label: The coupled spatio-sequential model
-        - label: Large parsimony
-        - label: Frustrated lattices
-        - label: The Gaussian mixture
-        - label: Continuous test functions
-        - label: The count-emission mixture
-        - label: LDPC decoding
-        - label: Turbo decoding
-        - label: A problem class added since the last release has a statement of its own
+        - label: The checks ledger and the experiment index are regenerated (`infra/ledgers.sh`, `infra/experiments.py`)
   - type: textarea
     id: frameworks
     attributes:
