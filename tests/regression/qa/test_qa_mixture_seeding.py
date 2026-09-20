@@ -79,6 +79,7 @@ def test_the_caption_reports_the_numbers_it_was_handed(tmp_path: Path) -> None:
         components=truth.components,
         log_likelihood=-1000.25,
         iterations=EM_ITERATIONS,
+        at_boundary=False,
     )
     ratios = SeedingRatios(
         kmeans_plus_plus=np.array([1.0, 3.0]),

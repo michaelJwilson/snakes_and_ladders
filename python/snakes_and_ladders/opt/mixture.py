@@ -390,12 +390,20 @@ class MixtureFit:
         The final log-likelihood. A density, so possibly positive.
     iterations : int
         EM iterations run.
+    at_boundary : bool
+        Whether a component's M step reached the edge of the range this data
+        identifies its parameter over --- reported rather than treated as an
+        error (issue #122), as
+        :attr:`snakes_and_ladders.opt.emission_mixture.EmissionMixtureFit.at_boundary`
+        is. ``False`` for the closed-form Gaussian step, which has no such
+        edge; the field carries what a family with one reports (issue #856).
     """
 
     weights: torch.Tensor
     components: GaussianEmission
     log_likelihood: float
     iterations: int
+    at_boundary: bool
 
 
 def expectation_maximization(
@@ -430,7 +438,8 @@ def expectation_maximization(
     Returns
     -------
     MixtureFit
-        The fitted parameters and the final log-likelihood.
+        The fitted parameters, the final log-likelihood, and whether an M step
+        reached a boundary.
 
     Raises
     ------
@@ -438,11 +447,15 @@ def expectation_maximization(
         If a component's re-estimated variance reaches its floor. The mixture
         likelihood is unbounded in that direction exactly as a Gaussian HMM's
         is, so this is an approach to a degenerate optimum rather than a
-        convergence.
+        convergence. Or if a component's M step did not converge: the loop
+        reads the report its sibling
+        :func:`snakes_and_ladders.opt.emission_mixture.expectation_maximization`
+        reads, on the terms ``likelihood/CLAUDE.md`` states (issue #856).
     """
     values = torch.as_tensor(observations, dtype=torch.float64).reshape(-1)
     previous = -float("inf")
     log_likelihood = previous
+    boundary = False
     iterations = 0
     while iterations < max_iterations:
         iterations += 1
@@ -450,13 +463,22 @@ def expectation_maximization(
         log_likelihood = float(mixture_log_likelihood(values, log_weight, components))
         posterior = responsibilities(values, log_weight, components)
         weights = posterior.mean(dim=0)
-        components = components.reestimate(
+        step = components.reestimate(
             values.reshape(1, -1), posterior.reshape(1, *posterior.shape)
-        ).emissions
+        )
+        if not step.converged:
+            msg = (
+                f"a component's M step did not settle at EM iteration "
+                f"{iterations}: residual {step.residual:.3e} after "
+                f"{step.iterations} inner iterations"
+            )
+            raise ValueError(msg)
+        components = step.emissions
+        boundary = boundary or step.at_boundary
         if abs(log_likelihood - previous) <= tolerance * abs(log_likelihood):
             break
         previous = log_likelihood
-    return MixtureFit(weights, components, log_likelihood, iterations)
+    return MixtureFit(weights, components, log_likelihood, iterations, boundary)
 
 
 def clustering_cost(observations: np.ndarray, centres: np.ndarray) -> float:

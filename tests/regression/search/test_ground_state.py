@@ -438,26 +438,48 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
 def test_the_comparison_records_the_labelling_each_entry_returned() -> None:
     # `opt.budget.compare` returns an energy and a spend; the structural
     # referee needs the labelling, and running every method twice to get it
-    # would double the experiment. The entries memo what they already
-    # computed, and this asserts the memo covers every cell rather than
-    # silently missing one -- which would show up as a structural column
-    # quietly read from the wrong run.
+    # would double the experiment. An entry carries the run it already made
+    # out on its outcome, and this asserts the records cover every cell
+    # rather than silently missing one -- which would show up as a structural
+    # column quietly read from the wrong run.
     from snakes_and_ladders.opt.budget import compare
 
     rung = _rung(CI, 3)
     budget = Budget("site-visits", 20 * rung.visits_per_sweep)
-    ground_state.forget()
 
     comparison = compare(ground_state.entries(), [rung] * 2, budget, [551], workers=1)
-    runs = ground_state.recorded()
+    records = ground_state.recorded(comparison)
 
-    assert len(runs) == len(ground_state.METHODS) * 2
-    assert {name for name, _, _ in runs} == set(ground_state.METHODS)
-    for name, _, run in runs:
-        assert ground_state.outcome(run).value == run.energy, name
+    assert len(records) == len(ground_state.METHODS) * 2
+    assert {record.method for record in records} == set(ground_state.METHODS)
+    for record in records:
+        value = ground_state.outcome(record.run).value
+        assert value == record.run.energy, record.method
     assert set(comparison.methods) == set(ground_state.METHODS)
-    ground_state.forget()
-    assert ground_state.recorded() == ()
+
+
+@pytest.mark.smoke
+@pytest.mark.bug
+def test_every_cell_is_recorded_on_a_worker_pool() -> None:
+    # The memo was a module-level list, so at `workers > 1` the cells ran in
+    # other processes and the parent read an empty record (issue #856). The
+    # record returns on the outcome, and the pooled run is the serial run:
+    # each cell seeds itself, so the energies and the labellings match.
+    from snakes_and_ladders.opt.budget import compare
+
+    rung = _rung(CI, 3)
+    budget = Budget("site-visits", 20 * rung.visits_per_sweep)
+
+    serial = compare(ground_state.entries(), [rung] * 2, budget, [551], workers=1)
+    pooled = compare(ground_state.entries(), [rung] * 2, budget, [551], workers=2)
+
+    records = ground_state.recorded(pooled)
+    assert len(records) == len(ground_state.METHODS) * 2
+    assert np.array_equal(pooled.best, serial.best)
+    for record, expected in zip(records, ground_state.recorded(serial), strict=True):
+        assert record.method == expected.method
+        assert record.rung == expected.rung
+        assert np.array_equal(record.run.labelling, expected.run.labelling)
 
 
 @pytest.mark.smoke

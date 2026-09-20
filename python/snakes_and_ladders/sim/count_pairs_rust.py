@@ -25,11 +25,8 @@ from pathlib import Path
 import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
-from snakes_and_ladders.emissions import CovariateNotSupportedError
 from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.count_pairs import (
-    SUCCESSES,
-    TOTAL,
     CountPairInstance,
     IndependentCountPair,
     SpatioSequentialCountsParams,
@@ -37,6 +34,7 @@ from snakes_and_ladders.sim.count_pairs import (
     coarsen,
     counts_digest,
     planted_labels,
+    split_covariate,
 )
 
 
@@ -83,27 +81,25 @@ def _channels(
     strided read of one channel out of an interleaved pair would touch both
     (issue #671). Splitting here is one copy per call against ``S * V`` reads.
 
+    The split and the refusal are
+    :func:`~snakes_and_ladders.sim.count_pairs.split_covariate`'s, which states
+    the rank rule --- one simulator must not accept what the other refuses, and
+    this twin carried a second check that refused what the NumPy draw accepted
+    (issue #856). What is left here is the flatten the kernel's
+    one-dimensional arguments take; a covariate of the wrong length is the
+    kernel's own refusal.
+
     Raises
     ------
     CovariateNotSupportedError
-        If the covariate names no channel. The same refusal, of the same type,
-        that :func:`~snakes_and_ladders.sim.count_pairs.split_covariate` gives
-        the NumPy draw for the same shape: one simulator must not accept what
-        the other refuses.
+        If the covariate names no channel.
     """
-    if covariate is None:
+    exposure, trials = split_covariate(IndependentCountPair, covariate)
+    if exposure is None or trials is None:
         return None, None
-    if covariate.ndim != 3 or covariate.shape[-1] != 2:
-        msg = (
-            f"the count-pair simulator takes one covariate per channel, shape "
-            f"(S, V, 2) as its observations are: channel {TOTAL} the total's "
-            f"exposure and channel {SUCCESSES} the successes' trial count. Got "
-            f"{tuple(covariate.shape)}, which names no channel (#671)."
-        )
-        raise CovariateNotSupportedError(msg)
     return (
-        np.ascontiguousarray(covariate[..., TOTAL], dtype=np.float64).reshape(-1),
-        np.ascontiguousarray(covariate[..., SUCCESSES], dtype=np.float64).reshape(-1),
+        np.ascontiguousarray(exposure, dtype=np.float64).reshape(-1),
+        np.ascontiguousarray(trials, dtype=np.float64).reshape(-1),
     )
 
 
