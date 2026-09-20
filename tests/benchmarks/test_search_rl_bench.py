@@ -18,9 +18,9 @@ from pathlib import Path
 import numpy as np
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
-from snakes_and_ladders.search.topology import random_topology
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import random_topology
 
 from tests._fixtures import FIXTURES_DIR
 

@@ -23,18 +23,18 @@ from snakes_and_ladders.likelihood.parsimony import (
     unit_step_matrix,
 )
 from snakes_and_ladders.search.infer import (
-    MoveSet,
     ParsimonyInference,
     parsimony_search,
     score_topology,
 )
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.newick import count_topologies
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
 )
-from snakes_and_ladders.sim.newick import count_topologies
-from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import (
     EIGHT_TAXA,

@@ -45,16 +45,16 @@ from snakes_and_ladders.learn.tree import (
     TreeEnvironment,
 )
 from snakes_and_ladders.sample.statistics import sign_test_p_value
-from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.fixtures import baseline, fixture
+from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
     normalized_robinson_foulds,
 )
-from snakes_and_ladders.sim.fixtures import baseline, fixture
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
-from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import edges
 
 from tests._fixtures import FIXTURES_DIR

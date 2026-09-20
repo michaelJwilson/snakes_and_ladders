@@ -59,9 +59,11 @@ from snakes_and_ladders.likelihood.pruning_torch import branch_order
 from snakes_and_ladders.likelihood.pruning_torch import (
     log_likelihood as log_likelihood_torch,
 )
-from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
+from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.support import split_pattern_support
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.topology import (
+    Model,
+    MoveSet,
     Topology,
     leaf_bipartitions,
     nni_neighbours,
@@ -165,7 +167,7 @@ def exchanged_subtrees(
     breaking one split ``S`` and making one ``S'``, these are ``S - S'`` and
     ``S' - S``: two of the four subtrees around the edge, and the move is their
     exchange. Which two is fixed by the split canonicalization of
-    :func:`snakes_and_ladders.search.topology.leaf_bipartitions`: the anchor
+    :func:`snakes_and_ladders.sim.topology.leaf_bipartitions`: the anchor
     leaf's subtree is the one in neither split.
 
     Parameters

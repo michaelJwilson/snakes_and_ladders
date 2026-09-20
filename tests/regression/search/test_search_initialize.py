@@ -40,15 +40,16 @@ from snakes_and_ladders.opt.initialize import (
     RandomRestart,
 )
 from snakes_and_ladders.opt.testfunctions import Rosenbrock
-from snakes_and_ladders.search.infer import MoveSet, infer, score_topology
+from snakes_and_ladders.search.infer import infer, score_topology
 from snakes_and_ladders.search.initialize import FromDistances, FromHadamard
 from snakes_and_ladders.search.neighbor_joining import split_lengths
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, load_fixture

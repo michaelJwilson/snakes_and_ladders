@@ -20,7 +20,7 @@ scored candidate costs one.
 
 **What carries from a topology to its neighbour.** A neighbour shares every
 branch but the few a move touched, and a branch is the split it induces
-(:func:`snakes_and_ladders.search.topology.branch_splits`), so the parent's fitted
+(:func:`snakes_and_ladders.sim.topology.branch_splits`), so the parent's fitted
 lengths start the neighbour's fit on every branch that persists. The same
 identity lets an unfitted evaluation of the neighbour reuse the parent's
 subtree partials (:class:`~snakes_and_ladders.likelihood.pruning_torch.PartialCache`),
@@ -43,7 +43,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 
 import numpy as np
 import torch
@@ -61,7 +60,9 @@ from snakes_and_ladders.likelihood.pruning_torch import (
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.parallel import Backend, map_tasks
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.topology import (
+    Model,
+    MoveSet,
     Topology,
     branch_splits,
     leaf_bipartitions,
@@ -71,25 +72,6 @@ from snakes_and_ladders.search.topology import (
 )
 
 _log = logging.getLogger(__name__)
-
-
-class MoveSet(StrEnum):
-    """Which neighbourhood the search proposes from."""
-
-    NNI = "nni"
-    SPR = "spr"
-
-
-class Model(StrEnum):
-    """Which substitution model the continuous fit uses.
-
-    ``JC`` fits branch lengths alone: Jukes-Cantor has no free rate parameters
-    and its stationary distribution is uniform by construction. ``GTR``
-    additionally fits the exchangeabilities and the stationary distribution.
-    """
-
-    JC = "jc"
-    GTR = "gtr"
 
 
 @dataclass(frozen=True)
@@ -443,7 +425,7 @@ def infer(
         such; the fits it saves or costs are what ``fits`` reports.
     radius : int | None
         Bound an SPR regraft to within ``radius`` of the pruning point
-        (:func:`~snakes_and_ladders.search.topology.spr_neighbours`), making the
+        (:func:`~snakes_and_ladders.sim.topology.spr_neighbours`), making the
         neighbourhood ``O(n * radius)`` rather than ``O(n ** 2)``. ``None`` is
         unbounded, as is any radius from the leaf count up: the two are the
         same search, candidate for candidate. Rejected with ``MoveSet.NNI``,
@@ -706,7 +688,7 @@ def parsimony_search(
     the same accounting: a budget in candidates scored, each topology scored at
     most once and keyed on its bipartitions, and a converged flag meaning no
     neighbour improved. Below eight taxa
-    :func:`~snakes_and_ladders.search.topology.enumerate_topologies` referees
+    :func:`~snakes_and_ladders.sim.topology.enumerate_topologies` referees
     it, which is how the regression suite pins it.
 
     Parameters

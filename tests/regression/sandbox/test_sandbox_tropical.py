@@ -67,14 +67,14 @@ from snakes_and_ladders.search.neighbor_joining import (
     four_point_violation,
     neighbor_joining,
 )
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.params import SimulationParams
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
     normalized_robinson_foulds,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import EIGHT_TAXA, load_fixture
 

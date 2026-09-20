@@ -95,12 +95,13 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.likelihood.distance import tree_distances
-from snakes_and_ladders.search.infer import Model, score_topology
+from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.neighbor_joining import (
     four_point_violation,
     neighbor_joining,
 )
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.topology import (
+    Model,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,

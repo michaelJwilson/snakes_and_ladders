@@ -58,7 +58,6 @@ import yaml
 
 from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.inputs import library_versions
-from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.opt.testfunctions import load_test_function_params
 from snakes_and_ladders.sim.canonical import load_frustrated_lattice_params
 from snakes_and_ladders.sim.convolutional import load_turbo_params
@@ -73,6 +72,7 @@ from snakes_and_ladders.sim.potts import (
     load_potts_lattice_params,
     load_spatio_only_params,
 )
+from snakes_and_ladders.sim.potts_chain import load_potts_params
 from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
 
 #: The repository root, from this file rather than a working directory: the

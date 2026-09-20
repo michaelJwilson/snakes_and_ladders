@@ -19,10 +19,10 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood.potts import log_weights
-from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.sim.fixtures import FIXTURES_DIR, fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import energies
+from snakes_and_ladders.sim.potts_chain import load_potts_params
 
 #: What two exact routes over the same weights may differ by: the last bits
 #: of a `float64` reduction, which belong to the host and not to the tree.

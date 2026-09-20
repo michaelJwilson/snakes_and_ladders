@@ -44,7 +44,7 @@ import torch
 
 from snakes_and_ladders.enumeration import configurations, enumerated_optimum
 from snakes_and_ladders.learn.environment import Environment
-from snakes_and_ladders.opt.potts import PottsParams
+from snakes_and_ladders.sim.potts_chain import PottsParams
 
 # (site, new_state): flip one site to a state it is not already in.
 Flip = tuple[int, int]
@@ -346,7 +346,7 @@ def enumerate_configurations(
 
     ``n_states ** chain_length`` of them, so this is an oracle for small
     chains and nothing else -- the same role exhaustive topology enumeration
-    plays for tree search in ``snakes_and_ladders.search.topology``. The
+    plays for tree search in ``snakes_and_ladders.sim.topology``. The
     space is :func:`snakes_and_ladders.enumeration.configurations`, so the
     cap every other oracle declines at applies here too (issue #387).
     """

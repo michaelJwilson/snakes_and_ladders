@@ -20,6 +20,7 @@ import math
 
 import numpy as np
 import pytest
+from snakes_and_ladders.likelihood.algebraic import hamming_correct, syndrome
 from snakes_and_ladders.likelihood.ldpc import (
     decode,
     enumerate_codewords,
@@ -29,12 +30,10 @@ from snakes_and_ladders.sim.elementary_codes import (
     crc_remainder,
     golay_code,
     hamming_code,
-    hamming_correct,
     is_perfect,
     repetition_code,
     repetition_error_rate,
     single_parity_check,
-    syndrome,
 )
 from snakes_and_ladders.sim.ldpc import (
     BinaryErasureChannel,

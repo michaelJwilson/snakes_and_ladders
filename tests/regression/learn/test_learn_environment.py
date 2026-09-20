@@ -47,7 +47,7 @@ FORBIDDEN_PREFIXES = (
 #: reason an agent is not shaped by one problem. Listed rather than
 #: pattern-matched, so a fourth is a failure a reader decides on rather than a
 #: name that slips through.
-APPLICATION_INSTANCES = ("potts_nd.py", "ranking.py", "tree.py")
+APPLICATION_INSTANCES = ("potts.py", "potts_nd.py", "ranking.py", "tree.py")
 
 FIELD = np.array([0.4, -0.1, -0.3])
 

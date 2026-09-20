@@ -57,11 +57,11 @@ from snakes_and_ladders.parallel import map_tasks
 from snakes_and_ladders.qa.figure import write_qa_figure
 from snakes_and_ladders.sample import hmc, potts_mcmc
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
-from snakes_and_ladders.search.topology import robinson_foulds
 from snakes_and_ladders.sim.elementary_codes import hamming_code
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.hmm import HmmParams
 from snakes_and_ladders.sim.potts import PottsMetrics, energy
+from snakes_and_ladders.sim.topology import robinson_foulds
 from snakes_and_ladders.sim.tree import Node
 from snakes_and_ladders.track import (
     NULL,

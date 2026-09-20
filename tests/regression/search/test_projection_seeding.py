@@ -33,13 +33,9 @@ import pytest
 import torch
 from scipy.optimize import minimize_scalar
 from snakes_and_ladders.opt.budget import Budget
-from snakes_and_ladders.opt.initialize import (
-    FromAnnealing,
-    FromChain,
-    FromTempering,
-    Initializer,
-)
+from snakes_and_ladders.opt.initialize import Initializer
 from snakes_and_ladders.opt.mixture import kmeans_plus_plus, uniform_seeds
+from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.search.projection import (

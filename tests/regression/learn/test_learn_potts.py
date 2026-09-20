@@ -23,7 +23,7 @@ from snakes_and_ladders.learn.potts import (
     optimum,
 )
 from snakes_and_ladders.learn.rollout import greedy_rollout
-from snakes_and_ladders.opt.potts import load_potts_params
+from snakes_and_ladders.sim.potts_chain import load_potts_params
 
 from tests._fixtures import FIXTURES_DIR
 

@@ -43,14 +43,15 @@ from snakes_and_ladders.likelihood.surrogate import (
     ParsimonyUpperBound,
     PlugInLikelihood,
 )
-from snakes_and_ladders.search.infer import MoveSet, infer
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.search.infer import infer
+from snakes_and_ladders.sim.fixtures import baseline
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
 )
-from snakes_and_ladders.sim.fixtures import baseline
-from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import SMALL_SITES, load_fixture
 

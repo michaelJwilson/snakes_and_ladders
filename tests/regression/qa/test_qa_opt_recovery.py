@@ -14,7 +14,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.qa.opt_recovery import (
     build_figure,
     hmm_recovery,
@@ -22,6 +21,7 @@ from snakes_and_ladders.qa.opt_recovery import (
     potts_recovery,
 )
 from snakes_and_ladders.sim.hmm import load_hmm_params
+from snakes_and_ladders.sim.potts_chain import load_potts_params
 
 from tests._fixtures import FIXTURES_DIR
 

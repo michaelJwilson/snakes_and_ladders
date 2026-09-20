@@ -32,7 +32,7 @@ and `sample.schedule` fit, sample, start and temper *every* row — `ROADMAP.md`
 §1.1's claim — and `likelihood.message_passing`, `sim.factor_graph`,
 `sample.gibbs`, `likelihood.potts`, `sim.ldpc`, `sim.graph`, `sim.potts`,
 `sim.canonical`, `search.alpha_expansion`, `sample.potts_mcmc`, `search.infer`,
-`search.topology`, `emissions` and the rest of `likelihood/` are reached from
+`sim.topology`, `emissions` and the rest of `likelihood/` are reached from
 several. Importing one says nothing about which problem a test exercises, so
 none of them defines one.
 
@@ -41,7 +41,7 @@ none of them defines one.
 | Phylogenetic tree, Jukes–Cantor | `tree_search`, `tree_scale` | `sec:phylo` | `sim.jc`, `sim.simulate`, `likelihood.pruning`, `likelihood.pruning_rust`, `likelihood.hadamard`, `search.neighbor_joining`, `learn.tree`, `sandbox.tropical` |
 | Phylogenetic tree, general time-reversible | `tree_jc` | `sec:phylo` | `sim.gtr` |
 | Phylogenetic tree, parsimony | `tree_jc` | `sec:parsimony` | `likelihood.parsimony` |
-| Potts chain in a field | `potts_chain` | `sec:potts` | `learn.potts`, `opt.potts` |
+| Potts chain in a field | `potts_chain` | `sec:potts` | `sim.potts_chain`, `learn.potts`, `opt.potts` |
 | Potts lattice and Markov random field | `potts_lattice` | `sec:potts` | `likelihood.belief_propagation`, `search.maxflow`, `search.max_cut`, `sim.graph.lattice_graph`, `sim.graph.erdos_renyi_graph` |
 | Potts lattice in a per-site field | `spatio_only` | `sec:potts` | `sim.potts.spatio_only_field`, `sim.graph.triangular_lattice_graph` |
 | Frustrated Potts: triangular antiferromagnet | `frustrated_lattice` | `sec:frustrated` | `sim.canonical.frustrated_triangular_lattice`, `sim.canonical.minimum_frustrated_edges` |

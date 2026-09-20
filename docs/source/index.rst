@@ -87,6 +87,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sim.potts
    :members:
 
+.. automodule:: snakes_and_ladders.sim.potts_chain
+   :members:
+
 .. automodule:: snakes_and_ladders.sim.hmm
    :members:
 
@@ -204,6 +207,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.likelihood.ldpc
    :members:
 
+.. automodule:: snakes_and_ladders.likelihood.algebraic
+   :members:
+
 .. automodule:: snakes_and_ladders.likelihood.css
    :members:
 
@@ -229,6 +235,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: snakes_and_ladders.opt.initialize
+   :members:
+
+.. automodule:: snakes_and_ladders.sample.initialize
    :members:
 
 .. automodule:: snakes_and_ladders.opt.budget
@@ -348,7 +357,7 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search
    :members:
 
-.. automodule:: snakes_and_ladders.search.topology
+.. automodule:: snakes_and_ladders.sim.topology
    :members:
 
 .. automodule:: snakes_and_ladders.search.infer
@@ -381,7 +390,7 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.backend
    :members:
 
-.. automodule:: snakes_and_ladders.search.kernels
+.. automodule:: snakes_and_ladders.sample.kernels
    :members:
 
 .. automodule:: snakes_and_ladders.search.decoding

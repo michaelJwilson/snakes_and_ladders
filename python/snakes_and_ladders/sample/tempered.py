@@ -54,11 +54,10 @@ from snakes_and_ladders.sample.schedule import (
     FeedbackLadder,
     adapt_ladder_by_round_trips,
 )
-from snakes_and_ladders.search.infer import Model, MoveSet
-from snakes_and_ladders.search.topology import Topology, leaf_bipartitions
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
+from snakes_and_ladders.sim.topology import Model, MoveSet, Topology, leaf_bipartitions
 from snakes_and_ladders.track import TrackedOptimization, current
 
 S = TypeVar("S")

@@ -58,7 +58,7 @@ from snakes_and_ladders.likelihood.pruning_torch import (
     transition_probabilities,
 )
 from snakes_and_ladders.likelihood.surrogate import jc_distances, least_squares_lengths
-from snakes_and_ladders.search.topology import Topology
+from snakes_and_ladders.sim.topology import Topology
 from snakes_and_ladders.sim.tree import Node
 
 

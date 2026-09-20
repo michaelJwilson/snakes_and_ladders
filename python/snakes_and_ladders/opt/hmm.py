@@ -869,6 +869,85 @@ def forward_log_likelihood(
     )
 
 
+def align_states(
+    log_emission: torch.Tensor, reference: torch.Tensor
+) -> tuple[int, ...]:
+    """Permutation of fitted hidden states best matching ``reference``.
+
+    The likelihood is invariant to relabelling the hidden states, so a
+    recovery test has to choose a permutation. Emissions are the
+    discriminating signal -- two states with the same emission distribution
+    are the same state -- so it is the one minimizing total absolute emission
+    difference, found by enumeration (``m!`` is small, and a greedy match can
+    be wrong).
+
+    Parameters
+    ----------
+    log_emission : torch.Tensor
+        Fitted log emission matrix, shape ``(m, o)``.
+    reference : torch.Tensor
+        Emission matrix to align to, shape ``(m, o)``, as probabilities.
+
+    Returns
+    -------
+    tuple[int, ...]
+        ``order`` such that ``exp(log_emission)[list(order)]`` lines up with
+        ``reference``.
+    """
+    return align_by_key(torch.exp(log_emission), reference)
+
+
+def align_families(
+    fitted: EmissionFamily, reference: EmissionFamily
+) -> tuple[int, ...]:
+    """Permutation of ``fitted``'s states best matching ``reference``'s.
+
+    The same enumeration as :func:`align_states`, over whatever signature each
+    family says distinguishes its states --- symbol probabilities for a
+    categorical emission, means for a Gaussian one. The signature is the
+    family's to define: a Gaussian fit has no emission matrix to align by.
+
+    Parameters
+    ----------
+    fitted : EmissionFamily
+        The fitted family.
+    reference : EmissionFamily
+        The family to align to.
+
+    Returns
+    -------
+    tuple[int, ...]
+        ``order`` such that state ``order[i]`` of ``fitted`` lines up with
+        state ``i`` of ``reference``.
+    """
+    return align_by_key(fitted.alignment_key(), reference.alignment_key())
+
+
+def align_by_key(fitted: torch.Tensor, reference: torch.Tensor) -> tuple[int, ...]:
+    """The permutation minimizing total absolute distance between two key sets.
+
+    Found by enumeration: ``m!`` is small, and a greedy match can be wrong.
+
+    Parameters
+    ----------
+    fitted, reference : torch.Tensor
+        Per-state signatures, shape ``(m, d)``.
+
+    Returns
+    -------
+    tuple[int, ...]
+        ``order`` such that ``fitted[list(order)]`` lines up with
+        ``reference``.
+    """
+    best: tuple[int, ...] = ()
+    best_cost = float("inf")
+    for order in permutations(range(fitted.shape[0])):
+        cost = float((fitted[list(order)] - reference).abs().sum())
+        if cost < best_cost:
+            best, best_cost = order, cost
+    return best
+
+
 def forward_log_likelihood_from_density(
     log_density: torch.Tensor,
     log_initial: torch.Tensor,
@@ -980,85 +1059,6 @@ class HmmMetrics:
         """``{"log_likelihood": -objective(theta)}``, computed without a graph."""
         with torch.no_grad():
             return {"log_likelihood": -float(self.objective(theta))}
-
-
-def align_states(
-    log_emission: torch.Tensor, reference: torch.Tensor
-) -> tuple[int, ...]:
-    """Permutation of fitted hidden states best matching ``reference``.
-
-    The likelihood is invariant to relabelling the hidden states, so a
-    recovery test has to choose a permutation. Emissions are the
-    discriminating signal -- two states with the same emission distribution
-    are the same state -- so it is the one minimizing total absolute emission
-    difference, found by enumeration (``m!`` is small, and a greedy match can
-    be wrong).
-
-    Parameters
-    ----------
-    log_emission : torch.Tensor
-        Fitted log emission matrix, shape ``(m, o)``.
-    reference : torch.Tensor
-        Emission matrix to align to, shape ``(m, o)``, as probabilities.
-
-    Returns
-    -------
-    tuple[int, ...]
-        ``order`` such that ``exp(log_emission)[list(order)]`` lines up with
-        ``reference``.
-    """
-    return align_by_key(torch.exp(log_emission), reference)
-
-
-def align_families(
-    fitted: EmissionFamily, reference: EmissionFamily
-) -> tuple[int, ...]:
-    """Permutation of ``fitted``'s states best matching ``reference``'s.
-
-    The same enumeration as :func:`align_states`, over whatever signature each
-    family says distinguishes its states --- symbol probabilities for a
-    categorical emission, means for a Gaussian one. The signature is the
-    family's to define: a Gaussian fit has no emission matrix to align by.
-
-    Parameters
-    ----------
-    fitted : EmissionFamily
-        The fitted family.
-    reference : EmissionFamily
-        The family to align to.
-
-    Returns
-    -------
-    tuple[int, ...]
-        ``order`` such that state ``order[i]`` of ``fitted`` lines up with
-        state ``i`` of ``reference``.
-    """
-    return align_by_key(fitted.alignment_key(), reference.alignment_key())
-
-
-def align_by_key(fitted: torch.Tensor, reference: torch.Tensor) -> tuple[int, ...]:
-    """The permutation minimizing total absolute distance between two key sets.
-
-    Found by enumeration: ``m!`` is small, and a greedy match can be wrong.
-
-    Parameters
-    ----------
-    fitted, reference : torch.Tensor
-        Per-state signatures, shape ``(m, d)``.
-
-    Returns
-    -------
-    tuple[int, ...]
-        ``order`` such that ``fitted[list(order)]`` lines up with
-        ``reference``.
-    """
-    best: tuple[int, ...] = ()
-    best_cost = float("inf")
-    for order in permutations(range(fitted.shape[0])):
-        cost = float((fitted[list(order)] - reference).abs().sum())
-        if cost < best_cost:
-            best, best_cost = order, cost
-    return best
 
 
 @dataclass(frozen=True)

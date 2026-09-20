@@ -15,7 +15,7 @@ from snakes_and_ladders.search.neighbor_joining import (
     four_point_violation,
     neighbor_joining,
 )
-from snakes_and_ladders.search.topology import leaf_bipartitions
+from snakes_and_ladders.sim.topology import leaf_bipartitions
 
 from tests.regression.search.test_neighbor_joining import random_tree
 

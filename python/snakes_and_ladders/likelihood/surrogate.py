@@ -49,8 +49,8 @@ import torch
 
 from snakes_and_ladders.bound import Bound, Surrogate
 from snakes_and_ladders.likelihood.pruning_torch import log_likelihood
-from snakes_and_ladders.search.topology import Topology, branch_splits
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.topology import Topology, branch_splits
 from snakes_and_ladders.sim.tree import Node
 
 # --- trees ----------------------------------------------------------------

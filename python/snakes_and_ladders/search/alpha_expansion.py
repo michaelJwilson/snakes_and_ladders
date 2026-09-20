@@ -352,7 +352,7 @@ def iterated_conditional_modes(
 
     ``backend`` chooses the sweep's implementation and nothing else. The
     :data:`~snakes_and_ladders.backend.Backend.NUMBA` kernel in
-    :mod:`snakes_and_ladders.search.kernels` walks the compressed-row adjacency and
+    :mod:`snakes_and_ladders.sample.kernels` walks the compressed-row adjacency and
     returns the labelling the Python loop returns **bitwise** -- same update,
     same index order, same first-minimum tie rule -- which is what lets it be
     the default: the audit behind it (#264) measured the Python sweep at
@@ -369,7 +369,7 @@ def iterated_conditional_modes(
     labelling = rng.integers(0, n_states, size=graph.n_nodes)
 
     if backend is Backend.NUMBA:
-        from snakes_and_ladders.search.kernels import icm_sweeps
+        from snakes_and_ladders.sample.kernels import icm_sweeps
 
         offsets, neighbour_index, couplings = graph.compressed_adjacency()
         icm_sweeps(

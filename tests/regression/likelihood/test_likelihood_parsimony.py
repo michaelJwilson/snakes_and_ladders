@@ -35,8 +35,8 @@ from snakes_and_ladders.likelihood.parsimony import (
 )
 from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.tree import Node, edges, preorder
 
 from tests._fixtures import (

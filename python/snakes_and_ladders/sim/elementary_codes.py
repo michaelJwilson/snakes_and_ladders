@@ -262,29 +262,3 @@ def crc_remainder(message: np.ndarray, polynomial: np.ndarray) -> np.ndarray:
         if register[position]:
             register[position : position + generator.size] ^= generator
     return np.asarray(register[-degree:])
-
-
-def syndrome(code: ParityCheck, word: np.ndarray) -> np.ndarray:
-    """``H x`` over GF(2), for a word of the code's length."""
-    bits = np.asarray(word, dtype=np.int64) % 2
-    if bits.shape != (code.n_bits,):
-        msg = f"word is {bits.shape}, expected {(code.n_bits,)}"
-        raise ValueError(msg)
-    return np.asarray((code.dense() @ bits) % 2)
-
-
-def hamming_correct(code: ParityCheck, m: int, word: np.ndarray) -> np.ndarray:
-    """Correct one error by reading the syndrome as a bit index.
-
-    The whole reason the columns are written in increasing order: a nonzero
-    syndrome is the binary expansion of the flipped position, so decoding is a
-    table lookup with no table.
-    """
-    bits = np.asarray(word, dtype=np.int64) % 2
-    pattern = syndrome(code, bits)[:m]
-    position = int(sum(int(bit) << index for index, bit in enumerate(pattern)))
-    if position == 0:
-        return bits
-    corrected = bits.copy()
-    corrected[position - 1] ^= 1
-    return corrected

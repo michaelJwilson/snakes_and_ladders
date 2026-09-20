@@ -47,7 +47,6 @@ from snakes_and_ladders.search.support import (
     tempered_labelling_support,
     tempered_topology_support,
 )
-from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.canonical import (
     AMBIGUOUS_OBSERVATIONS,
     ambiguous_hmm,
@@ -57,6 +56,7 @@ from snakes_and_ladders.sim.factor_graph import FactorGraph, from_hmm, from_pott
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.potts import critical_coupling, site_field
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
 
 from tests._fixtures import FOUR_TAXA, load_fixture
 

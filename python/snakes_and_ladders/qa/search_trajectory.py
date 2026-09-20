@@ -29,10 +29,10 @@ from snakes_and_ladders.qa.style import (
     letter_style,
     series_style,
 )
-from snakes_and_ladders.search.infer import MoveSet, infer, score_topology
-from snakes_and_ladders.search.topology import enumerate_topologies
+from snakes_and_ladders.search.infer import infer, score_topology
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import MoveSet, enumerate_topologies
 
 # Starting seeds whose trajectories are drawn. Three is enough to show that
 # the endpoint does not depend on where the search began, which is the point

@@ -1,6 +1,6 @@
 """Topology equality against `rustworkx.is_isomorphic` (issue #376).
 
-`search.topology` has no canonical serialization: two topologies are the same
+`sim.topology` has no canonical serialization: two topologies are the same
 unrooted tree when their leaf-set bipartitions agree, which is
 `leaf_bipartitions`, and the Robinson--Foulds distance between them is zero.
 That is a claim about graphs, and `rustworkx.is_isomorphic` decides it
@@ -25,7 +25,7 @@ import itertools
 
 import numpy as np
 import pytest
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.topology import (
     Topology,
     enumerate_topologies,
     leaf_bipartitions,

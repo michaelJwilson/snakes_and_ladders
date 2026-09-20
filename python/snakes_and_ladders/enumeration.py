@@ -196,7 +196,7 @@ def enumerated_optimum(
 
     Exponential in ``n_sites``, and affordable only on the deliberately small
     reference instances --- the bargain
-    :func:`snakes_and_ladders.search.topology.enumerate_topologies` strikes
+    :func:`snakes_and_ladders.sim.topology.enumerate_topologies` strikes
     below eight taxa.
 
     Parameters

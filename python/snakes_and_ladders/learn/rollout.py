@@ -172,3 +172,59 @@ def greedy_rollout[S, A](
         rewards=tuple(rewards),
         terminated=terminated,
     )
+
+
+def greedy_restarts[S, A](
+    environment: Environment[S, A],
+    start: S,
+    max_steps: int,
+    rng: np.random.Generator,
+) -> tuple[Episode[S, A], ...]:
+    """Hill climbing restarted until ``max_steps`` decisions are spent.
+
+    The baseline a *wandering* searcher is read against (`learn/CLAUDE.md`,
+    issue #194): once an episode is no longer bounded by a local optimum, one
+    greedy run stops after a few decisions and leaves the budget unspent, so
+    the comparison at equal budget is greedy restarted from a fresh state
+    until the budget is gone. The first run starts from ``start``, so the two
+    sides of a comparison share their start; every later run starts from
+    ``environment.reset(rng)``. A run that spends nothing --- a start that is
+    already a local optimum --- still costs one decision, or a budget could
+    never be spent.
+
+    Parameters
+    ----------
+    environment : Environment[S, A]
+        The problem to search.
+    start : S
+        Starting state of the first run.
+    max_steps : int
+        Decision budget over every run together, counted as for
+        :func:`rollout`.
+    rng : np.random.Generator
+        Draws every restart's state, and nothing else.
+
+    Returns
+    -------
+    tuple[Episode[S, A], ...]
+        One :class:`~snakes_and_ladders.learn.environment.Episode` per run, in
+        order, so a reader scores the best state over all of them and sums
+        what they cost; a single record would have to invent an action for a
+        restart.
+
+    Raises
+    ------
+    ValueError
+        If ``max_steps`` is negative.
+    """
+    if max_steps < 0:
+        msg = f"max_steps must be >= 0, got {max_steps}"
+        raise ValueError(msg)
+    runs: list[Episode[S, A]] = []
+    state, spent = start, 0
+    while spent < max_steps:
+        episode = greedy_rollout(environment, state, max_steps - spent)
+        runs.append(episode)
+        spent += max(len(episode.actions), 1)
+        state = environment.reset(rng)
+    return tuple(runs)

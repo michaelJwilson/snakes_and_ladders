@@ -38,8 +38,9 @@ from snakes_and_ladders.opt.mixture import (
     seeding_guarantee,
     uniform_seeds,
 )
-from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
+from snakes_and_ladders.opt.potts import PottsObjective
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._objective_checks import assert_gradient_matches_finite_differences
 

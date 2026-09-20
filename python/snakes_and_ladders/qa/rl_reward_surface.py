@@ -43,9 +43,9 @@ from snakes_and_ladders.qa.style import (
     letter_style,
     series_style,
 )
-from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.tree import preorder
 
 # Spread over a 50-fold range around the fixture's own mean branch length.

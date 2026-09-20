@@ -38,10 +38,10 @@ from snakes_and_ladders.likelihood.potts import enumerate_potts, strip_log_parti
 from snakes_and_ladders.likelihood.pruning_torch import branch_order, log_likelihood
 from snakes_and_ladders.likelihood.surrogate import decoupled_ground_energy
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.infer import Model, score_topology
-from snakes_and_ladders.search.topology import Topology
+from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import SpatioOnlyParams, spatio_only_field
+from snakes_and_ladders.sim.topology import Model, Topology
 from snakes_and_ladders.sim.tree import Node
 
 TreeTarget = Callable[[Topology, Mapping[str, np.ndarray]], float]

@@ -16,19 +16,15 @@ import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.search import infer as infer_module
-from snakes_and_ladders.search.infer import (
+from snakes_and_ladders.search.infer import infer, parsimony_search, score_topology
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
     Model,
     MoveSet,
-    infer,
-    parsimony_search,
-    score_topology,
-)
-from snakes_and_ladders.search.topology import (
     nni_neighbours,
     random_topology,
     spr_neighbours,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture
 

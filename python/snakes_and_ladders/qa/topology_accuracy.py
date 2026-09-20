@@ -39,9 +39,9 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 from snakes_and_ladders.search.infer import infer
-from snakes_and_ladders.search.topology import normalized_robinson_foulds
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import normalized_robinson_foulds
 
 # Spanning the point where the signal runs out. The low end is deliberately
 # below what the fixtures use, because a sweep that only covers sizes already

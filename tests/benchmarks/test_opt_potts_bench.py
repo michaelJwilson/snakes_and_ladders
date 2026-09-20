@@ -22,11 +22,10 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.opt.potts import (
     PottsObjective,
-    load_potts_params,
     log_partition_by_recursion,
     log_partition_by_squaring,
-    simulate_chains,
 )
+from snakes_and_ladders.sim.potts_chain import load_potts_params, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 

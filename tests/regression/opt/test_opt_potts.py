@@ -30,14 +30,13 @@ from snakes_and_ladders.likelihood.potts import strip_log_partition
 from snakes_and_ladders.opt.constrain import log_simplex
 from snakes_and_ladders.opt.potts import (
     PottsObjective,
-    load_potts_params,
     log_partition,
     log_partition_by_recursion,
     log_partition_by_squaring,
-    simulate_chains,
     squaring_is_cheaper,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition
+from snakes_and_ladders.sim.potts_chain import load_potts_params, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences

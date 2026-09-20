@@ -22,10 +22,9 @@ from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.qa.rl_tree_policy import BATCH, HORIZON, ITERATIONS, STARTS
 from snakes_and_ladders.sample.schedule import LinearTempSchedule
-from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
 
 FIXTURE = Path("tests/regression/fixtures/tree_search/release.yaml")

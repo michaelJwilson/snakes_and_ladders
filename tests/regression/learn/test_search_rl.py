@@ -32,19 +32,21 @@ from snakes_and_ladders.likelihood.pruning_torch import branch_order
 from snakes_and_ladders.likelihood.pruning_torch import (
     log_likelihood as log_likelihood_torch,
 )
-from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
+from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.support import internal_splits, split_pattern_support
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.gtr import gtr_rate_matrix
+from snakes_and_ladders.sim.jc import jc_rate_matrix
+from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    Model,
+    MoveSet,
     Topology,
     branch_splits,
     enumerate_topologies,
     leaf_bipartitions,
     nni_neighbours,
 )
-from snakes_and_ladders.sim.gtr import gtr_rate_matrix
-from snakes_and_ladders.sim.jc import jc_rate_matrix
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
-from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
