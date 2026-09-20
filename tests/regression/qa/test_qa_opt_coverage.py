@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa import opt_coverage
 from snakes_and_ladders.qa.opt_coverage import (
     HMM_SIZES,
@@ -22,8 +23,8 @@ from snakes_and_ladders.qa.opt_coverage import (
     hmm_coverage,
     potts_coverage,
 )
-from snakes_and_ladders.sim.hmm import load_hmm_params
-from snakes_and_ladders.sim.potts_chain import load_potts_params
+from snakes_and_ladders.sim.hmm import HmmParams
+from snakes_and_ladders.sim.potts_chain import PottsParams
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -33,7 +34,7 @@ HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 @pytest.mark.smoke
 def test_potts_coverage_counts_every_parameter_of_every_replicate() -> None:
-    params = load_potts_params(POTTS_FIXTURE)
+    params = load_params(POTTS_FIXTURE, PottsParams)
     covered, total = potts_coverage(params, n_chains=100, replicates=3)
     assert total == 3 * (1 + params.n_states)
     assert 0 <= covered <= total
@@ -41,7 +42,7 @@ def test_potts_coverage_counts_every_parameter_of_every_replicate() -> None:
 
 @pytest.mark.smoke
 def test_hmm_coverage_counts_every_parameter_of_every_replicate() -> None:
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     covered, total, boundary = hmm_coverage(params, n_sequences=600, replicates=2)
     per_replicate = (
         params.n_states + params.n_states**2 + params.n_states * params.n_symbols
@@ -57,7 +58,7 @@ def test_a_boundary_fit_is_counted_and_contributes_no_intervals() -> None:
     # sample some fits put an emission probability at zero, where the
     # observed information is singular and there is no interval to check.
     # Dropping them silently would select for the well-behaved samples.
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     covered, total, boundary = hmm_coverage(params, n_sequences=40, replicates=3)
     per_replicate = (
         params.n_states + params.n_states**2 + params.n_states * params.n_symbols

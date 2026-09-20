@@ -15,8 +15,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa import search_topologies, search_trajectory
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR
@@ -69,7 +70,7 @@ def _small_fixture(tmp_path: Path) -> Path:
 
 
 def _params(path: Path) -> SimulationParams:
-    return load_simulation_params(path)
+    return load_params(path, SimulationParams)
 
 
 # --- the trajectory figure ----------------------------------------------

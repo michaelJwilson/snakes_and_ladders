@@ -45,8 +45,8 @@ from snakes_and_ladders.fixtures import Scale
 from snakes_and_ladders.sim.canonical import frustrated_triangular_lattice
 from snakes_and_ladders.sim.fixtures import (
     FIXTURES_DIR,
-    LOADERS,
     ORACLES,
+    PARAMS,
     Baseline,
     StaleBaselineError,
     baseline,
@@ -127,7 +127,7 @@ def test_every_fixture_loads_and_states_an_oracle_the_tables_know() -> None:
 
     for entry in loaded:
         assert entry.oracle in ORACLES
-        assert entry.model in LOADERS
+        assert entry.model in PARAMS
         assert entry.params is not None
         column = ORACLE_COLUMNS.get(entry.oracle)
         assert column is None or column in problems_tables.ORACLE_COLUMNS

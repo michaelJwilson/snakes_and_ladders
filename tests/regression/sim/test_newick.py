@@ -15,6 +15,7 @@ from itertools import combinations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.newick import (
     _parse_newick,
     _parse_unrooted_newick,
@@ -23,7 +24,7 @@ from snakes_and_ladders.sim.newick import (
     validate_newick,
     validate_unrooted_newick,
 )
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
 
@@ -90,7 +91,7 @@ def test_count_topologies_rejects_non_positive_n_taxa() -> None:
 
 @pytest.mark.smoke
 def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
-    params = load_simulation_params(BINARY_FIXTURE)
+    params = load_params(BINARY_FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -104,7 +105,7 @@ def test_validate_newick_accepts_a_simulated_binary_tree() -> None:
 
 @pytest.mark.smoke
 def test_validate_newick_rejects_a_trifurcating_root() -> None:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -118,7 +119,7 @@ def test_validate_newick_rejects_a_trifurcating_root() -> None:
 
 @pytest.mark.oracle
 def test_to_newick_with_node_states_round_trips_ancestor_labels() -> None:
-    params = load_simulation_params(BINARY_FIXTURE)
+    params = load_params(BINARY_FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -167,7 +168,7 @@ def test_validate_newick_accepts_branch_lengths_and_internal_labels() -> None:
 
 @pytest.mark.smoke
 def test_validate_unrooted_newick_accepts_a_trifurcating_root() -> None:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

@@ -20,12 +20,13 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import MoveSet, leaf_bipartitions
 
@@ -48,7 +49,7 @@ def _potts(chain_length: int = 4) -> tuple[PottsEnvironment, int]:
 
 
 def _tree() -> tuple[TreeEnvironment, int]:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

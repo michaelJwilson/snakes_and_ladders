@@ -18,7 +18,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
+from snakes_and_ladders.fixtures import load_params
+from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -60,7 +61,7 @@ def _enumerate_paths(
 
 @pytest.mark.smoke
 def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     dataset = simulate_sequences(params)
     assert dataset.observations.shape == (params.n_sequences, params.sequence_length)
     assert dataset.states.shape == (params.n_sequences, params.sequence_length)
@@ -70,7 +71,7 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
 
 @pytest.mark.smoke
 def test_simulation_is_reproducible_from_the_seed() -> None:
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     first = simulate_sequences(params)
     second = simulate_sequences(params)
     assert np.array_equal(first.observations, second.observations)
@@ -85,7 +86,7 @@ def test_simulated_symbol_frequencies_match_the_analytic_marginal() -> None:
     # distribution pushed through the transition matrix. Computed in closed
     # form, so this pins the simulator against the model rather than against
     # a second simulation.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     dataset = simulate_sequences(params)
 
     state = params.initial
@@ -113,7 +114,7 @@ def test_realized_state_occupancy_matches_the_stationary_distribution() -> None:
     # _MIXING_LENGTH instead, long enough for that transient to have decayed,
     # so what remains to check is the stationary distribution itself: the
     # left eigenvector of the transition matrix A at eigenvalue 1.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     dataset = simulate_sequences(
         replace(params, lengths=(_MIXING_LENGTH,) * params.n_sequences)
     )
@@ -137,7 +138,7 @@ def test_realized_state_marginals_match_brute_force_enumeration() -> None:
     # independent of the transition matrix's stationary distribution, and
     # exact at any length rather than only in the long-run limit the
     # occupancy check above relies on.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     length = _ENUMERATION_LENGTH
     paths, probabilities = _enumerate_paths(params.initial, params.transition, length)
 
@@ -162,7 +163,7 @@ def test_marginal_emission_distribution_matches_brute_force_enumeration() -> Non
     # emission matrix -- the two-step (state, then symbol) counterpart of
     # the whole-sequence-averaged check above, at single-position
     # resolution.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     length = _ENUMERATION_LENGTH
     paths, probabilities = _enumerate_paths(params.initial, params.transition, length)
 
@@ -193,7 +194,7 @@ def test_realized_path_posterior_matches_brute_force_enumeration() -> None:
     # of the posterior in the number of paths sampled (Koller & Friedman,
     # ch. 12). The check is at one interior position, where both the
     # forward and backward halves of the recursion matter.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     length = _ENUMERATION_LENGTH
     position = length // 2
     dataset = simulate_sequences(params)
@@ -252,7 +253,7 @@ def test_a_malformed_fixture_is_refused(
     path = tmp_path / "hmm.yaml"
     path.write_text(FIXTURE.read_text().replace(replace, with_))
     with pytest.raises(ValueError, match=message):
-        load_hmm_params(path)
+        load_params(path, HmmParams)
 
 
 @pytest.mark.smoke
@@ -265,7 +266,7 @@ def test_a_batch_of_no_chains_is_refused(tmp_path: Path) -> None:
         re.sub(r"lengths: \[[^\]]*\]", "lengths: []", FIXTURE.read_text(), flags=re.S)
     )
     with pytest.raises(ValueError, match="a batch needs at least one chain"):
-        load_hmm_params(path)
+        load_params(path, HmmParams)
 
 
 @pytest.mark.smoke
@@ -278,4 +279,4 @@ def test_a_missing_field_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "hmm.yaml"
     path.write_text(text)
     with pytest.raises(ValueError, match="missing required field"):
-        load_hmm_params(path)
+        load_params(path, HmmParams)

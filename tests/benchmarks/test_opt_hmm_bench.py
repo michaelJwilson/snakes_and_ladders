@@ -12,8 +12,9 @@ import math
 
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.hmm import HmmObjective
-from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
+from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -21,7 +22,7 @@ FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
 def test_hmm_objective_benchmark(benchmark: BenchmarkFixture) -> None:
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )
@@ -37,7 +38,7 @@ def test_hmm_objective_benchmark(benchmark: BenchmarkFixture) -> None:
 
 
 def test_hmm_objective_and_gradient_benchmark(benchmark: BenchmarkFixture) -> None:
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )

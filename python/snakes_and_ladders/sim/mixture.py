@@ -21,13 +21,14 @@ type from here but draws no data itself.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
 from snakes_and_ladders.emissions import GaussianEmission
-from snakes_and_ladders.fixtures import load_declared
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,11 @@ class BinInstance:
         if self.factor < 1:
             msg = f"a bin holds at least one draw, got {self.factor}"
             raise ValueError(msg)
+
+
+_REQUIRED_FIELDS = frozenset(
+    {"seed", "n_samples", "tolerance", "weights", "means", "scales", "variance_floor"}
+)
 
 
 @dataclass(frozen=True)
@@ -160,6 +166,49 @@ class MixtureParams:
         msg = f"no instance marked {marker!r}; the file declares {declared}"
         raise KeyError(msg)
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a Gaussian-mixture fixture's declared mapping.
+
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
+
+        The weight and component checks are :class:`MixtureParams`'s own, so
+        a file and an instance built in code are refused on the same terms.
+
+        Raises
+        ------
+        ValueError
+            If a required field is missing, or ``means`` and ``scales`` differ in
+            length.
+        """
+        means = np.asarray(declared["means"], dtype=np.float64)
+        scales = np.asarray(declared["scales"], dtype=np.float64)
+        if means.shape != scales.shape:
+            msg = f"{path}: means have shape {means.shape}, scales {scales.shape}"
+            raise ValueError(msg)
+        bins = tuple(
+            BinInstance(factor=int(entry["factor"]), marker=str(entry["marker"]))
+            for entry in declared.get("bin", ())
+        )
+
+        return cls(
+            weights=np.asarray(declared["weights"], dtype=np.float64),
+            components=GaussianEmission(
+                means, scales, float(declared["variance_floor"])
+            ),
+            n_samples=int(declared["n_samples"]),
+            seed=int(declared["seed"]),
+            tolerance=float(declared["tolerance"]),
+            bins=bins,
+        )
+
 
 @dataclass(frozen=True)
 class SimulatedMixtureDataset:
@@ -217,52 +266,4 @@ def simulate_mixture(
         weights=params.weights,
         components=params.components,
         seed=params.seed,
-    )
-
-
-_REQUIRED_FIELDS = frozenset(
-    {"seed", "n_samples", "tolerance", "weights", "means", "scales", "variance_floor"}
-)
-
-
-def load_mixture_params(path: Path) -> MixtureParams:
-    """Load and validate a Gaussian-mixture fixture yaml.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
-
-    Returns
-    -------
-    MixtureParams
-        The parsed, validated truth. The weight and component checks are
-        :class:`MixtureParams`'s own, so a file and an instance built in code
-        are refused on the same terms.
-
-    Raises
-    ------
-    ValueError
-        If a required field is missing, or ``means`` and ``scales`` differ in
-        length.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-
-    means = np.asarray(raw["means"], dtype=np.float64)
-    scales = np.asarray(raw["scales"], dtype=np.float64)
-    if means.shape != scales.shape:
-        msg = f"{path}: means have shape {means.shape}, scales {scales.shape}"
-        raise ValueError(msg)
-    bins = tuple(
-        BinInstance(factor=int(entry["factor"]), marker=str(entry["marker"]))
-        for entry in raw.get("bin", ())
-    )
-
-    return MixtureParams(
-        weights=np.asarray(raw["weights"], dtype=np.float64),
-        components=GaussianEmission(means, scales, float(raw["variance_floor"])),
-        n_samples=int(raw["n_samples"]),
-        seed=int(raw["seed"]),
-        tolerance=float(raw["tolerance"]),
-        bins=bins,
     )

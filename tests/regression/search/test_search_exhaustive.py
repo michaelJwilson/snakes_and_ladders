@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.search.infer import (
     Inference,
     infer,
@@ -25,7 +26,7 @@ from snakes_and_ladders.sim.newick import (
     to_newick,
     validate_unrooted_newick,
 )
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import (
     MoveSet,
@@ -45,7 +46,7 @@ _LIKELIHOOD_TOLERANCE = 1e-5
 
 
 def _alignment(path: Path = FIXTURE) -> tuple[dict[str, np.ndarray], int, Topology]:
-    params = load_simulation_params(path)
+    params = load_params(path, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

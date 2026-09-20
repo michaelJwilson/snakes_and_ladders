@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
@@ -36,7 +37,7 @@ from snakes_and_ladders.search.infer import score_topology
 from snakes_and_ladders.search.support import internal_splits, split_pattern_support
 from snakes_and_ladders.sim.gtr import gtr_rate_matrix
 from snakes_and_ladders.sim.jc import jc_rate_matrix
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import (
     Model,
@@ -57,7 +58,7 @@ _BRANCH_LENGTH = 0.1629
 
 
 def _params() -> SimulationParams:
-    return load_simulation_params(FIXTURE)
+    return load_params(FIXTURE, SimulationParams)
 
 
 def _alignment(params: SimulationParams) -> dict[str, np.ndarray]:

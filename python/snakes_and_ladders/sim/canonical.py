@@ -31,13 +31,14 @@ The three:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
 from snakes_and_ladders.emissions import CategoricalEmission
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
     PottsGraph,
@@ -410,40 +411,42 @@ class FrustratedLatticeParams:
             magnitude=self.glass_magnitude,
         )
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
 
-def load_frustrated_lattice_params(path: Path) -> FrustratedLatticeParams:
-    """Load and validate a frustrated-lattice fixture yaml.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a frustrated-lattice fixture's declared mapping.
 
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
 
-    Returns
-    -------
-    FrustratedLatticeParams
         The parsed truth. The size and range checks belong to the two
         constructors and run when an instance is built.
 
-    Raises
-    ------
-    ValueError
-        If a required field is missing, or the lattice extent is not
-        two-dimensional.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-    shape = tuple(int(extent) for extent in raw["shape"])
-    if len(shape) != 2:
-        msg = f"{path}: shape {shape} is not a two-dimensional lattice"
-        raise ValueError(msg)
-    return FrustratedLatticeParams(
-        shape=(shape[0], shape[1]),
-        boundary=BoundaryCondition(str(raw["boundary"])),
-        coupling=float(raw["coupling"]),
-        glass_nodes=int(raw["glass_nodes"]),
-        glass_mean_degree=float(raw["glass_mean_degree"]),
-        glass_magnitude=float(raw["glass_magnitude"]),
-        glass_frustrations=tuple(float(value) for value in raw["glass_frustrations"]),
-        glass_restarts=int(raw["glass_restarts"]),
-        seed=int(raw["seed"]),
-    )
+        Raises
+        ------
+        ValueError
+            If a required field is missing, or the lattice extent is not
+            two-dimensional.
+        """
+        shape = tuple(int(extent) for extent in declared["shape"])
+        if len(shape) != 2:
+            msg = f"{path}: shape {shape} is not a two-dimensional lattice"
+            raise ValueError(msg)
+        return cls(
+            shape=(shape[0], shape[1]),
+            boundary=BoundaryCondition(str(declared["boundary"])),
+            coupling=float(declared["coupling"]),
+            glass_nodes=int(declared["glass_nodes"]),
+            glass_mean_degree=float(declared["glass_mean_degree"]),
+            glass_magnitude=float(declared["glass_magnitude"]),
+            glass_frustrations=tuple(
+                float(value) for value in declared["glass_frustrations"]
+            ),
+            glass_restarts=int(declared["glass_restarts"]),
+            seed=int(declared["seed"]),
+        )

@@ -33,10 +33,10 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import torch
 
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.opt.objective import Objective
 
 
@@ -337,68 +337,65 @@ class TestFunctionSuite:
         """
         return {function.name: function for function in self.functions}
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
 
-def load_test_function_params(path: Path) -> TestFunctionSuite:
-    """Load and validate a continuous-test-function fixture yaml.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a continuous-test-function fixture's declared mapping.
 
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
 
-    Returns
-    -------
-    TestFunctionSuite
         The parsed suite.
 
-    Raises
-    ------
-    ValueError
-        If a required field is missing, a function names one this module does
-        not define, or a declared minimizer does not have the function's
-        dimension.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-
-    functions: list[TestFunctionParams] = []
-    for entry in raw["functions"]:
-        missing = _FUNCTION_FIELDS - set(entry)
-        if missing:
-            msg = f"{path}: a function lacks {sorted(missing)}"
-            raise ValueError(msg)
-        name = str(entry["name"])
-        if name not in _FUNCTIONS:
-            msg = (
-                f"{path}: unknown test function {name!r}, expected one of {_FUNCTIONS}"
+        Raises
+        ------
+        ValueError
+            If a required field is missing, a function names one this module does
+            not define, or a declared minimizer does not have the function's
+            dimension.
+        """
+        functions: list[TestFunctionParams] = []
+        for entry in declared["functions"]:
+            missing = _FUNCTION_FIELDS - set(entry)
+            if missing:
+                msg = f"{path}: a function lacks {sorted(missing)}"
+                raise ValueError(msg)
+            name = str(entry["name"])
+            if name not in _FUNCTIONS:
+                msg = f"{path}: unknown test function {name!r}, expected one of {_FUNCTIONS}"
+                raise ValueError(msg)
+            dimension = int(entry["dimension"])
+            minimizers = tuple(
+                tuple(float(value) for value in minimizer)
+                for minimizer in entry["minimizers"]
             )
-            raise ValueError(msg)
-        dimension = int(entry["dimension"])
-        minimizers = tuple(
-            tuple(float(value) for value in minimizer)
-            for minimizer in entry["minimizers"]
-        )
-        if any(len(minimizer) != dimension for minimizer in minimizers):
-            msg = f"{path}: {name} declares a minimizer that is not {dimension}-dimensional"
-            raise ValueError(msg)
-        domain = tuple(float(edge) for edge in entry["domain"])
-        if len(domain) != 4:
-            msg = f"{path}: {name} declares a domain of {len(domain)} edges, expected 4"
-            raise ValueError(msg)
-        functions.append(
-            TestFunctionParams(
-                name=name,
-                dimension=dimension,
-                start=float(entry["start"]),
-                restarts=int(entry["restarts"]),
-                scale=float(entry["scale"]),
-                domain=(domain[0], domain[1], domain[2], domain[3]),
-                minimizers=minimizers,
+            if any(len(minimizer) != dimension for minimizer in minimizers):
+                msg = f"{path}: {name} declares a minimizer that is not {dimension}-dimensional"
+                raise ValueError(msg)
+            domain = tuple(float(edge) for edge in entry["domain"])
+            if len(domain) != 4:
+                msg = f"{path}: {name} declares a domain of {len(domain)} edges, expected 4"
+                raise ValueError(msg)
+            functions.append(
+                TestFunctionParams(
+                    name=name,
+                    dimension=dimension,
+                    start=float(entry["start"]),
+                    restarts=int(entry["restarts"]),
+                    scale=float(entry["scale"]),
+                    domain=(domain[0], domain[1], domain[2], domain[3]),
+                    minimizers=minimizers,
+                )
             )
-        )
 
-    return TestFunctionSuite(
-        functions=tuple(functions),
-        seed=int(raw["seed"]),
-        grid=int(raw["grid"]),
-        at_minimum=float(raw["at_minimum"]),
-    )
+        return cls(
+            functions=tuple(functions),
+            seed=int(declared["seed"]),
+            grid=int(declared["grid"]),
+            at_minimum=float(declared["at_minimum"]),
+        )
