@@ -109,6 +109,12 @@
     No optimizer of its own. The exact cut refuses a non-submodular energy, so
     these instances are where descent, annealing and tempering are separated
     at an equal budget of sweeps and nothing is solved exactly.
+  surrogates: >-
+    Simulated bifurcation reaches the enumerated two-state ground state of the
+    3x3 antiferromagnet from 0.938 of 16 seeds where the cut refuses the negative
+    coupling (issue #823); at three states, where the ground state is a proper
+    colouring, from 0.438. No bound: the dual bound of the same section is the
+    certificate where enumeration stops.
 
 "Planted spin glass, enumerable ground state":
   samplers: >-
@@ -121,6 +127,12 @@
     Descent is the baseline the instance defeats. The sizes are chosen so the
     ground state is enumerated rather than bounded, which is what lets a
     failure be a failure rather than an unknown.
+  surrogates: >-
+    Simulated bifurcation is the relaxation the glass is for: couplings of both
+    signs and no field, where the cut refuses and a single descent reaches the
+    enumerated ground state from 0.079 of starts; one replica of the relaxation
+    reaches it from 0.562 of 32 seeds (issue #823). A heuristic with no bound,
+    refereed by enumeration at this size and by nothing above it.
 
 "Low-density parity-check code, Gallager (3,6)":
   optimizers: >-
