@@ -1803,6 +1803,22 @@ of vertices in the first class. The loader now refuses a trials ladder that
 varies, the trial count being a property of the observation and not of the
 state.
 
+**The pruning routes share their plumbing; the oracle shares nothing**
+([#858](https://github.com/michaelJwilson/snakes_and_ladders/issues/858)). The
+post-order, the leaf indicator, the rescaling step and the `pi`-shape,
+missing-leaf, branch-length and branch-order validations were written five
+times over. `likelihood.pruning_common` holds one of each and
+`likelihood.pruning_rust`, `pruning_torch`, `pruning_analytic`,
+`surrogate.prune_with_matrices`, `blocks` and `sandbox.pruning_burn` call it:
+130 lines out of the routes. `likelihood.pruning` is byte for byte unchanged,
+being the oracle each route is pinned against, and `brute_force`, the referee
+that pins *it*, keeps its own checks for the same reason. No arithmetic is
+unified: the vanished-scale fallback and the scatter index's device differed
+between copies and are parameters, so no call site's bits or device move.
+Evidence is 38 blake2b digests of the float64 bytes --- every route, rescaled,
+unrescaled, weighted, cached, with the analytic gradient --- on `tree_jc/ci`
+and `tree_search/ci`, identical before and after.
+
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
 **Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`).

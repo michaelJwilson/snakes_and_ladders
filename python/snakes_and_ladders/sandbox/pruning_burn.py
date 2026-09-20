@@ -55,7 +55,7 @@ import torch
 
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.likelihood.patterns import check_weights
-from snakes_and_ladders.likelihood.pruning_rust import _postorder
+from snakes_and_ladders.likelihood.pruning_common import postorder
 from snakes_and_ladders.likelihood.pruning_torch import branch_order
 from snakes_and_ladders.sim.tree import Node, preorder
 
@@ -93,7 +93,7 @@ class _Flattened:
     """
 
     def __init__(self, tau: Node, alignment: Mapping[str, np.ndarray]) -> None:
-        nodes = _postorder(tau)
+        nodes = postorder(tau)
         position = {id(node): index for index, node in enumerate(nodes)}
         leaves = [node for node in nodes if node.is_leaf]
         missing = [leaf.name for leaf in leaves if leaf.name not in alignment]

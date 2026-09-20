@@ -45,6 +45,14 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.likelihood.patterns import check_weights
+from snakes_and_ladders.likelihood.pruning_common import (
+    check_alignment_covers,
+    check_branch_lengths_shape,
+    check_pi_shape,
+    leaf_indicator,
+    postorder,
+    rescale_partial,
+)
 from snakes_and_ladders.likelihood.pruning_torch import (
     branch_order,
     transition_probabilities,
@@ -84,19 +92,6 @@ def _transition_derivatives(
         eye = torch.eye(k, dtype=t.dtype, device=t.device)
         return (eye - 1.0 / k) * (-k / (k - 1)) * decay
     return rate_matrix @ transitions
-
-
-def _postorder(root: Node) -> list[Node]:
-    """Every node of ``root``'s tree, children before parents, root last."""
-    order: list[Node] = []
-
-    def _walk(node: Node) -> None:
-        for child in node.children:
-            _walk(child)
-        order.append(node)
-
-    _walk(root)
-    return order
 
 
 def _sibling_products(messages: Sequence[torch.Tensor]) -> list[torch.Tensor]:
@@ -162,7 +157,7 @@ class _PruningLogLikelihood(torch.autograd.Function):
         dtype, device = branch_lengths.dtype, branch_lengths.device
         order = branch_order(tau)
         index = {name: position for position, name in enumerate(order)}
-        nodes = _postorder(tau)
+        nodes = postorder(tau)
         leaves = [node for node in nodes if node.is_leaf]
         n_sites = int(alignment[leaves[0].name].shape[0])
 
@@ -175,12 +170,14 @@ class _PruningLogLikelihood(torch.autograd.Function):
 
             for node in nodes:
                 if node.is_leaf:
-                    states = torch.as_tensor(
-                        alignment[node.name], dtype=torch.long, device=device
+                    partials[node.name] = leaf_indicator(
+                        alignment[node.name],
+                        n_sites,
+                        k,
+                        dtype,
+                        device,
+                        index_device=device,
                     )
-                    partial = torch.zeros((n_sites, k), dtype=dtype, device=device)
-                    partial[torch.arange(n_sites, device=device), states] = 1.0
-                    partials[node.name] = partial
                     continue
 
                 partial = torch.ones((n_sites, k), dtype=dtype, device=device)
@@ -192,10 +189,9 @@ class _PruningLogLikelihood(torch.autograd.Function):
                     partial = partial * message
 
                 if rescale:
-                    scale = partial.amax(dim=1)
-                    safe_scale = torch.where(scale > 0, scale, torch.ones_like(scale))
-                    partial = partial / safe_scale.unsqueeze(1)
-                    log_scale = log_scale + torch.log(safe_scale)
+                    partial, log_scale, safe_scale = rescale_partial(
+                        partial, log_scale, None
+                    )
                     scales[node.name] = safe_scale
                 partials[node.name] = partial
 
@@ -316,9 +312,7 @@ def log_likelihood(
     """
     dtype, device = branch_lengths.dtype, branch_lengths.device
     pi_t = torch.as_tensor(pi, dtype=dtype, device=device)
-    if pi_t.shape != (k,):
-        msg = f"pi has shape {tuple(pi_t.shape)}, expected ({k},)"
-        raise ValueError(msg)
+    check_pi_shape(tuple(pi_t.shape), k)
     if pi_t.requires_grad or (rate_matrix is not None and rate_matrix.requires_grad):
         msg = (
             "pruning_analytic computes a gradient in branch_lengths only; "
@@ -327,18 +321,10 @@ def log_likelihood(
         raise ValueError(msg)
 
     order = branch_order(tau)
-    if branch_lengths.shape != (len(order),):
-        msg = (
-            f"branch_lengths has shape {tuple(branch_lengths.shape)}, "
-            f"expected ({len(order)},) to match branch_order(tau)"
-        )
-        raise ValueError(msg)
+    check_branch_lengths_shape(tuple(branch_lengths.shape), len(order))
 
     leaves = [node for node in preorder(tau) if node.is_leaf]
-    missing = [leaf.name for leaf in leaves if leaf.name not in alignment]
-    if missing:
-        msg = f"alignment is missing leaf(ves) {missing}"
-        raise ValueError(msg)
+    check_alignment_covers((leaf.name for leaf in leaves), alignment)
 
     n_sites = int(torch.as_tensor(alignment[leaves[0].name]).shape[0])
     weight = check_weights(weights, n_sites)
