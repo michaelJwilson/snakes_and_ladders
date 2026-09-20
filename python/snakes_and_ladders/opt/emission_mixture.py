@@ -31,6 +31,7 @@ import torch
 
 from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
 from snakes_and_ladders.enumeration import refuse_oversized
+from snakes_and_ladders.opt.em import em_loop
 from snakes_and_ladders.opt.mixture import (
     emission_mixture_plus_plus,
     mixture_log_likelihood,
@@ -91,10 +92,14 @@ def expectation_maximization(
     """Fit a mixture of count emissions by EM.
 
     The E step is :func:`snakes_and_ladders.opt.mixture.responsibilities` and
-    the M step is the family's own :meth:`reestimate`, so only the loop is
-    written here: independent observations carry no message between them, and
-    the family receives the posterior an HMM's forward--backward pass would
-    hand it.
+    the M step is the family's own :meth:`reestimate`: independent
+    observations carry no message between them, and the family receives the
+    posterior an HMM's forward--backward pass would hand it. The alternation
+    around the two is :func:`snakes_and_ladders.opt.em.em_loop`'s, which is
+    the rung this one shares with
+    :func:`snakes_and_ladders.opt.mixture.expectation_maximization` and its
+    only one: the defaults, the result type and the oracle this is pinned
+    against are here (issue #859).
 
     Parameters
     ----------
@@ -125,30 +130,42 @@ def expectation_maximization(
         would surface several iterations later as a non-monotone likelihood.
     """
     values = torch.as_tensor(observations, dtype=torch.float64)
-    previous = -float("inf")
-    log_likelihood = previous
-    posterior = torch.empty((values.shape[0], components.n_states), dtype=torch.float64)
     boundary = False
-    iterations = 0
-    while iterations < max_iterations:
-        iterations += 1
-        log_weight = torch.log(weights)
-        log_likelihood = float(mixture_log_likelihood(values, log_weight, components))
-        posterior = responsibilities(values, log_weight, components)
-        weights = posterior.mean(dim=0)
-        step = components.reestimate(values, posterior)
-        if not step.converged:
+    attempt = 0
+
+    def step(
+        state: tuple[torch.Tensor, EmissionFamily, torch.Tensor],
+    ) -> tuple[tuple[torch.Tensor, EmissionFamily, torch.Tensor], float]:
+        """One E step, one M step, and the log-likelihood at the state given."""
+        nonlocal boundary, attempt
+        attempt += 1
+        current, family, _ = state
+        log_weight = torch.log(current)
+        log_likelihood = float(mixture_log_likelihood(values, log_weight, family))
+        posterior = responsibilities(values, log_weight, family)
+        reestimated = family.reestimate(values, posterior)
+        if not reestimated.converged:
             msg = (
                 f"a component's M step did not settle at EM iteration "
-                f"{iterations}: residual {step.residual:.3e} after "
-                f"{step.iterations} inner iterations"
+                f"{attempt}: residual {reestimated.residual:.3e} after "
+                f"{reestimated.iterations} inner iterations"
             )
             raise ValueError(msg)
-        components = step.emissions
-        boundary = boundary or step.at_boundary
-        if abs(log_likelihood - previous) <= tolerance * abs(log_likelihood):
-            break
-        previous = log_likelihood
+        boundary = boundary or reestimated.at_boundary
+        advanced = (posterior.mean(dim=0), reestimated.emissions, posterior)
+        return advanced, log_likelihood
+
+    # The responsibilities of the last E step are carried out of the loop, so
+    # the result holds the posterior its final M step consumed. Before the
+    # first step there is none, and an empty budget returns that.
+    start = (
+        weights,
+        components,
+        torch.empty((values.shape[0], components.n_states), dtype=torch.float64),
+    )
+    (weights, components, posterior), log_likelihood, iterations = em_loop(
+        step, start, tolerance=tolerance, max_iterations=max_iterations
+    )
     return EmissionMixtureFit(
         weights=weights,
         components=components,

@@ -40,8 +40,14 @@ from snakes_and_ladders.emissions import (
     GaussianEmission,
     pooled_variance_floor,
 )
-from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
-from snakes_and_ladders.opt.initialize import Initializer
+from snakes_and_ladders.opt.constrain import (
+    free_from_log_simplex,
+    free_from_positive,
+    log_simplex,
+    positive,
+)
+from snakes_and_ladders.opt.em import em_loop
+from snakes_and_ladders.opt.initialize import Initializer, quantile_locations
 from snakes_and_ladders.opt.objective import Objective
 
 
@@ -143,7 +149,7 @@ class GaussianMixtureObjective(Objective):
         """The component family ``theta`` encodes, differentiable in ``theta``."""
         return GaussianEmission(
             self._per_component(theta[self._mean_slice()]),
-            torch.exp(self._per_component(theta[self._log_scale_slice()])),
+            positive(self._per_component(theta[self._log_scale_slice()])),
             self._variance_floor,
         )
 
@@ -157,19 +163,20 @@ class GaussianMixtureObjective(Objective):
         components.
         """
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
-        quantiles = (
-            torch.arange(self._n_components, dtype=self._dtype) + 0.5
-        ) / self._n_components
         if self._n_channels == 1:
-            theta[self._mean_slice()] = torch.quantile(self._observations, quantiles)
-            theta[self._log_scale_slice()] = torch.log(self._observations.std())
+            theta[self._mean_slice()] = quantile_locations(
+                self._observations, self._n_components
+            )
+            theta[self._log_scale_slice()] = free_from_positive(
+                self._observations.std()
+            )
             return theta
         # Per channel, since a quantile of the two channels pooled is a
         # location in neither and would seed every component off the data.
-        theta[self._mean_slice()] = torch.quantile(
-            self._observations, quantiles, dim=0
+        theta[self._mean_slice()] = quantile_locations(
+            self._observations, self._n_components, dim=0
         ).reshape(-1)
-        theta[self._log_scale_slice()] = torch.log(
+        theta[self._log_scale_slice()] = free_from_positive(
             self._observations.std(dim=0)
         ).repeat(self._n_components)
         return theta
@@ -244,7 +251,7 @@ class GaussianMixtureObjective(Objective):
             [
                 free_from_log_simplex(named["log_weight"].to(self._dtype)),
                 named["mean"].reshape(-1).to(self._dtype),
-                torch.log(named["scale"].reshape(-1).to(self._dtype)),
+                free_from_positive(named["scale"].reshape(-1).to(self._dtype)),
             ]
         )
 
@@ -271,7 +278,9 @@ class GaussianMixtureObjective(Objective):
                     torch.log(torch.as_tensor(weights, dtype=self._dtype))
                 ),
                 torch.as_tensor(mean, dtype=self._dtype).reshape(-1),
-                torch.log(torch.as_tensor(scale, dtype=self._dtype)).reshape(-1),
+                free_from_positive(torch.as_tensor(scale, dtype=self._dtype)).reshape(
+                    -1
+                ),
             ]
         )
 
@@ -418,7 +427,9 @@ def expectation_maximization(
     The independent oracle, on the footing ``baum_welch`` occupies for the
     HMM: no optimizer, parameterization or constraint map shared with ``fit``,
     only the model. **And its component M step is the HMM's**, since that step
-    is the emission family's.
+    is the emission family's. The alternation around the two steps is
+    :func:`snakes_and_ladders.opt.em.em_loop`'s (issue #859); this entry
+    point's defaults, result type and oracle pin are its own.
 
     Parameters
     ----------
@@ -453,31 +464,38 @@ def expectation_maximization(
         reads, on the terms ``likelihood/CLAUDE.md`` states (issue #856).
     """
     values = torch.as_tensor(observations, dtype=torch.float64).reshape(-1)
-    previous = -float("inf")
-    log_likelihood = previous
     boundary = False
-    iterations = 0
-    while iterations < max_iterations:
-        iterations += 1
-        log_weight = torch.log(weights)
-        log_likelihood = float(mixture_log_likelihood(values, log_weight, components))
-        posterior = responsibilities(values, log_weight, components)
-        weights = posterior.mean(dim=0)
-        step = components.reestimate(
+    attempt = 0
+
+    def step(
+        state: tuple[torch.Tensor, GaussianEmission],
+    ) -> tuple[tuple[torch.Tensor, GaussianEmission], float]:
+        """One E step, one M step, and the log-likelihood at the state given."""
+        nonlocal boundary, attempt
+        attempt += 1
+        current, family = state
+        log_weight = torch.log(current)
+        log_likelihood = float(mixture_log_likelihood(values, log_weight, family))
+        posterior = responsibilities(values, log_weight, family)
+        reestimated = family.reestimate(
             values.reshape(1, -1), posterior.reshape(1, *posterior.shape)
         )
-        if not step.converged:
+        if not reestimated.converged:
             msg = (
                 f"a component's M step did not settle at EM iteration "
-                f"{iterations}: residual {step.residual:.3e} after "
-                f"{step.iterations} inner iterations"
+                f"{attempt}: residual {reestimated.residual:.3e} after "
+                f"{reestimated.iterations} inner iterations"
             )
             raise ValueError(msg)
-        components = step.emissions
-        boundary = boundary or step.at_boundary
-        if abs(log_likelihood - previous) <= tolerance * abs(log_likelihood):
-            break
-        previous = log_likelihood
+        boundary = boundary or reestimated.at_boundary
+        return (posterior.mean(dim=0), reestimated.emissions), log_likelihood
+
+    (weights, components), log_likelihood, iterations = em_loop(
+        step,
+        (weights, components),
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
     return MixtureFit(weights, components, log_likelihood, iterations, boundary)
 
 
