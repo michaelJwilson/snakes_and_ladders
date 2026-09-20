@@ -791,8 +791,8 @@ def _breakable(text: str) -> str:
     return escaped
 
 
-def ladder_rows() -> list[tuple[str, str, str, str, str]]:
-    """``(problem, rung, callable, below, test)`` per rung, ladder order.
+def ladder_rows() -> list[tuple[str, str, str, str, str, str]]:
+    """``(problem, rung, callable, below, cost, test)`` per rung, ladder order.
 
     The last cell is the test that pins the rung to the one below, its path
     relative to the regression suite and without its extension, or the ticket
@@ -811,13 +811,14 @@ def ladder_rows() -> list[tuple[str, str, str, str, str]]:
                 _tex_text(rung.name),
                 _breakable(rung.callable),
                 _breakable(rung.below) if rung.below else "--",
+                _tex_text(rung.cost.value),
                 pin,
             )
         )
     return body
 
 
-def _ladder_table(body: list[tuple[str, str, str, str, str]]) -> list[str]:
+def _ladder_table(body: list[tuple[str, str, str, str, str, str]]) -> list[str]:
     """The oracle ladder: one row per rung, and the test pinning it below.
 
     A ``longtable`` for the reason the declared instances are one: ninety
@@ -825,8 +826,12 @@ def _ladder_table(body: list[tuple[str, str, str, str, str]]) -> list[str]:
     """
     caption = (
         "The oracle ladder per problem, generated from its one declaration: "
-        "each rung, the callable it names, the rung it is pinned against, and "
-        "the test pinning the pair. A rung with nothing under it is pinned to "
+        "each rung, the callable it names, the rung it is pinned against, "
+        "the unit it spends, and the test pinning the pair. The unit is the "
+        "one the method reports --- a gradient is an evaluation and a "
+        "backward pass, so two rungs are compared in a unit both spend, and "
+        "an exact rung's cost is the instance's count --- and the table does "
+        "not rank by it (issue \\#818). A rung with nothing under it is pinned to "
         "an exact referee outside the ladder --- an enumeration at its foot, "
         "a closed form, a second implementation --- which the test names. A "
         r"rung reading \emph{ticket} is one no test pins yet; it is a gap "
@@ -836,15 +841,15 @@ def _ladder_table(body: list[tuple[str, str, str, str, str]]) -> list[str]:
     )
     lines = [
         r"{\scriptsize",
-        r"\begin{longtable}{p{0.09\textwidth}p{0.16\textwidth}p{0.20\textwidth}"
-        r"p{0.14\textwidth}p{0.24\textwidth}}",
+        r"\begin{longtable}{p{0.09\textwidth}p{0.15\textwidth}p{0.18\textwidth}"
+        r"p{0.13\textwidth}p{0.11\textwidth}p{0.22\textwidth}}",
         f"  \\caption{{{caption}}}\\label{{tab:ladder}}\\\\",
         r"  \toprule",
-        r"  Problem & Rung & Callable & Pinned against & Pinned by \\",
+        r"  Problem & Rung & Callable & Pinned against & Spends & Pinned by \\",
         r"  \midrule",
         r"  \endfirsthead",
         r"  \toprule",
-        r"  Problem & Rung & Callable & Pinned against & Pinned by \\",
+        r"  Problem & Rung & Callable & Pinned against & Spends & Pinned by \\",
         r"  \midrule",
         r"  \endhead",
         r"  \bottomrule",

@@ -26,7 +26,7 @@ sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 import coverage_recut  # noqa: E402
 import ladder  # noqa: E402
-from ladder import LADDER, PROBLEMS, Rung  # noqa: E402
+from ladder import LADDER, PROBLEMS, Cost, Rung  # noqa: E402
 
 #: What issue #734 counts as unpinned today: none. The Potts five (step 2),
 #: the tree four (step 3), the HMM four (step 4), the codes five (step 5) and
@@ -100,6 +100,7 @@ def test_a_misnamed_test_fails_the_check() -> None:
         "likelihood.potts.strip_log_partition",
         "enumeration",
         "tests/regression/likelihood/test_potts_exact.py::test_that_does_not_exist",
+        cost=Cost.PASS,
     )
     unmarked = Rung(
         "potts",
@@ -107,6 +108,7 @@ def test_a_misnamed_test_fails_the_check() -> None:
         "likelihood.potts.strip_log_partition",
         "enumeration",
         real,
+        cost=Cost.PASS,
     )
 
     assert unpinned_tests((misnamed,), markers) == [
@@ -206,3 +208,16 @@ def test_every_rung_belongs_to_one_of_the_five_ladders() -> None:
     assert {rung.problem for rung in LADDER} == set(PROBLEMS)
     with pytest.raises(ValueError, match="unknown problem"):
         ladder.rungs("potts_lattice")
+
+
+@pytest.mark.critical
+@pytest.mark.infra
+def test_every_rung_declares_a_unit_and_every_unit_is_spent() -> None:
+    # The field is keyword-only with no default, so a rung without a cost does
+    # not construct; what is asserted is the vocabulary: every rung's unit is
+    # one of the eight, and no unit is declared that no rung spends. An exact
+    # rung may sit above another exact rung (the k-means dynamic programme is
+    # pinned against assignment enumeration), so exactness is not a foot rule
+    # (issue #818).
+    assert [rung.name for rung in LADDER if not isinstance(rung.cost, Cost)] == []
+    assert {rung.cost for rung in LADDER} == set(Cost)
