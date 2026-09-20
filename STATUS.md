@@ -373,7 +373,7 @@ sites the plan lists after these — the candidate fits of `search.infer`,
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
-**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700).
+**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.simulator` (the one way to simulate, #829), `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700).
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed tree fixture, retaining
@@ -4280,6 +4280,28 @@ shape instead of once per level paid **1.21x** on the plan (64.2 to 52.9 ms at
 remains has no hotspot: it is Python bookkeeping proportional to the edges, and
 removing it would mean vectorising the level assignment wholesale.
 `docs/experiments/018` carries the run.
+
+**A sixth schedule, and where it earns its heap**
+([#825](https://github.com/michaelJwilson/snakes_and_ladders/issues/825)).
+`residual` orders sends by the largest residual a factor's inputs last saw
+(Elidan, McGraw & Koller 2006): a heap over the factors, the runner feeding each
+applied step's residual back through `send`, so the seam gains `adaptive` and
+`sweep_length` and no consumer names the schedule. It reaches the Bethe fixed
+point flooding and sequential reach, pinned against the reference flooding on
+the loopy lattice to 1e-9 in `log Z` and 1e-8 in the marginals. Sweeps to a
+residual of 1e-10 at damping 0.5, one sweep being every factor sent once
+whatever the order: on the 3x3 `ci` lattice 60 flooding, 53 sequential, 60
+residual; on an 8x8 at `J = 0.5` in a random field 61, 53, 55; on a 12x12 at
+the critical coupling in a random field **254, 196, 176**, where the residual
+order is the only one under 200. On the (3,6) Gallager codes at 96 and 996
+bits over a Gaussian channel at `sigma = 0.8` it is the worst of the three:
+1,761, 1,133, **2,357** sweeps at 96 bits and 1,769, 1,139, 2,135 at 996,
+because a parity factor's outgoing residual bumps every neighbour whether or
+not its own inputs moved, and the hard constraints keep the residuals large
+late into the run. Wall is not the comparison: flooding's one vectorised step
+runs 128 ms where the two per-factor orders run 4.9 s and 5.2 s on the 12x12,
+a cost of the Python step loop and not of the order, and the decoder keeps its
+own layered schedule.
 
 ## Consistency audit at 0.4.0
 

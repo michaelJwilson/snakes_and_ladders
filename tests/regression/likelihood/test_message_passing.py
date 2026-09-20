@@ -146,6 +146,24 @@ def test_flooding_on_the_loopy_lattice_is_belief_propagation() -> None:
     np.testing.assert_allclose(single, reference.single_site, rtol=1e-8, atol=1e-10)
 
 
+@pytest.mark.critical
+@pytest.mark.oracle
+def test_residual_on_the_loopy_lattice_is_belief_propagation() -> None:
+    # The residual order reaches the same Bethe fixed point as flooding, read
+    # against the reference module's flooding as flooding itself is (#825);
+    # the referee shares no schedule code with the seam.
+    reference = belief_propagation(LOOPY, FIELD, damping=0.5, tolerance=1e-12)
+    result = sum_product(
+        from_potts(LOOPY, FIELD), schedule=MessageScheduleName.RESIDUAL, tolerance=1e-12
+    )
+    assert not result.exact
+    assert math.isclose(
+        result.log_partition, reference.bethe_log_partition, rel_tol=1e-9
+    )
+    single = np.stack([result.variable[f"s{i}"] for i in range(LOOPY.n_nodes)])
+    np.testing.assert_allclose(single, reference.single_site, rtol=1e-8, atol=1e-10)
+
+
 @pytest.mark.smoke
 def test_the_tree_schedule_refuses_a_loopy_graph() -> None:
     graph = from_potts(LOOPY, FIELD)

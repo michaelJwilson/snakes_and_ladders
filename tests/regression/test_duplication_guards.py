@@ -105,12 +105,13 @@ SCHEDULE_OWNER = "likelihood/schedule.py"
 SCHEDULE_BASE = "MessageSchedule"
 
 #: The registered schedules, pinned at what the 2026-09-19 audit read from the
-#: tree: `tree`, `upward`, `downward`, `flooding` and `sequential`. The audit's
+#: tree plus the one #825 registered: `tree`, `upward`, `downward`, `flooding`,
+#: `sequential` and `residual`. The audit's
 #: `fields:name` cluster has seven members; the seventh,
 #: `search.ground_state.Entry`, shares the field `name` and nothing else and is
-#: not a schedule, so this pin is five and not seven. A sixth schedule raises
-#: it in the pull request that registers it.
-SCHEDULE_COUNT = 5
+#: not a schedule, so this pin was five and not seven; #825's sixth raised it.
+#: A seventh raises it in the pull request that registers it.
+SCHEDULE_COUNT = 6
 
 #: A consumer branching on which schedule it holds, by name. The base's
 #: methods are the seam --- `message_passing._run` reads `requires_tree`,

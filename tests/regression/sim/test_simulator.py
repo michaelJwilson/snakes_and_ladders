@@ -1,6 +1,6 @@
 """One shape draws every problem that has data, and the draw is the bits it always was (issue #829).
 
-Two claims. The registry is complete: every model `sim.fixtures.LOADERS` reads
+Two claims. The registry is complete: every model `sim.fixtures.PARAMS` names
 is simulated or named with the reason it is not, and no model is both. And the
 seam re-spells nothing: for each simulated model, `SIMULATORS[model](params,
 default_rng(params.seed))` is **bitwise** the call its problem has always
@@ -15,7 +15,7 @@ import inspect
 import numpy as np
 import pytest
 from snakes_and_ladders.sim.emission_mixture import simulate_emission_mixture
-from snakes_and_ladders.sim.fixtures import LOADERS, fixture
+from snakes_and_ladders.sim.fixtures import PARAMS, fixture
 from snakes_and_ladders.sim.graph import lattice_graph
 from snakes_and_ladders.sim.hmm import simulate_sequences
 from snakes_and_ladders.sim.mixture import simulate_mixture
@@ -39,9 +39,9 @@ PROBLEM_OF: dict[str, str] = {
 
 
 @pytest.mark.critical
-@pytest.mark.infra
+@pytest.mark.smoke
 def test_every_declared_model_is_simulated_or_says_why_not() -> None:
-    assert set(SIMULATORS) | set(NOT_SIMULATED) == set(LOADERS)
+    assert set(SIMULATORS) | set(NOT_SIMULATED) == set(PARAMS)
     assert not set(SIMULATORS) & set(NOT_SIMULATED)
     assert all(reason.strip() for reason in NOT_SIMULATED.values())
     assert set(PROBLEM_OF) == set(SIMULATORS)

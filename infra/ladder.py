@@ -178,6 +178,15 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "residual schedule",
+        "likelihood.schedule.ResidualMessageSchedule",
+        "flooding schedule",
+        T + "likelihood/test_message_passing.py"
+        "::test_residual_on_the_loopy_lattice_is_belief_propagation",
+        cost=Cost.ITERATIONS,
+    ),
+    Rung(
+        "potts",
         "Kikuchi / region graph",
         "sandbox.region_graph.kikuchi_free_energy",
         "enumeration",
@@ -228,6 +237,7 @@ LADDER: tuple[Rung, ...] = (
         "enumeration",
         T + "search/test_bifurcation.py"
         "::test_the_relaxation_reaches_the_enumerated_ground_state_of_the_declared_glass",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
@@ -236,6 +246,7 @@ LADDER: tuple[Rung, ...] = (
         "exact cut / max-flow",
         T + "search/test_bifurcation.py"
         "::test_at_two_labels_the_relaxation_is_read_against_the_exact_cut",
+        cost=Cost.ITERATIONS,
     ),
     Rung(
         "potts",
