@@ -11,13 +11,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.figure import latex_integer, state_label
 from snakes_and_ladders.qa.sim_example import (
     build_caption,
     display_newick,
     main,
 )
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
 
@@ -40,7 +41,7 @@ def test_state_label_falls_back_to_digit_for_other_k() -> None:
 def test_main_writes_a_figure_and_caption_with_generating_truth(
     tmp_path: Path,
 ) -> None:
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
 
     qa_figure = main(
         [
@@ -64,7 +65,7 @@ def test_main_writes_a_figure_and_caption_with_generating_truth(
 
 @pytest.mark.oracle
 def test_sim_example_alignment_matches_independent_simulation() -> None:
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
     expected = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -81,7 +82,7 @@ def test_sim_example_alignment_matches_independent_simulation() -> None:
 
 @pytest.mark.smoke
 def test_n_sites_shown_is_capped_at_the_fixture_site_count() -> None:
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
     caption = build_caption(params, n_sites_shown=params.n_sites + 1000)
     assert str(params.n_sites) in caption
 
@@ -111,7 +112,7 @@ def test_main_reads_sys_argv_when_no_argv_is_given(
     caption_path = tmp_path / "sim_example_caption.txt"
     assert figure_path.is_file()
     assert caption_path.read_text() == build_caption(
-        load_simulation_params(PARAMS_PATH), n_sites_shown=5
+        load_params(PARAMS_PATH, SimulationParams), n_sites_shown=5
     )
     # The runner reports what it wrote through the run logger (issue #311),
     # which writes to stderr; nothing goes to stdout.
@@ -126,7 +127,7 @@ def test_display_newick_uses_rho_for_the_root_and_greek_for_ancestors() -> None:
     # The raw serialization keeps names like "ancestor_CD"; the display form
     # replaces them, because an unescaped underscore is mathtext syntax and
     # the meaning is already visible from the tree.
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
 
     rendered = display_newick(params.tau)
 
@@ -140,7 +141,7 @@ def test_display_newick_uses_rho_for_the_root_and_greek_for_ancestors() -> None:
 
 @pytest.mark.smoke
 def test_display_newick_names_every_leaf_exactly_once() -> None:
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
     leaves = [node.name for node in preorder(params.tau) if node.is_leaf]
 
     rendered = display_newick(params.tau)

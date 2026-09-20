@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.hmm_paths import enumerate_hidden_paths
 from snakes_and_ladders.opt.hmm import (
     EmFit,
@@ -26,7 +27,7 @@ from snakes_and_ladders.opt.hmm import (
     forward_log_likelihood,
 )
 from snakes_and_ladders.sim.fixtures import fixture
-from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
+from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences
@@ -79,7 +80,7 @@ def _log_truth(params: object) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor
 
 @pytest.mark.oracle
 def test_forward_matches_brute_force_path_enumeration() -> None:
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     observations = torch.as_tensor(
         simulate_sequences(params).observations[
             :_BRUTE_FORCE_SEQUENCES, :_BRUTE_FORCE_LENGTH
@@ -101,7 +102,7 @@ def test_the_likelihood_is_invariant_to_relabelling_the_hidden_states() -> None:
     # The identifiability caveat, asserted rather than only documented: a
     # recovery test that compared parameters without aligning the
     # permutation would fail on a correct fit.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     observations = torch.as_tensor(simulate_sequences(params).observations[:20])
     log_initial, log_transition, log_emission = _log_truth(params)
     reference = float(
@@ -124,7 +125,7 @@ def test_the_likelihood_is_invariant_to_relabelling_the_hidden_states() -> None:
 @pytest.mark.analytic
 @pytest.mark.parametrize("at_truth", [True, False])
 def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     # A short slice: the finite-difference check costs two objective
     # evaluations per parameter, and the recursion it exercises is the same
     # at any length.
@@ -144,7 +145,7 @@ def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
 
 @pytest.mark.oracle
 def test_theta_round_trips_through_the_constraint_map() -> None:
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )
@@ -200,7 +201,7 @@ def test_the_uniform_point_is_a_stationary_point_of_the_likelihood() -> None:
     # parameters changes the likelihood at all. An optimizer started there
     # never moves those blocks, and the fit silently returns a model with one
     # effective state. Found by watching a fit do exactly that.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations[:40], params.n_states, params.n_symbols
     )
@@ -223,7 +224,7 @@ def test_baum_welch_increases_the_likelihood_monotonically() -> None:
     # An exact property of EM, not an empirical one: each iteration
     # maximizes a lower bound that is tight at the current parameters, so
     # the likelihood cannot decrease. A violation means the M step is wrong.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations[:60]
     objective = HmmObjective(observations, params.n_states, params.n_symbols)
     start = objective.constrain(objective.initial())
@@ -246,7 +247,7 @@ def test_baum_welch_increases_the_likelihood_monotonically() -> None:
 
 @pytest.mark.oracle
 def test_align_states_recovers_a_known_permutation() -> None:
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     emission = torch.as_tensor(params.emission)
     order = (2, 0, 1)
     permuted = torch.log(emission[list(order)])
@@ -262,7 +263,7 @@ def test_baum_welch_stops_once_the_likelihood_stops_moving() -> None:
     # The convergence test is relative to the log-likelihood's magnitude, as
     # everywhere else. A loose tolerance must stop the iteration early, which
     # shows as a worse optimum than a tight one reaches from the same start.
-    params = load_hmm_params(FIXTURE)
+    params = load_params(FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations[:60]
     objective = HmmObjective(observations, params.n_states, params.n_symbols)
     start = objective.constrain(objective.initial())

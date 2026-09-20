@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa import rl_reward_surface
 from snakes_and_ladders.qa.figure import pearson_correlation
 from snakes_and_ladders.qa.rl_reward_surface import (
@@ -23,7 +24,7 @@ from snakes_and_ladders.qa.rl_reward_surface import (
     mean_branch_length,
     reward_surfaces,
 )
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -41,7 +42,7 @@ SIX_TAXA = FIXTURES_DIR / "tree_search/stress.yaml"
 @pytest.fixture(scope="module")
 def five_taxon() -> Surfaces:
     """Both surfaces at 5 taxa, computed once for every test that reads them."""
-    return reward_surfaces(load_simulation_params(FIVE_TAXA))
+    return reward_surfaces(load_params(FIVE_TAXA, SimulationParams))
 
 
 # --- the statistic --------------------------------------------------------
@@ -142,7 +143,7 @@ def test_the_answer_survives_the_choice_of_fixed_branch_length(
 
 @pytest.mark.smoke
 def test_the_default_branch_length_is_the_generating_mean() -> None:
-    params = load_simulation_params(FIVE_TAXA)
+    params = load_params(FIVE_TAXA, SimulationParams)
     lengths = [0.11, 0.26, 0.07, 0.19, 0.12, 0.08, 0.31]
     assert_allclose(mean_branch_length(params), float(np.mean(lengths)), atol=1e-12)
 
@@ -153,7 +154,7 @@ def test_the_caption_reports_the_correlation_it_measured(five_taxon: Surfaces) -
     # the figure's whole evidence, so a caption that omitted or rounded away
     # from it would be reporting a different result than the one drawn.
     known, fitted, truth, default, correlations, agreements = five_taxon
-    params = load_simulation_params(FIVE_TAXA)
+    params = load_params(FIVE_TAXA, SimulationParams)
     figure, caption = build_figure(
         known, fitted, truth, default, correlations, agreements, params
     )
@@ -188,7 +189,7 @@ def test_the_comparison_holds_at_six_taxa() -> None:
     # The size the paper reports. Release-gated because the
     # fitted surface is one optimization per topology and there are 105.
     known, fitted, truth, _, _, agreements = reward_surfaces(
-        load_simulation_params(SIX_TAXA)
+        load_params(SIX_TAXA, SimulationParams)
     )
     assert known.size == 105
     assert int(np.argmax(known)) == truth == int(np.argmax(fitted))

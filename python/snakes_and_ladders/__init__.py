@@ -38,6 +38,7 @@ if TYPE_CHECKING:
         sim,
     )
     from snakes_and_ladders.backend import Backend
+    from snakes_and_ladders.fixtures import Params, load_params
     from snakes_and_ladders.learn.environment import Environment
     from snakes_and_ladders.opt.objective import Objective
     from snakes_and_ladders.sim.factor_graph import FactorGraph
@@ -49,8 +50,10 @@ __all__ = [
     "Environment",
     "FactorGraph",
     "Objective",
+    "Params",
     "PottsGraph",
     "fixture",
+    "load_params",
     "parallel",
 ]
 
@@ -60,8 +63,10 @@ _SURFACE: dict[str, tuple[str, str | None]] = {
     "Environment": ("snakes_and_ladders.learn.environment", "Environment"),
     "FactorGraph": ("snakes_and_ladders.sim.factor_graph", "FactorGraph"),
     "Objective": ("snakes_and_ladders.opt.objective", "Objective"),
+    "Params": ("snakes_and_ladders.fixtures", "Params"),
     "PottsGraph": ("snakes_and_ladders.sim.graph", "PottsGraph"),
     "fixture": ("snakes_and_ladders.sim.fixtures", "fixture"),
+    "load_params": ("snakes_and_ladders.fixtures", "load_params"),
     "parallel": ("snakes_and_ladders.parallel", None),
 }
 

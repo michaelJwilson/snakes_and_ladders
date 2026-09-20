@@ -17,10 +17,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa import topology_accuracy
 from snakes_and_ladders.qa.manifest import FIGURES
 from snakes_and_ladders.qa.topology_accuracy import REPLICATES, REQUIREMENT, SITE_COUNTS
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.topology import (
     enumerate_topologies,
     normalized_robinson_foulds,
@@ -127,7 +128,7 @@ def test_the_manifest_renders_this_figure_from_the_fixture_the_caption_names() -
         "tests/regression/fixtures/tree_search/stress.yaml",
     )
 
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     assert params.seed == 20260905
     assert len(params.pi) == 4
 
@@ -179,7 +180,7 @@ def test_more_sites_recover_the_topology_more_often() -> None:
     # `docs/CLAUDE.md`'s rule against publishing a number a rebuild on another
     # machine can move --- so they left the caption rather than gaining a pin
     # here that would itself be unstable.
-    measured = topology_accuracy.accuracy(load_simulation_params(FIXTURE))
+    measured = topology_accuracy.accuracy(load_params(FIXTURE, SimulationParams))
     smallest = float(np.mean(measured[min(SITE_COUNTS)]))
     largest = float(np.mean(measured[max(SITE_COUNTS)]))
     assert largest <= REQUIREMENT

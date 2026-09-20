@@ -27,6 +27,7 @@ from snakes_and_ladders.emissions import (
     NegativeBinomialEmission,
     PoissonEmission,
 )
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.fit import (
     constrained_standard_errors,
     covers,
@@ -48,7 +49,7 @@ from snakes_and_ladders.opt.initialize import RandomRestart
 from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.potts import PottsObjective
-from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
+from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
 from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
@@ -64,7 +65,7 @@ TRIALS = np.array([12, 12])
 
 def _hmm_case() -> tuple[HmmObjective, torch.Tensor]:
     """The categorical HMM at its fixture, and a truth point."""
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )
@@ -234,7 +235,7 @@ def test_an_em_fit_and_a_gradient_fit_agree_on_the_interval_at_their_optimum() -
     # standard errors by **0.31% relative**. The 1% bound below is the ridge's
     # width and not a tolerance chosen to pass; the 1e-8 on the likelihood is
     # how close two algorithms sharing only the model actually get.
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     observations = simulate_sequences(params).observations
     objective = HmmObjective(observations, params.n_states, params.n_symbols)
 
@@ -297,7 +298,7 @@ def test_a_multi_start_interval_belongs_beside_the_spread_that_qualifies_it() ->
     # An interval at the best of several starts is conditional on *that mode*,
     # and the spread across starts says whether that matters, so the two are
     # reported together: the interval at `best`, and `spread` beside it.
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )
@@ -328,7 +329,7 @@ def test_a_fit_asked_for_its_interval_gets_the_one_the_door_gives() -> None:
     # round trip is exact to 4e-16, and `test_the_new_door_is_the_old_one`
     # holds it to that.) And off is off: `None` and no Hessian, so a fit
     # inside a search loop costs what it cost before.
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )
@@ -351,7 +352,7 @@ def test_an_unconverged_fit_is_refused_an_interval_but_not_a_result() -> None:
     # optimizer left early is not, so asking for its interval raises; not
     # asking returns the unconverged fit for inspection exactly as before, so
     # the flag changes no existing behaviour.
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )
@@ -447,7 +448,7 @@ def test_the_intervals_from_an_em_fit_cover_truth_at_the_nominal_rate() -> None:
     # reaching the boundary of the parameter space and contributing none --
     # counted rather than dropped, since excluding them unannounced would
     # select for the well-behaved samples.
-    base = load_hmm_params(HMM_FIXTURE)
+    base = load_params(HMM_FIXTURE, HmmParams)
     truth = {
         "log_initial": torch.log(torch.as_tensor(base.initial)),
         "log_transition": torch.log(torch.as_tensor(base.transition)),
@@ -496,6 +497,6 @@ def test_the_categorical_family_is_still_what_the_fixture_declares() -> None:
     # Every case above assumes the committed HMM fixture is categorical, and a
     # fixture that changed family would make eight round-trip checks silently
     # test something else.
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
 
     assert isinstance(params.emissions, CategoricalEmission)

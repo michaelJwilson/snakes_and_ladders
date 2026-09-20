@@ -20,9 +20,9 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 from snakes_and_ladders.emissions import CountPairEmission
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.emission_mixture import (
     EmissionMixtureParams,
-    load_emission_mixture_params,
     simulate_emission_mixture,
 )
 from snakes_and_ladders.sim.fixtures import fixture
@@ -131,7 +131,7 @@ def test_the_loader_refuses_a_family_or_a_form_it_cannot_build(tmp_path: Path) -
         path.write_text(fields + tail)
 
         with pytest.raises(ValueError, match=message):
-            load_emission_mixture_params(path)
+            load_params(path, EmissionMixtureParams)
 
 
 @pytest.mark.smoke

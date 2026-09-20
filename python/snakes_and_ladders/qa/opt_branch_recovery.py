@@ -21,11 +21,14 @@ recursion and no optimizer (`qa/CLAUDE.md`).
 
 from __future__ import annotations
 
+from functools import partial
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from matplotlib.figure import Figure
 
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood import pruning_torch
 from snakes_and_ladders.likelihood.objective import BranchLengthObjective
 from snakes_and_ladders.opt.fit import constrained_standard_errors, covers, fit
@@ -37,7 +40,7 @@ from snakes_and_ladders.qa.style import (
     letter_style,
     series_style,
 )
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 # Enough sites for a well-determined estimate without a slow build; the
@@ -260,8 +263,12 @@ def build_figure(
 # Two alignments through the same loader, so the flags are declared here
 # rather than shared: the figure's claim is about the rooted and unrooted
 # fixtures specifically.
-UNROOTED_PARAMS = ParamsArgument("unrooted-params", load_simulation_params)
-ROOTED_PARAMS = ParamsArgument("rooted-params", load_simulation_params)
+UNROOTED_PARAMS = ParamsArgument(
+    "unrooted-params", partial(load_params, kind=SimulationParams)
+)
+ROOTED_PARAMS = ParamsArgument(
+    "rooted-params", partial(load_params, kind=SimulationParams)
+)
 
 
 def _build_from_params(

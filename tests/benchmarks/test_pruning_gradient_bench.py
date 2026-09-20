@@ -33,9 +33,10 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood import pruning_analytic, pruning_torch
 from snakes_and_ladders.sandbox import pruning_burn
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
@@ -55,7 +56,7 @@ if pruning_burn.AVAILABLE:
 def _dataset(
     fixture_name: str, n_sites: int
 ) -> tuple[Node, int, np.ndarray, dict[str, np.ndarray], torch.Tensor]:
-    params = load_simulation_params(FIXTURES_DIR / fixture_name)
+    params = load_params(FIXTURES_DIR / fixture_name, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

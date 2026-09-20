@@ -13,8 +13,9 @@ import math
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 
 from tests._fixtures import FIXTURES_DIR
@@ -31,7 +32,7 @@ from tests._fixtures import FIXTURES_DIR
 def test_log_likelihood_benchmark(
     benchmark: BenchmarkFixture, fixture_name: str
 ) -> None:
-    params = load_simulation_params(FIXTURES_DIR / fixture_name)
+    params = load_params(FIXTURES_DIR / fixture_name, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
