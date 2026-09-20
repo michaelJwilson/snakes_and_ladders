@@ -900,6 +900,7 @@ LADDER: tuple[Rung, ...] = (
         "polar SC / SCL",
         T + "likelihood/test_polar.py"
         "::test_crc_aided_exhaustive_list_is_maximum_likelihood_over_the_outer_code",
+        cost=Cost.PASS,
     ),
     Rung(
         "codes",
