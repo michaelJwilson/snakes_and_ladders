@@ -3918,10 +3918,17 @@ bound: like Bethe, the region-based free energy is a stationary point of a
 non-convex functional and may fall either side of $\log Z$.
 
 \paragraph{Regime.}
-Exact on a tree, in two passes. On a loopy graph the flooding schedule is
-iterated with damping to a tolerance and returns the Bethe approximation; the
-tree schedule is refused rather than run, a number that looks exact and is not
-being the worst output an evaluator can produce.
+Exact on a tree, in two passes. On a loopy graph an iterative schedule is run
+with damping to a tolerance and returns the Bethe approximation; the tree
+schedule is refused rather than run, a number that looks exact and is not being
+the worst output an evaluator can produce. Three iterative orders share the
+update and the fixed points and differ in the path: flooding sends every
+message from the previous sweep (Jacobi), the sequential order sends each
+factor's messages from the newest values (Gauss--Seidel), and the residual
+order sends next the factor whose inputs last changed most
+\citep{elidan2006}, a heap over the factors that spends its sends where the
+graph is still moving and converges where flooding oscillates. The sweep count
+of each is a measurement, not a guarantee.
 
 \paragraph{What pins it.}
 On a tree, $\log Z$ and every marginal against enumeration to a stated relative
