@@ -896,27 +896,36 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "codes",
         "polar SC / SCL",
-        "sandbox.polar_decoding.decode_sc",
+        "likelihood.polar.decode_sc",
         None,
-        T + "sandbox/test_polar_decoding.py"
+        T + "likelihood/test_polar.py"
         "::test_successive_cancellation_is_the_reference_implementation_bitwise",
         cost=Cost.PASS,
     ),
     Rung(
         "codes",
+        "CRC-aided list decoding",
+        "likelihood.polar.decode_scl",
         "polar SC / SCL",
-        "sandbox.polar_decoding.decode_sc",
+        T + "likelihood/test_polar.py"
+        "::test_crc_aided_exhaustive_list_is_maximum_likelihood_over_the_outer_code",
+        cost=Cost.PASS,
+    ),
+    Rung(
+        "codes",
+        "polar SC / SCL",
+        "likelihood.polar.decode_sc",
         "LDPC sum-product / min-sum",
-        T + "sandbox/test_polar_decoding.py"
+        T + "likelihood/test_polar.py"
         "::test_successive_cancellation_against_min_sum_on_the_same_parity_check",
         cost=Cost.PASS,
     ),
     Rung(
         "codes",
         "polar construction",
-        "sandbox.polar.polar_information_set",
+        "sim.polar.polar_information_set",
         None,
-        T + "sandbox/test_polar.py"
+        T + "sim/test_polar.py"
         "::test_the_polar_and_reed_muller_rules_coincide_at_eight_and_part_at_sixteen",
         cost=Cost.PASS,
     ),

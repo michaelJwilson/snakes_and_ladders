@@ -2322,12 +2322,18 @@ correction by the decision already made,
 
 \subsection{Extensions, and what is not attempted}
 \label{sec:polar:extensions}
-\paragraph{What it would take to go further.}
+\paragraph{The check, and what it would take to go further.}
 A cyclic redundancy check appended to the message and carried through the list
 turns the metric's best survivor into the best \emph{passing} survivor, which
-is what makes list decoding competitive in practice; the check is polynomial
-division over $\mathrm{GF}(2)$, which the elementary codes carry, and the
-combination is the next step here.
+is what makes list decoding competitive in practice \citep{tal2015}; the check
+is polynomial division over $\mathrm{GF}(2)$, which the elementary codes carry.
+The combination is built: at $N = 16$ with a three-bit check and the exhaustive
+list it returns the maximum-likelihood codeword of the outer code, enumerated,
+and it falls back to the metric's best survivor when no survivor passes. What
+it buys at $N = 256$ is measured rather than assumed: lists of eight and of
+thirty-two fail by pruning the sent path, never by ranking it second, so the
+check rescues nothing there and the gain waits on a list the pruning does not
+reach first.
 Beyond it: a systematic encoder, so the message is readable off the codeword
 without inverting anything; puncturing and shortening, which is how a length
 that is not a power of two is reached; and the Gaussian approximation against

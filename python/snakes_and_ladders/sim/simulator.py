@@ -120,6 +120,7 @@ NOT_SIMULATED: dict[str, str] = {
     "bicycle": "as `ldpc`",
     "bicycle-css": "as `ldpc`; the error draw is `sim.css.sample_x_error`",
     "turbo": "as `ldpc`; the noise scale is set by `likelihood.turbo` from a declared `E_b/N_0`",
+    "polar": "as `ldpc`; the frozen set is the construction's (#826) and a transmission is drawn by the test that needs it",
     "frustrated-lattice": "an instance and not a draw: the graph, or the glass at a frustration, is the data",
     "test-functions": "a surface has no data",
 }
