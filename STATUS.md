@@ -3160,6 +3160,27 @@ restarts, and with the global basin covering about 48% of starting topologies
 beat on this fixture is therefore 1.000, not the 0.480 the tree-policy
 comparison above was stated against, and nothing measured here beats it.
 
+**Accepted worsening is a first-class action, and the measurement says what
+it buys and what it does not**
+([#820](https://github.com/michaelJwilson/snakes_and_ladders/issues/820)).
+Every learner and the arena take `stop_at_local_optimum`; under `False` an
+episode runs past a local optimum and the greedy row is hill climbing
+restarted until the decision budget is spent, the baseline `learn/CLAUDE.md`
+names for a wandering searcher. On the chain (81 starts, the published
+budget of 60 x 32 x 6) the rule moves greedy and nothing else: restarted
+greedy reaches **81 of 81** against 65 stopped (McNemar `p < 1e-4`, 16
+discordant), while REINFORCE reads 71 against 72, actor--critic 70 against 72,
+PPO 80 against 78 and the MLP 81 against 79 (`p` from 0.50 to 1.0), and
+against restarted greedy REINFORCE and actor--critic **lose** (`p = 0.002`,
+`0.001`) where PPO and the MLP tie. On the 7-taxon fixture (9 traps and 50
+random starts, 40 x 16 x 60) the rule lifts every row --- escape 0 of 9 to 8
+or 9 of 9, random-start success 14 to 29 of 50 up to 46 to 50 of 50, `p <
+1e-4` on all five --- and no trained policy beats restarted greedy's 59 of 59:
+PPO ties at 59, the MLP 57, REINFORCE and actor--critic 55 (`p = 0.125`). The
+wandering rule buys the *baseline* its escape, and a policy that wanders has
+to beat a searcher that restarts; on these two fixtures none does. Recorded in
+the pull request's tables; the null default is bitwise the arena before it.
+
 **All three problem classes are now MDPs.**
 `snakes_and_ladders.learn.environment.Environment` had one instance, a 1-D Potts chain. It
 now carries the Potts environment over an arbitrary graph — the chain is the

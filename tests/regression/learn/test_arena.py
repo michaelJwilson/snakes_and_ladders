@@ -496,3 +496,63 @@ def test_the_greedy_row_is_the_table_computed_by_hand() -> None:
     assert greedy.against(worse) is Outcome.BEAT
     assert worse.against(greedy) is Outcome.LOSE
     assert greedy.against(Row("twin", 14, 16, 0.0, 0, greedy.scoring)) is Outcome.MATCH
+
+
+@pytest.mark.analytic
+def test_the_wandering_greedy_row_is_the_restart_loop_written_by_hand() -> None:
+    """Under ``stop_at_local_optimum=False`` the greedy row is restarted hill climbing.
+
+    On the three-site chain the rule is written out here rather than called:
+    climb from the start, charge the decisions spent (one where none was), draw
+    the next start from the evaluation stream, and stop when the budget is gone.
+    Every run's states and the row's two numbers must agree with the table
+    (#820); the by-hand loop reads the same stream in the same order, which is
+    what makes the restarts the same restarts.
+    """
+    environment = PottsEnvironment(*TINY)
+    starts = list(
+        enumerate_configurations(environment.n_states, environment.chain_length)
+    )
+    _, best = optimum(environment)
+    budget = TrainingBudget(
+        iterations=1, batch=1, max_steps=4, stop_at_local_optimum=False
+    )
+
+    def by_hand(
+        start: tuple[int, ...], rng: np.random.Generator
+    ) -> tuple[list[list[tuple[int, ...]]], int]:
+        runs, state, spent, evaluated = [], start, 0, 0
+        while spent < budget.max_steps:
+            visited, count = _hill_climb(environment, state, budget.max_steps - spent)
+            runs.append(visited)
+            evaluated += count
+            spent += max(len(visited) - 1, 1)
+            state = environment.reset(rng)
+        return runs, evaluated
+
+    # One evaluation stream across the eight starts, as the arena's row draws it.
+    stream = _streams().evaluation
+    hand = [by_hand(start, stream) for start in starts]
+    runs = LEARNERS["greedy"].episodes(environment, starts, budget, _streams())
+    for (visited, _), group in zip(hand, runs, strict=True):
+        assert [list(episode.states) for episode in group] == visited
+    reached = sum(
+        any(
+            best - environment.energy(state) <= 1e-9 for run in visited for state in run
+        )
+        for visited, _ in hand
+    )
+    (greedy,) = table(
+        environment,
+        starts,
+        environment.energy,
+        best,
+        budget,
+        _streams,
+        names=["greedy"],
+    )
+    assert (greedy.reached, greedy.starts) == (reached, 8)
+    assert greedy.evaluations == sum(count for _, count in hand) / 8
+    assert greedy.reached > 7, (
+        "restarts leave the (1, 1, 1) trap the stopped row cannot"
+    )
