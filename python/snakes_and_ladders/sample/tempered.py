@@ -28,6 +28,7 @@ ensemble mixed.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TypeVar
@@ -314,6 +315,7 @@ def _exchange(
     # `log_densities` it returns, whose state is replica 0's, so a bound
     # `Metrics` reads the same replica the density is taken from.
     tracked: TrackedOptimization = current()
+    started = time.perf_counter()
     for sweep in range(burn_in + n_sweeps):
         for replica in range(n_replicas):
             states[replica], values[replica] = step(
@@ -342,19 +344,37 @@ def _exchange(
             for rung, walker in enumerate(at_rung):
                 rungs[walker] = rung
             trace.append(rungs)
-        tracked.record(
-            sweep,
-            state=states[0],
-            swap_acceptance=float(np.mean(accepted / proposed)),
-            log_density=values[0],
-        )
+        if not tracked.is_null:
+            # The round trips and the up fraction are read from the trace so
+            # far by the two functions the result is read with, so the last
+            # entry is what `round_trips(ensemble.walkers)` returns; the
+            # re-read per sweep is paid by a listening run only (issue #799).
+            wall = time.perf_counter() - started
+            so_far = np.array(trace, dtype=np.int64).reshape(len(trace), n_replicas)
+            tracked.record(
+                sweep,
+                state=states[0],
+                swap_acceptance=float(np.mean(accepted / proposed)),
+                log_density=values[0],
+                round_trips=float(round_trips(so_far).sum()) if len(trace) else 0.0,
+                up_fraction=float(np.nanmean(up_fraction(so_far)))
+                if len(trace)
+                else 0.0,
+                sweeps_per_second=(sweep + 1) / wall if wall else 0.0,
+                wall_s=wall,
+            )
+    walkers = np.array(trace, dtype=np.int64).reshape(len(trace), n_replicas)
+    log_densities = np.array(densities)
+    tracked.record_cost(
+        max(burn_in + n_sweeps - 1, 0), walkers.nbytes + log_densities.nbytes
+    )
     return TemperedEnsemble(
         temperatures=tuple(temperatures),
         keys=tuple(tuple(names) for names in recorded_keys),
-        log_densities=np.array(densities),
+        log_densities=log_densities,
         swap_acceptance=accepted / proposed,
         scores=scores,
-        walkers=np.array(trace, dtype=np.int64).reshape(len(trace), n_replicas),
+        walkers=walkers,
     )
 
 
