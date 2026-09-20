@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.parsimony import brute_force_parsimony_score
 from snakes_and_ladders.qa.parsimony_zones import (
     FARRIS_ZONE,
@@ -25,7 +26,7 @@ from snakes_and_ladders.qa.parsimony_zones import (
     ranking,
     zone_gaps,
 )
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import leaf_bipartitions
 
@@ -79,7 +80,7 @@ def test_the_zones_separate_in_sign() -> None:
 
 @pytest.mark.oracle
 def test_the_ranking_is_sorted_and_the_climb_lands_on_an_enumerated_score() -> None:
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
     ranked = ranking(params)
 
     assert np.all(np.diff(ranked.scores) >= 0)
@@ -90,7 +91,7 @@ def test_the_ranking_is_sorted_and_the_climb_lands_on_an_enumerated_score() -> N
 
 @pytest.mark.smoke
 def test_the_caption_reports_the_numbers_it_was_handed() -> None:
-    params = load_simulation_params(PARAMS_PATH)
+    params = load_params(PARAMS_PATH, SimulationParams)
     gaps = {
         "Felsenstein": np.full((len(SITE_COUNTS), REPLICATES), -0.05),
         "Farris": np.full((len(SITE_COUNTS), REPLICATES), 0.07),

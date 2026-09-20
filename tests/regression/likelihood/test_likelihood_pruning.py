@@ -27,10 +27,11 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.brute_force import brute_force_log_likelihood
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.pruning import log_likelihood
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
 
@@ -180,7 +181,7 @@ def test_pulley_principle_is_invariant_to_root_position() -> None:
 
 @pytest.mark.end2end
 def test_generating_topology_outscores_random_wrong_topologies() -> None:
-    params = load_simulation_params(FIXTURES_DIR / "tree_jc/release.yaml")
+    params = load_params(FIXTURES_DIR / "tree_jc/release.yaml", SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

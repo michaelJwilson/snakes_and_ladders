@@ -20,12 +20,13 @@ from collections.abc import Callable
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.potts import (
     PottsObjective,
     log_partition_by_recursion,
     log_partition_by_squaring,
 )
-from snakes_and_ladders.sim.potts_chain import load_potts_params, simulate_chains
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -36,7 +37,7 @@ STRESS_LENGTH = 64
 
 
 def test_potts_objective_benchmark(benchmark: BenchmarkFixture) -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     objective = PottsObjective(simulate_chains(params), params.n_states)
     theta = objective.theta_from_truth(params.coupling, params.field)
 
@@ -48,7 +49,7 @@ def test_potts_objective_benchmark(benchmark: BenchmarkFixture) -> None:
 
 
 def test_potts_objective_and_gradient_benchmark(benchmark: BenchmarkFixture) -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     objective = PottsObjective(simulate_chains(params), params.n_states)
     theta = objective.theta_from_truth(params.coupling, params.field)
 
@@ -70,7 +71,7 @@ def test_log_partition_route_benchmark(
     benchmark: BenchmarkFixture,
     route: Callable[[torch.Tensor, torch.Tensor, int], torch.Tensor],
 ) -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     coupling = torch.tensor(params.coupling, dtype=torch.float64)
     field = torch.as_tensor(params.field, dtype=torch.float64)
 
@@ -90,7 +91,7 @@ def test_log_partition_route_and_gradient_benchmark(
 ) -> None:
     # The tape is the half of the cost the forward pass does not show: the
     # recursion builds one node per site and autograd walks every one of them.
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     field = torch.as_tensor(params.field, dtype=torch.float64)
 
     def _value_and_gradient() -> float:

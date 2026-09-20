@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.ldpc import (
     DecodingAlgorithm,
     decode,
@@ -32,7 +33,6 @@ from snakes_and_ladders.likelihood.ldpc import (
 from snakes_and_ladders.sandbox.polar import (
     PolarCode,
     PolarParams,
-    load_polar_params,
     parity_check,
     polar_transform,
 )
@@ -62,7 +62,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "polar"
 
 def _declared() -> PolarParams:
     """The `ci` instance the sandbox declares."""
-    return load_polar_params(FIXTURES / "ci.yaml")
+    return load_params(FIXTURES / "ci.yaml", PolarParams)
 
 
 def _instance() -> tuple[PolarCode, ParityCheck]:

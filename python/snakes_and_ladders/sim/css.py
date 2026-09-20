@@ -32,12 +32,13 @@ Correlated ``X`` and ``Z`` errors and non-CSS codes are named in
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.ldpc import (
     BinarySymmetricChannel,
     ParityCheck,
@@ -352,28 +353,28 @@ class CssBicycleParams:
         """The declared ``X`` error channel."""
         return BinarySymmetricChannel(self.flip_probability)
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _CSS_FIELDS
 
-def load_css_params(path: Path) -> CssBicycleParams:
-    """Load and validate a CSS bicycle fixture yaml.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], _path: Path, /) -> Self:
+        """Build the truth from a CSS bicycle fixture's declared mapping.
 
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
 
-    Returns
-    -------
-    CssBicycleParams
         The parsed truth. The shape and weight checks are
-        :func:`~snakes_and_ladders.sim.ldpc.bicycle_code`'s and the ``k > 0``
-        check :meth:`CssCode.from_parity_check`'s, both run when the code is
-        drawn.
-    """
-    raw = load_declared(path, _CSS_FIELDS)
-    return CssBicycleParams(
-        n_bits=int(raw["n_bits"]),
-        n_checks=int(raw["n_checks"]),
-        circulant_weight=int(raw["circulant_weight"]),
-        seed=int(raw["seed"]),
-        flip_probability=float(raw["flip_probability"]),
-    )
+        :func:`~snakes_and_ladders.sim.ldpc.bicycle_code`'s and the ``k >
+        0`` check :meth:`CssCode.from_parity_check`'s, both run when the
+        code is drawn.
+        """
+        return cls(
+            n_bits=int(declared["n_bits"]),
+            n_checks=int(declared["n_checks"]),
+            circulant_weight=int(declared["circulant_weight"]),
+            seed=int(declared["seed"]),
+            flip_probability=float(declared["flip_probability"]),
+        )

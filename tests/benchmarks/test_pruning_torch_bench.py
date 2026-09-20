@@ -19,8 +19,9 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood import pruning, pruning_torch
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import balanced_tree
 
@@ -38,7 +39,7 @@ from tests._fixtures import FIXTURES_DIR
 def test_torch_log_likelihood_benchmark(
     benchmark: BenchmarkFixture, fixture_name: str
 ) -> None:
-    params = load_simulation_params(FIXTURES_DIR / fixture_name)
+    params = load_params(FIXTURES_DIR / fixture_name, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -65,7 +66,7 @@ def test_torch_log_likelihood_benchmark(
 
 def test_numpy_vs_torch_forward_pass(benchmark: BenchmarkFixture) -> None:
     """Torch forward pass against the NumPy reference at a fixed size (report both)."""
-    params = load_simulation_params(FIXTURES_DIR / "tree_jc/ci.yaml")
+    params = load_params(FIXTURES_DIR / "tree_jc/ci.yaml", SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -92,7 +93,7 @@ def test_numpy_vs_torch_forward_pass(benchmark: BenchmarkFixture) -> None:
 
 def test_fit_general_rate_matrix_benchmark(benchmark: BenchmarkFixture) -> None:
     """One Adam step fitting a general Q (``torch.matrix_exp`` path), not just k."""
-    params = load_simulation_params(FIXTURES_DIR / "tree_jc/ci.yaml")
+    params = load_params(FIXTURES_DIR / "tree_jc/ci.yaml", SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

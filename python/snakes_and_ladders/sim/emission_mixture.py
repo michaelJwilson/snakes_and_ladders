@@ -20,14 +20,14 @@ the truth type from here and draws no data.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
 from snakes_and_ladders.emissions import CountPairEmission, EmissionFamily
-from snakes_and_ladders.fixtures import load_declared
 
 #: The component families a fixture may declare, and the constructor
 #: arguments each reads. Both are :class:`CountPairEmission`, one per form:
@@ -37,6 +37,11 @@ from snakes_and_ladders.fixtures import load_declared
 #: family with a scalar observation is added here when a fixture needs one;
 #: the mixture itself never asks what its components are.
 FAMILIES = ("count-pair-joint", "count-pair-independent")
+
+
+_REQUIRED_FIELDS = frozenset(
+    {"seed", "n_samples", "tolerance", "weights", "family", "dispersion", "mean"}
+)
 
 
 @dataclass(frozen=True)
@@ -92,6 +97,42 @@ class EmissionMixtureParams:
     def n_components(self) -> int:
         """Components in the mixture."""
         return self.components.n_states
+
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a count-emission-mixture fixture's declared mapping.
+
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
+
+        The weight and component checks are :class:`EmissionMixtureParams`'s
+        and the family's own, so a file and an instance built in code are
+        refused on the same terms.
+
+        Raises
+        ------
+        ValueError
+            If a required field is missing, or the declared family is not one of
+            :data:`FAMILIES`.
+        """
+        family = str(declared["family"])
+        if family not in FAMILIES:
+            msg = f"{path}: family {family!r} is not one of {list(FAMILIES)}"
+            raise ValueError(msg)
+
+        return cls(
+            weights=np.asarray(declared["weights"], dtype=np.float64),
+            components=_count_pair(declared, path, joint=family == "count-pair-joint"),
+            n_samples=int(declared["n_samples"]),
+            seed=int(declared["seed"]),
+            tolerance=float(declared["tolerance"]),
+        )
 
 
 @dataclass(frozen=True)
@@ -154,11 +195,6 @@ def simulate_emission_mixture(
     )
 
 
-_REQUIRED_FIELDS = frozenset(
-    {"seed", "n_samples", "tolerance", "weights", "family", "dispersion", "mean"}
-)
-
-
 def _count_pair(raw: Any, path: Path, *, joint: bool) -> CountPairEmission:
     """Build the declared count-pair family, refusing a field the form cannot use."""
     for field in ("alpha", "beta"):
@@ -181,40 +217,4 @@ def _count_pair(raw: Any, path: Path, *, joint: bool) -> CountPairEmission:
         np.asarray(raw["beta"], dtype=np.float64),
         None if joint else np.asarray(raw["trials"], dtype=np.float64),
         joint=joint,
-    )
-
-
-def load_emission_mixture_params(path: Path) -> EmissionMixtureParams:
-    """Load and validate a count-emission-mixture fixture yaml.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
-
-    Returns
-    -------
-    EmissionMixtureParams
-        The parsed, validated truth. The weight and component checks are
-        :class:`EmissionMixtureParams`'s and the family's own, so a file and
-        an instance built in code are refused on the same terms.
-
-    Raises
-    ------
-    ValueError
-        If a required field is missing, or the declared family is not one of
-        :data:`FAMILIES`.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-    family = str(raw["family"])
-    if family not in FAMILIES:
-        msg = f"{path}: family {family!r} is not one of {list(FAMILIES)}"
-        raise ValueError(msg)
-
-    return EmissionMixtureParams(
-        weights=np.asarray(raw["weights"], dtype=np.float64),
-        components=_count_pair(raw, path, joint=family == "count-pair-joint"),
-        n_samples=int(raw["n_samples"]),
-        seed=int(raw["seed"]),
-        tolerance=float(raw["tolerance"]),
     )

@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.potts import Configuration, PottsEnvironment, optimum
 from snakes_and_ladders.learn.relaxed import (
     MINIMUM_TEMPERATURE,
@@ -36,7 +37,7 @@ from snakes_and_ladders.likelihood.hmm_paths import (
     enumerate_hidden_paths,
     path_log_probability,
 )
-from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
+from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
@@ -52,7 +53,7 @@ def _environment() -> PottsEnvironment:
 
 
 def _hmm(length: int = 8) -> tuple[RelaxedHmmPath, HmmParams, np.ndarray]:
-    params = load_hmm_params(FIXTURES / "hmm/ci.yaml")
+    params = load_params(FIXTURES / "hmm/ci.yaml", HmmParams)
     observations = np.asarray(simulate_sequences(params).observations[0][:length])
     objective = RelaxedHmmPath(
         log_initial=torch.log(torch.from_numpy(params.initial)),

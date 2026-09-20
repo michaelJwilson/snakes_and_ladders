@@ -10,8 +10,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.jc import jc_rate_matrix, jc_transition_probabilities
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
@@ -65,7 +66,7 @@ def test_load_simulation_params_rejects_missing_field(tmp_path: Path) -> None:
     incomplete = tmp_path / "incomplete.yaml"
     incomplete.write_text("seed: 0\nn_sites: 10\nk: 4\n")
     with pytest.raises(ValueError, match="missing required field"):
-        load_simulation_params(incomplete)
+        load_params(incomplete, SimulationParams)
 
 
 @pytest.mark.smoke
@@ -84,7 +85,7 @@ def test_load_simulation_params_rejects_mismatched_pi_shape(tmp_path: Path) -> N
         "      branch_length: 0.1\n"
     )
     with pytest.raises(ValueError, match="pi has shape"):
-        load_simulation_params(bad_pi)
+        load_params(bad_pi, SimulationParams)
 
 
 @pytest.mark.smoke
@@ -103,4 +104,4 @@ def test_load_simulation_params_rejects_pi_not_summing_to_one(tmp_path: Path) ->
         "      branch_length: 0.1\n"
     )
     with pytest.raises(ValueError, match="pi sums to"):
-        load_simulation_params(bad_pi)
+        load_params(bad_pi, SimulationParams)

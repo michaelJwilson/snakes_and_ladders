@@ -26,6 +26,7 @@ import numpy as np
 
 from snakes_and_ladders import oxi_snakes_and_ladders
 from snakes_and_ladders.emissions import CovariateNotSupportedError
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.count_pairs import (
     SUCCESSES,
     TOTAL,
@@ -35,7 +36,6 @@ from snakes_and_ladders.sim.count_pairs import (
     chain_states,
     coarsen,
     counts_digest,
-    load_spatio_sequential_counts_params,
     planted_labels,
 )
 
@@ -204,7 +204,7 @@ def fine_instance(path: Path) -> CountPairInstance:
         changed simulator is then a failure at the fixture rather than a
         drift in whatever was measured on it.
     """
-    declared = load_spatio_sequential_counts_params(path)
+    declared = load_params(path, SpatioSequentialCountsParams)
     instance = simulate_count_pairs(declared)
     digest = counts_digest(instance)
     if declared.counts_digest is not None and digest != declared.counts_digest:

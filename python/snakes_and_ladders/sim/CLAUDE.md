@@ -9,6 +9,10 @@ module. It is referenced here, never restated. What follows is local.
 
 ## Local rules
 
+- **A problem that draws data is simulated one way**, `(params, rng) -> dataset`,
+  registered under its model's name beside the loader that reads it; a model
+  with no simulator says why in the same registry (#829).
+
 - **A generator, never a seed.** Randomness enters as a generator object
   passed in. Seeding inside a call makes every draw of an ensemble identical,
   which looks like a passing test over many draws and is one draw. That

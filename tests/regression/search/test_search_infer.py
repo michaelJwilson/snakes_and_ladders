@@ -12,10 +12,12 @@ validated in ``test_search_exhaustive.py``.
 
 from __future__ import annotations
 
+import dataclasses
 from functools import cache
 
 import numpy as np
 import pytest
+import torch
 from numpy.testing import assert_allclose
 from snakes_and_ladders.likelihood import pruning_torch
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
@@ -580,3 +582,34 @@ def test_workers_without_a_pool_is_refused_rather_than_run_serially() -> None:
             max_evaluations=4,
             workers=2,
         )
+
+
+@pytest.mark.smoke
+def test_nothing_of_the_optimizer_crosses_a_structural_move() -> None:
+    # `search/CLAUDE.md` (#815): a move constructs a new objective, and what
+    # crosses is the parent's fitted values keyed by the identity the move
+    # keeps. The record the warm start reads carries exactly that -- the value,
+    # the fitted parameters by name and by split, the default length and the
+    # cost -- and no step size, curvature or adaptation state; and the fit
+    # builds its optimizer per call, so two fits from one start are one fit.
+    assert {field.name for field in dataclasses.fields(infer_module._Fitted)} == {
+        "value",
+        "parameters",
+        "named",
+        "lengths_by_split",
+        "default_length",
+        "evaluations",
+    }
+    rng = np.random.default_rng(815)
+    topology = random_topology(["A", "B", "C", "D", "E"], rng)
+    alignment = {
+        name: rng.integers(0, 4, size=40) for name in ("A", "B", "C", "D", "E")
+    }
+    objective = BranchLengthObjective(topology, 4, np.full(4, 0.25), alignment)
+    theta0 = objective.initial() + 0.1
+    first, second = (
+        fit(objective, theta0=theta0.clone()),
+        fit(objective, theta0=theta0.clone()),
+    )
+    assert torch.equal(first.theta, second.theta)
+    assert first.iterations == second.iterations

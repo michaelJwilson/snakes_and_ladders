@@ -22,6 +22,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.opt.testfunctions import (
@@ -29,7 +30,7 @@ from snakes_and_ladders.opt.testfunctions import (
     Himmelblau,
     Rastrigin,
     Rosenbrock,
-    load_test_function_params,
+    TestFunctionSuite,
 )
 from snakes_and_ladders.sim.fixtures import path_of
 
@@ -218,7 +219,7 @@ def test_the_fixtures_declared_instances_are_what_they_declare() -> None:
     Rosenbrock from -1.2, Rastrigin from the origin it already sits in, and
     Himmelblau from the origin, which is in no basin --- with value 0.0.
     """
-    suite = load_test_function_params(path_of("test_functions", "ci"))
+    suite = load_params(path_of("test_functions", "ci"), TestFunctionSuite)
     declared = suite.named()
 
     assert set(declared) == set(CLOSED_FORM_MINIMIZERS)

@@ -27,12 +27,13 @@ unchanged: ``L_i = log p(y_i | c_i = 0) - log p(y_i | c_i = 1)``.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.ldpc import ParityCheck, null_space
 
 #: The log weight of an edge the trellis does not have. Finite rather than
@@ -598,32 +599,30 @@ class TurboParams:
             self.feedback, self.feedforward, self.memory
         )
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
 
-def load_turbo_params(path: Path) -> TurboParams:
-    """Load and validate a turbo fixture yaml.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], _path: Path, /) -> Self:
+        """Load and validate a turbo fixture yaml.  The generators are
+        written in the file as octal strings (``"7"``, ``"15"``) and read
+        here with base 8, which is the notation every reference states them
+        in; reading them as decimal would silently build a different
+        register.
 
-    The generators are written in the file as octal strings (``"7"``,
-    ``"15"``) and read here with base 8, which is the notation every
-    reference states them in; reading them as decimal would silently build a
-    different register.
-
-    Parameters
-    ----------
-    path : Path
-        The yaml file.
-
-    Returns
-    -------
-    TurboParams
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-    return TurboParams(
-        message_length=int(raw["message_length"]),
-        memory=int(raw["memory"]),
-        feedback=int(str(raw["feedback"]), 8),
-        feedforward=int(str(raw["feedforward"]), 8),
-        seed=int(raw["seed"]),
-        iterations=int(raw["iterations"]),
-        eb_n0_db=tuple(float(value) for value in raw["eb_n0_db"]),
-        frames=int(raw["frames"]),
-    )
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
+        """
+        return cls(
+            message_length=int(declared["message_length"]),
+            memory=int(declared["memory"]),
+            feedback=int(str(declared["feedback"]), 8),
+            feedforward=int(str(declared["feedforward"]), 8),
+            seed=int(declared["seed"]),
+            iterations=int(declared["iterations"]),
+            eb_n0_db=tuple(float(value) for value in declared["eb_n0_db"]),
+            frames=int(declared["frames"]),
+        )

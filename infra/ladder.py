@@ -232,6 +232,22 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
+        "simulated bifurcation",
+        "search.bifurcation.simulated_bifurcation",
+        "enumeration",
+        T + "search/test_bifurcation.py"
+        "::test_the_relaxation_reaches_the_enumerated_ground_state_of_the_declared_glass",
+    ),
+    Rung(
+        "potts",
+        "simulated bifurcation",
+        "search.bifurcation.simulated_bifurcation",
+        "exact cut / max-flow",
+        T + "search/test_bifurcation.py"
+        "::test_at_two_labels_the_relaxation_is_read_against_the_exact_cut",
+    ),
+    Rung(
+        "potts",
         "declined max-flow kernels",
         "sandbox.maxflow_declined.min_cut",
         "exact cut / max-flow",

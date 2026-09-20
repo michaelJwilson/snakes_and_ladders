@@ -13,13 +13,14 @@ here but draws no data itself.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
 from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.numerics import sample_rows
 from snakes_and_ladders.ragged import Ragged
 
@@ -144,6 +145,70 @@ class HmmParams:
         """
         return _categorical(self.emissions).n_symbols
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from an HMM fixture's declared mapping.
+
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
+
+        Raises
+        ------
+        ValueError
+            If a required field is missing, a size is too small to identify the
+            parameters, or a distribution has the wrong shape or does not sum
+            to 1.
+        """
+        n_states = int(declared["n_states"])
+        n_symbols = int(declared["n_symbols"])
+        # Both guards predate the `lengths` spelling and were lost with the field
+        # that was beside them (#667). They are not shape checks: a one-state chain
+        # has no transition to identify and a one-symbol alphabet carries no
+        # information, and both declare arrays that are internally consistent, so
+        # `_stochastic` below passes them and the fixture is accepted.
+        for name, size in (("n_states", n_states), ("n_symbols", n_symbols)):
+            if size < 2:
+                msg = f"{path}: {name} must be >= 2, got {size}"
+                raise ValueError(msg)
+        # One spelling. `n_sequences` chains of a shared `sequence_length` is the
+        # equal-length case of `lengths`, so a fixture writes the lengths and the
+        # loader reads them; there is nothing to keep consistent (issue #666).
+        lengths = tuple(int(one) for one in declared["lengths"])
+        if not lengths:
+            msg = f"{path}: a batch needs at least one chain, got none"
+            raise ValueError(msg)
+        sequence_length = min(lengths)
+        if sequence_length < 2:
+            msg = (
+                f"{path}: every chain carries at least 2 positions, got {lengths}; "
+                "one position is an initial distribution and no transition"
+            )
+            raise ValueError(msg)
+
+        initial = _stochastic(declared["initial"], (n_states,), path, "initial")
+        transition = _stochastic(
+            declared["transition"], (n_states, n_states), path, "transition"
+        )
+        emission = _stochastic(
+            declared["emission"], (n_states, n_symbols), path, "emission"
+        )
+
+        return cls(
+            n_states=n_states,
+            lengths=lengths,
+            initial=initial,
+            transition=transition,
+            emissions=CategoricalEmission(emission),
+            seed=int(declared["seed"]),
+            tolerance=float(declared["tolerance"]),
+        )
+
 
 def _categorical(family: EmissionFamily) -> CategoricalEmission:
     """The family as a categorical one, or a refusal naming what it is."""
@@ -154,71 +219,6 @@ def _categorical(family: EmissionFamily) -> CategoricalEmission:
         )
         raise TypeError(msg)
     return family
-
-
-def load_hmm_params(path: Path) -> HmmParams:
-    """Load and validate an HMM fixture yaml.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
-
-    Returns
-    -------
-    HmmParams
-        The parsed, validated truth.
-
-    Raises
-    ------
-    ValueError
-        If a required field is missing, a size is too small to identify the
-        parameters, or a distribution has the wrong shape or does not sum
-        to 1.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-
-    n_states = int(raw["n_states"])
-    n_symbols = int(raw["n_symbols"])
-    # Both guards predate the `lengths` spelling and were lost with the field
-    # that was beside them (#667). They are not shape checks: a one-state chain
-    # has no transition to identify and a one-symbol alphabet carries no
-    # information, and both declare arrays that are internally consistent, so
-    # `_stochastic` below passes them and the fixture is accepted.
-    for name, size in (("n_states", n_states), ("n_symbols", n_symbols)):
-        if size < 2:
-            msg = f"{path}: {name} must be >= 2, got {size}"
-            raise ValueError(msg)
-    # One spelling. `n_sequences` chains of a shared `sequence_length` is the
-    # equal-length case of `lengths`, so a fixture writes the lengths and the
-    # loader reads them; there is nothing to keep consistent (issue #666).
-    lengths = tuple(int(one) for one in raw["lengths"])
-    if not lengths:
-        msg = f"{path}: a batch needs at least one chain, got none"
-        raise ValueError(msg)
-    sequence_length = min(lengths)
-    if sequence_length < 2:
-        msg = (
-            f"{path}: every chain carries at least 2 positions, got {lengths}; "
-            "one position is an initial distribution and no transition"
-        )
-        raise ValueError(msg)
-
-    initial = _stochastic(raw["initial"], (n_states,), path, "initial")
-    transition = _stochastic(
-        raw["transition"], (n_states, n_states), path, "transition"
-    )
-    emission = _stochastic(raw["emission"], (n_states, n_symbols), path, "emission")
-
-    return HmmParams(
-        n_states=n_states,
-        lengths=lengths,
-        initial=initial,
-        transition=transition,
-        emissions=CategoricalEmission(emission),
-        seed=int(raw["seed"]),
-        tolerance=float(raw["tolerance"]),
-    )
 
 
 def _stochastic(
@@ -297,13 +297,19 @@ class SimulatedHmmDataset:
         return _categorical(self.emissions).matrix.numpy()
 
 
-def simulate_sequences(params: HmmParams) -> SimulatedHmmDataset:
+def simulate_sequences(
+    params: HmmParams, rng: np.random.Generator | None = None
+) -> SimulatedHmmDataset:
     """Draw hidden state paths and observation sequences by ancestral sampling.
 
     Parameters
     ----------
     params : HmmParams
         The generating truth.
+    rng : np.random.Generator | None
+        Generator to draw from. ``None`` builds one from ``params.seed``,
+        which is the stream every fixture was drawn on; a caller drawing an
+        ensemble passes its own (issue #829).
 
     Returns
     -------
@@ -311,7 +317,7 @@ def simulate_sequences(params: HmmParams) -> SimulatedHmmDataset:
         The hidden paths, the emitted observations, and the generating
         truth.
     """
-    rng = np.random.default_rng(params.seed)
+    rng = np.random.default_rng(params.seed) if rng is None else rng
     # Segments of one length are drawn together, which is what keeps the draw
     # vectorized. Where every chain is the same length --- every fixture that
     # predates #666 --- there is one group, the calls below are the calls this

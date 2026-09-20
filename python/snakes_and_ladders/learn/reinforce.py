@@ -133,6 +133,7 @@ def reinforce[S, A](
     max_steps: int,
     learning_rate: float = _DEFAULT_LEARNING_RATE,
     use_baseline: bool = True,
+    stop_at_local_optimum: bool = True,
 ) -> Training:
     """Train ``policy`` in place by REINFORCE.
 
@@ -156,6 +157,12 @@ def reinforce[S, A](
     use_baseline : bool
         Whether to subtract the running mean return. Exposed so the variance
         reduction it buys can be measured rather than assumed.
+    stop_at_local_optimum : bool
+        Passed to :func:`~snakes_and_ladders.learn.rollout.rollout`. ``True``
+        ends an episode where nothing improves, which is what every published
+        number was trained under; ``False`` lets the policy take the
+        worsening move that leaves a local optimum, the one parameter a
+        softmax over the improvement can learn (issue #820).
 
     Returns
     -------
@@ -181,7 +188,16 @@ def reinforce[S, A](
     seen_total, seen_count = 0.0, 0
 
     for _ in range(iterations):
-        episodes = [rollout(environment, policy, rng, max_steps) for _ in range(batch)]
+        episodes = [
+            rollout(
+                environment,
+                policy,
+                rng,
+                max_steps,
+                stop_at_local_optimum=stop_at_local_optimum,
+            )
+            for _ in range(batch)
+        ]
         returns = [episode.total_reward for episode in episodes]
         baseline = seen_total / seen_count if use_baseline and seen_count else 0.0
 

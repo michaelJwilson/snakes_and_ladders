@@ -19,9 +19,10 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.potts import log_partition
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.potts import load_potts_lattice_params, simulate_potts
+from snakes_and_ladders.sim.potts import PottsLatticeParams, simulate_potts
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -75,7 +76,7 @@ def _enumerate_lattice(
 
 @pytest.mark.oracle
 def test_gibbs_sampling_matches_brute_force_enumeration_on_a_loopy_lattice() -> None:
-    params = load_potts_lattice_params(FIXTURE)
+    params = load_params(FIXTURE, PottsLatticeParams)
     graph = lattice_graph(
         params.shape, boundary=params.boundary, coupling=params.coupling
     )
@@ -188,7 +189,7 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
     # A shape/alphabet check needs no equilibration, so it runs at a tiny
     # burn-in and sample count rather than the fixture's full,
     # distribution-accuracy-sized settings.
-    params = load_potts_lattice_params(FIXTURE)
+    params = load_params(FIXTURE, PottsLatticeParams)
     graph = lattice_graph(
         params.shape, boundary=params.boundary, coupling=params.coupling
     )
@@ -205,7 +206,7 @@ def test_simulated_dataset_has_the_declared_shape_and_alphabet() -> None:
 
 @pytest.mark.smoke
 def test_simulation_is_reproducible_from_the_seed() -> None:
-    params = load_potts_lattice_params(FIXTURE)
+    params = load_params(FIXTURE, PottsLatticeParams)
     graph = lattice_graph(
         params.shape, boundary=params.boundary, coupling=params.coupling
     )
@@ -243,7 +244,7 @@ def test_a_malformed_fixture_is_refused(
     path = tmp_path / "potts_lattice.yaml"
     path.write_text(FIXTURE.read_text().replace(replace, with_))
     with pytest.raises(ValueError, match=message):
-        load_potts_lattice_params(path)
+        load_params(path, PottsLatticeParams)
 
 
 @pytest.mark.smoke
@@ -256,4 +257,4 @@ def test_a_missing_field_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "potts_lattice.yaml"
     path.write_text(text)
     with pytest.raises(ValueError, match="missing required field"):
-        load_potts_lattice_params(path)
+        load_params(path, PottsLatticeParams)

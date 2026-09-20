@@ -25,6 +25,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.device import CROSS_DEVICE_RTOL_FLOAT64
 from snakes_and_ladders.likelihood.potts import strip_log_partition
 from snakes_and_ladders.opt.constrain import log_simplex
@@ -36,7 +37,7 @@ from snakes_and_ladders.opt.potts import (
     squaring_is_cheaper,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition
-from snakes_and_ladders.sim.potts_chain import load_potts_params, simulate_chains
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import assert_gradient_matches_finite_differences
@@ -78,7 +79,7 @@ def _brute_force_log_partition(
 def test_transfer_matrix_matches_brute_force_enumeration(
     length: int, route: object
 ) -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     expected = _brute_force_log_partition(params.coupling, params.field, length)
     actual = route(  # type: ignore[operator]
         torch.tensor(params.coupling, dtype=torch.float64),
@@ -166,7 +167,7 @@ def test_squaring_is_the_transfer_matrix_on_a_strip_one_site_wide(
     # open `length x 1` strip, where `strip_log_partition` transfers a whole
     # column and shares no code with either route here -- so it referees the
     # squaring at lengths brute force cannot reach.
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     expected = strip_log_partition(
         (length, 1), BoundaryCondition.OPEN, params.coupling, params.field
     )
@@ -210,7 +211,7 @@ def test_log_partition_shifts_exactly_with_the_field_gauge(shift: float) -> None
     # to the field multiplies every weight by exp(length * shift). This is an
     # exact analytic identity, and it is why the field has to be gauge-fixed
     # before a fitted value means anything.
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     coupling = torch.tensor(params.coupling, dtype=torch.float64)
     field = torch.as_tensor(params.field, dtype=torch.float64)
     length = 6
@@ -226,7 +227,7 @@ def test_objective_matches_a_naive_per_chain_log_likelihood() -> None:
     # The objective reduces the data to two sufficient statistics up front.
     # That shortcut is the kind of thing that is right until someone changes
     # the model, so it is pinned against the definition it claims to equal.
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     chains = simulate_chains(params)
     objective = PottsObjective(chains, params.n_states)
     theta = objective.theta_from_truth(params.coupling, params.field)
@@ -250,7 +251,7 @@ def test_objective_matches_a_naive_per_chain_log_likelihood() -> None:
 @pytest.mark.analytic
 @pytest.mark.parametrize("at_truth", [True, False])
 def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     objective = PottsObjective(simulate_chains(params), params.n_states)
     theta = (
         objective.theta_from_truth(params.coupling, params.field)
@@ -265,7 +266,7 @@ def test_gradient_matches_central_finite_differences(at_truth: bool) -> None:
 
 @pytest.mark.oracle
 def test_theta_round_trips_through_the_constraint_map() -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     objective = PottsObjective(simulate_chains(params), params.n_states)
     constrained = objective.constrain(
         objective.theta_from_truth(params.coupling, params.field)
@@ -286,13 +287,13 @@ def test_the_initial_point_is_a_uniform_field_and_no_coupling() -> None:
 
 @pytest.mark.smoke
 def test_the_loader_canonicalizes_the_field_gauge() -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     assert_allclose(float(np.exp(params.field).sum()), 1.0, rtol=1e-14)
 
 
 @pytest.mark.smoke
 def test_simulated_chains_have_the_declared_shape_and_alphabet() -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     chains = simulate_chains(params)
     assert chains.shape == (params.n_chains, params.chain_length)
     assert set(np.unique(chains)) <= set(range(params.n_states))
@@ -300,7 +301,7 @@ def test_simulated_chains_have_the_declared_shape_and_alphabet() -> None:
 
 @pytest.mark.smoke
 def test_simulation_is_reproducible_from_the_seed() -> None:
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     assert np.array_equal(simulate_chains(params), simulate_chains(params))
 
 
@@ -311,7 +312,7 @@ def test_coupling_raises_the_frequency_of_adjacent_agreement() -> None:
     # than independent draws from the same field would. The independent rate
     # is computed in closed form, not simulated, so this is an analytic
     # comparison rather than two runs of the same code.
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     chains = simulate_chains(params)
     observed = float((chains[:, :-1] == chains[:, 1:]).mean())
     independent = float((np.exp(params.field) ** 2).sum())
@@ -335,7 +336,7 @@ def test_a_missing_field_is_refused(field: str, message: str, tmp_path: Path) ->
     path = tmp_path / "potts.yaml"
     path.write_text(text)
     with pytest.raises(ValueError, match=message):
-        load_potts_params(path)
+        load_params(path, PottsParams)
 
 
 @pytest.mark.smoke
@@ -353,7 +354,7 @@ def test_an_unusable_size_is_refused(
     path = tmp_path / "potts.yaml"
     path.write_text(FIXTURE.read_text().replace(replace, with_))
     with pytest.raises(ValueError, match=message):
-        load_potts_params(path)
+        load_params(path, PottsParams)
 
 
 @pytest.mark.smoke

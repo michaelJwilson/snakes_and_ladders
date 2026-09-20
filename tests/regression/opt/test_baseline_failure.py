@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.failure import (
     FailureCurve,
     failure_curve,
@@ -29,7 +30,7 @@ from snakes_and_ladders.learn.failure import (
 from snakes_and_ladders.learn.rollout import greedy_rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
 from snakes_and_ladders.opt.budget import Budget, Outcome, OverspendError, restarts
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import MoveSet, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
@@ -250,7 +251,7 @@ def test_the_harness_refuses_what_it_cannot_measure() -> None:
 
 def _tree_instance() -> tuple[TreeEnvironment, float]:
     """The 7-taxon environment and its enumerated maximum."""
-    params: SimulationParams = load_simulation_params(FIXTURE)
+    params: SimulationParams = load_params(FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

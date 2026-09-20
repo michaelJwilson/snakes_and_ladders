@@ -18,6 +18,7 @@ import pytest
 import torch
 import yaml
 from snakes_and_ladders.emissions import BetaBinomialEmission, NegativeBinomialEmission
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.count_pairs import (
     SUCCESSES,
     TOTAL,
@@ -26,7 +27,6 @@ from snakes_and_ladders.sim.count_pairs import (
     SpatioSequentialCountsParams,
     aggregate,
     coarsen,
-    load_spatio_sequential_counts_params,
     planted_labels,
 )
 from snakes_and_ladders.sim.count_pairs_rust import binned_instance, fine_instance
@@ -317,7 +317,7 @@ def test_a_fixture_that_cannot_mean_what_it_says_is_refused(
     path.write_text(yaml.safe_dump(raw))
 
     with pytest.raises(ValueError, match=message):
-        load_spatio_sequential_counts_params(path)
+        load_params(path, SpatioSequentialCountsParams)
 
 
 @pytest.mark.smoke
@@ -333,4 +333,4 @@ def test_a_shifted_beta_binomial_rate_outside_the_unit_interval_is_refused(
     path.write_text(yaml.safe_dump(raw))
 
     with pytest.raises(ValueError, match="leaves"):
-        load_spatio_sequential_counts_params(path)
+        load_params(path, SpatioSequentialCountsParams)

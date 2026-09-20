@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.enumeration import configurations
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.hmm_paths import (
     PathEnumeration,
     emission_log_density,
@@ -72,7 +73,7 @@ from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.hmm import simulate_sequences
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.spatio_sequential import (
     SpatioSequentialParams,
@@ -644,7 +645,7 @@ def test_the_temperature_scales_every_table_so_a_hot_chain_is_nearly_uniform() -
 
 
 def _five_taxa(n_sites: int) -> tuple[dict[str, np.ndarray], int]:
-    params = load_simulation_params(fixture_path("tree_search/ci.yaml"))
+    params = load_params(fixture_path("tree_search/ci.yaml"), SimulationParams)
     dataset = simulate_alignment(
         params.tau, params.k, params.pi, np.random.default_rng(2), n_sites
     )

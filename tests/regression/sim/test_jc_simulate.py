@@ -13,8 +13,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.sim.jc import jc_rate_matrix, jc_transition_probabilities
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import edges
 
@@ -79,7 +80,7 @@ def test_jc_detailed_balance_under_uniform_stationary_distribution() -> None:
 def test_simulated_substitution_frequencies_match_analytic_jc(
     fixture_name: str,
 ) -> None:
-    params = load_simulation_params(FIXTURES_DIR / fixture_name)
+    params = load_params(FIXTURES_DIR / fixture_name, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -111,7 +112,7 @@ def test_simulated_substitution_frequencies_match_analytic_jc(
 
 @pytest.mark.smoke
 def test_simulation_is_reproducible_given_seed() -> None:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     first = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -133,7 +134,7 @@ def test_simulation_is_reproducible_given_seed() -> None:
 
 @pytest.mark.smoke
 def test_alignment_holds_exactly_the_leaf_states() -> None:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,
@@ -149,7 +150,7 @@ def test_alignment_holds_exactly_the_leaf_states() -> None:
 
 @pytest.mark.smoke
 def test_newick_carries_every_leaf_and_terminates() -> None:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     dataset = simulate_alignment(
         tau=params.tau,
         k=params.k,

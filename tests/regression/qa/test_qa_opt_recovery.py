@@ -14,14 +14,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.opt_recovery import (
     build_figure,
     hmm_recovery,
     main,
     potts_recovery,
 )
-from snakes_and_ladders.sim.hmm import load_hmm_params
-from snakes_and_ladders.sim.potts_chain import load_potts_params
+from snakes_and_ladders.sim.hmm import HmmParams
+from snakes_and_ladders.sim.potts_chain import PottsParams
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -31,7 +32,7 @@ HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 @pytest.mark.smoke
 def test_potts_recovery_returns_one_entry_per_parameter() -> None:
-    params = load_potts_params(POTTS_FIXTURE)
+    params = load_params(POTTS_FIXTURE, PottsParams)
     truth, fitted, spread, hits = potts_recovery(params)
     # One coupling plus one field entry per state.
     assert truth.shape == fitted.shape == spread.shape == hits.shape
@@ -45,14 +46,14 @@ def test_potts_recovery_covers_every_parameter_at_the_fixture() -> None:
     # Deterministic: fixed seed, so this is a pinned outcome rather than a
     # sample. A single dataset is a draw, not a rate -- the nominal rate is
     # checked over replicates in test_opt_fit.py.
-    _, _, spread, hits = potts_recovery(load_potts_params(POTTS_FIXTURE))
+    _, _, spread, hits = potts_recovery(load_params(POTTS_FIXTURE, PottsParams))
     assert bool(hits.all())
     assert bool((spread > 0.0).all())
 
 
 @pytest.mark.analytic
 def test_hmm_recovery_reports_probabilities_that_normalize() -> None:
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     truth, fitted, spread, hits = hmm_recovery(params)
     expected = params.n_states + params.n_states**2 + params.n_states * params.n_symbols
     assert truth.size == fitted.size == spread.size == hits.size == expected
@@ -80,7 +81,7 @@ def test_hmm_recovery_aligns_the_state_permutation() -> None:
     # rows and the figure would show a correct fit as a failure. Checked by
     # requiring each fitted emission row to be closer to its own true row
     # than to any other.
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     truth, fitted, _, _ = hmm_recovery(params)
     offset = params.n_states + params.n_states**2
     emission = fitted[offset:].reshape(params.n_states, params.n_symbols)
@@ -97,8 +98,8 @@ def test_hmm_recovery_aligns_the_state_permutation() -> None:
 
 @pytest.mark.smoke
 def test_the_caption_reports_the_coverage_it_measured() -> None:
-    potts_params = load_potts_params(POTTS_FIXTURE)
-    hmm_params = load_hmm_params(HMM_FIXTURE)
+    potts_params = load_params(POTTS_FIXTURE, PottsParams)
+    hmm_params = load_params(HMM_FIXTURE, HmmParams)
     potts = potts_recovery(potts_params)
     hmm = hmm_recovery(hmm_params)
 

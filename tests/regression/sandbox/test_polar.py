@@ -16,12 +16,14 @@ outside this repository:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
 import pytest
 import yaml
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.ldpc import enumerate_codewords
 from snakes_and_ladders.sandbox.polar import (
     KERNEL,
@@ -33,7 +35,6 @@ from snakes_and_ladders.sandbox.polar import (
     capacity,
     gaussian_polar_code,
     gaussian_reliability,
-    load_polar_params,
     parity_check,
     polar_information_set,
     polar_transform,
@@ -52,7 +53,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "polar"
 
 def _declared(tier: str = "ci") -> PolarParams:
     """The instance the sandbox declares at one tier."""
-    return load_polar_params(FIXTURES / f"{tier}.yaml")
+    return load_params(FIXTURES / f"{tier}.yaml", PolarParams)
 
 
 @pytest.mark.analytic
@@ -230,16 +231,7 @@ def test_a_fixture_asking_for_an_impossible_reed_muller_rate_is_refused() -> Non
     # error names the sizes RM does produce rather than silently returning the
     # nearest.
     declared = _declared()
-    impossible = type(declared)(
-        **{
-            **{
-                field: getattr(declared, field)
-                for field in declared.__dataclass_fields__
-            },
-            "construction": "reed-muller",
-            "n_info": 7,
-        }
-    )
+    impossible = replace(declared, construction="reed-muller", n_info=7)
     with pytest.raises(ValueError, match="no RM"):
         impossible.code()
 

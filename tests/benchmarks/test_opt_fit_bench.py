@@ -13,11 +13,12 @@ from __future__ import annotations
 import math
 
 from pytest_benchmark.fixture import BenchmarkFixture
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.fit import constrained_standard_errors, fit
 from snakes_and_ladders.opt.hmm import HmmObjective
 from snakes_and_ladders.opt.potts import PottsObjective
-from snakes_and_ladders.sim.hmm import load_hmm_params, simulate_sequences
-from snakes_and_ladders.sim.potts_chain import load_potts_params, simulate_chains
+from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -26,7 +27,7 @@ HMM_FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 
 def test_potts_fit_benchmark(benchmark: BenchmarkFixture) -> None:
-    params = load_potts_params(POTTS_FIXTURE)
+    params = load_params(POTTS_FIXTURE, PottsParams)
     objective = PottsObjective(simulate_chains(params), params.n_states)
 
     result = benchmark(fit, objective)
@@ -38,7 +39,7 @@ def test_potts_fit_benchmark(benchmark: BenchmarkFixture) -> None:
 
 
 def test_hmm_fit_benchmark(benchmark: BenchmarkFixture) -> None:
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )
@@ -50,7 +51,7 @@ def test_hmm_fit_benchmark(benchmark: BenchmarkFixture) -> None:
 
 
 def test_hmm_interval_benchmark(benchmark: BenchmarkFixture) -> None:
-    params = load_hmm_params(HMM_FIXTURE)
+    params = load_params(HMM_FIXTURE, HmmParams)
     objective = HmmObjective(
         simulate_sequences(params).observations, params.n_states, params.n_symbols
     )
