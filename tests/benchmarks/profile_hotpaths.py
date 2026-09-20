@@ -63,20 +63,14 @@ from snakes_and_ladders.numerics import sample_rows
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.opt.hmm import forward_log_likelihood_from_density
-from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
+from snakes_and_ladders.opt.potts import PottsObjective
 from snakes_and_ladders.sample import hmc
 from snakes_and_ladders.sample.gibbs import sample_factor_graph
 from snakes_and_ladders.sample.potts_keyed import SwendsenWangMove
 from snakes_and_ladders.sample.potts_mcmc import PottsMove, sample_potts
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
-from snakes_and_ladders.search.infer import MoveSet, infer
+from snakes_and_ladders.search.infer import infer
 from snakes_and_ladders.search.maxflow import ising_ground_state
-from snakes_and_ladders.search.topology import (
-    Topology,
-    enumerate_topologies,
-    nni_neighbours,
-    spr_neighbours,
-)
 from snakes_and_ladders.sim import fixtures
 from snakes_and_ladders.sim.convolutional import turbo_code
 from snakes_and_ladders.sim.factor_graph import from_hmm, from_potts
@@ -87,7 +81,15 @@ from snakes_and_ladders.sim.ldpc import (
     gallager_code,
 )
 from snakes_and_ladders.sim.potts import critical_coupling, energies
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
+    Topology,
+    enumerate_topologies,
+    nni_neighbours,
+    spr_neighbours,
+)
 from snakes_and_ladders.sim.tree import Node
 
 FIELD = np.array([0.3, -0.7, 0.15])

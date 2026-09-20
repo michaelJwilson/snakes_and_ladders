@@ -1,4 +1,4 @@
-"""Regression tests for ``snakes_and_ladders.search.topology``'s NNI and SPR generators.
+"""Regression tests for ``snakes_and_ladders.sim.topology``'s NNI and SPR generators.
 
 Per root ``CLAUDE.md`` ("Pin to Independent Sources") and the module
 ``CLAUDE.md``'s local rules, every property here is checked exhaustively at
@@ -31,19 +31,19 @@ from itertools import combinations, pairwise
 
 import numpy as np
 import pytest
-from snakes_and_ladders.search import topology as topology_module
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim import topology as topology_module
+from snakes_and_ladders.sim.newick import (
+    count_topologies,
+    to_newick,
+    validate_unrooted_newick,
+)
+from snakes_and_ladders.sim.topology import (
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
     nni_neighbours,
     random_topology,
     spr_neighbours,
-)
-from snakes_and_ladders.sim.newick import (
-    count_topologies,
-    to_newick,
-    validate_unrooted_newick,
 )
 from snakes_and_ladders.sim.tree import Node
 

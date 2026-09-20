@@ -47,9 +47,10 @@ from snakes_and_ladders.opt.hmm import (
 from snakes_and_ladders.opt.initialize import RandomRestart
 from snakes_and_ladders.opt.mixture import GaussianMixtureObjective
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
+from snakes_and_ladders.opt.potts import PottsObjective
 from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
 from snakes_and_ladders.sim.mixture import MixtureParams, simulate_mixture
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._fixtures import FIXTURES_DIR
 from tests._objective_checks import AnalyticGaussian

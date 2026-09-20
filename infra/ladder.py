@@ -362,7 +362,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "tree",
         "topology enumeration",
-        "search.topology.enumerate_topologies",
+        "sim.topology.enumerate_topologies",
         None,
         T + "search/test_search_exhaustive.py"
         "::test_enumeration_produces_every_topology_exactly_once",
@@ -370,7 +370,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "tree",
         "topology equality",
-        "search.topology.robinson_foulds",
+        "sim.topology.robinson_foulds",
         None,
         T + "search/test_search_topology_rustworkx.py"
         "::test_two_topologies_our_code_calls_equal_are_isomorphic",
@@ -783,7 +783,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "codes",
         "hamming_correct, golay_code",
-        "sim.elementary_codes.hamming_correct",
+        "likelihood.algebraic.hamming_correct",
         "brute-force ML",
         T + "sim/test_elementary_codes.py"
         "::test_syndrome_correction_is_the_nearest_codeword_enumeration_returns",
@@ -791,7 +791,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "codes",
         "Reed--Solomon",
-        "sim.reed_solomon.decode",
+        "likelihood.algebraic.decode",
         None,
         T + "sim/test_reed_solomon.py"
         "::test_reed_solomon_meets_the_singleton_bound_with_equality",
@@ -799,7 +799,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "codes",
         "Reed--Solomon",
-        "sim.reed_solomon.decode",
+        "likelihood.algebraic.decode",
         "brute-force ML",
         T + "sim/test_reed_solomon.py"
         "::test_the_algebraic_decode_is_the_nearest_codeword_enumeration_returns",
@@ -914,7 +914,7 @@ LADDER: tuple[Rung, ...] = (
     Rung(
         "mixture",
         "FromChain, FromAnnealing, FromTempering",
-        "opt.initialize.FromChain",
+        "sample.initialize.FromChain",
         None,
         T + "opt/test_opt_initialize.py"
         "::test_the_sampled_starts_are_their_runs_own_records_and_leave_the_cell_descent_cannot",

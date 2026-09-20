@@ -43,10 +43,10 @@ from snakes_and_ladders.likelihood.surrogate import (
 )
 from snakes_and_ladders.search.alpha_expansion import alpha_expansion
 from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from snakes_and_ladders.sim.jc import jc_transition_probabilities
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import enumerate_topologies
 from snakes_and_ladders.sim.tree import Node, preorder
 
 from tests._fixtures import FIXTURES_DIR, load_fixture

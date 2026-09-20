@@ -30,8 +30,8 @@ from snakes_and_ladders.likelihood.hadamard import (
 )
 from snakes_and_ladders.likelihood.pruning import log_likelihood
 from snakes_and_ladders.search.neighbor_joining import split_lengths
-from snakes_and_ladders.search.topology import leaf_bipartitions
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import leaf_bipartitions
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, load_fixture

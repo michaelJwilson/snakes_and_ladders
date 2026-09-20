@@ -25,10 +25,9 @@ from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import PottsEnvironment
 from snakes_and_ladders.learn.rollout import rollout
 from snakes_and_ladders.learn.tree import RewardModel, TreeEnvironment
-from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.topology import leaf_bipartitions
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import MoveSet, leaf_bipartitions
 
 from tests._fixtures import FIXTURES_DIR
 

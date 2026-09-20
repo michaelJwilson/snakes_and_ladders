@@ -29,8 +29,8 @@ name (issue #779).
 - **No application imports, and the exceptions are listed by name.** The
   interface, the policy and the estimators import nothing from `sal.sim`,
   `sal.likelihood` or `sal.search`, so no agent is shaped by one problem.
-  `tree.py`, `ranking.py` and `potts_nd.py` do, and the guard in
-  `tests/regression/learn/` refuses a fourth (issue #779).
+  `tree.py`, `ranking.py`, `potts_nd.py` and `potts.py` (its params, #830) do,
+  and the guard in `tests/regression/learn/` refuses a fifth (issue #779).
 - **Closed-form rewards at known parameters are vital for testing.**
 - **Truth is a terminal penalty, never a training signal.** An agent that can
   see the answer during training learns to look it up.

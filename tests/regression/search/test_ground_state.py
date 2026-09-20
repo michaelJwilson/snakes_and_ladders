@@ -117,6 +117,7 @@ def test_the_graph_cut_is_the_enumerated_ground_state_at_two_states() -> None:
     assert np.array_equal(rust_state, labelling)
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 def test_the_backend_seam_reaches_the_rust_cut_bitwise() -> None:
     # `ising_ground_state(..., backend=Backend.RUST)` is the one way a caller

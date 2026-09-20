@@ -29,7 +29,6 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
 from snakes_and_ladders.log import get_logger, phase
-from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.opt.testfunctions import load_test_function_params
 from snakes_and_ladders.qa.figure import (
     QAFigure,
@@ -43,6 +42,7 @@ from snakes_and_ladders.sim.hmm import load_hmm_params
 from snakes_and_ladders.sim.ldpc import load_ldpc_params
 from snakes_and_ladders.sim.mixture import load_mixture_params
 from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.potts_chain import load_potts_params
 from snakes_and_ladders.sim.spatio_sequential import load_spatio_sequential_params
 
 

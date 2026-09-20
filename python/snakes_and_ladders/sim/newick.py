@@ -19,7 +19,7 @@ parallel type (root ``CLAUDE.md``'s no-premature-abstraction rule). It is
 grammar-only -- exactly one root with 3 children, every other internal node
 with exactly 2 -- and does not itself identify when two such strings denote
 the same topology under a different rooting or child order; that is
-``snakes_and_ladders.search.topology``'s ``leaf_bipartitions`` for move-set validation,
+``snakes_and_ladders.sim.topology``'s ``leaf_bipartitions`` for move-set validation,
 and issue #73's canonical Newick key for the general case.
 """
 

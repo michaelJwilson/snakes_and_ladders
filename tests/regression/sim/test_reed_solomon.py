@@ -21,6 +21,7 @@ import math
 
 import numpy as np
 import pytest
+from snakes_and_ladders.likelihood.algebraic import DecodingFailure, decode, syndromes
 from snakes_and_ladders.sim.galois import (
     PRIMITIVE,
     bits_from_symbols,
@@ -28,14 +29,7 @@ from snakes_and_ladders.sim.galois import (
     symbols_from_bits,
 )
 from snakes_and_ladders.sim.ldpc import BinarySymmetricChannel
-from snakes_and_ladders.sim.reed_solomon import (
-    DecodingFailure,
-    ReedSolomon,
-    decode,
-    encode,
-    reed_solomon,
-    syndromes,
-)
+from snakes_and_ladders.sim.reed_solomon import ReedSolomon, encode, reed_solomon
 
 
 @pytest.mark.analytic

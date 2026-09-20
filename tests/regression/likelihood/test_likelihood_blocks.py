@@ -31,13 +31,14 @@ from snakes_and_ladders.likelihood.pruning_torch import (
     branch_lengths_from_tree,
     log_likelihood,
 )
-from snakes_and_ladders.search.infer import MoveSet, infer, score_topology
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.search.infer import infer, score_topology
+from snakes_and_ladders.sim.params import SimulationParams
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
     enumerate_topologies,
     leaf_bipartitions,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import load_fixture

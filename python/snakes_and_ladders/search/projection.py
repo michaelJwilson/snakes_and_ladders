@@ -16,9 +16,9 @@ candidate is therefore scored twice, and
 observations and ``ComponentsAt`` places a component on each
 (:mod:`snakes_and_ladders.opt.emission_mixture`), so what separates the
 candidates is the choice and nothing downstream of it. The three that sample
-a surface --- :class:`~snakes_and_ladders.opt.initialize.FromChain`,
-:class:`~snakes_and_ladders.opt.initialize.FromAnnealing` and
-:class:`~snakes_and_ladders.opt.initialize.FromTempering` --- run on a
+a surface --- :class:`~snakes_and_ladders.sample.initialize.FromChain`,
+:class:`~snakes_and_ladders.sample.initialize.FromAnnealing` and
+:class:`~snakes_and_ladders.sample.initialize.FromTempering` --- run on a
 Gaussian mixture over the first channel, which is an ``Objective`` and needs
 no new code; their component means are realized as the observations nearest
 them, so they reach the same seam as the rest.
@@ -49,15 +49,11 @@ from snakes_and_ladders.opt.emission_mixture import (
     plus_plus_start,
     uniform_start,
 )
-from snakes_and_ladders.opt.initialize import (
-    FromAnnealing,
-    FromChain,
-    FromTempering,
-)
 from snakes_and_ladders.opt.mixture import (
     GaussianMixtureObjective,
     emission_mixture_plus_plus,
 )
+from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.sim.count_pairs import (
     TOTAL,

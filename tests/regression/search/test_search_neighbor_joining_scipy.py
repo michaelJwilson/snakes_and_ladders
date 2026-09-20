@@ -25,7 +25,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from snakes_and_ladders.search.neighbor_joining import neighbor_joining
-from snakes_and_ladders.search.topology import leaf_bipartitions
+from snakes_and_ladders.sim.topology import leaf_bipartitions
 from snakes_and_ladders.sim.tree import Node
 
 hierarchy = pytest.importorskip("scipy.cluster.hierarchy")

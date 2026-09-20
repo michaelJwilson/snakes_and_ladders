@@ -44,7 +44,7 @@
     "snakes_and_ladders.learn.policy",
     "snakes_and_ladders.learn.rollout",
     "snakes_and_ladders.search.rl",
-    "snakes_and_ladders.search.topology",
+    "snakes_and_ladders.sim.topology",
     "snakes_and_ladders.sim.simulate"
   ],
   "problem": "tree_search",

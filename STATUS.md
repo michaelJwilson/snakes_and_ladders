@@ -695,7 +695,7 @@ comparison.
 
 ## Milestone 1.2 — Differentiable Likelihood & Energy Engine
 
-**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged_rust` is the compiled kernel behind the ragged path, conserved beside `sandbox.rectangular_hmm` (#666).
+**Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.algebraic`, `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential_rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged_rust` is the compiled kernel behind the ragged path, conserved beside `sandbox.rectangular_hmm` (#666).
 
 **A covariate reaches the two-channel family, every seam above it, and the
 compiled backend** ([#660](https://github.com/michaelJwilson/snakes_and_ladders/pull/660)).
@@ -2289,7 +2289,7 @@ since the hand ladder hits 18/20 at 100 sweeps. NUTS remains out of scope.
 
 ## Milestone 1.4 — Discrete Move Sets & Classical Baselines
 
-**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `search.topology` and `search.kernels` (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777.
+**Modules.** The discrete solvers and their compiled counterparts: `search.ground_state`, `search.projection`, `sim.topology` and `sample.kernels` (`search.topology` and `search.kernels` until #830, which also put the chain's params in `sim.potts_chain`, the sampler-built initializers in `sample.initialize` and the algebraic decoders in `likelihood.algebraic`) (`search.potts_mcmc_rust`, a one-line twin, folded by #717). `search.decoding`: two estimators of a labelling, and which loss each one minimizes (#696). `search.tightening`: a dual bound on a Potts ground state, and the plaquettes that tighten it (#696). `sample.potts_keyed`: the cluster moves, as something a deterministic ``step`` can call (#706). `sample.balanced`: the locally balanced proposal kernel the Potts lattice and the factor graph share (#756). Those two, `sample.potts_mcmc`, `sample.gibbs`, `sample.tempered`, `sample.annealed` and `sample.statistics` were under `search` until #777.
 
 **NNI and SPR: landed and counted.** Both neighbourhoods sit behind one
 `Topology -> Iterator[Topology]` interface and are verified exhaustively

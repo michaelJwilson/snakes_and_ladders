@@ -69,8 +69,6 @@ from snakes_and_ladders.learn.tree import FeatureSet, RewardModel, TreeEnvironme
 from snakes_and_ladders.likelihood.potts import log_weights
 from snakes_and_ladders.log import get_logger, phase
 from snakes_and_ladders.search.alpha_expansion import iterated_conditional_modes
-from snakes_and_ladders.search.infer import MoveSet
-from snakes_and_ladders.search.topology import Topology, enumerate_topologies
 from snakes_and_ladders.sim.fixtures import (
     BASELINE_LIBRARIES,
     Baseline,
@@ -86,6 +84,7 @@ from snakes_and_ladders.sim.fixtures import (
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import MoveSet, Topology, enumerate_topologies
 from snakes_and_ladders.sim.tree import edges
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -512,7 +511,7 @@ _TREE_POLICY_MODULES = (
     "snakes_and_ladders.learn.policy",
     "snakes_and_ladders.learn.rollout",
     "snakes_and_ladders.learn.tree",
-    "snakes_and_ladders.search.topology",
+    "snakes_and_ladders.sim.topology",
     "snakes_and_ladders.sim.simulate",
 )
 

@@ -96,6 +96,7 @@ def test_the_rust_simulator_draws_what_the_numpy_one_draws() -> None:
         )
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 def test_the_backend_seam_reaches_the_rust_draw_bitwise() -> None:
     # `simulate_count_pairs(..., backend=Backend.RUST)` is the one way a caller

@@ -36,10 +36,14 @@ from snakes_and_ladders.qa.style import (
     letter_style,
     series_style,
 )
-from snakes_and_ladders.search.infer import MoveSet, parsimony_search
-from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
+from snakes_and_ladders.search.infer import parsimony_search
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
+    enumerate_topologies,
+    leaf_bipartitions,
+)
 from snakes_and_ladders.sim.tree import Node
 
 #: The zone proportions: a long branch on which convergent change is common,

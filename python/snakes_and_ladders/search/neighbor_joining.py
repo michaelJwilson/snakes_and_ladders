@@ -20,7 +20,7 @@ are equal. :func:`four_point_violation` reports the largest gap over every
 quartet, zero exactly on an additive matrix.
 
 The tree comes back as the repository's topology --- ``Node`` in the
-trifurcating-root convention :mod:`snakes_and_ladders.search.topology` walks
+trifurcating-root convention :mod:`snakes_and_ladders.sim.topology` walks
 --- with branch lengths attached, so it can start a search directly or, by
 :func:`split_lengths`, seed a fit on any topology that shares its splits.
 Estimated distances can give a negative branch length; it is returned as
@@ -35,7 +35,7 @@ from itertools import combinations
 
 import numpy as np
 
-from snakes_and_ladders.search.topology import NodeId, _from_adjacency, _leaf_names
+from snakes_and_ladders.sim.topology import NodeId, _from_adjacency, _leaf_names
 from snakes_and_ladders.sim.tree import Node, edges
 
 _MIN_TAXA = 3
@@ -157,7 +157,7 @@ def _with_lengths(
 
 
 def split_lengths(tau: Node) -> dict[frozenset[str], float]:
-    """Branch length per split, keyed as :func:`~snakes_and_ladders.search.topology.branch_splits` keys them.
+    """Branch length per split, keyed as :func:`~snakes_and_ladders.sim.topology.branch_splits` keys them.
 
     A branch is the bipartition of the leaves it separates, canonicalized to
     the side without the lexicographically smallest leaf, so lengths can be

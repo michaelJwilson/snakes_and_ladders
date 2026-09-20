@@ -35,9 +35,9 @@ from snakes_and_ladders.likelihood.surrogate import (
     spanning_tree_log_partition,
 )
 from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.topology import enumerate_topologies
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import enumerate_topologies
 
 from tests._fixtures import load_fixture
 

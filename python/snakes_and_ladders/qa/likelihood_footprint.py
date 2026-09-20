@@ -37,9 +37,9 @@ from snakes_and_ladders.learn.tree import with_uniform_branch_lengths
 from snakes_and_ladders.likelihood import pruning
 from snakes_and_ladders.qa.figure import QATable, latex_integer
 from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, table_main
-from snakes_and_ladders.search.topology import Topology
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import Topology
 from snakes_and_ladders.sim.tree import Node
 
 #: The declared scale's lower and middle reaches, the sizes the regression
@@ -72,7 +72,7 @@ def caterpillar(n_taxa: int) -> Topology:
     Returns
     -------
     Topology
-        A caterpillar rooted at a trifurcation, as `snakes_and_ladders.search.topology`
+        A caterpillar rooted at a trifurcation, as `snakes_and_ladders.sim.topology`
         represents an unrooted tree.
     """
     leaves = [Node(name=f"t{index}", branch_length=None) for index in range(n_taxa)]

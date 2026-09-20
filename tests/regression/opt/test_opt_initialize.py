@@ -19,20 +19,14 @@ import torch
 from snakes_and_ladders.opt.budget import Budget, Outcome, compare, restarts
 from snakes_and_ladders.opt.fit import fit, fit_from
 from snakes_and_ladders.opt.hmm import HmmObjective
-from snakes_and_ladders.opt.initialize import (
-    FromAnnealing,
-    FromChain,
-    FromObjective,
-    FromTempering,
-    Perturbed,
-    RandomRestart,
-)
+from snakes_and_ladders.opt.initialize import FromObjective, Perturbed, RandomRestart
 from snakes_and_ladders.opt.testfunctions import (
     HIMMELBLAU_MINIMA,
     Himmelblau,
     Rastrigin,
     Rosenbrock,
 )
+from snakes_and_ladders.sample.initialize import FromAnnealing, FromChain, FromTempering
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 
 #: Distance within which a fit counts as having reached a named minimum.

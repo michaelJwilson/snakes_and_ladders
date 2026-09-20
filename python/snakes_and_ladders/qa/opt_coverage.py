@@ -26,11 +26,7 @@ from matplotlib.figure import Figure
 
 from snakes_and_ladders.opt.fit import constrained_standard_errors, covers, fit
 from snakes_and_ladders.opt.hmm import HmmObjective, align_states
-from snakes_and_ladders.opt.potts import (
-    PottsObjective,
-    PottsParams,
-    simulate_chains,
-)
+from snakes_and_ladders.opt.potts import PottsObjective
 from snakes_and_ladders.qa.figure import QAFigure
 from snakes_and_ladders.qa.runner import HMM_PARAMS, POTTS_PARAMS, figure_main
 from snakes_and_ladders.qa.style import (
@@ -40,6 +36,7 @@ from snakes_and_ladders.qa.style import (
     series_style,
 )
 from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 NOMINAL = 0.95
 

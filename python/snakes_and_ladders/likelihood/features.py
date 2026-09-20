@@ -46,8 +46,8 @@ from snakes_and_ladders.likelihood.surrogate import (
     site_fitch_scores,
     site_rows,
 )
-from snakes_and_ladders.search.topology import Topology, branch_splits
 from snakes_and_ladders.sim.graph import PottsGraph
+from snakes_and_ladders.sim.topology import Topology, branch_splits
 
 TREE_FEATURE_NAMES = (
     "plug_in_per_site",

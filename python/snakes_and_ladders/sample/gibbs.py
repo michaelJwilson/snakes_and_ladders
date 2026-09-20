@@ -61,14 +61,16 @@ from snakes_and_ladders.sample.balanced import (
     log_ratios,
 )
 from snakes_and_ladders.sample.schedule import TempSchedule
-from snakes_and_ladders.search.infer import Model, MoveSet, score_topology
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.search.infer import score_topology
+from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph
+from snakes_and_ladders.sim.topology import (
+    Model,
+    MoveSet,
     Topology,
     leaf_bipartitions,
     nni_neighbours,
     spr_neighbours,
 )
-from snakes_and_ladders.sim.factor_graph import Factor, FactorGraph
 
 
 class GibbsMove(StrEnum):
@@ -356,7 +358,7 @@ class _Indexed:
         key per factor, which #561 promoted to 47.8% of a run once the sweep
         was compiled. The
         :data:`~snakes_and_ladders.backend.Backend.NUMBA` path
-        (:func:`snakes_and_ladders.search.kernels.factor_graph_log_density`) reads
+        (:func:`snakes_and_ladders.sample.kernels.factor_graph_log_density`) reads
         the same tables through the edge layout and sums the same terms in the
         same order, so it reproduces it **bitwise** (#563).
 
@@ -366,7 +368,7 @@ class _Indexed:
             If ``backend`` is one this density has no implementation for.
         """
         if backend is Backend.NUMBA:
-            from snakes_and_ladders.search.kernels import factor_graph_log_density
+            from snakes_and_ladders.sample.kernels import factor_graph_log_density
 
             layout = self.layout()
             return float(
@@ -438,7 +440,7 @@ def gibbs_sweep(
 
     ``backend`` chooses the implementation and nothing else. The
     :data:`~snakes_and_ladders.backend.Backend.NUMBA` kernel
-    (:func:`snakes_and_ladders.search.kernels.gibbs_sweep_sites`) walks the edge
+    (:func:`snakes_and_ladders.sample.kernels.gibbs_sweep_sites`) walks the edge
     layout and returns the state the NumPy path returns **bitwise**, deciding
     a site itself only where the last place of ``exp`` cannot reach the draw
     and leaving the rest to NumPy, which is what lets it be the default: the
@@ -456,7 +458,7 @@ def gibbs_sweep(
     draws = np.asarray(rng.random(len(indexed.names)))
 
     if backend is Backend.NUMBA:
-        from snakes_and_ladders.search.kernels import gibbs_sweep_sites
+        from snakes_and_ladders.sample.kernels import gibbs_sweep_sites
 
         layout = indexed.layout()
         local = np.empty(int(indexed.cardinality.max()), dtype=np.float64)

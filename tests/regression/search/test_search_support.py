@@ -22,7 +22,7 @@ from snakes_and_ladders.likelihood.hmm_paths import (
 )
 from snakes_and_ladders.likelihood.parsimony import fitch_score
 from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
-from snakes_and_ladders.search.infer import MoveSet, infer
+from snakes_and_ladders.search.infer import infer
 from snakes_and_ladders.search.support import (
     Support,
     SupportKind,
@@ -35,11 +35,6 @@ from snakes_and_ladders.search.support import (
     pattern_support,
     split_pattern_support,
 )
-from snakes_and_ladders.search.topology import (
-    enumerate_topologies,
-    leaf_bipartitions,
-    random_topology,
-)
 from snakes_and_ladders.sim.canonical import AMBIGUOUS_OBSERVATIONS, ambiguous_hmm
 from snakes_and_ladders.sim.factor_graph import (
     Factor,
@@ -50,6 +45,12 @@ from snakes_and_ladders.sim.factor_graph import (
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
+    enumerate_topologies,
+    leaf_bipartitions,
+    random_topology,
+)
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, fixture_path, load_fixture
 

@@ -22,14 +22,15 @@ from snakes_and_ladders.qa.figure import QAFigure, latex_integer
 from snakes_and_ladders.qa.runner import SIMULATION_PARAMS, figure_main
 from snakes_and_ladders.qa.sim_tree import render_sim_tree
 from snakes_and_ladders.qa.style import ONE_COLUMN_WIDE, letter_style
-from snakes_and_ladders.search.infer import MoveSet, infer
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.search.infer import infer
+from snakes_and_ladders.sim.params import SimulationParams
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
 )
-from snakes_and_ladders.sim.params import SimulationParams
-from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node, preorder
 
 

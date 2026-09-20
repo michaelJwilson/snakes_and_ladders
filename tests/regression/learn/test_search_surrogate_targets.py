@@ -34,12 +34,12 @@ from snakes_and_ladders.learn.ranking import (
 )
 from snakes_and_ladders.likelihood.potts import enumerate_potts, log_weights
 from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.topology import leaf_bipartitions, random_topology
 from snakes_and_ladders.sim.fixtures import fixture
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.newick import to_newick, validate_unrooted_newick
 from snakes_and_ladders.sim.potts import SpatioOnlyParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import leaf_bipartitions, random_topology
 
 from tests._fixtures import SMALL_SITES, load_fixture
 

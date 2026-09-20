@@ -32,7 +32,7 @@ from snakes_and_ladders.likelihood.mixture_assignments import (
 from snakes_and_ladders.opt.constrain import log_simplex
 from snakes_and_ladders.opt.mixture import responsibilities
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.opt.potts import PottsObjective, PottsParams, simulate_chains
+from snakes_and_ladders.opt.potts import PottsObjective
 from snakes_and_ladders.sample.hmc import (
     YOSHIDA_WEIGHTS,
     Integrator,
@@ -49,6 +49,7 @@ from snakes_and_ladders.sample.schedule import (
     ConstantTempSchedule,
     ExponentialTempSchedule,
 )
+from snakes_and_ladders.sim.potts_chain import PottsParams, simulate_chains
 
 from tests._objective_checks import AnalyticGaussian, Counted
 from tests._posteriors import (

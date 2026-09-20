@@ -45,8 +45,8 @@ from snakes_and_ladders.opt.constrain import (
     positive,
 )
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.search.topology import robinson_foulds
 from snakes_and_ladders.sim.gtr import n_exchangeabilities
+from snakes_and_ladders.sim.topology import robinson_foulds
 from snakes_and_ladders.sim.tree import Node
 
 # Starting length for every branch, in expected substitutions per site. Small
@@ -607,7 +607,7 @@ class TreeMetrics:
       criterion that ignores branch lengths, so the two disagree where the
       model matters;
     * ``split_distance`` is
-      :func:`snakes_and_ladders.search.topology.robinson_foulds` against the
+      :func:`snakes_and_ladders.sim.topology.robinson_foulds` against the
       truth, and is recorded only where a truth topology is given. It is zero
       exactly on the true tree.
 

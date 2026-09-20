@@ -27,25 +27,21 @@ from snakes_and_ladders.likelihood.pruning_torch import (
 )
 from snakes_and_ladders.opt.fit import fit
 from snakes_and_ladders.search import infer as infer_module
-from snakes_and_ladders.search.infer import (
-    Inference,
-    Model,
-    MoveSet,
-    infer,
-    score_topology,
-)
-from snakes_and_ladders.search.topology import (
-    branch_splits,
-    leaf_bipartitions,
-    nni_neighbours,
-    random_topology,
-)
+from snakes_and_ladders.search.infer import Inference, infer, score_topology
 from snakes_and_ladders.sim.newick import (
     count_topologies,
     to_newick,
     validate_unrooted_newick,
 )
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    Model,
+    MoveSet,
+    branch_splits,
+    leaf_bipartitions,
+    nni_neighbours,
+    random_topology,
+)
 from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import EIGHT_TAXA, SMALL_SITES, load_fixture

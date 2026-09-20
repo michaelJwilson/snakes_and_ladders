@@ -30,12 +30,12 @@ from snakes_and_ladders.search.neighbor_joining import (
     neighbor_joining,
     split_lengths,
 )
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
     enumerate_topologies,
     leaf_bipartitions,
     random_topology,
 )
-from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.tree import Node
 
 from tests._fixtures import EIGHT_TAXA, FOUR_TAXA, load_fixture

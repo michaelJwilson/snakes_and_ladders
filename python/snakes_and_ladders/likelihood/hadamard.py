@@ -252,7 +252,7 @@ def edge_spectrum(tau: Node) -> tuple[list[str], np.ndarray]:
 def split_weights(
     edge_spectrum: np.ndarray, names: list[str]
 ) -> dict[frozenset[str], float]:
-    """The edge spectrum as split weights, keyed as :func:`~snakes_and_ladders.search.topology.leaf_bipartitions` keys splits.
+    """The edge spectrum as split weights, keyed as :func:`~snakes_and_ladders.sim.topology.leaf_bipartitions` keys splits.
 
     Parameters
     ----------

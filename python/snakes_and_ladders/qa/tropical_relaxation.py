@@ -38,9 +38,9 @@ from snakes_and_ladders.sandbox.tropical import (
     temperature_for,
 )
 from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.topology import enumerate_topologies, leaf_bipartitions
 from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import enumerate_topologies, leaf_bipartitions
 
 #: Temperatures panel (a) sweeps, geometrically, and the agreement panel (a)
 #: inverts the bound for.

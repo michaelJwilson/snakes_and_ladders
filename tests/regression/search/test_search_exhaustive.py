@@ -16,15 +16,9 @@ import numpy as np
 import pytest
 from snakes_and_ladders.search.infer import (
     Inference,
-    MoveSet,
     infer,
     parsimony_search,
     score_topology,
-)
-from snakes_and_ladders.search.topology import (
-    Topology,
-    enumerate_topologies,
-    leaf_bipartitions,
 )
 from snakes_and_ladders.sim.newick import (
     count_topologies,
@@ -33,6 +27,12 @@ from snakes_and_ladders.sim.newick import (
 )
 from snakes_and_ladders.sim.params import load_simulation_params
 from snakes_and_ladders.sim.simulate import simulate_alignment
+from snakes_and_ladders.sim.topology import (
+    MoveSet,
+    Topology,
+    enumerate_topologies,
+    leaf_bipartitions,
+)
 
 from tests._fixtures import FIXTURES_DIR
 

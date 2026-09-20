@@ -40,6 +40,7 @@ held to the enumerated optimum rather than to the count.
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
+from enum import StrEnum
 
 import numpy as np
 
@@ -48,6 +49,25 @@ from snakes_and_ladders.sim.tree import Node, edges
 Topology = Node
 
 NodeId = int | str
+
+
+class MoveSet(StrEnum):
+    """Which neighbourhood the search proposes from."""
+
+    NNI = "nni"
+    SPR = "spr"
+
+
+class Model(StrEnum):
+    """Which substitution model the continuous fit uses.
+
+    ``JC`` fits branch lengths alone: Jukes-Cantor has no free rate parameters
+    and its stationary distribution is uniform by construction. ``GTR``
+    additionally fits the exchangeabilities and the stationary distribution.
+    """
+
+    JC = "jc"
+    GTR = "gtr"
 
 
 def enumerate_topologies(leaf_names: Sequence[str]) -> Iterator[Topology]:

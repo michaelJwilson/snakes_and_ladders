@@ -5,7 +5,7 @@ of :class:`~snakes_and_ladders.sim.graph.PottsGraph`, not a separate code path, 
 ``docs/tex/textbook.tex``, ``sec:potts`` (Mezard &
 Montanari, ch. 2; Koller & Friedman for the general framing). A graph
 recognized as a 1-D chain with an open boundary is sampled exactly, by the
-same backward-message recursion :func:`snakes_and_ladders.opt.potts.simulate_chains`
+same backward-message recursion :func:`snakes_and_ladders.sim.potts_chain.simulate_chains`
 delegates to here; every other graph is sampled by single-site Gibbs
 (heat-bath) Markov chain Monte Carlo.
 
@@ -631,7 +631,7 @@ def _simulate_open_chain_exact(
     """Exact i.i.d. samples on an open chain, by backward messages.
 
     Moved verbatim (not reimplemented) from the recursion
-    ``snakes_and_ladders.opt.potts.simulate_chains`` used before this module existed: the
+    ``snakes_and_ladders.sim.potts_chain.simulate_chains`` used before this module existed: the
     chain's backward messages give the conditional distributions directly,
     so the fixture carries no equilibration assumption (root ``CLAUDE.md``,
     "Simulate Component-Wise"). Generalized to a per-edge coupling, which

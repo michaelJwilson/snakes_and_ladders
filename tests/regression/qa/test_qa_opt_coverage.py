@@ -13,7 +13,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from snakes_and_ladders.opt.potts import load_potts_params
 from snakes_and_ladders.qa import opt_coverage
 from snakes_and_ladders.qa.opt_coverage import (
     HMM_SIZES,
@@ -24,6 +23,7 @@ from snakes_and_ladders.qa.opt_coverage import (
     potts_coverage,
 )
 from snakes_and_ladders.sim.hmm import load_hmm_params
+from snakes_and_ladders.sim.potts_chain import load_potts_params
 
 from tests._fixtures import FIXTURES_DIR
 

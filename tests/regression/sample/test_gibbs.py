@@ -57,12 +57,6 @@ from snakes_and_ladders.sample.schedule import (
 )
 from snakes_and_ladders.sample.statistics import chi_square_p_value
 from snakes_and_ladders.search.infer import score_topology
-from snakes_and_ladders.search.topology import (
-    enumerate_topologies,
-    leaf_bipartitions,
-    nni_neighbours,
-    random_topology,
-)
 from snakes_and_ladders.sim.canonical import (
     minimum_frustrated_edges,
 )
@@ -85,6 +79,12 @@ from snakes_and_ladders.sim.spatio_sequential import (
     coupled_factor_graph,
     gated_log_density,
     simulate_spatio_sequential,
+)
+from snakes_and_ladders.sim.topology import (
+    enumerate_topologies,
+    leaf_bipartitions,
+    nni_neighbours,
+    random_topology,
 )
 from snakes_and_ladders.sim.tree import preorder
 

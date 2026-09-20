@@ -65,15 +65,17 @@ from snakes_and_ladders.numerics import logsumexp
 from snakes_and_ladders.parallel import Backend, map_tasks
 from snakes_and_ladders.sample.statistics import integrated_autocorrelation_time
 from snakes_and_ladders.sample.tempered import TemperedEnsemble
-from snakes_and_ladders.search.infer import Model, MoveSet, infer, score_topology
-from snakes_and_ladders.search.topology import (
+from snakes_and_ladders.search.infer import infer, score_topology
+from snakes_and_ladders.sim.factor_graph import FactorGraph
+from snakes_and_ladders.sim.topology import (
+    Model,
+    MoveSet,
     Topology,
     enumerate_topologies,
     leaf_bipartitions,
     nni_neighbours,
     spr_neighbours,
 )
-from snakes_and_ladders.sim.factor_graph import FactorGraph
 
 # Processes, because a replicate is a whole search -- Python control flow
 # around small torch fits. The intra-op thread count stays at the process
@@ -494,7 +496,7 @@ def split_pattern_support(
     ----------
     split : frozenset[str]
         One side of a bipartition of the alignment's taxa, as
-        :func:`snakes_and_ladders.search.topology.leaf_bipartitions` canonicalizes it.
+        :func:`snakes_and_ladders.sim.topology.leaf_bipartitions` canonicalizes it.
     alignment : Mapping[str, np.ndarray]
         Observed states per taxon, each of shape ``(n_sites,)``.
     k : int
