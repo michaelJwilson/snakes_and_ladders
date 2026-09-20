@@ -65,7 +65,7 @@ def test_the_drivers_are_written_in_book_order(tmp_path: Path) -> None:
     written = split_textbook.write_drivers(toc, tmp_path / "sections")
     assert [path.stem for path in written][:2] == ["00-front-matter", "01-notation"]
     assert (
-        "\\includepdf[pages={60-},fitpaper=true]{../../textbook.pdf}"
+        "\\includepdf[pages={60-},fitpaper=true]{../../../textbook.pdf}"
         in written[-1].read_text()
     )
     assert split_textbook.ranges([]) == []

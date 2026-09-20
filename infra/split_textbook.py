@@ -95,8 +95,12 @@ def ranges(found: list[Section]) -> list[tuple[str, str]]:
     return cuts
 
 
-def driver(pages: str, book: str = "../../textbook.pdf") -> str:
-    """The LaTeX that cuts ``pages`` out of the book at their own size."""
+def driver(pages: str, book: str = "../../../textbook.pdf") -> str:
+    """The LaTeX that cuts ``pages`` out of the book at their own size.
+
+    ``book`` is the path ``pdfpages`` resolves from the driver's own directory,
+    ``docs/tex/generated/sections/``: three levels up to ``docs/textbook.pdf``.
+    """
     return (
         "\\documentclass{article}\n"
         "\\usepackage{pdfpages}\n"
