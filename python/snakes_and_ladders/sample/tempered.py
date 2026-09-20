@@ -28,6 +28,7 @@ ensemble mixed.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TypeVar
@@ -52,7 +53,9 @@ from snakes_and_ladders.sample.potts_mcmc import (
 )
 from snakes_and_ladders.sample.schedule import (
     FeedbackLadder,
+    TempSchedule,
     adapt_ladder_by_round_trips,
+    ladder,
 )
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -312,6 +315,7 @@ def _exchange(
     # `log_densities` it returns, whose state is replica 0's, so a bound
     # `Metrics` reads the same replica the density is taken from.
     tracked: TrackedOptimization = current()
+    started = time.perf_counter()
     for sweep in range(burn_in + n_sweeps):
         for replica in range(n_replicas):
             states[replica], values[replica] = step(
@@ -340,25 +344,43 @@ def _exchange(
             for rung, walker in enumerate(at_rung):
                 rungs[walker] = rung
             trace.append(rungs)
-        tracked.record(
-            sweep,
-            state=states[0],
-            swap_acceptance=float(np.mean(accepted / proposed)),
-            log_density=values[0],
-        )
+        if not tracked.is_null:
+            # The round trips and the up fraction are read from the trace so
+            # far by the two functions the result is read with, so the last
+            # entry is what `round_trips(ensemble.walkers)` returns; the
+            # re-read per sweep is paid by a listening run only (issue #799).
+            wall = time.perf_counter() - started
+            so_far = np.array(trace, dtype=np.int64).reshape(len(trace), n_replicas)
+            tracked.record(
+                sweep,
+                state=states[0],
+                swap_acceptance=float(np.mean(accepted / proposed)),
+                log_density=values[0],
+                round_trips=float(round_trips(so_far).sum()) if len(trace) else 0.0,
+                up_fraction=float(np.nanmean(up_fraction(so_far)))
+                if len(trace)
+                else 0.0,
+                sweeps_per_second=(sweep + 1) / wall if wall else 0.0,
+                wall_s=wall,
+            )
+    walkers = np.array(trace, dtype=np.int64).reshape(len(trace), n_replicas)
+    log_densities = np.array(densities)
+    tracked.record_cost(
+        max(burn_in + n_sweeps - 1, 0), walkers.nbytes + log_densities.nbytes
+    )
     return TemperedEnsemble(
         temperatures=tuple(temperatures),
         keys=tuple(tuple(names) for names in recorded_keys),
-        log_densities=np.array(densities),
+        log_densities=log_densities,
         swap_acceptance=accepted / proposed,
         scores=scores,
-        walkers=np.array(trace, dtype=np.int64).reshape(len(trace), n_replicas),
+        walkers=walkers,
     )
 
 
 def tempered_factor_graph(
     graph: FactorGraph,
-    temperatures: Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -377,7 +399,7 @@ def tempered_factor_graph(
     ----------
     graph : FactorGraph
         Any of the adapters' graphs.
-    temperatures : Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The ladder, at least two, all positive; the order fixes which pairs
         are adjacent for exchange.
     rng : np.random.Generator
@@ -397,6 +419,7 @@ def tempered_factor_graph(
         the ladder has fewer than two temperatures or one that is not
         positive.
     """
+    temperatures = ladder(temperatures)
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
     indexed = _Indexed(graph)
     children = rng.spawn(len(temperatures))
@@ -426,7 +449,7 @@ def tempered_factor_graph(
 def tempered_potts_pair(
     graph: PottsGraph,
     field: np.ndarray,
-    temperatures: Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -458,7 +481,7 @@ def tempered_potts_pair(
         refusal.
     field : np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
-    temperatures : Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The ladder, at least two, all positive, in the order that fixes which
         pairs are adjacent for exchange.
     rng : np.random.Generator
@@ -490,6 +513,7 @@ def tempered_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts` refuses it.
     """
+    temperatures = ladder(temperatures)
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
     _refuse_negative_coupling(move, graph)
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
@@ -552,7 +576,7 @@ def tempered_potts_pair(
 def tempered_topologies(
     alignment: Mapping[str, np.ndarray],
     k: int,
-    temperatures: Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -582,6 +606,7 @@ def tempered_topologies(
         If the ladder has fewer than two temperatures or one that is not
         positive, or ``n_sweeps``, ``thin`` or ``burn_in`` is unusable.
     """
+    temperatures = ladder(temperatures)
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
     cache = {} if scores is None else scores
     score = cached_topology_score(alignment, k, cache, model=model)

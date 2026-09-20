@@ -11,12 +11,13 @@ open chain, bitwise what the copy in ``opt`` returned (#813).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
 from snakes_and_ladders.sim.potts import simulate_potts
 
@@ -54,54 +55,53 @@ class PottsParams:
     field: np.ndarray
     seed: int
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
 
-def load_potts_params(path: Path) -> PottsParams:
-    """Load and validate a Potts fixture yaml.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a Potts fixture's declared mapping.
 
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
 
-    Returns
-    -------
-    PottsParams
         Parsed truth, with ``field`` canonicalized to ``logsumexp(h) == 0``.
 
-    Raises
-    ------
-    ValueError
-        If a required field is missing, ``field`` does not have shape
-        ``(n_states,)``, or a size is too small to identify the parameters.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
+        Raises
+        ------
+        ValueError
+            If a required field is missing, ``field`` does not have shape
+            ``(n_states,)``, or a size is too small to identify the parameters.
+        """
+        n_states = int(declared["n_states"])
+        chain_length = int(declared["chain_length"])
+        if n_states < 2:
+            msg = f"{path}: n_states must be >= 2, got {n_states}"
+            raise ValueError(msg)
+        if chain_length < 2:
+            msg = f"{path}: chain_length must be >= 2, got {chain_length}"
+            raise ValueError(msg)
 
-    n_states = int(raw["n_states"])
-    chain_length = int(raw["chain_length"])
-    if n_states < 2:
-        msg = f"{path}: n_states must be >= 2, got {n_states}"
-        raise ValueError(msg)
-    if chain_length < 2:
-        msg = f"{path}: chain_length must be >= 2, got {chain_length}"
-        raise ValueError(msg)
+        field = np.asarray(declared["field"], dtype=np.float64)
+        if field.shape != (n_states,):
+            msg = f"{path}: field has shape {field.shape}, expected ({n_states},)"
+            raise ValueError(msg)
+        # Canonicalize the gauge here rather than demanding the yaml be written
+        # in it: h and h + c are the same model, and a hand-written fixture
+        # should not have to solve for c.
+        field = field - float(np.log(np.exp(field).sum()))
 
-    field = np.asarray(raw["field"], dtype=np.float64)
-    if field.shape != (n_states,):
-        msg = f"{path}: field has shape {field.shape}, expected ({n_states},)"
-        raise ValueError(msg)
-    # Canonicalize the gauge here rather than demanding the yaml be written
-    # in it: h and h + c are the same model, and a hand-written fixture
-    # should not have to solve for c.
-    field = field - float(np.log(np.exp(field).sum()))
-
-    return PottsParams(
-        n_states=n_states,
-        chain_length=chain_length,
-        n_chains=int(raw["n_chains"]),
-        coupling=float(raw["coupling"]),
-        field=field,
-        seed=int(raw["seed"]),
-    )
+        return cls(
+            n_states=n_states,
+            chain_length=chain_length,
+            n_chains=int(declared["n_chains"]),
+            coupling=float(declared["coupling"]),
+            field=field,
+            seed=int(declared["seed"]),
+        )
 
 
 def simulate_chains(

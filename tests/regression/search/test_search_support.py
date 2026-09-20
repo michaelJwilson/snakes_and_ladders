@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.likelihood.hmm_paths import (
     emission_log_density,
     enumerate_hidden_paths,
@@ -43,7 +44,7 @@ from snakes_and_ladders.sim.factor_graph import (
     from_potts,
 )
 from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import (
     MoveSet,
@@ -96,7 +97,7 @@ def test_the_neighbourhood_weight_bounds_the_enumerated_one_and_the_best_tree_ha
     # A neighbourhood is a subset of the space, so its denominator is smaller
     # and its weight larger; and the topology that beats every topology beats
     # every neighbour, so its NNI margin equals its enumerated margin.
-    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 2, 300)
     topologies = list(enumerate_topologies(sorted(alignment)))
     assert len(topologies) == 15
@@ -118,7 +119,7 @@ def test_the_neighbourhood_weight_bounds_the_enumerated_one_and_the_best_tree_ha
 def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_splits() -> (
     None
 ):
-    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 3, 300)
     topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
 
@@ -149,7 +150,7 @@ def test_bootstrap_support_is_a_frequency_over_the_returned_topology_s_internal_
 @pytest.mark.end2end
 @pytest.mark.release
 def test_the_generating_splits_have_full_bootstrap_support_at_many_sites() -> None:
-    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 5, 1000)
     truth = params.tau
 
@@ -172,7 +173,7 @@ def test_the_enumerated_support_is_calibrated_on_simulated_data() -> None:
     # Bin the returned trees by the support they report; the fraction equal to
     # the generating topology must not fall as the support rises. Site counts
     # from 30 to 300 spread the runs across the bins; six seeds each.
-    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     truth = leaf_bipartitions(params.tau)
     edges = (0.0, 0.5, 0.9, 1.0 + 1e-12)
     hits = np.zeros(3)
@@ -225,7 +226,7 @@ def test_the_neighbourhood_and_bootstrap_supports_are_calibrated_at_seven_and_ei
     # 10 min at seven taxa and 30 at eight. The realized tables are in
     # `STATUS.md`; the assertion is that neither fraction falls from one
     # bin to the next.
-    params = load_simulation_params(fixture_path(fixture))
+    params = load_params(fixture_path(fixture), SimulationParams)
     assert len(list(internal_splits(params.tau))) == n_taxa - 3
     truth = leaf_bipartitions(params.tau)
     neighbourhood: list[float] = []
@@ -431,7 +432,7 @@ def test_pattern_support_is_the_fraction_of_sites_some_tree_with_the_split_fits_
     # the split, which shares nothing with the straddling-state count under
     # test. The split tree with polytomies is not the oracle: it charges a
     # change for two unresolved leaves that share a state.
-    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 8, 120)
     taxa = sorted(alignment)
     n_sites = next(iter(alignment.values())).shape[0]
@@ -468,7 +469,7 @@ def test_the_four_taxon_support_is_one_minus_the_frequency_of_the_two_conflictin
     # Closed form at four taxa: a site conflicts with AB|CD exactly when it
     # reads xyxy or xyyx, so the support is one minus those two frequencies,
     # counted here directly on the columns.
-    params = load_simulation_params(fixture_path(FOUR_TAXA))
+    params = load_params(fixture_path(FOUR_TAXA), SimulationParams)
     alignment = _alignment(params, 9, 400)
     a, b, c, d = (alignment[name] for name in ("A", "B", "C", "D"))
     conflicting = ((a == c) & (b == d) & (a != b)) | ((a == d) & (b == c) & (a != b))
@@ -486,7 +487,7 @@ def test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_re
     # at 1000 sites on four taxa, the bootstrap returns the generating split
     # in every replicate, and the pattern support of that split exceeds the
     # pattern support of both alternatives.
-    params = load_simulation_params(fixture_path(FOUR_TAXA))
+    params = load_params(fixture_path(FOUR_TAXA), SimulationParams)
     alignment = _alignment(params, 10, 1000)
     truth = params.tau
     (true_split,) = internal_splits(truth)
@@ -503,7 +504,7 @@ def test_pattern_support_ranks_the_generating_split_first_where_the_bootstrap_re
 
 @pytest.mark.smoke
 def test_a_split_that_is_not_a_bipartition_of_the_alignment_is_refused() -> None:
-    params = load_simulation_params(fixture_path(FOUR_TAXA))
+    params = load_params(fixture_path(FOUR_TAXA), SimulationParams)
     alignment = _alignment(params, 12, 20)
     with pytest.raises(ValueError, match="lacks"):
         split_pattern_support(frozenset({"A", "Z"}), alignment, params.k)
@@ -522,7 +523,7 @@ def test_four_workers_report_the_bootstrap_one_worker_reports() -> None:
     because the resample and the search of each replicate come from the
     generator spawned for that replicate and from nothing scheduled.
     """
-    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 3, 300)
     topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
 
@@ -547,7 +548,7 @@ def test_a_replicate_is_the_search_of_the_resample_its_spawned_generator_draws()
     construction rather than against a recorded frequency, because the
     frequency would also hold under a stream nobody could name.
     """
-    params = load_simulation_params(fixture_path(FIVE_TAXA))
+    params = load_params(fixture_path(FIVE_TAXA), SimulationParams)
     alignment = _alignment(params, 3, 300)
     topology = infer(alignment, params.k, rng=np.random.default_rng(3)).topology
     n_sites = 300

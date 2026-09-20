@@ -16,14 +16,15 @@ not import ``likelihood``.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 import torch
 
 from snakes_and_ladders.emissions import CategoricalEmission, EmissionFamily
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.ragged import MINIMUM_LENGTH
 from snakes_and_ladders.sim.factor_graph import FactorGraph, from_coupled
 from snakes_and_ladders.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
@@ -50,6 +51,23 @@ def circulant_transition(n_states: int, self_transition: float) -> np.ndarray:
     return np.full((n_states, n_states), off) + (self_transition - off) * np.eye(
         n_states
     )
+
+
+_REQUIRED_FIELDS = frozenset(
+    {
+        "seed",
+        "shape",
+        "boundary",
+        "coupling",
+        "n_classes",
+        "n_states",
+        "n_positions",
+        "beta",
+        "self_transition",
+        "initial",
+        "emissions",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -260,6 +278,64 @@ class SpatioSequentialParams:
             n_nodes=self.graph.n_nodes,
             edges=self.graph.edges,
             coupling=tuple(self.beta * coupling for coupling in self.graph.coupling),
+        )
+
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Load and validate a coupled spatio-sequential fixture yaml.  The
+        spatial graph is declared as a lattice --- extent, boundary and a
+        uniform coupling --- rather than as an edge list, because that is
+        the family the model's enumerable instances come from and an edge
+        list would make the file unreadable at the sizes the oracle reaches.
+
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
+
+        Every further check --- non-negative couplings, a row-stochastic
+        ``initial``, one emission family per class --- is
+        :class:`SpatioSequentialParams`'s own.
+
+        Raises
+        ------
+        ValueError
+            If a required field is missing, or the file declares a number of
+            emission families other than ``n_classes``.
+        """
+        n_classes = int(declared["n_classes"])
+        emissions = tuple(
+            CategoricalEmission(np.asarray(matrix, dtype=np.float64))
+            for matrix in declared["emissions"]
+        )
+        if len(emissions) != n_classes:
+            msg = f"{path}: {len(emissions)} emission families for {n_classes} classes"
+            raise ValueError(msg)
+
+        return cls(
+            graph=lattice_graph(
+                tuple(int(extent) for extent in declared["shape"]),
+                BoundaryCondition(str(declared["boundary"])),
+                float(declared["coupling"]),
+            ),
+            n_classes=n_classes,
+            n_states=int(declared["n_states"]),
+            n_positions=int(declared["n_positions"]),
+            beta=float(declared["beta"]),
+            self_transition=float(declared["self_transition"]),
+            initial=np.asarray(declared["initial"], dtype=np.float64),
+            emissions=emissions,
+            # Optional: a fixture that declares no segmentation is one chain, which
+            # is every instance that existed before #666.
+            segments=(
+                tuple(int(one) for one in declared["segments"])
+                if "segments" in declared
+                else None
+            ),
         )
 
 
@@ -503,80 +579,5 @@ def canonical_spatio_sequential() -> SpatioSequentialParams:
         emissions=(
             CategoricalEmission(np.array([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1]])),
             CategoricalEmission(np.array([[0.1, 0.1, 0.8], [0.45, 0.45, 0.1]])),
-        ),
-    )
-
-
-_REQUIRED_FIELDS = frozenset(
-    {
-        "seed",
-        "shape",
-        "boundary",
-        "coupling",
-        "n_classes",
-        "n_states",
-        "n_positions",
-        "beta",
-        "self_transition",
-        "initial",
-        "emissions",
-    }
-)
-
-
-def load_spatio_sequential_params(path: Path) -> SpatioSequentialParams:
-    """Load and validate a coupled spatio-sequential fixture yaml.
-
-    The spatial graph is declared as a lattice --- extent, boundary and a
-    uniform coupling --- rather than as an edge list, because that is the
-    family the model's enumerable instances come from and an edge list would
-    make the file unreadable at the sizes the oracle reaches.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
-
-    Returns
-    -------
-    SpatioSequentialParams
-        The parsed, validated truth. Every further check --- non-negative
-        couplings, a row-stochastic ``initial``, one emission family per class
-        --- is :class:`SpatioSequentialParams`'s own.
-
-    Raises
-    ------
-    ValueError
-        If a required field is missing, or the file declares a number of
-        emission families other than ``n_classes``.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-
-    n_classes = int(raw["n_classes"])
-    emissions = tuple(
-        CategoricalEmission(np.asarray(matrix, dtype=np.float64))
-        for matrix in raw["emissions"]
-    )
-    if len(emissions) != n_classes:
-        msg = f"{path}: {len(emissions)} emission families for {n_classes} classes"
-        raise ValueError(msg)
-
-    return SpatioSequentialParams(
-        graph=lattice_graph(
-            tuple(int(extent) for extent in raw["shape"]),
-            BoundaryCondition(str(raw["boundary"])),
-            float(raw["coupling"]),
-        ),
-        n_classes=n_classes,
-        n_states=int(raw["n_states"]),
-        n_positions=int(raw["n_positions"]),
-        beta=float(raw["beta"]),
-        self_transition=float(raw["self_transition"]),
-        initial=np.asarray(raw["initial"], dtype=np.float64),
-        emissions=emissions,
-        # Optional: a fixture that declares no segmentation is one chain, which
-        # is every instance that existed before #666.
-        segments=(
-            tuple(int(one) for one in raw["segments"]) if "segments" in raw else None
         ),
     )

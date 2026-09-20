@@ -13,7 +13,7 @@ form. Until that lands :class:`IndependentCountPair` computes the independent
 form here: two existing families side by side, their log-densities added. Every
 consumer already takes an
 :class:`~snakes_and_ladders.emissions.EmissionFamily`, so the swap is the
-constructor in :func:`load_spatio_sequential_counts_params` and nothing else.
+constructor in :func:`SpatioSequentialCountsParams` and nothing else.
 
 **One simulation, three instances.** The fixture is drawn once at the fine
 resolution and the coarse instances are *binned* from it --- counts summed
@@ -34,6 +34,7 @@ import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any, ClassVar, Self
 
 import numpy as np
 import torch
@@ -46,7 +47,6 @@ from snakes_and_ladders.emissions import (
     NegativeBinomialEmission,
     Reestimate,
 )
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.graph import BoundaryCondition, triangular_lattice_graph
 from snakes_and_ladders.sim.spatio_sequential import (
     SpatioSequentialParams,
@@ -277,7 +277,8 @@ class IndependentCountPair(EmissionFamily):
         )
 
     def alignment_key(self) -> torch.Tensor:
-        """Both channels' means, shape ``(n_states, 2)``: two states emitting the same pair are one state."""
+        """Both channels' means, shape ``(n_states, 2)``: two states
+        emitting the same pair are one state."""
         return torch.stack([self._total.mean, self._successes.mean], dim=-1)
 
     def named_parameters(self) -> Mapping[str, torch.Tensor]:
@@ -435,6 +436,24 @@ class BinInstance:
 BIN_MARKERS = ("ci", "release", "stress", "key")
 
 
+_REQUIRED_FIELDS = frozenset(
+    {
+        "seed",
+        "shape",
+        "boundary",
+        "coupling",
+        "n_classes",
+        "n_states",
+        "n_positions",
+        "beta",
+        "self_transition",
+        "initial",
+        "emissions",
+        "bin",
+    }
+)
+
+
 @dataclass(frozen=True)
 class SpatioSequentialCountsParams:
     """A declared count-pair instance: the model, its seed, and its bin factors.
@@ -533,6 +552,110 @@ class SpatioSequentialCountsParams:
         msg = f"{factor} is not a declared bin factor; {self.factors} are"
         raise KeyError(msg)
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Load and validate a count-pair coupled fixture yaml.  **The
+        emissions are declared as ladders, not as a table.** ``M x K``
+        families carrying five parameters each is 500 numbers at the
+        declared 5K size, which no reader checks and no reviewer reads. What
+        the file states instead is one ladder per parameter over the ``K``
+        states, shared by every class, and two per-class vectors that
+        separate the classes: the negative binomial's mean is scaled by
+        ``class_mean_scale[m]`` and the beta-binomial's rate shifted by
+        ``class_rate_shift[m]``. Everything is still a literal in the file,
+        and the number of them is ``5 K + 2 M``.
+
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
+
+        The parsed, validated instance.
+
+        Raises
+        ------
+        ValueError
+            If a required field is absent, a ladder is the wrong length, a
+            declared beta-binomial rate leaves ``(0, 1)`` once shifted, or the
+            emission form is not one this module implements.
+        """
+        n_classes, n_states = int(declared["n_classes"]), int(declared["n_states"])
+
+        declared_emissions = declared["emissions"]
+        form = str(declared_emissions["form"])
+        if form != "independent":
+            msg = (
+                f"{path}: emission form {form!r} is not implemented here; the joint "
+                f"form arrives with emissions.CountPairEmission (issue #399)"
+            )
+            raise ValueError(msg)
+        missing = set(_REQUIRED_LADDERS) - declared_emissions.keys()
+        if missing:
+            msg = f"{path}: emissions is missing {sorted(missing)}"
+            raise ValueError(msg)
+        ladders = {
+            name: _ladder(declared_emissions, name, n_states)
+            for name in _REQUIRED_LADDERS
+        }
+        scale = np.asarray(declared_emissions["class_mean_scale"], dtype=np.float64)
+        shift = np.asarray(declared_emissions["class_rate_shift"], dtype=np.float64)
+        for name, values in (("class_mean_scale", scale), ("class_rate_shift", shift)):
+            if values.shape != (n_classes,):
+                msg = f"{path}: emissions.{name} has {values.shape}, expected ({n_classes},)"
+                raise ValueError(msg)
+
+        families: list[EmissionFamily] = []
+        for m in range(n_classes):
+            rate = ladders["rate"] + shift[m]
+            if bool(((rate <= 0.0) | (rate >= 1.0)).any()):
+                msg = (
+                    f"{path}: class {m}'s beta-binomial rate leaves (0, 1) once "
+                    f"shifted by {shift[m]}: {rate.tolist()}"
+                )
+                raise ValueError(msg)
+            families.append(
+                IndependentCountPair(
+                    NegativeBinomialEmission(
+                        dispersion=ladders["dispersion"],
+                        mean=ladders["mean"] * scale[m],
+                    ),
+                    BetaBinomialEmission(
+                        trials=ladders["trials"],
+                        alpha=ladders["concentration"] * rate,
+                        beta=ladders["concentration"] * (1.0 - rate),
+                    ),
+                )
+            )
+
+        model = SpatioSequentialParams(
+            graph=triangular_lattice_graph(
+                (int(declared["shape"][0]), int(declared["shape"][1])),
+                BoundaryCondition(str(declared["boundary"])),
+                float(declared["coupling"]),
+            ),
+            n_classes=n_classes,
+            n_states=n_states,
+            n_positions=int(declared["n_positions"]),
+            beta=float(declared["beta"]),
+            self_transition=float(declared["self_transition"]),
+            initial=np.asarray(declared["initial"], dtype=np.float64),
+            emissions=tuple(families),
+        )
+        digest = declared.get("counts_digest")
+        return cls(
+            model=model,
+            seed=int(declared["seed"]),
+            bins=tuple(
+                BinInstance(factor=int(entry["factor"]), marker=str(entry["marker"]))
+                for entry in declared["bin"]
+            ),
+            counts_digest=None if digest is None else str(digest),
+        )
+
 
 @dataclass(frozen=True)
 class CountPairInstance:
@@ -564,7 +687,8 @@ class CountPairInstance:
 
     @property
     def nbytes(self) -> int:
-        """Bytes the observations occupy, the term that decides whether an instance fits."""
+        """Bytes the observations occupy, the term that decides whether an
+        instance fits."""
         return int(self.observations.nbytes)
 
 
@@ -820,23 +944,6 @@ def counts_digest(instance: CountPairInstance) -> str:
     return hashlib.sha256(contiguous.tobytes()).hexdigest()[:16]
 
 
-_REQUIRED_FIELDS = frozenset(
-    {
-        "seed",
-        "shape",
-        "boundary",
-        "coupling",
-        "n_classes",
-        "n_states",
-        "n_positions",
-        "beta",
-        "self_transition",
-        "initial",
-        "emissions",
-        "bin",
-    }
-)
-
 _REQUIRED_LADDERS = ("mean", "dispersion", "trials", "rate", "concentration")
 
 
@@ -875,108 +982,3 @@ def _ladder(declared: Mapping[str, object], name: str, n_states: int) -> np.ndar
         )
         raise ValueError(msg)
     return values
-
-
-def load_spatio_sequential_counts_params(path: Path) -> SpatioSequentialCountsParams:
-    """Load and validate a count-pair coupled fixture yaml.
-
-    **The emissions are declared as ladders, not as a table.** ``M x K``
-    families carrying five parameters each is 500 numbers at the declared 5K
-    size, which no reader checks and no reviewer reads. What the file states
-    instead is one ladder per parameter over the ``K`` states, shared by every
-    class, and two per-class vectors that separate the classes: the negative
-    binomial's mean is scaled by ``class_mean_scale[m]`` and the
-    beta-binomial's rate shifted by ``class_rate_shift[m]``. Everything is
-    still a literal in the file, and the number of them is ``5 K + 2 M``.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
-
-    Returns
-    -------
-    SpatioSequentialCountsParams
-        The parsed, validated instance.
-
-    Raises
-    ------
-    ValueError
-        If a required field is absent, a ladder is the wrong length, a
-        declared beta-binomial rate leaves ``(0, 1)`` once shifted, or the
-        emission form is not one this module implements.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-    n_classes, n_states = int(raw["n_classes"]), int(raw["n_states"])
-
-    declared_emissions = raw["emissions"]
-    form = str(declared_emissions["form"])
-    if form != "independent":
-        msg = (
-            f"{path}: emission form {form!r} is not implemented here; the joint "
-            f"form arrives with emissions.CountPairEmission (issue #399)"
-        )
-        raise ValueError(msg)
-    missing = set(_REQUIRED_LADDERS) - declared_emissions.keys()
-    if missing:
-        msg = f"{path}: emissions is missing {sorted(missing)}"
-        raise ValueError(msg)
-    ladders = {
-        name: _ladder(declared_emissions, name, n_states) for name in _REQUIRED_LADDERS
-    }
-    scale = np.asarray(declared_emissions["class_mean_scale"], dtype=np.float64)
-    shift = np.asarray(declared_emissions["class_rate_shift"], dtype=np.float64)
-    for name, values in (("class_mean_scale", scale), ("class_rate_shift", shift)):
-        if values.shape != (n_classes,):
-            msg = (
-                f"{path}: emissions.{name} has {values.shape}, expected ({n_classes},)"
-            )
-            raise ValueError(msg)
-
-    families: list[EmissionFamily] = []
-    for m in range(n_classes):
-        rate = ladders["rate"] + shift[m]
-        if bool(((rate <= 0.0) | (rate >= 1.0)).any()):
-            msg = (
-                f"{path}: class {m}'s beta-binomial rate leaves (0, 1) once "
-                f"shifted by {shift[m]}: {rate.tolist()}"
-            )
-            raise ValueError(msg)
-        families.append(
-            IndependentCountPair(
-                NegativeBinomialEmission(
-                    dispersion=ladders["dispersion"],
-                    mean=ladders["mean"] * scale[m],
-                ),
-                BetaBinomialEmission(
-                    trials=ladders["trials"],
-                    alpha=ladders["concentration"] * rate,
-                    beta=ladders["concentration"] * (1.0 - rate),
-                ),
-            )
-        )
-
-    model = SpatioSequentialParams(
-        graph=triangular_lattice_graph(
-            (int(raw["shape"][0]), int(raw["shape"][1])),
-            BoundaryCondition(str(raw["boundary"])),
-            float(raw["coupling"]),
-        ),
-        n_classes=n_classes,
-        n_states=n_states,
-        n_positions=int(raw["n_positions"]),
-        beta=float(raw["beta"]),
-        self_transition=float(raw["self_transition"]),
-        initial=np.asarray(raw["initial"], dtype=np.float64),
-        emissions=tuple(families),
-    )
-    digest = raw.get("counts_digest")
-    return SpatioSequentialCountsParams(
-        model=model,
-        seed=int(raw["seed"]),
-        bins=tuple(
-            BinInstance(factor=int(entry["factor"]), marker=str(entry["marker"]))
-            for entry in raw["bin"]
-        ),
-        counts_digest=None if digest is None else str(digest),
-    )

@@ -49,7 +49,7 @@ from snakes_and_ladders.learn.environment import Environment, Episode
 from snakes_and_ladders.learn.policy import LinearPolicy, MLPPolicy, Policy
 from snakes_and_ladders.learn.ppo import ppo
 from snakes_and_ladders.learn.reinforce import reinforce
-from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
+from snakes_and_ladders.learn.rollout import greedy_restarts, greedy_rollout, rollout
 
 #: Hidden width of the MLP row's scorer, as issue #313 measured it. A declared
 #: constant rather than a parameter of :func:`table`: the row is comparable
@@ -127,6 +127,14 @@ class TrainingBudget:
     max_steps : int
         Decision budget per episode, which is also the horizon a row is
         evaluated at.
+    stop_at_local_optimum : bool
+        Whether an episode ends where nothing improves, in training and in
+        evaluation alike. ``True`` is what every published row was measured
+        under. ``False`` lets a learner walk out of a local optimum, and
+        changes the baseline with it: the greedy row is then hill climbing
+        restarted until the same budget is spent, since one greedy run stops
+        after a few decisions and a learner read against it overstates itself
+        (`learn/CLAUDE.md`, issue #820).
 
     Raises
     ------
@@ -137,6 +145,7 @@ class TrainingBudget:
     iterations: int
     batch: int
     max_steps: int
+    stop_at_local_optimum: bool = True
 
     def __post_init__(self) -> None:
         if min(self.iterations, self.batch, self.max_steps) < 1:
@@ -202,9 +211,10 @@ class Row:
         Starts offered. Every row is evaluated from the same set, since a
         fraction over different starts is not a comparison.
     evaluations : float
-        Mean scored actions per evaluation episode --- the quantity #135's
-        planner result is stated in, and the one that separates "the same
-        answer" from "the same answer more cheaply".
+        Mean scored actions per start --- over every run the start bought,
+        which is one episode for every row but restarted greedy --- the
+        quantity #135's planner result is stated in, and the one that
+        separates "the same answer" from "the same answer more cheaply".
     training_decisions : int
         Decisions the training run spent, zero for a row that does not train.
     scoring : Scoring
@@ -323,16 +333,29 @@ class Learner:
         starts: Sequence[S],
         budget: TrainingBudget,
         streams: Streams,
-    ) -> list[Episode[S, A]]:
-        """Train if this row trains, then one episode from each of ``starts``.
+    ) -> list[tuple[Episode[S, A], ...]]:
+        """Train if this row trains, then the runs each of ``starts`` buys.
 
-        A row that does not train reads no stream at all: `greedy_rollout`
-        takes no generator, since given a start it is deterministic and ties
-        break towards the first action the environment lists.
+        One run per start for every row but one: under
+        ``budget.stop_at_local_optimum = False`` the greedy row is
+        :func:`~snakes_and_ladders.learn.rollout.greedy_restarts`, whose
+        restarts are the runs, so a start's result is the best state over
+        them and its cost their sum (issue #820). Under the default the
+        greedy row reads no stream at all: `greedy_rollout` takes no
+        generator, since given a start it is deterministic and ties break
+        towards the first action the environment lists.
         """
         if self._train is None:
+            if budget.stop_at_local_optimum:
+                return [
+                    (greedy_rollout(environment, start, budget.max_steps),)
+                    for start in starts
+                ]
             return [
-                greedy_rollout(environment, start, budget.max_steps) for start in starts
+                greedy_restarts(
+                    environment, start, budget.max_steps, streams.evaluation
+                )
+                for start in starts
             ]
         policy = self._train(
             environment,  # type: ignore[arg-type]
@@ -340,8 +363,15 @@ class Learner:
             streams,
         )
         return [
-            rollout(
-                environment, policy, streams.evaluation, budget.max_steps, start=start
+            (
+                rollout(
+                    environment,
+                    policy,
+                    streams.evaluation,
+                    budget.max_steps,
+                    start=start,
+                    stop_at_local_optimum=budget.stop_at_local_optimum,
+                ),
             )
             for start in starts
         ]
@@ -367,6 +397,7 @@ def _reinforce[S, A](
         budget.iterations,
         budget.batch,
         budget.max_steps,
+        stop_at_local_optimum=budget.stop_at_local_optimum,
     )
     return policy
 
@@ -385,6 +416,7 @@ def _actor_critic[S, A](
         iterations=budget.iterations,
         batch=budget.batch,
         max_steps=budget.max_steps,
+        stop_at_local_optimum=budget.stop_at_local_optimum,
     )
     return policy
 
@@ -403,6 +435,7 @@ def _ppo[S, A](
         iterations=budget.iterations,
         batch=budget.batch,
         max_steps=budget.max_steps,
+        stop_at_local_optimum=budget.stop_at_local_optimum,
     )
     return policy
 
@@ -424,6 +457,7 @@ def _mlp_ppo[S, A](
         batch=budget.batch,
         max_steps=budget.max_steps,
         learning_rate=MLP_LEARNING_RATE,
+        stop_at_local_optimum=budget.stop_at_local_optimum,
     )
     return policy
 
@@ -454,18 +488,26 @@ def row[S, A](
     tolerance: float = DEFAULT_TOLERANCE,
 ) -> Row:
     """One learner's row: its success fraction and what it cost."""
-    episodes = learner.episodes(environment, starts, budget, streams)
+    runs = learner.episodes(environment, starts, budget, streams)
     return Row(
         name=learner.name,
         reached=sum(
-            reached_optimum(
-                episode, value, optimum, scoring=scoring, tolerance=tolerance
+            any(
+                reached_optimum(
+                    episode, value, optimum, scoring=scoring, tolerance=tolerance
+                )
+                for episode in group
             )
-            for episode in episodes
+            for group in runs
         ),
         starts=len(starts),
         evaluations=float(
-            np.mean([evaluations(environment, episode) for episode in episodes])
+            np.mean(
+                [
+                    sum(evaluations(environment, episode) for episode in group)
+                    for group in runs
+                ]
+            )
         ),
         training_decisions=budget.decisions if learner.trains else 0,
         scoring=scoring,

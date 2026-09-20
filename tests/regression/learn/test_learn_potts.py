@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 import torch
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.potts import (
     PottsEnvironment,
@@ -23,7 +24,7 @@ from snakes_and_ladders.learn.potts import (
     optimum,
 )
 from snakes_and_ladders.learn.rollout import greedy_rollout
-from snakes_and_ladders.sim.potts_chain import load_potts_params
+from snakes_and_ladders.sim.potts_chain import PottsParams
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -190,7 +191,7 @@ def test_the_greedy_weights_reproduce_the_greedy_searcher() -> None:
 def test_the_fixture_yaml_builds_the_same_environment() -> None:
     # One model, two roles: the yaml that supplies `snakes_and_ladders.opt`'s reference
     # objective read as a search problem instead of a fitting problem.
-    params = load_potts_params(FIXTURE)
+    params = load_params(FIXTURE, PottsParams)
     environment = PottsEnvironment.from_params(params)
     assert environment.n_states == params.n_states
     assert environment.chain_length == params.chain_length

@@ -34,7 +34,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
-from snakes_and_ladders.fixtures import Scale
+from snakes_and_ladders.fixtures import Scale, load_params
 from snakes_and_ladders.learn.policy import LinearPolicy
 from snakes_and_ladders.learn.reinforce import reinforce
 from snakes_and_ladders.learn.rollout import greedy_rollout, rollout
@@ -46,7 +46,7 @@ from snakes_and_ladders.learn.tree import (
 )
 from snakes_and_ladders.sample.statistics import sign_test_p_value
 from snakes_and_ladders.sim.fixtures import baseline, fixture
-from snakes_and_ladders.sim.params import SimulationParams, load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.simulate import simulate_alignment
 from snakes_and_ladders.sim.topology import (
     MoveSet,
@@ -98,8 +98,8 @@ _RELEASE_MEAN = {FeatureSet.IMPROVEMENT: 0.487, FeatureSet.FULL: 0.796}
 _RELEASE_P_FULL_VS_SINGLE = 3.05e-5
 
 
-def load_params() -> SimulationParams:
-    return load_simulation_params(FIXTURE)
+def _params() -> SimulationParams:
+    return load_params(FIXTURE, SimulationParams)
 
 
 def environment(
@@ -182,7 +182,7 @@ def trained_rate(
     evaluation generator is seeded from the training seed, so a seed is one
     number.
     """
-    params = load_params()
+    params = _params()
     built, taxa = environment(params, feature_set)
     policy = LinearPolicy(built.n_features())
     reinforce(
@@ -229,7 +229,7 @@ def assemble(
     rates: dict[tuple[FeatureSet, int], float],
 ) -> Comparison:
     """The comparison from per-(feature set, seed) rates, however they were run."""
-    params = load_params()
+    params = _params()
     built, taxa = environment(params, FeatureSet.IMPROVEMENT)
     return Comparison(
         greedy=greedy_rate(
@@ -256,7 +256,7 @@ def compare(
 
 @pytest.fixture(scope="module")
 def params() -> SimulationParams:
-    return load_params()
+    return _params()
 
 
 @pytest.fixture(scope="module")

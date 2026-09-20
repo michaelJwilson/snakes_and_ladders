@@ -14,8 +14,9 @@ import numpy as np
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from snakes_and_ladders.emissions import GaussianEmission
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.opt.hmm import GaussianHmmObjective
-from snakes_and_ladders.sim.hmm import HmmParams, load_hmm_params, simulate_sequences
+from snakes_and_ladders.sim.hmm import HmmParams, simulate_sequences
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -24,7 +25,7 @@ FIXTURE = FIXTURES_DIR / "hmm/ci.yaml"
 
 def _objective() -> tuple[GaussianHmmObjective, torch.Tensor]:
     """The Gaussian instance at the categorical fixture's shape, and a truth point."""
-    categorical = load_hmm_params(FIXTURE)
+    categorical = load_params(FIXTURE, HmmParams)
     mean = np.linspace(-3.0, 3.0, categorical.n_states)
     scale = np.full(categorical.n_states, 1.0)
     params = HmmParams(

@@ -209,6 +209,54 @@ class CosineTempSchedule(_InterpolatedTempSchedule):
         return weight * self.start + (1.0 - weight) * self.end
 
 
+@dataclass(frozen=True)
+class LadderTempSchedule(TempSchedule):
+    """The temperatures as given, one per step: a ladder is a schedule indexed by rung.
+
+    The second spelling of a schedule this repository carried was a bare
+    sequence of temperatures --- ``parallel_tempering(graph, field,
+    temperatures, ...)`` and the tempered ensembles --- so a caller who had
+    built a :class:`TempSchedule` could not hand it to a tempering. This is
+    the sequence as a schedule, and :func:`ladder` reads either spelling into
+    the tuple those functions consume, so the values a run sees are the same
+    floats whichever way they were written (issue #827).
+
+    Parameters
+    ----------
+    values : tuple[float, ...]
+        Positive temperatures, at least one; ``n_steps`` is their count.
+    """
+
+    values: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        _check_length(len(self.values))
+        for value in self.values:
+            _check_temperature("temperature", value)
+
+    @property
+    def n_steps(self) -> int:  # type: ignore[override]
+        """One step per rung."""
+        return len(self.values)
+
+    def __call__(self, step: int) -> float:
+        _check_step(step, len(self.values))
+        return self.values[step]
+
+
+def ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
+    """A tuple of temperatures from a schedule or from a sequence, the same floats either way.
+
+    A schedule is read step by step; a sequence is read as given. What a
+    tempering validates about the ladder --- its length, its sign, its order
+    --- it validates on the tuple, so the two spellings are refused on the
+    same terms.
+    """
+    if isinstance(values, TempSchedule):
+        return tuple(temperatures(values))
+    return tuple(float(value) for value in values)
+
+
 def temperatures(schedule: TempSchedule) -> list[float]:
     """Every temperature of ``schedule``, in step order.
 

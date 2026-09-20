@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa import backend_agreement
 from snakes_and_ladders.qa.backend_agreement import (
     BACKENDS,
@@ -19,7 +20,7 @@ from snakes_and_ladders.qa.backend_agreement import (
     agreement,
     build_figure,
 )
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 
 from tests._fixtures import FIXTURES_DIR
 
@@ -33,7 +34,7 @@ _AGREEMENT = 1e-12
 
 @pytest.fixture(scope="module")
 def measured() -> dict[str, list[tuple[int, float]]]:
-    return agreement(load_simulation_params(FIXTURE))
+    return agreement(load_params(FIXTURE, SimulationParams))
 
 
 @pytest.mark.oracle
@@ -55,7 +56,7 @@ def test_every_backend_agrees_with_brute_force(
 def test_the_caption_reports_the_worst_deviation_it_measured(
     measured: dict[str, list[tuple[int, float]]],
 ) -> None:
-    params = load_simulation_params(FIXTURE)
+    params = load_params(FIXTURE, SimulationParams)
     figure, caption = build_figure(measured, params)
     try:
         worst = max(value for points in measured.values() for _, value in points)

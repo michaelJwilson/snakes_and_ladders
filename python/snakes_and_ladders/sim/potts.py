@@ -19,14 +19,13 @@ the broadcast of a per-site one and not a second model.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.numerics import logsumexp, sample_rows
 from snakes_and_ladders.sim.graph import (
     BoundaryCondition,
@@ -464,6 +463,52 @@ class PottsLatticeParams:
     burn_in: int
     tolerance: float
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a Potts-lattice fixture's declared mapping.
+
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
+
+        Raises
+        ------
+        ValueError
+            If a required field is missing, ``field`` has the wrong shape, or a
+            size is too small to identify the model.
+        """
+        shape = tuple(int(extent) for extent in declared["shape"])
+        n_states = int(declared["n_states"])
+        if n_states < 2:
+            msg = f"{path}: n_states must be >= 2, got {n_states}"
+            raise ValueError(msg)
+
+        field = np.asarray(declared["field"], dtype=np.float64)
+        n_nodes = int(np.prod(shape))
+        if field.shape not in {(n_states,), (n_nodes, n_states)}:
+            msg = (
+                f"{path}: field has shape {field.shape}, expected ({n_states},) "
+                f"or ({n_nodes}, {n_states})"
+            )
+            raise ValueError(msg)
+
+        return cls(
+            shape=shape,
+            boundary=_boundary(path, declared["boundary"]),
+            n_states=n_states,
+            coupling=_coupling(path, declared["coupling"], n_states),
+            field=field,
+            seed=int(declared["seed"]),
+            n_samples=int(declared["n_samples"]),
+            burn_in=int(declared["burn_in"]),
+            tolerance=float(declared["tolerance"]),
+        )
+
 
 def _boundary(path: Path, raw: object) -> BoundaryCondition:
     """Parse a yaml boundary field, naming the file when it is unrecognized.
@@ -514,55 +559,6 @@ def _coupling(path: Path, raw: object, n_states: int) -> float:
         msg = f"{path}: coupling {raw!r} is not a number or {CRITICAL!r}"
         raise ValueError(msg)
     return float(raw)
-
-
-def load_potts_lattice_params(path: Path) -> PottsLatticeParams:
-    """Load and validate a Potts-lattice fixture yaml.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
-
-    Returns
-    -------
-    PottsLatticeParams
-        The parsed, validated truth.
-
-    Raises
-    ------
-    ValueError
-        If a required field is missing, ``field`` has the wrong shape, or a
-        size is too small to identify the model.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-
-    shape = tuple(int(extent) for extent in raw["shape"])
-    n_states = int(raw["n_states"])
-    if n_states < 2:
-        msg = f"{path}: n_states must be >= 2, got {n_states}"
-        raise ValueError(msg)
-
-    field = np.asarray(raw["field"], dtype=np.float64)
-    n_nodes = int(np.prod(shape))
-    if field.shape not in {(n_states,), (n_nodes, n_states)}:
-        msg = (
-            f"{path}: field has shape {field.shape}, expected ({n_states},) "
-            f"or ({n_nodes}, {n_states})"
-        )
-        raise ValueError(msg)
-
-    return PottsLatticeParams(
-        shape=shape,
-        boundary=_boundary(path, raw["boundary"]),
-        n_states=n_states,
-        coupling=_coupling(path, raw["coupling"], n_states),
-        field=field,
-        seed=int(raw["seed"]),
-        n_samples=int(raw["n_samples"]),
-        burn_in=int(raw["burn_in"]),
-        tolerance=float(raw["tolerance"]),
-    )
 
 
 @dataclass(frozen=True)
@@ -799,6 +795,59 @@ class SpatioOnlyParams:
     burn_in: int
     tolerance: float
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _SPATIO_ONLY_REQUIRED_FIELDS
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a per-site-field Potts fixture's declared mapping.
+
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
+
+        The parsed, validated instance, its field already built.
+
+        Raises
+        ------
+        ValueError
+            If a required field is absent, the geometry is not one this module
+            builds, ``alpha`` is not one entry per class, or a size is not
+            positive.
+        """
+        geometry = str(declared["geometry"])
+        if geometry not in _GEOMETRIES:
+            msg = f"{path}: geometry {geometry!r} is not one of {sorted(_GEOMETRIES)}"
+            raise ValueError(msg)
+        shape = tuple(int(extent) for extent in declared["shape"])
+        graph = _GEOMETRIES[geometry](
+            shape, _boundary(path, declared["boundary"]), float(declared["coupling"])
+        )
+
+        n_classes = int(declared["n_classes"])
+        if n_classes < 2:
+            msg = f"{path}: n_classes must be >= 2, got {n_classes}"
+            raise ValueError(msg)
+        alpha = np.asarray(declared["alpha"], dtype=np.float64)
+        if alpha.shape != (n_classes,):
+            msg = f"{path}: alpha has shape {alpha.shape}, expected ({n_classes},)"
+            raise ValueError(msg)
+
+        sizes = _spatio_only_sizes(path, declared["sizes"], graph.n_nodes)
+        return cls(
+            graph=graph,
+            n_classes=n_classes,
+            alpha=alpha,
+            sizes=sizes,
+            field=spatio_only_field(alpha, sizes),
+            seed=int(declared["seed"]),
+            n_samples=int(declared["n_samples"]),
+            burn_in=int(declared["burn_in"]),
+            tolerance=float(declared["tolerance"]),
+        )
+
 
 def spatio_only_field(alpha: np.ndarray, sizes: np.ndarray) -> np.ndarray:
     """``alpha[m] * log(size[n] / size_bar)`` as one row per site.
@@ -868,57 +917,3 @@ def _spatio_only_sizes(path: Path, declared: Any, n_nodes: int) -> np.ndarray:
         return np.asarray(np.exp(drawn))
     msg = f"{path}: sizes.form {form!r} is not one of ['declared', 'lognormal']"
     raise ValueError(msg)
-
-
-def load_spatio_only_params(path: Path) -> SpatioOnlyParams:
-    """Load and validate a per-site-field Potts fixture yaml.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
-
-    Returns
-    -------
-    SpatioOnlyParams
-        The parsed, validated instance, its field already built.
-
-    Raises
-    ------
-    ValueError
-        If a required field is absent, the geometry is not one this module
-        builds, ``alpha`` is not one entry per class, or a size is not
-        positive.
-    """
-    raw = load_declared(path, _SPATIO_ONLY_REQUIRED_FIELDS)
-
-    geometry = str(raw["geometry"])
-    if geometry not in _GEOMETRIES:
-        msg = f"{path}: geometry {geometry!r} is not one of {sorted(_GEOMETRIES)}"
-        raise ValueError(msg)
-    shape = tuple(int(extent) for extent in raw["shape"])
-    graph = _GEOMETRIES[geometry](
-        shape, _boundary(path, raw["boundary"]), float(raw["coupling"])
-    )
-
-    n_classes = int(raw["n_classes"])
-    if n_classes < 2:
-        msg = f"{path}: n_classes must be >= 2, got {n_classes}"
-        raise ValueError(msg)
-    alpha = np.asarray(raw["alpha"], dtype=np.float64)
-    if alpha.shape != (n_classes,):
-        msg = f"{path}: alpha has shape {alpha.shape}, expected ({n_classes},)"
-        raise ValueError(msg)
-
-    sizes = _spatio_only_sizes(path, raw["sizes"], graph.n_nodes)
-    return SpatioOnlyParams(
-        graph=graph,
-        n_classes=n_classes,
-        alpha=alpha,
-        sizes=sizes,
-        field=spatio_only_field(alpha, sizes),
-        seed=int(raw["seed"]),
-        n_samples=int(raw["n_samples"]),
-        burn_in=int(raw["burn_in"]),
-        tolerance=float(raw["tolerance"]),
-    )

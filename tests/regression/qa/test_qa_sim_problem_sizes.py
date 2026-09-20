@@ -10,12 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from snakes_and_ladders.fixtures import load_params
 from snakes_and_ladders.qa.manifest import FIGURES
 from snakes_and_ladders.qa.sim_problem_sizes import (
     build_caption,
     main,
 )
-from snakes_and_ladders.sim.params import load_simulation_params
+from snakes_and_ladders.sim.params import SimulationParams
 from snakes_and_ladders.sim.tree import preorder
 
 from tests._fixtures import FIXTURES_DIR
@@ -114,7 +115,7 @@ def test_the_manifest_tabulates_these_three_fixtures_in_this_order() -> None:
 @pytest.mark.oracle
 def test_problem_sizes_values_match_each_fixture_independently() -> None:
     for path in FIXTURE_PATHS:
-        params = load_simulation_params(path)
+        params = load_params(path, SimulationParams)
         n_taxa = sum(1 for node in preorder(params.tau) if node.is_leaf)
 
         # Cross-check against direct knowledge of the fixtures rather than

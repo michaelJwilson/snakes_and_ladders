@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, Protocol, Self, TypeVar
 
 import yaml
 
@@ -94,3 +94,58 @@ def load_declared(path: Path, required: Iterable[str]) -> Mapping[str, Any]:
         raise ValueError(msg)
 
     return raw
+
+
+class Params(Protocol):
+    """A fixture's declared truth, built from the mapping its yaml declares.
+
+    Sixteen loaders shared one signature, one preamble and sixteen bodies
+    whose only difference was the per-field validation (issue #832). The
+    validation is each dataclass's own now, in :meth:`from_declared`, and the
+    preamble is :func:`load_params`, once. The seam earns its place by the
+    rule in the calling review: sixteen implementers, three consumers.
+    """
+
+    #: The fields :func:`load_params` checks are present before it calls
+    #: :meth:`from_declared`; the per-field validation stays with the class.
+    required_fields: ClassVar[frozenset[str]]
+
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Validate ``declared`` field by field and build the truth.
+
+        ``path`` is the file ``declared`` was read from, named in every error
+        so a bad value is found in the file and not in the loader.
+        """
+        ...
+
+
+P = TypeVar("P", bound=Params)
+
+
+def load_params(path: Path, kind: type[P]) -> P:
+    """Read a fixture yaml and build its declared truth as ``kind``.
+
+    Parameters
+    ----------
+    path : Path
+        The yaml file, reported in every error.
+    kind : type[Params]
+        Which truth the file declares: the dataclass whose
+        :attr:`~Params.required_fields` are checked and whose
+        :meth:`~Params.from_declared` validates the rest.
+
+    Returns
+    -------
+    P
+        The parsed, validated truth, equal record for record to what the
+        loader it replaced returned (issue #832).
+
+    Raises
+    ------
+    ValueError
+        From :func:`load_declared` if the file does not parse to a mapping or
+        a required field is absent, and from ``kind.from_declared`` on its own
+        terms.
+    """
+    return kind.from_declared(load_declared(path, kind.required_fields), path)

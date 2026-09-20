@@ -37,12 +37,14 @@ into.
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass
 from enum import Enum
 
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.track import TrackedOptimization, current
 
 #: Shrinkages one update may spend before it is refused. The interval halves
 #: on average per shrinkage, so 100 is about 30 orders of magnitude of
@@ -205,6 +207,11 @@ def slice_sample(
     evaluations = 0
     expansions = 0
     shrinkages = 0
+    # One lookup for the chain (`snakes_and_ladders.track`), one record per
+    # recorded draw: the evaluations spent so far, the unit this sampler is
+    # counted in, and the wall beside it (issue #799).
+    tracked: TrackedOptimization = current()
+    started = time.perf_counter()
     for index in range(n_samples + burn_in):
         for axis in range(dimension):
             update = slice_update(
@@ -222,6 +229,13 @@ def slice_sample(
             shrinkages += update.shrinkages
         if index >= burn_in:
             draws[index - burn_in] = position
+            tracked.record(
+                index - burn_in,
+                state=position,
+                objective_evaluations=float(evaluations),
+                wall_s=time.perf_counter() - started,
+            )
+    tracked.record_cost(max(n_samples - 1, 0), draws.nbytes)
 
     sweeps = max(n_samples + burn_in, 1)
     return SliceChain(

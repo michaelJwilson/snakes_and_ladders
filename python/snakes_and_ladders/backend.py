@@ -38,3 +38,9 @@ class Backend(StrEnum):
 
     RUST = "rust"
     """The ``oxi_snakes_and_ladders`` extension."""
+
+    TORCH = "torch"
+    """A ``torch`` kernel: the same arithmetic as the NumPy oracle over a tensor,
+    which is what puts it on a device. Admitted for a hot path that is
+    elementwise over sites and earns the GPU rule, or is measured against it
+    (issue #823); a kernel whose loop is over an adjacency belongs to Rust."""

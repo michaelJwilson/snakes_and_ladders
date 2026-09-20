@@ -17,13 +17,13 @@ literal one does; what it does not do is carry six hundred lines for a
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, Self
 
 import numpy as np
 
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.sim.tree import Node, balanced_tree
 
 _REQUIRED_FIELDS = frozenset({"seed", "n_sites", "tolerance", "k", "pi", "tau"})
@@ -59,47 +59,46 @@ class SimulationParams:
     n_sites: int
     tolerance: float
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
 
-def load_simulation_params(path: Path) -> SimulationParams:
-    """Load and validate a tree fixture yaml.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], path: Path, /) -> Self:
+        """Build the truth from a tree fixture's declared mapping.
 
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
 
-    Returns
-    -------
-    SimulationParams
         The parsed, validated parameters.
 
-    Raises
-    ------
-    ValueError
-        If a required field is missing, or ``pi`` does not have shape (k,)
-        and sum to 1.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
+        Raises
+        ------
+        ValueError
+            If a required field is missing, or ``pi`` does not have shape (k,)
+            and sum to 1.
+        """
+        k = int(declared["k"])
+        pi = np.asarray(declared["pi"], dtype=np.float64)
+        if pi.shape != (k,):
+            msg = f"{path}: pi has shape {pi.shape}, expected ({k},)"
+            raise ValueError(msg)
+        if not np.isclose(pi.sum(), 1.0):
+            msg = f"{path}: pi sums to {pi.sum()}, expected 1.0"
+            raise ValueError(msg)
 
-    k = int(raw["k"])
-    pi = np.asarray(raw["pi"], dtype=np.float64)
-    if pi.shape != (k,):
-        msg = f"{path}: pi has shape {pi.shape}, expected ({k},)"
-        raise ValueError(msg)
-    if not np.isclose(pi.sum(), 1.0):
-        msg = f"{path}: pi sums to {pi.sum()}, expected 1.0"
-        raise ValueError(msg)
+        tau = _tau_from_declaration(declared["tau"], path)
 
-    tau = _tau_from_declaration(raw["tau"], path)
-
-    return SimulationParams(
-        tau=tau,
-        k=k,
-        pi=pi,
-        seed=int(raw["seed"]),
-        n_sites=int(raw["n_sites"]),
-        tolerance=float(raw["tolerance"]),
-    )
+        return cls(
+            tau=tau,
+            k=k,
+            pi=pi,
+            seed=int(declared["seed"]),
+            n_sites=int(declared["n_sites"]),
+            tolerance=float(declared["tolerance"]),
+        )
 
 
 def _tau_from_declaration(raw: Any, path: Path) -> Node:

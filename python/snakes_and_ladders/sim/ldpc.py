@@ -37,13 +37,13 @@ non-trivial codewords too.
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, ClassVar, Protocol, Self
 
 import numpy as np
 
-from snakes_and_ladders.fixtures import load_declared
 from snakes_and_ladders.incidence import SparseIncidence
 
 #: The magnitude that stands for certainty. ``tanh(LLR_CAP / 2)`` is below
@@ -170,7 +170,8 @@ class ParityCheck:
         return matrix
 
     def syndrome(self, bits: np.ndarray) -> np.ndarray:
-        """``H c`` over GF(2): zero on every check exactly when ``bits`` is a codeword."""
+        """``H c`` over GF(2): zero on every check exactly when ``bits`` is
+        a codeword."""
         values = np.asarray(bits, dtype=np.uint8)[self.edge_variable[self.check_order]]
         return np.asarray(np.bitwise_xor.reduceat(values, self.check_offsets[:-1]))
 
@@ -689,31 +690,32 @@ class LdpcParams(ChannelParams):
             np.random.default_rng(self.seed),
         )
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _REQUIRED_FIELDS
 
-def load_ldpc_params(path: Path) -> LdpcParams:
-    """Load and validate an LDPC fixture yaml.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], _path: Path, /) -> Self:
+        """Build the truth from an LDPC fixture's declared mapping.
 
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
 
-    Returns
-    -------
-    LdpcParams
         The parsed truth. The degree checks are :func:`gallager_code`'s, run
-        when the code is drawn, so one statement of them serves both callers.
-    """
-    raw = load_declared(path, _REQUIRED_FIELDS)
-    return LdpcParams(
-        n_bits=int(raw["n_bits"]),
-        column_weight=int(raw["column_weight"]),
-        row_weight=int(raw["row_weight"]),
-        seed=int(raw["seed"]),
-        flip_probability=float(raw["flip_probability"]),
-        erasure_probability=float(raw["erasure_probability"]),
-        noise_scale=float(raw["noise_scale"]),
-    )
+        when the code is drawn, so one statement of them serves both
+        callers.
+        """
+        return cls(
+            n_bits=int(declared["n_bits"]),
+            column_weight=int(declared["column_weight"]),
+            row_weight=int(declared["row_weight"]),
+            seed=int(declared["seed"]),
+            flip_probability=float(declared["flip_probability"]),
+            erasure_probability=float(declared["erasure_probability"]),
+            noise_scale=float(declared["noise_scale"]),
+        )
 
 
 _BICYCLE_FIELDS = frozenset(
@@ -769,29 +771,29 @@ class BicycleParams(ChannelParams):
             np.random.default_rng(self.seed),
         )
 
+    #: The fields :func:`snakes_and_ladders.fixtures.load_params` checks are present before
+    #: calling :meth:`from_declared`.
+    required_fields: ClassVar[frozenset[str]] = _BICYCLE_FIELDS
 
-def load_bicycle_params(path: Path) -> BicycleParams:
-    """Load and validate a bicycle-code fixture yaml.
+    @classmethod
+    def from_declared(cls, declared: Mapping[str, Any], _path: Path, /) -> Self:
+        """Build the truth from a bicycle-code fixture's declared mapping.
 
-    Parameters
-    ----------
-    path : Path
-        Path to the yaml file.
+        ``declared`` is the mapping
+        :func:`snakes_and_ladders.fixtures.load_params` read from ``path``
+        with :attr:`required_fields` present; ``path`` names the file in
+        every error.
 
-    Returns
-    -------
-    BicycleParams
         The parsed truth. The weight and rate checks are
         :func:`bicycle_code`'s, run when the code is drawn, so one statement
         of them serves both callers.
-    """
-    raw = load_declared(path, _BICYCLE_FIELDS)
-    return BicycleParams(
-        n_bits=int(raw["n_bits"]),
-        n_checks=int(raw["n_checks"]),
-        circulant_weight=int(raw["circulant_weight"]),
-        seed=int(raw["seed"]),
-        flip_probability=float(raw["flip_probability"]),
-        erasure_probability=float(raw["erasure_probability"]),
-        noise_scale=float(raw["noise_scale"]),
-    )
+        """
+        return cls(
+            n_bits=int(declared["n_bits"]),
+            n_checks=int(declared["n_checks"]),
+            circulant_weight=int(declared["circulant_weight"]),
+            seed=int(declared["seed"]),
+            flip_probability=float(declared["flip_probability"]),
+            erasure_probability=float(declared["erasure_probability"]),
+            noise_scale=float(declared["noise_scale"]),
+        )
