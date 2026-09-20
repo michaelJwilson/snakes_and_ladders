@@ -526,6 +526,14 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "tree",
+        "SMC over topologies",
+        "sample.smc.smc_topologies",
+        "topology enumeration",
+        T + "sample/test_smc.py"
+        "::test_the_evidence_estimate_is_unbiased_for_the_enumerated_mean_likelihood",
+    ),
+    Rung(
+        "tree",
         "Gibbs / annealing over topologies",
         "sample.gibbs.topology_step",
         "topology enumeration",

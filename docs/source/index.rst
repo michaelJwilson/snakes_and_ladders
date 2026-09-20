@@ -273,6 +273,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.sample.slice
    :members:
 
+.. automodule:: snakes_and_ladders.sample.smc
+   :members:
+
 .. automodule:: snakes_and_ladders.sample.schedule
    :members:
 

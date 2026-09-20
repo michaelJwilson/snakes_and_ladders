@@ -59,6 +59,10 @@ ADMITTED: dict[tuple[str, str], str] = {
         "sample",
         "opt",
     ): "hmc, mala and slice sample an opt.objective.Objective: the seam",
+    ("sample", "likelihood"): (
+        "sample.smc weights a coalescence by the partial likelihoods "
+        "likelihood.pruning computes"
+    ),
     ("sample", "search"): (
         "sample.gibbs.anneal_topology and sample.tempered.tempered_topologies score a topology by "
         "search.infer.score_topology, the fit; the one edge #830 could not cut, and the cycle with "

@@ -1805,7 +1805,7 @@ state.
 
 ## Milestone 1.3 — Continuous Optimization via Autodiff
 
-**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`).
+**Modules.** The optimization interface and what is fitted through it: `opt.objective`, `opt.constrain`, and `opt.testfunctions`, whose functions are the problem a fit is checked on before any model is. `sample.langevin` and `sample.slice`: the two samplers an HMC number is read against, one module each, both over the same `Objective` (#756; under `opt` until #777, with `sample.hmc` and `sample.schedule`). `sample.smc`: sequential Monte Carlo over topologies by coalescence, the one sampler here that constructs a tree and reports an evidence (#824).
 
 **The interface is model-agnostic, and that is measured rather than asserted.**
 An `Objective` is an unconstrained parameter vector, a differentiable scalar,
