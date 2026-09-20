@@ -615,6 +615,7 @@ def _tex_text(text: str) -> str:
     return (
         text.replace("&", r"\&")
         .replace("%", r"\%")
+        .replace("#", r"\#")
         .replace("_", r"\_")
         .replace("\u2013", "--")
         .replace("\u2014", "---")

@@ -153,6 +153,7 @@ def test_three_labels_reach_the_enumerated_minimum_at_nine_sites() -> None:
     assert run.energy == pytest.approx(exact, abs=_EXACT)
 
 
+@pytest.mark.oracle
 @pytest.mark.backend
 def test_the_torch_path_returns_the_numpy_labelling() -> None:
     # One arithmetic over two array libraries. The scatter-add reduces in an
