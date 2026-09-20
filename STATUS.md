@@ -373,7 +373,7 @@ sites the plan lists after these — the candidate fits of `search.infer`,
 
 ## Milestone 1.1 — Simulation & Ground Truth Engine
 
-**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700).
+**Modules.** The generators and the registry this milestone's ground truth comes from: `sim.jc`, `sim.gtr`, `sim.simulate`, `sim.simulator` (the one way to simulate, #829), `sim.tree`, `sim.newick`, `sim.params`, `sim.css`, `sim.emission_mixture`, `sim.count_pairs_rust` and `sim.fixtures`, which declares every instance the suite is checked on. `sim.galois`, `sim.reed_solomon`, `sim.elementary_codes` and `sim.capacity` are the algebraic codes and the capacity they are read against (#700).
 
 **Phylogenetics: landed.** A `k`-state Jukes-Cantor simulator generates an
 alignment and the ancestral tree in Newick from a typed tree fixture, retaining
