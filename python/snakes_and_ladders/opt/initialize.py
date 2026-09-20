@@ -188,3 +188,44 @@ class RandomRestart(Initializer):
             )
             drawn.append(base + displacement)
         return drawn
+
+
+def quantile_locations(
+    values: torch.Tensor, n_locations: int, dim: int | None = None
+) -> torch.Tensor:
+    """Evenly spaced quantiles of ``values``, one per state or component.
+
+    Where a start places a location on the scale of the data, which four
+    objectives asked for in the same four lines (issue #859): `opt/hmm.py`'s
+    Gaussian, count and negative binomial starts and `opt/mixture.py`'s. Two
+    reasons, both recorded at those starts --- equal locations leave the
+    states exchangeable and the gradient in that block exactly zero, and a
+    location far from every observation contributes a density that underflows,
+    so the fit reduces to one with fewer states.
+
+    It takes the values rather than an objective, which is what lets it sit
+    beside the model-free initializers above: it reads nothing it was not
+    handed and names no problem.
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        Observations, in the precision the start is built at.
+    n_locations : int
+        Locations to place.
+    dim : int | None
+        Axis the quantiles are taken along. ``None`` pools every entry, which
+        is what a scalar observation wants; ``0`` keeps each channel's own
+        scale, since a quantile of two channels pooled is a location in
+        neither.
+
+    Returns
+    -------
+    torch.Tensor
+        Shape ``(n_locations,)``, or ``(n_locations, n_channels)`` given a
+        ``dim``.
+    """
+    quantiles = (torch.arange(n_locations, dtype=values.dtype) + 0.5) / n_locations
+    if dim is None:
+        return torch.quantile(values, quantiles)
+    return torch.quantile(values, quantiles, dim=dim)

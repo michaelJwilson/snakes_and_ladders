@@ -42,7 +42,15 @@ from snakes_and_ladders.emissions import (
     identifiable_dispersion_bound,
     pooled_variance_floor,
 )
-from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
+from snakes_and_ladders.opt.constrain import (
+    free_from_log_simplex,
+    free_from_positive,
+    free_from_probability,
+    log_simplex,
+    positive,
+    probability,
+)
+from snakes_and_ladders.opt.initialize import quantile_locations
 from snakes_and_ladders.opt.objective import Objective
 from snakes_and_ladders.ragged import Ragged
 
@@ -194,6 +202,20 @@ class _HmmObjective(Objective):
         )
 
 
+def _free_transitions(
+    initial: np.ndarray, transition: np.ndarray, dtype: torch.dtype
+) -> torch.Tensor:
+    """The unconstrained coordinates of a known initial distribution and transition."""
+    return torch.cat(
+        [
+            free_from_log_simplex(torch.log(torch.as_tensor(initial, dtype=dtype))),
+            free_from_log_simplex(
+                torch.log(torch.as_tensor(transition, dtype=dtype))
+            ).reshape(-1),
+        ]
+    )
+
+
 class HmmObjective(_HmmObjective):
     """Negative log-likelihood of observed sequences, by the forward algorithm.
 
@@ -288,11 +310,18 @@ class HmmObjective(_HmmObjective):
         torch.Tensor
             ``theta`` such that ``constrain(theta)`` returns this truth.
         """
-        parts = [
-            free_from_log_simplex(torch.log(torch.as_tensor(part, dtype=self._dtype)))
-            for part in (initial, transition, emission)
-        ]
-        return torch.cat([parts[0], parts[1].reshape(-1), parts[2].reshape(-1)])
+        return torch.cat(
+            [
+                _free_transitions(initial, transition, self._dtype),
+                self._free_emissions_from(
+                    {
+                        "log_emission": torch.log(
+                            torch.as_tensor(emission, dtype=self._dtype)
+                        )
+                    }
+                ),
+            ]
+        )
 
 
 class GaussianHmmObjective(_HmmObjective):
@@ -361,13 +390,16 @@ class GaussianHmmObjective(_HmmObjective):
         """
         return GaussianEmission(
             theta[self._mean_slice()],
-            torch.exp(theta[self._log_scale_slice()]),
+            positive(theta[self._log_scale_slice()]),
             self._variance_floor,
         )
 
     def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         return torch.cat(
-            [named["mean"].reshape(-1), torch.log(named["scale"]).reshape(-1)]
+            [
+                named["mean"].reshape(-1),
+                free_from_positive(named["scale"]).reshape(-1),
+            ]
         )
 
     def initial(self) -> torch.Tensor:
@@ -387,11 +419,8 @@ class GaussianHmmObjective(_HmmObjective):
         """
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
         values = self._observations.reshape(-1).to(self._dtype)
-        quantiles = (torch.arange(self._n_states, dtype=self._dtype) + 0.5) / (
-            self._n_states
-        )
-        theta[self._mean_slice()] = torch.quantile(values, quantiles)
-        theta[self._log_scale_slice()] = torch.log(values.std())
+        theta[self._mean_slice()] = quantile_locations(values, self._n_states)
+        theta[self._log_scale_slice()] = free_from_positive(values.std())
         return theta
 
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
@@ -431,14 +460,13 @@ class GaussianHmmObjective(_HmmObjective):
         """
         return torch.cat(
             [
-                free_from_log_simplex(
-                    torch.log(torch.as_tensor(initial, dtype=self._dtype))
+                _free_transitions(initial, transition, self._dtype),
+                self._free_emissions_from(
+                    {
+                        "mean": torch.as_tensor(mean, dtype=self._dtype),
+                        "scale": torch.as_tensor(scale, dtype=self._dtype),
+                    }
                 ),
-                free_from_log_simplex(
-                    torch.log(torch.as_tensor(transition, dtype=self._dtype))
-                ).reshape(-1),
-                torch.as_tensor(mean, dtype=self._dtype).reshape(-1),
-                torch.log(torch.as_tensor(scale, dtype=self._dtype)).reshape(-1),
             ]
         )
 
@@ -463,11 +491,9 @@ class _CountHmmObjective(_HmmObjective):
 
     def _location_quantiles(self) -> torch.Tensor:
         """Evenly spaced quantiles of the pooled observations, one per state."""
-        values = self._observations.reshape(-1).to(self._dtype)
-        quantiles = (torch.arange(self._n_states, dtype=self._dtype) + 0.5) / (
-            self._n_states
+        return quantile_locations(
+            self._observations.reshape(-1).to(self._dtype), self._n_states
         )
-        return torch.quantile(values, quantiles)
 
     def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
         """Log transitions, and the emission family's own named parameters."""
@@ -500,15 +526,15 @@ class PoissonHmmObjective(_CountHmmObjective):
 
     def emissions(self, theta: torch.Tensor) -> PoissonEmission:
         """The Poisson family ``theta``'s emission block encodes."""
-        return PoissonEmission(torch.exp(theta[self._emission_slice]))
+        return PoissonEmission(positive(theta[self._emission_slice]))
 
     def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
-        return torch.log(named["mean"]).reshape(-1)
+        return free_from_positive(named["mean"]).reshape(-1)
 
     def initial(self) -> torch.Tensor:
         """Uniform transitions; rates at quantiles of the pooled counts."""
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
-        theta[self._emission_slice] = torch.log(
+        theta[self._emission_slice] = free_from_positive(
             self._location_quantiles().clamp_min(_MINIMUM_COUNT_MEAN)
         )
         return theta
@@ -520,7 +546,9 @@ class PoissonHmmObjective(_CountHmmObjective):
         return torch.cat(
             [
                 _free_transitions(initial, transition, self._dtype),
-                torch.log(torch.as_tensor(mean, dtype=self._dtype)).reshape(-1),
+                self._free_emissions_from(
+                    {"mean": torch.as_tensor(mean, dtype=self._dtype)}
+                ),
             ]
         )
 
@@ -562,13 +590,10 @@ class BinomialHmmObjective(_CountHmmObjective):
 
     def emissions(self, theta: torch.Tensor) -> BinomialEmission:
         """The binomial family ``theta``'s emission block encodes."""
-        return BinomialEmission(
-            self._trials, torch.sigmoid(theta[self._emission_slice])
-        )
+        return BinomialEmission(self._trials, probability(theta[self._emission_slice]))
 
     def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
-        rate = named["probability"].reshape(-1)
-        return torch.log(rate) - torch.log1p(-rate)
+        return free_from_probability(named["probability"].reshape(-1))
 
     def initial(self) -> torch.Tensor:
         """Uniform transitions; success rates from quantiles of the counts."""
@@ -576,18 +601,19 @@ class BinomialHmmObjective(_CountHmmObjective):
         rate = (self._location_quantiles() / self._trials).clamp(
             _RATE_MARGIN, 1.0 - _RATE_MARGIN
         )
-        theta[self._emission_slice] = torch.log(rate) - torch.log1p(-rate)
+        theta[self._emission_slice] = free_from_probability(rate)
         return theta
 
     def theta_from_truth(
         self, initial: np.ndarray, transition: np.ndarray, probability: np.ndarray
     ) -> torch.Tensor:
         """Place a known ``(pi, A, p)`` in the unconstrained coordinates."""
-        rate = torch.as_tensor(probability, dtype=self._dtype).reshape(-1)
         return torch.cat(
             [
                 _free_transitions(initial, transition, self._dtype),
-                torch.log(rate) - torch.log1p(-rate),
+                self._free_emissions_from(
+                    {"probability": torch.as_tensor(probability, dtype=self._dtype)}
+                ),
             ]
         )
 
@@ -640,15 +666,15 @@ class BetaBinomialHmmObjective(_CountHmmObjective):
         """The beta-binomial family ``theta``'s emission block encodes."""
         return BetaBinomialEmission(
             self._trials,
-            torch.exp(theta[self._log_alpha_slice()]),
-            torch.exp(theta[self._log_beta_slice()]),
+            positive(theta[self._log_alpha_slice()]),
+            positive(theta[self._log_beta_slice()]),
         )
 
     def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         return torch.cat(
             [
-                torch.log(named["alpha"]).reshape(-1),
-                torch.log(named["beta"]).reshape(-1),
+                free_from_positive(named["alpha"]).reshape(-1),
+                free_from_positive(named["beta"]).reshape(-1),
             ]
         )
 
@@ -679,24 +705,14 @@ class BetaBinomialHmmObjective(_CountHmmObjective):
         return torch.cat(
             [
                 _free_transitions(initial, transition, self._dtype),
-                torch.log(torch.as_tensor(alpha, dtype=self._dtype)).reshape(-1),
-                torch.log(torch.as_tensor(beta, dtype=self._dtype)).reshape(-1),
+                self._free_emissions_from(
+                    {
+                        "alpha": torch.as_tensor(alpha, dtype=self._dtype),
+                        "beta": torch.as_tensor(beta, dtype=self._dtype),
+                    }
+                ),
             ]
         )
-
-
-def _free_transitions(
-    initial: np.ndarray, transition: np.ndarray, dtype: torch.dtype
-) -> torch.Tensor:
-    """The unconstrained coordinates of a known initial distribution and transition."""
-    return torch.cat(
-        [
-            free_from_log_simplex(torch.log(torch.as_tensor(initial, dtype=dtype))),
-            free_from_log_simplex(
-                torch.log(torch.as_tensor(transition, dtype=dtype))
-            ).reshape(-1),
-        ]
-    )
 
 
 class NegativeBinomialHmmObjective(_HmmObjective):
@@ -752,15 +768,15 @@ class NegativeBinomialHmmObjective(_HmmObjective):
     def emissions(self, theta: torch.Tensor) -> NegativeBinomialEmission:
         """The negative binomial family ``theta``'s emission block encodes."""
         return NegativeBinomialEmission(
-            torch.exp(theta[self._log_dispersion_slice()]),
-            torch.exp(theta[self._log_mean_slice()]),
+            positive(theta[self._log_dispersion_slice()]),
+            positive(theta[self._log_mean_slice()]),
         )
 
     def _free_emissions_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
         return torch.cat(
             [
-                torch.log(named["dispersion"]).reshape(-1),
-                torch.log(named["mean"]).reshape(-1),
+                free_from_positive(named["dispersion"]).reshape(-1),
+                free_from_positive(named["mean"]).reshape(-1),
             ]
         )
 
@@ -776,11 +792,10 @@ class NegativeBinomialHmmObjective(_HmmObjective):
         """
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
         values = self._observations.reshape(-1).to(self._dtype)
-        quantiles = (torch.arange(self._n_states, dtype=self._dtype) + 0.5) / (
-            self._n_states
+        means = quantile_locations(values, self._n_states).clamp_min(
+            _MINIMUM_COUNT_MEAN
         )
-        means = torch.quantile(values, quantiles).clamp_min(_MINIMUM_COUNT_MEAN)
-        theta[self._log_mean_slice()] = torch.log(means)
+        theta[self._log_mean_slice()] = free_from_positive(means)
 
         pooled_mean = float(values.mean())
         pooled_variance = float(values.var(unbiased=True))
@@ -825,14 +840,13 @@ class NegativeBinomialHmmObjective(_HmmObjective):
         """
         return torch.cat(
             [
-                free_from_log_simplex(
-                    torch.log(torch.as_tensor(initial, dtype=self._dtype))
+                _free_transitions(initial, transition, self._dtype),
+                self._free_emissions_from(
+                    {
+                        "dispersion": torch.as_tensor(dispersion, dtype=self._dtype),
+                        "mean": torch.as_tensor(mean, dtype=self._dtype),
+                    }
                 ),
-                free_from_log_simplex(
-                    torch.log(torch.as_tensor(transition, dtype=self._dtype))
-                ).reshape(-1),
-                torch.log(torch.as_tensor(dispersion, dtype=self._dtype)).reshape(-1),
-                torch.log(torch.as_tensor(mean, dtype=self._dtype)).reshape(-1),
             ]
         )
 

@@ -95,3 +95,42 @@ def free_from_positive(values: torch.Tensor) -> torch.Tensor:
         Unconstrained parameters satisfying ``positive(free) == values``.
     """
     return torch.log(values)
+
+
+def probability(free: torch.Tensor) -> torch.Tensor:
+    """Map unconstrained reals to strictly interior probabilities.
+
+    A logistic rather than a clamp: a probability has two boundaries, so
+    positivity is not enough, and a projection lands iterates exactly on a
+    boundary, where the inverse is infinite.
+
+    Parameters
+    ----------
+    free : torch.Tensor
+        Unconstrained parameters, any shape.
+
+    Returns
+    -------
+    torch.Tensor
+        Values in ``(0, 1)``, same shape.
+    """
+    return torch.sigmoid(free)
+
+
+def free_from_probability(values: torch.Tensor) -> torch.Tensor:
+    """Invert :func:`probability`.
+
+    ``log(p) - log1p(-p)`` rather than ``log(p / (1 - p))``: the difference is
+    what ``1 - p`` costs as ``p`` approaches one.
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        Probabilities in ``(0, 1)``, any shape.
+
+    Returns
+    -------
+    torch.Tensor
+        Unconstrained parameters satisfying ``probability(free) == values``.
+    """
+    return torch.log(values) - torch.log1p(-values)

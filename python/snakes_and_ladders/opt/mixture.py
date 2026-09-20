@@ -40,8 +40,13 @@ from snakes_and_ladders.emissions import (
     GaussianEmission,
     pooled_variance_floor,
 )
-from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
-from snakes_and_ladders.opt.initialize import Initializer
+from snakes_and_ladders.opt.constrain import (
+    free_from_log_simplex,
+    free_from_positive,
+    log_simplex,
+    positive,
+)
+from snakes_and_ladders.opt.initialize import Initializer, quantile_locations
 from snakes_and_ladders.opt.objective import Objective
 
 
@@ -143,7 +148,7 @@ class GaussianMixtureObjective(Objective):
         """The component family ``theta`` encodes, differentiable in ``theta``."""
         return GaussianEmission(
             self._per_component(theta[self._mean_slice()]),
-            torch.exp(self._per_component(theta[self._log_scale_slice()])),
+            positive(self._per_component(theta[self._log_scale_slice()])),
             self._variance_floor,
         )
 
@@ -157,19 +162,20 @@ class GaussianMixtureObjective(Objective):
         components.
         """
         theta = torch.zeros(self.n_parameters, dtype=self._dtype)
-        quantiles = (
-            torch.arange(self._n_components, dtype=self._dtype) + 0.5
-        ) / self._n_components
         if self._n_channels == 1:
-            theta[self._mean_slice()] = torch.quantile(self._observations, quantiles)
-            theta[self._log_scale_slice()] = torch.log(self._observations.std())
+            theta[self._mean_slice()] = quantile_locations(
+                self._observations, self._n_components
+            )
+            theta[self._log_scale_slice()] = free_from_positive(
+                self._observations.std()
+            )
             return theta
         # Per channel, since a quantile of the two channels pooled is a
         # location in neither and would seed every component off the data.
-        theta[self._mean_slice()] = torch.quantile(
-            self._observations, quantiles, dim=0
+        theta[self._mean_slice()] = quantile_locations(
+            self._observations, self._n_components, dim=0
         ).reshape(-1)
-        theta[self._log_scale_slice()] = torch.log(
+        theta[self._log_scale_slice()] = free_from_positive(
             self._observations.std(dim=0)
         ).repeat(self._n_components)
         return theta
@@ -244,7 +250,7 @@ class GaussianMixtureObjective(Objective):
             [
                 free_from_log_simplex(named["log_weight"].to(self._dtype)),
                 named["mean"].reshape(-1).to(self._dtype),
-                torch.log(named["scale"].reshape(-1).to(self._dtype)),
+                free_from_positive(named["scale"].reshape(-1).to(self._dtype)),
             ]
         )
 
@@ -271,7 +277,9 @@ class GaussianMixtureObjective(Objective):
                     torch.log(torch.as_tensor(weights, dtype=self._dtype))
                 ),
                 torch.as_tensor(mean, dtype=self._dtype).reshape(-1),
-                torch.log(torch.as_tensor(scale, dtype=self._dtype)).reshape(-1),
+                free_from_positive(torch.as_tensor(scale, dtype=self._dtype)).reshape(
+                    -1
+                ),
             ]
         )
 
