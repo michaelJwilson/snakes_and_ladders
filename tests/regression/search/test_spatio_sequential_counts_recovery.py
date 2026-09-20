@@ -27,7 +27,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from snakes_and_ladders.likelihood.spatio_sequential_rust import RUST_BACKEND
+from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.likelihood.spatio_sequential import (
+    class_posteriors,
+    external_field,
+)
 from snakes_and_ladders.search.spatio_sequential import (
     LabelSolver,
     fit_spatio_sequential,
@@ -99,7 +103,7 @@ def _fitted(instance: CountPairInstance) -> np.ndarray:
         n_blocks=BLOCKS,
         labels=_start(instance),
         fit_parameters=False,
-        backend=RUST_BACKEND,
+        backend=Backend.RUST,
     ).labels
 
 
@@ -132,11 +136,18 @@ def test_the_field_alone_names_every_vertex_class() -> None:
     # emission table fails --- with one class's evidence NaN the argmin is
     # constant and this reads 0.113, the fraction of vertices in class 0.
     instance = _instance(fixture(PROBLEM, KEY).params.key_factor)
-    posterior = RUST_BACKEND.class_posteriors(
-        instance.params, instance.observations, instance.labels
+    posterior = class_posteriors(
+        instance.params,
+        instance.observations,
+        instance.labels,
+        backend=Backend.RUST,
     ).posterior
-    field = RUST_BACKEND.external_field(
-        instance.params, instance.observations, instance.labels, posterior
+    field = external_field(
+        instance.params,
+        instance.observations,
+        instance.labels,
+        posterior,
+        backend=Backend.RUST,
     )
 
     assert np.isfinite(field).all()

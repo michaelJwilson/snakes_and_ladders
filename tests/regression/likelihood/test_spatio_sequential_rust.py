@@ -23,7 +23,9 @@ import numpy as np
 import pytest
 import torch
 from snakes_and_ladders import oxi_snakes_and_ladders
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.emissions import CategoricalEmission
+from snakes_and_ladders.likelihood import spatio_sequential
 from snakes_and_ladders.likelihood import spatio_sequential_rust as rust
 from snakes_and_ladders.likelihood.spatio_sequential import (
     class_posteriors,
@@ -211,3 +213,30 @@ def test_a_family_that_is_not_a_count_pair_is_refused() -> None:
 
     with pytest.raises(TypeError, match="two-channel count emission"):
         rust.class_posteriors(params, instance.observations, instance.labels)
+
+
+@pytest.mark.backend
+@pytest.mark.oracle
+def test_the_enum_reaches_the_rust_kernel_bitwise() -> None:
+    # #828: `Backend.RUST` at the NumPy module's three functions is the twin's
+    # own call, bitwise, and any other member is refused by name.
+    instance = _ci()
+    observations, labels = instance.observations, instance.labels
+    via_enum = spatio_sequential.class_posteriors(
+        instance.params, observations, labels, backend=Backend.RUST
+    )
+    direct = rust.class_posteriors(instance.params, observations, labels)
+    np.testing.assert_array_equal(via_enum.posterior, direct.posterior)
+    assert spatio_sequential.labelled_log_likelihood(
+        instance.params, observations, labels, backend=Backend.RUST
+    ) == rust.labelled_log_likelihood(instance.params, observations, labels)
+    np.testing.assert_array_equal(
+        spatio_sequential.external_field(
+            instance.params, observations, labels, backend=Backend.RUST
+        ),
+        rust.external_field(instance.params, observations, labels),
+    )
+    with pytest.raises(ValueError, match="not numba"):
+        spatio_sequential.labelled_log_likelihood(
+            instance.params, observations, labels, backend=Backend.NUMBA
+        )

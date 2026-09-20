@@ -16,12 +16,13 @@ the forward recursion of :mod:`snakes_and_ladders.opt.hmm`.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.enumeration import (
     configurations,
     refuse_oversized,
@@ -360,9 +361,18 @@ class ClassPosteriors:
 
 
 def class_posteriors(
-    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    *,
+    backend: Backend = Backend.PYTHON,
 ) -> ClassPosteriors:
     """Forward--backward on every class's chain over its members' summed scores."""
+    if backend is Backend.RUST:
+        from snakes_and_ladders.likelihood import spatio_sequential_rust
+
+        return spatio_sequential_rust.class_posteriors(params, observations, labels)
+    _refuse_backend(backend)
     density = class_log_density(params, observations, labels)
     log_transition = np.log(params.transition)
     posterior = np.empty_like(density)
@@ -388,8 +398,10 @@ def external_field(
     observations: np.ndarray,
     labels: np.ndarray,
     posterior: np.ndarray | None = None,
+    *,
+    backend: Backend = Backend.PYTHON,
 ) -> np.ndarray:
-    """``H_nm`` of the external-field equation of the textbook: minus the posterior-expected emission score, shape ``(n_nodes, M)``.
+    """`    `H_nm`` of the external-field equation of the textbook: minus the posterior-expected emission score, shape ``(n_nodes, M)``.
 
     ``posterior`` defaults to the E step at ``labels``; passing one computed
     under other parameters is the ``theta'`` of the equation.
@@ -403,6 +415,13 @@ def external_field(
     model and accepted them under another. The ascent stays monotone either
     way, which is why nothing failed.
     """
+    if backend is Backend.RUST:
+        from snakes_and_ladders.likelihood import spatio_sequential_rust
+
+        return spatio_sequential_rust.external_field(
+            params, observations, labels, posterior
+        )
+    _refuse_backend(backend)
     if posterior is None:
         posterior = class_posteriors(params, observations, labels).posterior
     # The vertices the observations carry, not the graph's: a slice of a
@@ -424,7 +443,11 @@ def external_field(
 
 
 def labelled_log_likelihood(
-    params: SpatioSequentialParams, observations: np.ndarray, labels: np.ndarray
+    params: SpatioSequentialParams,
+    observations: np.ndarray,
+    labels: np.ndarray,
+    *,
+    backend: Backend = Backend.PYTHON,
 ) -> float:
     """``log p(x, l | theta)`` with the chains marginalized, up to ``log Z_Potts``.
 
@@ -434,53 +457,31 @@ def labelled_log_likelihood(
     :attr:`ExactSpatioSequential.log_prior_normalizer` where enumeration
     reaches, which is how the test pins this against the oracle.
     """
+    if backend is Backend.RUST:
+        from snakes_and_ladders.likelihood import spatio_sequential_rust
+
+        return spatio_sequential_rust.labelled_log_likelihood(
+            params, observations, labels
+        )
+    _refuse_backend(backend)
     own = float(log_prior(params, np.asarray(labels, dtype=np.int64)[None, :])[0])
     evidence = class_posteriors(params, observations, labels).log_evidence
     return own + float(evidence.sum())
 
 
-@dataclass(frozen=True)
-class CoupledBackend:
-    """The three quantities a block ascent asks of an E step, as one value.
+def _refuse_backend(backend: Backend) -> None:
+    """The coupled E step runs on NumPy, the oracle, or on the tabulated Rust kernel.
 
-    `search.spatio_sequential.fit_spatio_sequential` needs a class posterior,
-    a field and a labelled log-likelihood, and there is more than one
-    implementation of them: the NumPy path here, and the tabulated Rust kernel
-    of :mod:`snakes_and_ladders.likelihood.spatio_sequential_rust`. Passing
-    them as one value rather than three keeps a caller from mixing the two,
-    which would read as a slow fit or a wrong one depending on which pair it
-    mixed.
-
-    Parameters
-    ----------
-    class_posteriors : Callable
-        ``(params, observations, labels) -> ClassPosteriors``.
-    external_field : Callable
-        ``(params, observations, labels, posterior) -> (n_nodes, M)``, the
-        posterior positional and ``None`` meaning "compute it".
-    labelled_log_likelihood : Callable
-        ``(params, observations, labels) -> float``.
+    One enum names the kernel, as it does for `maxflow` and `count_pairs`
+    (#819); the frozen triple of callables this replaced spelled the same
+    choice a second way for one problem (#828).
     """
-
-    class_posteriors: Callable[
-        [SpatioSequentialParams, np.ndarray, np.ndarray], ClassPosteriors
-    ]
-    external_field: Callable[
-        [SpatioSequentialParams, np.ndarray, np.ndarray, np.ndarray | None],
-        np.ndarray,
-    ]
-    labelled_log_likelihood: Callable[
-        [SpatioSequentialParams, np.ndarray, np.ndarray], float
-    ]
-
-
-#: The default backend: the implementations in this module, which are the
-#: oracle every other one is pinned to (`likelihood/CLAUDE.md`).
-NUMPY_BACKEND = CoupledBackend(
-    class_posteriors=class_posteriors,
-    external_field=external_field,
-    labelled_log_likelihood=labelled_log_likelihood,
-)
+    if backend is not Backend.PYTHON:
+        msg = (
+            f"the coupled model runs on {Backend.PYTHON} or {Backend.RUST}, "
+            f"not {backend}"
+        )
+        raise ValueError(msg)
 
 
 def map_labelling(
