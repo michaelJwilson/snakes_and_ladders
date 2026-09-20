@@ -23,8 +23,9 @@ problem class, each running the application from a seeded fixture to a learned
 policy against oracles the regression suite already establishes.
 
 The build script regenerates the cited figures and then runs `latexmk` per
-document; nothing else invokes `latexmk`, and `DEV.md` holds the selection in
-full. A partial rebuild *moves* a check and never removes one: the release gate
+document, then once per textbook section: `infra/split_textbook.py` cuts each
+section's pages out of the one PDF by its `.toc`, so the source and the book
+stay what they were (#844). Only it invokes `latexmk`; `DEV.md` selects. A partial rebuild *moves* a check and never removes one: the release gate
 regenerates and compares every figure, whatever a document cites. The document
 selects, never a stamp predicting which figure a change moved (issue #490).
 

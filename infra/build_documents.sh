@@ -120,4 +120,16 @@ for document in paper textbook api_map mind_map; do
   )
 done
 
-echo "Built docs/paper.pdf, docs/textbook.pdf, docs/api_map.pdf and docs/mind_map.pdf"
+# One PDF per textbook section, cut from the book's pages by its own TOC
+# (issue #844): the book is untouched, so its bytes and its numbering are what
+# they were, and each section carries the cross-references the book resolved.
+mkdir -p docs/textbook
+uv run --no-sync python infra/split_textbook.py | while read -r driver; do
+  (
+    cd docs/tex/generated/sections
+    latexmk -pdf -interaction=nonstopmode -halt-on-error \
+      -outdir=../../../textbook -jobname="$(basename "$driver" .tex)" "$(basename "$driver")"
+  )
+done
+
+echo "Built docs/paper.pdf, docs/textbook.pdf, docs/api_map.pdf, docs/mind_map.pdf and docs/textbook/*.pdf"
