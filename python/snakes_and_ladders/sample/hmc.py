@@ -57,14 +57,14 @@ from __future__ import annotations
 import itertools
 import math
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
-from snakes_and_ladders.sample.schedule import TempSchedule
+from snakes_and_ladders.sample.schedule import TempSchedule, ladder
 
 # `current` is aliased: `_coefficients` already binds that name to a
 # sub-step length, and one of the two has to give.
@@ -844,7 +844,7 @@ def _swap_log_ratio(
 
 def parallel_tempering(
     objective: Objective,
-    temperatures: tuple[float, ...],
+    temperatures: TempSchedule | Sequence[float],
     generator: torch.Generator,
     n_rounds: int,
     *,
@@ -875,7 +875,7 @@ def parallel_tempering(
         What to minimize. Read as an energy, so ``T`` is physical; a negative
         log-likelihood here is a power posterior and the caller should know
         which they meant.
-    temperatures : tuple[float, ...]
+    temperatures : TempSchedule | Sequence[float]
         The ladder, coldest first; at least two, all positive, strictly
         increasing so that adjacent pairs are the ones that exchange.
     generator : torch.Generator
@@ -900,6 +900,7 @@ def parallel_tempering(
         or the ladder is not increasing, or if ``n_rounds`` is below one.
     """
     _check_trajectory(step_size, n_steps)
+    temperatures = ladder(temperatures)
     if len(temperatures) < 2:
         msg = (
             f"parallel tempering needs at least two temperatures, got "
