@@ -584,7 +584,7 @@ def test_workers_without_a_pool_is_refused_rather_than_run_serially() -> None:
         )
 
 
-@pytest.mark.infra
+@pytest.mark.smoke
 def test_nothing_of_the_optimizer_crosses_a_structural_move() -> None:
     # `search/CLAUDE.md` (#815): a move constructs a new objective, and what
     # crosses is the parent's fitted values keyed by the identity the move
