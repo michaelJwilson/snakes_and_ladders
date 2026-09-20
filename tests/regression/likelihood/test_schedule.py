@@ -18,6 +18,8 @@ not compute is absent, and reading one raises rather than returning a number.
 
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import numpy as np
 import pytest
 from snakes_and_ladders.likelihood.message_passing import sum_product
@@ -27,8 +29,10 @@ from snakes_and_ladders.likelihood.schedule import (
     DownwardMessageSchedule,
     FloodingMessageSchedule,
     Guarantee,
+    Layout,
     MessageScheduleName,
     SequentialMessageSchedule,
+    Step,
     TreeMessageSchedule,
     UpwardMessageSchedule,
     resolve,
@@ -48,7 +52,7 @@ from snakes_and_ladders.sim.tree import preorder
 from tests._fixtures import SMALL_SITES, load_fixture
 
 TREE_SCHEDULES = ("tree", "upward", "downward")
-LOOPY_SCHEDULES = ("flooding", "sequential")
+LOOPY_SCHEDULES = ("flooding", "sequential", "residual")
 
 
 def _chain(n: int, cardinality: int = 3, seed: int = 5) -> FactorGraph:
@@ -183,20 +187,20 @@ def test_an_iterative_schedule_reaches_the_exact_answer_on_a_tree(
 
 
 @pytest.mark.analytic
-def test_the_two_iterative_schedules_find_the_same_fixed_point_on_a_loopy_graph() -> (
-    None
-):
-    # Jacobi and Gauss-Seidel over the same update have the same stationary
-    # points; only the path differs. On a graph where both settle, the answers
+def test_the_iterative_schedules_find_the_same_fixed_point_on_a_loopy_graph() -> None:
+    # Jacobi, Gauss-Seidel and the residual order over the same update have the
+    # same stationary points; only the path differs (#825). On a graph where both settle, the answers
     # must agree -- if they did not, one of them is not computing Bethe.
     graph = _lattice()
 
     jacobi = sum_product(graph, schedule="flooding", max_iterations=5000)
     seidel = sum_product(graph, schedule="sequential", max_iterations=5000)
+    residual = sum_product(graph, schedule="residual", max_iterations=5000)
 
-    assert seidel.log_partition == pytest.approx(jacobi.log_partition, abs=1e-6)
-    for name, row in jacobi.variable.items():
-        np.testing.assert_allclose(seidel.variable[name], row, atol=1e-5)
+    for other in (seidel, residual):
+        assert other.log_partition == pytest.approx(jacobi.log_partition, abs=1e-6)
+        for name, row in jacobi.variable.items():
+            np.testing.assert_allclose(other.variable[name], row, atol=1e-5)
 
 
 @pytest.mark.smoke
@@ -255,3 +259,36 @@ def test_the_upward_pass_is_felsenstein_pruning_on_a_real_tree() -> None:
     assert total == pytest.approx(
         log_likelihood(params.tau, params.k, params.pi, alignment), rel=1e-13
     )
+
+
+@pytest.mark.analytic
+def test_the_residual_schedule_sweeps_once_in_order_then_follows_the_residual() -> None:
+    # Every factor starts at infinite priority, so the first sweep is the
+    # sequential order whatever residuals come back; after it the heap sends
+    # the factor whose inputs moved most. Read on the layout directly, feeding
+    # the residuals by hand (#825).
+    layout = Layout(_lattice())
+    schedule = resolve("residual")
+    assert schedule.adaptive
+    assert schedule.sweep_length(layout) == len(layout.factor_edges)
+    per_factor = layout.sequential_steps()
+
+    def which(step: Step) -> int:
+        # A factor's step is identified by the edges its sends write.
+        written = tuple(int(edge) for sends in step[1] for edge in sends.targets)
+        return next(
+            position
+            for position, own in enumerate(per_factor)
+            if tuple(int(edge) for sends in own[1] for edge in sends.targets) == written
+        )
+
+    steps = schedule.steps(layout)
+    assert isinstance(steps, Generator)
+    first = [which(next(steps))]
+    first += [which(steps.send(1.0)) for _ in range(len(per_factor) - 1)]
+    assert first == list(range(len(per_factor)))
+    # A residual of 5 on the next factor sent bumps its neighbours above every
+    # other pending factor, so the step after is one of them.
+    neighbours = layout.factor_neighbours()
+    factor = which(steps.send(0.0))
+    assert which(steps.send(5.0)) in neighbours[factor]

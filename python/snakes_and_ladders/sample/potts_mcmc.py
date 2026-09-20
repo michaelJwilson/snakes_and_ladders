@@ -73,6 +73,7 @@ from typing import NamedTuple
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.sample.accept import accept, accept_at, accept_drawn
 from snakes_and_ladders.sample.balanced import (
     draw_change,
     log_balanced_weights,
@@ -801,7 +802,7 @@ def parallel_tempering(
                 betas[pair], betas[pair + 1], current[pair], current[pair + 1]
             )
             proposed[pair] += 1
-            if log_ratio >= 0.0 or rng.random() < np.exp(log_ratio):
+            if accept(log_ratio, rng):
                 accepted[pair] += 1
                 states[[pair, pair + 1]] = states[[pair + 1, pair]]
                 current[[pair, pair + 1]] = current[[pair + 1, pair]]
@@ -1446,7 +1447,7 @@ def _balanced_sweep_at(
             log_alpha = log_metropolis_ratio(
                 log_ratio, forward, forward_total, reverse, reverse_total
             )
-            if not (log_alpha >= 0.0 or rng.random() < np.exp(log_alpha)):
+            if not accept(log_alpha, rng):
                 local[touched] = restored
                 state[node] = previous
 
@@ -1908,21 +1909,15 @@ def _niedermayer_sweep(
 
 
 def _niedermayer_accept(delta: float, beta: float, rng: np.random.Generator) -> bool:
-    """Metropolis on ``delta``, with the ``beta = inf`` limit taken exactly.
+    """:func:`~snakes_and_ladders.sample.accept.accept_at` on ``delta``, under a name.
 
     A separate function because it is what an ablation replaces:
     `tests/regression/search/test_potts_mcmc.py` swaps in an unconditional
     accept and asserts the enumerated chi-square rejects, which is the
-    evidence that the tests above have the power they claim.
-
-    A non-negative ``delta`` is accepted without a draw, and at ``beta = inf``
-    a negative one is refused without a draw --- the ``T = 0`` limit, where a
-    step that lowers the score is refused rather than accepted with
-    probability zero.
+    evidence that the tests above have the power they claim. The ``beta = inf``
+    limit it takes is stated where the accept step lives (issue #857).
     """
-    return delta >= 0.0 or (
-        bool(np.isfinite(beta)) and bool(rng.random() < np.exp(beta * delta))
-    )
+    return accept_at(beta, delta, rng)
 
 
 def houdayer_cluster(
@@ -2084,7 +2079,7 @@ def _recolour_drawn(
     if proposed == current:
         return Recolour(proposed=False, accepted=False)
     difference = float(rows[members, proposed].sum() - rows[members, current].sum())
-    if difference >= 0.0 or draw() < np.exp(difference):
+    if accept_drawn(difference, draw):
         state[members] = proposed
         return Recolour(proposed=True, accepted=True)
     return Recolour(proposed=True, accepted=False)

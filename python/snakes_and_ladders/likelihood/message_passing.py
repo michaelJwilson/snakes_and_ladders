@@ -64,7 +64,7 @@ for.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass
 
 import numpy as np
@@ -72,7 +72,6 @@ import numpy as np
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.likelihood.schedule import (
     FactorSends,
-    FloodingMessageSchedule,
     Guarantee,
     Layout,
     MessageSchedule,
@@ -310,14 +309,21 @@ def _run(
     if not 0.0 <= damping < 1.0:
         msg = f"damping must be in [0, 1), got {damping}"
         raise ValueError(msg)
-    length = _sweep_length(plan, layout)
+    length = plan.sweep_length(layout)
     residual, sweep, position = math.inf, 0, 0
-    for step in plan.steps(layout):
+    order = plan.steps(layout)
+    step = next(order)
+    while True:
         if position == 0:
             residual = 0.0
-        residual = max(
-            residual, _apply(step, to_variable, to_factor, maximum, damping)[0]
-        )
+        moved = _apply(step, to_variable, to_factor, maximum, damping)[0]
+        residual = max(residual, moved)
+        # An adaptive schedule chooses its next step from what this one moved;
+        # a fixed order ignores the value, so `send` is `next` to it.
+        if plan.adaptive and isinstance(order, Generator):
+            step = order.send(moved)
+        else:
+            step = next(order)
         position += 1
         if position < length:
             continue
@@ -331,17 +337,6 @@ def _run(
         f"residual {residual:.2e} above {tolerance:.0e}"
     )
     raise ConvergenceError(msg)
-
-
-def _sweep_length(plan: MessageSchedule, layout: Layout) -> int:
-    """How many steps make one sweep, so a residual is compared over a full pass.
-
-    Flooding sends everything in one step, so its sweep is one; a sequential
-    schedule sends one factor's messages per step, so its sweep is the factor
-    count. Comparing a residual against the tolerance mid-sweep would stop on
-    a message that had simply not moved yet.
-    """
-    return 1 if isinstance(plan, FloodingMessageSchedule) else len(layout.factor_edges)
 
 
 def _beliefs(

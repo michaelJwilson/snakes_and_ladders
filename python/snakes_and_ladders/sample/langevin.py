@@ -49,6 +49,7 @@ from dataclasses import dataclass
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.sample.accept import accept_ratio, acceptance_probability
 from snakes_and_ladders.sample.hmc import (
     Adaptation,
     Adapted,
@@ -262,10 +263,10 @@ class _LangevinKernel:
         # forming the momenta the trajectory form would carry.
         error = abs(temperature * log_ratio)
         ratio = float(torch.exp(torch.tensor(log_ratio)))
-        probability = 0.0 if math.isnan(ratio) else min(1.0, ratio)
+        probability = acceptance_probability(ratio)
         if not self.corrected:
             return proposal, error, 1, probability
         uniform = float(torch.rand(1, generator=generator))
-        if uniform < ratio:
+        if accept_ratio(ratio, uniform):
             return proposal, error, 1, probability
         return position, error, 0, probability

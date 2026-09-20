@@ -71,6 +71,7 @@ from snakes_and_ladders.sample.potts_mcmc import (
 )
 from snakes_and_ladders.sample.schedule import ExponentialTempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
+    SweepOrder,
     alpha_beta_swap,
     alpha_expansion,
     iterated_conditional_modes,
@@ -483,22 +484,27 @@ def run_gibbs_zero(rung: Rung, budget: Budget, rng: np.random.Generator) -> Meth
     two differ in the order sites are visited and in nothing else. Running
     both and reporting one axis is what keeps the comparison from counting
     the same method twice; the pair's spread *is* the sweep order's effect.
+
+    That is why this is :func:`run_icm`'s call under two parameters rather
+    than a second sweep written beside it (issue #858): a random order, and
+    every sweep of the budget run whether or not one changes nothing. The
+    compiled kernel walks in index order, so this is the Python sweep.
     """
     steps = max(1, budget.size // rung.visits_per_sweep)
     start = time.perf_counter()
-    labelling = rng.integers(0, rung.n_states, size=rung.n_nodes)
-    offsets, neighbour_index, edge_couplings = rung.graph.compressed_adjacency()
-    bounds = offsets.tolist()
-    neighbours, couplings = neighbour_index.tolist(), edge_couplings.tolist()
-    for _ in range(steps):
-        for node in rng.permutation(rung.n_nodes):
-            local = -rung.field[node].copy()
-            for position in range(bounds[node], bounds[node + 1]):
-                local[labelling[neighbours[position]]] -= couplings[position]
-            labelling[node] = int(np.argmin(local))
+    labelling, value = iterated_conditional_modes(
+        rung.graph,
+        rung.field,
+        rung.n_states,
+        rng,
+        max_sweeps=steps,
+        sweep_order=SweepOrder.RANDOM,
+        stop_when_clean=False,
+        backend=Backend.PYTHON,
+    )
     return MethodRun(
         labelling=labelling,
-        energy=energy(rung.graph, rung.field, labelling),
+        energy=value,
         spent=steps * rung.visits_per_sweep,
         seconds=time.perf_counter() - start,
     )

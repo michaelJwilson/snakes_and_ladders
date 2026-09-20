@@ -35,7 +35,7 @@ ADMITTED: dict[tuple[str, str], str] = {
     (
         "learn",
         "sample",
-    ): "an environment's moves are the sampler's own (potts_nd), and a schedule tempers PPO's epsilon",
+    ): "an environment's moves are the sampler's own, down to the accept step (potts_nd), and a schedule tempers PPO's epsilon",
     (
         "learn",
         "search",

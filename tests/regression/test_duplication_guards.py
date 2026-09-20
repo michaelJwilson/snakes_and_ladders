@@ -105,12 +105,13 @@ SCHEDULE_OWNER = "likelihood/schedule.py"
 SCHEDULE_BASE = "MessageSchedule"
 
 #: The registered schedules, pinned at what the 2026-09-19 audit read from the
-#: tree: `tree`, `upward`, `downward`, `flooding` and `sequential`. The audit's
+#: tree plus the one #825 registered: `tree`, `upward`, `downward`, `flooding`,
+#: `sequential` and `residual`. The audit's
 #: `fields:name` cluster has seven members; the seventh,
 #: `search.ground_state.Entry`, shares the field `name` and nothing else and is
-#: not a schedule, so this pin is five and not seven. A sixth schedule raises
-#: it in the pull request that registers it.
-SCHEDULE_COUNT = 5
+#: not a schedule, so this pin was five and not seven; #825's sixth raised it.
+#: A seventh raises it in the pull request that registers it.
+SCHEDULE_COUNT = 6
 
 #: A consumer branching on which schedule it holds, by name. The base's
 #: methods are the seam --- `message_passing._run` reads `requires_tree`,
@@ -138,13 +139,15 @@ INCIDENCE_OWNER = "incidence.py"
 #: Package modules building a store through the seam, pinned at what this
 #: guard reads on `main` at 048a342: `sim/graph.py`,
 #: `sim/ldpc.py`, `sim/factor_graph.py`, `sim/potts.py`, `search/maxflow.py`,
-#: `sample/potts_mcmc.py`, `sample/potts_keyed.py`, `search/ground_state.py`,
-#: `search/alpha_expansion.py` and `search/spatio_sequential.py`; the eleventh
-#: and twelfth are `sample/tempered.py` and `sample/annealed.py`, which #766
-#: added. The pull request that adds a consumer raises the pin; one that
-#: removes the last caller of the seam lowers it to a number a reader can
-#: question.
-SEAM_CONSUMERS = 12
+#: `sample/potts_mcmc.py`, `sample/potts_keyed.py`,
+#: `search/alpha_expansion.py` and `search/spatio_sequential.py`; the tenth
+#: and eleventh are `sample/tempered.py` and `sample/annealed.py`, which #766
+#: added. `search/ground_state.py` was the twelfth until #858 folded its
+#: second single-site sweep onto `alpha_expansion`'s, which leaves it no
+#: adjacency of its own to walk. The pull request that adds a consumer raises
+#: the pin; one that removes the last caller of the seam lowers it to a number
+#: a reader can question.
+SEAM_CONSUMERS = 11
 
 #: Files this guard does not read, each against the reason, rather than an
 #: allow-list nobody can audit. The first two are measurements the

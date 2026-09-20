@@ -36,6 +36,7 @@ from typing import TypeVar
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
+from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.gibbs import (
     _Indexed,
     cached_topology_score,
@@ -329,7 +330,7 @@ def _exchange(
                 betas[pair], betas[pair + 1], -values[pair], -values[pair + 1]
             )
             proposed[pair] += 1
-            if log_ratio >= 0.0 or rng.random() < np.exp(log_ratio):
+            if accept(log_ratio, rng):
                 accepted[pair] += 1
                 states[pair], states[pair + 1] = states[pair + 1], states[pair]
                 values[pair], values[pair + 1] = values[pair + 1], values[pair]

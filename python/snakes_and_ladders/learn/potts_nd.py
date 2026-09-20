@@ -59,6 +59,7 @@ import torch
 
 from snakes_and_ladders.learn.environment import Environment
 from snakes_and_ladders.learn.keyed import KeyedMove, keyed_generator
+from snakes_and_ladders.sample.accept import accept_at_temperature
 from snakes_and_ladders.sample.potts_mcmc import MoveKind
 
 #: One label per site.
@@ -550,13 +551,9 @@ class PottsNDEnvironment(Environment[Configuration, PottsAction]):
     ) -> tuple[Configuration, float]:
         """One site's Metropolis update, deterministic at ``T = 0``."""
         gain = self._flip_gain(np.asarray(state, dtype=np.int64), action)
-        if gain >= 0.0:
-            accepted = True
-        elif temperature == 0.0:
-            accepted = False
-        else:
-            rng = self._move_generator(state, action)
-            accepted = bool(rng.random() < np.exp(gain / temperature))
+        accepted = accept_at_temperature(
+            temperature, gain, lambda: self._move_generator(state, action).random()
+        )
         if not accepted:
             return state, 0.0
         successor = list(state)

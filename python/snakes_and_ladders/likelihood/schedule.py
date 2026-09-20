@@ -46,6 +46,7 @@ root ``CLAUDE.md`` admits a contract becoming a base class.
 
 from __future__ import annotations
 
+import heapq
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
@@ -105,6 +106,12 @@ class MessageScheduleName(StrEnum):
     rather than the previous sweep's: Gauss-Seidel where flooding is Jacobi.
     The same fixed points, reached by a different path, so the answer depends
     on the order in a way flooding's does not."""
+    RESIDUAL = "residual"
+    """Largest change first: a heap over the factors keyed on the last residual
+    their inputs saw (Elidan, McGraw & Koller 2006). Converges where flooding
+    oscillates and spends its sends where the graph is still moving; the same
+    fixed points as flooding and sequential, reached in a data-dependent
+    order (issue #825)."""
 
 
 def _runs(indices: Iterable[int]) -> Iterator[tuple[int, int]]:
@@ -391,6 +398,26 @@ class Layout:
                 start = stop
         return out
 
+    def factor_neighbours(self) -> list[list[int]]:
+        """The factors sharing a variable with each factor, excluding itself.
+
+        What a residual schedule bumps when a factor's outgoing messages
+        change: the factors whose incoming messages those are (issue #825).
+        """
+        by_variable: list[list[int]] = [[] for _ in self.variable_edges]
+        for factor, edges in enumerate(self.factor_edges):
+            for edge in edges:
+                by_variable[self.edge_variable[edge]].append(factor)
+        neighbours: list[list[int]] = []
+        for factor, edges in enumerate(self.factor_edges):
+            seen: dict[int, None] = {}
+            for edge in edges:
+                for other in by_variable[self.edge_variable[edge]]:
+                    if other != factor:
+                        seen.setdefault(other, None)
+            neighbours.append(list(seen))
+        return neighbours
+
     def sequential_steps(self) -> list[Step]:
         """One step per factor: its incoming messages, then its outgoing ones.
 
@@ -501,9 +528,35 @@ class MessageSchedule(ABC):
         """
         return not self.bounded
 
+    @property
+    def adaptive(self) -> bool:
+        """Whether :meth:`steps` chooses its next send from the last send's residual.
+
+        False for a fixed order. True means the runner passes each applied
+        step's residual back into the generator through ``send``, which is
+        how an adaptive schedule sees the graph move without the runner naming
+        it (issue #825).
+        """
+        return False
+
+    def sweep_length(self, layout: Layout) -> int:
+        """How many steps make one sweep, so a residual is compared over a full pass.
+
+        One step per factor by default, which is the sequential order's
+        sweep and the residual order's accounting unit; flooding sends
+        everything in one step and says so. Comparing a residual against the
+        tolerance mid-sweep would stop on a message that had simply not moved
+        yet.
+        """
+        return len(layout.factor_edges)
+
     @abstractmethod
     def steps(self, layout: Layout) -> Iterator[Step]:
-        """The sends, in order. May be infinite when :attr:`bounded` is false."""
+        """The sends, in order. May be infinite when :attr:`bounded` is false.
+
+        An :attr:`adaptive` schedule is a generator that receives each yielded
+        step's residual through ``send`` and chooses the next from it.
+        """
 
     def log_partition(
         self, layout: Layout, to_variable: np.ndarray, bethe: float, scale: float
@@ -660,6 +713,10 @@ class FloodingMessageSchedule(MessageSchedule):
     def bounded(self) -> bool:
         return False
 
+    def sweep_length(self, layout: Layout) -> int:
+        del layout
+        return 1
+
     def steps(self, layout: Layout) -> Iterator[Step]:
         step = layout.flooding_step()
         while True:
@@ -693,8 +750,68 @@ class SequentialMessageSchedule(MessageSchedule):
             yield from sweep
 
 
+@dataclass(frozen=True)
+class ResidualMessageSchedule(MessageSchedule):
+    """The factor whose inputs moved most sends next: residual belief propagation.
+
+    Elidan, McGraw & Koller (2006) order messages by the size of their last
+    change. Here the unit is a factor's step --- its incoming sends, then its
+    outgoing ones, :meth:`Layout.sequential_steps`'s shape --- and a factor's
+    priority is the largest residual any neighbouring factor's outgoing
+    messages last had, since those are its inputs. Every factor starts at
+    infinity, so the first sweep visits each once; after that the heap decides,
+    and a factor whose inputs have not moved is not sent again. The fixed
+    points are flooding's and sequential's --- the Bethe stationary points ---
+    and the path is not, so the sweep count is a measurement (issue #825).
+
+    The residual reaches the schedule through ``send``: the runner applies
+    the yielded step and sends back the largest change it made, which is the
+    number this schedule keys on. A stale heap entry is skipped by its stamp
+    rather than removed, the standard lazy deletion.
+    """
+
+    name: str = "residual"
+
+    @property
+    def guarantee(self) -> Guarantee:
+        return Guarantee.APPROXIMATE
+
+    @property
+    def bounded(self) -> bool:
+        return False
+
+    @property
+    def adaptive(self) -> bool:
+        return True
+
+    def steps(self, layout: Layout) -> Iterator[Step]:
+        per_factor = layout.sequential_steps()
+        neighbours = layout.factor_neighbours()
+        n_factors = len(per_factor)
+        priority = [math.inf] * n_factors
+        stamp = [0] * n_factors
+        # (-priority, factor) so the heap pops the largest; ties by index, so
+        # the first sweep is the sequential order and the run is reproducible.
+        heap = [(-math.inf, factor, 0) for factor in range(n_factors)]
+        heapq.heapify(heap)
+        while True:
+            negated, factor, seen = heapq.heappop(heap)
+            if seen != stamp[factor]:
+                continue
+            residual = yield per_factor[factor]
+            moved = float(residual) if residual is not None else 0.0
+            priority[factor] = 0.0
+            stamp[factor] += 1
+            heapq.heappush(heap, (0.0, factor, stamp[factor]))
+            for other in neighbours[factor]:
+                if moved > priority[other]:
+                    priority[other] = moved
+                    stamp[other] += 1
+                    heapq.heappush(heap, (-moved, other, stamp[other]))
+
+
 #: Every schedule this module offers, by the name :class:`MessageScheduleName`
-#: uses. A sixth is registered by adding it here; nothing else changes.
+#: uses. A seventh is registered by adding it here; nothing else changes.
 SCHEDULES: dict[str, MessageSchedule] = {
     schedule.name: schedule
     for schedule in (
@@ -703,6 +820,7 @@ SCHEDULES: dict[str, MessageSchedule] = {
         DownwardMessageSchedule(),
         FloodingMessageSchedule(),
         SequentialMessageSchedule(),
+        ResidualMessageSchedule(),
     )
 }
 
@@ -735,6 +853,7 @@ __all__ = [
     "Layout",
     "MessageSchedule",
     "MessageScheduleName",
+    "ResidualMessageSchedule",
     "SequentialMessageSchedule",
     "Step",
     "TreeMessageSchedule",
