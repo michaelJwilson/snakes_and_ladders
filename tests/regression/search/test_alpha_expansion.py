@@ -26,6 +26,7 @@ from snakes_and_ladders.search.alpha_expansion import (
     SweepOrder,
     _expansion_network,
     _infinite_capacity,
+    alpha_beta_swap,
     alpha_expansion,
     expand,
     iterated_conditional_modes,
@@ -498,3 +499,62 @@ def test_the_compiled_sweep_refuses_an_order_it_does_not_walk() -> None:
         iterated_conditional_modes(
             graph, np.zeros(3), 3, np.random.default_rng(0), stop_when_clean=False
         )
+
+
+# --- the one expansion template (issue #858) ----------------------------------
+
+#: What the two moves return on a 4x4 open lattice at coupling 0.8 in a
+#: seeded three-label field, recorded before `expand`/`swap` and
+#: `alpha_expansion`/`alpha_beta_swap` were folded onto one body each. The two
+#: reach the same labelling by different routes --- the expansion in 2 moves
+#: and the swap in 3 --- which is what makes the pair a check on the template:
+#: a body that lost the label set would collapse the counts onto each other.
+RECORDED_LABELLING = [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
+RECORDED_ENERGY = -25.228722898156448
+RECORDED_CYCLES = 2
+RECORDED_MOVES = {"expansion": 2, "swap": 3}
+
+
+@pytest.mark.smoke
+@pytest.mark.snapshot
+@pytest.mark.parametrize(
+    ("move", "method"), [("expansion", alpha_expansion), ("swap", alpha_beta_swap)]
+)
+def test_a_move_through_the_template_returns_its_recorded_result(
+    move: str, method: object
+) -> None:
+    graph = lattice_graph((4, 4), BoundaryCondition.OPEN, 0.8)
+    field = np.random.default_rng(858).normal(size=(graph.n_nodes, 3))
+
+    result = method(graph, field, 3)  # type: ignore[operator]
+
+    assert list(result.labelling) == RECORDED_LABELLING
+    assert result.energy == RECORDED_ENERGY
+    assert (result.cycles, result.moves) == (RECORDED_CYCLES, RECORDED_MOVES[move])
+
+
+@pytest.mark.smoke
+def test_the_one_coupling_guard_keeps_each_move_its_own_reason() -> None:
+    # Three constructions, three reasons, one refusal: what the sign buys is
+    # the caller's and stays in the message that names it.
+    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, -0.4)
+    prefix = "every coupling must be non-negative, got -0.4: "
+
+    with pytest.raises(ValueError, match="metric only then") as expansion:
+        alpha_expansion(graph, np.zeros(3), 3)
+    with pytest.raises(ValueError, match="submodular only then") as swap_refusal:
+        alpha_beta_swap(graph, np.zeros(3), 3)
+    with pytest.raises(ValueError, match="non-submodular") as cut:
+        ising_ground_state(graph, np.zeros(2))
+
+    assert str(expansion.value) == prefix + (
+        "the Potts pairwise term is a metric only then, and the factor-2 "
+        "bound rests on it"
+    )
+    assert str(swap_refusal.value) == prefix + (
+        "the swap's binary sub-problem is submodular only then"
+    )
+    assert str(cut.value) == prefix + (
+        "a negative coupling makes the energy non-submodular, the ground "
+        "state NP-hard, and this construction inapplicable rather than slow"
+    )

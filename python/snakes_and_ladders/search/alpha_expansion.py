@@ -19,19 +19,32 @@ It is a local minimum with respect to moves that change *arbitrarily many*
 sites at once, which is what makes it beat single-site descent: no sequence of
 single flips crosses a barrier that one expansion crosses in a step.
 
+**Two moves, one body each.** The expansion and the alpha-beta swap differ in
+the label set a cycle offers and in the network one move builds; the widening,
+the solver pick, the accept, the cycle and the two refusals are the same text,
+so they are written once and parameterised by a :class:`_Move` (issue #858).
+Single-site descent is here too, as the baseline the expansion has to beat and
+as the sweep two other callers run under :class:`SweepOrder`.
+
 See Boykov, Veksler & Zabih (2001); Kolmogorov & Zabih (2004) for which
 energies a cut can represent.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import NamedTuple
 
 import numpy as np
 
 from snakes_and_ladders.backend import Backend
-from snakes_and_ladders.search.maxflow import FlowNetwork, max_flow
+from snakes_and_ladders.search.maxflow import (
+    FlowNetwork,
+    check_non_negative_couplings,
+    max_flow,
+)
 from snakes_and_ladders.search.maxflow_rust import min_cut
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
@@ -66,6 +79,177 @@ class ExpansionResult:
     energy: float
     cycles: int
     moves: int
+
+
+class _CutMove(NamedTuple):
+    """One binary move, built: the network, its terminals and where a cut lands.
+
+    Parameters
+    ----------
+    network : FlowNetwork
+        The move's network, whose arc order is part of the contract: a
+        minimum cut need not be unique, so the two solvers are pinned to one
+        labelling by building one network.
+    source, sink : int
+        The terminals. The source side keeps its label; the sink side takes
+        the move's.
+    place : Callable[[np.ndarray], np.ndarray]
+        The cut's source-side mask to the labelling it proposes.
+    """
+
+    network: FlowNetwork
+    source: int
+    sink: int
+    place: Callable[[np.ndarray], np.ndarray]
+
+
+def _check_cut_backend(backend: Backend, move: str) -> None:
+    """Refuse a backend neither move has a minimum cut for."""
+    if backend not in (Backend.PYTHON, Backend.RUST):
+        msg = f"{move} has no {backend} minimum-cut backend"
+        raise ValueError(msg)
+
+
+def _terminal_capacities(
+    source_side: np.ndarray, sink_side: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """The two terminal arcs of each site, shifted by the cheaper branch.
+
+    A cut pays one of the two whatever it does, so subtracting the smaller
+    from both leaves every cut's capacity lower by the same constant and the
+    minimizing cut where it was. Subtracting it keeps the capacities
+    non-negative, which the flow requires.
+
+    Parameters
+    ----------
+    source_side : np.ndarray
+        Each site's cost of landing on the source side.
+    sink_side : np.ndarray
+        Each site's cost of landing on the sink side.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        The capacity of ``source -> site``, which is cut when the site lands
+        on the sink side, and of ``site -> sink``, which is cut when it lands
+        on the source side.
+    """
+    offset = np.minimum(source_side, sink_side)
+    return sink_side - offset, source_side - offset
+
+
+def _lowest_by_cut(
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    labelling: np.ndarray,
+    build: Callable[[np.ndarray], _CutMove | None],
+    backend: Backend,
+) -> tuple[np.ndarray, float]:
+    """A binary move by one minimum cut, taken only where it lowers the energy.
+
+    The body :func:`expand` and :func:`swap` share (issue #858): widen the
+    field, build the move's network, cut it with the chosen solver, and
+    accept the proposal only against the energy. They differ in the network,
+    which is ``build``'s, and in nothing else. ``build`` returning ``None``
+    is a move with no site to make it on, which is the labelling unchanged.
+    """
+    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
+    built = build(values)
+    if built is None:
+        return labelling, energy(graph, values, labelling)
+
+    cut = (
+        min_cut(built.network, built.source, built.sink)
+        if backend is Backend.RUST
+        else max_flow(built.network, built.source, built.sink)
+    )
+    proposed = built.place(cut.source_side)
+
+    current, candidate = (
+        energy(graph, values, labelling),
+        energy(graph, values, proposed),
+    )
+    if candidate < current:
+        return proposed, candidate
+    return labelling, current
+
+
+@dataclass(frozen=True)
+class _Move:
+    """A move set the cycle iterates, and what the refusals call it.
+
+    Parameters
+    ----------
+    name : str
+        The subject of this move's refusals, e.g. ``"alpha expansion"``.
+    reason : str
+        What non-negative couplings buy this move, passed to
+        :func:`~snakes_and_ladders.search.maxflow.check_non_negative_couplings`.
+    label_sets : Callable[[int], Iterator[tuple[int, ...]]]
+        The label sets one cycle offers, in the order it offers them: one
+        label per move for the expansion, an unordered pair for the swap.
+    apply : Callable[..., tuple[np.ndarray, float]]
+        The move itself, as :func:`expand` and :func:`swap` implement it.
+    """
+
+    name: str
+    reason: str
+    label_sets: Callable[[int], Iterator[tuple[int, ...]]]
+    apply: Callable[
+        [PottsGraph, np.ndarray, np.ndarray, tuple[int, ...], Backend],
+        tuple[np.ndarray, float],
+    ]
+
+
+def _cycle_to_a_local_minimum(
+    graph: PottsGraph,
+    field_values: np.ndarray,
+    n_states: int,
+    move: _Move,
+    *,
+    start: np.ndarray | None,
+    max_cycles: int,
+    backend: Backend,
+) -> ExpansionResult:
+    """Cycle over ``move``'s label sets until a full sweep lowers nothing.
+
+    The body :func:`alpha_expansion` and :func:`alpha_beta_swap` share
+    (issue #858). The loop, the accept and the two refusals are identical
+    between them; what differs is the label set a cycle iterates and the move
+    it applies to each, which is what ``move`` carries. Monotonicity over a
+    finite state space is what makes the cap unreachable, so reaching it is a
+    defect and not a budget --- for either move.
+    """
+    check_non_negative_couplings(graph, move.reason)
+
+    values = site_field(
+        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=n_states
+    )
+    labelling = (
+        values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
+    )
+    current = energy(graph, values, labelling)
+
+    moves = 0
+    for cycle in range(1, max_cycles + 1):
+        improved = False
+        for labels in move.label_sets(n_states):
+            labelling, candidate = move.apply(graph, values, labelling, labels, backend)
+            if candidate < current - 1e-12:
+                current = candidate
+                improved = True
+                moves += 1
+        if not improved:
+            return ExpansionResult(
+                labelling=labelling, energy=current, cycles=cycle, moves=moves
+            )
+
+    msg = (
+        f"{move.name} did not settle in {max_cycles} cycles. The energy is "
+        "non-increasing over a finite state space, so this cannot happen on a "
+        "correct implementation and is a defect rather than a budget"
+    )
+    raise ValueError(msg)
 
 
 def _expansion_network(
@@ -115,7 +299,7 @@ def _expansion_network(
         _infinite_capacity(graph, values),
         -values[np.arange(n_nodes), labels].astype(np.float64),
     )
-    offset = np.minimum(keep, switch)
+    from_source, to_sink = _terminal_capacities(keep, switch)
 
     node_tail = np.empty(2 * n_nodes, dtype=np.int64)
     node_head = np.empty(2 * n_nodes, dtype=np.int64)
@@ -123,7 +307,7 @@ def _expansion_network(
     nodes = np.arange(n_nodes, dtype=np.int64)
     node_tail[0::2], node_tail[1::2] = source, nodes
     node_head[0::2], node_head[1::2] = nodes, sink
-    node_capacity[0::2], node_capacity[1::2] = switch - offset, keep - offset
+    node_capacity[0::2], node_capacity[1::2] = from_source, to_sink
 
     # One arc per agreeing edge and three per disagreeing one, laid out in
     # edge order so the auxiliaries are numbered as the loop numbered them.
@@ -220,29 +404,48 @@ def expand(
     ValueError
         If ``backend`` names an implementation this function does not have.
     """
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = f"alpha expansion has no {backend} minimum-cut backend"
-        raise ValueError(msg)
+    _check_cut_backend(backend, "alpha expansion")
 
-    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
-    network = _expansion_network(graph, values, labelling, alpha)
-    source, sink = graph.n_nodes, graph.n_nodes + 1
+    def build(values: np.ndarray) -> _CutMove | None:
+        return _CutMove(
+            network=_expansion_network(graph, values, labelling, alpha),
+            source=graph.n_nodes,
+            sink=graph.n_nodes + 1,
+            # The sink side switched, so it takes alpha and the rest is held.
+            place=lambda source_side: np.where(
+                ~source_side[: graph.n_nodes], alpha, labelling
+            ),
+        )
 
-    cut = (
-        min_cut(network, source, sink)
-        if backend is Backend.RUST
-        else max_flow(network, source, sink)
-    )
-    switched = ~cut.source_side[: graph.n_nodes]
-    proposed = np.where(switched, alpha, labelling)
+    return _lowest_by_cut(graph, field_values, labelling, build, backend)
 
-    current, candidate = (
-        energy(graph, values, labelling),
-        energy(graph, values, proposed),
-    )
-    if candidate < current:
-        return proposed, candidate
-    return labelling, current
+
+def _expansion_label_sets(n_states: int) -> Iterator[tuple[int, ...]]:
+    """One label per move: every site is offered ``alpha``, for each label in turn."""
+    return ((alpha,) for alpha in range(n_states))
+
+
+def _apply_expansion(
+    graph: PottsGraph,
+    values: np.ndarray,
+    labelling: np.ndarray,
+    labels: tuple[int, ...],
+    backend: Backend,
+) -> tuple[np.ndarray, float]:
+    """:func:`expand` in the shape :func:`_cycle_to_a_local_minimum` calls."""
+    return expand(graph, values, labelling, labels[0], backend=backend)
+
+
+EXPANSION = _Move(
+    name="alpha expansion",
+    reason=(
+        "the Potts pairwise term is a metric only then, and the factor-2 bound "
+        "rests on it"
+    ),
+    label_sets=_expansion_label_sets,
+    apply=_apply_expansion,
+)
+"""The expansion move set: one cut per label, and the factor-2 bound."""
 
 
 def alpha_expansion(
@@ -287,45 +490,15 @@ def alpha_expansion(
     ValueError
         If a coupling is negative, or the cap is reached.
     """
-    couplings = graph.edge_coupling
-    if couplings.size and couplings.min() < 0.0:
-        msg = (
-            f"every coupling must be non-negative, got {couplings.min()}: the "
-            "Potts pairwise term is a metric only then, and the factor-2 bound "
-            "rests on it"
-        )
-        raise ValueError(msg)
-
-    values = site_field(
-        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=n_states
+    return _cycle_to_a_local_minimum(
+        graph,
+        field_values,
+        n_states,
+        EXPANSION,
+        start=start,
+        max_cycles=max_cycles,
+        backend=backend,
     )
-    labelling = (
-        values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
-    )
-    current = energy(graph, values, labelling)
-
-    moves = 0
-    for cycle in range(1, max_cycles + 1):
-        improved = False
-        for alpha in range(n_states):
-            labelling, candidate = expand(
-                graph, values, labelling, alpha, backend=backend
-            )
-            if candidate < current - 1e-12:
-                current = candidate
-                improved = True
-                moves += 1
-        if not improved:
-            return ExpansionResult(
-                labelling=labelling, energy=current, cycles=cycle, moves=moves
-            )
-
-    msg = (
-        f"alpha expansion did not settle in {max_cycles} cycles. The energy is "
-        "non-increasing over a finite state space, so this cannot happen on a "
-        "correct implementation and is a defect rather than a budget"
-    )
-    raise ValueError(msg)
 
 
 class SweepOrder(StrEnum):
@@ -539,58 +712,78 @@ def swap(
         or ``alpha`` and ``beta`` are the same label, where the move is the
         identity and a caller asking for it has a bug rather than a no-op.
     """
-    if backend not in (Backend.PYTHON, Backend.RUST):
-        msg = f"the alpha-beta swap has no {backend} minimum-cut backend"
-        raise ValueError(msg)
+    _check_cut_backend(backend, "the alpha-beta swap")
     if alpha == beta:
         msg = f"a swap needs two distinct labels, got {alpha} twice"
         raise ValueError(msg)
 
-    values = site_field(np.asarray(field_values, dtype=float), graph.n_nodes)
-    moving = np.flatnonzero((labelling == alpha) | (labelling == beta))
-    if moving.size == 0:
-        return labelling, energy(graph, values, labelling)
-    position = {int(node): index for index, node in enumerate(moving)}
+    def build(values: np.ndarray) -> _CutMove | None:
+        moving = np.flatnonzero((labelling == alpha) | (labelling == beta))
+        if moving.size == 0:
+            return None
+        position = {int(node): index for index, node in enumerate(moving)}
 
-    source, sink = moving.size, moving.size + 1
-    network = FlowNetwork(n_nodes=moving.size + 2)
+        source, sink = moving.size, moving.size + 1
+        network = FlowNetwork(n_nodes=moving.size + 2)
 
-    # The data term of a moving site is its own field and nothing else. A
-    # *held* neighbour carries neither alpha nor beta --- those are exactly
-    # the labels that move --- so it agrees with the moving site under
-    # neither choice and contributes the same constant to both. That is why
-    # this move needs no auxiliary node and why the expansion does: there,
-    # a held neighbour can already be alpha.
-    to_alpha = -values[moving, alpha].astype(float)
-    to_beta = -values[moving, beta].astype(float)
-    offsets = np.minimum(to_alpha, to_beta)
-    for index in range(moving.size):
+        # The data term of a moving site is its own field and nothing else. A
+        # *held* neighbour carries neither alpha nor beta --- those are exactly
+        # the labels that move --- so it agrees with the moving site under
+        # neither choice and contributes the same constant to both. That is why
+        # this move needs no auxiliary node and why the expansion does: there,
+        # a held neighbour can already be alpha.
+        to_alpha = -values[moving, alpha].astype(float)
+        to_beta = -values[moving, beta].astype(float)
         # Cut source -> index when the site lands on the sink side, taking
         # beta, so that arc carries the cost of beta.
-        network.add_edge(source, index, float(to_beta[index] - offsets[index]))
-        network.add_edge(index, sink, float(to_alpha[index] - offsets[index]))
+        from_source, to_sink = _terminal_capacities(to_alpha, to_beta)
+        for index in range(moving.size):
+            network.add_edge(source, index, float(from_source[index]))
+            network.add_edge(index, sink, float(to_sink[index]))
 
-    for (first, second), coupling in graph.weighted_edges():
-        if first in position and second in position:
-            network.add_edge(
-                position[first], position[second], coupling, reverse=coupling
-            )
+        for (first, second), coupling in graph.weighted_edges():
+            if first in position and second in position:
+                network.add_edge(
+                    position[first], position[second], coupling, reverse=coupling
+                )
 
-    cut = (
-        min_cut(network, source, sink)
-        if backend is Backend.RUST
-        else max_flow(network, source, sink)
+        def place(source_side: np.ndarray) -> np.ndarray:
+            proposed = labelling.copy()
+            proposed[moving] = np.where(source_side[: moving.size], alpha, beta)
+            return proposed
+
+        return _CutMove(network=network, source=source, sink=sink, place=place)
+
+    return _lowest_by_cut(graph, field_values, labelling, build, backend)
+
+
+def _swap_label_sets(n_states: int) -> Iterator[tuple[int, ...]]:
+    """Every unordered pair of labels, the first index outermost."""
+    return (
+        (alpha, beta)
+        for alpha in range(n_states)
+        for beta in range(alpha + 1, n_states)
     )
-    proposed = labelling.copy()
-    proposed[moving] = np.where(cut.source_side[: moving.size], alpha, beta)
 
-    current, candidate = (
-        energy(graph, values, labelling),
-        energy(graph, values, proposed),
-    )
-    if candidate < current:
-        return proposed, candidate
-    return labelling, current
+
+def _apply_swap(
+    graph: PottsGraph,
+    values: np.ndarray,
+    labelling: np.ndarray,
+    labels: tuple[int, ...],
+    backend: Backend,
+) -> tuple[np.ndarray, float]:
+    """:func:`swap` in the shape :func:`_cycle_to_a_local_minimum` calls."""
+    return swap(graph, values, labelling, labels[0], labels[1], backend=backend)
+
+
+SWAP = _Move(
+    name="the alpha-beta swap",
+    reason="the swap's binary sub-problem is submodular only then",
+    label_sets=_swap_label_sets,
+    apply=_apply_swap,
+)
+"""The swap move set: one cut per label pair, no auxiliary node, and no bound."""
 
 
 def alpha_beta_swap(
@@ -620,42 +813,12 @@ def alpha_beta_swap(
         finite state space makes the second impossible on a correct
         implementation, as it is for :func:`alpha_expansion`.
     """
-    couplings = graph.edge_coupling
-    if couplings.size and couplings.min() < 0.0:
-        msg = (
-            f"every coupling must be non-negative, got {couplings.min()}: the "
-            "swap's binary sub-problem is submodular only then"
-        )
-        raise ValueError(msg)
-
-    values = site_field(
-        np.asarray(field_values, dtype=float), graph.n_nodes, n_states=n_states
+    return _cycle_to_a_local_minimum(
+        graph,
+        field_values,
+        n_states,
+        SWAP,
+        start=start,
+        max_cycles=max_cycles,
+        backend=backend,
     )
-    labelling = (
-        values.argmax(axis=1).astype(np.int64) if start is None else start.copy()
-    )
-    current = energy(graph, values, labelling)
-
-    moves = 0
-    for cycle in range(1, max_cycles + 1):
-        improved = False
-        for alpha in range(n_states):
-            for beta in range(alpha + 1, n_states):
-                labelling, candidate = swap(
-                    graph, values, labelling, alpha, beta, backend=backend
-                )
-                if candidate < current - 1e-12:
-                    current = candidate
-                    improved = True
-                    moves += 1
-        if not improved:
-            return ExpansionResult(
-                labelling=labelling, energy=current, cycles=cycle, moves=moves
-            )
-
-    msg = (
-        f"the alpha-beta swap did not settle in {max_cycles} cycles. The energy "
-        "is non-increasing over a finite state space, so this cannot happen on "
-        "a correct implementation and is a defect rather than a budget"
-    )
-    raise ValueError(msg)
