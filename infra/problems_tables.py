@@ -254,6 +254,7 @@ ALGORITHMS: dict[str, str] = {
     "search.alpha_expansion.iterated_conditional_modes": "descent and expansion",
     "search.maxflow.ising_ground_state": "exact ground state",
     "search.max_cut.goemans_williamson": "relaxation",
+    "search.bifurcation.simulated_bifurcation": "relaxation",
     "learn.relaxed.RelaxedPotts": "relaxation",
     "learn.relaxed.RelaxedHmmPath": "relaxation",
     "sandbox.tropical.optimize": "relaxation",
@@ -614,6 +615,7 @@ def _tex_text(text: str) -> str:
     return (
         text.replace("&", r"\&")
         .replace("%", r"\%")
+        .replace("#", r"\#")
         .replace("_", r"\_")
         .replace("\u2013", "--")
         .replace("\u2014", "---")

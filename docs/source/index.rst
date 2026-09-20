@@ -399,6 +399,9 @@ whether or not it has members yet.
 .. automodule:: snakes_and_ladders.search.tightening
    :members:
 
+.. automodule:: snakes_and_ladders.search.bifurcation
+   :members:
+
 .. automodule:: snakes_and_ladders.search.alpha_expansion
    :members:
 

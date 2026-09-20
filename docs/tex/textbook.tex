@@ -4056,6 +4056,40 @@ Section~\ref{sec:potts-cuts} exactly; enumeration referees the multi-label
 case where it reaches; and the realized ratio against the enumerated optimum
 is measured, since the bound is a theorem and the ratio is a number.
 
+\subsection{Simulated bifurcation}
+\label{sec:potts-bifurcation}
+Every route above is sequential over sites or over labels. Simulated
+bifurcation \citep{goto2019, goto2021} relaxes each site and label to an
+oscillator $x_{i,a} \in [-1, 1]$ with momentum $y_{i,a}$ and integrates all of
+them at once. With one-hot rows the energy is $-S(x)$ for
+\begin{equation}
+  S(x) = \sum_i \sum_a h_{i,a}\, x_{i,a} + \sum_{(ij)} J_{ij} \sum_a x_{i,a}\, x_{j,a},
+  \label{eq:bifurcation-score}
+\end{equation}
+which is multilinear on the box, so its maximum over the box sits at a corner
+and the relaxation adds no optimum the discrete problem lacks. The dynamics
+ascend $S$ under a restoring term $-(a_0 - a(t))\,x$ whose strength falls to
+zero along a ramp $a(t)$, so each oscillator bifurcates from the origin toward
+$\pm 1$ as the ramp runs out; a coordinate that leaves the box is set to its
+sign with its momentum zeroed, Algorithm~\ref{alg:simulated-bifurcation}. The
+labelling is the arg max over $a$ at each site and its energy is the
+discrete one, never $S$. The force scale $c_0$ is read from the instance as
+one half over the largest drive a site can see, the sum of its $|J_{ij}|$ and
+its largest $|h_{i,a}|$: the dense-matrix scale of the original leaves a
+per-site field as the whole drive and returns the field-only labelling.
+
+\paragraph{Regime.}
+A heuristic with no bound. It is the one route whose inner loop is an
+elementwise update over every site, which is what a device runs; it earns its
+place where couplings decide the ground state --- the frustrated lattice and
+the planted glass, where the cut does not apply --- and loses to a single
+descent where a per-site field does.
+
+\paragraph{What pins it.}
+The cut at two labels, exact at any size; enumeration at nine sites and on the
+declared glass; the dual bound of Section~\ref{sec:frustrated:algorithms} where
+neither reaches; and the same labelling from the NumPy and the tensor paths.
+
 \subsection{The heat bath, Gibbs sampling and cluster moves}
 \label{sec:potts-sampling}
 The single-site heat bath draws each spin from its conditional,
@@ -6307,6 +6341,22 @@ Equation~\ref{eq:heat-bath}}
 \State \Return $\sigma$ \Comment{within the constant of
        Equation~\ref{eq:alpha-expansion} of the optimum, provided each
        expansion was solved exactly}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Simulated bifurcation, Equation~\ref{eq:bifurcation-score}}
+\label{alg:simulated-bifurcation}
+\begin{algorithmic}[1]
+\State $x_{i,a} \gets$ small uniform draws, $y_{i,a} \gets 0$, $c_0 \gets 1 / (2 \max_i (\sum_{j \sim i} |J_{ij}| + \max_a |h_{i,a}|))$
+\For{$t = 0, \dots, T-1$}
+  \State $a \gets a_0\, t / T$
+  \State $f_{i,a} \gets h_{i,a} + \sum_{j \sim i} J_{ij}\, x_{j,a}$ \Comment{one gather over the edges}
+  \State $y \gets y + \Delta t\,\big(-(a_0 - a)\, x + c_0\, f\big)$
+  \State $x \gets x + \Delta t\, a_0\, y$
+  \State where $|x_{i,a}| > 1$: $x_{i,a} \gets \operatorname{sign}(x_{i,a})$, $y_{i,a} \gets 0$
+\EndFor
+\State \Return $\sigma_i = \arg\max_a x_{i,a}$ \Comment{scored by $\energy(\sigma)$, never by $S(x)$}
 \end{algorithmic}
 \end{algorithm}
 
