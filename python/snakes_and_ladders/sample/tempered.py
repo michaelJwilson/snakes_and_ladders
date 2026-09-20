@@ -52,7 +52,9 @@ from snakes_and_ladders.sample.potts_mcmc import (
 )
 from snakes_and_ladders.sample.schedule import (
     FeedbackLadder,
+    TempSchedule,
     adapt_ladder_by_round_trips,
+    ladder,
 )
 from snakes_and_ladders.sim.factor_graph import FactorGraph
 from snakes_and_ladders.sim.graph import PottsGraph
@@ -358,7 +360,7 @@ def _exchange(
 
 def tempered_factor_graph(
     graph: FactorGraph,
-    temperatures: Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -377,7 +379,7 @@ def tempered_factor_graph(
     ----------
     graph : FactorGraph
         Any of the adapters' graphs.
-    temperatures : Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The ladder, at least two, all positive; the order fixes which pairs
         are adjacent for exchange.
     rng : np.random.Generator
@@ -397,6 +399,7 @@ def tempered_factor_graph(
         the ladder has fewer than two temperatures or one that is not
         positive.
     """
+    temperatures = ladder(temperatures)
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
     indexed = _Indexed(graph)
     children = rng.spawn(len(temperatures))
@@ -426,7 +429,7 @@ def tempered_factor_graph(
 def tempered_potts_pair(
     graph: PottsGraph,
     field: np.ndarray,
-    temperatures: Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -458,7 +461,7 @@ def tempered_potts_pair(
         refusal.
     field : np.ndarray
         External field ``h``, shape ``(n_states,)`` or ``(n_nodes, n_states)``.
-    temperatures : Sequence[float]
+    temperatures : TempSchedule | Sequence[float]
         The ladder, at least two, all positive, in the order that fixes which
         pairs are adjacent for exchange.
     rng : np.random.Generator
@@ -490,6 +493,7 @@ def tempered_potts_pair(
         Fortuin-Kasteleyn cluster move on a graph with a negative coupling, as
         :func:`~snakes_and_ladders.sample.potts_mcmc.sample_potts` refuses it.
     """
+    temperatures = ladder(temperatures)
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
     _refuse_negative_coupling(move, graph)
     rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
@@ -552,7 +556,7 @@ def tempered_potts_pair(
 def tempered_topologies(
     alignment: Mapping[str, np.ndarray],
     k: int,
-    temperatures: Sequence[float],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -582,6 +586,7 @@ def tempered_topologies(
         If the ladder has fewer than two temperatures or one that is not
         positive, or ``n_sweeps``, ``thin`` or ``burn_in`` is unusable.
     """
+    temperatures = ladder(temperatures)
     _check_ladder(temperatures, n_sweeps, thin, burn_in)
     cache = {} if scores is None else scores
     score = cached_topology_score(alignment, k, cache, model=model)

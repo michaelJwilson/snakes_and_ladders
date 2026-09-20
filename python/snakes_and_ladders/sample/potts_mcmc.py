@@ -80,7 +80,12 @@ from snakes_and_ladders.sample.balanced import (
     log_normalizer,
     log_ratios,
 )
-from snakes_and_ladders.sample.schedule import AdaptedLadder, TempSchedule, adapt_ladder
+from snakes_and_ladders.sample.schedule import (
+    AdaptedLadder,
+    TempSchedule,
+    adapt_ladder,
+    ladder,
+)
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import (
     energies,
@@ -687,7 +692,7 @@ def _swap_log_ratio(
 def parallel_tempering(
     graph: PottsGraph,
     field: np.ndarray,
-    temperatures: tuple[float, ...],
+    temperatures: TempSchedule | Sequence[float],
     rng: np.random.Generator,
     n_sweeps: int,
     burn_in: int = 0,
@@ -716,7 +721,7 @@ def parallel_tempering(
         the reason :func:`anneal_potts` gives.
     field : np.ndarray
         External field, shape ``(n_states,)``.
-    temperatures : tuple[float, ...]
+    temperatures : TempSchedule | Sequence[float]
         The ladder, in any order; at least two, all positive. The stationary
         distribution depends on which pairs are adjacent for exchange, not on
         the order.
@@ -741,6 +746,7 @@ def parallel_tempering(
         nothing to exchange and is :func:`sample_potts` --- or any is not
         positive.
     """
+    temperatures = ladder(temperatures)
     if len(temperatures) < 2:
         msg = (
             f"parallel tempering needs at least two temperatures, got "

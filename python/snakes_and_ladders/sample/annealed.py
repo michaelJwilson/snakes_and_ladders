@@ -52,7 +52,11 @@ from snakes_and_ladders.sample.potts_mcmc import (
     _sweep_for,
     energies,
 )
-from snakes_and_ladders.sample.schedule import ExponentialTempSchedule, temperatures
+from snakes_and_ladders.sample.schedule import (
+    ExponentialTempSchedule,
+    TempSchedule,
+    temperatures,
+)
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import site_field
 
@@ -500,7 +504,7 @@ def rung_weights(estimate: LogPartition) -> np.ndarray:
 def simulated_tempering(
     graph: PottsGraph,
     field: np.ndarray,
-    betas: Sequence[float],
+    betas: TempSchedule | Sequence[float],
     weights: np.ndarray,
     rng: np.random.Generator,
     n_sweeps: int,
@@ -530,7 +534,10 @@ def simulated_tempering(
     ----------
     graph, field, move, backend
         As :func:`annealed_importance_sampling`.
-    betas : Sequence[float]
+    betas : TempSchedule | Sequence[float]
+        A :class:`~snakes_and_ladders.sample.schedule.TempSchedule` is read as
+        temperatures and inverted, rung by rung (issue #827); a sequence is
+        the inverse temperatures as given.
         The ladder, at least two rungs, non-negative and strictly increasing.
         It need not start at zero: nothing here is anchored on an exact
         normalizer.
@@ -557,6 +564,8 @@ def simulated_tempering(
         If the ladder is unusable, ``weights`` does not carry one entry per
         rung, or ``n_sweeps`` or ``thin`` is below 1 or ``burn_in`` below 0.
     """
+    if isinstance(betas, TempSchedule):
+        betas = tuple(1.0 / temperature for temperature in temperatures(betas))
     ladder = _check_betas(betas, from_zero=False)
     g = np.asarray(weights, dtype=float)
     if g.shape != (len(ladder),):
