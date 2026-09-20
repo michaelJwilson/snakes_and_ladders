@@ -277,7 +277,89 @@ def log_partition_graph(
     return torch.logsumexp(coupling * agreements + counts @ field, dim=0)
 
 
-class PottsLatticeObjective(Objective):
+class _PottsObjectiveBase(Objective):
+    """A Potts objective before the graph is named: one gauge, one start.
+
+    The chain and the lattice differ in the normalizer and in the sufficient
+    statistics the data enters through, and in nothing else. Both carry a
+    scalar coupling and one gauge-fixed field over ``q`` states, so ``theta``
+    has the same length and the same meaning for either, and the four methods
+    that read only ``theta`` are written once here (issue #859). ``__call__``
+    and the statistics it reads stay with the class that names the graph.
+
+    Subclasses set ``_n_states`` and ``_dtype`` in ``__init__``; nothing here
+    reads anything else.
+    """
+
+    #: States per site, ``q``.
+    _n_states: int
+    #: Precision every tensor below is built at.
+    _dtype: torch.dtype
+
+    def initial(self) -> torch.Tensor:
+        """A deliberately uninformative start: zero coupling, uniform field."""
+        return torch.zeros(self._n_states, dtype=self._dtype)
+
+    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
+        """Split ``theta`` into the coupling and the gauge-fixed field.
+
+        Adding a constant to every entry of ``h`` shifts the energy and
+        ``log Z`` by the same amount, so without the gauge the model is
+        unidentifiable and no fitted field has a value to compare against.
+        """
+        return {"coupling": theta[0], "field": log_simplex(theta[1:])}
+
+    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """The unconstrained vector whose :meth:`constrain` is ``named``.
+
+        The inverse of the constraint map, keyed exactly as :meth:`constrain`
+        returns. It is what lets a fit produced by *any* optimizer be given an
+        interval: the observed information is a property of the objective at a
+        point, and this is how a point stated in the model's own parameters
+        becomes one the Hessian can be taken at (issue #268).
+
+        Parameters
+        ----------
+        named : Mapping[str, torch.Tensor]
+            Constrained parameters, under :meth:`constrain`'s own keys.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns ``named``.
+        """
+        return torch.cat(
+            [
+                named["coupling"].reshape(1).to(self._dtype),
+                free_from_log_simplex(named["field"].to(self._dtype)),
+            ]
+        )
+
+    def theta_from_truth(self, coupling: float, field: np.ndarray) -> torch.Tensor:
+        """Place a known truth in the unconstrained coordinates.
+
+        Parameters
+        ----------
+        coupling : float
+            True ``J``.
+        field : np.ndarray
+            True ``h``, already gauge-fixed to ``logsumexp(h) == 0``.
+
+        Returns
+        -------
+        torch.Tensor
+            ``theta`` such that ``constrain(theta)`` returns this truth.
+        """
+        as_tensor = torch.as_tensor(field, dtype=self._dtype)
+        return torch.cat(
+            [
+                torch.tensor([coupling], dtype=self._dtype),
+                free_from_log_simplex(as_tensor),
+            ]
+        )
+
+
+class PottsLatticeObjective(_PottsObjectiveBase):
     """Negative log-likelihood of Potts configurations on a graph.
 
     The lattice counterpart of :class:`PottsObjective`, the same shape: an
@@ -344,20 +426,6 @@ class PottsLatticeObjective(Objective):
             n_states, edges, n_nodes
         )
 
-    def initial(self) -> torch.Tensor:
-        """A deliberately uninformative start: zero coupling, uniform field."""
-        return torch.zeros(self._n_states, dtype=self._dtype)
-
-    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
-        """Split ``theta`` into the coupling and the gauge-fixed field.
-
-        The gauge is the chain's: adding a constant to every entry of ``h``
-        shifts the energy and ``log Z`` by the same amount, so without it the
-        model is unidentifiable and no fitted field has a value to compare
-        against.
-        """
-        return {"coupling": theta[0], "field": log_simplex(theta[1:])}
-
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """Negative log-likelihood of every observed configuration."""
         constrained = self.constrain(theta)
@@ -368,50 +436,8 @@ class PottsLatticeObjective(Objective):
         unnormalized = coupling * self._agreement_total + (self._counts * field).sum()
         return -(unnormalized - self._n_samples * log_z)
 
-    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
-        """The unconstrained vector whose :meth:`constrain` is ``named``.
 
-        The inverse of the constraint map, keyed exactly as :meth:`constrain`
-        returns. It is what lets a fit produced by *any* optimizer be given an
-        interval: the observed information is a property of the objective at a
-        point, and this is how a point stated in the model's own parameters
-        becomes one the Hessian can be taken at (issue #268).
-
-        Parameters
-        ----------
-        named : Mapping[str, torch.Tensor]
-            Constrained parameters, under :meth:`constrain`'s own keys.
-
-        Returns
-        -------
-        torch.Tensor
-            ``theta`` such that ``constrain(theta)`` returns ``named``.
-        """
-        return torch.cat(
-            [
-                named["coupling"].reshape(1).to(self._dtype),
-                free_from_log_simplex(named["field"].to(self._dtype)),
-            ]
-        )
-
-    def theta_from_truth(self, coupling: float, field: np.ndarray) -> torch.Tensor:
-        """Place a known truth in the unconstrained coordinates.
-
-        Returns
-        -------
-        torch.Tensor
-            ``theta`` such that ``constrain(theta)`` returns this truth.
-        """
-        as_tensor = torch.as_tensor(field, dtype=self._dtype)
-        return torch.cat(
-            [
-                torch.tensor([coupling], dtype=self._dtype),
-                free_from_log_simplex(as_tensor),
-            ]
-        )
-
-
-class PottsObjective(Objective):
+class PottsObjective(_PottsObjectiveBase):
     """Negative log-likelihood of Potts chains, as an :class:`~snakes_and_ladders.opt.objective.Objective`.
 
     Parameters
@@ -443,14 +469,6 @@ class PottsObjective(Objective):
             0, self._chains.reshape(-1), torch.ones(self._chains.numel(), dtype=dtype)
         )
 
-    def initial(self) -> torch.Tensor:
-        """A deliberately uninformative start: zero coupling, uniform field."""
-        return torch.zeros(self._n_states, dtype=self._dtype)
-
-    def constrain(self, theta: torch.Tensor) -> Mapping[str, torch.Tensor]:
-        """Split ``theta`` into the coupling and the gauge-fixed field."""
-        return {"coupling": theta[0], "field": log_simplex(theta[1:])}
-
     def __call__(self, theta: torch.Tensor) -> torch.Tensor:
         """Negative log-likelihood of every observed chain."""
         constrained = self.constrain(theta)
@@ -461,52 +479,3 @@ class PottsObjective(Objective):
             + (self._counts * field).sum()
         )
         return -(unnormalized - self._chains.shape[0] * log_z)
-
-    def theta_from(self, named: Mapping[str, torch.Tensor]) -> torch.Tensor:
-        """The unconstrained vector whose :meth:`constrain` is ``named``.
-
-        The inverse of the constraint map, keyed exactly as :meth:`constrain`
-        returns. It is what lets a fit produced by *any* optimizer be given an
-        interval: the observed information is a property of the objective at a
-        point, and this is how a point stated in the model's own parameters
-        becomes one the Hessian can be taken at (issue #268).
-
-        Parameters
-        ----------
-        named : Mapping[str, torch.Tensor]
-            Constrained parameters, under :meth:`constrain`'s own keys.
-
-        Returns
-        -------
-        torch.Tensor
-            ``theta`` such that ``constrain(theta)`` returns ``named``.
-        """
-        return torch.cat(
-            [
-                named["coupling"].reshape(1).to(self._dtype),
-                free_from_log_simplex(named["field"].to(self._dtype)),
-            ]
-        )
-
-    def theta_from_truth(self, coupling: float, field: np.ndarray) -> torch.Tensor:
-        """Place a known truth in the unconstrained coordinates.
-
-        Parameters
-        ----------
-        coupling : float
-            True ``J``.
-        field : np.ndarray
-            True ``h``, already gauge-fixed to ``logsumexp(h) == 0``.
-
-        Returns
-        -------
-        torch.Tensor
-            ``theta`` such that ``constrain(theta)`` returns this truth.
-        """
-        as_tensor = torch.as_tensor(field, dtype=self._dtype)
-        return torch.cat(
-            [
-                torch.tensor([coupling], dtype=self._dtype),
-                free_from_log_simplex(as_tensor),
-            ]
-        )
