@@ -59,7 +59,7 @@ def monochrome_partition(
     ``potts_mcmc``'s own union-find, so the partition is not a second reading
     of what a component is. Walked over the compressed rows the move built
     once rather than the graph's edge tuples, which `CLAUDE.md`'s layout rule
-    asks and `infra/appraise_structures.py` reported (2026-09-17 review).
+    asks (2026-09-17 review).
 
     Parameters
     ----------
@@ -141,8 +141,7 @@ class WolffMove:
         self._n_nodes = graph.n_nodes
         self._field = field
         # Built once and held: the T = 0 partition and the T > 0 sweep both
-        # read these rows, and `infra/appraise_structures.py` reads the store
-        # from these assignments (recompute or store, decided as store).
+        # read these rows (recompute or store, decided as store).
         offsets, neighbours, couplings = graph.compressed_adjacency()
         self._offsets = offsets
         self._neighbours = neighbours

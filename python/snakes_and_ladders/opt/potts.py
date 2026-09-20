@@ -41,9 +41,10 @@ import numpy as np
 import torch
 
 from snakes_and_ladders.fixtures import load_declared
-from snakes_and_ladders.numerics import logsumexp, sample_rows
 from snakes_and_ladders.opt.constrain import free_from_log_simplex, log_simplex
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.sim.graph import BoundaryCondition, lattice_graph
+from snakes_and_ladders.sim.potts import simulate_potts
 
 _REQUIRED_FIELDS = frozenset(
     {"seed", "n_chains", "chain_length", "n_states", "coupling", "field"}
@@ -290,8 +291,11 @@ def log_partition(
 def simulate_chains(params: PottsParams) -> np.ndarray:
     """Draw ``n_chains`` exact samples from the truth in ``params``.
 
-    Exact, not MCMC: the chain's backward messages give the conditional
-    distributions directly, so the fixture carries no equilibration
+    The draw is :func:`snakes_and_ladders.sim.potts.simulate_potts` on an
+    open chain, which is where the exact backward-message recursion lives;
+    the copy that stood here drew the same states, bit for bit, at the
+    declared instance (#813), so this is the call and not a second
+    simulator. Exact, not MCMC: the fixture carries no equilibration
     assumption (root ``CLAUDE.md``, "Simulate Component-Wise").
 
     Parameters
@@ -304,23 +308,11 @@ def simulate_chains(params: PottsParams) -> np.ndarray:
     np.ndarray
         Integer states, shape ``(n_chains, chain_length)``.
     """
+    graph = lattice_graph(
+        (params.chain_length,), BoundaryCondition.OPEN, params.coupling
+    )
     rng = np.random.default_rng(params.seed)
-    field = params.field
-    log_transfer = params.coupling * np.eye(params.n_states) + field[np.newaxis, :]
-
-    # backward[i] is the log weight of everything from site i+1 onward, given
-    # the state at site i; backward[-1] is empty and so zero.
-    backward = np.zeros((params.chain_length, params.n_states))
-    for i in range(params.chain_length - 2, -1, -1):
-        backward[i] = logsumexp(log_transfer + backward[i + 1][np.newaxis, :], axis=1)
-
-    chains = np.empty((params.n_chains, params.chain_length), dtype=np.int64)
-    first = _softmax(field + backward[0])
-    chains[:, 0] = rng.choice(params.n_states, size=params.n_chains, p=first)
-    for i in range(1, params.chain_length):
-        conditional = _softmax(log_transfer + backward[i][np.newaxis, :], axis=1)
-        chains[:, i] = sample_rows(rng, conditional, chains[:, i - 1])
-    return chains
+    return simulate_potts(graph, params.field, rng, params.n_chains).configurations
 
 
 def graph_statistics(
@@ -633,10 +625,3 @@ class PottsObjective(Objective):
                 free_from_log_simplex(as_tensor),
             ]
         )
-
-
-def _softmax(values: np.ndarray, axis: int = -1) -> np.ndarray:
-    shifted = values - values.max(axis=axis, keepdims=True)
-    weights = np.exp(shifted)
-    result: np.ndarray = weights / weights.sum(axis=axis, keepdims=True)
-    return result

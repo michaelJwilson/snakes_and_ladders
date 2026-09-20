@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.incidence import SparseIncidence
 from snakes_and_ladders.sim.graph import PottsGraph
 from snakes_and_ladders.sim.potts import energy, site_field
@@ -358,7 +359,7 @@ def _augment(
 
 
 def ising_ground_state(
-    graph: PottsGraph, field_values: np.ndarray
+    graph: PottsGraph, field_values: np.ndarray, *, backend: Backend = Backend.PYTHON
 ) -> tuple[np.ndarray, float]:
     """The exact minimum-energy configuration of a two-state ferromagnet.
 
@@ -387,6 +388,12 @@ def ising_ground_state(
         problem has content when the field varies by site, which is also the
         shape alpha expansion (issue #207) needs. More than two states is
         refused: a cut solves ``k = 2`` and alpha expansion covers the rest.
+    backend : Backend
+        :data:`~snakes_and_ladders.backend.Backend.PYTHON` is the push-relabel
+        cut here, the oracle; :data:`~snakes_and_ladders.backend.Backend.RUST`
+        is :mod:`snakes_and_ladders.search.maxflow_rust`, pinned to it bitwise.
+        Chosen here so a caller names the kernel rather than the module, as
+        ``bcjr`` and ``sum_product`` already ask (#813).
 
     Returns
     -------
@@ -400,6 +407,15 @@ def ising_ground_state(
         is the submodularity boundary: the problem is NP-hard there and this
         returns nothing rather than a lattice-shaped wrong answer.
     """
+    if backend not in (Backend.PYTHON, Backend.RUST):
+        msg = f"ising_ground_state runs on {Backend.PYTHON} or {Backend.RUST}, not {backend}"
+        raise ValueError(msg)
+    if backend is Backend.RUST:
+        # Local, because the twin imports `FlowNetwork` and `MinCut` from
+        # here: a module-level import is the cycle.
+        from snakes_and_ladders.search import maxflow_rust
+
+        return maxflow_rust.ising_ground_state(graph, field_values)
     values = site_field(
         np.asarray(field_values, dtype=float), graph.n_nodes, n_states=2
     )

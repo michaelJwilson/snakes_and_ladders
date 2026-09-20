@@ -1,8 +1,8 @@
 # search/
 
-Discrete optimization: move sets over discrete structures to be optimized,
-exact and approximate solvers, and samplers. The agents that choose among moves
-are `learn/`'s, and issue #779 moved the last of them out of here.
+Discrete optimization: move sets over discrete structures to be optimized, and
+exact and approximate solvers. The samplers are `sample/`'s (#777) and the agents
+that choose among moves are `learn/`'s (#779).
 
 Root `CLAUDE.md` holds the repository-wide rules, and its **Writing Style**
 section binds this file and every docstring, comment and commit message in this

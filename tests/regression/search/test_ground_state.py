@@ -117,6 +117,23 @@ def test_the_graph_cut_is_the_enumerated_ground_state_at_two_states() -> None:
     assert np.array_equal(rust_state, labelling)
 
 
+@pytest.mark.backend
+def test_the_backend_seam_reaches_the_rust_cut_bitwise() -> None:
+    # `ising_ground_state(..., backend=Backend.RUST)` is the one way a caller
+    # names the kernel (#813); it must hand back the twin's own answer and not
+    # a third one, so the comparison is equality, state and energy both.
+    rung = _rung(CI, 2)
+    seam_state, seam_energy = ising_ground_state(
+        rung.graph, rung.field, backend=Backend.RUST
+    )
+    rust_state, rust_energy = rust_ground_state(rung.graph, rung.field)
+
+    assert np.array_equal(seam_state, rust_state)
+    assert seam_energy == rust_energy
+    with pytest.raises(ValueError, match="runs on"):
+        ising_ground_state(rung.graph, rung.field, backend=Backend.NUMBA)
+
+
 @pytest.mark.oracle
 @pytest.mark.parametrize("n_states", [2, 3])
 def test_both_cut_move_sets_reach_the_enumerated_optimum(n_states: int) -> None:
