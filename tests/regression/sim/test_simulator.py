@@ -39,7 +39,7 @@ PROBLEM_OF: dict[str, str] = {
 
 
 @pytest.mark.critical
-@pytest.mark.infra
+@pytest.mark.smoke
 def test_every_declared_model_is_simulated_or_says_why_not() -> None:
     assert set(SIMULATORS) | set(NOT_SIMULATED) == set(PARAMS)
     assert not set(SIMULATORS) & set(NOT_SIMULATED)
