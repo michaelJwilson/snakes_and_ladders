@@ -64,6 +64,11 @@ from typing import Protocol
 import torch
 
 from snakes_and_ladders.opt.objective import Objective
+from snakes_and_ladders.sample.accept import (
+    accept_ratio,
+    accept_with,
+    acceptance_probability,
+)
 from snakes_and_ladders.sample.schedule import TempSchedule, ladder
 
 # `current` is aliased: `_coefficients` already binds that name to a
@@ -960,7 +965,7 @@ def parallel_tempering(
                 values[pair + 1],
             )
             uniform = float(torch.rand(1, generator=parent))
-            if log_ratio >= 0.0 or uniform < math.exp(log_ratio):
+            if accept_with(log_ratio, uniform):
                 swapped[pair] += 1
                 positions[pair], positions[pair + 1] = (
                     positions[pair + 1],
@@ -1077,8 +1082,8 @@ def _transition(
     error = abs(proposed - current)
     uniform = float(torch.rand(1, generator=generator))
     ratio = float(torch.exp(torch.tensor((current - proposed) / temperature)))
-    probability = 0.0 if math.isnan(ratio) else min(1.0, ratio)
-    if uniform < ratio:
+    probability = acceptance_probability(ratio)
+    if accept_ratio(ratio, uniform):
         return proposal, error, 1, probability
     return position, error, 0, probability
 

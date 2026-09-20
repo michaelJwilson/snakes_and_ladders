@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from snakes_and_ladders.numerics import logsumexp
+from snakes_and_ladders.numerics import constant_chain_kernel, logsumexp
 
 
 @dataclass(frozen=True)
@@ -69,24 +69,69 @@ def step_kernels(
     copy, so the ``T``-fold memory the varying form costs --- 0.50 KiB against
     48.83 MiB at that size --- is paid only by a caller who asks for it.
 
+    Which of the two shapes arrived is read by
+    :func:`~snakes_and_ladders.numerics.constant_chain_kernel`, so this and the
+    torch recursion in :mod:`snakes_and_ladders.opt.hmm` refuse the same shapes
+    in the same words (issue #857).
+
     Raises
     ------
     ValueError
         If ``log_transition`` is neither shape.
     """
-    steps = max(length - 1, 0)
-    if log_transition.shape == (n_states, n_states):
-        return np.broadcast_to(log_transition, (steps, n_states, n_states)), (
-            log_transition
-        )
-    if log_transition.shape == (steps, n_states, n_states):
+    if not constant_chain_kernel(log_transition.shape, length, n_states):
         return log_transition, None
-    msg = (
-        f"log_transition {log_transition.shape} is neither ({n_states}, {n_states}) "
-        f"nor ({steps}, {n_states}, {n_states}) for a chain of {length} positions "
-        f"over {n_states} states"
-    )
-    raise ValueError(msg)
+    steps = max(length - 1, 0)
+    return np.broadcast_to(log_transition, (steps, n_states, n_states)), log_transition
+
+
+def _forward(
+    log_density: np.ndarray, log_initial: np.ndarray, log_transition: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    """The forward pass, checked, with the kernels the caller reads after it.
+
+    One recursion for both the evaluator and the block sampler (issue #857).
+    The two carried a copy each, and the copy checked no shape: a
+    ``log_initial`` of the wrong length broadcast into the sampler and
+    returned a path.
+
+    Parameters
+    ----------
+    log_density, log_initial, log_transition : np.ndarray
+        As :func:`forward_backward`, already float arrays.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray | None]
+        ``alpha``, shape ``(T, K)``; the per-step kernels; and the one matrix
+        to read instead where the chain carries one --- :func:`step_kernels`'
+        pair, hoisted out of the recursion for its reason.
+
+    Raises
+    ------
+    ValueError
+        If the shapes disagree or the chain is empty.
+    """
+    if log_density.ndim != 2 or log_density.shape[0] < 1:
+        msg = f"log_density must be (T, K) with T >= 1, got {log_density.shape}"
+        raise ValueError(msg)
+    length, n_states = log_density.shape
+    if log_initial.shape != (n_states,):
+        msg = f"log_initial {log_initial.shape} does not match {n_states} states"
+        raise ValueError(msg)
+    kernels, constant = step_kernels(log_transition, length, n_states)
+    alpha = np.empty((length, n_states))
+    alpha[0] = log_initial + log_density[0]
+    for t in range(1, length):
+        alpha[t] = (
+            logsumexp(
+                alpha[t - 1][:, None]
+                + (kernels[t - 1] if constant is None else constant),
+                axis=0,
+            )
+            + log_density[t]
+        )
+    return alpha, kernels, constant
 
 
 def forward_backward(
@@ -113,26 +158,9 @@ def forward_backward(
     log_density = np.asarray(log_density, dtype=float)
     log_initial = np.asarray(log_initial, dtype=float)
     log_transition = np.asarray(log_transition, dtype=float)
-    if log_density.ndim != 2 or log_density.shape[0] < 1:
-        msg = f"log_density must be (T, K) with T >= 1, got {log_density.shape}"
-        raise ValueError(msg)
-    length, n_states = log_density.shape
-    if log_initial.shape != (n_states,):
-        msg = f"log_initial {log_initial.shape} does not match {n_states} states"
-        raise ValueError(msg)
-    kernels, constant = step_kernels(log_transition, length, n_states)
+    alpha, kernels, constant = _forward(log_density, log_initial, log_transition)
+    length, n_states = alpha.shape
 
-    alpha = np.empty((length, n_states))
-    alpha[0] = log_initial + log_density[0]
-    for t in range(1, length):
-        alpha[t] = (
-            logsumexp(
-                alpha[t - 1][:, None]
-                + (kernels[t - 1] if constant is None else constant),
-                axis=0,
-            )
-            + log_density[t]
-        )
     beta = np.zeros((length, n_states))
     for t in range(length - 2, -1, -1):
         beta[t] = logsumexp(
@@ -163,24 +191,21 @@ def sample_path(
 
     The block Gibbs move a chain-shaped model needs: exact, because the
     posterior over paths factorizes backward given the forward messages.
-    ``log_transition`` takes either shape :func:`step_kernels` accepts.
+    ``log_transition`` takes either shape :func:`step_kernels` accepts. The
+    filter is :func:`forward_backward`'s own (:func:`_forward`), so the two
+    agree by construction and the draws are refused on the shapes the
+    evaluator refuses.
+
+    Raises
+    ------
+    ValueError
+        If the shapes disagree or the chain is empty.
     """
     log_density = np.asarray(log_density, dtype=float)
     log_initial = np.asarray(log_initial, dtype=float)
     log_transition = np.asarray(log_transition, dtype=float)
-    length, n_states = log_density.shape
-    kernels, constant = step_kernels(log_transition, length, n_states)
-    alpha = np.empty((length, n_states))
-    alpha[0] = log_initial + log_density[0]
-    for t in range(1, length):
-        alpha[t] = (
-            logsumexp(
-                alpha[t - 1][:, None]
-                + (kernels[t - 1] if constant is None else constant),
-                axis=0,
-            )
-            + log_density[t]
-        )
+    alpha, kernels, constant = _forward(log_density, log_initial, log_transition)
+    length, n_states = alpha.shape
     path = np.empty(length, dtype=np.int64)
     weights = np.exp(alpha[-1] - logsumexp(alpha[-1], axis=0))
     path[-1] = rng.choice(n_states, p=weights / weights.sum())

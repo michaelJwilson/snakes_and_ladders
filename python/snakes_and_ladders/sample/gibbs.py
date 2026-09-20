@@ -53,6 +53,7 @@ import numpy as np
 
 from snakes_and_ladders.backend import Backend
 from snakes_and_ladders.numerics import logsumexp
+from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.balanced import (
     draw_change,
     log_balanced_weights,
@@ -648,7 +649,7 @@ def balanced_sweep(
         log_alpha = log_metropolis_ratio(
             log_ratio, forward, forward_total, reverse, reverse_total
         )
-        if not (log_alpha >= 0.0 or rng.random() < np.exp(log_alpha)):
+        if not accept(log_alpha, rng):
             local[touched] = restored
             state[position] = previous
 
@@ -966,6 +967,6 @@ def topology_step(
     proposal = options[int(rng.integers(len(options)))]
     proposed = score(proposal)
     difference = (proposed - value) / temperature
-    if difference >= 0.0 or rng.random() < np.exp(difference):
+    if accept(difference, rng):
         return proposal, proposed, True
     return current, value, False

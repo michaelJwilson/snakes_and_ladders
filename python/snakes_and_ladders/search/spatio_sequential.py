@@ -54,6 +54,7 @@ from snakes_and_ladders.likelihood.spatio_sequential import (
     labelled_log_likelihood,
 )
 from snakes_and_ladders.opt.mixture import emission_mixture_plus_plus
+from snakes_and_ladders.sample.accept import accept
 from snakes_and_ladders.sample.schedule import TempSchedule
 from snakes_and_ladders.search.alpha_expansion import (
     alpha_expansion,
@@ -206,7 +207,7 @@ def _wolff_update(
         return
     cluster = np.array(members, dtype=np.int64)
     difference = beta * float((field[cluster, proposed] - field[cluster, colour]).sum())
-    if difference >= 0.0 or rng.random() < np.exp(difference):
+    if accept(difference, rng):
         labels[cluster] = proposed
 
 
